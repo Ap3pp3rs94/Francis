@@ -358,6 +358,7 @@ def _summon_blocker_family_readback(blocker_groups: dict[str, list[str]]) -> lis
         "overlay_window": "/lens/overlay",
         "global_hotkey_binding": "/lens/summon",
         "summon_binding": "/lens/summon",
+        "summon_anywhere": "/lens/summon",
         "authority": "/lens/preflight",
     }
     labels = {
@@ -366,6 +367,7 @@ def _summon_blocker_family_readback(blocker_groups: dict[str, list[str]]) -> lis
         "overlay_window": "Overlay window",
         "global_hotkey_binding": "Global hotkey binding",
         "summon_binding": "Summon binding",
+        "summon_anywhere": "Summon anywhere runtime",
         "authority": "Authority boundary",
     }
     authority_required = {
@@ -374,6 +376,7 @@ def _summon_blocker_family_readback(blocker_groups: dict[str, list[str]]) -> lis
         "overlay_window": "overlay_control_authority",
         "global_hotkey_binding": "hotkey_registration_authority",
         "summon_binding": "summon_authority",
+        "summon_anywhere": "summon_anywhere_runtime_proof",
         "authority": "operator_approved_authority",
     }
     return [
@@ -436,6 +439,15 @@ def _summon_blocker_family_handoffs(blocker_family_readback: list[dict[str, Any]
             "next_step": "run_summon_binding_blocker_proof",
             "next_smallest_truthful_gap": "summon_authority_blocker_boundary",
             "authority_required": "summon_authority",
+        },
+        "summon_anywhere": {
+            "label": "Summon anywhere runtime",
+            "proof_script": "scripts/lens-summon-anywhere-family-chain-proof.ps1 -Mode Status",
+            "route": "/lens/summon",
+            "readiness_route": "/lens/summon/readiness",
+            "next_step": "prove_os_level_summon_anywhere_runtime_before_stage6_closure",
+            "next_smallest_truthful_gap": "stage6_lens_completion_audit",
+            "authority_required": "summon_anywhere_runtime_proof",
         },
         "authority": {
             "label": "Summon authority",
@@ -1173,6 +1185,9 @@ def lens_summon_enablement_gate(*, preflight: dict[str, Any] | None = None) -> d
     hotkey_runtime_ready = bool(hotkey_runtime.get("ready"))
     overlay_runtime = _dict_value(overlay, "overlay_runtime")
     overlay_runtime_ready = bool(overlay_runtime.get("ready"))
+    launch_manifest = lens_host_launch_manifest()
+    summon_runtime = _dict_value(launch_manifest, "summon_runtime_readback")
+    summon_runtime_ready = bool(summon_runtime.get("ready"))
     if hotkey_runtime_ready:
         blockers = [blocker for blocker in blockers if blocker != "global_hotkey_binding_missing"]
     if overlay_runtime_ready:
@@ -1181,7 +1196,19 @@ def lens_summon_enablement_gate(*, preflight: dict[str, Any] | None = None) -> d
             for blocker in blockers
             if blocker not in {"lens_overlay_window_not_implemented", "overlay_window_missing"}
         ]
-    summon_ready = bool(summon.get("ready"))
+    if summon_runtime_ready:
+        blockers = [
+            blocker
+            for blocker in blockers
+            if blocker
+            not in {
+                "lens_summon_binding_disabled_pending_authority",
+                "summon_authority_not_granted",
+                "summon_binding_missing",
+            }
+        ]
+        blockers.append("summon_anywhere_runtime_readback")
+    summon_ready = bool(summon.get("ready")) or summon_runtime_ready
     resident_host_ready = bool(host.get("ready"))
     tray_ready = bool(tray.get("ready"))
     overlay_ready = bool(overlay.get("ready"))
@@ -1232,6 +1259,8 @@ def lens_summon_enablement_gate(*, preflight: dict[str, Any] | None = None) -> d
         ),
         "authority": _authority_blockers(blockers),
     }
+    if summon_runtime_ready:
+        blocker_groups["summon_anywhere"] = _select_blockers(blockers, "summon_anywhere_runtime_readback")
     blocker_family_readback = _summon_blocker_family_readback(blocker_groups)
     blocked_families = [_safe_str(item.get("id")).strip() for item in blocker_family_readback if not item["ready"]]
     first_blocker_family = blocked_families[0] if blocked_families else ""
@@ -1262,6 +1291,10 @@ def lens_summon_enablement_gate(*, preflight: dict[str, Any] | None = None) -> d
         "summon_anywhere_family_chain_completion_audit_handoff": family_chain_completion_audit_handoff,
         "operator_surface_readback_ready": True,
         "summon_binding_ready": summon_ready,
+        "summon_runtime_ready": summon_runtime_ready,
+        "summon_runtime_bounded_handoff_ready": bool(summon_runtime.get("bounded_handoff_ready")),
+        "summon_runtime_local_open_ready": bool(summon_runtime.get("local_open_ready")),
+        "summon_runtime_readback": summon_runtime,
         "resident_host_ready": resident_host_ready,
         "tray_ready": tray_ready,
         "overlay_ready": overlay_ready,

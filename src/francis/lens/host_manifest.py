@@ -36,6 +36,20 @@ def _runtime_json_dict(relative_path: str) -> dict[str, Any]:
     return _json_dict_from_path(repo_root() / Path(relative_path))
 
 
+def _lens_host_service_config_path() -> Path:
+    override = (os.getenv("FRANCIS_LENS_HOST_SERVICE_CONFIG_PATH") or "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    return repo_root() / "config" / "runtime" / "services" / "lens-host.json"
+
+
+def _lens_host_service_config_source(path: Path) -> str:
+    override = (os.getenv("FRANCIS_LENS_HOST_SERVICE_CONFIG_PATH") or "").strip()
+    if override:
+        return str(path)
+    return "config/runtime/services/lens-host.json"
+
+
 def _path_exists(path: Path) -> bool:
     try:
         return path.is_file()
@@ -55,7 +69,7 @@ def _safe_pid(value: Any) -> int:
 
 def _pid_from_file(path: Path) -> int:
     try:
-        return _safe_pid(path.read_text(encoding="utf-8").strip())
+        return _safe_pid(path.read_text(encoding="utf-8-sig").strip())
     except OSError:
         return 0
 
@@ -518,6 +532,54 @@ def _lens_overlay_runtime_readback() -> dict[str, Any]:
     }
 
 
+def _lens_summon_runtime_readback() -> dict[str, Any]:
+    config = _runtime_json_dict("config/runtime/lens/summon.json")
+    expected_global_hotkey = str(config.get("global_hotkey") or "")
+    expected_binding_scope = str(config.get("binding_scope") or "global")
+    state_file = data_dir() / "runtime" / "lens-summon" / "status.json"
+    state_exists = _path_exists(state_file)
+    state_payload = _json_dict_from_path(state_file) if state_exists else {}
+    state_kind = str(state_payload.get("kind") or "")
+    state_status = str(state_payload.get("status") or "")
+    state_global_hotkey = str(state_payload.get("global_hotkey") or "")
+    state_binding_scope = str(state_payload.get("binding_scope") or "")
+    state_claims_bounded_handoff = (
+        state_kind == "lens.summon.runtime_state"
+        and state_status == "summon_binding_observed"
+        and bool(state_payload.get("bounded_handoff_ready"))
+        and state_global_hotkey == expected_global_hotkey
+        and state_binding_scope == expected_binding_scope
+    )
+    requirement_state = (
+        "bounded_handoff_observed"
+        if state_claims_bounded_handoff
+        else "stale_or_unverified"
+        if state_exists
+        else "missing"
+    )
+    return {
+        "ready": state_claims_bounded_handoff,
+        "status": "observed" if state_claims_bounded_handoff else "missing",
+        "runtime_state_path": "data/runtime/lens-summon/status.json",
+        "state_exists": state_exists,
+        "state_kind": state_kind,
+        "state_status": state_status,
+        "state_updated_at": str(state_payload.get("updated_at") or ""),
+        "global_hotkey": state_global_hotkey,
+        "expected_global_hotkey": expected_global_hotkey,
+        "binding_scope": state_binding_scope,
+        "expected_binding_scope": expected_binding_scope,
+        "bounded_handoff_ready": bool(state_payload.get("bounded_handoff_ready")),
+        "local_open_ready": bool(state_payload.get("local_open_ready")),
+        "opened": bool(state_payload.get("opened")),
+        "no_launch": bool(state_payload.get("no_launch")),
+        "summon_anywhere": bool(state_payload.get("summon_anywhere")),
+        "os_level_summon": bool(state_payload.get("os_level_summon")),
+        "requirement_state": requirement_state,
+        "blocker": "" if state_claims_bounded_handoff else "summon_binding_runtime_missing",
+    }
+
+
 def _lens_host_activation_execution_receipt_root() -> Path:
     return data_dir() / "lens" / "host_activation_executions"
 
@@ -810,6 +872,7 @@ def _lens_host_missing_required_before_enable(
     tray_runtime_readback = _as_dict(launch_manifest.get("tray_runtime_readback"))
     hotkey_runtime_readback = _as_dict(launch_manifest.get("hotkey_runtime_readback"))
     overlay_runtime_readback = _as_dict(launch_manifest.get("overlay_runtime_readback"))
+    summon_runtime_readback = _as_dict(launch_manifest.get("summon_runtime_readback"))
     resident_supervised_runtime = (
         bool(process_readback.get("process_alive"))
         and bool(supervisor_readback.get("fresh_readback"))
@@ -833,7 +896,8 @@ def _lens_host_missing_required_before_enable(
         "tray_presence": not tray_presence_ready,
         "global_hotkey_binding": not hotkey_binding_ready,
         "overlay_window": not overlay_window_ready,
-        "summon_binding": "summon_binding_missing" in surface_blockers,
+        "summon_binding": not bool(summon_runtime_readback.get("ready"))
+        and "summon_binding_missing" in surface_blockers,
     }
     return [item for item in required_before_enable if missing_by_requirement.get(item, False)]
 
@@ -979,7 +1043,28 @@ def _lens_host_prerequisite_handoff(dependency: dict[str, Any]) -> dict[str, Any
             "supervision_executions_route": "/lens/host/supervision/executions",
             "supervision_start_mode": "resident_start",
             "supervision_stop_mode": "resident_stop",
+            "resident_runtime_preflight_route": "/lens/resident-runtime/preflight",
+            "resident_runtime_policy_route": "/lens/resident-runtime/policy",
+            "resident_runtime_plan_route": "/lens/resident-runtime/plan",
+            "resident_runtime_authority_grant_readiness_route": ("/lens/resident-runtime/authority-grant/readiness"),
+            "resident_runtime_authority_request_route": "/lens/resident-runtime/authority-grant/request",
+            "resident_runtime_authority_requests_route": "/lens/resident-runtime/authority-grant/requests",
+            "resident_runtime_authority_route": "/lens/resident-runtime/authority-grant",
+            "resident_runtime_authority_grants_route": "/lens/resident-runtime/authority-grant/grants",
+            "resident_runtime_authority_denials_route": "/lens/resident-runtime/authority-grant/denials",
+            "resident_runtime_execute_route": "/lens/resident-runtime/execute",
+            "resident_runtime_executions_route": "/lens/resident-runtime/executions",
+            "resident_runtime_execution_denials_route": "/lens/resident-runtime/denials",
+            "request_route": "/lens/resident-runtime/authority-grant/request",
+            "requests_route": "/lens/resident-runtime/authority-grant/requests",
+            "grant_route": "/lens/resident-runtime/authority-grant",
+            "grants_route": "/lens/resident-runtime/authority-grant/grants",
+            "denials_route": "/lens/resident-runtime/denials",
+            "execution_readiness_route": "/lens/resident-runtime/plan",
+            "execution_route": "/lens/resident-runtime/execute",
+            "executions_route": "/lens/resident-runtime/executions",
             "approval_action": "lens.host.foreground_activation",
+            "resident_runtime_approval_action": "lens.resident_runtime.execution_authority",
             "authority_scope": "system.write",
         }
     else:
@@ -1351,6 +1436,8 @@ def _lens_host_summon_binding_requirement_readback(*, missing: bool) -> dict[str
     hotkey_registration_authority = bool(config.get("hotkey_registration_authority"))
     overlay_control_authority = bool(config.get("overlay_control_authority"))
     local_process_launch_authority = bool(config.get("local_process_launch_authority"))
+    summon_runtime_readback = _lens_summon_runtime_readback()
+    summon_runtime_ready = bool(summon_runtime_readback.get("ready"))
     host_preflight_exists = _runtime_file_exists(host_preflight)
     host_status_runner_exists = _runtime_file_exists(host_status_runner)
     summon_runner_exists = _runtime_file_exists(summon_runner)
@@ -1433,6 +1520,18 @@ def _lens_host_summon_binding_requirement_readback(*, missing: bool) -> dict[str
         "hotkey_registration_authority": hotkey_registration_authority,
         "overlay_control_authority": overlay_control_authority,
         "local_process_launch_authority": local_process_launch_authority,
+        "summon_runtime_ready": summon_runtime_ready,
+        "summon_presence_source": "live_runtime_readback"
+        if summon_runtime_ready
+        else "enabled_config"
+        if config_exists and summon_authority and local_process_launch_authority
+        else "blocked_config",
+        "summon_runtime_requirement_state": str(summon_runtime_readback.get("requirement_state") or "missing"),
+        "summon_runtime_blocker": str(summon_runtime_readback.get("blocker") or ""),
+        "summon_runtime_bounded_handoff_ready": bool(summon_runtime_readback.get("bounded_handoff_ready")),
+        "summon_runtime_local_open_ready": bool(summon_runtime_readback.get("local_open_ready")),
+        "summon_runtime_no_launch": bool(summon_runtime_readback.get("no_launch")),
+        "summon_runtime_readback": summon_runtime_readback,
         "family_blockers": _ordered_unique(family_blockers) if missing else [],
         "host_dependency_blockers": _ordered_unique(host_dependency_blockers) if missing else [],
         "surface_dependency_blockers": _ordered_unique(surface_dependency_blockers) if missing else [],
@@ -1814,6 +1913,7 @@ def _lens_host_service_plan(
     service_manager_exists: bool,
     service_config_exists: bool,
     service_config_payload: dict[str, Any],
+    service_config_source: str = "config/runtime/services/lens-host.json",
 ) -> dict[str, Any]:
     service_name = str(service_config_payload.get("service_name") or "Francis-LensHost")
     service_executable = str(service_config_payload.get("service_executable") or "")
@@ -1851,7 +1951,7 @@ def _lens_host_service_plan(
         "kind": "service_install.plan_projection",
         "status": "ready" if ready else "blocked",
         "ready": ready,
-        "source": "config/runtime/services/lens-host.json",
+        "source": service_config_source,
         "manager": service_manager,
         "manager_exists": service_manager_exists,
         "plan_mode": "Plan",
@@ -1907,6 +2007,32 @@ def _required_before_enable_readiness_item(
         ),
         "required_before_enable": required_before_enable,
         "missing_required_before_enable": missing_required_before_enable,
+    }
+
+
+def _persistent_supervision_current_gap_readback(
+    *,
+    next_gap: str,
+    missing_required_before_enable: list[str],
+    first_missing_handoff: dict[str, Any],
+) -> dict[str, Any]:
+    raw_gap = str(next_gap or "").strip()
+    if missing_required_before_enable:
+        return {
+            "current_truthful_gap": "persistent_supervision_required_prerequisites_missing",
+            "current_truthful_gap_basis": "missing_required_before_enable",
+            "current_first_missing_requirement": str(first_missing_handoff.get("id") or "").strip(),
+            "current_first_missing_truthful_gap": str(
+                first_missing_handoff.get("next_smallest_truthful_gap") or ""
+            ).strip(),
+            "raw_persistent_supervision_next_smallest_truthful_gap": raw_gap,
+        }
+    return {
+        "current_truthful_gap": raw_gap,
+        "current_truthful_gap_basis": "next_smallest_truthful_gap",
+        "current_first_missing_requirement": "",
+        "current_first_missing_truthful_gap": "",
+        "raw_persistent_supervision_next_smallest_truthful_gap": raw_gap,
     }
 
 
@@ -2331,6 +2457,11 @@ def lens_host_persistent_supervision_plan(*, manifest: dict[str, Any] | None = N
         next_gap = "persistent_supervision_required_prerequisites_missing"
     elif not ready and not authority_blocked:
         next_gap = "persistent_supervision_enablement_disabled"
+    current_gap = _persistent_supervision_current_gap_readback(
+        next_gap=next_gap,
+        missing_required_before_enable=missing_required_before_enable,
+        first_missing_handoff=first_missing_handoff,
+    )
     return {
         "ok": True,
         "kind": "lens.host.persistent_supervision_plan",
@@ -2385,6 +2516,7 @@ def lens_host_persistent_supervision_plan(*, manifest: dict[str, Any] | None = N
             "supervision_readiness": supervision_readiness,
         },
         "next_smallest_truthful_gap": next_gap,
+        **current_gap,
         "governance": {
             "read_only_contract": True,
             "diagnostic_only": True,
@@ -2483,6 +2615,11 @@ def lens_host_persistent_supervision_enablement_preflight(
         next_gap = "persistent_supervision_enablement_disabled"
     else:
         next_gap = "persistent_supervision_authority_not_granted"
+    current_gap = _persistent_supervision_current_gap_readback(
+        next_gap=next_gap,
+        missing_required_before_enable=missing_required_before_enable,
+        first_missing_handoff=first_missing_handoff,
+    )
     return {
         "ok": True,
         "kind": "lens.host.persistent_supervision_enablement.preflight",
@@ -2536,6 +2673,7 @@ def lens_host_persistent_supervision_enablement_preflight(
             "supervision_readiness": supervision_readiness,
         },
         "next_smallest_truthful_gap": next_gap,
+        **current_gap,
         "governance": {
             "read_only_contract": True,
             "preflight_only": True,
@@ -2719,9 +2857,10 @@ def lens_host_supervision_authority_preflight(*, manifest: dict[str, Any] | None
 
 def lens_host_launch_manifest() -> dict[str, Any]:
     entrypoint = "scripts/lens-host.ps1"
-    service_config = "config/runtime/services/lens-host.json"
+    service_config_path = _lens_host_service_config_path()
+    service_config_source = _lens_host_service_config_source(service_config_path)
     entrypoint_exists = _runtime_file_exists(entrypoint)
-    service_config_payload = _runtime_json_dict(service_config)
+    service_config_payload = _json_dict_from_path(service_config_path)
     required_before_enable = _lens_host_required_before_enable(service_config_payload)
     service_config_exists = bool(service_config_payload)
     service_manager = str(service_config_payload.get("manager") or "scripts/service-install.ps1")
@@ -2734,11 +2873,13 @@ def lens_host_launch_manifest() -> dict[str, Any]:
         service_manager_exists=service_manager_exists,
         service_config_exists=service_config_exists,
         service_config_payload=service_config_payload,
+        service_config_source=service_config_source,
     )
     process_readback = _lens_host_process_readback()
     tray_runtime_readback = _lens_tray_runtime_readback()
     hotkey_runtime_readback = _lens_hotkey_runtime_readback()
     overlay_runtime_readback = _lens_overlay_runtime_readback()
+    summon_runtime_readback = _lens_summon_runtime_readback()
     supervisor_readback = _lens_host_supervisor_readback()
     supervision_execution_readback = _lens_host_supervision_execution_readback()
     supervision_readiness = _lens_host_supervision_readiness(
@@ -2762,7 +2903,8 @@ def lens_host_launch_manifest() -> dict[str, Any]:
         surface_dependency_blockers.append("global_hotkey_binding_missing")
     if not bool(overlay_runtime_readback.get("ready")):
         surface_dependency_blockers.append("overlay_window_missing")
-    surface_dependency_blockers.append("summon_binding_missing")
+    if not bool(summon_runtime_readback.get("ready")):
+        surface_dependency_blockers.append("summon_binding_missing")
     blockers = [runtime_blocker, *surface_dependency_blockers]
     if not entrypoint_exists:
         blockers.insert(0, "lens_host_entrypoint_missing")
@@ -2883,7 +3025,7 @@ def lens_host_launch_manifest() -> dict[str, Any]:
         "service_install": {
             "manager": service_manager,
             "manager_exists": service_manager_exists,
-            "config_path": service_config,
+            "config_path": service_config_source,
             "config_exists": service_config_exists,
             "config_status": "present_disabled" if service_config_exists else "missing",
             "service_name": str(service_config_payload.get("service_name") or ""),
@@ -2914,6 +3056,7 @@ def lens_host_launch_manifest() -> dict[str, Any]:
         "tray_runtime_readback": tray_runtime_readback,
         "hotkey_runtime_readback": hotkey_runtime_readback,
         "overlay_runtime_readback": overlay_runtime_readback,
+        "summon_runtime_readback": summon_runtime_readback,
         "activation_execution_readback": activation_execution_readback,
         "supervision_execution_readback": supervision_execution_readback,
         "supervisor_readback": supervisor_readback,
@@ -2931,7 +3074,7 @@ def lens_host_launch_manifest() -> dict[str, Any]:
             },
             {
                 "id": "host_service_config",
-                "path": service_config,
+                "path": service_config_source,
                 "status": "present_disabled" if service_config_exists else "missing",
             },
             {
@@ -2941,7 +3084,7 @@ def lens_host_launch_manifest() -> dict[str, Any]:
             },
             {
                 "id": "host_service_plan",
-                "path": service_config,
+                "path": service_config_source,
                 "status": service_plan["status"],
             },
             {
@@ -2987,7 +3130,11 @@ def lens_host_launch_manifest() -> dict[str, Any]:
             },
             {
                 "id": "overlay_window",
-                "status": "missing",
+                "status": "observed" if bool(overlay_runtime_readback.get("ready")) else "missing",
+            },
+            {
+                "id": "summon_binding",
+                "status": "observed" if bool(summon_runtime_readback.get("ready")) else "missing",
             },
         ],
         "blockers": blockers,

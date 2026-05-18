@@ -39,7 +39,7 @@ def _run_script(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_lens_surface_plan_consumption_proof_moves_handoff_to_summon_binding() -> None:
+def test_lens_surface_plan_consumption_proof_consumes_summon_handoff_readback() -> None:
     if platform.system() != "Windows":
         pytest.skip("Live resident host surface plan-consumption proof is Windows-hosted.")
 
@@ -60,11 +60,12 @@ def test_lens_surface_plan_consumption_proof_moves_handoff_to_summon_binding() -
     assert payload["tray_dependency_ready"] is True
     assert payload["global_hotkey_dependency_ready"] is True
     assert payload["overlay_dependency_ready"] is True
-    assert payload["summon_binding_still_blocked"] is True
-    assert payload["first_missing_required_before_enable"] == "summon_binding"
-    assert payload["missing_required_before_enable"] == ["summon_binding"]
-    assert payload["next_smallest_truthful_gap"] == "summon_binding"
-    assert payload["recommended_next_slice"] == "resolve_summon_binding_before_persistent_supervision_enablement"
+    assert payload["summon_dependency_ready"] is True
+    assert payload["summon_binding_still_blocked"] is False
+    assert payload["first_missing_required_before_enable"] == ""
+    assert payload["missing_required_before_enable"] == []
+    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_authority_not_granted"
+    assert payload["recommended_next_slice"] == "resolve_persistent_supervision_authority_before_enablement"
     assert payload["stop_observed"] is True
     assert payload["side_effects_bounded"] is True
 
@@ -73,11 +74,15 @@ def test_lens_surface_plan_consumption_proof_moves_handoff_to_summon_binding() -
         "synthetic_tray_runtime_readback": True,
         "synthetic_hotkey_runtime_readback": True,
         "synthetic_overlay_runtime_readback": True,
+        "synthetic_summon_runtime_readback": True,
         "os_tray_registered": False,
         "global_hotkey_registered": False,
         "overlay_opened": False,
+        "browser_launched": False,
+        "os_level_summon": False,
+        "summon_anywhere": False,
+        "bounded_summon_handoff_readback": True,
         "persistent_supervision_enabled": False,
-        "summon_binding_enabled": False,
     }
 
     start = payload["start_resident"]
@@ -102,9 +107,9 @@ def test_lens_surface_plan_consumption_proof_moves_handoff_to_summon_binding() -
     plan = payload["persistent_supervision_plan"]
     assert plan["exit_code"] == 0
     assert plan["status"] == "blocked"
-    assert plan["required_before_enable_ready"] is False
-    assert plan["first_missing_required_before_enable"] == "summon_binding"
-    assert plan["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
+    assert plan["required_before_enable_ready"] is True
+    assert plan["first_missing_required_before_enable"] == ""
+    assert plan["next_smallest_truthful_gap"] == "persistent_supervision_authority_not_granted"
     assert plan["parse_error"] == ""
     assert plan["stderr"] == ""
 
@@ -159,23 +164,39 @@ def test_lens_surface_plan_consumption_proof_moves_handoff_to_summon_binding() -
 
     summon = payload["summon_dependency"]
     assert summon["id"] == "summon_binding"
-    assert summon["ready"] is False
-    assert summon["status"] == "blocked"
-    assert summon["blocker"] == "summon_binding_missing"
-    assert summon["requirement_state"] == "disabled_pending_authority"
-    assert summon["blocked_reason"] == "lens_summon_binding_disabled_pending_authority"
+    assert summon["ready"] is True
+    assert summon["status"] == "ready"
+    assert summon["blocker"] == ""
+    assert summon["requirement_state"] == "ready"
+    assert summon["blocked_reason"] == ""
     assert summon["summon_authority"] is False
     assert summon["local_process_launch_authority"] is False
+    assert summon["summon_config_ready"] is False
+    assert summon["summon_runtime_ready"] is True
+    assert summon["summon_presence_source"] == "live_runtime_readback"
+    assert summon["summon_runtime_requirement_state"] == "bounded_handoff_observed"
+    assert summon["summon_runtime_blocker"] == ""
+    assert summon["summon_runtime_bounded_handoff_ready"] is True
+    assert summon["summon_runtime_local_open_ready"] is True
+    assert summon["summon_runtime_no_launch"] is True
+    summon_runtime = summon["summon_runtime_readback"]
+    assert summon_runtime["ready"] is True
+    assert summon_runtime["status"] == "observed"
+    assert summon_runtime["state_kind"] == "lens.summon.runtime_state"
+    assert summon_runtime["state_status"] == "summon_binding_observed"
+    assert summon_runtime["global_hotkey"] == "Ctrl+Alt+Space"
+    assert summon_runtime["expected_global_hotkey"] == "Ctrl+Alt+Space"
+    assert summon_runtime["binding_scope"] == "global"
+    assert summon_runtime["expected_binding_scope"] == "global"
+    assert summon_runtime["bounded_handoff_ready"] is True
+    assert summon_runtime["local_open_ready"] is True
+    assert summon_runtime["opened"] is False
+    assert summon_runtime["no_launch"] is True
+    assert summon_runtime["summon_anywhere"] is False
+    assert summon_runtime["os_level_summon"] is False
 
     handoff = payload["plan_first_missing_requirement_handoff"]
-    assert handoff == summon
-    assert handoff["route"] == "/lens/summon"
-    assert handoff["readiness_route"] == "/lens/summon/readiness"
-    assert handoff["preflight_script"] == "scripts/lens-summon-preflight.ps1 -Mode Status"
-    assert handoff["read_only_contract"] is True
-    assert handoff["diagnostic_only"] is True
-    assert handoff["would_execute"] is False
-    assert handoff["would_mutate"] is False
+    assert handoff is None
 
     stop = payload["stop_resident"]
     assert stop["exit_code"] == 0

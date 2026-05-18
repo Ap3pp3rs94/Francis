@@ -161,6 +161,14 @@ def test_lens_persistent_supervision_plan_stays_blocked_without_authority(tmp_pa
     assert "receipt_write_authority_not_granted" in payload["blockers"]
     assert "resident_claim_authority_not_granted" in payload["blockers"]
     assert payload["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
+    assert payload["current_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
+    assert payload["current_truthful_gap_basis"] == "missing_required_before_enable"
+    assert payload["current_first_missing_requirement"] == "resident_host_process"
+    assert payload["current_first_missing_truthful_gap"] == "resident_host_process_not_supervised"
+    assert (
+        payload["raw_persistent_supervision_next_smallest_truthful_gap"]
+        == "persistent_supervision_required_prerequisites_missing"
+    )
 
     plan = payload["plan"]
     assert plan["would_install_service"] is False

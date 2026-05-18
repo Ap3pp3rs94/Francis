@@ -131,6 +131,13 @@ function Get-HotkeyConfig {
     Join-Path $RepoRoot 'config\runtime\lens\summon.json'
   }
   $Config = Read-JsonFile -Path $ConfigPath
+  $BlockedReason = 'lens_summon_binding_disabled_pending_authority'
+  if ($null -ne $Config) {
+    $BlockedReasonProperty = $Config.PSObject.Properties['blocked_reason']
+    if ($null -ne $BlockedReasonProperty -and $null -ne $BlockedReasonProperty.Value) {
+      $BlockedReason = [string]$BlockedReasonProperty.Value
+    }
+  }
   return [ordered]@{
     path = $ConfigPath
     exists = Test-Path -LiteralPath $ConfigPath -PathType Leaf
@@ -138,7 +145,7 @@ function Get-HotkeyConfig {
     global_hotkey = Get-StringProperty -Payload $Config -Name 'global_hotkey' -Default 'Ctrl+Alt+Space'
     binding_scope = Get-StringProperty -Payload $Config -Name 'binding_scope' -Default 'global'
     summon_runner = Get-StringProperty -Payload $Config -Name 'summon_runner' -Default 'scripts/lens-summon.ps1'
-    blocked_reason = Get-StringProperty -Payload $Config -Name 'blocked_reason' -Default 'lens_summon_binding_disabled_pending_authority'
+    blocked_reason = $BlockedReason
     binding_enabled = Get-BoolProperty -Payload $Config -Name 'binding_enabled' -Default $false
     register_hotkey = Get-BoolProperty -Payload $Config -Name 'register_hotkey' -Default $false
     summon_authority = Get-BoolProperty -Payload $Config -Name 'summon_authority' -Default $false

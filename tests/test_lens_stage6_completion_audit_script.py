@@ -47,7 +47,7 @@ def _family_chain_wrapper_timeout_seconds(child_timeout_seconds: int) -> int:
 
 
 def _prerequisites_child_timeout_seconds(child_timeout_seconds: int) -> int:
-    return max(child_timeout_seconds, 240)
+    return min(child_timeout_seconds, 240)
 
 
 def _prerequisites_wrapper_timeout_seconds(child_timeout_seconds: int) -> int:
@@ -70,6 +70,7 @@ def _expected_audit_child_proof_timeouts(child_timeout_seconds: int) -> dict[str
         "host_supervision_authority_request": child_timeout_seconds,
         "persistent_supervision_plan": child_timeout_seconds,
         "persistent_supervision_prerequisites": _prerequisites_wrapper_timeout_seconds(child_timeout_seconds),
+        "stage6_prerequisite_bringup_plan": child_timeout_seconds,
         "persistent_supervision_service_install_plan": child_timeout_seconds,
         "persistent_supervision_enablement_authority": child_timeout_seconds,
         "persistent_supervision_execution_authority": child_timeout_seconds,
@@ -122,13 +123,15 @@ def test_lens_stage6_completion_audit_outer_timeout_covers_serial_child_budget()
 
     assert _full_audit_timeout_seconds({}) >= expected_minimum
     assert _full_audit_timeout_seconds({_FULL_AUDIT_TIMEOUT_ENV: "777"}) == 777
+    assert _prerequisites_child_timeout_seconds(420) == 240
+    assert _prerequisites_wrapper_timeout_seconds(420) == 300
 
 
 def test_lens_stage6_completion_audit_budgets_transition_plan_wrapper() -> None:
     script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
 
     assert (
-        "$PersistentSupervisionPrerequisitesProofChildTimeoutSeconds = [Math]::Max($ChildProofTimeoutSeconds, 240)"
+        "$PersistentSupervisionPrerequisitesProofChildTimeoutSeconds = [Math]::Min($ChildProofTimeoutSeconds, 240)"
         in script
     )
     assert "$PersistentSupervisionPrerequisitesProofTimeoutSeconds" in script
@@ -187,6 +190,36 @@ def test_lens_stage6_completion_audit_projects_persistent_prerequisite_first_mis
     assert "authority_required = [string]$PersistentSupervisionPrerequisitesProof.authority_required" in script
     assert "authority_granted = [bool]$PersistentSupervisionPrerequisitesProof.authority_granted" in script
     assert "-not [bool]$PersistentSupervisionPrerequisitesProof.authority_granted" in script
+
+
+def test_lens_stage6_completion_audit_consumes_stage6_prerequisite_bringup_plan_readback() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    assert "$Stage6PrerequisiteBringupPlanScript" in script
+    assert "lens-stage6-prerequisite-bringup-plan.ps1" in script
+    assert "$Stage6PrerequisiteBringupPlanObserved" in script
+    assert "[string]$Stage6PrerequisiteBringupPlan.kind -eq 'lens.stage6.prerequisite_bringup.plan'" in script
+    assert (
+        "[string]$Stage6PrerequisiteBringupPlan.current_truthful_gap "
+        "-eq 'persistent_supervision_required_prerequisites_missing'"
+    ) in script
+    assert "$Stage6PrerequisiteBringupPlanAllowedFirstMissingTruthfulGaps" in script
+    assert "'resident_host_process_not_supervised'" in script
+    assert "'resident_supervision_not_persistent'" in script
+    assert (
+        "[string]$Stage6PrerequisiteBringupPlanNextOperatorAction.id -eq 'request_resident_runtime_execution_authority'"
+    ) in script
+    assert "stage6_prerequisite_bringup_plan_readback = $Stage6PrerequisiteBringupPlanObserved" in script
+    assert "stage6_prerequisite_bringup_plan = [ordered]@{" in script
+    assert "'scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status'" in script
+    assert (
+        "$Stage6CompletionReviewed = (\n"
+        "  $Stage6CompletionEvidenceReviewed -and\n"
+        "  $Stage6PrerequisiteBringupPlanObserved -and"
+    ) in script
+    assert "stage6_prerequisite_bringup_plan_readback" in script
+    assert "$RecommendedHandoffSource = 'stage6_prerequisite_bringup_operator_plan'" in script
+    assert "next_operator_command = $Stage6PrerequisiteBringupPlanNextOperatorCommand" in script
 
 
 def test_lens_stage6_completion_audit_preserves_persistent_authority_child_readbacks() -> None:
@@ -693,6 +726,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "host_supervision_authority_request",
         "persistent_supervision_plan",
         "persistent_supervision_prerequisites",
+        "stage6_prerequisite_bringup_plan",
         "persistent_supervision_service_install_plan",
         "persistent_supervision_enablement_authority",
         "persistent_supervision_execution_authority",
@@ -715,14 +749,9 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     }
     assert payload["stage6_completion_reviewed"] is True
     assert payload["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
-    assert payload["recommended_handoff_source"] == "resident_host_process_supervision_handoff_consumed"
-    assert (
-        payload["recommended_next_slice"] == "resolve_persistent_supervision_required_prerequisites_before_enablement"
-    )
-    assert (
-        payload["recommended_proof_script"]
-        == "scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status"
-    )
+    assert payload["recommended_handoff_source"] == "stage6_prerequisite_bringup_operator_plan"
+    assert payload["recommended_next_slice"] == "run_stage6_prerequisite_bringup_request_next_for_resident_host_process"
+    assert payload["recommended_proof_script"] == "scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status"
     assert payload["authority_required"] == "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
     assert payload["authority_granted"] is False
     assert payload["persistent_supervision_first_missing_required_before_enable"] == "resident_host_process"
@@ -736,11 +765,14 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     recommended_handoff = payload["recommended_handoff"]
     assert recommended_handoff["status"] == "blocked"
     assert recommended_handoff["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
-    assert recommended_handoff["next_step"] == "resolve_persistent_supervision_required_prerequisites_before_enablement"
-    assert (
-        recommended_handoff["proof_script"]
-        == "scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status"
-    )
+    assert recommended_handoff["next_step"] == "run_stage6_prerequisite_bringup_request_next_for_resident_host_process"
+    assert recommended_handoff["proof_script"] == "scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status"
+    assert recommended_handoff["operator_plan_script"] == "scripts/lens-stage6-prerequisite-bringup-plan.ps1"
+    assert recommended_handoff["next_operator_action_requirement"] == "resident_host_process"
+    assert recommended_handoff["next_operator_action"]["id"] == "request_resident_runtime_execution_authority"
+    assert recommended_handoff["next_operator_action"]["route"] == "/lens/resident-runtime/authority-grant/request"
+    assert recommended_handoff["next_operator_command"]["mode"] == "RequestNext"
+    assert recommended_handoff["operator_sequence_command_availability"]["truthful"] is True
     assert recommended_handoff["route"] == "/lens/host/persistent-supervision"
     assert recommended_handoff["readiness_route"] == "/lens/host/persistent-supervision/enablement"
     assert (
@@ -777,6 +809,23 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "No runtime launch, service-config mutation, memory write, or resident claim is made"
         in (payload["next_smallest_truthful_gap_basis"])
     )
+    bringup_plan = payload["stage6_prerequisite_bringup_plan"]
+    assert bringup_plan["ok"] is True
+    assert bringup_plan["status"] == "blocked"
+    assert bringup_plan["current_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
+    assert bringup_plan["current_first_missing_requirement"] == "resident_host_process"
+    assert bringup_plan["current_first_missing_truthful_gap"] in {
+        "resident_host_process_not_supervised",
+        "resident_supervision_not_persistent",
+    }
+    assert bringup_plan["next_operator_action_requirement"] == "resident_host_process"
+    assert bringup_plan["next_operator_action"]["id"] == "request_resident_runtime_execution_authority"
+    assert bringup_plan["next_operator_command"]["mode"] == "RequestNext"
+    assert bringup_plan["operator_sequence_command_availability"]["truthful"] is True
+    assert bringup_plan["governance"]["read_only_contract"] is True
+    assert bringup_plan["governance"]["approval_request_write"] is False
+    assert bringup_plan["governance"]["resident_claim_authority"] is False
+    assert payload["governance"]["stage6_prerequisite_bringup_plan_readback"] is True
     assert payload["remaining_stage6_acceptance_blockers"] == [
         "summon_anywhere",
         "helpful_not_noisy",

@@ -36,6 +36,7 @@ from francis.lens.activation import (
     lens_host_supervision_authority_request_readback,
     lens_host_supervision_authority_readiness_audit,
     lens_resident_runtime_activation_denial_receipts,
+    lens_resident_runtime_activation_execution_receipts,
     lens_resident_runtime_authority_grant_denial_receipts,
     lens_resident_runtime_authority_grant_readiness_audit,
     lens_resident_runtime_execution_authority_grant_receipts,
@@ -62,7 +63,12 @@ from francis.lens.host_runtime_plan import (
 )
 from francis.lens.os_binding_authority import (
     lens_os_binding_authority_request_readback,
+    lens_os_binding_execution_receipts,
     lens_os_binding_execution_readiness_audit,
+)
+from francis.lens.overlay_authority import (
+    lens_overlay_authority_request_readback,
+    lens_overlay_window_execution_receipts,
 )
 from francis.lens.preflight import (
     lens_os_binding_readiness,
@@ -70,6 +76,14 @@ from francis.lens.preflight import (
     lens_preflight,
     lens_summon_enablement_gate,
     lens_tray_enablement_gate,
+)
+from francis.lens.summon_authority import (
+    lens_summon_action_execution_receipts,
+    lens_summon_authority_request_readback,
+)
+from francis.lens.tray_authority import (
+    lens_tray_authority_request_readback,
+    lens_tray_presence_execution_receipts,
 )
 from francis.reactor import reactor_operator_visibility_summary
 from francis.world_state.operator_mode import snapshot as operator_mode_snapshot
@@ -389,6 +403,7 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
     resident_runtime_plan = lens_resident_runtime_activation_plan()
     resident_runtime_denial = deny_lens_resident_runtime_activation_execution()
     resident_runtime_denial_receipts = lens_resident_runtime_activation_denial_receipts(limit=limit)
+    resident_runtime_execution_receipts = lens_resident_runtime_activation_execution_receipts(limit=limit)
     activation_execution_denial = deny_lens_host_activation_execution()
     activation_denial_receipts = lens_host_activation_denial_receipts(limit=limit)
     resident_runtime_authority_grant_denial_receipts = lens_resident_runtime_authority_grant_denial_receipts(
@@ -549,6 +564,10 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "resident_runtime_denial": resident_runtime_denial,
         "resident_runtime_denial_receipts_route": _safe_str(resident_runtime_denial_receipts.get("route")).strip(),
         "resident_runtime_denial_receipts": resident_runtime_denial_receipts,
+        "resident_runtime_execution_receipts_route": _safe_str(
+            resident_runtime_execution_receipts.get("route")
+        ).strip(),
+        "resident_runtime_execution_receipts": resident_runtime_execution_receipts,
         "activation_execution_denial_route": _safe_str(activation_execution_denial.get("route")).strip(),
         "activation_execution_denial": activation_execution_denial,
         "activation_denial_receipts_route": _safe_str(activation_denial_receipts.get("route")).strip(),
@@ -1574,6 +1593,806 @@ def _stage6_next_handoff_readback(
     }
 
 
+_STAGE6_PREREQUISITE_ORDER = [
+    "resident_host_process",
+    "tray_presence",
+    "global_hotkey_binding",
+    "overlay_window",
+    "summon_binding",
+]
+
+_STAGE6_PREREQUISITE_FAMILY = {
+    "resident_host_process": "resident_host",
+    "tray_presence": "tray_presence",
+    "global_hotkey_binding": "global_hotkey_binding",
+    "overlay_window": "overlay_window",
+    "summon_binding": "summon_binding",
+}
+
+_STAGE6_PREREQUISITE_PROOF = {
+    "resident_host_process": "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status",
+    "tray_presence": "scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status",
+    "global_hotkey_binding": "scripts/lens-summon-global-hotkey-binding-blocker-proof.ps1 -Mode Status",
+    "overlay_window": "scripts/lens-summon-overlay-window-blocker-proof.ps1 -Mode Status",
+    "summon_binding": "scripts/lens-summon-binding-blocker-proof.ps1 -Mode Status",
+}
+
+_STAGE6_PREREQUISITE_READINESS_ROUTE = {
+    "resident_host_process": "/lens/host/runtime-loop/readiness",
+    "tray_presence": "/lens/tray/readiness",
+    "global_hotkey_binding": "/lens/summon/readiness",
+    "overlay_window": "/lens/overlay/readiness",
+    "summon_binding": "/lens/summon/readiness",
+}
+
+_STAGE6_PREREQUISITE_DEFAULT_GAP = {
+    "resident_host_process": "resident_host_process_not_supervised",
+    "tray_presence": "summon_tray_presence_blocker_boundary",
+    "global_hotkey_binding": "os_level_command_palette_binding",
+    "overlay_window": "summon_overlay_window_blocker_boundary",
+    "summon_binding": "summon_anywhere_blockers",
+}
+
+
+def _stage6_action(
+    action_id: str,
+    *,
+    route: str,
+    approval_action: str,
+    requires: list[str],
+    live_effect: str,
+    mode: str = "",
+) -> dict[str, Any]:
+    return {
+        "id": action_id,
+        "route": route,
+        "method": "POST",
+        "approval_action": approval_action,
+        "requires": requires,
+        "mode": mode,
+        "live_effect": live_effect,
+        "operator_supplied_values_required": True,
+        "script_would_execute": False,
+        "script_would_mutate": False,
+    }
+
+
+def _stage6_await_action(action_id: str, *, route: str, approval_action: str) -> dict[str, Any]:
+    return {
+        "id": action_id,
+        "route": route,
+        "method": "GET",
+        "approval_action": approval_action,
+        "requires": ["operator approval decision"],
+        "mode": "await_approval",
+        "live_effect": "wait for approval decision",
+        "operator_supplied_values_required": False,
+        "script_would_execute": False,
+        "script_would_mutate": False,
+    }
+
+
+def _stage6_active_approval_id(readback: dict[str, Any]) -> str:
+    for key in ("active_authority_grant", "active_latest", "active_grant"):
+        active = _as_dict(readback.get(key))
+        approval_id = _safe_str(active.get("approval_id")).strip()
+        if approval_id:
+            return approval_id
+    return (
+        _safe_str(readback.get("active_approval_id")).strip()
+        or _safe_str(readback.get("active_grant_approval_id")).strip()
+    )
+
+
+def _stage6_active_grant_receipt_id(readback: dict[str, Any]) -> str:
+    for key in ("active_authority_grant", "active_latest", "active_grant"):
+        active = _as_dict(readback.get(key))
+        receipt_id = _safe_str(active.get("receipt_id")).strip()
+        if receipt_id:
+            return receipt_id
+    return _safe_str(readback.get("active_grant_receipt_id")).strip()
+
+
+def _stage6_approved_count(readback: dict[str, Any]) -> int:
+    explicit = _safe_int(readback.get("approved_count"), default=-1, minimum=-1)
+    if explicit >= 0:
+        return explicit
+    return sum(
+        1 for item in _as_list(readback.get("items")) if _safe_str(_as_dict(item).get("status")).strip() == "approved"
+    )
+
+
+def _stage6_pending_count(readback: dict[str, Any]) -> int:
+    explicit = _safe_int(readback.get("pending_count"), default=-1, minimum=-1)
+    if explicit >= 0:
+        return explicit
+    return sum(
+        1 for item in _as_list(readback.get("items")) if _safe_str(_as_dict(item).get("status")).strip() == "pending"
+    )
+
+
+def _stage6_latest_approved_id(readback: dict[str, Any]) -> str:
+    for item in _as_list(readback.get("items")):
+        candidate = _as_dict(item)
+        if _safe_str(candidate.get("status")).strip() == "approved":
+            approval_id = _safe_str(candidate.get("id")).strip()
+            if approval_id:
+                return approval_id
+    latest = _as_dict(readback.get("latest"))
+    if _safe_str(latest.get("status")).strip() == "approved":
+        return _safe_str(latest.get("id")).strip()
+    return _safe_str(readback.get("latest_approval_id")).strip()
+
+
+def _stage6_authority_state(readback: dict[str, Any], authority_field: str = "") -> dict[str, Any]:
+    return {
+        "status": _safe_str(readback.get("status")).strip(),
+        "route": _safe_str(readback.get("route")).strip(),
+        "authority_route": _safe_str(readback.get("authority_route")).strip(),
+        "request_route": _safe_str(readback.get("request_route")).strip(),
+        "grants_route": _safe_str(readback.get("grants_route")).strip(),
+        "execute_route": _safe_str(readback.get("execute_route")).strip(),
+        "action": _safe_str(readback.get("action")).strip(),
+        "authority_granted": bool(readback.get(authority_field))
+        if authority_field
+        else bool(readback.get("authority_granted")),
+        "active_grant_receipt_id": _stage6_active_grant_receipt_id(readback),
+        "active_approval_id": _stage6_active_approval_id(readback),
+    }
+
+
+def _stage6_resident_prerequisite_actions(handoff: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        _stage6_action(
+            "request_resident_runtime_execution_authority",
+            route=_safe_str(handoff.get("resident_runtime_authority_request_route")).strip()
+            or "/lens/resident-runtime/authority-grant/request",
+            approval_action="lens.resident_runtime.execution_authority",
+            requires=["actor with system.write scope"],
+            live_effect="approval request receipt only",
+        ),
+        _stage6_action(
+            "grant_resident_runtime_execution_authority",
+            route=_safe_str(handoff.get("resident_runtime_authority_route")).strip()
+            or "/lens/resident-runtime/authority-grant",
+            approval_action="lens.resident_runtime.execution_authority",
+            requires=["exact approved resident runtime authority approval_id"],
+            live_effect="resident runtime authority grant receipt",
+        ),
+        _stage6_action(
+            "request_host_supervision_authority",
+            route=_safe_str(handoff.get("supervision_authority_request_route")).strip()
+            or "/lens/host/supervision/authority/request",
+            approval_action="lens.host.supervision_authority",
+            requires=["actor with system.write scope"],
+            live_effect="host supervision authority request receipt only",
+        ),
+        _stage6_action(
+            "grant_host_supervision_authority",
+            route=_safe_str(handoff.get("supervision_authority_route")).strip() or "/lens/host/supervision/authority",
+            approval_action="lens.host.supervision_authority",
+            requires=["exact approved host supervision authority approval_id"],
+            live_effect="host supervision authority grant receipt",
+        ),
+        _stage6_action(
+            "execute_supervised_resident_host_start",
+            route=_safe_str(handoff.get("resident_runtime_execute_route")).strip() or "/lens/resident-runtime/execute",
+            approval_action="lens.resident_runtime.execution_authority",
+            requires=[
+                "resident runtime authority grant",
+                "host supervision authority grant",
+                "actor with system.write scope",
+            ],
+            mode="resident_start",
+            live_effect="bounded supervised resident host lease",
+        ),
+    ]
+
+
+def _stage6_surface_prerequisite_actions(requirement_id: str, readback: dict[str, Any]) -> list[dict[str, Any]]:
+    defaults = {
+        "tray_presence": (
+            "lens.tray.presence_authority",
+            "/lens/tray/authority/request",
+            "/lens/tray/authority",
+            "/lens/tray/execute",
+            "start",
+            "bounded tray presence lease",
+        ),
+        "global_hotkey_binding": (
+            "lens.os_binding.command_palette_binding_authority",
+            "/lens/os-binding/authority/request",
+            "/lens/os-binding/authority",
+            "/lens/os-binding/execute",
+            "bind",
+            "bounded global hotkey binding lease",
+        ),
+        "overlay_window": (
+            "lens.overlay.window_authority",
+            "/lens/overlay/authority/request",
+            "/lens/overlay/authority",
+            "/lens/overlay/execute",
+            "start",
+            "bounded overlay window lease",
+        ),
+        "summon_binding": (
+            "lens.summon.action_authority",
+            "/lens/summon/authority/request",
+            "/lens/summon/authority",
+            "/lens/summon/execute",
+            "execute",
+            "bounded summon handoff without summon-anywhere claim",
+        ),
+    }
+    approval_action, request_route, authority_route, execute_route, execute_mode, live_effect = defaults.get(
+        requirement_id,
+        ("", "", "", "", "", ""),
+    )
+    approval_action = _safe_str(readback.get("action")).strip() or approval_action
+    request_route = _safe_str(readback.get("request_route")).strip() or request_route
+    authority_route = _safe_str(readback.get("authority_route")).strip() or authority_route
+    execute_route = _safe_str(readback.get("execute_route")).strip() or execute_route
+    return [
+        _stage6_action(
+            f"request_{requirement_id}_authority",
+            route=request_route,
+            approval_action=approval_action,
+            requires=["actor with system.write scope"],
+            live_effect="approval request receipt only",
+        ),
+        _stage6_action(
+            f"grant_{requirement_id}_authority",
+            route=authority_route,
+            approval_action=approval_action,
+            requires=[f"exact approved {approval_action} approval_id"],
+            live_effect="authority grant receipt",
+        ),
+        _stage6_action(
+            f"execute_{requirement_id}",
+            route=execute_route,
+            approval_action=approval_action,
+            requires=["active authority grant", "actor with system.write scope"],
+            mode=execute_mode,
+            live_effect=live_effect,
+        ),
+    ]
+
+
+def _stage6_next_prerequisite_action(
+    requirement_id: str,
+    *,
+    actions: list[dict[str, Any]],
+    status_readbacks: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    if requirement_id == "resident_host_process":
+        resident_grants = status_readbacks["resident_runtime_authority_grant_receipts"]
+        host_grants = status_readbacks["supervision_authority_grant_receipts"]
+        resident_requests = status_readbacks["resident_runtime_authority_requests"]
+        host_requests = status_readbacks["supervision_authority_requests"]
+        if not bool(resident_grants.get("authority_granted")):
+            if _stage6_approved_count(resident_requests) > 0:
+                grant_action = dict(actions[1])
+                grant_action["approved_approval_id"] = _stage6_latest_approved_id(resident_requests)
+                return grant_action
+            if _stage6_pending_count(resident_requests) > 0:
+                return _stage6_await_action(
+                    "await_resident_runtime_execution_authority_approval",
+                    route="/lens/resident-runtime/authority-grant/requests",
+                    approval_action="lens.resident_runtime.execution_authority",
+                )
+            return actions[0]
+        if not bool(host_grants.get("authority_granted")):
+            if _stage6_approved_count(host_requests) > 0:
+                grant_action = dict(actions[3])
+                grant_action["approved_approval_id"] = _stage6_latest_approved_id(host_requests)
+                return grant_action
+            if _stage6_pending_count(host_requests) > 0:
+                return _stage6_await_action(
+                    "await_host_supervision_authority_approval",
+                    route="/lens/host/supervision/authority/requests",
+                    approval_action="lens.host.supervision_authority",
+                )
+            return actions[2]
+        execute_action = dict(actions[-1])
+        execute_action["active_approval_id"] = _stage6_active_approval_id(resident_grants)
+        execute_action["host_supervision_active_approval_id"] = _stage6_active_approval_id(host_grants)
+        return execute_action
+
+    readback_key = {
+        "tray_presence": "tray_authority_requests",
+        "global_hotkey_binding": "os_binding_authority_requests",
+        "overlay_window": "overlay_authority_requests",
+        "summon_binding": "summon_authority_requests",
+    }.get(requirement_id, "")
+    readback = status_readbacks.get(readback_key, {})
+    if bool(readback.get("authority_granted")):
+        execute_action = dict(actions[-1])
+        execute_action["active_approval_id"] = _stage6_active_approval_id(readback)
+        return execute_action
+    if _stage6_approved_count(readback) > 0:
+        grant_action = dict(actions[1])
+        grant_action["approved_approval_id"] = _stage6_latest_approved_id(readback)
+        return grant_action
+    if _stage6_pending_count(readback) > 0:
+        return _stage6_await_action(
+            f"await_{requirement_id}_authority_approval",
+            route=_safe_str(readback.get("route")).strip() or actions[0]["route"],
+            approval_action=_safe_str(readback.get("action")).strip() or actions[0]["approval_action"],
+        )
+    return actions[0]
+
+
+def _stage6_prerequisite_operator_command(action: dict[str, Any]) -> dict[str, Any]:
+    action_id = _safe_str(action.get("id")).strip()
+    approval_id = (
+        _safe_str(action.get("approved_approval_id")).strip() or _safe_str(action.get("active_approval_id")).strip()
+    )
+    approval_arg = approval_id or "<approval_id>"
+    if action_id.startswith("request_"):
+        return {
+            "command": ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 -Mode RequestNext -Actor <actor> -ConfirmRequest",
+            "mode": "RequestNext",
+            "requires_confirmation": True,
+            "requires_approval_id": False,
+            "requires_operator_approval_decision": False,
+        }
+    if action_id.startswith("grant_"):
+        return {
+            "command": (
+                ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 "
+                f"-Mode GrantNext -Actor <actor> -ApprovalId {approval_arg} -ConfirmGrant"
+            ),
+            "mode": "GrantNext",
+            "requires_confirmation": True,
+            "requires_approval_id": True,
+            "requires_operator_approval_decision": True,
+        }
+    if action_id.startswith("execute_") or action_id.startswith("apply_"):
+        return {
+            "command": (
+                ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 "
+                f"-Mode ExecuteNext -Actor <actor> -ApprovalId {approval_arg} -RunSeconds 2 -ConfirmExecute"
+            ),
+            "mode": "ExecuteNext",
+            "requires_confirmation": True,
+            "requires_approval_id": True,
+            "requires_operator_approval_decision": False,
+        }
+    if action_id.startswith("await_"):
+        return {
+            "command": ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status",
+            "mode": "Status",
+            "requires_confirmation": False,
+            "requires_approval_id": False,
+            "requires_operator_approval_decision": True,
+        }
+    return {
+        "command": ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status",
+        "mode": "Status",
+        "requires_confirmation": False,
+        "requires_approval_id": False,
+        "requires_operator_approval_decision": False,
+    }
+
+
+def _stage6_operator_sequence_with_commands(
+    actions: list[dict[str, Any]],
+    *,
+    current_action: dict[str, Any],
+) -> list[dict[str, Any]]:
+    sequence: list[dict[str, Any]] = []
+    current_id = _safe_str(current_action.get("id")).strip()
+    current_route = _safe_str(current_action.get("route")).strip()
+    for action in actions:
+        item = dict(action)
+        available_now = (
+            bool(current_id)
+            and bool(current_route)
+            and _safe_str(item.get("id")).strip() == current_id
+            and _safe_str(item.get("route")).strip() == current_route
+        )
+        operator_command = _stage6_prerequisite_operator_command(item)
+        operator_command["available_now"] = available_now
+        operator_command["preview_only"] = not available_now
+        operator_command["availability_reason"] = (
+            "current_next_operator_action" if available_now else "future_step_waiting_on_prior_prerequisites"
+        )
+        item["operator_command"] = operator_command
+        sequence.append(item)
+    return sequence
+
+
+def _stage6_prerequisite_step(
+    requirement_id: str,
+    *,
+    dependency: dict[str, Any],
+    first_missing_handoff: dict[str, Any],
+    status_readbacks: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    is_first_missing = requirement_id == _safe_str(first_missing_handoff.get("id")).strip()
+    ready = bool(dependency.get("ready"))
+    if requirement_id == "resident_host_process":
+        authority_state: dict[str, Any] = {
+            "resident_runtime": _stage6_authority_state(
+                status_readbacks["resident_runtime_authority_grant_receipts"],
+                "resident_runtime_execution_authority",
+            ),
+            "host_supervision": _stage6_authority_state(
+                status_readbacks["supervision_authority_grant_receipts"],
+                "host_supervision_authority",
+            ),
+        }
+        actions = _stage6_resident_prerequisite_actions(first_missing_handoff if is_first_missing else {})
+    else:
+        readback_key = {
+            "tray_presence": "tray_authority_requests",
+            "global_hotkey_binding": "os_binding_authority_requests",
+            "overlay_window": "overlay_authority_requests",
+            "summon_binding": "summon_authority_requests",
+        }.get(requirement_id, "")
+        readback = status_readbacks.get(readback_key, {})
+        authority_state = _stage6_authority_state(readback)
+        actions = _stage6_surface_prerequisite_actions(requirement_id, readback)
+    return {
+        "id": requirement_id,
+        "family": _safe_str(dependency.get("family")).strip()
+        or _STAGE6_PREREQUISITE_FAMILY.get(requirement_id, requirement_id),
+        "route": _safe_str(dependency.get("route")).strip()
+        or ("/lens/host" if requirement_id == "resident_host_process" else ""),
+        "readiness_route": _safe_str(dependency.get("readiness_route")).strip()
+        or _STAGE6_PREREQUISITE_READINESS_ROUTE.get(requirement_id, ""),
+        "ready": ready,
+        "status": "ready" if ready else "blocked",
+        "requirement_state": _safe_str(dependency.get("requirement_state")).strip(),
+        "blocker": _safe_str(dependency.get("blocker")).strip(),
+        "blocked_reason": _safe_str(dependency.get("blocked_reason")).strip(),
+        "proof_script": (
+            _safe_str(first_missing_handoff.get("proof_script")).strip()
+            if is_first_missing
+            else _STAGE6_PREREQUISITE_PROOF.get(requirement_id, "")
+        ),
+        "next_smallest_truthful_gap": (
+            _safe_str(first_missing_handoff.get("next_smallest_truthful_gap")).strip()
+            if is_first_missing
+            else _STAGE6_PREREQUISITE_DEFAULT_GAP.get(requirement_id, "")
+        ),
+        "authority_state": authority_state,
+        "actions": actions,
+        "next_operator_action": _stage6_next_prerequisite_action(
+            requirement_id,
+            actions=actions,
+            status_readbacks=status_readbacks,
+        ),
+        "script_would_execute": False,
+        "script_would_mutate": False,
+    }
+
+
+def _stage6_persistent_supervision_enablement_steps(handoff: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        _stage6_action(
+            "request_persistent_supervision_enablement_authority",
+            route=_safe_str(handoff.get("persistent_supervision_enablement_authority_request_route")).strip()
+            or "/lens/host/persistent-supervision/enablement/authority/request",
+            approval_action="lens.host.persistent_supervision_enablement_authority",
+            requires=["all required prerequisite surfaces ready", "actor with system.write scope"],
+            live_effect="persistent supervision enablement authority request receipt only",
+        ),
+        _stage6_action(
+            "grant_persistent_supervision_enablement_authority",
+            route=_safe_str(handoff.get("persistent_supervision_enablement_authority_route")).strip()
+            or "/lens/host/persistent-supervision/enablement/authority",
+            approval_action="lens.host.persistent_supervision_enablement_authority",
+            requires=["exact approved persistent supervision enablement authority approval_id"],
+            live_effect="persistent supervision enablement authority grant receipt",
+        ),
+        _stage6_action(
+            "request_persistent_supervision_execution_authority",
+            route=_safe_str(handoff.get("persistent_supervision_enablement_execution_request_route")).strip()
+            or "/lens/host/persistent-supervision/enablement/execution/request",
+            approval_action="lens.host.persistent_supervision_enablement_execution_authority",
+            requires=["persistent supervision enablement authority grant", "actor with system.write scope"],
+            live_effect="persistent supervision execution authority request receipt only",
+        ),
+        _stage6_action(
+            "grant_persistent_supervision_execution_authority",
+            route=_safe_str(handoff.get("persistent_supervision_enablement_execution_authority_route")).strip()
+            or "/lens/host/persistent-supervision/enablement/execution/authority",
+            approval_action="lens.host.persistent_supervision_enablement_execution_authority",
+            requires=["exact approved persistent supervision execution authority approval_id"],
+            live_effect="persistent supervision execution authority grant receipt",
+        ),
+        _stage6_action(
+            "apply_persistent_supervision_enablement",
+            route="/lens/host/persistent-supervision/enablement/execution/apply",
+            approval_action="lens.host.persistent_supervision_enablement_execution_authority",
+            requires=[
+                "all prerequisite surfaces ready",
+                "persistent supervision enablement authority grant",
+                "persistent supervision execution authority grant",
+                "actor with system.write scope",
+            ],
+            live_effect="persistent supervision service config update and execution receipt",
+        ),
+    ]
+
+
+def _stage6_next_persistent_supervision_enablement_action(
+    *,
+    actions: list[dict[str, Any]],
+    status_readbacks: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    enablement_requests = status_readbacks["persistent_supervision_enablement_authority_requests"]
+    enablement_grants = status_readbacks["persistent_supervision_enablement_authority_grants"]
+    execution_requests = status_readbacks["persistent_supervision_enablement_execution_requests"]
+    execution_grants = status_readbacks["persistent_supervision_enablement_execution_authority_grants"]
+
+    if not bool(enablement_grants.get("authority_granted")):
+        if _stage6_approved_count(enablement_requests) > 0:
+            grant_action = dict(actions[1])
+            grant_action["approved_approval_id"] = _stage6_latest_approved_id(enablement_requests)
+            return grant_action
+        if _stage6_pending_count(enablement_requests) > 0:
+            return _stage6_await_action(
+                "await_persistent_supervision_enablement_authority_approval",
+                route=_safe_str(enablement_requests.get("route")).strip()
+                or "/lens/host/persistent-supervision/enablement/authority/requests",
+                approval_action="lens.host.persistent_supervision_enablement_authority",
+            )
+        return actions[0]
+
+    if not bool(execution_grants.get("authority_granted")):
+        if _stage6_approved_count(execution_requests) > 0:
+            grant_action = dict(actions[3])
+            grant_action["approved_approval_id"] = _stage6_latest_approved_id(execution_requests)
+            return grant_action
+        if _stage6_pending_count(execution_requests) > 0:
+            return _stage6_await_action(
+                "await_persistent_supervision_execution_authority_approval",
+                route=_safe_str(execution_requests.get("route")).strip()
+                or "/lens/host/persistent-supervision/enablement/execution/requests",
+                approval_action="lens.host.persistent_supervision_enablement_execution_authority",
+            )
+        return actions[2]
+
+    apply_action = dict(actions[-1])
+    apply_action["active_approval_id"] = _stage6_active_approval_id(execution_grants)
+    apply_action["enablement_active_approval_id"] = _stage6_active_approval_id(enablement_grants)
+    return apply_action
+
+
+def _stage6_prerequisite_bringup_readback(
+    *,
+    closure_readback: dict[str, Any],
+    resident_host: dict[str, Any],
+    os_binding_authority_requests: dict[str, Any],
+    tray_authority_requests: dict[str, Any],
+    overlay_authority_requests: dict[str, Any],
+    summon_authority_requests: dict[str, Any],
+) -> dict[str, Any]:
+    persistent_plan = _as_dict(resident_host.get("persistent_supervision_plan"))
+    persistent_enablement = _as_dict(resident_host.get("persistent_supervision_enablement"))
+    dependencies = [_as_dict(item) for item in _as_list(persistent_plan.get("enablement_dependency_readback"))]
+    dependency_by_id = {_safe_str(item.get("id")).strip(): item for item in dependencies}
+    required_before_enable = [
+        _safe_str(item).strip() for item in _as_list(persistent_plan.get("required_before_enable"))
+    ] or list(_STAGE6_PREREQUISITE_ORDER)
+    ordered_requirement_ids = [
+        requirement_id for requirement_id in _STAGE6_PREREQUISITE_ORDER if requirement_id in required_before_enable
+    ]
+    ordered_requirement_ids.extend(
+        requirement_id
+        for requirement_id in required_before_enable
+        if requirement_id and requirement_id not in ordered_requirement_ids
+    )
+    first_missing_handoff = _as_dict(persistent_plan.get("first_missing_requirement_handoff")) or _as_dict(
+        persistent_enablement.get("first_missing_requirement_handoff")
+    )
+    status_readbacks = {
+        "resident_runtime_authority_requests": _as_dict(resident_host.get("resident_runtime_authority_requests")),
+        "resident_runtime_authority_grant_receipts": _as_dict(
+            resident_host.get("resident_runtime_authority_grant_receipts")
+        ),
+        "supervision_authority_requests": _as_dict(resident_host.get("supervision_authority_requests")),
+        "supervision_authority_grant_receipts": _as_dict(resident_host.get("supervision_authority_grant_receipts")),
+        "os_binding_authority_requests": os_binding_authority_requests,
+        "tray_authority_requests": tray_authority_requests,
+        "overlay_authority_requests": overlay_authority_requests,
+        "summon_authority_requests": summon_authority_requests,
+        "persistent_supervision_enablement_authority_requests": _as_dict(
+            resident_host.get("persistent_supervision_enablement_authority_requests")
+        ),
+        "persistent_supervision_enablement_authority_grants": _as_dict(
+            resident_host.get("persistent_supervision_enablement_authority_grants")
+        ),
+        "persistent_supervision_enablement_execution_requests": _as_dict(
+            resident_host.get("persistent_supervision_enablement_execution_requests")
+        ),
+        "persistent_supervision_enablement_execution_authority_grants": _as_dict(
+            resident_host.get("persistent_supervision_enablement_execution_authority_grants")
+        ),
+    }
+    ordered_steps = [
+        _stage6_prerequisite_step(
+            requirement_id,
+            dependency=dependency_by_id.get(requirement_id, {}),
+            first_missing_handoff=first_missing_handoff,
+            status_readbacks=status_readbacks,
+        )
+        for requirement_id in ordered_requirement_ids
+    ]
+    missing_required = [
+        _safe_str(item).strip() for item in _as_list(persistent_plan.get("missing_required_before_enable"))
+    ]
+    missing_steps = [item for item in ordered_steps if _safe_str(item.get("id")).strip() in missing_required]
+    enablement_steps = _stage6_persistent_supervision_enablement_steps(first_missing_handoff)
+    next_operator_action = (
+        _as_dict(missing_steps[0].get("next_operator_action"))
+        if missing_steps
+        else _stage6_next_persistent_supervision_enablement_action(
+            actions=enablement_steps,
+            status_readbacks=status_readbacks,
+        )
+    )
+    current_gap = (
+        "persistent_supervision_required_prerequisites_missing"
+        if missing_steps
+        else _safe_str(persistent_plan.get("next_smallest_truthful_gap")).strip()
+        or "persistent_supervision_enablement_sequence_ready"
+    )
+    current_gap_basis = (
+        "missing_required_before_enable"
+        if missing_steps
+        else ("persistent_supervision_plan.next_smallest_truthful_gap")
+    )
+    first_missing_step = missing_steps[0] if missing_steps else {}
+    first_missing_requirement = _safe_str(first_missing_step.get("id")).strip()
+    first_missing_truthful_gap = _safe_str(first_missing_step.get("next_smallest_truthful_gap")).strip()
+    next_operator_action_requirement = (
+        first_missing_requirement if missing_steps else "persistent_supervision_enablement"
+    )
+    operator_sequence = _stage6_operator_sequence_with_commands(
+        [_as_dict(item.get("next_operator_action")) for item in missing_steps] or [next_operator_action],
+        current_action=next_operator_action,
+    )
+    available_now_count = sum(
+        1 for item in operator_sequence if bool(_as_dict(item.get("operator_command")).get("available_now"))
+    )
+    preview_only_count = sum(
+        1 for item in operator_sequence if bool(_as_dict(item.get("operator_command")).get("preview_only"))
+    )
+    command_availability_truthful = (
+        bool(operator_sequence)
+        and available_now_count == 1
+        and available_now_count + preview_only_count == len(operator_sequence)
+    )
+    return {
+        "ok": True,
+        "kind": "lens.stage6.prerequisite_bringup.plan",
+        "status": "blocked" if missing_steps else "ready",
+        "mode": "status",
+        "stage": "Stage 6 / Lens MVP",
+        "stage_state": "active" if not bool(closure_readback.get("ready_to_close")) else "ready_to_close",
+        "ready_to_close": bool(closure_readback.get("ready_to_close")),
+        "acceptance_criterion": "system_resident_presence",
+        "closure_next_smallest_truthful_gap": _safe_str(closure_readback.get("next_smallest_truthful_gap")).strip(),
+        "persistent_supervision_next_smallest_truthful_gap": _safe_str(
+            persistent_plan.get("next_smallest_truthful_gap")
+        ).strip(),
+        "current_truthful_gap": current_gap,
+        "current_truthful_gap_basis": current_gap_basis,
+        "current_first_missing_requirement": first_missing_requirement,
+        "current_first_missing_truthful_gap": first_missing_truthful_gap,
+        "raw_persistent_supervision_next_smallest_truthful_gap": _safe_str(
+            persistent_plan.get("next_smallest_truthful_gap")
+        ).strip(),
+        "required_before_enable": required_before_enable,
+        "missing_required_before_enable": missing_required,
+        "required_before_enable_ready": bool(persistent_plan.get("required_before_enable_ready")),
+        "first_missing_required_before_enable": _safe_str(
+            persistent_plan.get("first_missing_required_before_enable")
+        ).strip(),
+        "first_missing_requirement_handoff": first_missing_handoff,
+        "ordered_prerequisite_steps": ordered_steps,
+        "persistent_supervision_enablement_steps": enablement_steps,
+        "next_operator_action": next_operator_action,
+        "next_operator_action_requirement": next_operator_action_requirement,
+        "next_operator_command": _stage6_prerequisite_operator_command(next_operator_action),
+        "operator_sequence": operator_sequence,
+        "operator_sequence_command_availability": {
+            "available_now_count": available_now_count,
+            "preview_only_count": preview_only_count,
+            "sequence_length": len(operator_sequence),
+            "truthful": command_availability_truthful,
+        },
+        "checks": [
+            {
+                "id": "stage6_status_readback",
+                "status": "active" if not bool(closure_readback.get("ready_to_close")) else "ready_to_close",
+                "passed": not bool(closure_readback.get("ready_to_close")),
+                "evidence": "/lens/status stage6_readiness",
+                "reason": "The bring-up plan is only valid against the active Stage 6 Lens posture.",
+            },
+            {
+                "id": "required_prerequisite_chain",
+                "status": "ready" if bool(required_before_enable) else "missing",
+                "passed": bool(required_before_enable),
+                "evidence": "/lens/status resident_host.persistent_supervision_plan.required_before_enable",
+                "reason": "The plan must cover every surface required before persistent supervision enablement.",
+            },
+            {
+                "id": "first_missing_handoff_bounded",
+                "status": "readback_only" if bool(first_missing_handoff) else "missing",
+                "passed": (
+                    not bool(first_missing_handoff)
+                    or (
+                        bool(first_missing_handoff.get("read_only_contract"))
+                        and bool(first_missing_handoff.get("diagnostic_only"))
+                        and not bool(first_missing_handoff.get("would_execute"))
+                        and not bool(first_missing_handoff.get("would_mutate"))
+                    )
+                ),
+                "evidence": "first_missing_requirement_handoff",
+                "reason": "The first missing prerequisite handoff must remain read-only and non-mutating.",
+            },
+            {
+                "id": "operator_sequence_command_availability",
+                "status": "truthful" if command_availability_truthful else "inconsistent",
+                "passed": command_availability_truthful,
+                "evidence": "stage6_readiness.prerequisite_bringup.operator_sequence.operator_command",
+                "reason": "Exactly one operator-sequence command may be available now; all future steps must remain preview-only.",
+            },
+            {
+                "id": "status_mode_side_effects_denied",
+                "status": "readback_only",
+                "passed": True,
+                "evidence": "stage6_readiness.prerequisite_bringup.mode=status",
+                "reason": "Status projection never creates requests, grants authority, executes actions, or claims residency.",
+            },
+        ],
+        "evidence": [
+            "/lens/status",
+            "/lens/status resident_host.persistent_supervision_plan",
+            "/lens/status resident_host.persistent_supervision_enablement",
+            "/lens/status stage6_readiness.closure_readback",
+        ],
+        "governance": {
+            "read_only_contract": True,
+            "diagnostic_only": True,
+            "plan_only": True,
+            "uses_lens_status_readback": True,
+            "requires_explicit_operator_execution": True,
+            "request_next_mode_available": True,
+            "grant_next_mode_available": True,
+            "execute_next_mode_available": True,
+            "run_mode_available": False,
+            "approval_request_write": False,
+            "authority_grant_receipt_write": False,
+            "execution_receipt_write": False,
+            "would_request_authority": False,
+            "would_grant_authority": False,
+            "authority_granted": False,
+            "would_execute": False,
+            "would_mutate": False,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "local_process_launch_authority": False,
+            "process_supervision_authority": False,
+            "process_restart_authority": False,
+            "service_install_authority": False,
+            "service_control_authority": False,
+            "tray_registration_authority": False,
+            "hotkey_registration_authority": False,
+            "overlay_control_authority": False,
+            "summon_authority": False,
+            "memory_write": False,
+            "receipt_write_authority": False,
+            "resident_claim_authority": False,
+            "mutation_authority_granted": False,
+        },
+    }
+
+
 def _stage6_closure_readback(
     *,
     mode: dict[str, Any],
@@ -1865,9 +2684,13 @@ def _stage6_readiness(
     preflight: dict[str, Any],
     os_binding_readiness: dict[str, Any],
     os_binding_execution_readiness: dict[str, Any],
+    os_binding_authority_requests: dict[str, Any],
     summon_enablement_gate: dict[str, Any],
+    summon_authority_requests: dict[str, Any],
     tray_enablement_gate: dict[str, Any],
+    tray_authority_requests: dict[str, Any],
     overlay_enablement_gate: dict[str, Any],
+    overlay_authority_requests: dict[str, Any],
     resident_surface_activation: dict[str, Any],
     pilot_indicator: dict[str, Any],
 ) -> dict[str, Any]:
@@ -1888,6 +2711,7 @@ def _stage6_readiness(
         resident_host.get("resident_runtime_authority_grant_readiness")
     )
     resident_runtime_denial_receipts = _as_dict(resident_host.get("resident_runtime_denial_receipts"))
+    resident_runtime_execution_receipts = _as_dict(resident_host.get("resident_runtime_execution_receipts"))
     runtime_loop_denial_receipts = _as_dict(resident_host.get("runtime_loop_denial_receipts"))
     runtime_loop_readiness = _as_dict(resident_host.get("runtime_loop_readiness"))
     runtime_loop_requirement_readback = _runtime_loop_requirement_readback(runtime_loop_readiness)
@@ -1920,7 +2744,6 @@ def _stage6_readiness(
     supervision_authority_grant_receipts = _as_dict(resident_host.get("supervision_authority_grant_receipts"))
     supervision_authority_preflight = _as_dict(resident_host.get("supervision_authority_preflight"))
     supervision_authority_readiness = _as_dict(resident_host.get("supervision_authority_readiness"))
-    os_binding_authority_requests = _as_dict(os_binding_readiness.get("authority_request_readback"))
     os_binding_execution_denial = _as_dict(os_binding_execution_readiness.get("execution_denial"))
     closure_readback = _stage6_closure_readback(
         mode=mode,
@@ -1936,6 +2759,14 @@ def _stage6_readiness(
     )
     ready_to_close = bool(closure_readback.get("ready_to_close"))
     next_handoff = _stage6_next_handoff_readback(closure_readback=closure_readback, resident_host=resident_host)
+    prerequisite_bringup = _stage6_prerequisite_bringup_readback(
+        closure_readback=closure_readback,
+        resident_host=resident_host,
+        os_binding_authority_requests=os_binding_authority_requests,
+        tray_authority_requests=tray_authority_requests,
+        overlay_authority_requests=overlay_authority_requests,
+        summon_authority_requests=summon_authority_requests,
+    )
     return {
         "stage": "Stage 6 / Lens MVP",
         "stage_state": "ready_to_close" if ready_to_close else "active",
@@ -1950,6 +2781,7 @@ def _stage6_readiness(
         or "stage6_lens_completion_audit",
         "claim": "backend_readback_contract_only",
         "next_handoff": next_handoff,
+        "prerequisite_bringup": prerequisite_bringup,
         "closure_readback": closure_readback,
         "criteria": [
             {
@@ -2480,6 +3312,46 @@ def _stage6_readiness(
                 "memory_write": False,
                 "receipt_write_authority": False,
                 "resident_claim_authority": False,
+            },
+            {
+                "id": "resident_runtime_execution_receipt_readback",
+                "status": _safe_str(resident_runtime_execution_receipts.get("status")).strip() or "missing",
+                "evidence": [
+                    "/lens/resident-runtime/executions",
+                    "/lens/resident-runtime/execute",
+                    "/lens/host/supervision/executions",
+                    "/lens/status",
+                ],
+                "receipt_count": _safe_int(resident_runtime_execution_receipts.get("total")),
+                "latest_receipt_id": _safe_str(
+                    _as_dict(resident_runtime_execution_receipts.get("latest")).get("receipt_id")
+                ).strip(),
+                "latest_supervision_mode": _safe_str(
+                    resident_runtime_execution_receipts.get("latest_supervision_mode")
+                ).strip(),
+                "latest_resident_host_process": bool(
+                    resident_runtime_execution_receipts.get("latest_resident_host_process")
+                ),
+                "latest_resident_supervised_runtime": bool(
+                    resident_runtime_execution_receipts.get("latest_resident_supervised_runtime")
+                ),
+                "resident_supervised_runtime_receipt_observed": bool(
+                    resident_runtime_execution_receipts.get("resident_supervised_runtime_receipt_observed")
+                ),
+                "resident_claim_allowed": bool(resident_runtime_execution_receipts.get("resident_claim_allowed")),
+                "execution_authority": False,
+                "approval_decision_authority": False,
+                "local_process_launch_authority": False,
+                "process_supervision_authority": False,
+                "process_restart_authority": False,
+                "service_install_authority": False,
+                "service_control_authority": False,
+                "tray_registration_authority": False,
+                "hotkey_registration_authority": False,
+                "overlay_control_authority": False,
+                "memory_write": False,
+                "resident_claim_authority": False,
+                "receipt_write_authority": False,
             },
             {
                 "id": "resident_runtime_activation_denial_receipt_readback",
@@ -3706,9 +4578,16 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
         authority_request_readback=os_binding_authority_requests,
         readiness=os_binding_readiness,
     )
+    os_binding_execution_receipts = lens_os_binding_execution_receipts(limit=safe_limit)
     summon_enablement_gate = lens_summon_enablement_gate(preflight=preflight)
+    summon_authority_requests = lens_summon_authority_request_readback(limit=safe_limit)
+    summon_execution_receipts = lens_summon_action_execution_receipts(limit=safe_limit)
     tray_enablement_gate = lens_tray_enablement_gate(preflight=preflight)
+    tray_authority_requests = lens_tray_authority_request_readback(limit=safe_limit)
+    tray_execution_receipts = lens_tray_presence_execution_receipts(limit=safe_limit)
     overlay_enablement_gate = lens_overlay_enablement_gate(preflight=preflight)
+    overlay_authority_requests = lens_overlay_authority_request_readback(limit=safe_limit)
+    overlay_execution_receipts = lens_overlay_window_execution_receipts(limit=safe_limit)
     resident_surface_activation = lens_resident_surface_activation_boundary(limit=safe_limit)
     pilot_indicator = _pilot_indicator(mode)
     resident_runtime_preflight = _as_dict(resident_host.get("resident_runtime_preflight"))
@@ -3721,6 +4600,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
         resident_host.get("resident_runtime_authority_grant_readiness")
     )
     resident_runtime_denial_receipts = _as_dict(resident_host.get("resident_runtime_denial_receipts"))
+    resident_runtime_execution_receipts = _as_dict(resident_host.get("resident_runtime_execution_receipts"))
     runtime_loop_denial_receipts = _as_dict(resident_host.get("runtime_loop_denial_receipts"))
     runtime_loop_readiness = _as_dict(resident_host.get("runtime_loop_readiness"))
     supervision_authority_denial_receipts = _as_dict(resident_host.get("supervision_authority_denial_receipts"))
@@ -3744,10 +4624,17 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
         "preflight": preflight,
         "os_binding_readiness": os_binding_readiness,
         "os_binding_execution_readiness": os_binding_execution_readiness,
+        "os_binding_execution_receipts": os_binding_execution_receipts,
         "os_binding_authority_requests": os_binding_authority_requests,
         "summon_enablement_gate": summon_enablement_gate,
+        "summon_authority_requests": summon_authority_requests,
+        "summon_execution_receipts": summon_execution_receipts,
         "tray_enablement_gate": tray_enablement_gate,
+        "tray_authority_requests": tray_authority_requests,
+        "tray_execution_receipts": tray_execution_receipts,
         "overlay_enablement_gate": overlay_enablement_gate,
+        "overlay_authority_requests": overlay_authority_requests,
+        "overlay_execution_receipts": overlay_execution_receipts,
         "resident_runtime_preflight": resident_runtime_preflight,
         "resident_runtime_policy": resident_runtime_policy,
         "resident_runtime_authority_requests": _as_dict(resident_host.get("resident_runtime_authority_requests")),
@@ -3758,6 +4645,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
         "resident_runtime_authority_grant_denial_receipts": resident_runtime_authority_grant_denial_receipts,
         "resident_runtime_authority_grant_readiness": resident_runtime_authority_grant_readiness,
         "resident_runtime_denial_receipts": resident_runtime_denial_receipts,
+        "resident_runtime_execution_receipts": resident_runtime_execution_receipts,
         "runtime_loop_denial_receipts": runtime_loop_denial_receipts,
         "runtime_loop_readiness": runtime_loop_readiness,
         "supervision_authority_denial_receipts": supervision_authority_denial_receipts,
@@ -3838,6 +4726,25 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
                 "/lens/resident-runtime/authority-grant/readiness"
             ),
             "lens_resident_runtime_denials_route": "/lens/resident-runtime/denials",
+            "lens_resident_runtime_executions_route": "/lens/resident-runtime/executions",
+            "lens_tray_authority_request_route": "/lens/tray/authority/request",
+            "lens_tray_authority_requests_route": "/lens/tray/authority/requests",
+            "lens_tray_authority_route": "/lens/tray/authority",
+            "lens_tray_authority_grants_route": "/lens/tray/authority/grants",
+            "lens_tray_executions_route": "/lens/tray/executions",
+            "lens_tray_execute_route": "/lens/tray/execute",
+            "lens_overlay_authority_request_route": "/lens/overlay/authority/request",
+            "lens_overlay_authority_requests_route": "/lens/overlay/authority/requests",
+            "lens_overlay_authority_route": "/lens/overlay/authority",
+            "lens_overlay_authority_grants_route": "/lens/overlay/authority/grants",
+            "lens_overlay_executions_route": "/lens/overlay/executions",
+            "lens_overlay_execute_route": "/lens/overlay/execute",
+            "lens_summon_authority_request_route": "/lens/summon/authority/request",
+            "lens_summon_authority_requests_route": "/lens/summon/authority/requests",
+            "lens_summon_authority_route": "/lens/summon/authority",
+            "lens_summon_authority_grants_route": "/lens/summon/authority/grants",
+            "lens_summon_executions_route": "/lens/summon/executions",
+            "lens_summon_execute_route": "/lens/summon/execute",
             "lens_resident_surface_route": "/lens/resident-surface",
             "lens_resident_surface_activation_route": "/lens/resident-surface/activation",
             "reactor_readback_surfaces": _as_dict(reactor.get("readback_surfaces")),
@@ -3855,9 +4762,13 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
             preflight=preflight,
             os_binding_readiness=os_binding_readiness,
             os_binding_execution_readiness=os_binding_execution_readiness,
+            os_binding_authority_requests=os_binding_authority_requests,
             summon_enablement_gate=summon_enablement_gate,
+            summon_authority_requests=summon_authority_requests,
             tray_enablement_gate=tray_enablement_gate,
+            tray_authority_requests=tray_authority_requests,
             overlay_enablement_gate=overlay_enablement_gate,
+            overlay_authority_requests=overlay_authority_requests,
             resident_surface_activation=resident_surface_activation,
             pilot_indicator=pilot_indicator,
         ),

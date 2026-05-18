@@ -613,6 +613,65 @@ function Get-OverlayRuntimeReadback {
   }
 }
 
+function Get-SummonRuntimeReadback {
+  param(
+    [string]$DataRoot,
+    [AllowNull()]
+    [object]$SummonConfig
+  )
+
+  $StatusPath = Join-Path $DataRoot 'runtime/lens-summon/status.json'
+  $Status = Read-JsonFile -Path $StatusPath
+  $StatusKind = [string](Get-PropertyValue -Payload $Status -Name 'kind' -Default '')
+  $StatusValue = [string](Get-PropertyValue -Payload $Status -Name 'status' -Default '')
+  $ExpectedGlobalHotkey = [string](Get-PropertyValue -Payload $SummonConfig -Name 'global_hotkey' -Default '')
+  $ExpectedBindingScope = [string](Get-PropertyValue -Payload $SummonConfig -Name 'binding_scope' -Default 'global')
+  $RuntimeStateExists = Test-Path -LiteralPath $StatusPath -PathType Leaf
+  $RuntimeGlobalHotkey = [string](Get-PropertyValue -Payload $Status -Name 'global_hotkey' -Default '')
+  $RuntimeBindingScope = [string](Get-PropertyValue -Payload $Status -Name 'binding_scope' -Default '')
+  $BoundedHandoffReady = (
+    $StatusKind -eq 'lens.summon.runtime_state' -and
+    $StatusValue -eq 'summon_binding_observed' -and
+    (Test-TruthyProperty -Payload $Status -Name 'bounded_handoff_ready') -and
+    $RuntimeGlobalHotkey -eq $ExpectedGlobalHotkey -and
+    $RuntimeBindingScope -eq $ExpectedBindingScope
+  )
+  $RequirementState = if ($BoundedHandoffReady) {
+    'bounded_handoff_observed'
+  } elseif ($RuntimeStateExists) {
+    'stale_or_unverified'
+  } else {
+    'missing'
+  }
+  $Blocker = if ($BoundedHandoffReady) {
+    ''
+  } else {
+    'summon_binding_runtime_missing'
+  }
+
+  return [ordered]@{
+    ready = $BoundedHandoffReady
+    status = if ($BoundedHandoffReady) { 'observed' } else { 'missing' }
+    runtime_state_path = 'data/runtime/lens-summon/status.json'
+    state_exists = $RuntimeStateExists
+    state_kind = $StatusKind
+    state_status = $StatusValue
+    state_updated_at = [string](Get-PropertyValue -Payload $Status -Name 'updated_at' -Default '')
+    global_hotkey = $RuntimeGlobalHotkey
+    expected_global_hotkey = $ExpectedGlobalHotkey
+    binding_scope = $RuntimeBindingScope
+    expected_binding_scope = $ExpectedBindingScope
+    bounded_handoff_ready = (Test-TruthyProperty -Payload $Status -Name 'bounded_handoff_ready')
+    local_open_ready = (Test-TruthyProperty -Payload $Status -Name 'local_open_ready')
+    opened = (Test-TruthyProperty -Payload $Status -Name 'opened')
+    no_launch = (Test-TruthyProperty -Payload $Status -Name 'no_launch')
+    summon_anywhere = (Test-TruthyProperty -Payload $Status -Name 'summon_anywhere')
+    os_level_summon = (Test-TruthyProperty -Payload $Status -Name 'os_level_summon')
+    requirement_state = $RequirementState
+    blocker = $Blocker
+  }
+}
+
 function New-EnablementDependency {
   param(
     [string]$Id,
@@ -727,6 +786,7 @@ $HostProcessReadback = Get-HostProcessReadback -DataRoot $DataRoot
 $TrayRuntimeReadback = Get-TrayRuntimeReadback -DataRoot $DataRoot
 $HotkeyRuntimeReadback = Get-HotkeyRuntimeReadback -DataRoot $DataRoot -SummonConfig $SummonConfig
 $OverlayRuntimeReadback = Get-OverlayRuntimeReadback -DataRoot $DataRoot -OverlayConfig $OverlayConfig
+$SummonRuntimeReadback = Get-SummonRuntimeReadback -DataRoot $DataRoot -SummonConfig $SummonConfig
 $HostProcessProofScript = if ([bool]$HostProcessReadback.resident_supervised_runtime) {
   ''
 } elseif ([string]$HostProcessReadback.blocker -eq 'resident_supervision_not_persistent') {
@@ -804,7 +864,7 @@ $OverlayBlocker = if ($OverlayRuntimeReady) {
 } else {
   'overlay_window_missing'
 }
-$SummonReady = (
+$SummonConfigReady = (
   (Test-TruthyProperty -Payload $SummonConfig -Name 'enabled') -and
   (Test-TruthyProperty -Payload $SummonConfig -Name 'binding_enabled') -and
   (Test-TruthyProperty -Payload $SummonConfig -Name 'summon_authority') -and
@@ -812,6 +872,22 @@ $SummonReady = (
   $TrayReady -and
   $OverlayReady
 )
+$SummonRuntimeReady = [bool]$SummonRuntimeReadback.ready
+$SummonReady = $SummonConfigReady -or $SummonRuntimeReady
+$SummonRequirementState = if ($SummonRuntimeReady) {
+  'ready'
+} elseif ([string]$SummonRuntimeReadback.requirement_state -ne 'missing') {
+  [string]$SummonRuntimeReadback.requirement_state
+} else {
+  'disabled_pending_authority'
+}
+$SummonBlocker = if ($SummonRuntimeReady) {
+  ''
+} elseif ([string]$SummonRuntimeReadback.blocker -and [string]$SummonRuntimeReadback.requirement_state -ne 'missing') {
+  [string]$SummonRuntimeReadback.blocker
+} else {
+  'summon_binding_missing'
+}
 $RequiredBeforeEnable = @(
   'resident_host_process',
   'tray_presence',
@@ -906,7 +982,7 @@ $EnablementDependencyReadback = @(
         overlay_runtime_state_exists = [bool]$OverlayRuntimeReadback.runtime_state_exists
         overlay_runtime_status_pid_matches_pid_file = [bool]$OverlayRuntimeReadback.runtime_status_pid_matches_pid_file
       })),
-  (New-EnablementDependency -Id 'summon_binding' -Family 'summon_binding' -Route '/lens/summon' -ReadinessRoute '/lens/summon/readiness' -Ready $SummonReady -Blocker 'summon_binding_missing' -RequirementState 'disabled_pending_authority' -BlockedReason ([string](Get-PropertyValue -Payload $SummonConfig -Name 'blocked_reason' -Default 'lens_summon_binding_disabled_pending_authority')) -PreflightScript 'scripts/lens-summon-preflight.ps1 -Mode Status' -Extra ([pscustomobject]@{
+  (New-EnablementDependency -Id 'summon_binding' -Family 'summon_binding' -Route '/lens/summon' -ReadinessRoute '/lens/summon/readiness' -Ready $SummonReady -Blocker $SummonBlocker -RequirementState $SummonRequirementState -BlockedReason ([string](Get-PropertyValue -Payload $SummonConfig -Name 'blocked_reason' -Default 'lens_summon_binding_disabled_pending_authority')) -PreflightScript 'scripts/lens-summon-preflight.ps1 -Mode Status' -Extra ([pscustomobject]@{
         config_path = $SummonConfigRelativePath
         config_exists = $null -ne $SummonConfig
         summon_runner = [string](Get-PropertyValue -Payload $SummonConfig -Name 'summon_runner' -Default 'scripts/lens-summon.ps1')
@@ -915,6 +991,15 @@ $EnablementDependencyReadback = @(
         binding_enabled = (Test-TruthyProperty -Payload $SummonConfig -Name 'binding_enabled')
         summon_authority = (Test-TruthyProperty -Payload $SummonConfig -Name 'summon_authority')
         local_process_launch_authority = (Test-TruthyProperty -Payload $SummonConfig -Name 'local_process_launch_authority')
+        summon_config_ready = $SummonConfigReady
+        summon_runtime_ready = $SummonRuntimeReady
+        summon_presence_source = if ($SummonRuntimeReady) { 'live_runtime_readback' } elseif ($SummonConfigReady) { 'enabled_config' } else { 'blocked_config' }
+        summon_runtime_requirement_state = [string]$SummonRuntimeReadback.requirement_state
+        summon_runtime_blocker = [string]$SummonRuntimeReadback.blocker
+        summon_runtime_bounded_handoff_ready = [bool]$SummonRuntimeReadback.bounded_handoff_ready
+        summon_runtime_local_open_ready = [bool]$SummonRuntimeReadback.local_open_ready
+        summon_runtime_no_launch = [bool]$SummonRuntimeReadback.no_launch
+        summon_runtime_readback = $SummonRuntimeReadback
       }))
 )
 $MissingRequiredBeforeEnable = [string[]]@($EnablementDependencyReadback | Where-Object { -not [bool]$_.ready } | ForEach-Object { [string]$_.id })
@@ -957,6 +1042,16 @@ $NextSmallestTruthfulGap = if ($Ready) {
   'persistent_supervision_execution_boundary'
 } else {
   'persistent_supervision_authority_not_granted'
+}
+$CurrentTruthfulGap = $NextSmallestTruthfulGap
+$CurrentTruthfulGapBasis = 'next_smallest_truthful_gap'
+$CurrentFirstMissingRequirement = ''
+$CurrentFirstMissingTruthfulGap = ''
+if (-not $RequiredBeforeEnableReady) {
+  $CurrentTruthfulGap = 'persistent_supervision_required_prerequisites_missing'
+  $CurrentTruthfulGapBasis = 'missing_required_before_enable'
+  $CurrentFirstMissingRequirement = [string](Get-PropertyValue -Payload $FirstMissingRequirementHandoff -Name 'id' -Default '')
+  $CurrentFirstMissingTruthfulGap = [string](Get-PropertyValue -Payload $FirstMissingRequirementHandoff -Name 'next_smallest_truthful_gap' -Default '')
 }
 $Payload = [ordered]@{
   ok = $true
@@ -1006,6 +1101,11 @@ $Payload = [ordered]@{
     would_claim_resident = $false
   }
   next_smallest_truthful_gap = $NextSmallestTruthfulGap
+  current_truthful_gap = $CurrentTruthfulGap
+  current_truthful_gap_basis = $CurrentTruthfulGapBasis
+  current_first_missing_requirement = $CurrentFirstMissingRequirement
+  current_first_missing_truthful_gap = $CurrentFirstMissingTruthfulGap
+  raw_persistent_supervision_next_smallest_truthful_gap = $NextSmallestTruthfulGap
   governance = [ordered]@{
     diagnostic_only = $true
     read_only_contract = $true

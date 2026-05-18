@@ -279,6 +279,10 @@ def test_lens_os_binding_authority_grant_writes_receipt_without_binding(monkeypa
     readback = client.get("/lens/os-binding/authority/requests?limit=10").json()
     assert readback["status"] == "authority_granted"
     assert readback["active_grant_receipt_id"] == receipt["receipt_id"]
+    assert readback["active_grant_approval_id"] == approval_id
+    assert readback["active_approval_id"] == approval_id
+    assert readback["active_authority_grant"]["receipt_id"] == receipt["receipt_id"]
+    assert readback["active_authority_grant"]["approval_id"] == approval_id
     assert readback["authority_granted"] is True
     assert readback["os_level_command_palette_binding_authority"] is True
     assert readback["os_level_command_palette"] is False

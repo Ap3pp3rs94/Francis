@@ -6,6 +6,7 @@ import shutil
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -45,6 +46,376 @@ def _run_proof(*args: str, env: dict[str, str] | None = None) -> subprocess.Comp
     )
 
 
+def _run_bringup(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+    run_env = os.environ.copy()
+    if env:
+        run_env.update(env)
+
+    return subprocess.run(
+        [
+            _powershell(),
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(_repo_root() / "scripts" / "lens-stage6-prerequisite-bringup-plan.ps1"),
+            *args,
+        ],
+        cwd=_repo_root(),
+        check=False,
+        text=True,
+        capture_output=True,
+        timeout=60,
+        env=run_env,
+    )
+
+
+def _assert_actor_scope_policy_contract(
+    readiness: dict[str, Any],
+    *,
+    scope_required: bool,
+) -> None:
+    contract = readiness["actor_scope_policy_contract"]
+    assert contract["env_var"] == "FRANCIS_API_ACTOR_SCOPES"
+    assert contract["json_shape"] == {"<actor>": ["system.write"]}
+    assert contract["required_scope"] == ("system.write" if scope_required else "")
+    assert contract["actor_placeholder"] == "<actor>"
+    assert contract["scope_required"] is scope_required
+    assert contract["powershell_example"] == ('$env:FRANCIS_API_ACTOR_SCOPES = \'{"<actor>":["system.write"]}\'')
+
+
+def _expected_approval_request_powershell(route: str) -> str:
+    return (
+        "$body = @{ actor = '<actor>'; reason = '<reason>' } | ConvertTo-Json -Compress; "
+        + "Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000"
+        + route
+        + "' -ContentType 'application/json' -Body $body"
+    )
+
+
+def _assert_approval_request_contract(
+    action: dict[str, Any],
+    *,
+    action_id: str,
+    route: str,
+    approval_action: str,
+) -> None:
+    assert action["approval_request_contract"] == {
+        "route": route,
+        "method": "POST",
+        "action_id": action_id,
+        "approval_action": approval_action,
+        "payload_shape": {
+            "actor": "<actor>",
+            "reason": "<reason>",
+        },
+        "required_scope": "system.write",
+        "actor_scope_policy_contract": {
+            "env_var": "FRANCIS_API_ACTOR_SCOPES",
+            "json_shape": {"<actor>": ["system.write"]},
+            "required_scope": "system.write",
+            "actor_placeholder": "<actor>",
+            "scope_required": True,
+            "powershell_example": '$env:FRANCIS_API_ACTOR_SCOPES = \'{"<actor>":["system.write"]}\'',
+        },
+        "creates": "approval_request",
+        "would_request_approval": False,
+        "would_grant_authority": False,
+        "would_execute": False,
+        "would_mutate_runtime": False,
+    }
+
+
+def _assert_approval_request_command(
+    command: dict[str, Any],
+    *,
+    route: str,
+) -> None:
+    assert command == {
+        "command": _expected_approval_request_powershell(route),
+        "route": route,
+        "method": "POST",
+        "api_base_url": "http://127.0.0.1:8000",
+        "payload_shape": {
+            "actor": "<actor>",
+            "reason": "<reason>",
+        },
+        "required_scope": "system.write",
+        "requires_running_api": True,
+        "requires_operator_actor": True,
+        "would_request_approval_if_run": True,
+        "status_readback_would_request_approval": False,
+    }
+
+
+def _assert_approval_decision_contract(
+    action: dict[str, Any],
+    *,
+    approval_id: str,
+) -> None:
+    contract = action["approval_decision_contract"]
+    assert contract["route"] == "/approvals/decision"
+    assert contract["method"] == "POST"
+    assert contract["payload_shape"] == {
+        "id": approval_id,
+        "action": "approve",
+        "comment": "<comment>",
+        "actor": "<actor>",
+    }
+    assert contract["allowed_actions"] == ["approve", "reject", "emergency"]
+    assert contract["required_scope"] == "approvals.decide"
+    assert contract["actor_scope_policy_contract"] == {
+        "env_var": "FRANCIS_API_ACTOR_SCOPES",
+        "json_shape": {"<actor>": ["approvals.decide"]},
+        "required_scope": "approvals.decide",
+        "actor_placeholder": "<actor>",
+        "scope_required": True,
+        "powershell_example": '$env:FRANCIS_API_ACTOR_SCOPES = \'{"<actor>":["approvals.decide"]}\'',
+    }
+    assert contract["local_caller_required_unless_remote_enabled"] is True
+    assert contract["remote_enable_env_var"] == "FRANCIS_APPROVALS_ALLOW_REMOTE_DECISIONS"
+    assert contract["would_decide_approval"] is False
+
+
+def _expected_approval_decision_powershell(approval_id: str) -> str:
+    return (
+        "$body = @{ id = '"
+        + approval_id
+        + "'; action = 'approve'; comment = '<comment>'; actor = '<actor>' } | ConvertTo-Json -Compress; "
+        + "Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/approvals/decision' "
+        + "-ContentType 'application/json' -Body $body"
+    )
+
+
+def _assert_approval_decision_command(
+    command: dict[str, Any],
+    *,
+    approval_id: str,
+) -> None:
+    assert command == {
+        "command": _expected_approval_decision_powershell(approval_id),
+        "route": "/approvals/decision",
+        "method": "POST",
+        "api_base_url": "http://127.0.0.1:8000",
+        "payload_shape": {
+            "id": approval_id,
+            "action": "approve",
+            "comment": "<comment>",
+            "actor": "<actor>",
+        },
+        "required_scope": "approvals.decide",
+        "requires_running_api": True,
+        "requires_local_caller_unless_remote_enabled": True,
+        "remote_enable_env_var": "FRANCIS_APPROVALS_ALLOW_REMOTE_DECISIONS",
+        "requires_operator_actor": True,
+        "would_decide_approval_if_run": True,
+        "status_readback_would_decide_approval": False,
+    }
+
+
+def _assert_stage6_prerequisite_bringup_operator_handoff(
+    payload: dict[str, Any],
+    *,
+    first_missing_truthful_gap: str = "resident_host_process_not_supervised",
+) -> None:
+    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
+    assert payload["recommended_next_slice"] == "run_stage6_prerequisite_bringup_request_next_for_resident_host_process"
+    assert payload["recommended_handoff_source"] == "stage6_prerequisite_bringup_operator_plan"
+    assert payload["recommended_proof_script"] == "scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status"
+    assert payload["recommended_route"] == "/lens/host/persistent-supervision"
+    assert payload["recommended_readiness_route"] == "/lens/host/persistent-supervision/enablement"
+    assert payload["authority_required"] == "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
+    assert payload["authority_granted"] is False
+    assert payload["stage6_prerequisite_bringup_plan_observed"] is True
+    assert payload["next_operator_action_requirement"] == "resident_host_process"
+    assert payload["next_operator_action"]["id"] == "request_resident_runtime_execution_authority"
+    assert payload["next_operator_action"]["route"] == "/lens/resident-runtime/authority-grant/request"
+    _assert_approval_request_contract(
+        payload["next_operator_action"],
+        action_id="request_resident_runtime_execution_authority",
+        route="/lens/resident-runtime/authority-grant/request",
+        approval_action="lens.resident_runtime.execution_authority",
+    )
+    _assert_approval_request_command(
+        payload["next_operator_action"]["approval_request_command"],
+        route="/lens/resident-runtime/authority-grant/request",
+    )
+    assert payload["next_operator_actor_scope_readiness"]["ready"] is False
+    assert payload["next_operator_actor_scope_readiness"]["reason"] == "actor_not_supplied"
+    assert payload["next_operator_actor_scope_readiness"]["actor_present"] is False
+    assert payload["next_operator_actor_scope_readiness"]["scope_required"] is True
+    assert payload["next_operator_actor_scope_readiness"]["action_id"] == (
+        "request_resident_runtime_execution_authority"
+    )
+    assert payload["next_operator_actor_scope_readiness"]["operator_must_supply_actor"] is True
+    _assert_actor_scope_policy_contract(payload["next_operator_actor_scope_readiness"], scope_required=True)
+    assert payload["next_operator_command"] == {
+        "command": (
+            ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 -Mode RequestNext -Actor <actor> -ConfirmRequest"
+        ),
+        "mode": "RequestNext",
+        "requires_confirmation": True,
+        "requires_approval_id": False,
+        "requires_operator_approval_decision": False,
+        "approval_request_command": payload["next_operator_action"]["approval_request_command"],
+    }
+    assert payload["operator_sequence_command_availability"]["truthful"] is True
+
+    handoff = payload["stage6_prerequisite_bringup_operator_plan_handoff"]
+    assert handoff["status"] == "blocked"
+    assert handoff["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
+    assert handoff["next_step"] == "run_stage6_prerequisite_bringup_request_next_for_resident_host_process"
+    assert handoff["proof_script"] == "scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status"
+    assert handoff["operator_plan_script"] == "scripts/lens-stage6-prerequisite-bringup-plan.ps1"
+    assert handoff["current_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
+    assert handoff["current_truthful_gap_basis"] == "missing_required_before_enable"
+    assert handoff["current_first_missing_requirement"] == "resident_host_process"
+    assert handoff["current_first_missing_truthful_gap"] == first_missing_truthful_gap
+    assert handoff["next_operator_action_requirement"] == "resident_host_process"
+    assert handoff["next_operator_action"]["id"] == "request_resident_runtime_execution_authority"
+    _assert_approval_request_contract(
+        handoff["next_operator_action"],
+        action_id="request_resident_runtime_execution_authority",
+        route="/lens/resident-runtime/authority-grant/request",
+        approval_action="lens.resident_runtime.execution_authority",
+    )
+    _assert_approval_request_command(
+        handoff["next_operator_action"]["approval_request_command"],
+        route="/lens/resident-runtime/authority-grant/request",
+    )
+    assert handoff["next_operator_command"]["mode"] == "RequestNext"
+    assert handoff["next_operator_actor_scope_readiness"]["ready"] is False
+    assert handoff["next_operator_actor_scope_readiness"]["reason"] == "actor_not_supplied"
+    assert handoff["next_operator_actor_scope_readiness"]["scope_required"] is True
+    assert handoff["next_operator_actor_scope_readiness"]["action_id"] == (
+        "request_resident_runtime_execution_authority"
+    )
+    _assert_actor_scope_policy_contract(handoff["next_operator_actor_scope_readiness"], scope_required=True)
+    assert handoff["operator_sequence_command_availability"]["truthful"] is True
+    assert handoff["required_before_enable"] == [
+        "resident_host_process",
+        "tray_presence",
+        "global_hotkey_binding",
+        "overlay_window",
+        "summon_binding",
+    ]
+    assert handoff["missing_required_before_enable"] == [
+        "resident_host_process",
+        "tray_presence",
+        "global_hotkey_binding",
+        "overlay_window",
+        "summon_binding",
+    ]
+    assert handoff["required_before_enable_ready"] is False
+    assert handoff["authority_required"] == "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
+    assert handoff["authority_granted"] is False
+    assert handoff["read_only_contract"] is True
+    assert handoff["diagnostic_only"] is True
+    assert handoff["plan_only"] is True
+    assert handoff["requires_explicit_operator_execution"] is True
+    assert handoff["would_execute"] is False
+    assert handoff["would_mutate"] is False
+    assert "persistent_supervision_required_prerequisites_missing" in handoff["blockers"]
+    assert first_missing_truthful_gap in handoff["blockers"]
+
+    bringup_plan = payload["stage6_prerequisite_bringup_plan"]
+    assert bringup_plan["status"] == "blocked"
+    assert bringup_plan["ok"] is True
+    assert bringup_plan["current_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
+    assert bringup_plan["current_truthful_gap_basis"] == "missing_required_before_enable"
+    assert bringup_plan["current_first_missing_requirement"] == "resident_host_process"
+    assert bringup_plan["current_first_missing_truthful_gap"] == first_missing_truthful_gap
+    assert bringup_plan["next_operator_action_requirement"] == "resident_host_process"
+    assert bringup_plan["next_operator_action"]["id"] == "request_resident_runtime_execution_authority"
+    assert bringup_plan["next_operator_command"]["mode"] == "RequestNext"
+    assert bringup_plan["next_operator_actor_scope_readiness"]["ready"] is False
+    assert bringup_plan["next_operator_actor_scope_readiness"]["reason"] == "actor_not_supplied"
+    assert bringup_plan["next_operator_actor_scope_readiness"]["scope_required"] is True
+    assert bringup_plan["next_operator_actor_scope_readiness"]["action_id"] == (
+        "request_resident_runtime_execution_authority"
+    )
+    _assert_actor_scope_policy_contract(bringup_plan["next_operator_actor_scope_readiness"], scope_required=True)
+    assert bringup_plan["operator_sequence_command_availability"]["truthful"] is True
+
+
+def test_lens_stage6_next_handoff_names_approval_wait_after_request(tmp_path: Path) -> None:
+    data_root = tmp_path / "data"
+    actor_env = {"FRANCIS_API_ACTOR_SCOPES": json.dumps({"test.system.write": ["system.write"]})}
+    request = _run_bringup(
+        "-Mode",
+        "RequestNext",
+        "-DataDir",
+        str(data_root),
+        "-Actor",
+        "test.system.write",
+        "-Reason",
+        "test next handoff approval wait",
+        "-ConfirmRequest",
+        env=actor_env,
+    )
+
+    assert request.returncode == 0, request.stderr or request.stdout
+    request_payload = json.loads(request.stdout)
+    assert request_payload["status"] == "approval_requested"
+    assert request_payload["request_result"]["action_id"] == "request_resident_runtime_execution_authority"
+    approval_id = request_payload["request_result"]["approval_id"]
+    assert approval_id
+
+    proc = _run_proof("-Mode", "Status", env={"FRANCIS_DATA_DIR": str(data_root)})
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "proof_passed"
+    assert payload["recommended_handoff_source"] == "stage6_prerequisite_bringup_operator_plan"
+    assert (
+        payload["recommended_next_slice"] == "run_stage6_prerequisite_bringup_approval_wait_for_resident_host_process"
+    )
+    assert payload["next_operator_action_requirement"] == "resident_host_process"
+    assert payload["next_operator_action"]["id"] == "await_resident_runtime_execution_authority_approval"
+    assert payload["next_operator_action"]["method"] == "GET"
+    assert payload["next_operator_action"]["approval_decision_required"] is True
+    assert payload["next_operator_action"]["pending_approval_count"] == 1
+    assert payload["next_operator_action"]["pending_approval_id"] == approval_id
+    assert payload["next_operator_action"]["decision_route"] == "/approvals/decision"
+    assert payload["next_operator_action"]["request_status"] == "pending_review"
+    _assert_approval_decision_contract(payload["next_operator_action"], approval_id=approval_id)
+    _assert_approval_decision_command(
+        payload["next_operator_action"]["approval_decision_command"],
+        approval_id=approval_id,
+    )
+    assert payload["next_operator_command"] == {
+        "command": ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status",
+        "mode": "Status",
+        "requires_confirmation": False,
+        "requires_approval_id": False,
+        "requires_operator_approval_decision": True,
+        "approval_decision_command": payload["next_operator_action"]["approval_decision_command"],
+    }
+    assert payload["next_operator_actor_scope_readiness"]["ready"] is True
+    assert payload["next_operator_actor_scope_readiness"]["reason"] == "not_required"
+    assert payload["next_operator_actor_scope_readiness"]["scope_required"] is False
+    assert payload["next_operator_actor_scope_readiness"]["operator_must_supply_actor"] is False
+    assert payload["next_operator_actor_scope_readiness"]["action_id"] == (
+        "await_resident_runtime_execution_authority_approval"
+    )
+    _assert_actor_scope_policy_contract(payload["next_operator_actor_scope_readiness"], scope_required=False)
+
+    handoff = payload["stage6_prerequisite_bringup_operator_plan_handoff"]
+    assert handoff["next_step"] == "run_stage6_prerequisite_bringup_approval_wait_for_resident_host_process"
+    assert handoff["next_operator_action"]["id"] == "await_resident_runtime_execution_authority_approval"
+    assert handoff["next_operator_action"]["pending_approval_id"] == approval_id
+    assert handoff["next_operator_action"]["pending_approval_count"] == 1
+    assert handoff["next_operator_action"]["decision_route"] == "/approvals/decision"
+    _assert_approval_decision_contract(handoff["next_operator_action"], approval_id=approval_id)
+    _assert_approval_decision_command(
+        handoff["next_operator_action"]["approval_decision_command"],
+        approval_id=approval_id,
+    )
+    assert handoff["next_operator_actor_scope_readiness"]["reason"] == "not_required"
+    assert handoff["next_operator_actor_scope_readiness"]["scope_required"] is False
+    _assert_actor_scope_policy_contract(handoff["next_operator_actor_scope_readiness"], scope_required=False)
+
+
 def test_lens_stage6_next_handoff_distills_closure_readback_without_authority(tmp_path: Path) -> None:
     data_root = tmp_path / "data"
     proc = _run_proof("-Mode", "Status", env={"FRANCIS_DATA_DIR": str(data_root)})
@@ -64,18 +435,7 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority(tm
     assert payload["criterion_next_smallest_truthful_gap"] == "summon_anywhere_blockers"
     assert payload["first_blocker_family"] == "resident_host"
     assert payload["first_blocker_family_next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
-    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_enablement_authority_not_granted"
-    assert payload["recommended_next_slice"] == (
-        "prove_persistent_supervision_enablement_authority_after_candidate_handoff"
-    )
-    assert payload["recommended_handoff_source"] == "persistent_supervision_enablement_authority_denial_handoff"
-    assert payload["recommended_proof_script"] == (
-        "scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status"
-    )
-    assert payload["recommended_route"] == "/lens/host/persistent-supervision/enablement"
-    assert payload["recommended_readiness_route"] == "/lens/host/persistent-supervision/enablement/authority/readiness"
-    assert payload["authority_required"] == "persistent_supervision_enablement_authority"
-    assert payload["authority_granted"] is False
+    _assert_stage6_prerequisite_bringup_operator_handoff(payload)
     assert payload["recommended_prerequisites_handoff_source"] == (
         "persistent_supervision_required_prerequisites_handoff"
     )
@@ -265,6 +625,7 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority(tm
     assert checks["persistent_supervision_enablement_authority_handoff"]["status"] == (
         "enablement_authority_handoff_ready"
     )
+    assert checks["stage6_prerequisite_bringup_plan"]["status"] == "operator_plan_readback_ready"
     assert checks["resident_runtime_candidate_handoff"]["status"] == "not_observed"
     assert checks["side_effects_denied"]["status"] == "readback_only"
     assert all(item["passed"] for item in payload["checks"])
@@ -274,6 +635,9 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority(tm
         "read_only_contract": True,
         "uses_lens_status_readback": True,
         "uses_persistent_supervision_readback": True,
+        "uses_stage6_prerequisite_bringup_plan_readback": True,
+        "stage6_prerequisite_bringup_plan_readback": True,
+        "stage6_prerequisite_bringup_actor_scope_readback": True,
         "proof_script": "scripts/lens-stage6-next-handoff.ps1 -Mode Status",
         "would_execute": False,
         "would_mutate": False,
@@ -333,14 +697,7 @@ def test_lens_stage6_next_handoff_consumes_unsupervised_process_readback(tmp_pat
 
     assert proc.returncode == 0, proc.stderr or proc.stdout
     payload = json.loads(proc.stdout)
-    assert payload["next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
-    assert payload["recommended_next_slice"] == (
-        "consume_resident_host_process_supervision_handoff_before_stage6_closure"
-    )
-    assert payload["recommended_handoff_source"] == "persistent_supervision_first_missing_requirement_handoff"
-    assert payload["recommended_proof_script"] == (
-        "scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status"
-    )
+    _assert_stage6_prerequisite_bringup_operator_handoff(payload)
     handoff = payload["persistent_supervision_first_missing_requirement_handoff"]
     assert handoff["blocker"] == "resident_host_process_not_supervised"
     assert handoff["requirement_state"] == "foreground_observed_not_supervised"
@@ -392,16 +749,7 @@ def test_lens_stage6_next_handoff_consumes_activation_execution_handoff(tmp_path
     assert proc.returncode == 0, proc.stderr or proc.stdout
     payload = json.loads(proc.stdout)
     assert payload["status"] == "proof_passed"
-    assert payload["next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
-    assert payload["recommended_next_slice"] == (
-        "consume_resident_host_process_supervision_handoff_before_stage6_closure"
-    )
-    assert payload["recommended_handoff_source"] == "activation_execution_handoff"
-    assert payload["recommended_proof_script"] == (
-        "scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status"
-    )
-    assert payload["authority_required"] == "process_supervision_authority"
-    assert payload["authority_granted"] is False
+    _assert_stage6_prerequisite_bringup_operator_handoff(payload)
     assert payload["latest_activation_execution_handoff_observed"] is True
     handoff = payload["latest_activation_execution_handoff"]
     assert handoff["id"] == "resident_host_process"
@@ -446,19 +794,10 @@ def test_lens_stage6_next_handoff_consumes_fresh_resident_candidate_readback(tmp
 
     assert proc.returncode == 0, proc.stderr or proc.stdout
     payload = json.loads(proc.stdout)
-    assert payload["next_smallest_truthful_gap"] == "resident_supervision_not_persistent"
-    assert payload["recommended_next_slice"] == (
-        "resolve_resident_supervision_persistence_before_persistent_supervision_enablement"
+    _assert_stage6_prerequisite_bringup_operator_handoff(
+        payload,
+        first_missing_truthful_gap="resident_supervision_not_persistent",
     )
-    assert payload["recommended_handoff_source"] == "resident_runtime_candidate_handoff"
-    assert (
-        payload["recommended_proof_script"]
-        == "scripts/lens-resident-supervision-persistence-boundary-proof.ps1 -Mode Status"
-    )
-    assert payload["recommended_route"] == "/lens/host"
-    assert payload["recommended_readiness_route"] == "/lens/host/runtime-loop/readiness"
-    assert payload["authority_required"] == "persistent_process_supervision_authority"
-    assert payload["authority_granted"] is False
     assert payload["resident_runtime_candidate_handoff_observed"] is True
 
     handoff = payload["resident_runtime_candidate_handoff"]
@@ -515,13 +854,10 @@ def test_lens_stage6_next_handoff_consumes_persisted_supervision_receipt(tmp_pat
 
     assert proc.returncode == 0, proc.stderr or proc.stdout
     payload = json.loads(proc.stdout)
-    assert payload["next_smallest_truthful_gap"] == "resident_supervision_not_persistent"
-    assert payload["recommended_next_slice"] == (
-        "resolve_resident_supervision_persistence_before_persistent_supervision_enablement"
+    _assert_stage6_prerequisite_bringup_operator_handoff(
+        payload,
+        first_missing_truthful_gap="resident_supervision_not_persistent",
     )
-    assert payload["recommended_handoff_source"] == "resident_runtime_candidate_handoff"
-    assert payload["authority_required"] == "persistent_process_supervision_authority"
-    assert payload["authority_granted"] is False
     assert payload["resident_runtime_candidate_handoff_observed"] is True
 
     handoff = payload["resident_runtime_candidate_handoff"]

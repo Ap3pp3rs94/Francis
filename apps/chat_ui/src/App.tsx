@@ -36,9 +36,12 @@ import type { MemoryTimelineEvent } from "./memory_timeline";
 import {
   LensApiError,
   LensClient,
+  presentPersistentSupervisionReadback,
   presentStage6NextHandoff,
+  presentStage6PrerequisiteBringup,
   shouldOpenLensCommandPalette,
   shouldOpenLensStatusPanel,
+  stage6PrerequisiteConfirmationMessage,
   type LensStatus,
 } from "./lens";
 import { OperationsApiError, OperationsClient } from "./operations";
@@ -3879,6 +3882,37 @@ function SystemPanel(props: {
   const [lensStatus, setLensStatus] = useState<LensStatus | null>(null);
   const [lensStatusError, setLensStatusError] = useState<string | null>(null);
   const [lensStatusLoadedAt, setLensStatusLoadedAt] = useState<number | null>(null);
+  const [lensActionBusy, setLensActionBusy] = useState<
+    ""
+      | "host_supervision_authority_request"
+      | "host_supervision_authority_grant"
+      | "host_supervision_start"
+      | "host_supervision_stop"
+      | "os_binding_authority_request"
+      | "os_binding_authority_grant"
+      | "os_binding_bind"
+      | "os_binding_stop"
+      | "tray_authority_request"
+      | "tray_authority_grant"
+      | "tray_start"
+      | "tray_stop"
+      | "overlay_authority_request"
+      | "overlay_authority_grant"
+      | "overlay_start"
+      | "overlay_stop"
+      | "summon_authority_request"
+      | "summon_authority_grant"
+      | "summon_execute"
+      | "persistent_supervision_enablement_authority_request"
+      | "persistent_supervision_enablement_authority_grant"
+      | "persistent_supervision_execution_authority_request"
+      | "persistent_supervision_execution_authority_grant"
+      | "persistent_supervision_apply"
+      | "resident_runtime_authority_request"
+      | "resident_runtime_authority_grant"
+      | "resident_runtime_execute"
+  >("");
+  const [lensActionNotice, setLensActionNotice] = useState<{ tone: "info" | "error"; text: string } | null>(null);
   const [selectedMissionId, setSelectedMissionId] = useState("");
   const [missionDetail, setMissionDetail] = useState<MissionDetail | null>(null);
   const [missionDetailBusy, setMissionDetailBusy] = useState(false);
@@ -4181,6 +4215,705 @@ function SystemPanel(props: {
     settingsError,
   ]);
 
+  const requestLensHostSupervisionAuthority = useCallback(async () => {
+    setLensActionBusy("host_supervision_authority_request");
+    setLensActionNotice(null);
+    try {
+      const response = await lensClient.requestHostSupervisionAuthority({
+        actor: "chat_ui.system",
+        reason: "request Lens host supervision authority from operator UI",
+      });
+      const approvalId = safeString(response.approval_id).trim() || safeString(response.approval.id).trim();
+      const status = safeString(response.status).trim() || "submitted";
+      setLensActionNotice({
+        tone: "info",
+        text: approvalId
+          ? `Host supervision authority request ${approvalId} is ${status}.`
+          : `Host supervision authority request is ${status}.`,
+      });
+      await refresh();
+    } catch (err) {
+      setLensActionNotice({ tone: "error", text: lensError(err) });
+    } finally {
+      setLensActionBusy("");
+    }
+  }, [lensClient, lensError, refresh]);
+
+  const grantLensHostSupervisionAuthority = useCallback(
+    async (approvalId: string) => {
+      const safeApprovalId = approvalId.trim();
+      if (!safeApprovalId) {
+        setLensActionNotice({ tone: "error", text: "Approved host supervision authority request is missing." });
+        return;
+      }
+      setLensActionBusy("host_supervision_authority_grant");
+      setLensActionNotice(null);
+      try {
+        const response = await lensClient.grantHostSupervisionAuthority({
+          approvalId: safeApprovalId,
+          actor: "chat_ui.system",
+          reason: "grant Lens host supervision authority from operator UI",
+        });
+        const status = safeString(response.status).trim() || "submitted";
+        setLensActionNotice({
+          tone: response.authority_granted ? "info" : "error",
+          text: response.authority_granted
+            ? `Host supervision authority grant ${safeApprovalId} is ${status}.`
+            : `Host supervision authority grant ${safeApprovalId} is blocked: ${
+                response.blockers.join(", ") || status
+              }.`,
+        });
+        await refresh();
+      } catch (err) {
+        setLensActionNotice({ tone: "error", text: lensError(err) });
+      } finally {
+        setLensActionBusy("");
+      }
+    },
+    [lensClient, lensError, refresh],
+  );
+
+  const executeLensHostSupervision = useCallback(
+    async (approvalId: string, mode: "resident_start" | "resident_stop") => {
+      const safeApprovalId = approvalId.trim();
+      if (!safeApprovalId) {
+        setLensActionNotice({ tone: "error", text: "Approved host supervision authority request is missing." });
+        return;
+      }
+      const starting = mode === "resident_start";
+      setLensActionBusy(starting ? "host_supervision_start" : "host_supervision_stop");
+      setLensActionNotice(null);
+      try {
+        const response = await lensClient.executeHostSupervision({
+          approvalId: safeApprovalId,
+          actor: "chat_ui.system",
+          reason: starting
+            ? "start governed Lens resident host supervision from operator UI"
+            : "stop governed Lens resident host supervision from operator UI",
+          mode,
+          runSeconds: 2,
+        });
+        const status = safeString(response.status).trim() || "submitted";
+        setLensActionNotice({
+          tone: response.executed ? "info" : "error",
+          text: response.executed
+            ? `Resident host supervision ${safeApprovalId} is ${status}.`
+            : `Resident host supervision ${safeApprovalId} is blocked: ${response.blockers.join(", ") || status}.`,
+        });
+        await refresh();
+      } catch (err) {
+        setLensActionNotice({ tone: "error", text: lensError(err) });
+      } finally {
+        setLensActionBusy("");
+      }
+    },
+    [lensClient, lensError, refresh],
+  );
+
+  const requestLensOsBindingAuthority = useCallback(async () => {
+    setLensActionBusy("os_binding_authority_request");
+    setLensActionNotice(null);
+    try {
+      const response = await lensClient.requestOsBindingAuthority({
+        actor: "chat_ui.system",
+        reason: "request Lens OS-binding hotkey authority from operator UI",
+      });
+      const approvalId = safeString(response.approval_id).trim() || safeString(response.approval.id).trim();
+      const status = safeString(response.status).trim() || "submitted";
+      setLensActionNotice({
+        tone: "info",
+        text: approvalId
+          ? `Hotkey authority request ${approvalId} is ${status}.`
+          : `Hotkey authority request is ${status}.`,
+      });
+      await refresh();
+    } catch (err) {
+      setLensActionNotice({ tone: "error", text: lensError(err) });
+    } finally {
+      setLensActionBusy("");
+    }
+  }, [lensClient, lensError, refresh]);
+
+  const grantLensOsBindingAuthority = useCallback(
+    async (approvalId: string) => {
+      const safeApprovalId = approvalId.trim();
+      if (!safeApprovalId) {
+        setLensActionNotice({ tone: "error", text: "Approved hotkey authority request is missing." });
+        return;
+      }
+      setLensActionBusy("os_binding_authority_grant");
+      setLensActionNotice(null);
+      try {
+        const response = await lensClient.grantOsBindingAuthority({
+          approvalId: safeApprovalId,
+          actor: "chat_ui.system",
+          reason: "grant Lens OS-binding hotkey authority from operator UI",
+        });
+        const status = safeString(response.status).trim() || "submitted";
+        setLensActionNotice({
+          tone: response.authority_granted ? "info" : "error",
+          text: response.authority_granted
+            ? `Hotkey authority grant ${safeApprovalId} is ${status}.`
+            : `Hotkey authority grant ${safeApprovalId} is blocked: ${response.blockers.join(", ") || status}.`,
+        });
+        await refresh();
+      } catch (err) {
+        setLensActionNotice({ tone: "error", text: lensError(err) });
+      } finally {
+        setLensActionBusy("");
+      }
+    },
+    [lensClient, lensError, refresh],
+  );
+
+  const executeLensOsBinding = useCallback(
+    async (approvalId: string, mode: "bind" | "stop") => {
+      const safeApprovalId = approvalId.trim();
+      if (!safeApprovalId) {
+        setLensActionNotice({ tone: "error", text: "Approved hotkey authority request is missing." });
+        return;
+      }
+      const binding = mode === "bind";
+      setLensActionBusy(binding ? "os_binding_bind" : "os_binding_stop");
+      setLensActionNotice(null);
+      try {
+        const response = await lensClient.executeOsBinding({
+          approvalId: safeApprovalId,
+          actor: "chat_ui.system",
+          reason: binding ? "bind governed Lens global hotkey from operator UI" : "stop Lens global hotkey from operator UI",
+          mode,
+          runSeconds: 2,
+        });
+        const status = safeString(response.status).trim() || "submitted";
+        setLensActionNotice({
+          tone: response.executed ? "info" : "error",
+          text: response.executed
+            ? `Hotkey binding ${safeApprovalId} is ${status}.`
+            : `Hotkey binding ${safeApprovalId} is blocked: ${response.blockers.join(", ") || status}.`,
+        });
+        await refresh();
+      } catch (err) {
+        setLensActionNotice({ tone: "error", text: lensError(err) });
+      } finally {
+        setLensActionBusy("");
+      }
+    },
+    [lensClient, lensError, refresh],
+  );
+
+  const requestLensTrayAuthority = useCallback(async () => {
+    setLensActionBusy("tray_authority_request");
+    setLensActionNotice(null);
+    try {
+      const response = await lensClient.requestTrayAuthority({
+        actor: "chat_ui.system",
+        reason: "request Lens tray presence authority from operator UI",
+      });
+      const approvalId = safeString(response.approval_id).trim() || safeString(response.approval.id).trim();
+      const status = safeString(response.status).trim() || "submitted";
+      setLensActionNotice({
+        tone: "info",
+        text: approvalId ? `Tray authority request ${approvalId} is ${status}.` : `Tray authority request is ${status}.`,
+      });
+      await refresh();
+    } catch (err) {
+      setLensActionNotice({ tone: "error", text: lensError(err) });
+    } finally {
+      setLensActionBusy("");
+    }
+  }, [lensClient, lensError, refresh]);
+
+  const grantLensTrayAuthority = useCallback(
+    async (approvalId: string) => {
+      const safeApprovalId = approvalId.trim();
+      if (!safeApprovalId) {
+        setLensActionNotice({ tone: "error", text: "Approved tray authority request is missing." });
+        return;
+      }
+      setLensActionBusy("tray_authority_grant");
+      setLensActionNotice(null);
+      try {
+        const response = await lensClient.grantTrayAuthority({
+          approvalId: safeApprovalId,
+          actor: "chat_ui.system",
+          reason: "grant Lens tray presence authority from operator UI",
+        });
+        const status = safeString(response.status).trim() || "submitted";
+        setLensActionNotice({
+          tone: response.authority_granted ? "info" : "error",
+          text: response.authority_granted
+            ? `Tray authority grant ${safeApprovalId} is ${status}.`
+            : `Tray authority grant ${safeApprovalId} is blocked: ${response.blockers.join(", ") || status}.`,
+        });
+        await refresh();
+      } catch (err) {
+        setLensActionNotice({ tone: "error", text: lensError(err) });
+      } finally {
+        setLensActionBusy("");
+      }
+    },
+    [lensClient, lensError, refresh],
+  );
+
+  const executeLensTrayPresence = useCallback(
+    async (approvalId: string, mode: "start" | "stop") => {
+      const safeApprovalId = approvalId.trim();
+      if (!safeApprovalId) {
+        setLensActionNotice({ tone: "error", text: "Approved tray authority request is missing." });
+        return;
+      }
+      const starting = mode === "start";
+      setLensActionBusy(starting ? "tray_start" : "tray_stop");
+      setLensActionNotice(null);
+      try {
+        const response = await lensClient.executeTrayPresence({
+          approvalId: safeApprovalId,
+          actor: "chat_ui.system",
+          reason: starting ? "start Lens tray presence from operator UI" : "stop Lens tray presence from operator UI",
+          mode,
+          runSeconds: 2,
+        });
+        const status = safeString(response.status).trim() || "submitted";
+        setLensActionNotice({
+          tone: response.executed ? "info" : "error",
+          text: response.executed
+            ? `Tray presence ${safeApprovalId} is ${status}.`
+            : `Tray presence ${safeApprovalId} is blocked: ${response.blockers.join(", ") || status}.`,
+        });
+        await refresh();
+      } catch (err) {
+        setLensActionNotice({ tone: "error", text: lensError(err) });
+      } finally {
+        setLensActionBusy("");
+      }
+    },
+    [lensClient, lensError, refresh],
+  );
+
+  const requestLensOverlayAuthority = useCallback(async () => {
+    setLensActionBusy("overlay_authority_request");
+    setLensActionNotice(null);
+    try {
+      const response = await lensClient.requestOverlayAuthority({
+        actor: "chat_ui.system",
+        reason: "request Lens overlay window authority from operator UI",
+      });
+      const approvalId = safeString(response.approval_id).trim() || safeString(response.approval.id).trim();
+      const status = safeString(response.status).trim() || "submitted";
+      setLensActionNotice({
+        tone: "info",
+        text: approvalId
+          ? `Overlay authority request ${approvalId} is ${status}.`
+          : `Overlay authority request is ${status}.`,
+      });
+      await refresh();
+    } catch (err) {
+      setLensActionNotice({ tone: "error", text: lensError(err) });
+    } finally {
+      setLensActionBusy("");
+    }
+  }, [lensClient, lensError, refresh]);
+
+  const grantLensOverlayAuthority = useCallback(
+    async (approvalId: string) => {
+      const safeApprovalId = approvalId.trim();
+      if (!safeApprovalId) {
+        setLensActionNotice({ tone: "error", text: "Approved overlay authority request is missing." });
+        return;
+      }
+      setLensActionBusy("overlay_authority_grant");
+      setLensActionNotice(null);
+      try {
+        const response = await lensClient.grantOverlayAuthority({
+          approvalId: safeApprovalId,
+          actor: "chat_ui.system",
+          reason: "grant Lens overlay window authority from operator UI",
+        });
+        const status = safeString(response.status).trim() || "submitted";
+        setLensActionNotice({
+          tone: response.authority_granted ? "info" : "error",
+          text: response.authority_granted
+            ? `Overlay authority grant ${safeApprovalId} is ${status}.`
+            : `Overlay authority grant ${safeApprovalId} is blocked: ${response.blockers.join(", ") || status}.`,
+        });
+        await refresh();
+      } catch (err) {
+        setLensActionNotice({ tone: "error", text: lensError(err) });
+      } finally {
+        setLensActionBusy("");
+      }
+    },
+    [lensClient, lensError, refresh],
+  );
+
+  const executeLensOverlayWindow = useCallback(
+    async (approvalId: string, mode: "start" | "stop") => {
+      const safeApprovalId = approvalId.trim();
+      if (!safeApprovalId) {
+        setLensActionNotice({ tone: "error", text: "Approved overlay authority request is missing." });
+        return;
+      }
+      const starting = mode === "start";
+      setLensActionBusy(starting ? "overlay_start" : "overlay_stop");
+      setLensActionNotice(null);
+      try {
+        const response = await lensClient.executeOverlayWindow({
+          approvalId: safeApprovalId,
+          actor: "chat_ui.system",
+          reason: starting ? "start Lens overlay window from operator UI" : "stop Lens overlay window from operator UI",
+          mode,
+          runSeconds: 2,
+        });
+        const status = safeString(response.status).trim() || "submitted";
+        setLensActionNotice({
+          tone: response.executed ? "info" : "error",
+          text: response.executed
+            ? `Overlay window ${safeApprovalId} is ${status}.`
+            : `Overlay window ${safeApprovalId} is blocked: ${response.blockers.join(", ") || status}.`,
+        });
+        await refresh();
+      } catch (err) {
+        setLensActionNotice({ tone: "error", text: lensError(err) });
+      } finally {
+        setLensActionBusy("");
+      }
+    },
+    [lensClient, lensError, refresh],
+  );
+
+  const requestLensSummonAuthority = useCallback(async () => {
+    setLensActionBusy("summon_authority_request");
+    setLensActionNotice(null);
+    try {
+      const response = await lensClient.requestSummonAuthority({
+        actor: "chat_ui.system",
+        reason: "request Lens summon action authority from operator UI",
+      });
+      const approvalId = safeString(response.approval_id).trim() || safeString(response.approval.id).trim();
+      const status = safeString(response.status).trim() || "submitted";
+      setLensActionNotice({
+        tone: "info",
+        text: approvalId
+          ? `Summon authority request ${approvalId} is ${status}.`
+          : `Summon authority request is ${status}.`,
+      });
+      await refresh();
+    } catch (err) {
+      setLensActionNotice({ tone: "error", text: lensError(err) });
+    } finally {
+      setLensActionBusy("");
+    }
+  }, [lensClient, lensError, refresh]);
+
+  const grantLensSummonAuthority = useCallback(
+    async (approvalId: string) => {
+      const safeApprovalId = approvalId.trim();
+      if (!safeApprovalId) {
+        setLensActionNotice({ tone: "error", text: "Approved summon authority request is missing." });
+        return;
+      }
+      setLensActionBusy("summon_authority_grant");
+      setLensActionNotice(null);
+      try {
+        const response = await lensClient.grantSummonAuthority({
+          approvalId: safeApprovalId,
+          actor: "chat_ui.system",
+          reason: "grant Lens summon action authority from operator UI",
+        });
+        const status = safeString(response.status).trim() || "submitted";
+        setLensActionNotice({
+          tone: response.authority_granted ? "info" : "error",
+          text: response.authority_granted
+            ? `Summon authority grant ${safeApprovalId} is ${status}.`
+            : `Summon authority grant ${safeApprovalId} is blocked: ${response.blockers.join(", ") || status}.`,
+        });
+        await refresh();
+      } catch (err) {
+        setLensActionNotice({ tone: "error", text: lensError(err) });
+      } finally {
+        setLensActionBusy("");
+      }
+    },
+    [lensClient, lensError, refresh],
+  );
+
+  const executeLensSummonAction = useCallback(
+    async (approvalId: string) => {
+      const safeApprovalId = approvalId.trim();
+      if (!safeApprovalId) {
+        setLensActionNotice({ tone: "error", text: "Approved summon authority request is missing." });
+        return;
+      }
+      setLensActionBusy("summon_execute");
+      setLensActionNotice(null);
+      try {
+        const response = await lensClient.executeSummonAction({
+          approvalId: safeApprovalId,
+          actor: "chat_ui.system",
+          reason: "record bounded Lens summon handoff from operator UI",
+          mode: "launch",
+          runSeconds: 2,
+          allowLaunch: false,
+        });
+        const status = safeString(response.status).trim() || "submitted";
+        setLensActionNotice({
+          tone: response.executed ? "info" : "error",
+          text: response.executed
+            ? `Summon handoff ${safeApprovalId} is ${status}.`
+            : `Summon handoff ${safeApprovalId} is blocked: ${response.blockers.join(", ") || status}.`,
+        });
+        await refresh();
+      } catch (err) {
+        setLensActionNotice({ tone: "error", text: lensError(err) });
+      } finally {
+        setLensActionBusy("");
+      }
+    },
+    [lensClient, lensError, refresh],
+  );
+
+  const requestLensPersistentSupervisionEnablementAuthority = useCallback(async () => {
+    setLensActionBusy("persistent_supervision_enablement_authority_request");
+    setLensActionNotice(null);
+    try {
+      const response = await lensClient.requestPersistentSupervisionEnablementAuthority({
+        actor: "chat_ui.system",
+        reason: "request Lens persistent supervision enablement authority from operator UI",
+      });
+      const approvalId = safeString(response.approval_id).trim() || safeString(response.approval.id).trim();
+      const status = safeString(response.status).trim() || "submitted";
+      setLensActionNotice({
+        tone: "info",
+        text: approvalId
+          ? `Persistent supervision enablement authority request ${approvalId} is ${status}.`
+          : `Persistent supervision enablement authority request is ${status}.`,
+      });
+      await refresh();
+    } catch (err) {
+      setLensActionNotice({ tone: "error", text: lensError(err) });
+    } finally {
+      setLensActionBusy("");
+    }
+  }, [lensClient, lensError, refresh]);
+
+  const grantLensPersistentSupervisionEnablementAuthority = useCallback(
+    async (approvalId: string) => {
+      const safeApprovalId = approvalId.trim();
+      if (!safeApprovalId) {
+        setLensActionNotice({ tone: "error", text: "Approved persistent supervision enablement request is missing." });
+        return;
+      }
+      setLensActionBusy("persistent_supervision_enablement_authority_grant");
+      setLensActionNotice(null);
+      try {
+        const response = await lensClient.grantPersistentSupervisionEnablementAuthority({
+          approvalId: safeApprovalId,
+          actor: "chat_ui.system",
+          reason: "grant Lens persistent supervision enablement authority from operator UI",
+        });
+        const status = safeString(response.status).trim() || "submitted";
+        setLensActionNotice({
+          tone: response.authority_granted ? "info" : "error",
+          text: response.authority_granted
+            ? `Persistent supervision enablement authority grant ${safeApprovalId} is ${status}.`
+            : `Persistent supervision enablement authority grant ${safeApprovalId} is blocked: ${
+                response.blockers.join(", ") || status
+              }.`,
+        });
+        await refresh();
+      } catch (err) {
+        setLensActionNotice({ tone: "error", text: lensError(err) });
+      } finally {
+        setLensActionBusy("");
+      }
+    },
+    [lensClient, lensError, refresh],
+  );
+
+  const requestLensPersistentSupervisionExecutionAuthority = useCallback(async () => {
+    setLensActionBusy("persistent_supervision_execution_authority_request");
+    setLensActionNotice(null);
+    try {
+      const response = await lensClient.requestPersistentSupervisionExecutionAuthority({
+        actor: "chat_ui.system",
+        reason: "request Lens persistent supervision execution authority from operator UI",
+      });
+      const approvalId = safeString(response.approval_id).trim() || safeString(response.approval.id).trim();
+      const status = safeString(response.status).trim() || "submitted";
+      setLensActionNotice({
+        tone: "info",
+        text: approvalId
+          ? `Persistent supervision execution authority request ${approvalId} is ${status}.`
+          : `Persistent supervision execution authority request is ${status}.`,
+      });
+      await refresh();
+    } catch (err) {
+      setLensActionNotice({ tone: "error", text: lensError(err) });
+    } finally {
+      setLensActionBusy("");
+    }
+  }, [lensClient, lensError, refresh]);
+
+  const grantLensPersistentSupervisionExecutionAuthority = useCallback(
+    async (approvalId: string) => {
+      const safeApprovalId = approvalId.trim();
+      if (!safeApprovalId) {
+        setLensActionNotice({ tone: "error", text: "Approved persistent supervision execution request is missing." });
+        return;
+      }
+      setLensActionBusy("persistent_supervision_execution_authority_grant");
+      setLensActionNotice(null);
+      try {
+        const response = await lensClient.grantPersistentSupervisionExecutionAuthority({
+          approvalId: safeApprovalId,
+          actor: "chat_ui.system",
+          reason: "grant Lens persistent supervision execution authority from operator UI",
+        });
+        const status = safeString(response.status).trim() || "submitted";
+        setLensActionNotice({
+          tone: response.authority_granted ? "info" : "error",
+          text: response.authority_granted
+            ? `Persistent supervision execution authority grant ${safeApprovalId} is ${status}.`
+            : `Persistent supervision execution authority grant ${safeApprovalId} is blocked: ${
+                response.blockers.join(", ") || status
+              }.`,
+        });
+        await refresh();
+      } catch (err) {
+        setLensActionNotice({ tone: "error", text: lensError(err) });
+      } finally {
+        setLensActionBusy("");
+      }
+    },
+    [lensClient, lensError, refresh],
+  );
+
+  const applyLensPersistentSupervisionEnablement = useCallback(
+    async (approvalId: string) => {
+      const safeApprovalId = approvalId.trim();
+      if (!safeApprovalId) {
+        setLensActionNotice({ tone: "error", text: "Approved persistent supervision execution request is missing." });
+        return;
+      }
+      setLensActionBusy("persistent_supervision_apply");
+      setLensActionNotice(null);
+      try {
+        const response = await lensClient.applyPersistentSupervisionEnablement({
+          approvalId: safeApprovalId,
+          actor: "chat_ui.system",
+          reason: "apply Lens persistent supervision enablement from operator UI",
+        });
+        const status = safeString(response.status).trim() || "submitted";
+        setLensActionNotice({
+          tone: response.applied || response.executed ? "info" : "error",
+          text:
+            response.applied || response.executed
+              ? `Persistent supervision enablement ${safeApprovalId} is ${status}.`
+              : `Persistent supervision enablement ${safeApprovalId} is blocked: ${
+                  response.blockers.join(", ") || status
+                }.`,
+        });
+        await refresh();
+      } catch (err) {
+        setLensActionNotice({ tone: "error", text: lensError(err) });
+      } finally {
+        setLensActionBusy("");
+      }
+    },
+    [lensClient, lensError, refresh],
+  );
+
+  const requestLensResidentRuntimeAuthority = useCallback(async () => {
+    setLensActionBusy("resident_runtime_authority_request");
+    setLensActionNotice(null);
+    try {
+      const response = await lensClient.requestResidentRuntimeAuthority({
+        actor: "chat_ui.system",
+        reason: "request Lens resident runtime execution authority from operator UI",
+      });
+      const approvalId = safeString(response.approval_id).trim() || safeString(response.approval.id).trim();
+      const status = safeString(response.status).trim() || "submitted";
+      setLensActionNotice({
+        tone: "info",
+        text: approvalId
+          ? `Resident runtime authority request ${approvalId} is ${status}.`
+          : `Resident runtime authority request is ${status}.`,
+      });
+      await refresh();
+    } catch (err) {
+      setLensActionNotice({ tone: "error", text: lensError(err) });
+    } finally {
+      setLensActionBusy("");
+    }
+  }, [lensClient, lensError, refresh]);
+
+  const grantLensResidentRuntimeAuthority = useCallback(
+    async (approvalId: string) => {
+      const safeApprovalId = approvalId.trim();
+      if (!safeApprovalId) {
+        setLensActionNotice({ tone: "error", text: "Approved resident runtime authority request is missing." });
+        return;
+      }
+      setLensActionBusy("resident_runtime_authority_grant");
+      setLensActionNotice(null);
+      try {
+        const response = await lensClient.grantResidentRuntimeAuthority({
+          approvalId: safeApprovalId,
+          actor: "chat_ui.system",
+          reason: "grant Lens resident runtime execution authority from operator UI",
+        });
+        const status = safeString(response.status).trim() || "submitted";
+        setLensActionNotice({
+          tone: response.authority_granted ? "info" : "error",
+          text: response.authority_granted
+            ? `Resident runtime authority grant ${safeApprovalId} is ${status}.`
+            : `Resident runtime authority grant ${safeApprovalId} is blocked: ${
+                response.blockers.join(", ") || status
+              }.`,
+        });
+        await refresh();
+      } catch (err) {
+        setLensActionNotice({ tone: "error", text: lensError(err) });
+      } finally {
+        setLensActionBusy("");
+      }
+    },
+    [lensClient, lensError, refresh],
+  );
+
+  const executeLensResidentRuntime = useCallback(
+    async (approvalId: string) => {
+      const safeApprovalId = approvalId.trim();
+      if (!safeApprovalId) {
+        setLensActionNotice({ tone: "error", text: "Resident runtime authority approval id is missing." });
+        return;
+      }
+      setLensActionBusy("resident_runtime_execute");
+      setLensActionNotice(null);
+      try {
+        const response = await lensClient.executeResidentRuntimeActivation({
+          approvalId: safeApprovalId,
+          actor: "chat_ui.system",
+          reason: "start bounded Lens resident runtime from operator UI",
+          runSeconds: 2,
+        });
+        const status = safeString(response.status).trim() || "submitted";
+        setLensActionNotice({
+          tone: response.executed ? "info" : "error",
+          text: response.executed
+            ? `Bounded resident runtime ${safeApprovalId} is ${status}.`
+            : `Bounded resident runtime ${safeApprovalId} is blocked: ${response.blockers.join(", ") || status}.`,
+        });
+        await refresh();
+      } catch (err) {
+        setLensActionNotice({ tone: "error", text: lensError(err) });
+      } finally {
+        setLensActionBusy("");
+      }
+    },
+    [lensClient, lensError, refresh],
+  );
+
   const recordObserverScan = useCallback(async () => {
     if (!modeClient) {
       setObserverScanNotice({ tone: "error", text: "API base URL is required before observer scans can be recorded." });
@@ -4463,6 +5196,50 @@ function SystemPanel(props: {
   const lensStage6ClosureCriteria = lensStage6Closure?.criteria ?? [];
   const lensStage6ClosureNextGap = safeString(lensStage6Closure?.next_smallest_truthful_gap).trim();
   const lensStage6NextHandoff = presentStage6NextHandoff(lensStage6Readiness?.next_handoff);
+  const lensStage6PrerequisiteBringup = lensStage6Readiness?.prerequisite_bringup;
+  const lensStage6PrerequisiteBringupReadback = presentStage6PrerequisiteBringup(lensStage6PrerequisiteBringup);
+  const lensStage6PrerequisiteNextActionAvailable =
+    lensStage6PrerequisiteBringupReadback.canRequestNextResidentRuntimeAuthority ||
+    lensStage6PrerequisiteBringupReadback.canGrantNextResidentRuntimeAuthority ||
+    lensStage6PrerequisiteBringupReadback.canRequestNextHostSupervisionAuthority ||
+    lensStage6PrerequisiteBringupReadback.canGrantNextHostSupervisionAuthority ||
+    lensStage6PrerequisiteBringupReadback.canExecuteNextSupervisedResidentHostStart ||
+    lensStage6PrerequisiteBringupReadback.canRequestNextTrayAuthority ||
+    lensStage6PrerequisiteBringupReadback.canGrantNextTrayAuthority ||
+    lensStage6PrerequisiteBringupReadback.canExecuteNextTrayPresence ||
+    lensStage6PrerequisiteBringupReadback.canRequestNextOsBindingAuthority ||
+    lensStage6PrerequisiteBringupReadback.canGrantNextOsBindingAuthority ||
+    lensStage6PrerequisiteBringupReadback.canExecuteNextOsBinding ||
+    lensStage6PrerequisiteBringupReadback.canRequestNextOverlayAuthority ||
+    lensStage6PrerequisiteBringupReadback.canGrantNextOverlayAuthority ||
+    lensStage6PrerequisiteBringupReadback.canExecuteNextOverlayWindow ||
+    lensStage6PrerequisiteBringupReadback.canRequestNextSummonAuthority ||
+    lensStage6PrerequisiteBringupReadback.canGrantNextSummonAuthority ||
+    lensStage6PrerequisiteBringupReadback.canExecuteNextSummonAction ||
+    lensStage6PrerequisiteBringupReadback.canRequestNextPersistentSupervisionEnablementAuthority ||
+    lensStage6PrerequisiteBringupReadback.canGrantNextPersistentSupervisionEnablementAuthority ||
+    lensStage6PrerequisiteBringupReadback.canRequestNextPersistentSupervisionExecutionAuthority ||
+    lensStage6PrerequisiteBringupReadback.canGrantNextPersistentSupervisionExecutionAuthority ||
+    lensStage6PrerequisiteBringupReadback.canApplyNextPersistentSupervisionEnablement;
+  const lensStage6NextOperatorAction = lensStage6PrerequisiteBringup?.next_operator_action;
+  const lensStage6NextOperatorCommand = lensStage6PrerequisiteBringup?.next_operator_command;
+  const lensStage6OperatorSequence = lensStage6PrerequisiteBringupReadback.operatorSequence;
+  const lensStage6OperatorSequenceAvailability =
+    lensStage6PrerequisiteBringupReadback.operatorSequenceCommandAvailability;
+  const lensStage6OperatorSequenceAvailabilityCheck =
+    lensStage6PrerequisiteBringupReadback.operatorSequenceCommandAvailabilityCheck;
+  const lensStage6PrerequisiteChecks = lensStage6PrerequisiteBringupReadback.checks;
+  const lensStage6PrerequisitePassedChecks = lensStage6PrerequisiteChecks.filter((check) => check.passed).length;
+  const confirmLensStage6PrerequisiteAction = useCallback(() => {
+    if (!lensStage6PrerequisiteBringupReadback.requiresConfirmation) return true;
+    return window.confirm(stage6PrerequisiteConfirmationMessage(lensStage6PrerequisiteBringupReadback));
+  }, [
+    lensStage6PrerequisiteBringupReadback.command,
+    lensStage6PrerequisiteBringupReadback.commandMode,
+    lensStage6PrerequisiteBringupReadback.nextActionId,
+    lensStage6PrerequisiteBringupReadback.requiresConfirmation,
+  ]);
+  const lensPersistentSupervision = presentPersistentSupervisionReadback(lensStage6Readiness?.next_handoff);
   const lensStage6GovernanceReadback = [
     ["status readback", lensStage6NextHandoff.usesLensStatusReadback],
     ["approval", lensStage6NextHandoff.approvalDecisionAuthority],
@@ -4490,6 +5267,19 @@ function SystemPanel(props: {
     ["service config updated", lensStage6NextHandoff.sourceHandoffServiceConfigUpdated],
     ["applied", lensStage6NextHandoff.sourceHandoffApplied],
     ["executed", lensStage6NextHandoff.sourceHandoffExecuted],
+  ] as const;
+  const lensPersistentSupervisionAuthorityReadback = [
+    ["read-only", lensPersistentSupervision.readOnlyContract],
+    ["diagnostic", lensPersistentSupervision.diagnosticOnly],
+    ["would execute", lensPersistentSupervision.wouldExecute],
+    ["would mutate", lensPersistentSupervision.wouldMutate],
+    ["enablement authority", lensPersistentSupervision.enablementAuthorityGranted],
+    ["execution authority", lensPersistentSupervision.executionAuthorityGranted],
+    ["receipt write", lensPersistentSupervision.receiptWriteAuthority],
+    ["resident claim", lensPersistentSupervision.residentClaimAllowed],
+    ["service config", lensPersistentSupervision.serviceConfigUpdated],
+    ["applied", lensPersistentSupervision.applied],
+    ["executed", lensPersistentSupervision.executed],
   ] as const;
   const lensStage6Criteria = lensStage6Readiness?.criteria ?? [];
   const lensScopeFocus = isRecord(lensStatus?.scope.focus) ? lensStatus?.scope.focus : null;
@@ -4519,6 +5309,397 @@ function SystemPanel(props: {
     safeString(lensActivationDenialReceipts?.route).trim() ||
     safeString(lensResidentHost?.activation_denial_receipts_route).trim() ||
     safeString(lensStatus?.receipts.lens_host_activation_denials_route).trim();
+  const lensHostSupervisionAuthorityRequests = lensResidentHost?.supervision_authority_requests;
+  const lensHostSupervisionAuthorityRequestStatus = safeString(lensHostSupervisionAuthorityRequests?.status).trim();
+  const lensHostSupervisionAuthorityApprovedRequests =
+    lensHostSupervisionAuthorityRequests?.by_status.approved ?? [];
+  const lensHostSupervisionAuthorityLatestApproved =
+    lensHostSupervisionAuthorityApprovedRequests[0] ??
+    (safeString(lensHostSupervisionAuthorityRequests?.latest?.status).trim() === "approved"
+      ? lensHostSupervisionAuthorityRequests?.latest
+      : undefined);
+  const lensHostSupervisionAuthorityApprovedId = safeString(lensHostSupervisionAuthorityLatestApproved?.id).trim();
+  const lensHostSupervisionAuthorityGrantRoute =
+    safeString(lensHostSupervisionAuthorityRequests?.grant_route).trim() || "/lens/host/supervision/authority";
+  const lensHostSupervisionAuthorityActiveGrantId = safeString(
+    lensHostSupervisionAuthorityRequests?.active_grant_receipt_id,
+  ).trim();
+  const lensHostSupervisionAuthorityGranted = Boolean(
+    lensHostSupervisionAuthorityRequests?.authority_granted || lensHostSupervisionAuthorityActiveGrantId,
+  );
+  const lensHostSupervisionAuthorityCanGrant =
+    Boolean(lensHostSupervisionAuthorityApprovedId) && !lensHostSupervisionAuthorityGranted;
+  const lensResidentRuntimeAuthorityRequests = lensResidentHost?.resident_runtime_authority_requests;
+  const lensResidentRuntimeAuthorityRequestStatus = safeString(lensResidentRuntimeAuthorityRequests?.status).trim();
+  const lensResidentRuntimeAuthorityApprovedRequests = lensResidentRuntimeAuthorityRequests?.by_status.approved ?? [];
+  const lensResidentRuntimeAuthorityLatestApproved =
+    lensResidentRuntimeAuthorityApprovedRequests[0] ??
+    (safeString(lensResidentRuntimeAuthorityRequests?.latest?.status).trim() === "approved"
+      ? lensResidentRuntimeAuthorityRequests?.latest
+      : undefined);
+  const lensResidentRuntimeAuthorityApprovedId = safeString(lensResidentRuntimeAuthorityLatestApproved?.id).trim();
+  const lensResidentRuntimeAuthorityRequestRoute =
+    safeString(lensResidentRuntimeAuthorityRequests?.request_route).trim() ||
+    safeString(lensResidentHost?.resident_runtime_authority_request_route).trim() ||
+    "/lens/resident-runtime/authority-grant/request";
+  const lensResidentRuntimeAuthorityGrantRoute =
+    safeString(lensResidentRuntimeAuthorityRequests?.grant_route).trim() ||
+    safeString(lensResidentHost?.resident_runtime_authority_grant_route).trim() ||
+    "/lens/resident-runtime/authority-grant";
+  const lensResidentRuntimeAuthorityActiveGrantId = safeString(
+    lensResidentRuntimeAuthorityRequests?.active_grant_receipt_id,
+  ).trim();
+  const lensResidentRuntimeAuthorityGranted = Boolean(
+    lensResidentRuntimeAuthorityRequests?.authority_granted || lensResidentRuntimeAuthorityActiveGrantId,
+  );
+  const lensResidentRuntimeAuthorityCanRequest =
+    lensHostSupervisionAuthorityGranted &&
+    !lensResidentRuntimeAuthorityGranted &&
+    safeNumber(lensResidentRuntimeAuthorityRequests?.pending_count, 0) === 0 &&
+    safeNumber(lensResidentRuntimeAuthorityRequests?.approved_count, 0) === 0;
+  const lensResidentRuntimeAuthorityCanGrant =
+    lensHostSupervisionAuthorityGranted &&
+    Boolean(lensResidentRuntimeAuthorityApprovedId) &&
+    !lensResidentRuntimeAuthorityGranted;
+  const lensResidentRuntimeExecuteRoute =
+    safeString(lensResidentRuntimeAuthorityRequests?.execute_route).trim() || "/lens/resident-runtime/execute";
+  const lensResidentRuntimeCanExecute =
+    lensHostSupervisionAuthorityGranted &&
+    lensResidentRuntimeAuthorityGranted &&
+    Boolean(lensResidentRuntimeAuthorityApprovedId);
+  const lensResidentRuntimeAuthorityReadiness =
+    lensResidentHost?.resident_runtime_authority_grant_readiness?.kind ||
+    lensResidentHost?.resident_runtime_authority_grant_readiness?.route
+      ? lensResidentHost.resident_runtime_authority_grant_readiness
+      : lensStatus?.resident_runtime_authority_grant_readiness;
+  const lensResidentRuntimeAuthorityStatus = safeString(lensResidentRuntimeAuthorityReadiness?.status).trim();
+  const lensResidentRuntimeAuthorityRoute =
+    safeString(lensResidentRuntimeAuthorityReadiness?.route).trim() ||
+    safeString(lensResidentHost?.resident_runtime_authority_grant_readiness_route).trim() ||
+    safeString(lensStatus?.receipts.lens_resident_runtime_authority_grant_readiness_route).trim();
+  const lensResidentRuntimeAuthorityFirstHandoff =
+    lensResidentRuntimeAuthorityReadiness?.first_blocked_requirement_handoff;
+  const lensResidentRuntimeAuthorityFirstRequirement =
+    safeString(lensResidentRuntimeAuthorityReadiness?.first_blocked_requirement).trim() ||
+    safeString(lensResidentRuntimeAuthorityFirstHandoff?.id).trim();
+  const lensResidentRuntimeAuthorityFirstNext =
+    safeString(lensResidentRuntimeAuthorityFirstHandoff?.next_step).trim() ||
+    safeString(lensResidentRuntimeAuthorityReadiness?.next_smallest_truthful_gap).trim();
+  const lensResidentRuntimeAuthorityFirstRoute =
+    safeString(lensResidentRuntimeAuthorityFirstHandoff?.readiness_route).trim() ||
+    safeString(lensResidentRuntimeAuthorityFirstHandoff?.route).trim();
+  const lensResidentRuntimeAuthorityFirstBlockers = lensResidentRuntimeAuthorityFirstHandoff?.blockers ?? [];
+  const lensResidentRuntimeAuthorityBlockedRequirements =
+    lensResidentRuntimeAuthorityReadiness?.blocked_requirements ?? [];
+  const lensResidentRuntimeHostSupervisionRequestRoute =
+    safeString(lensResidentRuntimeAuthorityFirstHandoff?.request_route).trim() ||
+    "/lens/host/supervision/authority/request";
+  const lensResidentRuntimeAuthorityLoaded = Boolean(
+    lensResidentRuntimeAuthorityStatus ||
+      lensResidentRuntimeAuthorityRoute ||
+      lensResidentRuntimeAuthorityBlockedRequirements.length ||
+      lensResidentRuntimeAuthorityReadiness?.requirements_total,
+  );
+  const lensResidentRuntimeCanRequestHostSupervisionAuthority =
+    lensResidentRuntimeAuthorityLoaded &&
+    !lensResidentRuntimeAuthorityReadiness?.ready &&
+    (lensResidentRuntimeAuthorityFirstRequirement === "resident_supervision_gate" ||
+      lensResidentRuntimeAuthorityBlockedRequirements.includes("resident_supervision_gate") ||
+      lensResidentRuntimeAuthorityFirstNext.includes("host_supervision_authority") ||
+      lensResidentRuntimeAuthorityFirstBlockers.includes("process_supervision_authority_not_granted"));
+  const lensResidentRuntimeExecutionReceipts =
+    lensResidentHost?.resident_runtime_execution_receipts?.kind ||
+    lensResidentHost?.resident_runtime_execution_receipts?.route
+      ? lensResidentHost.resident_runtime_execution_receipts
+      : lensStatus?.resident_runtime_execution_receipts;
+  const lensResidentRuntimeExecutionReceiptStatus = safeString(lensResidentRuntimeExecutionReceipts?.status).trim();
+  const lensResidentRuntimeExecutionReceiptTotal = safeNumber(lensResidentRuntimeExecutionReceipts?.total, 0);
+  const lensResidentRuntimeLatestReceiptId = safeString(lensResidentRuntimeExecutionReceipts?.latest_receipt_id).trim();
+  const lensResidentRuntimeLatestStatus = safeString(lensResidentRuntimeExecutionReceipts?.latest_status).trim();
+  const lensResidentRuntimeLatestMode = safeString(lensResidentRuntimeExecutionReceipts?.latest_supervision_mode).trim();
+  const lensResidentRuntimeLatestGap = safeString(
+    lensResidentRuntimeExecutionReceipts?.latest_next_smallest_truthful_gap,
+  ).trim();
+  const lensResidentRuntimeExecutionReceiptsRoute =
+    safeString(lensResidentRuntimeExecutionReceipts?.route).trim() ||
+    safeString(lensResidentHost?.resident_runtime_execution_receipts_route).trim() ||
+    safeString(lensStatus?.receipts.lens_resident_runtime_executions_route).trim();
+  const lensHostSupervisionExecuteRoute =
+    safeString(lensResidentRuntimeExecutionReceipts?.host_supervision_execute_route).trim() ||
+    "/lens/host/supervision/execute";
+  const lensHostSupervisionCanStartResident =
+    lensHostSupervisionAuthorityGranted && Boolean(lensHostSupervisionAuthorityApprovedId);
+  const lensHostSupervisionCanStopResident =
+    lensHostSupervisionCanStartResident &&
+    lensResidentRuntimeExecutionReceipts?.latest_supervision_mode === "resident_start" &&
+    lensResidentRuntimeExecutionReceipts?.latest_resident_supervised_runtime === true;
+  const lensTrayAuthorityRequests = lensStatus?.tray_authority_requests;
+  const lensTrayExecutionReceipts = lensStatus?.tray_execution_receipts;
+  const lensTrayAuthorityApproved =
+    lensTrayAuthorityRequests?.approved[0] ??
+    (safeString(lensTrayAuthorityRequests?.latest?.status).trim() === "approved"
+      ? lensTrayAuthorityRequests?.latest
+      : undefined);
+  const lensTrayAuthorityApprovedId =
+    safeString(lensTrayAuthorityApproved?.id).trim() ||
+    safeString(lensTrayAuthorityApproved?.approval_id).trim() ||
+    safeString(lensTrayAuthorityRequests?.active_authority_grant.approval_id).trim();
+  const lensTrayAuthorityActiveGrantId = safeString(
+    lensTrayAuthorityRequests?.active_authority_grant.receipt_id,
+  ).trim();
+  const lensTrayAuthorityGranted = Boolean(lensTrayAuthorityRequests?.authority_granted || lensTrayAuthorityActiveGrantId);
+  const lensTrayPendingCount = safeNumber(lensTrayAuthorityRequests?.approval_counts.pending, 0);
+  const lensTrayApprovedCount = safeNumber(lensTrayAuthorityRequests?.approval_counts.approved, 0);
+  const lensTrayResidentHostReady =
+    lensResidentRuntimeExecutionReceipts?.latest_supervision_mode === "resident_start" &&
+    lensResidentRuntimeExecutionReceipts?.latest_resident_supervised_runtime === true;
+  const lensTrayCanRequest =
+    lensTrayResidentHostReady && !lensTrayAuthorityGranted && lensTrayPendingCount === 0 && lensTrayApprovedCount === 0;
+  const lensTrayCanGrant = lensTrayResidentHostReady && Boolean(lensTrayAuthorityApprovedId) && !lensTrayAuthorityGranted;
+  const lensTrayCanStart =
+    lensTrayResidentHostReady &&
+    lensTrayAuthorityGranted &&
+    Boolean(lensTrayAuthorityApprovedId) &&
+    lensTrayExecutionReceipts?.latest_tray_presence !== true;
+  const lensTrayCanStop =
+    lensTrayAuthorityGranted && Boolean(lensTrayAuthorityApprovedId) && lensTrayExecutionReceipts?.latest_tray_presence === true;
+  const lensTrayRequestRoute = safeString(lensTrayAuthorityRequests?.request_route).trim() || "/lens/tray/authority/request";
+  const lensTrayGrantRoute = safeString(lensTrayAuthorityRequests?.authority_route).trim() || "/lens/tray/authority";
+  const lensTrayExecuteRoute =
+    safeString(lensTrayAuthorityRequests?.execute_route).trim() ||
+    safeString(lensTrayExecutionReceipts?.execute_route).trim() ||
+    "/lens/tray/execute";
+  const lensOsBindingAuthorityRequests = lensStatus?.os_binding_authority_requests;
+  const lensOsBindingExecutionReadiness = lensStatus?.os_binding_execution_readiness;
+  const lensOsBindingExecutionReceipts = lensStatus?.os_binding_execution_receipts;
+  const lensOsBindingAuthorityApproved =
+    lensOsBindingAuthorityRequests?.by_status.approved[0] ??
+    (safeString(lensOsBindingAuthorityRequests?.latest?.status).trim() === "approved"
+      ? lensOsBindingAuthorityRequests?.latest
+      : undefined);
+  const lensOsBindingAuthorityApprovedId =
+    safeString(lensOsBindingAuthorityApproved?.id).trim() ||
+    safeString(lensOsBindingAuthorityApproved?.approval_id).trim();
+  const lensOsBindingAuthorityActiveGrantId = safeString(
+    lensOsBindingAuthorityRequests?.active_grant_receipt_id,
+  ).trim();
+  const lensOsBindingAuthorityGranted = Boolean(
+    lensOsBindingAuthorityRequests?.authority_granted || lensOsBindingAuthorityActiveGrantId,
+  );
+  const lensOsBindingPendingCount = safeNumber(lensOsBindingAuthorityRequests?.pending_count, 0);
+  const lensOsBindingApprovedCount = safeNumber(lensOsBindingAuthorityRequests?.approved_count, 0);
+  const lensOsBindingTrayReady = lensTrayExecutionReceipts?.latest_tray_presence === true;
+  const lensOsBindingHotkeyReady = lensOsBindingExecutionReceipts?.latest_global_hotkey_binding === true;
+  const lensOsBindingCanRequest =
+    lensOsBindingTrayReady &&
+    !lensOsBindingAuthorityGranted &&
+    lensOsBindingPendingCount === 0 &&
+    lensOsBindingApprovedCount === 0;
+  const lensOsBindingCanGrant =
+    lensOsBindingTrayReady && Boolean(lensOsBindingAuthorityApprovedId) && !lensOsBindingAuthorityGranted;
+  const lensOsBindingCanBind =
+    lensOsBindingTrayReady &&
+    lensOsBindingAuthorityGranted &&
+    Boolean(lensOsBindingAuthorityApprovedId) &&
+    !lensOsBindingHotkeyReady;
+  const lensOsBindingCanStop =
+    lensOsBindingAuthorityGranted && Boolean(lensOsBindingAuthorityApprovedId) && lensOsBindingHotkeyReady;
+  const lensOsBindingRequestRoute =
+    safeString(lensOsBindingAuthorityRequests?.request_route).trim() || "/lens/os-binding/authority/request";
+  const lensOsBindingGrantRoute =
+    safeString(lensOsBindingAuthorityRequests?.authority_route).trim() || "/lens/os-binding/authority";
+  const lensOsBindingExecuteRoute =
+    safeString(lensOsBindingAuthorityRequests?.execute_route).trim() ||
+    safeString(lensOsBindingExecutionReceipts?.execute_route).trim() ||
+    "/lens/os-binding/execute";
+  const lensOverlayAuthorityRequests = lensStatus?.overlay_authority_requests;
+  const lensOverlayExecutionReceipts = lensStatus?.overlay_execution_receipts;
+  const lensOverlayAuthorityApproved =
+    lensOverlayAuthorityRequests?.approved[0] ??
+    (safeString(lensOverlayAuthorityRequests?.latest?.status).trim() === "approved"
+      ? lensOverlayAuthorityRequests?.latest
+      : undefined);
+  const lensOverlayAuthorityApprovedId =
+    safeString(lensOverlayAuthorityApproved?.id).trim() ||
+    safeString(lensOverlayAuthorityApproved?.approval_id).trim() ||
+    safeString(lensOverlayAuthorityRequests?.active_authority_grant.approval_id).trim();
+  const lensOverlayAuthorityActiveGrantId = safeString(
+    lensOverlayAuthorityRequests?.active_authority_grant.receipt_id,
+  ).trim();
+  const lensOverlayAuthorityGranted = Boolean(
+    lensOverlayAuthorityRequests?.authority_granted || lensOverlayAuthorityActiveGrantId,
+  );
+  const lensOverlayPendingCount = safeNumber(lensOverlayAuthorityRequests?.approval_counts.pending, 0);
+  const lensOverlayApprovedCount = safeNumber(lensOverlayAuthorityRequests?.approval_counts.approved, 0);
+  const lensOverlayHotkeyReady = lensOsBindingHotkeyReady;
+  const lensOverlayCanRequest =
+    lensOverlayHotkeyReady &&
+    !lensOverlayAuthorityGranted &&
+    lensOverlayPendingCount === 0 &&
+    lensOverlayApprovedCount === 0;
+  const lensOverlayCanGrant =
+    lensOverlayHotkeyReady && Boolean(lensOverlayAuthorityApprovedId) && !lensOverlayAuthorityGranted;
+  const lensOverlayCanStart =
+    lensOverlayHotkeyReady &&
+    lensOverlayAuthorityGranted &&
+    Boolean(lensOverlayAuthorityApprovedId) &&
+    lensOverlayExecutionReceipts?.latest_overlay_window !== true;
+  const lensOverlayCanStop =
+    lensOverlayAuthorityGranted &&
+    Boolean(lensOverlayAuthorityApprovedId) &&
+    lensOverlayExecutionReceipts?.latest_overlay_window === true;
+  const lensOverlayRequestRoute =
+    safeString(lensOverlayAuthorityRequests?.request_route).trim() || "/lens/overlay/authority/request";
+  const lensOverlayGrantRoute =
+    safeString(lensOverlayAuthorityRequests?.authority_route).trim() || "/lens/overlay/authority";
+  const lensOverlayExecuteRoute =
+    safeString(lensOverlayAuthorityRequests?.execute_route).trim() ||
+    safeString(lensOverlayExecutionReceipts?.execute_route).trim() ||
+    "/lens/overlay/execute";
+  const lensSummonAuthorityRequests = lensStatus?.summon_authority_requests;
+  const lensSummonExecutionReceipts = lensStatus?.summon_execution_receipts;
+  const lensSummonAuthorityApproved =
+    lensSummonAuthorityRequests?.approved[0] ??
+    (safeString(lensSummonAuthorityRequests?.latest?.status).trim() === "approved"
+      ? lensSummonAuthorityRequests?.latest
+      : undefined);
+  const lensSummonAuthorityApprovedId =
+    safeString(lensSummonAuthorityApproved?.id).trim() ||
+    safeString(lensSummonAuthorityApproved?.approval_id).trim() ||
+    safeString(lensSummonAuthorityRequests?.active_authority_grant.approval_id).trim();
+  const lensSummonAuthorityActiveGrantId = safeString(
+    lensSummonAuthorityRequests?.active_authority_grant.receipt_id,
+  ).trim();
+  const lensSummonAuthorityGranted = Boolean(
+    lensSummonAuthorityRequests?.authority_granted || lensSummonAuthorityActiveGrantId,
+  );
+  const lensSummonPendingCount = safeNumber(lensSummonAuthorityRequests?.approval_counts.pending, 0);
+  const lensSummonApprovedCount = safeNumber(lensSummonAuthorityRequests?.approval_counts.approved, 0);
+  const lensSummonOverlayReady = lensOverlayExecutionReceipts?.latest_overlay_window === true;
+  const lensSummonCanRequest =
+    lensSummonOverlayReady &&
+    !lensSummonAuthorityGranted &&
+    lensSummonPendingCount === 0 &&
+    lensSummonApprovedCount === 0;
+  const lensSummonCanGrant =
+    lensSummonOverlayReady && Boolean(lensSummonAuthorityApprovedId) && !lensSummonAuthorityGranted;
+  const lensSummonCanExecute =
+    lensSummonOverlayReady &&
+    lensSummonAuthorityGranted &&
+    Boolean(lensSummonAuthorityApprovedId) &&
+    lensSummonExecutionReceipts?.latest_summon_binding !== true;
+  const lensSummonRequestRoute =
+    safeString(lensSummonAuthorityRequests?.request_route).trim() || "/lens/summon/authority/request";
+  const lensSummonGrantRoute =
+    safeString(lensSummonAuthorityRequests?.authority_route).trim() || "/lens/summon/authority";
+  const lensSummonExecuteRoute =
+    safeString(lensSummonAuthorityRequests?.execute_route).trim() ||
+    safeString(lensSummonExecutionReceipts?.execute_route).trim() ||
+    "/lens/summon/execute";
+  const lensPersistentEnablementAuthorityRequests =
+    lensResidentHost?.persistent_supervision_enablement_authority_requests;
+  const lensPersistentEnablementAuthorityGrants =
+    lensResidentHost?.persistent_supervision_enablement_authority_grants;
+  const lensPersistentExecutionRequests = lensResidentHost?.persistent_supervision_enablement_execution_requests;
+  const lensPersistentExecutionAuthorityGrants =
+    lensResidentHost?.persistent_supervision_enablement_execution_authority_grants;
+  const lensPersistentExecutionReadiness =
+    lensResidentHost?.persistent_supervision_enablement_execution_readiness;
+  const lensPersistentExecutionReceipts =
+    lensResidentHost?.persistent_supervision_enablement_execution_receipts;
+  const lensPersistentEnablementAuthorityApproved =
+    lensPersistentEnablementAuthorityRequests?.by_status.approved[0] ??
+    (safeString(lensPersistentEnablementAuthorityRequests?.latest?.status).trim() === "approved"
+      ? lensPersistentEnablementAuthorityRequests?.latest
+      : undefined);
+  const lensPersistentEnablementAuthorityApprovedId =
+    safeString(lensPersistentEnablementAuthorityApproved?.id).trim() ||
+    safeString(lensPersistentEnablementAuthorityApproved?.approval_id).trim() ||
+    safeString(lensPersistentEnablementAuthorityGrants?.active_latest.approval_id).trim();
+  const lensPersistentEnablementAuthorityActiveGrantId = safeString(
+    lensPersistentEnablementAuthorityGrants?.active_latest.receipt_id,
+  ).trim();
+  const lensPersistentEnablementAuthorityGranted = Boolean(
+    lensPersistentEnablementAuthorityGrants?.authority_granted ||
+      lensPersistentEnablementAuthorityRequests?.authority_granted ||
+      lensPersistentEnablementAuthorityActiveGrantId,
+  );
+  const lensPersistentExecutionAuthorityApproved =
+    lensPersistentExecutionRequests?.by_status.approved[0] ??
+    (safeString(lensPersistentExecutionRequests?.latest?.status).trim() === "approved"
+      ? lensPersistentExecutionRequests?.latest
+      : undefined);
+  const lensPersistentExecutionAuthorityApprovedId =
+    safeString(lensPersistentExecutionAuthorityApproved?.id).trim() ||
+    safeString(lensPersistentExecutionAuthorityApproved?.approval_id).trim() ||
+    safeString(lensPersistentExecutionAuthorityGrants?.active_latest.approval_id).trim();
+  const lensPersistentExecutionAuthorityActiveGrantId = safeString(
+    lensPersistentExecutionAuthorityGrants?.active_latest.receipt_id,
+  ).trim();
+  const lensPersistentExecutionAuthorityGranted = Boolean(
+    lensPersistentExecutionAuthorityGrants?.authority_granted ||
+      lensPersistentExecutionRequests?.authority_granted ||
+      lensPersistentExecutionAuthorityActiveGrantId,
+  );
+  const lensPersistentEnablementPendingCount = safeNumber(
+    lensPersistentEnablementAuthorityRequests?.pending_count,
+    0,
+  );
+  const lensPersistentEnablementApprovedCount = safeNumber(
+    lensPersistentEnablementAuthorityRequests?.approved_count,
+    0,
+  );
+  const lensPersistentExecutionPendingCount = safeNumber(lensPersistentExecutionRequests?.pending_count, 0);
+  const lensPersistentExecutionApprovedCount = safeNumber(lensPersistentExecutionRequests?.approved_count, 0);
+  const lensPersistentCanRequestEnablementAuthority =
+    lensPersistentSupervision.prerequisitesReady &&
+    !lensPersistentEnablementAuthorityGranted &&
+    lensPersistentEnablementPendingCount === 0 &&
+    lensPersistentEnablementApprovedCount === 0;
+  const lensPersistentCanGrantEnablementAuthority =
+    lensPersistentSupervision.prerequisitesReady &&
+    Boolean(lensPersistentEnablementAuthorityApprovedId) &&
+    !lensPersistentEnablementAuthorityGranted;
+  const lensPersistentCanRequestExecutionAuthority =
+    lensPersistentSupervision.prerequisitesReady &&
+    lensPersistentEnablementAuthorityGranted &&
+    !lensPersistentExecutionAuthorityGranted &&
+    lensPersistentExecutionPendingCount === 0 &&
+    lensPersistentExecutionApprovedCount === 0;
+  const lensPersistentCanGrantExecutionAuthority =
+    lensPersistentSupervision.prerequisitesReady &&
+    lensPersistentEnablementAuthorityGranted &&
+    Boolean(lensPersistentExecutionAuthorityApprovedId) &&
+    !lensPersistentExecutionAuthorityGranted;
+  const lensPersistentCanApplyEnablement =
+    lensPersistentSupervision.prerequisitesReady &&
+    lensPersistentEnablementAuthorityGranted &&
+    lensPersistentExecutionAuthorityGranted &&
+    Boolean(lensPersistentExecutionAuthorityApprovedId) &&
+    lensPersistentExecutionReadiness?.ready === true &&
+    lensPersistentExecutionReceipts?.persistent_supervision_ready !== true;
+  const lensPersistentEnablementRequestRoute =
+    safeString(lensPersistentEnablementAuthorityRequests?.request_route).trim() ||
+    safeString(lensResidentHost?.persistent_supervision_enablement_authority_requests_route).trim() ||
+    "/lens/host/persistent-supervision/enablement/authority/request";
+  const lensPersistentEnablementGrantRoute =
+    safeString(lensPersistentEnablementAuthorityRequests?.grant_route).trim() ||
+    safeString(lensPersistentEnablementAuthorityGrants?.authority_route).trim() ||
+    safeString(lensResidentHost?.persistent_supervision_enablement_authority_grant_route).trim() ||
+    "/lens/host/persistent-supervision/enablement/authority";
+  const lensPersistentExecutionRequestRoute =
+    safeString(lensPersistentExecutionRequests?.request_route).trim() ||
+    safeString(lensResidentHost?.persistent_supervision_enablement_execution_request_route).trim() ||
+    "/lens/host/persistent-supervision/enablement/execution/request";
+  const lensPersistentExecutionGrantRoute =
+    safeString(lensPersistentExecutionRequests?.grant_route).trim() ||
+    safeString(lensPersistentExecutionAuthorityGrants?.authority_route).trim() ||
+    safeString(lensResidentHost?.persistent_supervision_enablement_execution_authority_grant_route).trim() ||
+    "/lens/host/persistent-supervision/enablement/execution/authority";
+  const lensPersistentApplyRoute =
+    safeString(lensResidentHost?.persistent_supervision_enablement_execution_apply_route).trim() ||
+    safeString(lensPersistentExecutionReceipts?.execution_route).trim() ||
+    "/lens/host/persistent-supervision/enablement/execution/apply";
   const lensResidentRuntimeLoopReadiness = lensResidentHost?.runtime_loop_readiness;
   const lensRuntimeLoopReadiness =
     lensResidentRuntimeLoopReadiness?.kind || lensResidentRuntimeLoopReadiness?.route
@@ -5566,6 +6747,23 @@ function SystemPanel(props: {
           <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 8 }}>Lens feed is degraded: {lensStatusError}</div>
         ) : null}
 
+        {lensActionNotice ? (
+          <div
+            style={{
+              marginTop: 8,
+              padding: 8,
+              borderRadius: 8,
+              border:
+                lensActionNotice.tone === "error" ? `1px solid ${THEME.errorBorder}` : "1px solid #274264",
+              background: lensActionNotice.tone === "error" ? THEME.errorBg : "#101925",
+              fontSize: 11,
+              color: lensActionNotice.tone === "error" ? "#ffaaaa" : "#bcdcff",
+            }}
+          >
+            {lensActionNotice.text}
+          </div>
+        ) : null}
+
         <div
           style={{
             display: "grid",
@@ -5636,6 +6834,304 @@ function SystemPanel(props: {
             ) : null}
           </div>
 
+          <div
+            style={{
+              border: `1px solid ${THEME.panelBorder}`,
+              borderRadius: 8,
+              padding: 8,
+              background: "#121212",
+              overflowWrap: "anywhere",
+            }}
+          >
+            <div style={{ fontSize: 11, color: THEME.muted }}>Resident runtime authority</div>
+            {lensResidentRuntimeAuthorityLoaded ? (
+              <>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                  <span style={badgeStyle(lensResidentRuntimeAuthorityStatus || "unknown")}>
+                    {lensResidentRuntimeAuthorityStatus || "unknown"}
+                  </span>
+                  <span style={badgeStyle(lensResidentRuntimeAuthorityReadiness?.ready ? "ready" : "blocked")}>
+                    ready {lensResidentRuntimeAuthorityReadiness?.ready ? "true" : "false"}
+                  </span>
+                  <span
+                    style={badgeStyle(
+                      lensResidentRuntimeAuthorityReadiness?.resident_runtime_execution_authority ? "ready" : "blocked",
+                    )}
+                  >
+                    runtime authority{" "}
+                    {lensResidentRuntimeAuthorityReadiness?.resident_runtime_execution_authority ? "true" : "false"}
+                  </span>
+                  <span style={badgeStyle(lensResidentRuntimeAuthorityReadiness?.runtime_ready ? "ready" : "blocked")}>
+                    runtime ready {lensResidentRuntimeAuthorityReadiness?.runtime_ready ? "true" : "false"}
+                  </span>
+                  <span
+                    style={badgeStyle(lensResidentRuntimeAuthorityReadiness?.resident_claim_allowed ? "ready" : "blocked")}
+                  >
+                    claim {lensResidentRuntimeAuthorityReadiness?.resident_claim_allowed ? "true" : "false"}
+                  </span>
+                </div>
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                  requirements{" "}
+                  <code>
+                    {safeNumber(lensResidentRuntimeAuthorityReadiness?.requirements_ready_total, 0)}/
+                    {safeNumber(lensResidentRuntimeAuthorityReadiness?.requirements_total, 0)}
+                  </code>
+                  {" / "}grant receipts <code>{safeNumber(lensResidentRuntimeAuthorityReadiness?.receipt_count, 0)}</code>
+                  {" / "}denials{" "}
+                  <code>{safeNumber(lensResidentRuntimeAuthorityReadiness?.denial_receipt_count, 0)}</code>
+                </div>
+                {lensHostSupervisionAuthorityRequests?.kind ? (
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                    host requests <code>{lensHostSupervisionAuthorityRequestStatus || "none"}</code>
+                    {" / "}pending <code>{safeNumber(lensHostSupervisionAuthorityRequests.pending_count, 0)}</code>
+                    {" / "}approved <code>{safeNumber(lensHostSupervisionAuthorityRequests.approved_count, 0)}</code>
+                    {" / "}grant{" "}
+                    <code>{lensHostSupervisionAuthorityGranted ? lensHostSupervisionAuthorityActiveGrantId || "active" : "none"}</code>
+                  </div>
+                ) : null}
+                {lensResidentRuntimeAuthorityRequests?.kind ? (
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                    runtime requests <code>{lensResidentRuntimeAuthorityRequestStatus || "none"}</code>
+                    {" / "}pending <code>{safeNumber(lensResidentRuntimeAuthorityRequests.pending_count, 0)}</code>
+                    {" / "}approved <code>{safeNumber(lensResidentRuntimeAuthorityRequests.approved_count, 0)}</code>
+                    {" / "}grant{" "}
+                    <code>
+                      {lensResidentRuntimeAuthorityGranted ? lensResidentRuntimeAuthorityActiveGrantId || "active" : "none"}
+                    </code>
+                  </div>
+                ) : null}
+                {lensResidentRuntimeAuthorityBlockedRequirements.length ? (
+                  <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 6 }}>
+                    {lensResidentRuntimeAuthorityBlockedRequirements.slice(0, 4).map((requirement) => (
+                      <span key={`lens-resident-runtime-authority-blocked-${requirement}`} style={badgeStyle("blocked")}>
+                        {requirement}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+                {lensResidentRuntimeAuthorityFirstRequirement ? (
+                  <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 6 }}>
+                    first blocked <code>{lensResidentRuntimeAuthorityFirstRequirement}</code>
+                    {lensResidentRuntimeAuthorityFirstNext ? (
+                      <>
+                        {" / "}next <code>{lensResidentRuntimeAuthorityFirstNext}</code>
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
+                {lensResidentRuntimeAuthorityFirstBlockers.length ? (
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                    blockers <code>{lensResidentRuntimeAuthorityFirstBlockers.join(", ")}</code>
+                  </div>
+                ) : null}
+                {lensResidentRuntimeAuthorityFirstRoute ? (
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                    handoff route <code>{lensResidentRuntimeAuthorityFirstRoute}</code>
+                  </div>
+                ) : null}
+                {lensResidentRuntimeAuthorityRoute ? (
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                    route <code>{lensResidentRuntimeAuthorityRoute}</code>
+                  </div>
+                ) : null}
+                {lensResidentRuntimeAuthorityReadiness?.plan_route ||
+                lensResidentRuntimeAuthorityReadiness?.execute_route ||
+                lensResidentRuntimeAuthorityReadiness?.authority_grant_route ? (
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                    {lensResidentRuntimeAuthorityReadiness?.plan_route ? (
+                      <>
+                        plan <code>{lensResidentRuntimeAuthorityReadiness.plan_route}</code>
+                      </>
+                    ) : null}
+                    {lensResidentRuntimeAuthorityReadiness?.execute_route ? (
+                      <>
+                        {" / "}execute <code>{lensResidentRuntimeAuthorityReadiness.execute_route}</code>
+                      </>
+                    ) : null}
+                    {lensResidentRuntimeAuthorityReadiness?.authority_grant_route ? (
+                      <>
+                        {" / "}grant <code>{lensResidentRuntimeAuthorityReadiness.authority_grant_route}</code>
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
+                {lensResidentRuntimeCanRequestHostSupervisionAuthority ? (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => void requestLensHostSupervisionAuthority()}
+                      disabled={Boolean(lensActionBusy) || busy}
+                      style={buttonStyle}
+                    >
+                      {lensActionBusy === "host_supervision_authority_request"
+                        ? "Requesting."
+                        : "Request host supervision authority"}
+                    </button>
+                    <span style={{ fontSize: 11, color: THEME.muted }}>
+                      <code>{lensResidentRuntimeHostSupervisionRequestRoute}</code>
+                    </span>
+                  </div>
+                ) : null}
+                {lensHostSupervisionAuthorityCanGrant ? (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => void grantLensHostSupervisionAuthority(lensHostSupervisionAuthorityApprovedId)}
+                      disabled={Boolean(lensActionBusy) || busy}
+                      style={buttonStyle}
+                    >
+                      {lensActionBusy === "host_supervision_authority_grant"
+                        ? "Granting."
+                        : "Grant host supervision authority"}
+                    </button>
+                    <span style={{ fontSize: 11, color: THEME.muted }}>
+                      <code>{lensHostSupervisionAuthorityGrantRoute}</code>
+                    </span>
+                  </div>
+                ) : null}
+                {lensHostSupervisionCanStartResident || lensHostSupervisionCanStopResident ? (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+                    {lensHostSupervisionCanStartResident ? (
+                      <button
+                        type="button"
+                        onClick={() => void executeLensHostSupervision(lensHostSupervisionAuthorityApprovedId, "resident_start")}
+                        disabled={Boolean(lensActionBusy) || busy}
+                        style={buttonStyle}
+                      >
+                        {lensActionBusy === "host_supervision_start"
+                          ? "Starting."
+                          : "Start resident host supervision"}
+                      </button>
+                    ) : null}
+                    {lensHostSupervisionCanStopResident ? (
+                      <button
+                        type="button"
+                        onClick={() => void executeLensHostSupervision(lensHostSupervisionAuthorityApprovedId, "resident_stop")}
+                        disabled={Boolean(lensActionBusy) || busy}
+                        style={buttonStyle}
+                      >
+                        {lensActionBusy === "host_supervision_stop"
+                          ? "Stopping."
+                          : "Stop resident host supervision"}
+                      </button>
+                    ) : null}
+                    <span style={{ fontSize: 11, color: THEME.muted }}>
+                      <code>{lensHostSupervisionExecuteRoute}</code>
+                    </span>
+                  </div>
+                ) : null}
+                {lensResidentRuntimeAuthorityCanRequest ? (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => void requestLensResidentRuntimeAuthority()}
+                      disabled={Boolean(lensActionBusy) || busy}
+                      style={buttonStyle}
+                    >
+                      {lensActionBusy === "resident_runtime_authority_request"
+                        ? "Requesting."
+                        : "Request resident runtime authority"}
+                    </button>
+                    <span style={{ fontSize: 11, color: THEME.muted }}>
+                      <code>{lensResidentRuntimeAuthorityRequestRoute}</code>
+                    </span>
+                  </div>
+                ) : null}
+                {lensResidentRuntimeAuthorityCanGrant ? (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => void grantLensResidentRuntimeAuthority(lensResidentRuntimeAuthorityApprovedId)}
+                      disabled={Boolean(lensActionBusy) || busy}
+                      style={buttonStyle}
+                    >
+                      {lensActionBusy === "resident_runtime_authority_grant"
+                        ? "Granting."
+                        : "Grant resident runtime authority"}
+                    </button>
+                    <span style={{ fontSize: 11, color: THEME.muted }}>
+                      <code>{lensResidentRuntimeAuthorityGrantRoute}</code>
+                    </span>
+                  </div>
+                ) : null}
+                {lensResidentRuntimeCanExecute ? (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => void executeLensResidentRuntime(lensResidentRuntimeAuthorityApprovedId)}
+                      disabled={Boolean(lensActionBusy) || busy}
+                      style={buttonStyle}
+                    >
+                      {lensActionBusy === "resident_runtime_execute"
+                        ? "Starting."
+                        : "Start bounded resident runtime"}
+                    </button>
+                    <span style={{ fontSize: 11, color: THEME.muted }}>
+                      <code>{lensResidentRuntimeExecuteRoute}</code>
+                    </span>
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                Resident runtime authority readback has not loaded from Lens status.
+              </div>
+            )}
+          </div>
+
+          <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 8, padding: 8, background: "#121212" }}>
+            <div style={{ fontSize: 11, color: THEME.muted }}>Resident runtime executions</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+              <span style={badgeStyle(lensResidentRuntimeExecutionReceiptTotal > 0 ? "readback" : "empty")}>
+                receipts {lensResidentRuntimeExecutionReceiptTotal}
+              </span>
+              <span style={badgeStyle(lensResidentRuntimeExecutionReceiptStatus || "empty")}>
+                {lensResidentRuntimeExecutionReceiptStatus || "empty"}
+              </span>
+              <span
+                style={badgeStyle(
+                  lensResidentRuntimeExecutionReceipts?.resident_supervised_runtime_receipt_observed ? "ready" : "blocked",
+                )}
+              >
+                supervised{" "}
+                {lensResidentRuntimeExecutionReceipts?.resident_supervised_runtime_receipt_observed ? "true" : "false"}
+              </span>
+              <span style={badgeStyle(lensResidentRuntimeExecutionReceipts?.resident_claim_allowed ? "ready" : "blocked")}>
+                claim {lensResidentRuntimeExecutionReceipts?.resident_claim_allowed ? "true" : "false"}
+              </span>
+            </div>
+            {lensResidentRuntimeLatestReceiptId ? (
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                latest <code>{lensResidentRuntimeLatestReceiptId}</code>
+                {lensResidentRuntimeLatestStatus ? (
+                  <>
+                    {" / "}status <code>{lensResidentRuntimeLatestStatus}</code>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+            {lensResidentRuntimeLatestMode || lensResidentRuntimeLatestGap ? (
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                {lensResidentRuntimeLatestMode ? (
+                  <>
+                    mode <code>{lensResidentRuntimeLatestMode}</code>
+                  </>
+                ) : null}
+                {lensResidentRuntimeLatestMode && lensResidentRuntimeLatestGap ? " / " : null}
+                {lensResidentRuntimeLatestGap ? (
+                  <>
+                    gap <code>{lensResidentRuntimeLatestGap}</code>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+            {lensResidentRuntimeExecutionReceiptsRoute ? (
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                route <code>{lensResidentRuntimeExecutionReceiptsRoute}</code>
+              </div>
+            ) : null}
+          </div>
+
           <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 8, padding: 8, background: "#121212" }}>
             <div style={{ fontSize: 11, color: THEME.muted }}>Runtime loop readiness</div>
             {lensRuntimeLoopReadinessLoaded ? (
@@ -5702,6 +7198,547 @@ function SystemPanel(props: {
             ) : (
               <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
                 Runtime-loop readiness audit has not loaded from Lens status.
+              </div>
+            )}
+          </div>
+
+          <div
+            style={{
+              border: `1px solid ${THEME.panelBorder}`,
+              borderRadius: 8,
+              padding: 8,
+              background: "#121212",
+              overflowWrap: "anywhere",
+            }}
+          >
+            <div style={{ fontSize: 11, color: THEME.muted }}>Persistent supervision</div>
+            {lensPersistentSupervision.loaded ? (
+              <>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                  <span style={badgeStyle(lensPersistentSupervision.status || "readback")}>
+                    {lensPersistentSupervision.status || "readback"}
+                  </span>
+                  <span style={badgeStyle(lensPersistentSupervision.prerequisitesReady ? "ready" : "blocked")}>
+                    prerequisites {lensPersistentSupervision.prerequisitesReady ? "ready" : "blocked"}
+                  </span>
+                  <span
+                    style={badgeStyle(
+                      lensPersistentSupervision.enablementAuthorityHandoffObserved ? "readback" : "blocked",
+                    )}
+                  >
+                    authority handoff{" "}
+                    {lensPersistentSupervision.enablementAuthorityHandoffObserved ? "true" : "false"}
+                  </span>
+                  <span style={badgeStyle(lensPersistentSupervision.enablementAuthorityGranted ? "ready" : "blocked")}>
+                    enablement authority {lensPersistentSupervision.enablementAuthorityGranted ? "true" : "false"}
+                  </span>
+                  <span style={badgeStyle(lensPersistentSupervision.executionAuthorityGranted ? "ready" : "blocked")}>
+                    execution authority {lensPersistentSupervision.executionAuthorityGranted ? "true" : "false"}
+                  </span>
+                  <span style={badgeStyle(lensPersistentSupervision.residentClaimAllowed ? "ready" : "blocked")}>
+                    resident claim {lensPersistentSupervision.residentClaimAllowed ? "true" : "false"}
+                  </span>
+                </div>
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                  authority{" "}
+                  <code>
+                    {lensPersistentSupervisionAuthorityReadback
+                      .map(([label, value]) => `${label}=${value ? "true" : "false"}`)
+                      .join(", ")}
+                  </code>
+                </div>
+                {lensPersistentSupervision.missingPrerequisites.length ? (
+                  <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 6 }}>
+                    missing <code>{lensPersistentSupervision.missingPrerequisites.join(", ")}</code>
+                    {lensPersistentSupervision.firstMissingPrerequisite ? (
+                      <>
+                        {" / "}first <code>{lensPersistentSupervision.firstMissingPrerequisite}</code>
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
+                {lensPersistentSupervision.firstMissingHandoff ||
+                lensPersistentSupervision.firstMissingProof ||
+                lensPersistentSupervision.firstMissingRoute ? (
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                    first missing
+                    {lensPersistentSupervision.firstMissingHandoff ? (
+                      <>
+                        {" "}handoff <code>{lensPersistentSupervision.firstMissingHandoff}</code>
+                      </>
+                    ) : null}
+                    {lensPersistentSupervision.firstMissingProof ? (
+                      <>
+                        {" / "}proof <code>{lensPersistentSupervision.firstMissingProof}</code>
+                      </>
+                    ) : null}
+                    {lensPersistentSupervision.firstMissingRoute ? (
+                      <>
+                        {" / "}route <code>{lensPersistentSupervision.firstMissingRoute}</code>
+                      </>
+                    ) : null}
+                    {lensPersistentSupervision.firstMissingAuthority ? (
+                      <>
+                        {" / "}authority <code>{lensPersistentSupervision.firstMissingAuthority}</code>
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
+                {lensPersistentSupervision.currentGap ? (
+                  <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 6 }}>
+                    current gap <code>{lensPersistentSupervision.currentGap}</code>
+                  </div>
+                ) : null}
+                {lensPersistentSupervision.currentHandoff ||
+                lensPersistentSupervision.currentProof ||
+                lensPersistentSupervision.currentRoute ? (
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                    current
+                    {lensPersistentSupervision.currentHandoff ? (
+                      <>
+                        {" "}handoff <code>{lensPersistentSupervision.currentHandoff}</code>
+                      </>
+                    ) : null}
+                    {lensPersistentSupervision.currentProof ? (
+                      <>
+                        {" / "}proof <code>{lensPersistentSupervision.currentProof}</code>
+                      </>
+                    ) : null}
+                    {lensPersistentSupervision.currentRoute ? (
+                      <>
+                        {" / "}route <code>{lensPersistentSupervision.currentRoute}</code>
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
+                {lensPersistentSupervision.currentRequestRoute ||
+                lensPersistentSupervision.currentGrantRoute ||
+                lensPersistentSupervision.currentGrantsRoute ||
+                lensPersistentSupervision.currentExecutionReadinessRoute ? (
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                    {lensPersistentSupervision.currentRequestRoute ? (
+                      <>
+                        request <code>{lensPersistentSupervision.currentRequestRoute}</code>
+                      </>
+                    ) : null}
+                    {lensPersistentSupervision.currentGrantRoute ? (
+                      <>
+                        {" / "}grant <code>{lensPersistentSupervision.currentGrantRoute}</code>
+                      </>
+                    ) : null}
+                    {lensPersistentSupervision.currentGrantsRoute ? (
+                      <>
+                        {" / "}grants <code>{lensPersistentSupervision.currentGrantsRoute}</code>
+                      </>
+                    ) : null}
+                    {lensPersistentSupervision.currentExecutionReadinessRoute ? (
+                      <>
+                        {" / "}execution readiness <code>{lensPersistentSupervision.currentExecutionReadinessRoute}</code>
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
+                {lensPersistentSupervision.prerequisiteSource ? (
+                  <div style={{ fontSize: 11, color: "#cce7e2", marginTop: 6 }}>
+                    prerequisite <code>{lensPersistentSupervision.prerequisiteSource}</code>
+                    {lensPersistentSupervision.prerequisiteHandoff ? (
+                      <>
+                        {" / "}handoff <code>{lensPersistentSupervision.prerequisiteHandoff}</code>
+                      </>
+                    ) : null}
+                    {lensPersistentSupervision.prerequisiteProof ? (
+                      <>
+                        {" / "}proof <code>{lensPersistentSupervision.prerequisiteProof}</code>
+                      </>
+                    ) : null}
+                    {lensPersistentSupervision.prerequisiteRoute ? (
+                      <>
+                        {" / "}route <code>{lensPersistentSupervision.prerequisiteRoute}</code>
+                      </>
+                    ) : null}
+                    {lensPersistentSupervision.prerequisiteAuthority ? (
+                      <>
+                        {" / "}authority <code>{lensPersistentSupervision.prerequisiteAuthority}</code>
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
+                {lensPersistentSupervision.blockers.length ? (
+                  <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 6 }}>
+                    {lensPersistentSupervision.blockers.slice(0, 4).map((blocker) => (
+                      <span key={`lens-persistent-supervision-blocker-${blocker}`} style={badgeStyle("blocked")}>
+                        {blocker}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+                {lensTrayAuthorityRequests?.kind ? (
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                    tray requests <code>{safeString(lensTrayAuthorityRequests.status).trim() || "none"}</code>
+                    {" / "}pending <code>{lensTrayPendingCount}</code>
+                    {" / "}approved <code>{lensTrayApprovedCount}</code>
+                    {" / "}grant <code>{lensTrayAuthorityGranted ? lensTrayAuthorityActiveGrantId || "active" : "none"}</code>
+                    {" / "}presence <code>{lensTrayExecutionReceipts?.latest_tray_presence ? "true" : "false"}</code>
+                  </div>
+                ) : null}
+                {lensTrayCanRequest || lensTrayCanGrant || lensTrayCanStart || lensTrayCanStop ? (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+                    {lensTrayCanRequest ? (
+                      <button
+                        type="button"
+                        onClick={() => void requestLensTrayAuthority()}
+                        disabled={Boolean(lensActionBusy) || busy}
+                        style={buttonStyle}
+                      >
+                        {lensActionBusy === "tray_authority_request" ? "Requesting." : "Request tray authority"}
+                      </button>
+                    ) : null}
+                    {lensTrayCanGrant ? (
+                      <button
+                        type="button"
+                        onClick={() => void grantLensTrayAuthority(lensTrayAuthorityApprovedId)}
+                        disabled={Boolean(lensActionBusy) || busy}
+                        style={buttonStyle}
+                      >
+                        {lensActionBusy === "tray_authority_grant" ? "Granting." : "Grant tray authority"}
+                      </button>
+                    ) : null}
+                    {lensTrayCanStart ? (
+                      <button
+                        type="button"
+                        onClick={() => void executeLensTrayPresence(lensTrayAuthorityApprovedId, "start")}
+                        disabled={Boolean(lensActionBusy) || busy}
+                        style={buttonStyle}
+                      >
+                        {lensActionBusy === "tray_start" ? "Starting." : "Start tray presence"}
+                      </button>
+                    ) : null}
+                    {lensTrayCanStop ? (
+                      <button
+                        type="button"
+                        onClick={() => void executeLensTrayPresence(lensTrayAuthorityApprovedId, "stop")}
+                        disabled={Boolean(lensActionBusy) || busy}
+                        style={buttonStyle}
+                      >
+                        {lensActionBusy === "tray_stop" ? "Stopping." : "Stop tray presence"}
+                      </button>
+                    ) : null}
+                    <span style={{ fontSize: 11, color: THEME.muted }}>
+                      <code>
+                        {lensTrayCanRequest ? lensTrayRequestRoute : lensTrayCanGrant ? lensTrayGrantRoute : lensTrayExecuteRoute}
+                      </code>
+                    </span>
+                  </div>
+                ) : null}
+                {lensOsBindingAuthorityRequests?.kind ? (
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                    hotkey requests <code>{safeString(lensOsBindingAuthorityRequests.status).trim() || "none"}</code>
+                    {" / "}pending <code>{lensOsBindingPendingCount}</code>
+                    {" / "}approved <code>{lensOsBindingApprovedCount}</code>
+                    {" / "}grant{" "}
+                    <code>
+                      {lensOsBindingAuthorityGranted ? lensOsBindingAuthorityActiveGrantId || "active" : "none"}
+                    </code>
+                    {" / "}binding <code>{lensOsBindingHotkeyReady ? "true" : "false"}</code>
+                    {" / "}ready <code>{lensOsBindingExecutionReadiness?.ready ? "true" : "false"}</code>
+                  </div>
+                ) : null}
+                {lensOsBindingCanRequest ||
+                lensOsBindingCanGrant ||
+                lensOsBindingCanBind ||
+                lensOsBindingCanStop ? (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+                    {lensOsBindingCanRequest ? (
+                      <button
+                        type="button"
+                        onClick={() => void requestLensOsBindingAuthority()}
+                        disabled={Boolean(lensActionBusy) || busy}
+                        style={buttonStyle}
+                      >
+                        {lensActionBusy === "os_binding_authority_request" ? "Requesting." : "Request hotkey authority"}
+                      </button>
+                    ) : null}
+                    {lensOsBindingCanGrant ? (
+                      <button
+                        type="button"
+                        onClick={() => void grantLensOsBindingAuthority(lensOsBindingAuthorityApprovedId)}
+                        disabled={Boolean(lensActionBusy) || busy}
+                        style={buttonStyle}
+                      >
+                        {lensActionBusy === "os_binding_authority_grant" ? "Granting." : "Grant hotkey authority"}
+                      </button>
+                    ) : null}
+                    {lensOsBindingCanBind ? (
+                      <button
+                        type="button"
+                        onClick={() => void executeLensOsBinding(lensOsBindingAuthorityApprovedId, "bind")}
+                        disabled={Boolean(lensActionBusy) || busy}
+                        style={buttonStyle}
+                      >
+                        {lensActionBusy === "os_binding_bind" ? "Binding." : "Bind global hotkey"}
+                      </button>
+                    ) : null}
+                    {lensOsBindingCanStop ? (
+                      <button
+                        type="button"
+                        onClick={() => void executeLensOsBinding(lensOsBindingAuthorityApprovedId, "stop")}
+                        disabled={Boolean(lensActionBusy) || busy}
+                        style={buttonStyle}
+                      >
+                        {lensActionBusy === "os_binding_stop" ? "Stopping." : "Stop global hotkey"}
+                      </button>
+                    ) : null}
+                    <span style={{ fontSize: 11, color: THEME.muted }}>
+                      <code>
+                        {lensOsBindingCanRequest
+                          ? lensOsBindingRequestRoute
+                          : lensOsBindingCanGrant
+                            ? lensOsBindingGrantRoute
+                            : lensOsBindingExecuteRoute}
+                      </code>
+                    </span>
+                  </div>
+                ) : null}
+                {lensOverlayAuthorityRequests?.kind ? (
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                    overlay requests <code>{safeString(lensOverlayAuthorityRequests.status).trim() || "none"}</code>
+                    {" / "}pending <code>{lensOverlayPendingCount}</code>
+                    {" / "}approved <code>{lensOverlayApprovedCount}</code>
+                    {" / "}grant{" "}
+                    <code>
+                      {lensOverlayAuthorityGranted ? lensOverlayAuthorityActiveGrantId || "active" : "none"}
+                    </code>
+                    {" / "}window <code>{lensOverlayExecutionReceipts?.latest_overlay_window ? "true" : "false"}</code>
+                  </div>
+                ) : null}
+                {lensOverlayCanRequest || lensOverlayCanGrant || lensOverlayCanStart || lensOverlayCanStop ? (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+                    {lensOverlayCanRequest ? (
+                      <button
+                        type="button"
+                        onClick={() => void requestLensOverlayAuthority()}
+                        disabled={Boolean(lensActionBusy) || busy}
+                        style={buttonStyle}
+                      >
+                        {lensActionBusy === "overlay_authority_request" ? "Requesting." : "Request overlay authority"}
+                      </button>
+                    ) : null}
+                    {lensOverlayCanGrant ? (
+                      <button
+                        type="button"
+                        onClick={() => void grantLensOverlayAuthority(lensOverlayAuthorityApprovedId)}
+                        disabled={Boolean(lensActionBusy) || busy}
+                        style={buttonStyle}
+                      >
+                        {lensActionBusy === "overlay_authority_grant" ? "Granting." : "Grant overlay authority"}
+                      </button>
+                    ) : null}
+                    {lensOverlayCanStart ? (
+                      <button
+                        type="button"
+                        onClick={() => void executeLensOverlayWindow(lensOverlayAuthorityApprovedId, "start")}
+                        disabled={Boolean(lensActionBusy) || busy}
+                        style={buttonStyle}
+                      >
+                        {lensActionBusy === "overlay_start" ? "Starting." : "Start overlay window"}
+                      </button>
+                    ) : null}
+                    {lensOverlayCanStop ? (
+                      <button
+                        type="button"
+                        onClick={() => void executeLensOverlayWindow(lensOverlayAuthorityApprovedId, "stop")}
+                        disabled={Boolean(lensActionBusy) || busy}
+                        style={buttonStyle}
+                      >
+                        {lensActionBusy === "overlay_stop" ? "Stopping." : "Stop overlay window"}
+                      </button>
+                    ) : null}
+                    <span style={{ fontSize: 11, color: THEME.muted }}>
+                      <code>
+                        {lensOverlayCanRequest
+                          ? lensOverlayRequestRoute
+                          : lensOverlayCanGrant
+                            ? lensOverlayGrantRoute
+                            : lensOverlayExecuteRoute}
+                      </code>
+                    </span>
+                  </div>
+                ) : null}
+                {lensSummonAuthorityRequests?.kind ? (
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                    summon requests <code>{safeString(lensSummonAuthorityRequests.status).trim() || "none"}</code>
+                    {" / "}pending <code>{lensSummonPendingCount}</code>
+                    {" / "}approved <code>{lensSummonApprovedCount}</code>
+                    {" / "}grant{" "}
+                    <code>
+                      {lensSummonAuthorityGranted ? lensSummonAuthorityActiveGrantId || "active" : "none"}
+                    </code>
+                    {" / "}binding <code>{lensSummonExecutionReceipts?.latest_summon_binding ? "true" : "false"}</code>
+                    {" / "}anywhere <code>{lensSummonExecutionReceipts?.latest_summon_anywhere ? "true" : "false"}</code>
+                  </div>
+                ) : null}
+                {lensSummonCanRequest || lensSummonCanGrant || lensSummonCanExecute ? (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+                    {lensSummonCanRequest ? (
+                      <button
+                        type="button"
+                        onClick={() => void requestLensSummonAuthority()}
+                        disabled={Boolean(lensActionBusy) || busy}
+                        style={buttonStyle}
+                      >
+                        {lensActionBusy === "summon_authority_request" ? "Requesting." : "Request summon authority"}
+                      </button>
+                    ) : null}
+                    {lensSummonCanGrant ? (
+                      <button
+                        type="button"
+                        onClick={() => void grantLensSummonAuthority(lensSummonAuthorityApprovedId)}
+                        disabled={Boolean(lensActionBusy) || busy}
+                        style={buttonStyle}
+                      >
+                        {lensActionBusy === "summon_authority_grant" ? "Granting." : "Grant summon authority"}
+                      </button>
+                    ) : null}
+                    {lensSummonCanExecute ? (
+                      <button
+                        type="button"
+                        onClick={() => void executeLensSummonAction(lensSummonAuthorityApprovedId)}
+                        disabled={Boolean(lensActionBusy) || busy}
+                        style={buttonStyle}
+                      >
+                        {lensActionBusy === "summon_execute" ? "Recording." : "Record summon handoff"}
+                      </button>
+                    ) : null}
+                    <span style={{ fontSize: 11, color: THEME.muted }}>
+                      <code>
+                        {lensSummonCanRequest
+                          ? lensSummonRequestRoute
+                          : lensSummonCanGrant
+                            ? lensSummonGrantRoute
+                            : lensSummonExecuteRoute}
+                      </code>
+                    </span>
+                  </div>
+                ) : null}
+                {lensPersistentEnablementAuthorityRequests?.kind || lensPersistentExecutionRequests?.kind ? (
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                    enablement requests{" "}
+                    <code>{safeString(lensPersistentEnablementAuthorityRequests?.status).trim() || "none"}</code>
+                    {" / "}pending <code>{lensPersistentEnablementPendingCount}</code>
+                    {" / "}approved <code>{lensPersistentEnablementApprovedCount}</code>
+                    {" / "}grant{" "}
+                    <code>
+                      {lensPersistentEnablementAuthorityGranted
+                        ? lensPersistentEnablementAuthorityActiveGrantId || "active"
+                        : "none"}
+                    </code>
+                    {" / "}execution requests{" "}
+                    <code>{safeString(lensPersistentExecutionRequests?.status).trim() || "none"}</code>
+                    {" / "}approved <code>{lensPersistentExecutionApprovedCount}</code>
+                    {" / "}execution grant{" "}
+                    <code>
+                      {lensPersistentExecutionAuthorityGranted
+                        ? lensPersistentExecutionAuthorityActiveGrantId || "active"
+                        : "none"}
+                    </code>
+                    {" / "}ready <code>{lensPersistentExecutionReadiness?.ready ? "true" : "false"}</code>
+                  </div>
+                ) : null}
+                {lensPersistentCanRequestEnablementAuthority ||
+                lensPersistentCanGrantEnablementAuthority ||
+                lensPersistentCanRequestExecutionAuthority ||
+                lensPersistentCanGrantExecutionAuthority ||
+                lensPersistentCanApplyEnablement ? (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+                    {lensPersistentCanRequestEnablementAuthority ? (
+                      <button
+                        type="button"
+                        onClick={() => void requestLensPersistentSupervisionEnablementAuthority()}
+                        disabled={Boolean(lensActionBusy) || busy}
+                        style={buttonStyle}
+                      >
+                        {lensActionBusy === "persistent_supervision_enablement_authority_request"
+                          ? "Requesting."
+                          : "Request enablement authority"}
+                      </button>
+                    ) : null}
+                    {lensPersistentCanGrantEnablementAuthority ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void grantLensPersistentSupervisionEnablementAuthority(
+                            lensPersistentEnablementAuthorityApprovedId,
+                          )
+                        }
+                        disabled={Boolean(lensActionBusy) || busy}
+                        style={buttonStyle}
+                      >
+                        {lensActionBusy === "persistent_supervision_enablement_authority_grant"
+                          ? "Granting."
+                          : "Grant enablement authority"}
+                      </button>
+                    ) : null}
+                    {lensPersistentCanRequestExecutionAuthority ? (
+                      <button
+                        type="button"
+                        onClick={() => void requestLensPersistentSupervisionExecutionAuthority()}
+                        disabled={Boolean(lensActionBusy) || busy}
+                        style={buttonStyle}
+                      >
+                        {lensActionBusy === "persistent_supervision_execution_authority_request"
+                          ? "Requesting."
+                          : "Request execution authority"}
+                      </button>
+                    ) : null}
+                    {lensPersistentCanGrantExecutionAuthority ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void grantLensPersistentSupervisionExecutionAuthority(
+                            lensPersistentExecutionAuthorityApprovedId,
+                          )
+                        }
+                        disabled={Boolean(lensActionBusy) || busy}
+                        style={buttonStyle}
+                      >
+                        {lensActionBusy === "persistent_supervision_execution_authority_grant"
+                          ? "Granting."
+                          : "Grant execution authority"}
+                      </button>
+                    ) : null}
+                    {lensPersistentCanApplyEnablement ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void applyLensPersistentSupervisionEnablement(lensPersistentExecutionAuthorityApprovedId)
+                        }
+                        disabled={Boolean(lensActionBusy) || busy}
+                        style={buttonStyle}
+                      >
+                        {lensActionBusy === "persistent_supervision_apply"
+                          ? "Applying."
+                          : "Apply persistent supervision"}
+                      </button>
+                    ) : null}
+                    <span style={{ fontSize: 11, color: THEME.muted }}>
+                      <code>
+                        {lensPersistentCanRequestEnablementAuthority
+                          ? lensPersistentEnablementRequestRoute
+                          : lensPersistentCanGrantEnablementAuthority
+                            ? lensPersistentEnablementGrantRoute
+                            : lensPersistentCanRequestExecutionAuthority
+                              ? lensPersistentExecutionRequestRoute
+                              : lensPersistentCanGrantExecutionAuthority
+                                ? lensPersistentExecutionGrantRoute
+                                : lensPersistentApplyRoute}
+                      </code>
+                    </span>
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                No persistent-supervision readback loaded from Stage 6 handoff.
               </div>
             )}
           </div>
@@ -5879,6 +7916,421 @@ function SystemPanel(props: {
             {lensStage6NextHandoff.currentRoute ? (
               <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
                 route <code>{lensStage6NextHandoff.currentRoute}</code>
+              </div>
+            ) : null}
+            {lensStage6PrerequisiteBringupReadback.currentGap ? (
+              <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 6 }}>
+                prerequisite current gap <code>{lensStage6PrerequisiteBringupReadback.currentGap}</code>
+                {lensStage6PrerequisiteBringupReadback.firstMissingRequirement ? (
+                  <>
+                    {" / "}first <code>{lensStage6PrerequisiteBringupReadback.firstMissingRequirement}</code>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+            {lensStage6NextOperatorAction?.id || lensStage6NextOperatorCommand?.mode ? (
+              <div style={{ fontSize: 11, color: "#cce7e2", marginTop: 4 }}>
+                operator next
+                {lensStage6NextOperatorAction?.id ? (
+                  <>
+                    {" "}action <code>{lensStage6NextOperatorAction.id}</code>
+                  </>
+                ) : null}
+                {lensStage6PrerequisiteBringup?.next_operator_action_requirement ? (
+                  <>
+                    {" / "}requirement{" "}
+                    <code>{lensStage6PrerequisiteBringup.next_operator_action_requirement}</code>
+                  </>
+                ) : null}
+                {lensStage6NextOperatorCommand?.mode ? (
+                  <>
+                    {" / "}mode <code>{lensStage6NextOperatorCommand.mode}</code>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+            {lensStage6NextOperatorCommand?.command ? (
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                command <code>{lensStage6NextOperatorCommand.command}</code>
+              </div>
+            ) : null}
+            {lensStage6OperatorSequence.length > 0 ? (
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                prerequisite sequence <code>{lensStage6OperatorSequence.length}</code>
+                {" / "}availability{" "}
+                <code>{lensStage6OperatorSequenceAvailability.truthful ? "truthful" : "unchecked"}</code>
+                {" / "}available now <code>{lensStage6OperatorSequenceAvailability.availableNowCount}</code>
+                {" / "}preview <code>{lensStage6OperatorSequenceAvailability.previewOnlyCount}</code>
+                {" / "}reported length <code>{lensStage6OperatorSequenceAvailability.sequenceLength}</code>
+                {lensStage6OperatorSequenceAvailabilityCheck.id ? (
+                  <>
+                    {" / "}check{" "}
+                    <code>
+                      {lensStage6OperatorSequenceAvailabilityCheck.status ||
+                        (lensStage6OperatorSequenceAvailabilityCheck.passed ? "passed" : "failed")}
+                    </code>
+                    {" / "}passed{" "}
+                    <code>{lensStage6OperatorSequenceAvailabilityCheck.passed ? "true" : "false"}</code>
+                  </>
+                ) : null}
+                {lensStage6OperatorSequenceAvailabilityCheck.reason ? (
+                  <div style={{ marginTop: 2 }}>
+                    availability reason <code>{lensStage6OperatorSequenceAvailabilityCheck.reason}</code>
+                  </div>
+                ) : null}
+                {lensStage6PrerequisiteChecks.length > 0 ? (
+                  <div style={{ marginTop: 4 }}>
+                    prerequisite checks{" "}
+                    <code>
+                      {lensStage6PrerequisitePassedChecks}/{lensStage6PrerequisiteChecks.length}
+                    </code>
+                    <ul style={{ margin: "4px 0 0 18px", padding: 0 }}>
+                      {lensStage6PrerequisiteChecks.map((check) => (
+                        <li key={`${check.id}:${check.status}`} style={{ marginTop: 2 }}>
+                          <code>{check.id || "unknown_check"}</code>
+                          {" / "}status <code>{check.status || (check.passed ? "passed" : "failed")}</code>
+                          {" / "}passed <code>{check.passed ? "true" : "false"}</code>
+                          {check.reason ? (
+                            <>
+                              {" / "}reason <code>{check.reason}</code>
+                            </>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                <ol style={{ margin: "4px 0 0 18px", padding: 0 }}>
+                  {lensStage6OperatorSequence.map((item) => (
+                    <li key={`${item.index}:${item.id}:${item.route}`} style={{ marginTop: 3 }}>
+                      {item.current ? <span style={{ color: "#cce7e2" }}>current </span> : null}
+                      <code>{item.id || "unknown_action"}</code>
+                      {item.approvalAction ? (
+                        <>
+                          {" / "}approval <code>{item.approvalAction}</code>
+                        </>
+                      ) : null}
+                      {item.liveEffect ? (
+                        <>
+                          {" / "}effect <code>{item.liveEffect}</code>
+                        </>
+                      ) : null}
+                      {item.commandMode ? (
+                        <>
+                          {" / "}mode <code>{item.commandMode}</code>
+                        </>
+                      ) : null}
+                      {" / "}live{" "}
+                      <code>
+                        {item.wouldExecute || item.wouldMutate
+                          ? [item.wouldExecute ? "execute" : "", item.wouldMutate ? "mutate" : ""]
+                              .filter(Boolean)
+                              .join("+")
+                          : "no execution"}
+                      </code>
+                      {item.route ? (
+                        <div style={{ marginTop: 2 }}>
+                          route <code>{item.route}</code>
+                        </div>
+                      ) : null}
+                      {item.command ? (
+                        <div style={{ marginTop: 2 }}>
+                          command <code>{item.command}</code>
+                          {" / "}availability{" "}
+                          <code>{item.commandAvailableNow ? "available now" : "preview only"}</code>
+                          {item.commandRequiresConfirmation ? (
+                            <>
+                              {" / "}confirmation <code>required</code>
+                            </>
+                          ) : null}
+                          {item.commandAvailabilityReason ? (
+                            <>
+                              {" / "}reason <code>{item.commandAvailabilityReason}</code>
+                            </>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ) : null}
+            {lensStage6PrerequisiteNextActionAvailable ? (
+              <div
+                style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 8 }}
+                onClickCapture={(event) => {
+                  const target = event.target;
+                  if (!(target instanceof HTMLElement) || !target.closest("button")) return;
+                  if (confirmLensStage6PrerequisiteAction()) return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+              >
+                {lensStage6PrerequisiteBringupReadback.canRequestNextResidentRuntimeAuthority ? (
+                  <button
+                    type="button"
+                    style={buttonStyle}
+                    disabled={Boolean(lensActionBusy) || busy}
+                    onClick={() => void requestLensResidentRuntimeAuthority()}
+                  >
+                    {lensActionBusy === "resident_runtime_authority_request"
+                      ? "Requesting."
+                      : "Request next prerequisite authority"}
+                  </button>
+                ) : null}
+                {lensStage6PrerequisiteBringupReadback.canGrantNextResidentRuntimeAuthority ? (
+                  <button
+                    type="button"
+                    style={buttonStyle}
+                    disabled={Boolean(lensActionBusy) || busy}
+                    onClick={() =>
+                      void grantLensResidentRuntimeAuthority(lensStage6PrerequisiteBringupReadback.approvedApprovalId)
+                    }
+                  >
+                    {lensActionBusy === "resident_runtime_authority_grant"
+                      ? "Granting."
+                      : "Grant next prerequisite authority"}
+                  </button>
+                ) : null}
+                {lensStage6PrerequisiteBringupReadback.canRequestNextHostSupervisionAuthority ? (
+                  <button
+                    type="button"
+                    style={buttonStyle}
+                    disabled={Boolean(lensActionBusy) || busy}
+                    onClick={() => void requestLensHostSupervisionAuthority()}
+                  >
+                    {lensActionBusy === "host_supervision_authority_request"
+                      ? "Requesting."
+                      : "Request next host supervision authority"}
+                  </button>
+                ) : null}
+                {lensStage6PrerequisiteBringupReadback.canGrantNextHostSupervisionAuthority ? (
+                  <button
+                    type="button"
+                    style={buttonStyle}
+                    disabled={Boolean(lensActionBusy) || busy}
+                    onClick={() =>
+                      void grantLensHostSupervisionAuthority(lensStage6PrerequisiteBringupReadback.approvedApprovalId)
+                    }
+                  >
+                    {lensActionBusy === "host_supervision_authority_grant"
+                      ? "Granting."
+                      : "Grant next host supervision authority"}
+                  </button>
+                ) : null}
+                {lensStage6PrerequisiteBringupReadback.canExecuteNextSupervisedResidentHostStart ? (
+                  <button
+                    type="button"
+                    style={buttonStyle}
+                    disabled={Boolean(lensActionBusy) || busy}
+                    onClick={() =>
+                      void executeLensResidentRuntime(lensStage6PrerequisiteBringupReadback.activeApprovalId)
+                    }
+                  >
+                    {lensActionBusy === "resident_runtime_execute"
+                      ? "Starting."
+                      : "Start next supervised resident host"}
+                  </button>
+                ) : null}
+                {lensStage6PrerequisiteBringupReadback.canRequestNextTrayAuthority ? (
+                  <button
+                    type="button"
+                    style={buttonStyle}
+                    disabled={Boolean(lensActionBusy) || busy}
+                    onClick={() => void requestLensTrayAuthority()}
+                  >
+                    {lensActionBusy === "tray_authority_request" ? "Requesting." : "Request next tray authority"}
+                  </button>
+                ) : null}
+                {lensStage6PrerequisiteBringupReadback.canGrantNextTrayAuthority ? (
+                  <button
+                    type="button"
+                    style={buttonStyle}
+                    disabled={Boolean(lensActionBusy) || busy}
+                    onClick={() => void grantLensTrayAuthority(lensStage6PrerequisiteBringupReadback.approvedApprovalId)}
+                  >
+                    {lensActionBusy === "tray_authority_grant" ? "Granting." : "Grant next tray authority"}
+                  </button>
+                ) : null}
+                {lensStage6PrerequisiteBringupReadback.canExecuteNextTrayPresence ? (
+                  <button
+                    type="button"
+                    style={buttonStyle}
+                    disabled={Boolean(lensActionBusy) || busy}
+                    onClick={() => void executeLensTrayPresence(lensStage6PrerequisiteBringupReadback.activeApprovalId, "start")}
+                  >
+                    {lensActionBusy === "tray_start" ? "Starting." : "Start next tray presence"}
+                  </button>
+                ) : null}
+                {lensStage6PrerequisiteBringupReadback.canRequestNextOsBindingAuthority ? (
+                  <button
+                    type="button"
+                    style={buttonStyle}
+                    disabled={Boolean(lensActionBusy) || busy}
+                    onClick={() => void requestLensOsBindingAuthority()}
+                  >
+                    {lensActionBusy === "os_binding_authority_request"
+                      ? "Requesting."
+                      : "Request next hotkey authority"}
+                  </button>
+                ) : null}
+                {lensStage6PrerequisiteBringupReadback.canGrantNextOsBindingAuthority ? (
+                  <button
+                    type="button"
+                    style={buttonStyle}
+                    disabled={Boolean(lensActionBusy) || busy}
+                    onClick={() => void grantLensOsBindingAuthority(lensStage6PrerequisiteBringupReadback.approvedApprovalId)}
+                  >
+                    {lensActionBusy === "os_binding_authority_grant" ? "Granting." : "Grant next hotkey authority"}
+                  </button>
+                ) : null}
+                {lensStage6PrerequisiteBringupReadback.canExecuteNextOsBinding ? (
+                  <button
+                    type="button"
+                    style={buttonStyle}
+                    disabled={Boolean(lensActionBusy) || busy}
+                    onClick={() => void executeLensOsBinding(lensStage6PrerequisiteBringupReadback.activeApprovalId, "bind")}
+                  >
+                    {lensActionBusy === "os_binding_bind" ? "Binding." : "Bind next global hotkey"}
+                  </button>
+                ) : null}
+                {lensStage6PrerequisiteBringupReadback.canRequestNextOverlayAuthority ? (
+                  <button
+                    type="button"
+                    style={buttonStyle}
+                    disabled={Boolean(lensActionBusy) || busy}
+                    onClick={() => void requestLensOverlayAuthority()}
+                  >
+                    {lensActionBusy === "overlay_authority_request" ? "Requesting." : "Request next overlay authority"}
+                  </button>
+                ) : null}
+                {lensStage6PrerequisiteBringupReadback.canGrantNextOverlayAuthority ? (
+                  <button
+                    type="button"
+                    style={buttonStyle}
+                    disabled={Boolean(lensActionBusy) || busy}
+                    onClick={() => void grantLensOverlayAuthority(lensStage6PrerequisiteBringupReadback.approvedApprovalId)}
+                  >
+                    {lensActionBusy === "overlay_authority_grant" ? "Granting." : "Grant next overlay authority"}
+                  </button>
+                ) : null}
+                {lensStage6PrerequisiteBringupReadback.canExecuteNextOverlayWindow ? (
+                  <button
+                    type="button"
+                    style={buttonStyle}
+                    disabled={Boolean(lensActionBusy) || busy}
+                    onClick={() =>
+                      void executeLensOverlayWindow(lensStage6PrerequisiteBringupReadback.activeApprovalId, "start")
+                    }
+                  >
+                    {lensActionBusy === "overlay_start" ? "Starting." : "Start next overlay window"}
+                  </button>
+                ) : null}
+                {lensStage6PrerequisiteBringupReadback.canRequestNextSummonAuthority ? (
+                  <button
+                    type="button"
+                    style={buttonStyle}
+                    disabled={Boolean(lensActionBusy) || busy}
+                    onClick={() => void requestLensSummonAuthority()}
+                  >
+                    {lensActionBusy === "summon_authority_request" ? "Requesting." : "Request next summon authority"}
+                  </button>
+                ) : null}
+                {lensStage6PrerequisiteBringupReadback.canGrantNextSummonAuthority ? (
+                  <button
+                    type="button"
+                    style={buttonStyle}
+                    disabled={Boolean(lensActionBusy) || busy}
+                    onClick={() => void grantLensSummonAuthority(lensStage6PrerequisiteBringupReadback.approvedApprovalId)}
+                  >
+                    {lensActionBusy === "summon_authority_grant" ? "Granting." : "Grant next summon authority"}
+                  </button>
+                ) : null}
+                {lensStage6PrerequisiteBringupReadback.canExecuteNextSummonAction ? (
+                  <button
+                    type="button"
+                    style={buttonStyle}
+                    disabled={Boolean(lensActionBusy) || busy}
+                    onClick={() => void executeLensSummonAction(lensStage6PrerequisiteBringupReadback.activeApprovalId)}
+                  >
+                    {lensActionBusy === "summon_execute" ? "Recording." : "Record next summon handoff"}
+                  </button>
+                ) : null}
+                {lensStage6PrerequisiteBringupReadback.canRequestNextPersistentSupervisionEnablementAuthority ? (
+                  <button
+                    type="button"
+                    style={buttonStyle}
+                    disabled={Boolean(lensActionBusy) || busy}
+                    onClick={() => void requestLensPersistentSupervisionEnablementAuthority()}
+                  >
+                    {lensActionBusy === "persistent_supervision_enablement_authority_request"
+                      ? "Requesting."
+                      : "Request next enablement authority"}
+                  </button>
+                ) : null}
+                {lensStage6PrerequisiteBringupReadback.canGrantNextPersistentSupervisionEnablementAuthority ? (
+                  <button
+                    type="button"
+                    style={buttonStyle}
+                    disabled={Boolean(lensActionBusy) || busy}
+                    onClick={() =>
+                      void grantLensPersistentSupervisionEnablementAuthority(
+                        lensStage6PrerequisiteBringupReadback.approvedApprovalId,
+                      )
+                    }
+                  >
+                    {lensActionBusy === "persistent_supervision_enablement_authority_grant"
+                      ? "Granting."
+                      : "Grant next enablement authority"}
+                  </button>
+                ) : null}
+                {lensStage6PrerequisiteBringupReadback.canRequestNextPersistentSupervisionExecutionAuthority ? (
+                  <button
+                    type="button"
+                    style={buttonStyle}
+                    disabled={Boolean(lensActionBusy) || busy}
+                    onClick={() => void requestLensPersistentSupervisionExecutionAuthority()}
+                  >
+                    {lensActionBusy === "persistent_supervision_execution_authority_request"
+                      ? "Requesting."
+                      : "Request next execution authority"}
+                  </button>
+                ) : null}
+                {lensStage6PrerequisiteBringupReadback.canGrantNextPersistentSupervisionExecutionAuthority ? (
+                  <button
+                    type="button"
+                    style={buttonStyle}
+                    disabled={Boolean(lensActionBusy) || busy}
+                    onClick={() =>
+                      void grantLensPersistentSupervisionExecutionAuthority(
+                        lensStage6PrerequisiteBringupReadback.approvedApprovalId,
+                      )
+                    }
+                  >
+                    {lensActionBusy === "persistent_supervision_execution_authority_grant"
+                      ? "Granting."
+                      : "Grant next execution authority"}
+                  </button>
+                ) : null}
+                {lensStage6PrerequisiteBringupReadback.canApplyNextPersistentSupervisionEnablement ? (
+                  <button
+                    type="button"
+                    style={buttonStyle}
+                    disabled={Boolean(lensActionBusy) || busy}
+                    onClick={() =>
+                      void applyLensPersistentSupervisionEnablement(
+                        lensStage6PrerequisiteBringupReadback.activeApprovalId,
+                      )
+                    }
+                  >
+                    {lensActionBusy === "persistent_supervision_apply"
+                      ? "Applying."
+                      : "Apply next persistent supervision"}
+                  </button>
+                ) : null}
+                <span style={{ fontSize: 11, color: THEME.muted }}>
+                  <code>{lensStage6PrerequisiteBringupReadback.nextActionRoute}</code>
+                </span>
               </div>
             ) : null}
             {lensStage6NextHandoff.currentRequestRoute ||

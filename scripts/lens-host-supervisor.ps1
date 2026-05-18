@@ -3,7 +3,7 @@ param(
   [ValidateSet('Status', 'Observe', 'SuperviseOnce', 'SuperviseResidentOnce', 'SuperviseResident', 'StartResident', 'StopResident')]
   [string]$Mode = 'Status',
 
-  [ValidateRange(0, 30)]
+  [ValidateRange(0, 60)]
   [int]$RunSeconds = 5,
 
   [string]$DataDir = ''

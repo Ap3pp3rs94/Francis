@@ -140,10 +140,94 @@ print(json.dumps(lens_status(limit=$StatusLimit)))
   return $Text | ConvertFrom-Json -ErrorAction Stop
 }
 
+function Invoke-JsonScriptReadback {
+  param(
+    [string]$ScriptPath,
+    [hashtable]$Parameters = @{}
+  )
+
+  $Output = & $ScriptPath @Parameters 2>&1
+  $ExitCode = $LASTEXITCODE
+  $Text = ($Output | ForEach-Object { [string]$_ }) -join "`n"
+
+  if ([string]::IsNullOrWhiteSpace($Text)) {
+    throw "JSON script readback produced no output: $ScriptPath"
+  }
+
+  try {
+    $Payload = $Text | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    throw "JSON script readback failed to parse: $ScriptPath. $Text"
+  }
+
+  return [ordered]@{
+    exit_code = [int]$ExitCode
+    payload = $Payload
+  }
+}
+
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 & (Join-Path $PSScriptRoot 'assert-runtime-root.ps1') -Root $RepoRoot
 
 $StatusReadback = Invoke-LensStatusReadback -StatusLimit $Limit
+$Stage6PrerequisiteBringupPlanScript = Join-Path $PSScriptRoot 'lens-stage6-prerequisite-bringup-plan.ps1'
+$Stage6PrerequisiteBringupDataDir = [string]$env:FRANCIS_DATA_DIR
+if ([string]::IsNullOrWhiteSpace($Stage6PrerequisiteBringupDataDir)) {
+  $Stage6PrerequisiteBringupDataDir = Join-Path $RepoRoot 'data'
+}
+$Stage6PrerequisiteBringupPlanResult = Invoke-JsonScriptReadback `
+  -ScriptPath $Stage6PrerequisiteBringupPlanScript `
+  -Parameters @{ Mode = 'Status'; DataDir = $Stage6PrerequisiteBringupDataDir }
+$Stage6PrerequisiteBringupPlan = $Stage6PrerequisiteBringupPlanResult.payload
+$Stage6PrerequisiteBringupPlanGovernance = Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'governance' -Default ([ordered]@{})
+$Stage6PrerequisiteBringupPlanRequiredBeforeEnable = ConvertTo-StringArray -Value (
+  Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'required_before_enable'
+)
+$Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable = ConvertTo-StringArray -Value (
+  Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'missing_required_before_enable'
+)
+$Stage6PrerequisiteBringupPlanNextOperatorAction = Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'next_operator_action' -Default ([ordered]@{})
+$Stage6PrerequisiteBringupPlanNextOperatorCommand = Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'next_operator_command' -Default ([ordered]@{})
+$Stage6PrerequisiteBringupPlanNextOperatorActorScopeReadiness = Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'next_operator_actor_scope_readiness' -Default ([ordered]@{})
+$Stage6PrerequisiteBringupPlanCommandAvailability = Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'operator_sequence_command_availability' -Default ([ordered]@{})
+$Stage6PrerequisiteBringupPlanAllowedFirstMissingTruthfulGaps = @(
+  'resident_host_process_not_supervised',
+  'resident_supervision_not_persistent'
+)
+$Stage6PrerequisiteBringupPlanObserved = (
+  [int]$Stage6PrerequisiteBringupPlanResult.exit_code -eq 0 -and
+  [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'kind' -Default '') -eq 'lens.stage6.prerequisite_bringup.plan' -and
+  [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'ok' -Default $false) -and
+  [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'status' -Default '') -eq 'blocked' -and
+  [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'stage_state' -Default '') -eq 'active' -and
+  -not [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'ready_to_close' -Default $true) -and
+  [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'acceptance_criterion' -Default '') -eq 'system_resident_presence' -and
+  [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'current_truthful_gap' -Default '') -eq 'persistent_supervision_required_prerequisites_missing' -and
+  [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'current_truthful_gap_basis' -Default '') -eq 'missing_required_before_enable' -and
+  [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'current_first_missing_requirement' -Default '') -eq 'resident_host_process' -and
+  $Stage6PrerequisiteBringupPlanAllowedFirstMissingTruthfulGaps -contains [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'current_first_missing_truthful_gap' -Default '') -and
+  -not [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'required_before_enable_ready' -Default $true) -and
+  [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'next_operator_action_requirement' -Default '') -eq 'resident_host_process' -and
+  -not [string]::IsNullOrWhiteSpace([string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlanNextOperatorAction -Name 'id' -Default '')) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlanNextOperatorAction -Name 'script_would_execute' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlanNextOperatorAction -Name 'script_would_mutate' -Default $true) -and
+  -not [string]::IsNullOrWhiteSpace([string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlanNextOperatorCommand -Name 'mode' -Default '')) -and
+  [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlanCommandAvailability -Name 'truthful' -Default $false) -and
+  $Stage6PrerequisiteBringupPlanRequiredBeforeEnable -contains 'resident_host_process' -and
+  $Stage6PrerequisiteBringupPlanRequiredBeforeEnable -contains 'tray_presence' -and
+  $Stage6PrerequisiteBringupPlanRequiredBeforeEnable -contains 'global_hotkey_binding' -and
+  $Stage6PrerequisiteBringupPlanRequiredBeforeEnable -contains 'overlay_window' -and
+  $Stage6PrerequisiteBringupPlanRequiredBeforeEnable -contains 'summon_binding' -and
+  $Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable -contains 'resident_host_process' -and
+  [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlanGovernance -Name 'read_only_contract' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlanGovernance -Name 'diagnostic_only' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlanGovernance -Name 'plan_only' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlanGovernance -Name 'requires_explicit_operator_execution' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlanGovernance -Name 'actor_scope_readback' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlanGovernance -Name 'would_execute' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlanGovernance -Name 'would_mutate' -Default $true)
+)
+
 $Stage6Readiness = Get-PropertyValue -Payload $StatusReadback -Name 'stage6_readiness'
 $ClosureReadback = Get-PropertyValue -Payload $Stage6Readiness -Name 'closure_readback'
 $Criteria = Get-PropertyValue -Payload $ClosureReadback -Name 'criteria' -Default @()
@@ -497,6 +581,68 @@ if ($ResidentRuntimeCandidateHandoffObserved) {
   $AuthorityRequired = [string](Get-PropertyValue -Payload $ResidentRuntimeCandidateHandoff -Name 'authority_required' -Default '')
   $AuthorityGranted = [bool](Get-PropertyValue -Payload $ResidentRuntimeCandidateHandoff -Name 'authority_granted' -Default $false)
 }
+$Stage6PrerequisiteBringupCommandMode = [string](
+  Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlanNextOperatorCommand -Name 'mode' -Default 'Status'
+)
+$Stage6PrerequisiteBringupNextOperatorActionId = [string](
+  Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlanNextOperatorAction -Name 'id' -Default ''
+)
+$Stage6PrerequisiteBringupCommandModeSlug = switch ($Stage6PrerequisiteBringupCommandMode) {
+  'RequestNext' { 'request_next' }
+  'GrantNext' { 'grant_next' }
+  'ExecuteNext' { 'execute_next' }
+  default { 'status' }
+}
+if ($Stage6PrerequisiteBringupNextOperatorActionId.StartsWith('await_')) {
+  $Stage6PrerequisiteBringupCommandModeSlug = 'approval_wait'
+}
+$Stage6PrerequisiteBringupOperatorPlanHandoff = [ordered]@{}
+if ($Stage6PrerequisiteBringupPlanObserved) {
+  $Stage6PrerequisiteBringupOperatorPlanHandoff = [ordered]@{
+    status = 'blocked'
+    next_smallest_truthful_gap = 'persistent_supervision_required_prerequisites_missing'
+    next_step = "run_stage6_prerequisite_bringup_$Stage6PrerequisiteBringupCommandModeSlug`_for_$([string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'next_operator_action_requirement' -Default 'resident_host_process'))"
+    proof_script = 'scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status'
+    route = '/lens/host/persistent-supervision'
+    readiness_route = '/lens/host/persistent-supervision/enablement'
+    operator_plan_script = 'scripts/lens-stage6-prerequisite-bringup-plan.ps1'
+    current_truthful_gap = [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'current_truthful_gap' -Default '')
+    current_truthful_gap_basis = [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'current_truthful_gap_basis' -Default '')
+    current_first_missing_requirement = [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'current_first_missing_requirement' -Default '')
+    current_first_missing_truthful_gap = [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'current_first_missing_truthful_gap' -Default '')
+    next_operator_action_requirement = [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'next_operator_action_requirement' -Default '')
+    next_operator_action = $Stage6PrerequisiteBringupPlanNextOperatorAction
+    next_operator_command = $Stage6PrerequisiteBringupPlanNextOperatorCommand
+    next_operator_actor_scope_readiness = $Stage6PrerequisiteBringupPlanNextOperatorActorScopeReadiness
+    operator_sequence_command_availability = $Stage6PrerequisiteBringupPlanCommandAvailability
+    required_before_enable = [string[]]@($Stage6PrerequisiteBringupPlanRequiredBeforeEnable)
+    missing_required_before_enable = [string[]]@($Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable)
+    required_before_enable_ready = [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'required_before_enable_ready' -Default $false)
+    first_missing_requirement_handoff = $(Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'first_missing_requirement_handoff' -Default ([ordered]@{}))
+    authority_required = 'resident_host_process_tray_hotkey_overlay_and_summon_prerequisites'
+    authority_granted = $false
+    read_only_contract = $true
+    diagnostic_only = $true
+    plan_only = $true
+    requires_explicit_operator_execution = $true
+    would_execute = $false
+    would_mutate = $false
+    blockers = [string[]]@(@(
+        [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'current_truthful_gap' -Default ''),
+        [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'current_first_missing_truthful_gap' -Default '')
+      ) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Sort-Object -Unique)
+  }
+}
+if ($PersistentSupervisionRequiredPrerequisitesObserved -and $Stage6PrerequisiteBringupPlanObserved) {
+  $RecommendedHandoffSource = 'stage6_prerequisite_bringup_operator_plan'
+  $RecommendedNextGap = [string]$Stage6PrerequisiteBringupOperatorPlanHandoff.next_smallest_truthful_gap
+  $RecommendedNextSlice = [string]$Stage6PrerequisiteBringupOperatorPlanHandoff.next_step
+  $RecommendedProofScript = [string]$Stage6PrerequisiteBringupOperatorPlanHandoff.proof_script
+  $RecommendedRoute = [string]$Stage6PrerequisiteBringupOperatorPlanHandoff.route
+  $RecommendedReadinessRoute = [string]$Stage6PrerequisiteBringupOperatorPlanHandoff.readiness_route
+  $AuthorityRequired = [string]$Stage6PrerequisiteBringupOperatorPlanHandoff.authority_required
+  $AuthorityGranted = [bool]$Stage6PrerequisiteBringupOperatorPlanHandoff.authority_granted
+}
 $RecommendedFirstMissingAuthorityRequired = [string](
   Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'authority_required' -Default ''
 )
@@ -529,7 +675,11 @@ $SideEffectsDenied = (
   -not [bool](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'would_execute' -Default $false) -and
   -not [bool](Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'would_mutate' -Default $false) -and
   -not [bool](Get-PropertyValue -Payload $ActivationExecutionHandoff -Name 'would_execute' -Default $false) -and
-  -not [bool](Get-PropertyValue -Payload $ActivationExecutionHandoff -Name 'would_mutate' -Default $false)
+  -not [bool](Get-PropertyValue -Payload $ActivationExecutionHandoff -Name 'would_mutate' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupOperatorPlanHandoff -Name 'would_execute' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupOperatorPlanHandoff -Name 'would_mutate' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlanNextOperatorAction -Name 'script_would_execute' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlanNextOperatorAction -Name 'script_would_mutate' -Default $false)
 )
 
 $Checks = @(
@@ -541,6 +691,7 @@ $Checks = @(
   New-Check -Id 'family_chain_handoff' -Status 'summon_family_chain_handoff_ready' -Passed $FamilyChainHandoffObserved -Evidence 'summon_anywhere.handoff.summon_anywhere_family_chain_completion_audit_handoff' -Reason 'The summon blocker family chain can still be consumed by audit.'
   New-Check -Id 'persistent_supervision_required_prerequisites' -Status 'required_prerequisites_handoff_ready' -Passed $PersistentSupervisionRequiredPrerequisitesObserved -Evidence '/lens/status resident_host.persistent_supervision_plan missing_required_before_enable' -Reason 'The latest Stage 6 handoff must preserve the full persistent-supervision prerequisite map after the audit chain consumes the older resident-host proofs.'
   New-Check -Id 'persistent_supervision_first_missing_requirement' -Status $(if ($PersistentSupervisionFirstMissingRequirementHandoffReady) { 'first_missing_requirement_handoff_ready' } else { 'missing_or_unexpected' }) -Passed $PersistentSupervisionFirstMissingRequirementHandoffReady -Evidence '/lens/status resident_host.persistent_supervision_plan first_missing_requirement_handoff' -Reason 'The persistent-supervision prerequisite gap must name the first concrete missing prerequisite before the next slice.'
+  New-Check -Id 'stage6_prerequisite_bringup_plan' -Status $(if ($Stage6PrerequisiteBringupPlanObserved) { 'operator_plan_readback_ready' } else { 'missing_or_unexpected' }) -Passed $Stage6PrerequisiteBringupPlanObserved -Evidence 'scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status' -Reason 'The next handoff should point at the governed prerequisite bring-up runbook instead of lower-level proof fragments.'
   New-Check -Id 'persistent_supervision_enablement_authority_handoff' -Status $(if ($PersistentSupervisionEnablementAuthorityHandoffObserved) { 'enablement_authority_handoff_ready' } else { 'not_observed' }) -Passed $true -Evidence '/lens/status resident_host.persistent_supervision_enablement_authority_readiness' -Reason 'When the enablement authority denial and execution-denial readiness are already audited, the next handoff can point at the enablement-authority proof without granting authority.'
   New-Check -Id 'activation_execution_handoff' -Status $(if ($ActivationExecutionHandoffReady) { 'activation_execution_handoff_ready' } else { 'not_observed' }) -Passed $true -Evidence '/lens/status resident_host.activation_state latest_execution_handoff' -Reason 'When a bounded activation execution receipt exists, the handoff can point directly at process-supervision proof without claiming resident host status.'
   New-Check -Id 'resident_runtime_candidate_handoff' -Status $(if ($ResidentRuntimeCandidateHandoffObserved -and $CandidateObservedByDurableReceipt) { 'receipt_candidate_handoff_ready' } elseif ($ResidentRuntimeCandidateHandoffObserved) { 'fresh_candidate_handoff_ready' } else { 'not_observed' }) -Passed $true -Evidence '/lens/status resident_host resident candidate readback' -Reason 'When a fresh or receipt-backed supervised resident candidate is present, the handoff can point at persistence; otherwise it remains on the first missing resident-host prerequisite.'
@@ -570,6 +721,13 @@ $Payload = [ordered]@{
   recommended_readiness_route = $RecommendedReadinessRoute
   authority_required = $AuthorityRequired
   authority_granted = $AuthorityGranted
+  stage6_prerequisite_bringup_plan_observed = $Stage6PrerequisiteBringupPlanObserved
+  stage6_prerequisite_bringup_operator_plan_handoff = $Stage6PrerequisiteBringupOperatorPlanHandoff
+  next_operator_action_requirement = [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'next_operator_action_requirement' -Default '')
+  next_operator_action = $Stage6PrerequisiteBringupPlanNextOperatorAction
+  next_operator_command = $Stage6PrerequisiteBringupPlanNextOperatorCommand
+  next_operator_actor_scope_readiness = $Stage6PrerequisiteBringupPlanNextOperatorActorScopeReadiness
+  operator_sequence_command_availability = $Stage6PrerequisiteBringupPlanCommandAvailability
   recommended_prerequisites_handoff_source = $(if ($PersistentSupervisionRequiredPrerequisitesObserved) { 'persistent_supervision_required_prerequisites_handoff' } else { '' })
   recommended_prerequisites_next_slice = [string](Get-PropertyValue -Payload $PersistentSupervisionRequiredPrerequisitesHandoff -Name 'next_step' -Default '')
   recommended_prerequisites_proof_script = [string](Get-PropertyValue -Payload $PersistentSupervisionRequiredPrerequisitesHandoff -Name 'proof_script' -Default '')
@@ -596,6 +754,25 @@ $Payload = [ordered]@{
   persistent_supervision_required_prerequisites_handoff = $PersistentSupervisionRequiredPrerequisitesHandoff
   persistent_supervision_enablement_authority_handoff_observed = $PersistentSupervisionEnablementAuthorityHandoffObserved
   persistent_supervision_enablement_authority_handoff = $PersistentSupervisionEnablementAuthorityHandoff
+  stage6_prerequisite_bringup_plan = [ordered]@{
+    status = if ($Stage6PrerequisiteBringupPlanObserved) { [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'status' -Default '') } else { 'missing_or_failed' }
+    ok = $Stage6PrerequisiteBringupPlanObserved
+    exit_code = [int]$Stage6PrerequisiteBringupPlanResult.exit_code
+    evidence = [string[]]@(ConvertTo-StringArray -Value (Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'evidence'))
+    current_truthful_gap = [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'current_truthful_gap' -Default '')
+    current_truthful_gap_basis = [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'current_truthful_gap_basis' -Default '')
+    current_first_missing_requirement = [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'current_first_missing_requirement' -Default '')
+    current_first_missing_truthful_gap = [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'current_first_missing_truthful_gap' -Default '')
+    required_before_enable = [string[]]@($Stage6PrerequisiteBringupPlanRequiredBeforeEnable)
+    missing_required_before_enable = [string[]]@($Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable)
+    required_before_enable_ready = [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'required_before_enable_ready' -Default $false)
+    next_operator_action_requirement = [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'next_operator_action_requirement' -Default '')
+    next_operator_action = $Stage6PrerequisiteBringupPlanNextOperatorAction
+    next_operator_command = $Stage6PrerequisiteBringupPlanNextOperatorCommand
+    next_operator_actor_scope_readiness = $Stage6PrerequisiteBringupPlanNextOperatorActorScopeReadiness
+    operator_sequence_command_availability = $Stage6PrerequisiteBringupPlanCommandAvailability
+    governance = $Stage6PrerequisiteBringupPlanGovernance
+  }
   latest_activation_execution_handoff_observed = $ActivationExecutionHandoffReady
   latest_activation_execution_handoff = $(if ($ActivationExecutionHandoffReady) { $ActivationExecutionHandoff } else { [ordered]@{} })
   activation_execution_handoff_observed = $ActivationExecutionHandoffReady
@@ -608,6 +785,9 @@ $Payload = [ordered]@{
     read_only_contract = $true
     uses_lens_status_readback = $true
     uses_persistent_supervision_readback = $true
+    uses_stage6_prerequisite_bringup_plan_readback = $true
+    stage6_prerequisite_bringup_plan_readback = $Stage6PrerequisiteBringupPlanObserved
+    stage6_prerequisite_bringup_actor_scope_readback = [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlanGovernance -Name 'actor_scope_readback' -Default $false)
     proof_script = 'scripts/lens-stage6-next-handoff.ps1 -Mode Status'
     would_execute = $false
     would_mutate = $false

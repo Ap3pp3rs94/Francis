@@ -15,8 +15,12 @@ from francis.lens import (
     execute_lens_host_supervision_once,
     execute_lens_resident_runtime_activation,
     execute_lens_os_binding,
+    execute_lens_overlay_window,
+    execute_lens_summon_action,
     execute_lens_tray_presence,
     grant_lens_os_binding_authority,
+    grant_lens_overlay_authority,
+    grant_lens_summon_authority,
     grant_lens_host_activation_authority,
     grant_lens_resident_runtime_execution_authority,
     grant_lens_host_persistent_supervision_enablement_execution_authority,
@@ -60,8 +64,12 @@ from francis.lens import (
     lens_os_binding_execution_readiness_audit,
     lens_os_binding_implementation_plan,
     lens_os_binding_readiness,
+    lens_overlay_authority_grant_receipts,
+    lens_overlay_authority_request_readback,
     lens_overlay_enablement_gate,
+    lens_overlay_window_execution_receipts,
     lens_resident_runtime_activation_denial_receipts,
+    lens_resident_runtime_activation_execution_receipts,
     lens_preflight,
     lens_resident_runtime_authority_grant_denial_receipts,
     lens_resident_runtime_authority_grant_readiness_audit,
@@ -73,6 +81,9 @@ from francis.lens import (
     lens_resident_surface_activation_boundary,
     lens_resident_surface_readback,
     lens_status,
+    lens_summon_action_execution_receipts,
+    lens_summon_authority_grant_receipts,
+    lens_summon_authority_request_readback,
     lens_summon_enablement_gate,
     lens_tray_authority_grant_receipts,
     lens_tray_authority_request_contract,
@@ -84,7 +95,9 @@ from francis.lens import (
     request_lens_host_persistent_supervision_enablement_authority,
     request_lens_host_supervision_authority,
     request_lens_os_binding_authority,
+    request_lens_overlay_authority,
     request_lens_resident_runtime_execution_authority,
+    request_lens_summon_authority,
     request_lens_tray_authority,
 )
 
@@ -211,6 +224,27 @@ class LensOsBindingExecuteIn(BaseModel):
     run_seconds: int = Field(default=300, ge=0, le=3600)
 
 
+class LensSummonAuthorityRequestIn(BaseModel):
+    actor: str | None = None
+    reason: str = "request Lens summon action authority review"
+
+
+class LensSummonAuthorityGrantIn(BaseModel):
+    actor: str | None = None
+    approval_id: str = ""
+    reason: str = "attempt Lens summon action authority grant"
+    lease_seconds: int = Field(default=3600, ge=60, le=86400)
+
+
+class LensSummonExecuteIn(BaseModel):
+    actor: str | None = None
+    approval_id: str = ""
+    reason: str = "attempt Lens summon action execution"
+    mode: str = Field(default="launch")
+    run_seconds: int = Field(default=5, ge=1, le=60)
+    allow_launch: bool = False
+
+
 class LensTrayAuthorityRequestIn(BaseModel):
     actor: str | None = None
     reason: str = "request Lens tray presence authority review"
@@ -227,6 +261,26 @@ class LensTrayExecuteIn(BaseModel):
     actor: str | None = None
     approval_id: str = ""
     reason: str = "attempt Lens tray presence execution"
+    mode: str = Field(default="start")
+    run_seconds: int = Field(default=300, ge=0, le=3600)
+
+
+class LensOverlayAuthorityRequestIn(BaseModel):
+    actor: str | None = None
+    reason: str = "request Lens overlay window authority review"
+
+
+class LensOverlayAuthorityGrantIn(BaseModel):
+    actor: str | None = None
+    approval_id: str = ""
+    reason: str = "attempt Lens overlay window authority grant"
+    lease_seconds: int = Field(default=3600, ge=60, le=86400)
+
+
+class LensOverlayExecuteIn(BaseModel):
+    actor: str | None = None
+    approval_id: str = ""
+    reason: str = "attempt Lens overlay window execution"
     mode: str = Field(default="start")
     run_seconds: int = Field(default=300, ge=0, le=3600)
 
@@ -361,6 +415,83 @@ def os_binding_authority_grant(
     )
 
 
+@router.get("/summon/authority")
+@router.get("/summon/authority/requests")
+def summon_authority_requests(limit: int = Query(5, ge=1, le=50)) -> dict[str, Any]:
+    return lens_summon_authority_request_readback(limit=limit)
+
+
+@router.get("/summon/authority/grants")
+def summon_authority_grants(
+    limit: int = Query(5, ge=1, le=50),
+    approval_id: str = "",
+    status: str = "",
+    active_only: bool = False,
+) -> dict[str, Any]:
+    return lens_summon_authority_grant_receipts(
+        limit=limit,
+        approval_id=approval_id,
+        status=status,
+        active_only=active_only,
+    )
+
+
+@router.get("/summon/executions")
+def summon_executions(
+    limit: int = Query(5, ge=1, le=50),
+    approval_id: str = "",
+    status: str = "",
+) -> dict[str, Any]:
+    return lens_summon_action_execution_receipts(limit=limit, approval_id=approval_id, status=status)
+
+
+@router.post("/summon/authority/request")
+def summon_authority_request(
+    request: Request,
+    payload: LensSummonAuthorityRequestIn,
+) -> dict[str, Any]:
+    return request_lens_summon_authority(
+        actor=payload.actor,
+        reason=payload.reason,
+        route=request.url.path,
+        method=request.method,
+    )
+
+
+@router.post("/summon/authority")
+def summon_authority_grant(
+    request: Request,
+    payload: LensSummonAuthorityGrantIn,
+) -> dict[str, Any]:
+    return grant_lens_summon_authority(
+        approval_id=payload.approval_id,
+        actor=payload.actor,
+        reason=payload.reason,
+        route=request.url.path,
+        method=request.method,
+        record_receipt=True,
+        lease_seconds=payload.lease_seconds,
+    )
+
+
+@router.post("/summon/execute")
+def summon_execute(
+    request: Request,
+    payload: LensSummonExecuteIn,
+) -> dict[str, Any]:
+    return execute_lens_summon_action(
+        approval_id=payload.approval_id,
+        actor=payload.actor,
+        reason=payload.reason,
+        route=request.url.path,
+        method=request.method,
+        record_receipt=True,
+        mode=payload.mode,
+        run_seconds=payload.run_seconds,
+        allow_launch=payload.allow_launch,
+    )
+
+
 @router.get("/summon/readiness")
 @router.get("/summon")
 def summon() -> dict[str, Any]:
@@ -442,6 +573,82 @@ def tray_execute(
     payload: LensTrayExecuteIn,
 ) -> dict[str, Any]:
     return execute_lens_tray_presence(
+        approval_id=payload.approval_id,
+        actor=payload.actor,
+        reason=payload.reason,
+        route=request.url.path,
+        method=request.method,
+        record_receipt=True,
+        mode=payload.mode,
+        run_seconds=payload.run_seconds,
+    )
+
+
+@router.get("/overlay/authority")
+@router.get("/overlay/authority/requests")
+def overlay_authority_requests(limit: int = Query(5, ge=1, le=50)) -> dict[str, Any]:
+    return lens_overlay_authority_request_readback(limit=limit)
+
+
+@router.get("/overlay/authority/grants")
+def overlay_authority_grants(
+    limit: int = Query(5, ge=1, le=50),
+    approval_id: str = "",
+    status: str = "",
+    active_only: bool = False,
+) -> dict[str, Any]:
+    return lens_overlay_authority_grant_receipts(
+        limit=limit,
+        approval_id=approval_id,
+        status=status,
+        active_only=active_only,
+    )
+
+
+@router.get("/overlay/executions")
+def overlay_executions(
+    limit: int = Query(5, ge=1, le=50),
+    approval_id: str = "",
+    status: str = "",
+) -> dict[str, Any]:
+    return lens_overlay_window_execution_receipts(limit=limit, approval_id=approval_id, status=status)
+
+
+@router.post("/overlay/authority/request")
+def overlay_authority_request(
+    request: Request,
+    payload: LensOverlayAuthorityRequestIn,
+) -> dict[str, Any]:
+    return request_lens_overlay_authority(
+        actor=payload.actor,
+        reason=payload.reason,
+        route=request.url.path,
+        method=request.method,
+    )
+
+
+@router.post("/overlay/authority")
+def overlay_authority_grant(
+    request: Request,
+    payload: LensOverlayAuthorityGrantIn,
+) -> dict[str, Any]:
+    return grant_lens_overlay_authority(
+        approval_id=payload.approval_id,
+        actor=payload.actor,
+        reason=payload.reason,
+        route=request.url.path,
+        method=request.method,
+        record_receipt=True,
+        lease_seconds=payload.lease_seconds,
+    )
+
+
+@router.post("/overlay/execute")
+def overlay_execute(
+    request: Request,
+    payload: LensOverlayExecuteIn,
+) -> dict[str, Any]:
+    return execute_lens_overlay_window(
         approval_id=payload.approval_id,
         actor=payload.actor,
         reason=payload.reason,
@@ -906,6 +1113,19 @@ def resident_runtime_denials(
     status: str = "",
 ) -> dict[str, Any]:
     return lens_resident_runtime_activation_denial_receipts(
+        limit=limit,
+        approval_id=approval_id,
+        status=status,
+    )
+
+
+@router.get("/resident-runtime/executions")
+def resident_runtime_executions(
+    limit: int = Query(5, ge=1, le=50),
+    approval_id: str = "",
+    status: str = "",
+) -> dict[str, Any]:
+    return lens_resident_runtime_activation_execution_receipts(
         limit=limit,
         approval_id=approval_id,
         status=status,

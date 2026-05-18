@@ -1442,6 +1442,44 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert body["ok"] is True
     assert body["kind"] == "lens.status"
     assert body["read_only"] is True
+    assert body["os_binding_authority_requests"]["route"] == "/lens/os-binding/authority/requests"
+    assert body["os_binding_authority_requests"]["request_route"] == "/lens/os-binding/authority/request"
+    assert body["os_binding_authority_requests"]["authority_route"] == "/lens/os-binding/authority"
+    assert body["os_binding_authority_requests"]["execute_route"] == "/lens/os-binding/execute"
+    assert body["os_binding_authority_requests"]["authority_granted"] is False
+    assert body["os_binding_execution_receipts"]["route"] == "/lens/os-binding/executions"
+    assert body["os_binding_execution_receipts"]["execute_route"] == "/lens/os-binding/execute"
+    assert body["os_binding_execution_receipts"]["total"] == 0
+    assert body["tray_authority_requests"]["route"] == "/lens/tray/authority/requests"
+    assert body["tray_authority_requests"]["request_route"] == "/lens/tray/authority/request"
+    assert body["tray_authority_requests"]["authority_route"] == "/lens/tray/authority"
+    assert body["tray_authority_requests"]["execute_route"] == "/lens/tray/execute"
+    assert body["tray_authority_requests"]["authority_granted"] is False
+    assert body["tray_execution_receipts"]["route"] == "/lens/tray/executions"
+    assert body["tray_execution_receipts"]["execute_route"] == "/lens/tray/execute"
+    assert body["tray_execution_receipts"]["total"] == 0
+    assert body["overlay_authority_requests"]["route"] == "/lens/overlay/authority/requests"
+    assert body["overlay_authority_requests"]["request_route"] == "/lens/overlay/authority/request"
+    assert body["overlay_authority_requests"]["authority_route"] == "/lens/overlay/authority"
+    assert body["overlay_authority_requests"]["execute_route"] == "/lens/overlay/execute"
+    assert body["overlay_authority_requests"]["authority_granted"] is False
+    assert body["overlay_execution_receipts"]["route"] == "/lens/overlay/executions"
+    assert body["overlay_execution_receipts"]["execute_route"] == "/lens/overlay/execute"
+    assert body["overlay_execution_receipts"]["total"] == 0
+    assert body["summon_authority_requests"]["route"] == "/lens/summon/authority/requests"
+    assert body["summon_authority_requests"]["request_route"] == "/lens/summon/authority/request"
+    assert body["summon_authority_requests"]["authority_route"] == "/lens/summon/authority"
+    assert body["summon_authority_requests"]["execute_route"] == "/lens/summon/execute"
+    assert body["summon_authority_requests"]["authority_granted"] is False
+    assert body["summon_execution_receipts"]["route"] == "/lens/summon/executions"
+    assert body["summon_execution_receipts"]["execute_route"] == "/lens/summon/execute"
+    assert body["summon_execution_receipts"]["total"] == 0
+    assert body["receipts"]["lens_tray_authority_request_route"] == "/lens/tray/authority/request"
+    assert body["receipts"]["lens_tray_execute_route"] == "/lens/tray/execute"
+    assert body["receipts"]["lens_overlay_authority_request_route"] == "/lens/overlay/authority/request"
+    assert body["receipts"]["lens_overlay_execute_route"] == "/lens/overlay/execute"
+    assert body["receipts"]["lens_summon_authority_request_route"] == "/lens/summon/authority/request"
+    assert body["receipts"]["lens_summon_execute_route"] == "/lens/summon/execute"
     stage6_readiness = body["stage6_readiness"]
     assert stage6_readiness["stage"] == "Stage 6 / Lens MVP"
     assert stage6_readiness["stage_state"] == "active"
@@ -1471,8 +1509,9 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     )
     assert next_handoff["recommended_route"] == "/lens/host"
     assert next_handoff["recommended_readiness_route"] == "/lens/host/runtime-loop/readiness"
-    assert next_handoff["recommended_request_route"] == "/lens/host/activation/request"
-    assert next_handoff["recommended_grant_route"] == "/lens/host/activation/authority"
+    assert next_handoff["recommended_request_route"] == "/lens/resident-runtime/authority-grant/request"
+    assert next_handoff["recommended_grant_route"] == "/lens/resident-runtime/authority-grant"
+    assert next_handoff["recommended_execution_readiness_route"] == "/lens/resident-runtime/plan"
     assert next_handoff["authority_required"] == ("resident_host_process_tray_hotkey_overlay_and_summon_prerequisites")
     assert next_handoff["authority_granted"] is False
     assert next_handoff["recommended_prerequisites_handoff_source"] == (
@@ -1525,6 +1564,28 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert (
         next_handoff["persistent_supervision_first_missing_requirement_handoff"]["approval_action"]
         == "lens.host.foreground_activation"
+    )
+    assert (
+        next_handoff["persistent_supervision_first_missing_requirement_handoff"]["resident_runtime_approval_action"]
+        == "lens.resident_runtime.execution_authority"
+    )
+    assert (
+        next_handoff["persistent_supervision_first_missing_requirement_handoff"][
+            "resident_runtime_authority_request_route"
+        ]
+        == "/lens/resident-runtime/authority-grant/request"
+    )
+    assert (
+        next_handoff["persistent_supervision_first_missing_requirement_handoff"]["resident_runtime_authority_route"]
+        == "/lens/resident-runtime/authority-grant"
+    )
+    assert (
+        next_handoff["persistent_supervision_first_missing_requirement_handoff"]["resident_runtime_plan_route"]
+        == "/lens/resident-runtime/plan"
+    )
+    assert (
+        next_handoff["persistent_supervision_first_missing_requirement_handoff"]["resident_runtime_execute_route"]
+        == "/lens/resident-runtime/execute"
     )
     assert next_handoff["persistent_supervision_first_missing_requirement_handoff"]["read_only_contract"] is True
     assert next_handoff["persistent_supervision_first_missing_requirement_handoff"]["diagnostic_only"] is True
@@ -2241,6 +2302,31 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert resident_runtime_denial_receipts["governance"]["process_supervision_authority"] is False
     assert resident_runtime_denial_receipts["governance"]["service_control_authority"] is False
     assert resident_runtime_denial_receipts["governance"]["memory_write"] is False
+    assert resident_host["resident_runtime_execution_receipts_route"] == "/lens/resident-runtime/executions"
+    resident_runtime_execution_receipts = resident_host["resident_runtime_execution_receipts"]
+    assert resident_runtime_execution_receipts["kind"] == "lens.resident_runtime.activation.execution_receipts"
+    assert resident_runtime_execution_receipts["status"] == "empty"
+    assert resident_runtime_execution_receipts["route"] == "/lens/resident-runtime/executions"
+    assert resident_runtime_execution_receipts["execute_route"] == "/lens/resident-runtime/execute"
+    assert resident_runtime_execution_receipts["host_supervision_executions_route"] == (
+        "/lens/host/supervision/executions"
+    )
+    assert resident_runtime_execution_receipts["total"] == 0
+    assert resident_runtime_execution_receipts["latest"] is None
+    assert resident_runtime_execution_receipts["items"] == []
+    assert resident_runtime_execution_receipts["resident_supervised_runtime_receipt_observed"] is False
+    assert resident_runtime_execution_receipts["resident_claim_allowed"] is False
+    assert resident_runtime_execution_receipts["governance"]["gate"] == (
+        "lens_resident_runtime_activation_execution_receipts_readback"
+    )
+    assert resident_runtime_execution_receipts["governance"]["read_only_contract"] is True
+    assert resident_runtime_execution_receipts["governance"]["host_supervision_receipt_projection"] is True
+    assert resident_runtime_execution_receipts["governance"]["execution_authority"] is False
+    assert resident_runtime_execution_receipts["governance"]["approval_decision_authority"] is False
+    assert resident_runtime_execution_receipts["governance"]["process_supervision_authority"] is False
+    assert resident_runtime_execution_receipts["governance"]["service_control_authority"] is False
+    assert resident_runtime_execution_receipts["governance"]["memory_write"] is False
+    assert resident_runtime_execution_receipts["governance"]["resident_claim_authority"] is False
     assert resident_host["activation_denial_receipts_route"] == "/lens/host/activation/denials"
     activation_denial_receipts = resident_host["activation_denial_receipts"]
     assert activation_denial_receipts["kind"] == "lens.host.activation.denial_receipts"
@@ -3006,6 +3092,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "tray_presence",
         "global_hotkey",
         "overlay_window",
+        "summon_binding",
     ]
     assert launch_manifest["blockers"] == [
         "lens_host_runtime_not_implemented",
@@ -3417,6 +3504,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert body["receipts"]["lens_os_binding_execution_readiness_route"] == "/lens/os-binding/execution/readiness"
     assert body["receipts"]["lens_resident_surface_route"] == "/lens/resident-surface"
     assert body["receipts"]["lens_resident_surface_activation_route"] == "/lens/resident-surface/activation"
+    assert body["receipts"]["lens_resident_runtime_executions_route"] == "/lens/resident-runtime/executions"
     assert body["stage6_readiness"]["claim"] == "backend_readback_contract_only"
     assert _criterion(body, "resident_host_runtime")["status"] == "not_implemented"
     assert _criterion(body, "resident_host_runtime")["resident"] is False
@@ -3949,6 +4037,28 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert runtime_boundary_criterion["memory_write"] is False
     assert runtime_boundary_criterion["receipt_write_authority"] is False
     assert runtime_boundary_criterion["resident_claim_authority"] is False
+    runtime_execution_receipts_criterion = _criterion(body, "resident_runtime_execution_receipt_readback")
+    assert runtime_execution_receipts_criterion["status"] == "empty"
+    assert runtime_execution_receipts_criterion["evidence"] == [
+        "/lens/resident-runtime/executions",
+        "/lens/resident-runtime/execute",
+        "/lens/host/supervision/executions",
+        "/lens/status",
+    ]
+    assert runtime_execution_receipts_criterion["receipt_count"] == 0
+    assert runtime_execution_receipts_criterion["latest_receipt_id"] == ""
+    assert runtime_execution_receipts_criterion["latest_supervision_mode"] == ""
+    assert runtime_execution_receipts_criterion["latest_resident_host_process"] is False
+    assert runtime_execution_receipts_criterion["latest_resident_supervised_runtime"] is False
+    assert runtime_execution_receipts_criterion["resident_supervised_runtime_receipt_observed"] is False
+    assert runtime_execution_receipts_criterion["resident_claim_allowed"] is False
+    assert runtime_execution_receipts_criterion["execution_authority"] is False
+    assert runtime_execution_receipts_criterion["approval_decision_authority"] is False
+    assert runtime_execution_receipts_criterion["process_supervision_authority"] is False
+    assert runtime_execution_receipts_criterion["service_control_authority"] is False
+    assert runtime_execution_receipts_criterion["memory_write"] is False
+    assert runtime_execution_receipts_criterion["resident_claim_authority"] is False
+    assert runtime_execution_receipts_criterion["receipt_write_authority"] is False
     runtime_denial_receipts_criterion = _criterion(body, "resident_runtime_activation_denial_receipt_readback")
     assert runtime_denial_receipts_criterion["status"] == "empty"
     assert runtime_denial_receipts_criterion["evidence"] == [
@@ -5181,6 +5291,16 @@ def test_lens_persistent_supervision_plan_readback_blocks_without_authority(monk
     assert plan_first_missing_handoff["would_execute"] is False
     assert plan_first_missing_handoff["would_mutate"] is False
     assert plan_first_missing_handoff["authority_granted"] is False
+    assert plan_first_missing_handoff["resident_runtime_authority_request_route"] == (
+        "/lens/resident-runtime/authority-grant/request"
+    )
+    assert plan_first_missing_handoff["resident_runtime_authority_route"] == "/lens/resident-runtime/authority-grant"
+    assert plan_first_missing_handoff["resident_runtime_plan_route"] == "/lens/resident-runtime/plan"
+    assert plan_first_missing_handoff["resident_runtime_execute_route"] == "/lens/resident-runtime/execute"
+    assert plan_first_missing_handoff["request_route"] == "/lens/resident-runtime/authority-grant/request"
+    assert plan_first_missing_handoff["grant_route"] == "/lens/resident-runtime/authority-grant"
+    assert plan_first_missing_handoff["execution_readiness_route"] == "/lens/resident-runtime/plan"
+    assert plan_first_missing_handoff["execution_route"] == "/lens/resident-runtime/execute"
     assert "process_supervision_disabled" in body["blockers"]
     assert "persistent_supervision_disabled" in body["blockers"]
     assert "process_restart_authority_not_granted" in body["blockers"]
@@ -5249,6 +5369,14 @@ def test_lens_persistent_supervision_plan_readback_blocks_without_authority(monk
     assert enablement_first_missing_handoff["would_execute"] is False
     assert enablement_first_missing_handoff["would_mutate"] is False
     assert enablement_first_missing_handoff["authority_granted"] is False
+    assert enablement_first_missing_handoff["resident_runtime_authority_request_route"] == (
+        "/lens/resident-runtime/authority-grant/request"
+    )
+    assert enablement_first_missing_handoff["resident_runtime_authority_route"] == (
+        "/lens/resident-runtime/authority-grant"
+    )
+    assert enablement_first_missing_handoff["resident_runtime_plan_route"] == "/lens/resident-runtime/plan"
+    assert enablement_first_missing_handoff["resident_runtime_execute_route"] == "/lens/resident-runtime/execute"
     dependency_readback = enablement_body["enablement_dependency_readback"]
     assert [item["id"] for item in dependency_readback] == expected_enablement_prerequisites
     dependencies_by_id = {item["id"]: item for item in dependency_readback}
@@ -5360,11 +5488,41 @@ def test_lens_persistent_supervision_plan_readback_blocks_without_authority(monk
     assert resident_host["persistent_supervision_plan"]["next_smallest_truthful_gap"] == (
         "persistent_supervision_authority_not_granted"
     )
+    assert resident_host["persistent_supervision_plan"]["current_truthful_gap"] == (
+        "persistent_supervision_required_prerequisites_missing"
+    )
+    assert resident_host["persistent_supervision_plan"]["current_truthful_gap_basis"] == (
+        "missing_required_before_enable"
+    )
+    assert resident_host["persistent_supervision_plan"]["current_first_missing_requirement"] == (
+        "resident_host_process"
+    )
+    assert resident_host["persistent_supervision_plan"]["current_first_missing_truthful_gap"] == (
+        "resident_host_process_not_supervised"
+    )
+    assert resident_host["persistent_supervision_plan"]["raw_persistent_supervision_next_smallest_truthful_gap"] == (
+        "persistent_supervision_authority_not_granted"
+    )
     assert resident_host["persistent_supervision_plan"]["plan"]["would_supervise_process"] is False
     assert resident_host["persistent_supervision_enablement_route"] == ("/lens/host/persistent-supervision/enablement")
     assert resident_host["persistent_supervision_enablement"]["next_smallest_truthful_gap"] == (
         "persistent_supervision_authority_not_granted"
     )
+    assert resident_host["persistent_supervision_enablement"]["current_truthful_gap"] == (
+        "persistent_supervision_required_prerequisites_missing"
+    )
+    assert resident_host["persistent_supervision_enablement"]["current_truthful_gap_basis"] == (
+        "missing_required_before_enable"
+    )
+    assert resident_host["persistent_supervision_enablement"]["current_first_missing_requirement"] == (
+        "resident_host_process"
+    )
+    assert resident_host["persistent_supervision_enablement"]["current_first_missing_truthful_gap"] == (
+        "resident_host_process_not_supervised"
+    )
+    assert resident_host["persistent_supervision_enablement"][
+        "raw_persistent_supervision_next_smallest_truthful_gap"
+    ] == ("persistent_supervision_authority_not_granted")
     assert resident_host["persistent_supervision_enablement"]["required_before_enable"] == (
         expected_enablement_prerequisites
     )
@@ -5375,6 +5533,70 @@ def test_lens_persistent_supervision_plan_readback_blocks_without_authority(monk
     assert resident_host["persistent_supervision_enablement_denial_route"] == (
         "/lens/host/persistent-supervision/enablement"
     )
+    prerequisite_bringup = status_body["stage6_readiness"]["prerequisite_bringup"]
+    assert prerequisite_bringup["kind"] == "lens.stage6.prerequisite_bringup.plan"
+    assert prerequisite_bringup["status"] == "blocked"
+    assert prerequisite_bringup["mode"] == "status"
+    assert prerequisite_bringup["current_truthful_gap"] == ("persistent_supervision_required_prerequisites_missing")
+    assert prerequisite_bringup["current_truthful_gap_basis"] == "missing_required_before_enable"
+    assert prerequisite_bringup["current_first_missing_requirement"] == "resident_host_process"
+    assert prerequisite_bringup["current_first_missing_truthful_gap"] == "resident_host_process_not_supervised"
+    assert prerequisite_bringup["raw_persistent_supervision_next_smallest_truthful_gap"] == (
+        "persistent_supervision_authority_not_granted"
+    )
+    assert prerequisite_bringup["required_before_enable"] == expected_enablement_prerequisites
+    assert prerequisite_bringup["missing_required_before_enable"] == expected_enablement_prerequisites
+    assert prerequisite_bringup["next_operator_action_requirement"] == "resident_host_process"
+    assert prerequisite_bringup["next_operator_action"]["id"] == ("request_resident_runtime_execution_authority")
+    assert prerequisite_bringup["next_operator_action"]["route"] == ("/lens/resident-runtime/authority-grant/request")
+    assert prerequisite_bringup["next_operator_action"]["live_effect"] == "approval request receipt only"
+    assert prerequisite_bringup["next_operator_action"]["script_would_execute"] is False
+    assert prerequisite_bringup["next_operator_action"]["script_would_mutate"] is False
+    assert prerequisite_bringup["next_operator_command"]["mode"] == "RequestNext"
+    assert prerequisite_bringup["next_operator_command"]["requires_confirmation"] is True
+    assert prerequisite_bringup["next_operator_command"]["requires_approval_id"] is False
+    assert prerequisite_bringup["next_operator_command"]["requires_operator_approval_decision"] is False
+    assert "RequestNext" in prerequisite_bringup["next_operator_command"]["command"]
+    resident_step = prerequisite_bringup["ordered_prerequisite_steps"][0]
+    assert resident_step["id"] == "resident_host_process"
+    assert resident_step["status"] == "blocked"
+    assert resident_step["next_operator_action"]["id"] == "request_resident_runtime_execution_authority"
+    assert resident_step["authority_state"]["resident_runtime"]["authority_granted"] is False
+    assert resident_step["authority_state"]["host_supervision"]["authority_granted"] is False
+    assert prerequisite_bringup["operator_sequence"][0]["id"] == "request_resident_runtime_execution_authority"
+    first_operator_command = prerequisite_bringup["operator_sequence"][0]["operator_command"]
+    assert first_operator_command["command"] == (
+        ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 -Mode RequestNext -Actor <actor> -ConfirmRequest"
+    )
+    assert first_operator_command["mode"] == "RequestNext"
+    assert first_operator_command["requires_confirmation"] is True
+    assert first_operator_command["requires_approval_id"] is False
+    assert first_operator_command["requires_operator_approval_decision"] is False
+    assert first_operator_command["available_now"] is True
+    assert first_operator_command["preview_only"] is False
+    assert first_operator_command["availability_reason"] == "current_next_operator_action"
+    assert all("operator_command" in item for item in prerequisite_bringup["operator_sequence"])
+    assert all(
+        item["operator_command"]["available_now"] is False for item in prerequisite_bringup["operator_sequence"][1:]
+    )
+    assert all(
+        item["operator_command"]["preview_only"] is True for item in prerequisite_bringup["operator_sequence"][1:]
+    )
+    assert prerequisite_bringup["operator_sequence_command_availability"] == {
+        "available_now_count": 1,
+        "preview_only_count": len(prerequisite_bringup["operator_sequence"]) - 1,
+        "sequence_length": len(prerequisite_bringup["operator_sequence"]),
+        "truthful": True,
+    }
+    checks = {item["id"]: item for item in prerequisite_bringup["checks"]}
+    assert checks["operator_sequence_command_availability"]["status"] == "truthful"
+    assert checks["operator_sequence_command_availability"]["passed"] is True
+    assert prerequisite_bringup["governance"]["read_only_contract"] is True
+    assert prerequisite_bringup["governance"]["uses_lens_status_readback"] is True
+    assert prerequisite_bringup["governance"]["approval_request_write"] is False
+    assert prerequisite_bringup["governance"]["authority_grant_receipt_write"] is False
+    assert prerequisite_bringup["governance"]["execution_receipt_write"] is False
+    assert prerequisite_bringup["governance"]["mutation_authority_granted"] is False
     assert resident_host["persistent_supervision_enablement_denial"]["boundary_ready"] is True
     persistent_denial_criterion = _criterion(status_body, "persistent_supervision_enablement_denial_boundary")
     assert persistent_denial_criterion["status"] == "blocked"
@@ -5385,6 +5607,193 @@ def test_lens_persistent_supervision_plan_readback_blocks_without_authority(monk
     assert persistent_denial_criterion["execution_authority"] is False
     assert persistent_denial_criterion["service_config_write_authority"] is False
     assert persistent_denial_criterion["memory_write"] is False
+
+
+def test_stage6_prerequisite_bringup_selects_persistent_enablement_next_actions() -> None:
+    from francis.lens.status import (
+        _stage6_next_persistent_supervision_enablement_action,
+        _stage6_persistent_supervision_enablement_steps,
+    )
+
+    actions = _stage6_persistent_supervision_enablement_steps({})
+
+    def select_next(
+        *,
+        enablement_requests: dict[str, Any] | None = None,
+        enablement_grants: dict[str, Any] | None = None,
+        execution_requests: dict[str, Any] | None = None,
+        execution_grants: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return _stage6_next_persistent_supervision_enablement_action(
+            actions=actions,
+            status_readbacks={
+                "persistent_supervision_enablement_authority_requests": enablement_requests or {},
+                "persistent_supervision_enablement_authority_grants": enablement_grants or {},
+                "persistent_supervision_enablement_execution_requests": execution_requests or {},
+                "persistent_supervision_enablement_execution_authority_grants": execution_grants or {},
+            },
+        )
+
+    request_action = select_next()
+    assert request_action["id"] == "request_persistent_supervision_enablement_authority"
+    assert request_action["route"] == "/lens/host/persistent-supervision/enablement/authority/request"
+
+    grant_action = select_next(
+        enablement_requests={
+            "approved_count": 1,
+            "latest": {"status": "approved", "id": "approval-enable-1"},
+        }
+    )
+    assert grant_action["id"] == "grant_persistent_supervision_enablement_authority"
+    assert grant_action["approved_approval_id"] == "approval-enable-1"
+
+    execution_request_action = select_next(
+        enablement_grants={
+            "authority_granted": True,
+            "active_latest": {"approval_id": "approval-enable-1"},
+        }
+    )
+    assert execution_request_action["id"] == "request_persistent_supervision_execution_authority"
+
+    execution_grant_action = select_next(
+        enablement_grants={
+            "authority_granted": True,
+            "active_latest": {"approval_id": "approval-enable-1"},
+        },
+        execution_requests={
+            "approved_count": 1,
+            "latest": {"status": "approved", "id": "approval-execute-1"},
+        },
+    )
+    assert execution_grant_action["id"] == "grant_persistent_supervision_execution_authority"
+    assert execution_grant_action["approved_approval_id"] == "approval-execute-1"
+
+    apply_action = select_next(
+        enablement_grants={
+            "authority_granted": True,
+            "active_latest": {"approval_id": "approval-enable-1"},
+        },
+        execution_grants={
+            "authority_granted": True,
+            "active_latest": {"approval_id": "approval-execute-1"},
+        },
+    )
+    assert apply_action["id"] == "apply_persistent_supervision_enablement"
+    assert apply_action["active_approval_id"] == "approval-execute-1"
+    assert apply_action["enablement_active_approval_id"] == "approval-enable-1"
+
+
+def test_stage6_prerequisite_bringup_surface_execute_action_uses_active_authority_grant() -> None:
+    from francis.lens.status import (
+        _stage6_authority_state,
+        _stage6_next_prerequisite_action,
+        _stage6_prerequisite_operator_command,
+        _stage6_surface_prerequisite_actions,
+    )
+
+    readback = {
+        "authority_granted": True,
+        "active_authority_grant": {
+            "approval_id": "approval-hotkey-1",
+            "receipt_id": "grant-hotkey-1",
+        },
+        "request_route": "/lens/os-binding/authority/request",
+        "authority_route": "/lens/os-binding/authority",
+        "execute_route": "/lens/os-binding/execute",
+        "action": "lens.os_binding.command_palette_binding_authority",
+    }
+    actions = _stage6_surface_prerequisite_actions("global_hotkey_binding", readback)
+    action = _stage6_next_prerequisite_action(
+        "global_hotkey_binding",
+        actions=actions,
+        status_readbacks={"os_binding_authority_requests": readback},
+    )
+
+    assert action["id"] == "execute_global_hotkey_binding"
+    assert action["active_approval_id"] == "approval-hotkey-1"
+    assert _stage6_authority_state(readback)["active_grant_receipt_id"] == "grant-hotkey-1"
+    assert _stage6_authority_state(readback)["active_approval_id"] == "approval-hotkey-1"
+    assert _stage6_prerequisite_operator_command(action)["command"] == (
+        ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 "
+        "-Mode ExecuteNext -Actor <actor> -ApprovalId approval-hotkey-1 -RunSeconds 2 -ConfirmExecute"
+    )
+
+
+def test_stage6_prerequisite_bringup_labels_enablement_requirement_when_prerequisites_ready() -> None:
+    from francis.lens.status import _stage6_prerequisite_bringup_readback
+
+    required = [
+        "resident_host_process",
+        "tray_presence",
+        "global_hotkey_binding",
+        "overlay_window",
+        "summon_binding",
+    ]
+    dependencies = [
+        {
+            "id": requirement,
+            "family": requirement,
+            "route": f"/lens/test/{requirement}",
+            "readiness_route": f"/lens/test/{requirement}/readiness",
+            "ready": True,
+            "requirement_state": "ready",
+            "blocker": "",
+            "blocked_reason": "",
+        }
+        for requirement in required
+    ]
+
+    payload = _stage6_prerequisite_bringup_readback(
+        closure_readback={
+            "ready_to_close": False,
+            "next_smallest_truthful_gap": "persistent_supervision_required_prerequisites_missing",
+        },
+        resident_host={
+            "persistent_supervision_plan": {
+                "next_smallest_truthful_gap": "persistent_supervision_authority_not_granted",
+                "required_before_enable": required,
+                "missing_required_before_enable": [],
+                "required_before_enable_ready": True,
+                "first_missing_required_before_enable": "",
+                "enablement_dependency_readback": dependencies,
+            },
+            "persistent_supervision_enablement": {},
+            "resident_runtime_authority_requests": {},
+            "resident_runtime_authority_grant_receipts": {},
+            "supervision_authority_requests": {},
+            "supervision_authority_grant_receipts": {},
+            "persistent_supervision_enablement_authority_requests": {},
+            "persistent_supervision_enablement_authority_grants": {},
+            "persistent_supervision_enablement_execution_requests": {},
+            "persistent_supervision_enablement_execution_authority_grants": {},
+        },
+        os_binding_authority_requests={},
+        tray_authority_requests={},
+        overlay_authority_requests={},
+        summon_authority_requests={},
+    )
+
+    assert payload["status"] == "ready"
+    assert payload["current_truthful_gap"] == "persistent_supervision_authority_not_granted"
+    assert payload["current_truthful_gap_basis"] == "persistent_supervision_plan.next_smallest_truthful_gap"
+    assert payload["current_first_missing_requirement"] == ""
+    assert payload["missing_required_before_enable"] == []
+    assert payload["required_before_enable_ready"] is True
+    assert payload["next_operator_action_requirement"] == "persistent_supervision_enablement"
+    assert payload["next_operator_action"]["id"] == "request_persistent_supervision_enablement_authority"
+    assert payload["next_operator_action"]["route"] == (
+        "/lens/host/persistent-supervision/enablement/authority/request"
+    )
+    assert payload["next_operator_command"]["mode"] == "RequestNext"
+    assert payload["operator_sequence"][0]["id"] == "request_persistent_supervision_enablement_authority"
+    assert payload["operator_sequence"][0]["operator_command"]["available_now"] is True
+    assert payload["operator_sequence_command_availability"] == {
+        "available_now_count": 1,
+        "preview_only_count": 0,
+        "sequence_length": 1,
+        "truthful": True,
+    }
+    assert all(item["ready"] is True for item in payload["ordered_prerequisite_steps"])
 
 
 def test_lens_persistent_supervision_enablement_blocks_until_required_surfaces_exist(
@@ -9723,7 +10132,473 @@ def test_lens_tray_presence_execute_starts_and_stops_governed_tray_lease(
     assert stopped_body["receipt_written"] is True
 
 
-def test_lens_resident_runtime_execute_consumes_bounded_supervision_authority(
+def test_lens_overlay_execute_starts_and_stops_governed_overlay_lease(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    service_config_path = repo_root / "config" / "runtime" / "services" / "lens-host.json"
+    service_config = json.loads(service_config_path.read_text(encoding="utf-8"))
+    service_config["process_supervision_enabled"] = True
+    service_config["persistent_supervision_enabled"] = True
+    service_config["supervision_blocked_reason"] = "resident_supervision_prerequisites_pending"
+    service_config["blocked_reason"] = "lens_host_persistent_supervision_prerequisites_pending"
+    service_config_path.write_text(json.dumps(service_config, indent=2), encoding="utf-8")
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    import francis.lens.overlay_authority as overlay_authority_module
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    pid = os.getpid()
+    _write_lens_host_runtime_state(data_root, pid=pid, status="resident_running", mode="resident")
+    _write_lens_host_supervisor_state(
+        data_root,
+        observed_pid=pid,
+        status="resident_supervising",
+        mode="supervise_resident",
+        host_mode="resident",
+        observed_state="resident_running",
+        resident_supervised_runtime=True,
+        process_supervision_authority=True,
+    )
+    _write_lens_tray_runtime_state(data_root, pid=pid)
+    _write_lens_hotkey_runtime_state(data_root, pid=pid)
+
+    def fake_overlay_action(*, mode: str, run_seconds: int) -> dict[str, Any]:
+        assert run_seconds == 1
+        runtime_root = data_root / "runtime" / "lens-overlay"
+        runtime_root.mkdir(parents=True, exist_ok=True)
+        if mode == "stop":
+            (runtime_root / "lens-overlay.pid").unlink(missing_ok=True)
+            (runtime_root / "status.json").write_text(
+                json.dumps(
+                    {
+                        "kind": "lens.overlay.runtime_state",
+                        "status": "overlay_stopped",
+                        "pid": pid,
+                        "overlay_name": "Francis Lens Overlay",
+                        "overlay_scope": "user_session",
+                        "overlay_window_visible": False,
+                        "always_on_top": False,
+                        "updated_at": "2026-05-17T21:00:00Z",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            return {
+                "ok": True,
+                "status": "stopped",
+                "returncode": 0,
+                "script_mode": "Stop",
+                "script": "scripts/lens-overlay-window.ps1",
+                "runner": {
+                    "ok": True,
+                    "status": "stopped",
+                    "ready": False,
+                    "overlay_window": False,
+                },
+                "blockers": ["overlay_window_runtime_missing"],
+            }
+        _write_lens_overlay_runtime_state(data_root, pid=pid)
+        return {
+            "ok": True,
+            "status": "started",
+            "returncode": 0,
+            "script_mode": "Start",
+            "script": "scripts/lens-overlay-window.ps1",
+            "runner": {
+                "ok": True,
+                "status": "started",
+                "ready": True,
+                "overlay_window": True,
+                "next_smallest_truthful_gap": "overlay_authority_and_config",
+            },
+            "blockers": [],
+        }
+
+    monkeypatch.setattr(
+        overlay_authority_module,
+        "_run_lens_overlay_window_action",
+        fake_overlay_action,
+    )
+
+    client = TestClient(create_app())
+    requested = client.post(
+        "/lens/overlay/authority/request",
+        json={
+            "actor": "test.system.write",
+            "reason": "operator wants overlay window authority",
+        },
+    )
+    assert requested.status_code == 200
+    approval_id = str(requested.json()["approval_id"])
+    decided = client.post(
+        "/approvals/decision",
+        json={
+            "id": approval_id,
+            "action": "approve",
+            "actor": "test.approvals.decision",
+            "comment": "approved overlay window authority",
+        },
+    )
+    assert decided.status_code == 200
+    assert decided.json()["status"] == "approved"
+    grant = client.post(
+        "/lens/overlay/authority",
+        json={
+            "approval_id": approval_id,
+            "actor": "test.system.write",
+            "reason": "operator grants bounded overlay window authority",
+            "lease_seconds": 600,
+        },
+    )
+    assert grant.status_code == 200
+    grant_body = grant.json()
+    assert grant_body["status"] == "authority_granted"
+    assert grant_body["overlay_window_authority"] is True
+    assert grant_body["receipt_written"] is True
+    assert grant_body["governance"]["overlay_window_execution_authority"] is True
+    assert grant_body["governance"]["overlay_control_authority"] is True
+    assert grant_body["governance"]["window_management_authority"] is True
+    assert grant_body["governance"]["local_process_launch_authority"] is True
+    assert grant_body["governance"]["summon_authority"] is False
+    assert grant_body["governance"]["memory_write"] is False
+
+    started = client.post(
+        "/lens/overlay/execute",
+        json={
+            "approval_id": approval_id,
+            "actor": "test.system.write",
+            "reason": "start governed Lens overlay window",
+            "mode": "start",
+            "run_seconds": 1,
+        },
+    )
+    assert started.status_code == 200
+    started_body = started.json()
+    assert started_body["kind"] == "lens.overlay.window.execution"
+    assert started_body["status"] == "overlay_window_started"
+    assert started_body["executed"] is True
+    assert started_body["mode"] == "start"
+    assert started_body["overlay_window"] is True
+    assert started_body["overlay_runtime_ready"] is True
+    assert started_body["overlay_window_visible"] is True
+    assert started_body["always_on_top"] is True
+    assert started_body["overlay_runtime_pid"] == pid
+    assert started_body["resident_claim_allowed"] is False
+    assert started_body["stop_command"] == "scripts/lens-overlay-window.ps1 -Mode Stop"
+    assert started_body["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+    assert started_body["governance"]["execution_authority"] is True
+    assert started_body["governance"]["overlay_window_execution_authority"] is True
+    assert started_body["governance"]["overlay_control_authority"] is True
+    assert started_body["governance"]["window_management_authority"] is True
+    assert started_body["governance"]["local_process_launch_authority"] is True
+    assert started_body["governance"]["hotkey_registration_authority"] is False
+    assert started_body["governance"]["tray_registration_authority"] is False
+    assert started_body["governance"]["summon_authority"] is False
+    assert started_body["governance"]["capture_authority"] is False
+    assert started_body["governance"]["new_sensing_authority"] is False
+    assert started_body["governance"]["memory_write"] is False
+    assert started_body["governance"]["resident_claim_authority"] is False
+    assert started_body["receipt_written"] is True
+    receipt = started_body["receipt"]
+    assert receipt["kind"] == "lens.overlay.window.execution_receipt"
+    assert receipt["execution"]["mode"] == "start"
+    assert receipt["execution"]["overlay_window"] is True
+    assert receipt["execution"]["overlay_runtime_ready"] is True
+    assert receipt["execution"]["overlay_window_visible"] is True
+    assert receipt["execution"]["always_on_top"] is True
+    assert receipt["resident_claim"]["resident_host_process_claimed"] is False
+
+    executions = client.get("/lens/overlay/executions?limit=10")
+    assert executions.status_code == 200
+    executions_body = executions.json()
+    assert executions_body["kind"] == "lens.overlay.window.execution_receipts"
+    assert executions_body["status"] == "readback_ready"
+    assert executions_body["total"] == 1
+    assert executions_body["latest_overlay_window"] is True
+    assert executions_body["latest_next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+
+    status = client.get("/lens/status?limit=1")
+    assert status.status_code == 200
+    persistent_plan = status.json()["resident_host"]["persistent_supervision_plan"]
+    assert persistent_plan["missing_required_before_enable"] == ["summon_binding"]
+    handoff = persistent_plan["first_missing_requirement_handoff"]
+    assert handoff["id"] == "summon_binding"
+    assert handoff["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+
+    stopped = client.post(
+        "/lens/overlay/execute",
+        json={
+            "approval_id": approval_id,
+            "actor": "test.system.write",
+            "reason": "stop governed Lens overlay window",
+            "mode": "stop",
+            "run_seconds": 1,
+        },
+    )
+    assert stopped.status_code == 200
+    stopped_body = stopped.json()
+    assert stopped_body["status"] == "overlay_window_stopped"
+    assert stopped_body["mode"] == "stop"
+    assert stopped_body["executed"] is True
+    assert stopped_body["overlay_window"] is False
+    assert stopped_body["overlay_runtime_ready"] is False
+    assert stopped_body["governance"]["execution_authority"] is True
+    assert stopped_body["governance"]["local_process_launch_authority"] is False
+    assert stopped_body["governance"]["overlay_control_authority"] is True
+    assert stopped_body["governance"]["window_management_authority"] is True
+    assert stopped_body["governance"]["memory_write"] is False
+    assert stopped_body["receipt_written"] is True
+
+
+def test_lens_summon_execute_records_bounded_handoff_without_summon_anywhere_claim(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    service_config_path = repo_root / "config" / "runtime" / "services" / "lens-host.json"
+    service_config = json.loads(service_config_path.read_text(encoding="utf-8"))
+    service_config["process_supervision_enabled"] = True
+    service_config["persistent_supervision_enabled"] = True
+    service_config["supervision_blocked_reason"] = "resident_supervision_prerequisites_pending"
+    service_config["blocked_reason"] = "lens_host_persistent_supervision_prerequisites_pending"
+    service_config_path.write_text(json.dumps(service_config, indent=2), encoding="utf-8")
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    import francis.lens.summon_authority as summon_authority_module
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    pid = os.getpid()
+    _write_lens_host_runtime_state(data_root, pid=pid, status="resident_running", mode="resident")
+    _write_lens_host_supervisor_state(
+        data_root,
+        observed_pid=pid,
+        status="resident_supervising",
+        mode="supervise_resident",
+        host_mode="resident",
+        observed_state="resident_running",
+        resident_supervised_runtime=True,
+        process_supervision_authority=True,
+    )
+    _write_lens_tray_runtime_state(data_root, pid=pid)
+    _write_lens_hotkey_runtime_state(data_root, pid=pid)
+    _write_lens_overlay_runtime_state(data_root, pid=pid)
+
+    def fake_summon_action(*, mode: str, run_seconds: int, allow_launch: bool) -> dict[str, Any]:
+        assert mode == "launch"
+        assert run_seconds == 1
+        assert allow_launch is False
+        return {
+            "ok": True,
+            "status": "handoff_completed",
+            "returncode": 0,
+            "script_mode": "Launch",
+            "script": "scripts/lens-summon-action.ps1",
+            "runner": {
+                "ok": True,
+                "kind": "lens.summon.action",
+                "status": "handoff_completed",
+                "mode": "launch",
+                "preflight_ready": True,
+                "execution_attempted": True,
+                "handoff_attempted": True,
+                "launch_attempted": True,
+                "allow_launch": False,
+                "bounded_handoff": {
+                    "status": "local_open_ready",
+                    "exit_code": 0,
+                    "json_parsed": True,
+                    "payload": {
+                        "kind": "lens.summon.local_launcher",
+                        "status": "local_open_ready",
+                        "local_binding_ready": True,
+                        "summon_binding_target_ready": True,
+                        "local_summon_available": True,
+                        "os_level_summon": False,
+                        "summon_anywhere": False,
+                        "global_hotkey": "Ctrl+Alt+Space",
+                        "binding_scope": "global",
+                        "local_open_target_url": "http://127.0.0.1:5173/?lens=command-palette",
+                        "opened": False,
+                        "no_launch": True,
+                    },
+                },
+                "next_smallest_truthful_gap": "summon_anywhere_runtime_readback",
+                "governance": {
+                    "execution_authority": True,
+                    "approval_decision_authority": False,
+                    "memory_write": False,
+                    "summon_authority": True,
+                    "hotkey_registration_authority": False,
+                    "local_process_launch_authority": False,
+                    "mutation_authority_granted": False,
+                },
+            },
+            "blockers": [],
+        }
+
+    monkeypatch.setattr(
+        summon_authority_module,
+        "_run_lens_summon_action",
+        fake_summon_action,
+    )
+
+    client = TestClient(create_app())
+    requested = client.post(
+        "/lens/summon/authority/request",
+        json={
+            "actor": "test.system.write",
+            "reason": "operator wants bounded summon action authority",
+        },
+    )
+    assert requested.status_code == 200
+    approval_id = str(requested.json()["approval_id"])
+    decided = client.post(
+        "/approvals/decision",
+        json={
+            "id": approval_id,
+            "action": "approve",
+            "actor": "test.approvals.decision",
+            "comment": "approved summon action authority",
+        },
+    )
+    assert decided.status_code == 200
+    assert decided.json()["status"] == "approved"
+    grant = client.post(
+        "/lens/summon/authority",
+        json={
+            "approval_id": approval_id,
+            "actor": "test.system.write",
+            "reason": "operator grants bounded summon action authority",
+            "lease_seconds": 600,
+        },
+    )
+    assert grant.status_code == 200
+    grant_body = grant.json()
+    assert grant_body["status"] == "authority_granted"
+    assert grant_body["summon_action_authority"] is True
+    assert grant_body["receipt_written"] is True
+    assert grant_body["governance"]["summon_execution_authority"] is True
+    assert grant_body["governance"]["bounded_local_open_handoff_authority"] is True
+    assert grant_body["governance"]["summon_authority"] is True
+    assert grant_body["governance"]["summon_anywhere_authority"] is False
+    assert grant_body["governance"]["os_level_summon_authority"] is False
+    assert grant_body["governance"]["memory_write"] is False
+
+    executed = client.post(
+        "/lens/summon/execute",
+        json={
+            "approval_id": approval_id,
+            "actor": "test.system.write",
+            "reason": "record bounded summon local-open handoff",
+            "mode": "launch",
+            "run_seconds": 1,
+            "allow_launch": False,
+        },
+    )
+    assert executed.status_code == 200
+    executed_body = executed.json()
+    assert executed_body["kind"] == "lens.summon.action.execution"
+    assert executed_body["status"] == "summon_binding_observed"
+    assert executed_body["executed"] is True
+    assert executed_body["summon_binding"] is True
+    assert executed_body["summon_runtime_ready"] is True
+    assert executed_body["bounded_handoff_ready"] is True
+    assert executed_body["local_open_ready"] is True
+    assert executed_body["opened"] is False
+    assert executed_body["no_launch"] is True
+    assert executed_body["allow_launch"] is False
+    assert executed_body["summon_anywhere"] is False
+    assert executed_body["os_level_summon"] is False
+    assert executed_body["next_smallest_truthful_gap"] == "summon_anywhere_runtime_readback"
+    assert executed_body["governance"]["execution_authority"] is True
+    assert executed_body["governance"]["summon_execution_authority"] is True
+    assert executed_body["governance"]["bounded_local_open_handoff_authority"] is True
+    assert executed_body["governance"]["summon_authority"] is True
+    assert executed_body["governance"]["summon_anywhere_authority"] is False
+    assert executed_body["governance"]["os_level_summon_authority"] is False
+    assert executed_body["governance"]["local_process_launch_authority"] is False
+    assert executed_body["governance"]["hotkey_registration_authority"] is False
+    assert executed_body["governance"]["overlay_control_authority"] is False
+    assert executed_body["governance"]["memory_write"] is False
+    assert executed_body["governance"]["resident_claim_authority"] is False
+    assert executed_body["receipt_written"] is True
+    receipt = executed_body["receipt"]
+    assert receipt["kind"] == "lens.summon.action.execution_receipt"
+    assert receipt["execution"]["summon_binding"] is True
+    assert receipt["execution"]["bounded_handoff_ready"] is True
+    assert receipt["execution"]["summon_anywhere"] is False
+    assert receipt["execution"]["os_level_summon"] is False
+
+    runtime_state_path = data_root / "runtime" / "lens-summon" / "status.json"
+    runtime_state = json.loads(runtime_state_path.read_text(encoding="utf-8"))
+    assert runtime_state["kind"] == "lens.summon.runtime_state"
+    assert runtime_state["status"] == "summon_binding_observed"
+    assert runtime_state["bounded_handoff_ready"] is True
+    assert runtime_state["local_open_ready"] is True
+    assert runtime_state["opened"] is False
+    assert runtime_state["no_launch"] is True
+    assert runtime_state["summon_anywhere"] is False
+
+    executions = client.get("/lens/summon/executions?limit=10")
+    assert executions.status_code == 200
+    executions_body = executions.json()
+    assert executions_body["kind"] == "lens.summon.action.execution_receipts"
+    assert executions_body["status"] == "readback_ready"
+    assert executions_body["total"] == 1
+    assert executions_body["latest_summon_binding"] is True
+    assert executions_body["latest_summon_anywhere"] is False
+    assert executions_body["latest_next_smallest_truthful_gap"] == "summon_anywhere_runtime_readback"
+
+    summon_readiness = client.get("/lens/summon/readiness")
+    assert summon_readiness.status_code == 200
+    summon_readiness_body = summon_readiness.json()
+    assert summon_readiness_body["ready"] is False
+    assert summon_readiness_body["summon_binding_ready"] is True
+    assert summon_readiness_body["summon_runtime_ready"] is True
+    assert summon_readiness_body["summon_runtime_bounded_handoff_ready"] is True
+    assert summon_readiness_body["summon_anywhere"] is False
+    assert summon_readiness_body["blocker_groups"]["summon_binding"] == []
+    assert "summon_anywhere_runtime_readback" in summon_readiness_body["blocker_groups"]["summon_anywhere"]
+
+    status = client.get("/lens/status?limit=1")
+    assert status.status_code == 200
+    persistent_plan = status.json()["resident_host"]["persistent_supervision_plan"]
+    assert persistent_plan["missing_required_before_enable"] == []
+    assert persistent_plan["required_before_enable_ready"] is True
+    dependencies = {item["id"]: item for item in persistent_plan["enablement_dependency_readback"]}
+    assert dependencies["summon_binding"]["ready"] is True
+    assert dependencies["summon_binding"]["summon_runtime_ready"] is True
+    assert dependencies["summon_binding"]["summon_presence_source"] == "live_runtime_readback"
+    assert dependencies["summon_binding"]["summon_runtime_bounded_handoff_ready"] is True
+
+
+def test_lens_resident_runtime_execute_starts_supervised_resident_host_lease(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
@@ -9752,31 +10627,41 @@ def test_lens_resident_runtime_execute_consumes_bounded_supervision_authority(
 
     from francis.api.app import create_app
 
-    def fake_supervise_once(*, run_seconds: int) -> dict[str, Any]:
+    pid = os.getpid()
+
+    def fake_resident_supervision_action(*, mode: str) -> dict[str, Any]:
+        assert mode == "resident_start"
+        _write_lens_host_runtime_state(data_root, pid=pid, status="resident_running", mode="resident")
         _write_lens_host_supervisor_state(
             data_root,
-            observed_pid=5432,
-            mode="supervise_resident_once",
+            observed_pid=pid,
+            status="resident_supervising",
+            mode="supervise_resident",
             host_mode="resident",
-            observed_state="resident_stopped",
+            observed_state="resident_running",
+            resident_supervised_runtime=True,
+            process_supervision_authority=True,
+            process_restart_authority=False,
+            service_control_authority=False,
         )
         return {
             "ok": True,
-            "status": "supervised_session_completed",
+            "status": "resident_supervision_started",
             "returncode": 0,
-            "run_seconds": run_seconds,
+            "script_mode": "StartResident",
             "script": "scripts/lens-host-supervisor.ps1",
             "runner": {
                 "ok": True,
-                "status": "supervised_session_completed",
-                "bounded_supervised_session": True,
+                "status": "resident_supervision_started",
+                "bounded_supervised_session": False,
                 "temporary_host_process_observed": True,
+                "resident_host_process": True,
+                "resident_supervised_runtime": True,
                 "resident_runtime_candidate_supervised": True,
-                "next_smallest_truthful_gap": "resident_supervision_not_persistent",
+                "resident_claim_allowed": False,
+                "next_smallest_truthful_gap": "summon_tray_presence_blocker_boundary",
             },
             "blockers": [
-                "resident_runtime_candidate_not_persistent",
-                "resident_supervision_not_persistent",
                 "tray_host_missing",
                 "global_hotkey_binding_missing",
                 "overlay_window_missing",
@@ -9784,7 +10669,11 @@ def test_lens_resident_runtime_execute_consumes_bounded_supervision_authority(
             ],
         }
 
-    monkeypatch.setattr(activation_module, "_run_bounded_lens_host_supervision_once", fake_supervise_once)
+    monkeypatch.setattr(
+        activation_module,
+        "_run_lens_host_resident_supervision_action",
+        fake_resident_supervision_action,
+    )
 
     client = TestClient(create_app())
     host_requested = client.post(
@@ -9874,32 +10763,38 @@ def test_lens_resident_runtime_execute_consumes_bounded_supervision_authority(
         json={
             "approval_id": runtime_approval_id,
             "actor": "test.system.write",
-            "reason": "prove resident runtime consumes bounded supervision authority",
+            "reason": "prove resident runtime starts supervised resident host lease",
             "run_seconds": 1,
         },
     )
     assert executed.status_code == 200
     executed_body = executed.json()
     assert executed_body["kind"] == "lens.resident_runtime.activation.execution"
-    assert executed_body["status"] == "bounded_resident_candidate_supervised_not_persistent"
+    assert executed_body["status"] == "resident_supervision_started"
     assert executed_body["approval_id"] == runtime_approval_id
     assert executed_body["host_supervision_approval_id"] == host_approval_id
     assert executed_body["executed"] is True
     assert executed_body["bounded_resident_candidate_ready"] is True
-    assert executed_body["bounded_supervised_session"] is True
+    assert executed_body["supervised_resident_host_ready"] is True
+    assert executed_body["resident_supervision_lease_started"] is True
+    assert executed_body["resident_host_process"] is True
+    assert executed_body["stop_command"] == "scripts/lens-host-supervisor.ps1 -Mode StopResident"
+    assert executed_body["bounded_supervised_session"] is False
     assert executed_body["temporary_host_process_observed"] is True
     assert executed_body["resident_runtime_candidate_supervised"] is True
-    assert executed_body["resident_supervised_runtime"] is False
+    assert executed_body["resident_supervised_runtime"] is True
     assert executed_body["resident_claim_allowed"] is False
-    assert executed_body["next_smallest_truthful_gap"] == "resident_supervision_not_persistent"
+    assert executed_body["next_smallest_truthful_gap"] == "summon_tray_presence_blocker_boundary"
     assert executed_body["host_supervision_authority"]["process_supervision_authority"] is True
     assert executed_body["host_supervision_authority"]["process_restart_authority"] is True
     assert executed_body["governance"]["gate"] == "lens_resident_runtime_activation_execution"
     assert executed_body["governance"]["execution_authority"] is True
     assert executed_body["governance"]["resident_runtime_execution_authority"] is True
-    assert executed_body["governance"]["bounded_supervision_process_launch_authority"] is True
+    assert executed_body["governance"]["resident_supervision_lease_execution"] is True
+    assert executed_body["governance"]["local_process_launch_authority"] is True
+    assert executed_body["governance"]["bounded_supervision_process_launch_authority"] is False
     assert executed_body["governance"]["process_supervision_authority"] is True
-    assert executed_body["governance"]["process_restart_authority"] is True
+    assert executed_body["governance"]["process_restart_authority"] is False
     assert executed_body["governance"]["service_install_authority"] is False
     assert executed_body["governance"]["service_control_authority"] is False
     assert executed_body["governance"]["tray_registration_authority"] is False
@@ -9913,16 +10808,66 @@ def test_lens_resident_runtime_execute_consumes_bounded_supervision_authority(
     assert receipt["kind"] == "lens.host.supervision.execution.receipt"
     assert receipt["route"] == "/lens/resident-runtime/execute"
     assert receipt["approval_id"] == host_approval_id
+    assert receipt["execution"]["supervision_mode"] == "resident_start"
     assert receipt["execution"]["resident_runtime_candidate_supervised"] is True
-    assert receipt["execution"]["resident_supervised_runtime"] is False
+    assert receipt["execution"]["resident_supervised_runtime"] is True
+    assert receipt["execution"]["resident_host_process"] is True
+    assert receipt["resident_claim"]["resident_host_process_claimed"] is False
     receipt_path = data_root / "lens" / "host_supervision_executions" / f"{receipt['receipt_id']}.json"
     assert receipt_path.exists()
 
+    executions = client.get("/lens/resident-runtime/executions?limit=10")
+    assert executions.status_code == 200
+    executions_body = executions.json()
+    assert executions_body["kind"] == "lens.resident_runtime.activation.execution_receipts"
+    assert executions_body["status"] == "readback_ready"
+    assert executions_body["route"] == "/lens/resident-runtime/executions"
+    assert executions_body["execute_route"] == "/lens/resident-runtime/execute"
+    assert executions_body["host_supervision_executions_route"] == "/lens/host/supervision/executions"
+    assert executions_body["total"] == 1
+    assert executions_body["latest_receipt_id"] == receipt["receipt_id"]
+    assert executions_body["latest_supervision_mode"] == "resident_start"
+    assert executions_body["latest_resident_host_process"] is True
+    assert executions_body["latest_resident_supervised_runtime"] is True
+    assert executions_body["latest_stop_command"] == "scripts/lens-host-supervisor.ps1 -Mode StopResident"
+    assert executions_body["latest_next_smallest_truthful_gap"] == "summon_tray_presence_blocker_boundary"
+    assert executions_body["resident_supervised_runtime_receipt_observed"] is True
+    assert executions_body["resident_claim_allowed"] is False
+    assert executions_body["governance"]["read_only_contract"] is True
+    assert executions_body["governance"]["resident_runtime_execution_readback"] is True
+    assert executions_body["governance"]["host_supervision_receipt_projection"] is True
+    assert executions_body["governance"]["execution_authority"] is False
+    assert executions_body["governance"]["resident_claim_authority"] is False
+    assert executions_body["governance"]["memory_write"] is False
+
     status = client.get("/lens/status?limit=1")
     assert status.status_code == 200
-    next_handoff = status.json()["stage6_readiness"]["next_handoff"]
-    assert next_handoff["next_smallest_truthful_gap"] == "resident_supervision_not_persistent"
-    assert next_handoff["resident_runtime_candidate_handoff_observed"] is True
+    status_body = status.json()
+    status_executions = status_body["resident_host"]["resident_runtime_execution_receipts"]
+    assert status_executions["status"] == "readback_ready"
+    assert status_executions["total"] == 1
+    assert status_executions["latest_receipt_id"] == receipt["receipt_id"]
+    assert status_executions["latest_supervision_mode"] == "resident_start"
+    assert status_executions["resident_supervised_runtime_receipt_observed"] is True
+    assert status_body["resident_runtime_execution_receipts"]["latest_receipt_id"] == receipt["receipt_id"]
+    status_execution_receipts_criterion = _criterion(status_body, "resident_runtime_execution_receipt_readback")
+    assert status_execution_receipts_criterion["status"] == "readback_ready"
+    assert status_execution_receipts_criterion["receipt_count"] == 1
+    assert status_execution_receipts_criterion["latest_receipt_id"] == receipt["receipt_id"]
+    assert status_execution_receipts_criterion["latest_supervision_mode"] == "resident_start"
+    assert status_execution_receipts_criterion["latest_resident_host_process"] is True
+    assert status_execution_receipts_criterion["latest_resident_supervised_runtime"] is True
+    assert status_execution_receipts_criterion["resident_supervised_runtime_receipt_observed"] is True
+    assert status_execution_receipts_criterion["resident_claim_allowed"] is False
+    assert status_execution_receipts_criterion["execution_authority"] is False
+    assert status_execution_receipts_criterion["approval_decision_authority"] is False
+    assert status_execution_receipts_criterion["process_supervision_authority"] is False
+    assert status_execution_receipts_criterion["service_control_authority"] is False
+    assert status_execution_receipts_criterion["memory_write"] is False
+    assert status_execution_receipts_criterion["resident_claim_authority"] is False
+    next_handoff = status_body["stage6_readiness"]["next_handoff"]
+    assert next_handoff["next_smallest_truthful_gap"] == "summon_tray_presence_blocker_boundary"
+    assert next_handoff["persistent_supervision_first_missing_required_before_enable"] == "tray_presence"
 
 
 def test_lens_host_supervision_authority_request_requires_system_write_without_grant(

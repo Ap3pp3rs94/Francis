@@ -31392,6 +31392,2048 @@ contract hardening:
 - `.tmp\codex-uv-env\Scripts\uv.exe run --python 3.13 --frozen --extra core --extra web --extra dev -m ruff format --check tests\test_api_lens.py`
   Result: `passed; 1 file already formatted`
 
+Stage 6 Lens persistent-supervision prerequisite audit readback on
+`2026-05-17`:
+
+- The Stage 6 completion audit was still reporting
+  `next_smallest_truthful_gap: persistent_supervision_prerequisites_proof_readback`
+  even though the standalone prerequisite proof passed and the transition-plan
+  proof already observed prerequisite readback. The child proof stdout was
+  empty in the audit capture because the audit wrapper passed its default
+  `ChildProofTimeoutSeconds: 420` into
+  `scripts\lens-persistent-supervision-prerequisites-proof.ps1`, whose
+  contract accepts a maximum child timeout of `240`.
+- Clamped the completion-audit child argument for that proof to `240` while
+  preserving the outer wrapper timeout budget. The audit now consumes
+  `persistent_supervision_prerequisites_proof_readback: true`, reports
+  `stage6_completion_reviewed: true`, and advances the next truthful blocker to
+  `persistent_supervision_required_prerequisites_missing`.
+- This is audit-wrapper and truth-surface hardening only. It does not close
+  Stage 6, does not enable resident runtime, does not mutate service config,
+  does not write memory or receipts, and does not grant process, service, tray,
+  hotkey, overlay, summon, approval-decision, or resident-claim authority.
+  Stage 6 remains active with 2/5 checkpoint criteria ready.
+
+Latest validation for the Stage 6 Lens persistent-supervision prerequisite
+audit readback:
+
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q --tb=short --durations=8 --durations-min=1`
+  Result: `passed; 34 passed, 1 skipped`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 1 file already formatted`
+- PowerShell parser check for `scripts\lens-stage6-completion-audit.ps1`.
+  Result: `passed; parser ok`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status | ConvertFrom-Json | Select-Object kind,status,ready_to_close,stage6_completion_reviewed,checkpoint_next_smallest_truthful_gap,next_smallest_truthful_gap,next_smallest_truthful_gap_basis,recommended_handoff_source,recommended_next_slice,recommended_proof_script,authority_required,authority_granted,persistent_supervision_first_missing_required_before_enable,summary,governance,persistent_supervision_prerequisites_proof | ConvertTo-Json -Depth 10`
+  Result: `passed; status=blocked, ready_to_close=false,
+  stage6_completion_reviewed=true, next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing,
+  persistent_supervision_prerequisites_proof_readback=true,
+  persistent_supervision_first_missing_required_before_enable=resident_host_process`
+- `git diff --check`
+  Result:
+  `passed; warned that Git will normalize scripts/lens-stage6-completion-audit.ps1 from LF to CRLF next time Git touches it`
+
+Stage 6 Lens resident-runtime supervised host lease execution on
+`2026-05-17`:
+
+- `/lens/resident-runtime/execute` now consumes the existing governed Lens host
+  supervision authority through the resident-start path instead of stopping at
+  a bounded resident candidate handoff. The route calls the host supervisor with
+  `mode: resident_start`, returns `status: resident_supervision_started` when
+  the supervised resident host lease is observed, exposes the matching stop
+  command, and writes the existing host-supervision execution receipt with
+  `supervision_mode: resident_start`.
+- The execution response and the following `/lens/status` readback now agree on
+  the next truthful Stage 6 gap when the resident host process is supervised:
+  `summon_tray_presence_blocker_boundary`, with `tray_presence` as the first
+  missing persistent-supervision prerequisite.
+- This is a governed resident host supervision lease only. It does not close
+  Stage 6, does not claim OS-wide summon behavior, does not register tray or
+  hotkey surfaces, does not open an overlay, does not install or control a
+  Windows service, does not write memory, does not decide approvals, and does
+  not grant resident-claim authority. Stage 6 remains active with 2/5
+  checkpoint criteria ready.
+
+Latest validation for the Stage 6 Lens resident-runtime supervised host lease
+execution:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_resident_runtime_execute_starts_supervised_resident_host_lease -q --tb=short`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract tests\test_api_lens.py::test_lens_host_supervision_execute_starts_and_stops_resident_supervision_lease tests\test_api_lens.py::test_lens_resident_runtime_execute_starts_supervised_resident_host_lease -q --tb=short`
+  Result: `passed; 3 tests completed`
+- `python -m ruff check src\francis\lens\activation.py tests\test_api_lens.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check src\francis\lens\activation.py tests\test_api_lens.py`
+  Result: `passed; 2 files already formatted`
+
+Stage 6 Lens governed overlay window execution on `2026-05-17`:
+
+- Stage 6/Lens now has an approval-backed overlay window execution surface.
+  `/lens/overlay/authority/request`, `/lens/overlay/authority`,
+  `/lens/overlay/authority/requests`, `/lens/overlay/authority/grants`,
+  `/lens/overlay/execute`, and `/lens/overlay/executions` expose the same
+  governed request -> approval -> grant -> execute -> receipt readback pattern
+  already used by the tray and OS-binding surfaces.
+- `/lens/overlay/execute` starts and stops the bounded overlay window through
+  `scripts\lens-overlay-window.ps1`, then re-reads the Lens host manifest so
+  the response is driven by live overlay runtime state rather than by the runner
+  claim alone. When resident host, tray, hotkey, and overlay readbacks are live,
+  `/lens/status` now promotes the persistent-supervision handoff to the
+  remaining `summon_binding` prerequisite with
+  `next_smallest_truthful_gap: summon_anywhere_blockers`.
+- This is bounded overlay-window authority only. It does not close Stage 6,
+  does not create a summon-anywhere binding, does not claim resident status, does
+  not write memory, does not decide approvals, does not install or control a
+  service, does not register tray or hotkey surfaces, and does not grant capture
+  or new sensing authority. Stage 6 remains active with 2/5 checkpoint criteria
+  ready.
+
+Latest validation for the Stage 6 Lens governed overlay window execution:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_overlay_execute_starts_and_stops_governed_overlay_lease -q --tb=short`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_tray_presence_execute_starts_and_stops_governed_tray_lease tests\test_api_lens.py::test_lens_os_binding_execute_binds_governed_hotkey_lease tests\test_api_lens.py::test_lens_overlay_execute_starts_and_stops_governed_overlay_lease tests\test_api_lens.py::test_lens_status_promotes_coordinated_surface_runtime_before_summon_binding -q --tb=short`
+  Result: `passed; 4 tests completed`
+- `python -m ruff check src\francis\lens\overlay_authority.py src\francis\lens\__init__.py src\francis\api\routes\lens.py src\francis\lens\activation.py tests\test_api_lens.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check src\francis\lens\overlay_authority.py src\francis\lens\__init__.py src\francis\api\routes\lens.py src\francis\lens\activation.py tests\test_api_lens.py`
+  Result: `passed; 5 files already formatted`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status | ConvertFrom-Json | Select-Object kind,status,ready_to_close,stage6_completion_reviewed,next_smallest_truthful_gap,recommended_next_slice,persistent_supervision_first_missing_required_before_enable,summary | ConvertTo-Json -Depth 6`
+  Result: `passed; status=blocked, ready_to_close=false,
+  stage6_completion_reviewed=true,
+  next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing,
+  persistent_supervision_first_missing_required_before_enable=resident_host_process,
+  ready_total=2/5`
+
+Stage 6 Lens governed summon action handoff on `2026-05-17`:
+
+- Stage 6/Lens now has an approval-backed summon action execution surface.
+  `/lens/summon/authority/request`, `/lens/summon/authority`,
+  `/lens/summon/authority/requests`, `/lens/summon/authority/grants`,
+  `/lens/summon/execute`, and `/lens/summon/executions` expose a governed
+  request -> approval -> grant -> execute -> receipt readback path for the
+  bounded local-open summon handoff.
+- `/lens/summon/execute` runs the summon action through
+  `scripts\lens-summon-action.ps1` with an explicit no-launch default, writes a
+  `data/runtime/lens-summon/status.json` runtime readback, and then re-reads the
+  Lens host manifest. When resident host, tray, hotkey, overlay, and summon
+  handoff readbacks are live, the persistent-supervision prerequisite readback
+  reports `missing_required_before_enable: []`.
+- The manifest now treats `summon_binding` as a runtime-readback-backed
+  prerequisite rather than a hard-coded permanent blocker. The readback only
+  satisfies the bounded local-open handoff and keeps `summon_anywhere: false`
+  and `os_level_summon: false`.
+- `/lens/summon/readiness` now consumes the same bounded runtime readback for
+  `summon_binding_ready` while keeping `ready: false` and `summon_anywhere:
+  false` until OS-level/global summon-anywhere runtime proof exists.
+- This does not close Stage 6, does not claim OS-wide/global summon-anywhere,
+  does not register a new hotkey, does not launch UI by default, does not write
+  memory, does not decide approvals, does not install or control a service, and
+  does not grant capture, new sensing, or resident-claim authority. Stage 6
+  remains active with checkpoint closure still blocked by the remaining runtime
+  acceptance criteria.
+
+Latest validation for the Stage 6 Lens governed summon action handoff:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_summon_execute_records_bounded_handoff_without_summon_anywhere_claim -q --tb=short`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_overlay_execute_starts_and_stops_governed_overlay_lease tests\test_api_lens.py::test_lens_status_promotes_coordinated_surface_runtime_before_summon_binding tests\test_api_lens.py::test_lens_summon_execute_records_bounded_handoff_without_summon_anywhere_claim tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q --tb=short`
+  Result: `passed; 4 tests completed`
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q --tb=short`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py -q --tb=short`
+  Result: `passed; Lens API contract file reached 100%`
+- `python -m ruff check src\francis\lens\summon_authority.py src\francis\lens\host_manifest.py src\francis\lens\preflight.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check src\francis\lens\summon_authority.py src\francis\lens\host_manifest.py src\francis\lens\preflight.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed; 6 files already formatted`
+
+Stage 6 Lens resident-host prerequisite handoff route alignment on
+`2026-05-17`:
+
+- The persistent-supervision prerequisite handoff for the first missing
+  `resident_host_process` prerequisite now exposes the current governed
+  resident-runtime route chain:
+  `/lens/resident-runtime/authority-grant/request`,
+  `/lens/resident-runtime/authority-grant`,
+  `/lens/resident-runtime/plan`, and `/lens/resident-runtime/execute`.
+- This aligns `/lens/status`, `/lens/host/persistent-supervision`, and
+  `/lens/host/persistent-supervision/enablement` with the bounded resident
+  supervision lease execution surface added for Stage 6. The handoff remains a
+  read-only diagnostic contract: it does not execute, mutate state, grant
+  authority, decide approvals, write memory, claim residency, or satisfy the
+  live `resident_host_process` prerequisite.
+- Stage 6 remains active. The full audit still requires live resident host,
+  tray, hotkey, overlay, summon, helpful/not-noisy, and resident presence
+  runtime proof before closure.
+
+Latest validation for the Stage 6 Lens resident-host prerequisite handoff route
+alignment:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract tests\test_api_lens.py::test_lens_persistent_supervision_plan_readback_blocks_without_authority -q --tb=short`
+  Result: `passed; 2 tests completed`
+- `python -m pytest tests\test_api_lens.py::test_lens_resident_runtime_execute_starts_supervised_resident_host_lease tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract tests\test_api_lens.py::test_lens_persistent_supervision_plan_readback_blocks_without_authority -q --tb=short`
+  Result: `passed; 3 tests completed`
+- `python -m ruff check src\francis\lens\host_manifest.py tests\test_api_lens.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py tests\test_api_lens.py`
+  Result: `passed; 2 files already formatted`
+
+Stage 6 Lens resident-runtime execution receipt readback on `2026-05-17`:
+
+- Added `GET /lens/resident-runtime/executions` as a read-only projection over
+  the existing host-supervision execution receipts for `resident_start` and
+  `resident_stop` modes. This gives the resident-runtime execution path its own
+  inspectable receipt surface while preserving the underlying
+  `data/lens/host_supervision_executions/` receipt source.
+- The readback exposes the latest supervision mode, resident host process flag,
+  supervised runtime flag, stop command, next truthful gap, and whether a
+  resident supervised runtime receipt was observed. It explicitly keeps
+  execution authority, approval-decision authority, memory write, service
+  control, and resident-claim authority false.
+- This is receipts-backed auditability only. It does not start or stop the
+  runtime, does not grant authority, does not satisfy the live resident-host
+  prerequisite by itself, does not claim residency, and does not close Stage 6.
+
+Latest validation for the Stage 6 Lens resident-runtime execution receipt
+readback:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_resident_runtime_execute_starts_supervised_resident_host_lease -q --tb=short`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_resident_runtime_execute_starts_supervised_resident_host_lease tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract tests\test_api_lens.py::test_lens_persistent_supervision_plan_readback_blocks_without_authority -q --tb=short`
+  Result: `passed; 3 tests completed`
+- `python -m ruff check src\francis\lens\activation.py src\francis\lens\host_manifest.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check src\francis\lens\activation.py src\francis\lens\host_manifest.py src\francis\lens\__init__.py src\francis\api\routes\lens.py tests\test_api_lens.py`
+  Result: `passed; 5 files already formatted`
+
+Stage 6 Lens status resident-runtime execution receipt projection on
+`2026-05-18`:
+
+- `/lens/status` now embeds the read-only
+  `/lens/resident-runtime/executions` projection in both
+  `resident_host.resident_runtime_execution_receipts` and the top-level
+  `resident_runtime_execution_receipts` status surface.
+- Stage 6 readiness now includes a
+  `resident_runtime_execution_receipt_readback` criterion that reports the
+  latest resident-runtime execution receipt id, supervision mode, resident host
+  process flag, supervised runtime flag, and resident-supervised-runtime receipt
+  observation while keeping execution, approval-decision, service-control,
+  memory-write, receipt-write, and resident-claim authority false.
+- `/lens/status.receipts` now names
+  `lens_resident_runtime_executions_route: /lens/resident-runtime/executions`
+  so operator surfaces can discover the success-receipt readback next to the
+  resident-runtime authority, denial, and readiness routes.
+- This is status/readback alignment only. It does not execute resident runtime,
+  does not grant authority, does not treat historical execution receipts as live
+  resident-host proof, does not claim residency, and does not close Stage 6.
+
+Latest validation for the Stage 6 Lens status resident-runtime execution receipt
+projection:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract tests\test_api_lens.py::test_lens_resident_runtime_execute_starts_supervised_resident_host_lease -q --tb=short`
+  Result: `passed; 2 tests completed`
+- `python -m pytest tests\test_api_lens.py::test_lens_resident_runtime_execute_starts_supervised_resident_host_lease tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract tests\test_api_lens.py::test_lens_persistent_supervision_plan_readback_blocks_without_authority -q --tb=short`
+  Result: `passed; 3 tests completed`
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed; 2 files already formatted`
+
+Stage 6 Lens persistent-supervision summon prerequisite proof alignment on
+`2026-05-18`:
+
+- `scripts/lens-persistent-supervision-plan.ps1` now reads
+  `data/runtime/lens-summon/status.json` as the PowerShell-side summon runtime
+  readback, matching the API/runtime contract that treats a bounded local-open
+  handoff as satisfying the `summon_binding` prerequisite without claiming
+  OS-level summon-anywhere behavior.
+- `scripts/lens-surface-plan-consumption-proof.ps1` now writes a temporary
+  proof-only summon runtime state alongside the existing resident host, tray,
+  hotkey, and overlay readbacks. The proof now demonstrates that all
+  persistent-supervision prerequisites can be consumed from runtime readbacks
+  and that the next truthful gap is persistent-supervision authority, not stale
+  `summon_binding` handoff work.
+- This remains a bounded proof harness. It does not enable persistent
+  supervision, does not register an OS hotkey, does not open an overlay, does
+  not launch a browser, does not grant authority, does not write product
+  memory, does not claim residency, and does not close Stage 6.
+
+Latest validation for the Stage 6 Lens persistent-supervision summon
+prerequisite proof alignment:
+
+- `.\scripts\lens-surface-plan-consumption-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed; first_missing_required_before_enable=""; next_smallest_truthful_gap=persistent_supervision_authority_not_granted`
+- `python -m pytest tests\test_lens_surface_plan_consumption_proof_script.py tests\test_lens_persistent_supervision_plan_script.py -q --tb=short`
+  Result: `passed; 7 tests completed`
+- `python -m ruff check tests\test_lens_surface_plan_consumption_proof_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests\test_lens_surface_plan_consumption_proof_script.py`
+  Result: `passed; 1 file already formatted`
+- `.\scripts\lens-stage6-completion-audit.ps1 -Mode Status`
+  Result: `passed; audit_status=complete; status=blocked; stage6_completion_reviewed=true; ready_to_close=false; child_proof_timeouts=[]; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing; persistent_supervision_first_missing_required_before_enable=resident_host_process`
+
+Stage 6 Lens persistent-supervision operator readback projection on
+`2026-05-18`:
+
+- The chat UI now derives a dedicated persistent-supervision readback from the
+  existing Stage 6 next-handoff contract. The readback surfaces prerequisite
+  observation, prerequisite readiness, missing prerequisites, first missing
+  handoff/proof/route/authority, enablement authority, execution authority,
+  receipt-write authority, resident-claim allowance, service-config update,
+  applied/executed state, blockers, and current/prerequisite routes.
+- The Lens panel now renders this as a read-only `Persistent supervision` card
+  next to the runtime-loop and Stage 6 handoff cards so the operator can see
+  that `resident_host_process` remains the first live prerequisite blocker and
+  that persistent-supervision authority is not granted.
+- This is operator-surface projection only. It does not call new routes, does
+  not request or grant authority, does not mutate service config, does not
+  start or supervise a resident process, does not claim residency, and does not
+  close Stage 6.
+
+Latest validation for the Stage 6 Lens persistent-supervision operator
+readback projection:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `passed; 97 tests completed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed; Vite production build completed`
+
+Stage 6 Lens resident-runtime authority operator readback projection on
+`2026-05-18`:
+
+- The chat UI now parses the read-only
+  `resident_runtime_authority_grant_readiness` contract from `/lens/status` and
+  `resident_host.resident_runtime_authority_grant_readiness`, including
+  readiness, authority state, grant/denial receipt counts, requirement totals,
+  blocked requirements, first blocked requirement handoff, source readbacks,
+  and plan/execute/grant routes.
+- The Lens panel now renders this as a read-only `Resident runtime authority`
+  card before resident-runtime execution receipts. It shows that resident
+  runtime execution authority is not granted, runtime readiness is blocked, and
+  the operator-facing first blocked requirement is still the resident
+  supervision gate.
+- This is operator-surface projection only. It does not request or grant
+  resident-runtime authority, does not execute `/lens/resident-runtime/execute`,
+  does not start or supervise a resident host process, does not mutate service
+  config, does not write memory, does not claim residency, and does not close
+  Stage 6.
+
+Latest validation for the Stage 6 Lens resident-runtime authority operator
+readback projection:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `passed; 97 tests completed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed; Vite production build completed`
+
+Stage 6 Lens host-supervision authority request/grant operator actions on
+`2026-05-18`:
+
+- The chat UI Lens client now exposes a bounded
+  `requestHostSupervisionAuthority` action for the existing
+  `/lens/host/supervision/authority/request` route. The request sends an
+  explicit `chat_ui.system` actor and preserves the approval id, action, status,
+  route, authority state, resident-claim state, blockers, approval payload, and
+  governance payload from the backend response.
+- The chat UI Lens client now also exposes
+  `grantHostSupervisionAuthority` for the existing
+  `/lens/host/supervision/authority` route. The grant action requires an
+  approved host-supervision authority approval id, uses the same
+  `chat_ui.system` actor, and preserves returned authority, blocker,
+  resident-claim, approval, and governance readback.
+- The Lens status parser now preserves
+  `resident_host.supervision_authority_requests`, including request/grant
+  routes, pending/approved/rejected counts, active grant receipt id, latest
+  approval item, and by-status approval buckets.
+- The Lens panel now shows a guarded `Request host supervision authority`
+  control only when resident-runtime authority readback identifies the resident
+  supervision gate as the blocked prerequisite. It shows a separate
+  `Grant host supervision authority` control only when Lens readback contains
+  an approved host-supervision authority request and no active grant receipt.
+- These actions do not approve the request, do not decide approvals, do not
+  start or supervise a resident process, do not execute
+  `/lens/resident-runtime/execute`, do not mutate service config, do not write
+  memory, do not claim residency, and do not close Stage 6. The grant action can
+  write the existing bounded host-supervision authority receipt only after the
+  separate approval decision path has already approved the exact request.
+
+Latest validation for the Stage 6 Lens host-supervision authority request/grant
+operator actions:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `passed; 99 tests completed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed; Vite production build completed`
+
+Stage 6 Lens resident-runtime authority request/grant operator actions on
+`2026-05-18`:
+
+- The chat UI Lens client now exposes bounded
+  `requestResidentRuntimeAuthority` and `grantResidentRuntimeAuthority`
+  actions for the existing `/lens/resident-runtime/authority-grant/request`
+  and `/lens/resident-runtime/authority-grant` routes. Both actions use the
+  existing `chat_ui.system` actor and preserve returned approval, route,
+  authority, blocker, resident-claim, and governance readback.
+- The Lens status parser now preserves
+  `resident_host.resident_runtime_authority_requests`, including request,
+  grant, grants, denials, readiness, policy, plan, and execute routes;
+  pending/approved/rejected counts; active grant receipt id; latest approval
+  item; by-status approval buckets; and authority booleans.
+- The Lens panel now shows resident-runtime authority request/grant state in
+  the existing `Resident runtime authority` card. It exposes a guarded
+  `Request resident runtime authority` control only after host-supervision
+  authority is active and no pending/approved resident-runtime authority
+  request exists. It exposes a separate `Grant resident runtime authority`
+  control only after Lens readback contains an approved resident-runtime
+  authority request and no active resident-runtime authority grant receipt.
+- These actions do not decide approvals, do not start or supervise a resident
+  process, do not execute `/lens/resident-runtime/execute`, do not mutate
+  service config, do not register tray/hotkey/overlay/summon surfaces, do not
+  write memory, do not claim residency, and do not close Stage 6. The grant
+  action only writes the existing bounded resident-runtime execution authority
+  receipt after the separate approval decision path has already approved the
+  exact request.
+
+Latest validation for the Stage 6 Lens resident-runtime authority request/grant
+operator actions:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `passed; 101 tests completed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed; Vite production build completed`
+
+Stage 6 Lens bounded resident-runtime execution operator action on
+`2026-05-18`:
+
+- The chat UI Lens client now exposes
+  `executeResidentRuntimeActivation` for the existing
+  `/lens/resident-runtime/execute` route. The action sends an explicit
+  `chat_ui.system` actor, the approved resident-runtime authority approval id,
+  a bounded `run_seconds` value clamped to the backend contract range, and
+  preserves returned execution, blocker, resident-claim, approval, and
+  governance readback.
+- The Lens panel now shows `Start bounded resident runtime` only after Lens
+  readback shows both active host-supervision authority and active
+  resident-runtime execution authority, plus an approved resident-runtime
+  authority request id to bind the execution to.
+- This operator action was not invoked during validation. It is a UI affordance
+  for the existing bounded backend execution route. It does not decide
+  approvals, does not bypass authority grants, does not register tray/hotkey,
+  overlay, or summon surfaces, does not mutate service config, does not write
+  memory, does not claim residency, and does not close Stage 6.
+
+Latest validation for the Stage 6 Lens bounded resident-runtime execution
+operator action:
+
+- `cd apps\chat_ui; npm run test`
+  Result: `passed; 102 tests completed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed; Vite production build completed`
+
+Stage 6 Lens resident-host supervision start/stop operator action on
+`2026-05-18`:
+
+- The chat UI Lens client now exposes `executeHostSupervision` for the existing
+  `/lens/host/supervision/execute` route. The action sends an explicit
+  `chat_ui.system` actor, the approved host-supervision authority approval id,
+  a bounded `run_seconds` value clamped to the backend contract range, and the
+  requested supervision mode.
+- The Lens panel now exposes guarded `Start resident host supervision` and
+  `Stop resident host supervision` controls after host-supervision authority is
+  active. Start uses `resident_start`; stop uses `resident_stop` only when the
+  resident-runtime execution readback shows the latest resident host supervision
+  lease is running and supervised.
+- This operator action was not invoked from the UI during validation. It is a UI
+  affordance for the existing governed backend host-supervision execution route.
+  It does not decide approvals, does not bypass the host-supervision authority
+  grant, does not register tray/hotkey/overlay/summon surfaces, does not mutate
+  service config, does not write memory, does not claim residency, and does not
+  close Stage 6.
+- The current Stage 6 audit remains blocked on
+  `persistent_supervision_required_prerequisites_missing`, with first missing
+  prerequisite `resident_host_process`. The audit completed without child proof
+  timeouts, so the current blocker is capability/readiness rather than audit
+  harness timeout.
+
+Latest validation for the Stage 6 Lens resident-host supervision start/stop
+operator action:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_resident_runtime_execute_starts_supervised_resident_host_lease tests\test_api_lens.py::test_lens_host_supervision_execute_starts_and_stops_resident_supervision_lease -q --tb=short`
+  Result: `passed; 2 tests completed`
+- `.\scripts\lens-stage6-completion-audit.ps1 -Mode Status`
+  Result: `completed; status=blocked; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing; child_proof_timeouts=[]`
+- `.\scripts\lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status`
+  Result: `passed; first_missing_required_before_enable=resident_host_process`
+- `cd apps\chat_ui; npm run test`
+  Result: `passed; 103 tests completed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed; Vite production build completed`
+
+Stage 6 Lens tray-presence authority and execution operator action on
+`2026-05-18`:
+
+- `/lens/status` now carries top-level tray authority request readback and tray
+  execution receipt readback from the existing `/lens/tray/authority/requests`
+  and `/lens/tray/executions` contracts. The status receipts map now also
+  names the tray authority request, authority, grant, execute, and executions
+  routes.
+- The chat UI Lens parser now preserves tray authority request state, approval
+  counts, approved request ids, active tray authority grant receipt, tray
+  execution routes, and latest tray execution receipt posture.
+- The chat UI Lens client now exposes bounded `requestTrayAuthority`,
+  `grantTrayAuthority`, and `executeTrayPresence` actions for the existing
+  `/lens/tray/authority/request`, `/lens/tray/authority`, and
+  `/lens/tray/execute` routes. The execution action sends an explicit
+  `chat_ui.system` actor, the approved tray authority approval id, a bounded
+  `run_seconds` value clamped to the backend contract range, and an explicit
+  `start` or `stop` mode.
+- The Lens panel now exposes guarded tray request/grant/start/stop controls in
+  the persistent-supervision card. Request/grant/start are gated by current
+  resident-host supervision readback; stop is gated by active tray authority and
+  latest tray presence readback.
+- These operator actions were not invoked from the UI during validation. They
+  are UI affordances for existing governed backend routes. They do not decide
+  approvals, do not bypass tray authority grants, do not register hotkey,
+  overlay, or summon surfaces, do not mutate service config, do not write
+  memory, do not claim residency, and do not close Stage 6.
+
+Latest validation for the Stage 6 Lens tray-presence authority and execution
+operator action:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract tests\test_api_lens.py::test_lens_tray_presence_execute_starts_and_stops_governed_tray_lease -q --tb=short`
+  Result: `passed; 2 tests completed`
+- `cd apps\chat_ui; npm run test`
+  Result: `passed; 104 tests completed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed; Vite production build completed`
+
+Stage 6 Lens overlay and summon authority/execution operator actions on
+`2026-05-18`:
+
+- `/lens/status` now carries top-level overlay window authority request
+  readback, overlay execution receipt readback, summon action authority request
+  readback, and summon execution receipt readback from the existing
+  `/lens/overlay/*` and `/lens/summon/*` governed backend contracts. The status
+  receipts map now also names the overlay and summon request, authority, grant,
+  execute, and executions routes.
+- The chat UI Lens parser now preserves overlay and summon authority request
+  state, approval counts, approved request ids, active grant receipts, execution
+  routes, and latest execution posture.
+- The chat UI Lens client now exposes bounded `requestOverlayAuthority`,
+  `grantOverlayAuthority`, `executeOverlayWindow`, `requestSummonAuthority`,
+  `grantSummonAuthority`, and `executeSummonAction` actions for the existing
+  governed backend routes. Execution actions send an explicit `chat_ui.system`
+  actor, the approved authority approval id, bounded `run_seconds` clamped to
+  the backend contract range, and explicit mode fields. Summon execution keeps
+  `allow_launch=false` from the UI.
+- The Lens panel now exposes guarded overlay request/grant/start/stop controls
+  after tray presence readback, and guarded summon request/grant/execute
+  controls after overlay window readback. The UI only routes operator intent
+  through existing backend authority boundaries.
+- These operator actions were not invoked from the UI during validation. They
+  are UI affordances for existing governed backend routes. They do not decide
+  approvals, do not bypass overlay or summon authority grants, do not create
+  OS-wide summon authority, do not mutate service config, do not write memory,
+  do not claim residency, and do not close Stage 6.
+
+Latest validation for the Stage 6 Lens overlay and summon authority/execution
+operator actions:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract tests\test_api_lens.py::test_lens_overlay_execute_starts_and_stops_governed_overlay_lease tests\test_api_lens.py::test_lens_summon_execute_records_bounded_handoff_without_summon_anywhere_claim -q --tb=short`
+  Result: `passed; 3 tests completed`
+- `cd apps\chat_ui; npm run test`
+  Result: `passed; 105 tests completed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed; Vite production build completed`
+- `.\scripts\lens-stage6-completion-audit.ps1 -Mode Status`
+  Result: `completed; status=blocked; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing; first_missing_required_before_enable=resident_host_process; child_proof_timeouts=[]`
+- `git diff --check`
+  Result: `passed; warnings only for pre-existing PowerShell LF-to-CRLF normalization in Stage 6 scripts`
+
+Stage 6 Lens OS-binding hotkey authority/execution operator action on
+`2026-05-18`:
+
+- `/lens/status` now carries top-level OS-binding execution receipt readback
+  from the existing `/lens/os-binding/executions` contract, alongside the
+  existing OS-binding authority request and execution readiness readbacks.
+- The chat UI Lens parser now preserves OS-binding authority request state,
+  approved request ids, active grant receipt id, execution readiness blockers,
+  execution routes, and latest global-hotkey execution posture.
+- The chat UI Lens client now exposes bounded `requestOsBindingAuthority`,
+  `grantOsBindingAuthority`, and `executeOsBinding` actions for the existing
+  `/lens/os-binding/authority/request`, `/lens/os-binding/authority`, and
+  `/lens/os-binding/execute` routes. Execution sends an explicit
+  `chat_ui.system` actor, the approved OS-binding authority approval id, a
+  bounded `run_seconds` value clamped to the backend contract range, and an
+  explicit `bind` or `stop` mode.
+- The Lens panel now exposes guarded hotkey request/grant/bind/stop controls in
+  the persistent-supervision card after tray presence readback. Overlay controls
+  are now sequenced behind global-hotkey binding readback, and summon controls
+  remain sequenced behind overlay window readback.
+- These operator actions were not invoked from the UI during validation. They
+  are UI affordances for existing governed backend routes. They do not decide
+  approvals, do not bypass OS-binding authority grants, do not create
+  summon-anywhere authority, do not mutate service config, do not write memory,
+  do not claim residency, and do not close Stage 6.
+
+Latest validation for the Stage 6 Lens OS-binding hotkey authority/execution
+operator action:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract tests\test_api_lens.py::test_lens_os_binding_execute_binds_governed_hotkey_lease -q --tb=short`
+  Result: `passed; 2 tests completed`
+- `cd apps\chat_ui; npm run test`
+  Result: `passed; 106 tests completed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed; Vite production build completed`
+- `git diff --check`
+  Result: `passed; warnings only for pre-existing PowerShell LF-to-CRLF normalization in Stage 6 scripts`
+
+Stage 6 Lens prerequisite bring-up runbook on `2026-05-18`:
+
+- Added `scripts/lens-stage6-prerequisite-bringup-plan.ps1` as a read-only
+  governed operator runbook for the persistent-supervision prerequisite chain.
+  It reads `/lens/status` through the local Lens status contract and emits the
+  ordered prerequisite sequence for resident host process, tray presence,
+  global hotkey binding, overlay window, summon binding, and final persistent
+  supervision enablement.
+- The runbook explicitly names request, grant, and execute/apply routes for
+  each prerequisite surface, including resident runtime authority,
+  host-supervision authority, tray authority, OS-binding authority, overlay
+  authority, summon authority, and persistent-supervision enablement/execution
+  authority.
+- The runbook now has `Mode=Status`, `Mode=RequestNext`, `Mode=GrantNext`, and
+  `Mode=ExecuteNext`. `Status` remains a read-only diagnostic projection.
+  `RequestNext` requires an explicit `Actor` and `-ConfirmRequest`, can create
+  only the current next approval request through the existing governed
+  authority request route, and refuses without confirmation.
+- `GrantNext` requires an explicit `Actor`, `ApprovalId`, and `-ConfirmGrant`.
+  It can grant only the already approved current next authority receipt through
+  the existing governed authority grant route, and refuses without confirmation.
+  It does not approve requests, decide approvals, execute live process actions,
+  mutate service config, write memory, claim residency, or close Stage 6.
+- `ExecuteNext` requires an explicit `Actor`, `ApprovalId`, `RunSeconds`, and
+  `-ConfirmExecute`. It can execute only the current next bounded execute/apply
+  action through the existing governed backend execution route after the
+  required authority grant receipts already exist. It does not approve requests,
+  create new grants, write memory, claim residency, or close Stage 6. Summon
+  execution stays constrained to `allow_launch=false`.
+- After an approval request exists, `Status` reports an await action while the
+  request is pending, a grant action when the request is approved, and the next
+  prerequisite action after the grant receipt exists. Every listed execute and
+  apply action still requires explicit operator-supplied values and the existing
+  governed backend routes.
+
+Latest validation for the Stage 6 Lens prerequisite bring-up runbook:
+
+- `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py -q --tb=short`
+  Result: `passed; 8 tests completed`
+- `python -m ruff check tests\test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests\test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed; 1 file already formatted`
+- `.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status`
+  Result: `completed; status=blocked; first_missing_required_before_enable=resident_host_process; next_operator_action_requirement=resident_host_process; next_operator_action.id=request_resident_runtime_execution_authority; request_next_mode_available=true; grant_next_mode_available=true; execute_next_mode_available=true; approval_request_write=false; authority_grant_receipt_write=false; execution_receipt_write=false`
+- `.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode RequestNext -Actor test.system.write`
+  Result: `refused as expected; status=refused_confirmation_required; approval_request_write=false; request_result.approval_requested=false`
+- `.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode GrantNext -Actor test.system.write -ApprovalId live-not-used-without-confirm`
+  Result: `refused as expected; status=refused_confirmation_required; authority_granted=false; authority_grant_receipt_write=false`
+- `.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode ExecuteNext -Actor test.system.write -ApprovalId live-not-used-without-confirm`
+  Result: `refused as expected; status=refused_confirmation_required; executed=false; execution_receipt_write=false; would_execute=false; would_mutate=false`
+- `.\scripts\lens-stage6-completion-audit.ps1 -Mode Status`
+  Result: `completed; status=blocked; audit_status=complete; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing; child_proof_timeouts=[]`
+- `git diff --check`
+  Result: `passed; warnings only for pre-existing PowerShell LF-to-CRLF normalization in Stage 6 scripts`
+
+Stage 6 Lens persistent-supervision enablement operator actions on `2026-05-18`:
+
+- The chat UI Lens parser now preserves the resident-host persistent-supervision
+  enablement authority request, authority grant, execution request, execution
+  authority grant, execution readiness, and execution receipt readbacks already
+  exposed by `/lens/status`.
+- The Lens client now exposes bounded request/grant/apply methods for the
+  existing `/lens/host/persistent-supervision/enablement/authority/request`,
+  `/lens/host/persistent-supervision/enablement/authority`,
+  `/lens/host/persistent-supervision/enablement/execution/request`,
+  `/lens/host/persistent-supervision/enablement/execution/authority`, and
+  `/lens/host/persistent-supervision/enablement/execution/apply` routes.
+- The Lens panel now exposes guarded persistent-supervision enablement controls
+  only after prerequisite readback is ready, approved request ids exist where
+  required, active authority grants are present where required, and execution
+  readiness reports `ready=true` before apply.
+- These operator actions were not invoked from the UI during validation. They
+  are UI affordances for existing governed backend routes. They do not decide
+  approvals, bypass enablement/execution authority grants, install or start
+  services directly, write memory, claim residency, or close Stage 6.
+
+Latest validation for the Stage 6 Lens persistent-supervision enablement
+operator actions:
+
+- `cd apps\chat_ui; npm run test -- src/lens/index.test.ts`
+  Result: `passed; 107 UI tests completed`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed; Vite production build completed`
+- `git diff --check`
+  Result: `passed; warnings only for pre-existing PowerShell LF-to-CRLF normalization in Stage 6 scripts`
+
+Stage 6 Lens prerequisite bring-up current-gap command readback on `2026-05-18`:
+
+- The Stage 6 prerequisite bring-up runbook now separates the current operator
+  blocker from the raw persistent-supervision plan gap. When required
+  prerequisites are still missing, `Status` reports
+  `current_truthful_gap=persistent_supervision_required_prerequisites_missing`,
+  names the first missing requirement, and preserves the raw
+  `persistent_supervision_next_smallest_truthful_gap` separately.
+- `Status` now emits a bounded `next_operator_command` object for the current
+  next action, including the script mode, whether explicit confirmation is
+  required, whether an approval id is required, and whether the operator must
+  complete an approval decision first.
+- This is a readback/actionability improvement only. It does not add a run-all
+  mode, does not approve requests, does not grant authority, does not execute
+  live process actions, does not mutate service config, does not write memory,
+  does not claim residency, and does not close Stage 6.
+
+Latest validation for the Stage 6 Lens prerequisite bring-up current-gap command
+readback:
+
+- `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py -q --tb=short`
+  Result: `passed; 8 tests completed`
+- `python -m ruff check tests\test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests\test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed; 1 file already formatted`
+- `.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,current_truthful_gap,current_truthful_gap_basis,current_first_missing_requirement,current_first_missing_truthful_gap,raw_persistent_supervision_next_smallest_truthful_gap,next_operator_action_requirement,next_operator_command | ConvertTo-Json -Depth 8`
+  Result: `completed; status=blocked; current_truthful_gap=persistent_supervision_required_prerequisites_missing; current_truthful_gap_basis=missing_required_before_enable; current_first_missing_requirement=resident_host_process; current_first_missing_truthful_gap=resident_host_process_not_supervised; raw_persistent_supervision_next_smallest_truthful_gap=persistent_supervision_authority_not_granted; next_operator_action_requirement=resident_host_process; next_operator_command.mode=RequestNext; next_operator_command.requires_confirmation=true`
+
+Stage 6 Lens persistent-supervision current-gap status contract on `2026-05-18`:
+
+- The persistent-supervision plan and enablement preflight readbacks now expose
+  `current_truthful_gap`, `current_truthful_gap_basis`,
+  `current_first_missing_requirement`, `current_first_missing_truthful_gap`, and
+  `raw_persistent_supervision_next_smallest_truthful_gap`.
+- This preserves the legacy/raw `next_smallest_truthful_gap` value while making
+  the operator-current blocker explicit when required prerequisites are still
+  missing. In the current live readback, the raw plan gap remains
+  `persistent_supervision_authority_not_granted`, while the current blocker is
+  `persistent_supervision_required_prerequisites_missing` with first missing
+  requirement `resident_host_process`.
+- The standalone persistent-supervision plan proof script now emits the same
+  current-gap fields. This is a readback contract improvement only. It does not
+  create approval requests, grant authority, execute live process actions,
+  mutate service config, write memory, claim residency, or close Stage 6.
+
+Latest validation for the Stage 6 Lens persistent-supervision current-gap status
+contract:
+
+- `python -m pytest tests\test_lens_persistent_supervision_plan_script.py::test_lens_persistent_supervision_plan_stays_blocked_without_authority tests\test_api_lens.py::test_lens_persistent_supervision_plan_readback_blocks_without_authority -q --tb=short`
+  Result: `passed; 2 tests completed`
+- `python -m ruff check src\francis\lens\host_manifest.py tests\test_lens_persistent_supervision_plan_script.py tests\test_api_lens.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check src\francis\lens\host_manifest.py tests\test_lens_persistent_supervision_plan_script.py tests\test_api_lens.py`
+  Result: `passed; 3 files already formatted`
+- `python -c "import json; from francis.lens.status import lens_status; s=lens_status(limit=3); p=s['resident_host']['persistent_supervision_plan']; e=s['resident_host']['persistent_supervision_enablement']; print(json.dumps({'plan_next': p.get('next_smallest_truthful_gap'), 'plan_current': p.get('current_truthful_gap'), 'plan_basis': p.get('current_truthful_gap_basis'), 'plan_first': p.get('current_first_missing_requirement'), 'plan_first_gap': p.get('current_first_missing_truthful_gap'), 'plan_raw': p.get('raw_persistent_supervision_next_smallest_truthful_gap'), 'enablement_next': e.get('next_smallest_truthful_gap'), 'enablement_current': e.get('current_truthful_gap'), 'enablement_basis': e.get('current_truthful_gap_basis'), 'enablement_first': e.get('current_first_missing_requirement'), 'enablement_first_gap': e.get('current_first_missing_truthful_gap'), 'enablement_raw': e.get('raw_persistent_supervision_next_smallest_truthful_gap')}, indent=2))"`
+  Result: `completed; plan_next=persistent_supervision_authority_not_granted; plan_current=persistent_supervision_required_prerequisites_missing; plan_basis=missing_required_before_enable; plan_first=resident_host_process; plan_first_gap=resident_host_process_not_supervised; plan_raw=persistent_supervision_authority_not_granted; enablement_next=persistent_supervision_authority_not_granted; enablement_current=persistent_supervision_required_prerequisites_missing; enablement_basis=missing_required_before_enable; enablement_first=resident_host_process; enablement_first_gap=resident_host_process_not_supervised; enablement_raw=persistent_supervision_authority_not_granted`
+- `.\scripts\lens-persistent-supervision-plan.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,current_truthful_gap,current_truthful_gap_basis,current_first_missing_requirement,current_first_missing_truthful_gap,raw_persistent_supervision_next_smallest_truthful_gap | ConvertTo-Json -Depth 6`
+  Result: `completed; status=blocked; next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing; current_truthful_gap=persistent_supervision_required_prerequisites_missing; current_truthful_gap_basis=missing_required_before_enable; current_first_missing_requirement=resident_host_process; current_first_missing_truthful_gap=resident_supervision_not_persistent; raw_persistent_supervision_next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`
+
+Stage 6 Lens prerequisite bring-up status projection on `2026-05-18`:
+
+- `/lens/status` now exposes
+  `stage6_readiness.prerequisite_bringup` as the Python/API counterpart to the
+  read-only prerequisite bring-up runbook. The projection includes the current
+  prerequisite gap, first missing requirement, ordered prerequisite steps, the
+  bounded next operator action, and the exact `RequestNext`/`GrantNext`/
+  `ExecuteNext` command shape.
+- The current live readback remains blocked at
+  `persistent_supervision_required_prerequisites_missing`, with first missing
+  requirement `resident_host_process` and next operator action
+  `request_resident_runtime_execution_authority`. The projection is read-only:
+  it does not create approval requests, grant authority, execute process
+  actions, write memory, mutate service config, or claim residency.
+- The chat UI Lens client now parses the new `prerequisite_bringup` object, and
+  the Stage 6 status panel renders the current prerequisite gap, next operator
+  action, and command mode without executing the command.
+
+Latest validation for the Stage 6 Lens prerequisite bring-up status projection:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_persistent_supervision_plan_readback_blocks_without_authority -q --tb=short`
+  Result: `passed; 1 test completed`
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed; 2 files already formatted`
+- `npm run test -- src/lens/index.test.ts`
+  Result: `passed; 107 Node tests completed`
+- `npm run build`
+  Result: `passed; Vite built 45 modules`
+- `python -c "import json; from francis.lens.status import lens_status; s=lens_status(limit=3); p=s['stage6_readiness']['prerequisite_bringup']; print(json.dumps({'status': p.get('status'), 'current_truthful_gap': p.get('current_truthful_gap'), 'first_missing': p.get('current_first_missing_requirement'), 'first_missing_gap': p.get('current_first_missing_truthful_gap'), 'next_action': p.get('next_operator_action', {}).get('id'), 'next_route': p.get('next_operator_action', {}).get('route'), 'command_mode': p.get('next_operator_command', {}).get('mode'), 'requires_confirmation': p.get('next_operator_command', {}).get('requires_confirmation'), 'write': p.get('governance', {}).get('approval_request_write'), 'mutation': p.get('governance', {}).get('mutation_authority_granted')}, indent=2))"`
+  Result: `completed; status=blocked; current_truthful_gap=persistent_supervision_required_prerequisites_missing; first_missing=resident_host_process; first_missing_gap=resident_host_process_not_supervised; next_action=request_resident_runtime_execution_authority; next_route=/lens/resident-runtime/authority-grant/request; command_mode=RequestNext; requires_confirmation=true; write=false; mutation=false`
+
+Stage 6 Lens prerequisite bring-up next-action UI affordance on `2026-05-18`:
+
+- The chat UI Lens client now derives a typed Stage 6 prerequisite bring-up
+  presentation from `stage6_readiness.prerequisite_bringup`, including the
+  current truthful gap, first missing requirement, next action route, command
+  mode, and governance/no-mutation flags.
+- The Stage 6 status panel now exposes a guarded
+  `Request next prerequisite authority` button only when the status projection
+  says the next action is `request_resident_runtime_execution_authority`, the
+  route is `/lens/resident-runtime/authority-grant/request`, command mode is
+  `RequestNext`, and the read-only/diagnostic/plan/no-mutation guards are all
+  true.
+- The button reuses the existing governed resident-runtime authority request
+  route. This slice did not click the button and did not create an approval
+  request, grant authority, execute a resident runtime, write memory, mutate
+  service config, or claim persistent supervision.
+
+Latest validation for the Stage 6 Lens prerequisite bring-up next-action UI
+affordance:
+
+- `npm run test -- src/lens/index.test.ts`
+  Result: `passed; 107 Node tests completed`
+- `npm run build`
+  Result: `passed; Vite built 45 modules`
+
+Stage 6 Lens prerequisite bring-up resident-host next-action UI sequence on
+`2026-05-18`:
+
+- The chat UI Stage 6 prerequisite presentation now recognizes the full
+  resident-host next-action sequence emitted by `/lens/status`: resident runtime
+  authority request, resident runtime authority grant, host supervision
+  authority request, host supervision authority grant, and bounded supervised
+  resident host start.
+- The Stage 6 status panel now renders the exact next-action button for that
+  sequence from `stage6_readiness.prerequisite_bringup.next_operator_action`,
+  reusing existing governed UI mutations for each step and preserving the
+  status projection as the source of truth.
+- This slice did not click any next-action button and did not create an
+  approval request, grant authority, execute a resident runtime, write memory,
+  mutate service config, or claim persistent supervision.
+
+Latest validation for the Stage 6 Lens prerequisite bring-up resident-host
+next-action UI sequence:
+
+- `npm run test -- src/lens/index.test.ts`
+  Result: `passed; 107 Node tests completed`
+- `npm run build`
+  Result: `passed; Vite built 45 modules`
+
+Stage 6 Lens prerequisite bring-up surface next-action UI sequence on
+`2026-05-18`:
+
+- The chat UI Stage 6 prerequisite presentation now recognizes the remaining
+  prerequisite surface families emitted by `/lens/status`: `tray_presence`,
+  `global_hotkey_binding`, `overlay_window`, and `summon_binding`.
+- The Stage 6 status panel now renders the exact request, grant, or execute
+  button for those surface families from
+  `stage6_readiness.prerequisite_bringup.next_operator_action`, reusing the
+  existing governed tray, OS-binding, overlay, and summon UI actions.
+- This slice did not click any next-action button and did not create an
+  approval request, grant authority, execute a tray/hotkey/overlay/summon
+  action, write memory, mutate service config, or claim persistent supervision.
+
+Latest validation for the Stage 6 Lens prerequisite bring-up surface
+next-action UI sequence:
+
+- `npm run test -- src/lens/index.test.ts`
+  Result: `passed; 107 Node tests completed`
+- `npm run build`
+  Result: `passed; Vite built 45 modules`
+
+Stage 6 Lens persistent-supervision enablement next-action projection on
+`2026-05-18`:
+
+- `/lens/status` Stage 6 prerequisite bring-up now selects the current
+  persistent-supervision enablement next action once prerequisite surfaces are
+  ready, instead of always pointing at the first enablement request.
+- The chat UI Stage 6 prerequisite panel now recognizes the projected
+  persistent-supervision sequence: request enablement authority, grant
+  enablement authority, request execution authority, grant execution authority,
+  and apply the persistent-supervision enablement.
+- The OS-binding authority request readback now exposes its direct
+  `readback_ready` contract so `/lens/status` can truthfully project the same
+  OS-binding request-readback readiness that `/lens/os-binding/readiness`
+  already derived.
+- This slice did not click any next-action button and did not create an
+  approval request, grant authority, apply persistent-supervision config,
+  execute persistent supervision, write memory, or claim persistent
+  supervision.
+
+Latest validation for the Stage 6 Lens persistent-supervision enablement
+next-action projection:
+
+- `python -m pytest tests\test_api_lens.py::test_stage6_prerequisite_bringup_selects_persistent_enablement_next_actions tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q --tb=short`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\status.py src\francis\lens\os_binding_authority.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py src\francis\lens\os_binding_authority.py tests\test_api_lens.py`
+  Result: `passed; 3 files already formatted`
+- `npm run test -- src/lens/index.test.ts`
+  Result: `passed; 107 Node tests completed`
+- `npm run build`
+  Result: `passed; Vite built 45 modules`
+- `python -c "import json; from francis.lens.status import lens_status; s=lens_status(limit=3); p=s['stage6_readiness']['prerequisite_bringup']; print(json.dumps({'status': p.get('status'), 'current_truthful_gap': p.get('current_truthful_gap'), 'first_missing': p.get('current_first_missing_requirement'), 'next_action': p.get('next_operator_action', {}).get('id'), 'next_route': p.get('next_operator_action', {}).get('route'), 'command_mode': p.get('next_operator_command', {}).get('mode'), 'operator_sequence_first': (p.get('operator_sequence') or [{}])[0].get('id')}, indent=2))"`
+  Result: `passed; readback remained blocked on resident_host_process with next action request_resident_runtime_execution_authority`
+
+Stage 6 Lens prerequisite bring-up script summon authority alignment on
+`2026-05-18`:
+
+- `scripts/lens-stage6-prerequisite-bringup-plan.ps1` now uses the canonical
+  `lens.summon.action_authority` approval action for the summon-binding fallback
+  path, matching the `/lens/summon/authority/request` contract and the
+  `/lens/status` summon authority readback.
+- `tests/test_lens_stage6_prerequisite_bringup_plan_script.py` now asserts the
+  summon-binding action id so the governed bring-up script cannot drift back to
+  the wrong approval action string.
+- This slice did not run `RequestNext`, `GrantNext`, or `ExecuteNext` against
+  live data, did not create approval requests, did not grant authority, did not
+  execute summon, did not write memory, and did not claim persistent
+  supervision.
+
+Latest validation for the Stage 6 Lens prerequisite bring-up script summon
+authority alignment:
+
+- `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py -q --tb=short`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed`
+- `powershell -NoProfile -Command '$tokens = $null; $parseErrors = $null; [System.Management.Automation.Language.Parser]::ParseFile("D:\Francis\scripts\lens-stage6-prerequisite-bringup-plan.ps1", [ref]$tokens, [ref]$parseErrors) | Out-Null; if ($parseErrors.Count -gt 0) { foreach ($e in $parseErrors) { Write-Output $e.Message }; exit 1 }'`
+  Result: `passed`
+- `.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status`
+  Result: `passed; status=blocked; current_truthful_gap=persistent_supervision_required_prerequisites_missing; current_first_missing_requirement=resident_host_process; next_operator_command.mode=RequestNext`
+
+Stage 6 Lens next-action UI confirmation boundary on `2026-05-18`:
+
+- The chat UI Stage 6 prerequisite next-action button group now honors
+  `stage6_readiness.prerequisite_bringup.next_operator_command.requires_confirmation`
+  before any projected next-action button calls its governed route.
+- The confirmation prompt names the projected command mode and next action id,
+  and includes the exact status-projected script command when present. This
+  keeps the UI action path aligned with the
+  `scripts/lens-stage6-prerequisite-bringup-plan.ps1` confirmation contract
+  without changing backend authority semantics.
+- This slice did not click any Stage 6 next-action button and did not create an
+  approval request, grant authority, execute a prerequisite action, apply
+  persistent supervision, write memory, or claim persistent supervision.
+
+Latest validation for the Stage 6 Lens next-action UI confirmation boundary:
+
+- `npm run test -- src/lens/index.test.ts`
+  Result: `passed; 107 Node tests completed`
+- `npm run build`
+  Result: `passed; Vite built 45 modules`
+
+Stage 6 Lens next-action confirmation prompt helper on `2026-05-18`:
+
+- `apps/chat_ui/src/lens/index.ts` now exports a tested
+  `stage6PrerequisiteConfirmationMessage` helper for
+  `stage6_readiness.prerequisite_bringup` presentation readbacks, so the HUD
+  confirmation prompt derives from the same Lens contract object as the
+  next-action button eligibility.
+- `apps/chat_ui/src/App.tsx` now uses that helper inside the existing
+  `requires_confirmation` click-capture guard before any Stage 6 prerequisite
+  next-action button calls its governed route.
+- `apps/chat_ui/src/lens/index.test.ts` now asserts the prompt includes the
+  projected command mode, next action id, and exact script command when present,
+  with a fallback message when those fields are missing.
+- This slice did not click any Stage 6 next-action button and did not create an
+  approval request, grant authority, execute a prerequisite action, apply
+  persistent supervision, write memory, or claim persistent supervision.
+
+Latest validation for the Stage 6 Lens next-action confirmation prompt helper:
+
+- `npm run test -- src/lens/index.test.ts`
+  Result: `passed; 107 Node tests completed`
+- `npm run build`
+  Result: `passed; Vite built 45 modules`
+- `git diff --check`
+  Result: `passed; existing PowerShell LF-to-CRLF warnings remained for
+  scripts/lens-persistent-supervision-plan.ps1,
+  scripts/lens-stage6-completion-audit.ps1, and
+  scripts/lens-surface-plan-consumption-proof.ps1`
+
+Stage 6 Lens prerequisite operator-sequence visibility on `2026-05-18`:
+
+- The chat UI Lens presentation now preserves
+  `stage6_readiness.prerequisite_bringup.operator_sequence` as typed,
+  read-only sequence items with route, approval action, live effect,
+  operator-supplied value, execution/mutation, and current-step markers.
+- The Stage 6 status panel now renders that prerequisite sequence before the
+  guarded next-action button group, making the full blocked operator path
+  visible without granting or executing anything.
+- `apps/chat_ui/src/lens/index.test.ts` now asserts the existing single-item
+  fixture readback and a multi-step prerequisite sequence so the UI contract
+  cannot silently collapse the planned operator chain back to only the first
+  action.
+- This slice did not click any Stage 6 next-action button and did not create an
+  approval request, grant authority, execute a prerequisite action, apply
+  persistent supervision, write memory, or claim persistent supervision.
+
+Latest validation for the Stage 6 Lens prerequisite operator-sequence
+visibility:
+
+- `npm run test -- src/lens/index.test.ts`
+  Result: `passed; 107 Node tests completed`
+- `npm run build`
+  Result: `passed; Vite built 45 modules`
+- `git diff --check`
+  Result: `passed; existing PowerShell LF-to-CRLF warnings remained for
+  scripts/lens-persistent-supervision-plan.ps1,
+  scripts/lens-stage6-completion-audit.ps1, and
+  scripts/lens-surface-plan-consumption-proof.ps1`
+
+Stage 6 Lens prerequisite operator-sequence command previews on `2026-05-18`:
+
+- `/lens/status` now annotates each
+  `stage6_readiness.prerequisite_bringup.operator_sequence` item with its
+  `operator_command`, including the governed bring-up script command, mode,
+  confirmation requirement, approval-id requirement, and approval-decision
+  requirement.
+- `scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status` now emits
+  the same `operator_command` preview for each read-only operator-sequence
+  item, keeping the Python status contract and runbook JSON aligned.
+- The chat UI Lens parser and Stage 6 panel now preserve and render those
+  command previews from contract data, without recreating command strings in
+  the UI.
+- This slice did not click any Stage 6 next-action button and did not create an
+  approval request, grant authority, execute a prerequisite action, apply
+  persistent supervision, write memory, or claim persistent supervision.
+
+Latest validation for the Stage 6 Lens prerequisite operator-sequence command
+previews:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_plan_projects_ordered_governed_sequence -q --tb=short`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed; 3 files already formatted`
+- `npm run test -- src/lens/index.test.ts`
+  Result: `passed; 107 Node tests completed`
+- `npm run build`
+  Result: `passed; Vite built 45 modules`
+- `powershell -NoProfile -Command '$tokens = $null; $parseErrors = $null; [System.Management.Automation.Language.Parser]::ParseFile("D:\Francis\scripts\lens-stage6-prerequisite-bringup-plan.ps1", [ref]$tokens, [ref]$parseErrors) | Out-Null; if ($parseErrors.Count -gt 0) { foreach ($e in $parseErrors) { Write-Output $e.Message }; exit 1 }'`
+  Result: `passed`
+- `python -c "import json; from francis.lens.status import lens_status; p=lens_status(limit=3)['stage6_readiness']['prerequisite_bringup']; print(json.dumps([{'id': x.get('id'), 'mode': x.get('operator_command', {}).get('mode'), 'command': x.get('operator_command', {}).get('command'), 'requires_confirmation': x.get('operator_command', {}).get('requires_confirmation')} for x in (p.get('operator_sequence') or [])], indent=2))"`
+  Result: `passed; five read-only prerequisite sequence items projected
+  RequestNext command previews with requires_confirmation=true`
+- `git diff --check`
+  Result: `passed; existing PowerShell LF-to-CRLF warnings remained for
+  scripts/lens-persistent-supervision-plan.ps1,
+  scripts/lens-stage6-completion-audit.ps1, and
+  scripts/lens-surface-plan-consumption-proof.ps1`
+
+Stage 6 Lens prerequisite command availability truth on `2026-05-18`:
+
+- `/lens/status` and `scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode
+  Status` now mark each operator-sequence `operator_command` with
+  `available_now`, `preview_only`, and `availability_reason`.
+- The current `next_operator_action` command is marked `available_now=true`
+  with reason `current_next_operator_action`; future sequence items are marked
+  `preview_only=true` with reason
+  `future_step_waiting_on_prior_prerequisites`.
+- The chat UI Lens parser and Stage 6 panel now preserve and render that
+  availability state, so repeated `RequestNext` command previews are not
+  mistaken for direct commands against future prerequisite surfaces.
+- This slice did not click any Stage 6 next-action button and did not create an
+  approval request, grant authority, execute a prerequisite action, apply
+  persistent supervision, write memory, or claim persistent supervision.
+
+Latest validation for the Stage 6 Lens prerequisite command availability truth:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_plan_projects_ordered_governed_sequence -q --tb=short`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed; 3 files already formatted`
+- `npm run test -- src/lens/index.test.ts`
+  Result: `passed; 107 Node tests completed`
+- `npm run build`
+  Result: `passed; Vite built 45 modules`
+- `powershell -NoProfile -Command '$tokens = $null; $parseErrors = $null; [System.Management.Automation.Language.Parser]::ParseFile("D:\Francis\scripts\lens-stage6-prerequisite-bringup-plan.ps1", [ref]$tokens, [ref]$parseErrors) | Out-Null; if ($parseErrors.Count -gt 0) { foreach ($e in $parseErrors) { Write-Output $e.Message }; exit 1 }'`
+  Result: `passed`
+- `python -c "import json; from francis.lens.status import lens_status; p=lens_status(limit=3)['stage6_readiness']['prerequisite_bringup']; print(json.dumps([{'id': x.get('id'), 'available_now': x.get('operator_command', {}).get('available_now'), 'preview_only': x.get('operator_command', {}).get('preview_only'), 'reason': x.get('operator_command', {}).get('availability_reason')} for x in (p.get('operator_sequence') or [])], indent=2))"`
+  Result: `passed; resident-runtime request available now; tray, hotkey,
+  overlay, and summon request commands preview-only until prior prerequisites
+  resolve`
+- `git diff --check`
+  Result: `passed; existing PowerShell LF-to-CRLF warnings remained for
+  scripts/lens-persistent-supervision-plan.ps1,
+  scripts/lens-stage6-completion-audit.ps1, and
+  scripts/lens-surface-plan-consumption-proof.ps1`
+
+Stage 6 Lens prerequisite command availability consistency check on
+`2026-05-18`:
+
+- `/lens/status` now emits
+  `stage6_readiness.prerequisite_bringup.operator_sequence_command_availability`
+  with available-now count, preview-only count, sequence length, and truthful
+  boolean.
+- `/lens/status` and `scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode
+  Status` now include an `operator_sequence_command_availability` check. The
+  check passes only when exactly one operator-sequence command is available now
+  and every other sequence command is preview-only.
+- This turns the command-availability distinction into an auditable contract
+  rather than a passive UI label.
+- This slice did not click any Stage 6 next-action button and did not create an
+  approval request, grant authority, execute a prerequisite action, apply
+  persistent supervision, write memory, or claim persistent supervision.
+
+Latest validation for the Stage 6 Lens prerequisite command availability
+consistency check:
+
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_plan_projects_ordered_governed_sequence -q --tb=short`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed; 3 files already formatted`
+- `powershell -NoProfile -Command '$tokens = $null; $parseErrors = $null; [System.Management.Automation.Language.Parser]::ParseFile("D:\Francis\scripts\lens-stage6-prerequisite-bringup-plan.ps1", [ref]$tokens, [ref]$parseErrors) | Out-Null; if ($parseErrors.Count -gt 0) { foreach ($e in $parseErrors) { Write-Output $e.Message }; exit 1 }'`
+  Result: `passed`
+- `python -c "import json; from francis.lens.status import lens_status; p=lens_status(limit=3)['stage6_readiness']['prerequisite_bringup']; print(json.dumps({'summary': p.get('operator_sequence_command_availability'), 'check': [c for c in p.get('checks', []) if c.get('id') == 'operator_sequence_command_availability']}, indent=2))"`
+  Result: `passed; summary available_now_count=1, preview_only_count=4,
+  sequence_length=5, truthful=true; check status=truthful, passed=true`
+- `git diff --check`
+  Result: `passed; existing PowerShell LF-to-CRLF warnings remained for
+  scripts/lens-persistent-supervision-plan.ps1,
+  scripts/lens-stage6-completion-audit.ps1, and
+  scripts/lens-surface-plan-consumption-proof.ps1`
+
+Stage 6 Lens prerequisite command availability summary in UI on
+`2026-05-18`:
+
+- The chat UI Lens parser now preserves
+  `stage6_readiness.prerequisite_bringup.operator_sequence_command_availability`
+  as a typed presentation summary.
+- The Stage 6 Lens panel now renders the command-availability summary beside
+  the prerequisite sequence: truthful/unchecked, available-now count,
+  preview-only count, and reported sequence length.
+- `apps/chat_ui/src/lens/index.test.ts` now asserts both the single-step
+  fixture summary and a five-step sequence summary so the UI does not drop the
+  backend availability consistency readback.
+- This slice did not click any Stage 6 next-action button and did not create an
+  approval request, grant authority, execute a prerequisite action, apply
+  persistent supervision, write memory, or claim persistent supervision.
+
+Latest validation for the Stage 6 Lens prerequisite command availability
+summary in UI:
+
+- `npm run test -- src/lens/index.test.ts`
+  Result: `passed; 107 Node tests completed`
+- `npm run build`
+  Result: `passed; Vite built 45 modules`
+- `git diff --check`
+  Result: `passed; existing PowerShell LF-to-CRLF warnings remained for
+  scripts/lens-persistent-supervision-plan.ps1,
+  scripts/lens-stage6-completion-audit.ps1, and
+  scripts/lens-surface-plan-consumption-proof.ps1`
+
+Stage 6 Lens prerequisite command availability check in UI on
+`2026-05-18`:
+
+- The chat UI Lens presentation now preserves the
+  `operator_sequence_command_availability` check from
+  `stage6_readiness.prerequisite_bringup.checks`, including id, status,
+  passed flag, evidence, and reason.
+- The Stage 6 Lens panel now renders the command-availability check status,
+  passed flag, and reason next to the prerequisite sequence summary.
+- `apps/chat_ui/src/lens/index.test.ts` now asserts that the check survives
+  parsing and presentation, so the operator-facing UI does not silently drop
+  the backend audit reason.
+- This slice did not click any Stage 6 next-action button and did not create an
+  approval request, grant authority, execute a prerequisite action, apply
+  persistent supervision, write memory, or claim persistent supervision.
+
+Latest validation for the Stage 6 Lens prerequisite command availability check
+in UI:
+
+- `npm run test -- src/lens/index.test.ts`
+  Result: `passed; 107 Node tests completed`
+- `npm run build`
+  Result: `passed; Vite built 45 modules`
+- `git diff --check`
+  Result: `passed; existing PowerShell LF-to-CRLF warnings remained for
+  scripts/lens-persistent-supervision-plan.ps1,
+  scripts/lens-stage6-completion-audit.ps1, and
+  scripts/lens-surface-plan-consumption-proof.ps1`
+
+Stage 6 Lens prerequisite check list in UI on `2026-05-18`:
+
+- The chat UI Lens panel now renders the full typed
+  `stage6_readiness.prerequisite_bringup.checks` list as read-only
+  prerequisite check rows with a pass count.
+- The rows preserve each check id, status, passed flag, and reason so the
+  operator can inspect all backend bring-up checks instead of only the
+  command-availability check.
+- `apps/chat_ui/src/lens/index.test.ts` now asserts the parsed check list so
+  the operator-facing UI cannot silently drop backend bring-up checks.
+- This slice did not click any Stage 6 next-action button and did not create an
+  approval request, grant authority, execute a prerequisite action, apply
+  persistent supervision, write memory, or claim persistent supervision.
+
+Latest validation for the Stage 6 Lens prerequisite check list in UI:
+
+- `npm run test -- src/lens/index.test.ts`
+  Result: `passed; 107 Node tests completed`
+- `npm run build`
+  Result: `passed; Vite built 45 modules`
+- `git diff --check`
+  Result: `passed; existing PowerShell LF-to-CRLF warnings remained for
+  scripts/lens-persistent-supervision-plan.ps1,
+  scripts/lens-stage6-completion-audit.ps1, and
+  scripts/lens-surface-plan-consumption-proof.ps1`
+
+Stage 6 Lens prerequisite-ready enablement handoff label on `2026-05-18`:
+
+- `/lens/status` now labels the Stage 6 prerequisite bring-up
+  `next_operator_action_requirement` as
+  `persistent_supervision_enablement` once all required prerequisite surfaces
+  are ready.
+- `tests/test_api_lens.py` now directly covers that all-prerequisites-ready
+  readback: status `ready`, no missing prerequisites, current truthful gap
+  from the persistent-supervision plan, and next action
+  `request_persistent_supervision_enablement_authority`.
+- The live readback remains blocked on `resident_host_process` today; this
+  slice only hardens the future handoff once the prerequisite chain is walked.
+- This slice did not run `RequestNext`, `GrantNext`, or `ExecuteNext`, did not
+  create approval requests, grant authority, execute a prerequisite action,
+  apply persistent supervision, write memory, or claim persistent supervision.
+
+Latest validation for the Stage 6 Lens prerequisite-ready enablement handoff
+label:
+
+- `python -m pytest tests\test_api_lens.py::test_stage6_prerequisite_bringup_labels_enablement_requirement_when_prerequisites_ready tests\test_api_lens.py::test_stage6_prerequisite_bringup_selects_persistent_enablement_next_actions -q --tb=short`
+  Result: `passed; 2 tests`
+- `python -m pytest tests\test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q --tb=short`
+  Result: `passed`
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py`
+  Result: `passed; 2 files already formatted`
+- `python -c "import json; from francis.lens.status import lens_status; p=lens_status(limit=3)['stage6_readiness']['prerequisite_bringup']; print(json.dumps({'status':p.get('status'),'next_operator_action_requirement':p.get('next_operator_action_requirement'),'next_action':p.get('next_operator_action',{}).get('id'),'current_first_missing_requirement':p.get('current_first_missing_requirement')}, indent=2))"`
+  Result: `passed; live readback status=blocked,
+  next_operator_action_requirement=resident_host_process,
+  next_action=request_resident_runtime_execution_authority`
+- `git diff --check`
+  Result: `passed; existing PowerShell LF-to-CRLF warnings remained for
+  scripts/lens-persistent-supervision-plan.ps1,
+  scripts/lens-stage6-completion-audit.ps1, and
+  scripts/lens-surface-plan-consumption-proof.ps1`
+
+Stage 6 Lens prerequisite bring-up resident-to-tray handoff proof on
+`2026-05-18`:
+
+- `tests/test_lens_stage6_prerequisite_bringup_plan_script.py` now proves that
+  after a temp-data `ExecuteNext` completes the bounded resident-host
+  execution, the follow-up `Status` projection advances
+  `next_operator_action_requirement` and `current_first_missing_requirement`
+  from `resident_host_process` to `tray_presence`.
+- The same proof asserts the next action becomes
+  `request_tray_presence_authority`, with the expected `RequestNext` command,
+  rather than leaving the runbook stuck on the already-executed resident-host
+  step.
+- This slice used only pytest temp data. It did not run `RequestNext`,
+  `GrantNext`, or `ExecuteNext` against live data, did not create live approval
+  requests, grant live authority, execute a live prerequisite action, apply
+  persistent supervision, write memory, or claim persistent supervision.
+
+Latest validation for the Stage 6 Lens prerequisite bring-up resident-to-tray
+handoff proof:
+
+- `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_execute_next_runs_only_current_bounded_execution -q --tb=short`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py -q --tb=short`
+  Result: `passed; 8 tests`
+- `python -m ruff check tests\test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed; 1 file already formatted`
+- `python -c "import json; from francis.lens.status import lens_status; p=lens_status(limit=3)['stage6_readiness']['prerequisite_bringup']; print(json.dumps({'status':p.get('status'),'next_operator_action_requirement':p.get('next_operator_action_requirement'),'next_action':p.get('next_operator_action',{}).get('id'),'current_first_missing_requirement':p.get('current_first_missing_requirement')}, indent=2))"`
+  Result: `passed; live readback remained blocked on
+  resident_host_process with next action
+  request_resident_runtime_execution_authority`
+- `git diff --check`
+  Result: `passed; existing PowerShell LF-to-CRLF warnings remained for
+  scripts/lens-persistent-supervision-plan.ps1,
+  scripts/lens-stage6-completion-audit.ps1, and
+  scripts/lens-surface-plan-consumption-proof.ps1`
+
+Stage 6 Lens prerequisite bring-up tray-to-hotkey handoff proof on
+`2026-05-18`:
+
+- `src/francis/lens/host_manifest.py` now reads runtime PID files with
+  `utf-8-sig`, matching the PID files written by PowerShell `Set-Content
+  -Encoding UTF8`. This keeps a live tray runtime from being misread as PID
+  `0` and reported as stale during Stage 6 manifest readback.
+- `tests/test_lens_stage6_prerequisite_bringup_plan_script.py` now proves that
+  after temp-data resident-host and tray `ExecuteNext` steps, follow-up
+  `Status` advances `next_operator_action_requirement` and
+  `current_first_missing_requirement` from `tray_presence` to
+  `global_hotkey_binding`.
+- `tests/test_lens_tray_runtime_readback.py` now covers the BOM-PID manifest
+  readback path directly so the tray runtime cannot regress back to a stale
+  PID mismatch.
+- This slice used pytest temp data for execution-path proof and did not run
+  `RequestNext`, `GrantNext`, or `ExecuteNext` against live data, did not grant
+  live authority, did not apply persistent supervision, write memory, or claim
+  persistent supervision.
+
+Latest validation for the Stage 6 Lens prerequisite bring-up tray-to-hotkey
+handoff proof:
+
+- `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_tray_execution_advances_to_hotkey tests\test_lens_tray_runtime_readback.py -q --tb=short`
+  Result: `passed; 3 tests`
+- `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py tests\test_lens_tray_runtime_readback.py -q --tb=short`
+  Result: `passed; 11 tests`
+- `python -m ruff check tests\test_lens_stage6_prerequisite_bringup_plan_script.py tests\test_lens_tray_runtime_readback.py src\francis\lens\host_manifest.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_prerequisite_bringup_plan_script.py tests\test_lens_tray_runtime_readback.py src\francis\lens\host_manifest.py`
+  Result: `passed; 3 files already formatted`
+- `.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,current_truthful_gap,current_first_missing_requirement,next_operator_action_requirement,next_operator_command | ConvertTo-Json -Depth 6`
+  Result: `passed; live readback remained blocked on
+  resident_host_process with next action
+  request_resident_runtime_execution_authority`
+- `git diff --check`
+  Result: `passed; existing PowerShell LF-to-CRLF warnings remained for
+  scripts/lens-persistent-supervision-plan.ps1,
+  scripts/lens-stage6-completion-audit.ps1, and
+  scripts/lens-surface-plan-consumption-proof.ps1`
+
+Stage 6 Lens prerequisite bring-up hotkey-to-overlay handoff proof on
+`2026-05-18`:
+
+- `scripts/lens-hotkey-binding.ps1` now preserves an explicitly cleared
+  `blocked_reason` in config overrides, allowing governed hotkey binding
+  execution to consume an authority-granted override instead of restoring the
+  default blocked configuration.
+- `/lens/os-binding/authority/requests` now exposes the active authority grant
+  and its approval id alongside the active grant receipt id. The `/lens/status`
+  Stage 6 prerequisite projection now reads that active grant shape so
+  `execute_global_hotkey_binding` command previews include the real approval id
+  instead of the placeholder or an empty value.
+- `tests/test_lens_stage6_prerequisite_bringup_plan_script.py` now proves that
+  after temp-data resident-host, tray, and global-hotkey `ExecuteNext` steps,
+  follow-up `Status` advances `next_operator_action_requirement` and
+  `current_first_missing_requirement` from `global_hotkey_binding` to
+  `overlay_window`.
+- This slice used pytest temp data for execution-path proof and did not run
+  `RequestNext`, `GrantNext`, or `ExecuteNext` against live data, did not grant
+  live authority, did not start a live hotkey binding from the operator
+  runbook, did not apply persistent supervision, write memory, or claim
+  persistent supervision.
+
+Latest validation for the Stage 6 Lens prerequisite bring-up
+hotkey-to-overlay handoff proof:
+
+- `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_hotkey_execution_advances_to_overlay -q --tb=short`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py tests\test_lens_tray_runtime_readback.py tests\test_api_lens.py::test_stage6_prerequisite_bringup_surface_execute_action_uses_active_authority_grant tests\test_api_lens_os_binding_authority.py::test_lens_os_binding_authority_grant_writes_receipt_without_binding tests\test_lens_hotkey_binding_script.py -q --tb=short`
+  Result: `passed; 18 tests`
+- `python -m ruff check tests\test_lens_stage6_prerequisite_bringup_plan_script.py tests\test_lens_tray_runtime_readback.py tests\test_api_lens.py tests\test_api_lens_os_binding_authority.py src\francis\lens\host_manifest.py src\francis\lens\status.py src\francis\lens\os_binding_authority.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_prerequisite_bringup_plan_script.py tests\test_lens_tray_runtime_readback.py tests\test_api_lens.py tests\test_api_lens_os_binding_authority.py src\francis\lens\host_manifest.py src\francis\lens\status.py src\francis\lens\os_binding_authority.py`
+  Result: `passed; 7 files already formatted`
+- `.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,current_truthful_gap,current_first_missing_requirement,next_operator_action_requirement,next_operator_command | ConvertTo-Json -Depth 6`
+  Result: `passed; live readback remained blocked on
+  resident_host_process with next action
+  request_resident_runtime_execution_authority`
+- `git diff --check`
+  Result: `passed; existing PowerShell LF-to-CRLF warnings remained for
+  scripts/lens-hotkey-binding.ps1,
+  scripts/lens-persistent-supervision-plan.ps1,
+  scripts/lens-stage6-completion-audit.ps1, and
+  scripts/lens-surface-plan-consumption-proof.ps1`
+
+Stage 6 Lens prerequisite bring-up overlay, summon, and enablement handoff
+proof on `2026-05-18`:
+
+- `tests/test_lens_stage6_prerequisite_bringup_plan_script.py` now proves that
+  after temp-data resident-host, tray, global-hotkey, and overlay `ExecuteNext`
+  steps, follow-up `Status` advances from `overlay_window` to `summon_binding`.
+- The same temp-data proof now executes the bounded summon handoff and advances
+  follow-up `Status` to the persistent-supervision enablement sequence with
+  `next_operator_action_requirement=persistent_supervision_enablement` and the
+  next command still restricted to an explicit `RequestNext`.
+- `src/francis/lens/summon_authority.py` no longer passes the summon runtime
+  state path as the command-palette status input; the command-palette bridge now
+  consumes the normal Lens status readback, and the summon action still writes
+  its own bounded runtime state afterward.
+- `src/francis/lens/activation.py` now forwards the requested bounded
+  `run_seconds` into the resident supervision start path, and
+  `scripts/lens-host-supervisor.ps1` accepts the same 60-second cap used by the
+  Stage 6 prerequisite runbook. This removes the false stale-resident failures
+  in chained temp-data proofs without claiming live persistent supervision.
+- The prerequisite runbook self-check now treats an empty
+  `first_missing_requirement_handoff` as valid only when every required
+  prerequisite is ready, so the ready-for-enablement state does not fail the
+  first-missing handoff guard.
+- The prerequisite test file now stops temp-data resident, tray, hotkey, and
+  overlay runtimes after each test, preventing leaked test processes and global
+  hotkey collisions across proof runs.
+- This slice used pytest temp data only. It did not run live `RequestNext`,
+  `GrantNext`, or `ExecuteNext`; did not grant live authority; did not apply
+  persistent supervision; did not write memory; and did not claim a persistent
+  resident host.
+
+Latest validation for the Stage 6 Lens prerequisite bring-up overlay, summon,
+and enablement handoff proof:
+
+- `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_summon_execution_advances_to_enablement -q --tb=short`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py tests\test_lens_tray_runtime_readback.py -q --tb=short`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_summon_execute_records_bounded_handoff_without_summon_anywhere_claim tests\test_api_lens.py::test_stage6_prerequisite_bringup_labels_enablement_requirement_when_prerequisites_ready tests\test_lens_hotkey_binding_script.py -q --tb=short`
+  Result: `passed; 6 tests`
+- `python -m ruff check tests\test_lens_stage6_prerequisite_bringup_plan_script.py tests\test_lens_tray_runtime_readback.py tests\test_api_lens.py tests\test_api_lens_os_binding_authority.py src\francis\lens\host_manifest.py src\francis\lens\status.py src\francis\lens\os_binding_authority.py src\francis\lens\summon_authority.py src\francis\lens\activation.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_prerequisite_bringup_plan_script.py tests\test_lens_tray_runtime_readback.py tests\test_api_lens.py tests\test_api_lens_os_binding_authority.py src\francis\lens\host_manifest.py src\francis\lens\status.py src\francis\lens\os_binding_authority.py src\francis\lens\summon_authority.py src\francis\lens\activation.py`
+  Result: `passed; 9 files already formatted`
+- PowerShell parser check for
+  `scripts\lens-stage6-prerequisite-bringup-plan.ps1`,
+  `scripts\lens-host-supervisor.ps1`, `scripts\lens-hotkey-binding.ps1`,
+  `scripts\lens-persistent-supervision-plan.ps1`,
+  `scripts\lens-stage6-completion-audit.ps1`, and
+  `scripts\lens-surface-plan-consumption-proof.ps1`
+  Result: `passed; parsed=6; errors=0`
+- `.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,current_truthful_gap,current_first_missing_requirement,next_operator_action_requirement,next_operator_command | ConvertTo-Json -Depth 6`
+  Result: `passed; live readback remained blocked on
+  resident_host_process with current_truthful_gap
+  persistent_supervision_required_prerequisites_missing and next action
+  request_resident_runtime_execution_authority`
+- Test-run Lens process cleanup check:
+  `Get-CimInstance Win32_Process` filtered to `D:\Francis` Lens scripts under
+  `data\test_runs\pytest`
+  Result: `passed; remaining=0`
+- `git diff --check`
+  Result: `passed; existing PowerShell LF-to-CRLF warnings remained for
+  scripts/lens-host-supervisor.ps1, scripts/lens-hotkey-binding.ps1,
+  scripts/lens-persistent-supervision-plan.ps1,
+  scripts/lens-stage6-completion-audit.ps1, and
+  scripts/lens-surface-plan-consumption-proof.ps1`
+
+Stage 6 Lens prerequisite bring-up persistent-supervision enablement apply
+proof on `2026-05-18`:
+
+- `scripts/lens-stage6-prerequisite-bringup-plan.ps1` now carries the
+  persistent-supervision enablement sequence past the first request action. It
+  reads the existing authority request/grant readbacks and advances
+  `RequestNext`, `GrantNext`, and `ExecuteNext` through enablement authority,
+  execution authority, and the bounded service-config apply action.
+- The bring-up runbook now accepts an explicit `-ServiceConfigPath` override
+  for temp-proof execution. `src/francis/lens/activation.py` and
+  `src/francis/lens/host_manifest.py` honor the same override so apply and
+  post-apply readback use the same service-config target.
+- `tests/test_lens_stage6_prerequisite_bringup_plan_script.py` now proves the
+  governed path from completed summon prerequisites into enablement authority,
+  execution authority, and `apply_persistent_supervision_enablement` against a
+  temp service config. The test asserts the temp config is updated, live
+  `config/runtime/services/lens-host.json` bytes are unchanged, no live service
+  install/control authority is granted, no memory is written, and no resident
+  claim is made.
+- The prerequisite helper now polls the next truthful runbook action after
+  bounded runtime steps instead of assuming the first status readback is already
+  stable.
+- This slice did not run live `RequestNext`, `GrantNext`, or `ExecuteNext`; did
+  not grant live authority; did not apply persistent supervision to the live
+  service config; did not write memory; and did not claim a persistent resident
+  host. Live posture remains blocked on `resident_host_process`.
+
+Latest validation for the Stage 6 Lens prerequisite bring-up
+persistent-supervision enablement apply proof:
+
+- `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_config_only -q --tb=short`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py -q --tb=short`
+  Result: `passed`
+- `python -m pytest tests\test_api_lens.py::test_stage6_prerequisite_bringup_selects_persistent_enablement_next_actions tests\test_api_lens.py::test_lens_persistent_supervision_enablement_execution_request_requires_enablement_authority_grant -q --tb=short`
+  Result: `passed; 2 tests`
+- `python -m ruff check src\francis\lens\activation.py src\francis\lens\host_manifest.py tests\test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\activation.py src\francis\lens\host_manifest.py tests\test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed; 3 files already formatted`
+- PowerShell parser check for
+  `scripts\lens-stage6-prerequisite-bringup-plan.ps1`
+  Result: `passed; errors=0`
+- `.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,current_truthful_gap,current_first_missing_requirement,next_operator_action_requirement,next_operator_command | ConvertTo-Json -Depth 6`
+  Result: `passed; live readback remained blocked on
+  resident_host_process with current_truthful_gap
+  persistent_supervision_required_prerequisites_missing and next action
+  request_resident_runtime_execution_authority`
+- Test-run Lens process cleanup check:
+  `Get-CimInstance Win32_Process` filtered to `D:\Francis` Lens scripts under
+  `data\test_runs\pytest`
+  Result: `passed; remaining=0`
+- `git diff --check`
+  Result: `passed; existing PowerShell LF-to-CRLF warnings remained for
+  scripts/lens-host-supervisor.ps1, scripts/lens-hotkey-binding.ps1,
+  scripts/lens-persistent-supervision-plan.ps1,
+  scripts/lens-stage6-completion-audit.ps1, and
+  scripts/lens-surface-plan-consumption-proof.ps1`
+
+Stage 6 Lens completion-audit prerequisite bring-up plan readback on
+`2026-05-18`:
+
+- `scripts/lens-stage6-completion-audit.ps1` now runs
+  `scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status` as an
+  explicit child readback. The audit requires the runbook to remain read-only,
+  non-mutating, approval-decision-free, memory-write-free, and
+  resident-claim-free before `stage6_completion_reviewed` can be true.
+- The completion audit now projects the bring-up plan into
+  `stage6_prerequisite_bringup_plan` and exposes
+  `governance.stage6_prerequisite_bringup_plan_readback`.
+- When the current truthful gap remains
+  `persistent_supervision_required_prerequisites_missing`, the recommended
+  handoff now points at the operator runbook:
+  `scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status`, with the
+  next action `request_resident_runtime_execution_authority` for
+  `resident_host_process`.
+- The audit readback accepts the two truthful resident-host sub-states seen
+  around bounded diagnostics: `resident_host_process_not_supervised` before the
+  bounded supervision proof, and `resident_supervision_not_persistent` after the
+  audit has observed a bounded supervised candidate. Both still keep the
+  persistent-supervision prerequisite gap blocked.
+
+Latest validation for the Stage 6 Lens completion-audit prerequisite bring-up
+plan readback:
+
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_consumes_stage6_prerequisite_bringup_plan_readback -q --tb=short`
+  Result: `passed`
+- PowerShell parser check for
+  `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed; errors=0`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q --tb=short`
+  Result: `passed; 35 passed, 1 skipped`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 1 file already formatted`
+- `.\scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 120 | ConvertFrom-Json | Select-Object status,stage_state,ready_to_close,next_smallest_truthful_gap,stage6_completion_reviewed,recommended_handoff_source,recommended_next_slice,recommended_proof_script,@{Name='bringup_readback';Expression={$_.governance.stage6_prerequisite_bringup_plan_readback}},@{Name='bringup_gap';Expression={$_.stage6_prerequisite_bringup_plan.current_first_missing_truthful_gap}},@{Name='bringup_action';Expression={$_.stage6_prerequisite_bringup_plan.next_operator_action.id}},@{Name='bringup_requirement';Expression={$_.stage6_prerequisite_bringup_plan.next_operator_action_requirement}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=blocked, stage_state=active, ready_to_close=false,
+  next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing,
+  stage6_completion_reviewed=true,
+  recommended_handoff_source=stage6_prerequisite_bringup_operator_plan,
+  recommended_next_slice=run_stage6_prerequisite_bringup_request_next_for_resident_host_process,
+  recommended_proof_script=scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status,
+  bringup_readback=true, bringup_gap=resident_supervision_not_persistent,
+  bringup_action=request_resident_runtime_execution_authority, and
+  bringup_requirement=resident_host_process`
+
+Stage 6 Lens next-handoff prerequisite bring-up runbook readback on
+`2026-05-18`:
+
+- `scripts/lens-stage6-next-handoff.ps1` now consumes
+  `scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status` as an
+  explicit read-only operator-plan readback.
+- The next-handoff proof now keeps the primary recommendation aligned with the
+  completion audit when the active gap is
+  `persistent_supervision_required_prerequisites_missing`:
+  `recommended_handoff_source=stage6_prerequisite_bringup_operator_plan`,
+  `recommended_next_slice=run_stage6_prerequisite_bringup_request_next_for_resident_host_process`,
+  and `recommended_proof_script=scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status`.
+- Lower-level readbacks, including activation execution handoffs and
+  receipt-backed/fresh resident runtime candidate handoffs, remain present in
+  the payload, but they no longer supersede the governed prerequisite runbook
+  as the operator's next Stage 6 handoff while required prerequisites are still
+  missing.
+- The payload now exposes the runbook handoff, next operator action, next
+  operator command, command availability, and
+  `governance.stage6_prerequisite_bringup_plan_readback` without granting
+  execution, approval-decision, process-supervision, service-control,
+  receipt-write, resident-claim, memory-write, or mutation authority.
+
+Latest validation for the Stage 6 Lens next-handoff prerequisite bring-up
+runbook readback:
+
+- PowerShell parser check for
+  `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed; errors=0`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q --tb=short`
+  Result: `passed; 5 tests`
+- `python -m ruff check tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 1 file already formatted`
+- `.\scripts\lens-stage6-next-handoff.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,recommended_handoff_source,recommended_next_slice,recommended_proof_script,authority_required,next_operator_action_requirement,@{Name='action';Expression={$_.next_operator_action.id}},@{Name='command_mode';Expression={$_.next_operator_command.mode}},@{Name='bringup_readback';Expression={$_.governance.stage6_prerequisite_bringup_plan_readback}},@{Name='candidate';Expression={$_.resident_runtime_candidate_handoff_observed}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed,
+  next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing,
+  recommended_handoff_source=stage6_prerequisite_bringup_operator_plan,
+  recommended_next_slice=run_stage6_prerequisite_bringup_request_next_for_resident_host_process,
+  recommended_proof_script=scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status,
+  authority_required=resident_host_process_tray_hotkey_overlay_and_summon_prerequisites,
+  next_operator_action_requirement=resident_host_process,
+  action=request_resident_runtime_execution_authority,
+  command_mode=RequestNext, bringup_readback=true, candidate=false`
+
+Stage 6 Lens prerequisite bring-up actor-scope readiness readback on
+`2026-05-18`:
+
+- `scripts/lens-stage6-prerequisite-bringup-plan.ps1` now projects
+  `next_operator_actor_scope_readiness` for the next governed operator action.
+  The readback checks the supplied `-Actor` against
+  `FRANCIS_API_ACTOR_SCOPES` through the API permission gate and names the
+  required `system.write` scope for the
+  `/lens/resident-runtime/authority-grant/request` route.
+- The bring-up runbook now emits a
+  `next_operator_actor_scope_readiness` check and governance fields
+  `actor_scope_readback`, `next_operator_actor_ready`, and
+  `operator_actor_required`. This keeps the runbook from implying that
+  `RequestNext` is executable when the operator has not supplied an actor or
+  the shell has no actor-scope policy configured.
+- `scripts/lens-stage6-next-handoff.ps1` now carries the same actor-scope
+  readiness readback into the handoff payload, runbook handoff, embedded
+  prerequisite plan, and
+  `governance.stage6_prerequisite_bringup_actor_scope_readback`.
+- This slice did not request authority, grant authority, execute the next
+  action, mutate service configuration, write memory, claim a resident host,
+  or alter the live Stage 6 gap. Live posture remains blocked on
+  `persistent_supervision_required_prerequisites_missing`.
+
+Latest validation for the Stage 6 Lens prerequisite bring-up actor-scope
+readiness readback:
+
+- `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py -q --tb=short`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q --tb=short`
+  Result: `passed; 5 tests`
+- `python -m ruff check tests\test_lens_stage6_prerequisite_bringup_plan_script.py tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_prerequisite_bringup_plan_script.py tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 2 files already formatted`
+- PowerShell parser checks for
+  `scripts\lens-stage6-prerequisite-bringup-plan.ps1` and
+  `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed; errors=0`
+- `.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,current_truthful_gap,next_operator_action_requirement,@{Name='action';Expression={$_.next_operator_action.id}},@{Name='actor_ready';Expression={$_.next_operator_actor_scope_readiness.ready}},@{Name='actor_reason';Expression={$_.next_operator_actor_scope_readiness.reason}},@{Name='policy';Expression={$_.next_operator_actor_scope_readiness.configured_actor_scope_policy}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=blocked,
+  current_truthful_gap=persistent_supervision_required_prerequisites_missing,
+  next_operator_action_requirement=resident_host_process,
+  action=request_resident_runtime_execution_authority, actor_ready=false,
+  actor_reason=actor_not_supplied, policy=false`
+- `.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status -Actor codex.stage6 | ConvertFrom-Json | Select-Object status,@{Name='actor_ready';Expression={$_.next_operator_actor_scope_readiness.ready}},@{Name='actor_reason';Expression={$_.next_operator_actor_scope_readiness.reason}},@{Name='policy';Expression={$_.next_operator_actor_scope_readiness.configured_actor_scope_policy}},@{Name='scope_count';Expression={$_.next_operator_actor_scope_readiness.evidence.actor_scope_count}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=blocked, actor_ready=false,
+  actor_reason=missing_scopes, policy=false, scope_count=0`
+- `.\scripts\lens-stage6-next-handoff.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,recommended_handoff_source,@{Name='actor_ready';Expression={$_.next_operator_actor_scope_readiness.ready}},@{Name='actor_reason';Expression={$_.next_operator_actor_scope_readiness.reason}},@{Name='actor_readback';Expression={$_.governance.stage6_prerequisite_bringup_actor_scope_readback}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed,
+  next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing,
+  recommended_handoff_source=stage6_prerequisite_bringup_operator_plan,
+  actor_ready=false, actor_reason=actor_not_supplied, actor_readback=true`
+
+Stage 6 Lens prerequisite bring-up approval-wait actor-scope readback on
+`2026-05-18`:
+
+- `scripts/lens-stage6-prerequisite-bringup-plan.ps1` now treats read-only
+  `await_*` approval-wait actions as actor-scope `not_required` instead of
+  reporting a false missing `system.write` actor. Request, grant, execute, and
+  apply boundaries still report `scope_required=true` and require a scoped
+  actor through `FRANCIS_API_ACTOR_SCOPES`.
+- `next_operator_actor_scope_readiness` now includes the `action_id` and
+  `scope_required` fields so operator surfaces can distinguish a blocked write
+  boundary from a read-only wait/status handoff.
+- `scripts/lens-stage6-next-handoff.ps1` continues to carry the same readiness
+  object through the handoff payload. Its current live readback still points to
+  `request_resident_runtime_execution_authority`, so actor scope remains
+  required for the live next action.
+- This slice used a temp data directory to prove the request-to-wait transition.
+  It did not write a live approval request, grant authority, execute a runtime
+  action, mutate service configuration, write memory, claim a resident host, or
+  close Stage 6.
+
+Latest validation for the Stage 6 Lens prerequisite bring-up approval-wait
+actor-scope readback:
+
+- `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_plan_projects_ordered_governed_sequence tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_plan_reports_actor_scope_readiness tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_request_next_creates_only_next_approval_request -q --tb=short`
+  Result: `passed; 3 tests`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q --tb=short`
+  Result: `passed; 5 tests`
+- `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py -q --tb=short`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_prerequisite_bringup_plan_script.py tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_prerequisite_bringup_plan_script.py tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 2 files already formatted`
+- PowerShell parser checks for
+  `scripts\lens-stage6-prerequisite-bringup-plan.ps1` and
+  `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed; errors=0`
+- Temp-data runtime proof with
+  `FRANCIS_API_ACTOR_SCOPES={"codex.stage6":["system.write"]}` and
+  `.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode RequestNext -DataDir <temp> -Actor codex.stage6 -ConfirmRequest`
+  followed by `-Mode Status -DataDir <temp>`
+  Result: `passed; request_status=approval_requested,
+  request_action=request_resident_runtime_execution_authority,
+  request_actor_ready=true,
+  followup_action=await_resident_runtime_execution_authority_approval,
+  followup_command_mode=Status, followup_actor_ready=true,
+  followup_actor_reason=not_required, followup_scope_required=false,
+  followup_method=GET`
+- `.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,current_truthful_gap,next_operator_action_requirement,@{Name='action';Expression={$_.next_operator_action.id}},@{Name='actor_ready';Expression={$_.next_operator_actor_scope_readiness.ready}},@{Name='actor_reason';Expression={$_.next_operator_actor_scope_readiness.reason}},@{Name='scope_required';Expression={$_.next_operator_actor_scope_readiness.scope_required}},@{Name='policy';Expression={$_.next_operator_actor_scope_readiness.configured_actor_scope_policy}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=blocked,
+  current_truthful_gap=persistent_supervision_required_prerequisites_missing,
+  next_operator_action_requirement=resident_host_process,
+  action=request_resident_runtime_execution_authority, actor_ready=false,
+  actor_reason=actor_not_supplied, scope_required=true, policy=false`
+- `.\scripts\lens-stage6-next-handoff.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,recommended_handoff_source,@{Name='action';Expression={$_.next_operator_action.id}},@{Name='actor_ready';Expression={$_.next_operator_actor_scope_readiness.ready}},@{Name='actor_reason';Expression={$_.next_operator_actor_scope_readiness.reason}},@{Name='scope_required';Expression={$_.next_operator_actor_scope_readiness.scope_required}},@{Name='actor_readback';Expression={$_.governance.stage6_prerequisite_bringup_actor_scope_readback}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed,
+  next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing,
+  recommended_handoff_source=stage6_prerequisite_bringup_operator_plan,
+  action=request_resident_runtime_execution_authority, actor_ready=false,
+  actor_reason=actor_not_supplied, scope_required=true, actor_readback=true`
+
+Stage 6 Lens next-handoff approval-wait label readback on `2026-05-18`:
+
+- `scripts/lens-stage6-next-handoff.ps1` now labels post-request approval waits
+  as `run_stage6_prerequisite_bringup_approval_wait_for_<requirement>`
+  instead of collapsing them to a generic Status handoff. The operator command
+  remains the read-only
+  `scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status`.
+- `tests/test_lens_stage6_next_handoff_script.py` now proves the temp-data
+  request-to-wait transition end-to-end: a scoped temp `RequestNext` creates
+  only the resident-runtime authority request, then the next-handoff proof reads
+  the same temp data and recommends the approval-wait handoff with
+  `next_operator_actor_scope_readiness.reason=not_required`.
+- This slice did not write a live approval request, grant authority, execute a
+  runtime action, mutate service configuration, write memory, claim a resident
+  host, or close Stage 6. Live posture remains blocked on the unrequested
+  `request_resident_runtime_execution_authority` action.
+
+Latest validation for the Stage 6 Lens next-handoff approval-wait label
+readback:
+
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_names_approval_wait_after_request -q --tb=short`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q --tb=short`
+  Result: `passed; 6 tests`
+- `python -m ruff check tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 1 file already formatted`
+- PowerShell parser check for
+  `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed; errors=0`
+- `.\scripts\lens-stage6-next-handoff.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,next_smallest_truthful_gap,recommended_handoff_source,recommended_next_slice,@{Name='action';Expression={$_.next_operator_action.id}},@{Name='command_mode';Expression={$_.next_operator_command.mode}},@{Name='actor_ready';Expression={$_.next_operator_actor_scope_readiness.ready}},@{Name='actor_reason';Expression={$_.next_operator_actor_scope_readiness.reason}},@{Name='scope_required';Expression={$_.next_operator_actor_scope_readiness.scope_required}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed,
+  next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing,
+  recommended_handoff_source=stage6_prerequisite_bringup_operator_plan,
+  recommended_next_slice=run_stage6_prerequisite_bringup_request_next_for_resident_host_process,
+  action=request_resident_runtime_execution_authority,
+  command_mode=RequestNext, actor_ready=false,
+  actor_reason=actor_not_supplied, scope_required=true`
+
+Stage 6 Lens prerequisite bring-up actor-policy format readback on
+`2026-05-18`:
+
+- `scripts/lens-stage6-prerequisite-bringup-plan.ps1` now includes a structured
+  `actor_scope_policy_contract` under `next_operator_actor_scope_readiness`.
+  The contract names `FRANCIS_API_ACTOR_SCOPES`, the JSON shape
+  `{"<actor>":["system.write"]}`, the required scope, the `<actor>` placeholder,
+  whether scope is required for the current action, and a PowerShell setup
+  example.
+- The contract is emitted for both write boundaries and read-only `await_*`
+  handoffs. Write boundaries report `scope_required=true`; approval waits report
+  `scope_required=false`.
+- `scripts/lens-stage6-next-handoff.ps1` carries the same structured contract
+  through the handoff payload so operator surfaces can render the expected
+  actor-policy format without guessing or parsing prose.
+- This slice did not write a live approval request, grant authority, execute a
+  runtime action, mutate service configuration, write memory, claim a resident
+  host, or close Stage 6. Live posture remains blocked on the unrequested
+  `request_resident_runtime_execution_authority` action.
+
+Latest validation for the Stage 6 Lens prerequisite bring-up actor-policy
+format readback:
+
+- `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_plan_projects_ordered_governed_sequence tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_plan_reports_actor_scope_readiness tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_request_next_creates_only_next_approval_request -q --tb=short`
+  Result: `passed; 3 tests`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_distills_closure_readback_without_authority tests\test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_names_approval_wait_after_request -q --tb=short`
+  Result: `passed; 2 tests`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q --tb=short`
+  Result: `passed; 6 tests`
+- `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py -q --tb=short`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_prerequisite_bringup_plan_script.py tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_prerequisite_bringup_plan_script.py tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 2 files already formatted`
+- PowerShell parser checks for
+  `scripts\lens-stage6-prerequisite-bringup-plan.ps1` and
+  `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed; errors=0`
+- `.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,current_truthful_gap,next_operator_action_requirement,@{Name='action';Expression={$_.next_operator_action.id}},@{Name='actor_ready';Expression={$_.next_operator_actor_scope_readiness.ready}},@{Name='actor_reason';Expression={$_.next_operator_actor_scope_readiness.reason}},@{Name='policy_env';Expression={$_.next_operator_actor_scope_readiness.actor_scope_policy_contract.env_var}},@{Name='policy_scope_required';Expression={$_.next_operator_actor_scope_readiness.actor_scope_policy_contract.scope_required}},@{Name='policy_example';Expression={$_.next_operator_actor_scope_readiness.actor_scope_policy_contract.powershell_example}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=blocked,
+  current_truthful_gap=persistent_supervision_required_prerequisites_missing,
+  next_operator_action_requirement=resident_host_process,
+  action=request_resident_runtime_execution_authority,
+  actor_ready=false, actor_reason=actor_not_supplied,
+  policy_env=FRANCIS_API_ACTOR_SCOPES, policy_scope_required=true`
+- `.\scripts\lens-stage6-next-handoff.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,recommended_next_slice,@{Name='action';Expression={$_.next_operator_action.id}},@{Name='actor_ready';Expression={$_.next_operator_actor_scope_readiness.ready}},@{Name='actor_reason';Expression={$_.next_operator_actor_scope_readiness.reason}},@{Name='policy_env';Expression={$_.next_operator_actor_scope_readiness.actor_scope_policy_contract.env_var}},@{Name='policy_scope_required';Expression={$_.next_operator_actor_scope_readiness.actor_scope_policy_contract.scope_required}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed,
+  recommended_next_slice=run_stage6_prerequisite_bringup_request_next_for_resident_host_process,
+  action=request_resident_runtime_execution_authority,
+  actor_ready=false, actor_reason=actor_not_supplied,
+  policy_env=FRANCIS_API_ACTOR_SCOPES, policy_scope_required=true`
+
+Stage 6 Lens prerequisite bring-up pending approval wait identity readback on
+`2026-05-18`:
+
+- `scripts/lens-stage6-prerequisite-bringup-plan.ps1` now includes pending
+  approval identity on read-only `await_*` actions: `pending_approval_count`,
+  `pending_approval_id`, `decision_route`, `request_status`, and
+  `approval_decision_required=true`.
+- The pending approval ID is derived from the existing approval request
+  readback and is not invented by the script. If no pending request exists, the
+  normal live next action remains a write-boundary request action with no
+  pending approval ID.
+- `tests/test_lens_stage6_prerequisite_bringup_plan_script.py` and
+  `tests/test_lens_stage6_next_handoff_script.py` now prove that a temp-data
+  scoped `RequestNext` writes only the request, and the follow-up Status and
+  next-handoff payload both carry the same pending approval ID for the
+  operator-decision wait.
+- This slice did not write a live approval request, grant authority, execute a
+  runtime action, mutate service configuration, write memory, claim a resident
+  host, or close Stage 6. Live posture remains blocked on the unrequested
+  `request_resident_runtime_execution_authority` action.
+
+Latest validation for the Stage 6 Lens prerequisite bring-up pending approval
+wait identity readback:
+
+- `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_request_next_creates_only_next_approval_request -q --tb=short`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_names_approval_wait_after_request -q --tb=short`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q --tb=short`
+  Result: `passed; 6 tests`
+- `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py -q --tb=short`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_prerequisite_bringup_plan_script.py tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_prerequisite_bringup_plan_script.py tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 2 files already formatted`
+- PowerShell parser checks for
+  `scripts\lens-stage6-prerequisite-bringup-plan.ps1` and
+  `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed; errors=0`
+- Temp-data runtime proof with
+  `FRANCIS_API_ACTOR_SCOPES={"codex.stage6":["system.write"]}` and
+  `.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode RequestNext -DataDir <temp> -Actor codex.stage6 -ConfirmRequest`
+  followed by both bring-up Status and next-handoff Status readbacks
+  Result: `passed; request_status=approval_requested,
+  followup_action=await_resident_runtime_execution_authority_approval,
+  followup_pending_id matched request_approval_id, followup_pending_count=1,
+  followup_decision_route=/approvals/decision,
+  handoff_next_slice=run_stage6_prerequisite_bringup_approval_wait_for_resident_host_process,
+  handoff_pending_id matched request_approval_id, handoff_pending_count=1`
+- `.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,current_truthful_gap,next_operator_action_requirement,@{Name='action';Expression={$_.next_operator_action.id}},@{Name='pending_id';Expression={$_.next_operator_action.pending_approval_id}},@{Name='pending_count';Expression={$_.next_operator_action.pending_approval_count}},@{Name='actor_ready';Expression={$_.next_operator_actor_scope_readiness.ready}},@{Name='actor_reason';Expression={$_.next_operator_actor_scope_readiness.reason}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=blocked,
+  current_truthful_gap=persistent_supervision_required_prerequisites_missing,
+  next_operator_action_requirement=resident_host_process,
+  action=request_resident_runtime_execution_authority, pending_id=null,
+  pending_count=null, actor_ready=false, actor_reason=actor_not_supplied`
+
+Stage 6 Lens prerequisite bring-up approval decision contract readback on
+`2026-05-18`:
+
+- Read-only `await_*` actions in
+  `scripts/lens-stage6-prerequisite-bringup-plan.ps1` now expose an
+  `approval_decision_contract` beside the pending approval identity. The
+  contract names `/approvals/decision`, method `POST`, payload shape
+  `{id, action, comment, actor}`, allowed actions `approve`, `reject`, and
+  `emergency`, required scope `approvals.decide`, the matching
+  `FRANCIS_API_ACTOR_SCOPES` JSON shape, and the local-caller/remote-enable
+  guard.
+- The contract is explicitly marked `would_decide_approval=false`; it is
+  decision readback for operator surfaces, not an approval action. The bring-up
+  script still creates no approval decision from `Status` mode.
+- `scripts/lens-stage6-next-handoff.ps1` carries the same contract through the
+  Stage 6 handoff payload when a temp-data scoped request is pending, so the
+  operator can see the exact decision route and actor-scope requirement without
+  guessing from prose.
+- This slice did not write a live approval request, make an approval decision,
+  grant authority, execute a runtime action, mutate service configuration,
+  write memory, claim a resident host, or close Stage 6. Live posture remains
+  blocked on the unrequested `request_resident_runtime_execution_authority`
+  action.
+
+Latest validation for the Stage 6 Lens prerequisite bring-up approval decision
+contract readback:
+
+- `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_request_next_creates_only_next_approval_request -q --tb=short`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_names_approval_wait_after_request -q --tb=short`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py -q --tb=short`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q --tb=short`
+  Result: `passed; 6 tests`
+- `python -m ruff check tests\test_lens_stage6_prerequisite_bringup_plan_script.py tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_prerequisite_bringup_plan_script.py tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 2 files already formatted`
+- PowerShell parser checks for
+  `scripts\lens-stage6-prerequisite-bringup-plan.ps1` and
+  `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed; errors=0`
+- Temp-data runtime proof with
+  `FRANCIS_API_ACTOR_SCOPES={"codex.stage6":["system.write"]}` and
+  `.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode RequestNext -DataDir <temp> -Actor codex.stage6 -ConfirmRequest`
+  followed by both bring-up Status and next-handoff Status readbacks
+  Result: `passed; request_status=approval_requested,
+  followup_action=await_resident_runtime_execution_authority_approval,
+  followup_contract_route=/approvals/decision,
+  followup_contract_scope=approvals.decide,
+  followup_contract_id matched request_approval_id,
+  followup_would_decide=false,
+  handoff_contract_route=/approvals/decision,
+  handoff_contract_id matched request_approval_id,
+  handoff_would_decide=false`
+- `.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,current_truthful_gap,next_operator_action_requirement,@{Name='action';Expression={$_.next_operator_action.id}},@{Name='pending';Expression={$_.next_operator_action.pending_approval_count}},@{Name='actor_ready';Expression={$_.next_operator_actor_scope_readiness.ready}},@{Name='actor_reason';Expression={$_.next_operator_actor_scope_readiness.reason}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=blocked,
+  current_truthful_gap=persistent_supervision_required_prerequisites_missing,
+  next_operator_action_requirement=resident_host_process,
+  action=request_resident_runtime_execution_authority,
+  pending=null, actor_ready=false, actor_reason=actor_not_supplied`
+- `.\scripts\lens-stage6-next-handoff.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,recommended_next_slice,next_operator_action_requirement,@{Name='action';Expression={$_.next_operator_action.id}},@{Name='pending';Expression={$_.next_operator_action.pending_approval_count}},@{Name='approval_wait';Expression={$_.approval_wait}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed,
+  recommended_next_slice=run_stage6_prerequisite_bringup_request_next_for_resident_host_process,
+  next_operator_action_requirement=resident_host_process,
+  action=request_resident_runtime_execution_authority,
+  pending=null, approval_wait=null`
+
+Stage 6 Lens prerequisite bring-up approval decision command preview on
+`2026-05-18`:
+
+- Read-only `await_*` actions in
+  `scripts/lens-stage6-prerequisite-bringup-plan.ps1` now include an
+  `approval_decision_command` preview next to the existing
+  `approval_decision_contract`. The preview includes the default local API base
+  URL, `/approvals/decision`, method `POST`, the same pending approval ID
+  payload shape, required `approvals.decide` scope, local-caller/remote-enable
+  guard, and a PowerShell `Invoke-RestMethod` example.
+- The preview distinguishes command semantics from readback semantics:
+  `would_decide_approval_if_run=true`, while
+  `status_readback_would_decide_approval=false`. `Status` mode still does not
+  make approval decisions.
+- `next_operator_command` for approval waits now carries that nested decision
+  command preview while keeping the script command itself at read-only
+  `Mode Status`. The Stage 6 next-handoff carries the same nested preview when
+  a temp-data scoped approval request is pending.
+- This slice did not write a live approval request, make an approval decision,
+  grant authority, execute a runtime action, mutate service configuration,
+  write memory, claim a resident host, or close Stage 6. Live posture remains
+  blocked on the unrequested `request_resident_runtime_execution_authority`
+  action.
+
+Latest validation for the Stage 6 Lens prerequisite bring-up approval decision
+command preview:
+
+- `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_request_next_creates_only_next_approval_request -q --tb=short`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_names_approval_wait_after_request -q --tb=short`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q --tb=short`
+  Result: `passed; 6 tests`
+- `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py -q --tb=short`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_prerequisite_bringup_plan_script.py tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_prerequisite_bringup_plan_script.py tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 2 files already formatted`
+- PowerShell parser checks for
+  `scripts\lens-stage6-prerequisite-bringup-plan.ps1` and
+  `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed; errors=0`
+- Temp-data runtime proof with
+  `FRANCIS_API_ACTOR_SCOPES={"codex.stage6":["system.write"]}` and
+  `.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode RequestNext -DataDir <temp> -Actor codex.stage6 -ConfirmRequest`
+  followed by both bring-up Status and next-handoff Status readbacks
+  Result: `passed; request_status=approval_requested,
+  followup_action=await_resident_runtime_execution_authority_approval,
+  followup_command_route=/approvals/decision,
+  followup_command_id matched request_approval_id,
+  followup_command_scope=approvals.decide,
+  followup_command_would_decide_if_run=true,
+  followup_status_would_decide=false,
+  next_operator_command_has_decision_command=true,
+  handoff_command_route=/approvals/decision,
+  handoff_command_id matched request_approval_id,
+  handoff_command_would_decide_if_run=true,
+  handoff_status_would_decide=false`
+- `.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,current_truthful_gap,next_operator_action_requirement,@{Name='action';Expression={$_.next_operator_action.id}},@{Name='pending';Expression={$_.next_operator_action.pending_approval_count}},@{Name='actor_ready';Expression={$_.next_operator_actor_scope_readiness.ready}},@{Name='actor_reason';Expression={$_.next_operator_actor_scope_readiness.reason}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=blocked,
+  current_truthful_gap=persistent_supervision_required_prerequisites_missing,
+  next_operator_action_requirement=resident_host_process,
+  action=request_resident_runtime_execution_authority,
+  pending=null, actor_ready=false, actor_reason=actor_not_supplied`
+- `.\scripts\lens-stage6-next-handoff.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,recommended_next_slice,next_operator_action_requirement,@{Name='action';Expression={$_.next_operator_action.id}},@{Name='pending';Expression={$_.next_operator_action.pending_approval_count}},@{Name='approval_wait';Expression={$_.approval_wait}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed,
+  recommended_next_slice=run_stage6_prerequisite_bringup_request_next_for_resident_host_process,
+  next_operator_action_requirement=resident_host_process,
+  action=request_resident_runtime_execution_authority,
+  pending=null, approval_wait=null`
+
+Stage 6 Lens prerequisite bring-up approval request command preview on
+`2026-05-18`:
+
+- `request_*` actions in
+  `scripts/lens-stage6-prerequisite-bringup-plan.ps1` now include an
+  `approval_request_contract` that names the existing API route, method
+  `POST`, action id, approval action, payload shape `{actor, reason}`,
+  required `system.write` scope, and the matching
+  `FRANCIS_API_ACTOR_SCOPES` shape.
+- The same request actions now include an `approval_request_command` preview
+  with the default local API base URL and a PowerShell `Invoke-RestMethod`
+  example. This preview is nested into `next_operator_command` for current
+  request boundaries, while the script command remains
+  `.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode RequestNext
+  -Actor <actor> -ConfirmRequest`.
+- The contract/command split is explicit: the readback contract reports
+  `would_request_approval=false`, while the preview reports
+  `would_request_approval_if_run=true` and
+  `status_readback_would_request_approval=false`.
+- This slice did not write a live approval request, make an approval decision,
+  grant authority, execute a runtime action, mutate service configuration,
+  write memory, claim a resident host, or close Stage 6. Live posture remains
+  blocked on the unrequested `request_resident_runtime_execution_authority`
+  action.
+
+Latest validation for the Stage 6 Lens prerequisite bring-up approval request
+command preview:
+
+- `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_plan_projects_ordered_governed_sequence tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_plan_reports_actor_scope_readiness -q --tb=short`
+  Result: `passed; 2 tests`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_distills_closure_readback_without_authority -q --tb=short`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q --tb=short`
+  Result: `passed; 6 tests`
+- `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py -q --tb=short`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_prerequisite_bringup_plan_script.py tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_prerequisite_bringup_plan_script.py tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 2 files already formatted`
+- PowerShell parser check for
+  `scripts\lens-stage6-prerequisite-bringup-plan.ps1`
+  Result: `passed; errors=0`
+- Runtime readback with
+  `.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status` and
+  `.\scripts\lens-stage6-next-handoff.ps1 -Mode Status`
+  Result: `passed; status=blocked,
+  current_truthful_gap=persistent_supervision_required_prerequisites_missing,
+  action=request_resident_runtime_execution_authority,
+  request_contract_route=/lens/resident-runtime/authority-grant/request,
+  request_contract_scope=system.write,
+  request_contract_would_request=false,
+  request_command_route=/lens/resident-runtime/authority-grant/request,
+  request_command_scope=system.write,
+  request_command_would_request_if_run=true,
+  status_readback_would_request=false,
+  next_operator_command_has_request_command=true,
+  handoff_status=proof_passed,
+  handoff_action=request_resident_runtime_execution_authority,
+  handoff_request_command_route=/lens/resident-runtime/authority-grant/request,
+  handoff_request_command_would_request_if_run=true`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

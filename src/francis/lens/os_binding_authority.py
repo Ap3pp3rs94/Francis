@@ -2163,6 +2163,7 @@ def lens_os_binding_authority_request_readback(*, limit: int = 5) -> dict[str, A
     grants = lens_os_binding_authority_grant_receipts(limit=1, active_only=True)
     active_grant = _as_dict(grants.get("active_latest"))
     active_grant_id = _safe_str(active_grant.get("receipt_id")).strip()
+    active_grant_approval_id = _safe_str(active_grant.get("approval_id")).strip()
     authority_granted = bool(active_grant)
     status, next_step = _readback_status(counts, authority_granted=authority_granted)
     latest = latest_items[0] if latest_items else None
@@ -2170,6 +2171,7 @@ def lens_os_binding_authority_request_readback(*, limit: int = 5) -> dict[str, A
         "ok": True,
         "kind": "lens.os_binding.command_palette_binding_authority.request_readback",
         "status": status,
+        "readback_ready": True,
         "route": LENS_OS_BINDING_AUTHORITY_REQUESTS_ROUTE,
         "authority_route": LENS_OS_BINDING_AUTHORITY_ROUTE,
         "request_route": LENS_OS_BINDING_AUTHORITY_REQUEST_ROUTE,
@@ -2180,6 +2182,9 @@ def lens_os_binding_authority_request_readback(*, limit: int = 5) -> dict[str, A
         "readiness_route": LENS_OS_BINDING_READINESS_ROUTE,
         "plan_route": LENS_OS_BINDING_PLAN_ROUTE,
         "active_grant_receipt_id": active_grant_id,
+        "active_grant_approval_id": active_grant_approval_id,
+        "active_approval_id": active_grant_approval_id,
+        "active_authority_grant": active_grant,
         "decision_route": "/approvals/decision",
         "approval_action": LENS_OS_BINDING_AUTHORITY_REQUEST_ACTION,
         "authority_required": "os_level_command_palette_binding_authority",
@@ -2208,6 +2213,7 @@ def lens_os_binding_authority_request_readback(*, limit: int = 5) -> dict[str, A
             "gate": "lens_os_binding_command_palette_authority_request_readback",
             "authority_grant_receipts_route": LENS_OS_BINDING_AUTHORITY_GRANTS_ROUTE,
             "active_grant_receipt_id": active_grant_id,
+            "active_grant_approval_id": active_grant_approval_id,
             "authority_granted": authority_granted,
             "os_level_command_palette_binding_authority": authority_granted,
             "next_step": next_step,

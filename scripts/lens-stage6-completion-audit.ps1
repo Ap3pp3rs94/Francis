@@ -253,6 +253,7 @@ $PersistentSupervisionEnablementAuthorityProofScript = Join-Path $PSScriptRoot '
 $PersistentSupervisionExecutionAuthorityProofScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-execution-authority-proof.ps1'
 $PersistentSupervisionResidentClaimBoundaryProofScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-resident-claim-boundary-proof.ps1'
 $PersistentSupervisionEnablementTransitionPlanProofScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-enablement-transition-plan-proof.ps1'
+$Stage6PrerequisiteBringupPlanScript = Join-Path $PSScriptRoot 'lens-stage6-prerequisite-bringup-plan.ps1'
 $SummonAnywhereBlockersProofScript = Join-Path $PSScriptRoot 'lens-summon-anywhere-blockers-proof.ps1'
 $SummonAuthorityBlockerProofScript = Join-Path $PSScriptRoot 'lens-summon-authority-blocker-proof.ps1'
 $SummonAnywhereFamilyChainProofScript = Join-Path $PSScriptRoot 'lens-summon-anywhere-family-chain-proof.ps1'
@@ -499,7 +500,7 @@ $PersistentSupervisionPlanObserved = (
   -not [bool]$PersistentSupervisionPlan.persistent_supervision_ready -and
   -not [bool]$PersistentSupervisionPlan.resident_claim_allowed
 )
-$PersistentSupervisionPrerequisitesProofChildTimeoutSeconds = [Math]::Max($ChildProofTimeoutSeconds, 240)
+$PersistentSupervisionPrerequisitesProofChildTimeoutSeconds = [Math]::Min($ChildProofTimeoutSeconds, 240)
 $PersistentSupervisionPrerequisitesProofTimeoutSeconds = (
   $PersistentSupervisionPrerequisitesProofChildTimeoutSeconds
 ) + 60
@@ -581,6 +582,83 @@ $PersistentSupervisionPrerequisitesProofObserved = (
   -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.memory_write -and
   -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.resident_claim_authority -and
   -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.mutation_authority_granted
+)
+$Stage6PrerequisiteBringupPlanResult = Invoke-JsonScript `
+  -PowerShellPath $PowerShell.Source `
+  -ScriptPath $Stage6PrerequisiteBringupPlanScript `
+  -ScriptArgs @('-Mode', 'Status')
+$Stage6PrerequisiteBringupPlan = $Stage6PrerequisiteBringupPlanResult.payload
+$Stage6PrerequisiteBringupPlanGovernance = $Stage6PrerequisiteBringupPlan.governance
+$Stage6PrerequisiteBringupPlanRequiredBeforeEnable = ConvertTo-StringArray -Value $Stage6PrerequisiteBringupPlan.required_before_enable
+$Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable = ConvertTo-StringArray -Value $Stage6PrerequisiteBringupPlan.missing_required_before_enable
+$Stage6PrerequisiteBringupPlanNextOperatorAction = $Stage6PrerequisiteBringupPlan.next_operator_action
+$Stage6PrerequisiteBringupPlanNextOperatorCommand = $Stage6PrerequisiteBringupPlan.next_operator_command
+$Stage6PrerequisiteBringupPlanCommandAvailability = $Stage6PrerequisiteBringupPlan.operator_sequence_command_availability
+$Stage6PrerequisiteBringupPlanAllowedFirstMissingTruthfulGaps = @(
+  'resident_host_process_not_supervised',
+  'resident_supervision_not_persistent'
+)
+$Stage6PrerequisiteBringupPlanObserved = (
+  [int]$Stage6PrerequisiteBringupPlanResult.exit_code -eq 0 -and
+  [string]$Stage6PrerequisiteBringupPlan.kind -eq 'lens.stage6.prerequisite_bringup.plan' -and
+  [bool]$Stage6PrerequisiteBringupPlan.ok -and
+  [string]$Stage6PrerequisiteBringupPlan.status -eq 'blocked' -and
+  [string]$Stage6PrerequisiteBringupPlan.stage_state -eq 'active' -and
+  -not [bool]$Stage6PrerequisiteBringupPlan.ready_to_close -and
+  [string]$Stage6PrerequisiteBringupPlan.acceptance_criterion -eq 'system_resident_presence' -and
+  [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap -eq 'persistent_supervision_required_prerequisites_missing' -and
+  [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap_basis -eq 'missing_required_before_enable' -and
+  [string]$Stage6PrerequisiteBringupPlan.current_first_missing_requirement -eq 'resident_host_process' -and
+  $Stage6PrerequisiteBringupPlanAllowedFirstMissingTruthfulGaps -contains [string]$Stage6PrerequisiteBringupPlan.current_first_missing_truthful_gap -and
+  -not [bool]$Stage6PrerequisiteBringupPlan.required_before_enable_ready -and
+  [string]$Stage6PrerequisiteBringupPlan.next_operator_action_requirement -eq 'resident_host_process' -and
+  [string]$Stage6PrerequisiteBringupPlanNextOperatorAction.id -eq 'request_resident_runtime_execution_authority' -and
+  [string]$Stage6PrerequisiteBringupPlanNextOperatorAction.route -eq '/lens/resident-runtime/authority-grant/request' -and
+  [string]$Stage6PrerequisiteBringupPlanNextOperatorAction.approval_action -eq 'lens.resident_runtime.execution_authority' -and
+  -not [bool]$Stage6PrerequisiteBringupPlanNextOperatorAction.script_would_execute -and
+  -not [bool]$Stage6PrerequisiteBringupPlanNextOperatorAction.script_would_mutate -and
+  [string]$Stage6PrerequisiteBringupPlanNextOperatorCommand.mode -eq 'RequestNext' -and
+  [bool]$Stage6PrerequisiteBringupPlanNextOperatorCommand.requires_confirmation -and
+  -not [bool]$Stage6PrerequisiteBringupPlanNextOperatorCommand.requires_approval_id -and
+  [int]$Stage6PrerequisiteBringupPlanCommandAvailability.available_now_count -eq 1 -and
+  [int]$Stage6PrerequisiteBringupPlanCommandAvailability.preview_only_count -eq 4 -and
+  [bool]$Stage6PrerequisiteBringupPlanCommandAvailability.truthful -and
+  $Stage6PrerequisiteBringupPlanRequiredBeforeEnable -contains 'resident_host_process' -and
+  $Stage6PrerequisiteBringupPlanRequiredBeforeEnable -contains 'tray_presence' -and
+  $Stage6PrerequisiteBringupPlanRequiredBeforeEnable -contains 'global_hotkey_binding' -and
+  $Stage6PrerequisiteBringupPlanRequiredBeforeEnable -contains 'overlay_window' -and
+  $Stage6PrerequisiteBringupPlanRequiredBeforeEnable -contains 'summon_binding' -and
+  $Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable -contains 'resident_host_process' -and
+  $Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable -contains 'tray_presence' -and
+  $Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable -contains 'global_hotkey_binding' -and
+  $Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable -contains 'overlay_window' -and
+  $Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable -contains 'summon_binding' -and
+  [bool]$Stage6PrerequisiteBringupPlanGovernance.read_only_contract -and
+  [bool]$Stage6PrerequisiteBringupPlanGovernance.diagnostic_only -and
+  [bool]$Stage6PrerequisiteBringupPlanGovernance.plan_only -and
+  [bool]$Stage6PrerequisiteBringupPlanGovernance.requires_explicit_operator_execution -and
+  [bool]$Stage6PrerequisiteBringupPlanGovernance.request_next_mode_available -and
+  [bool]$Stage6PrerequisiteBringupPlanGovernance.grant_next_mode_available -and
+  [bool]$Stage6PrerequisiteBringupPlanGovernance.execute_next_mode_available -and
+  -not [bool]$Stage6PrerequisiteBringupPlanGovernance.run_mode_available -and
+  -not [bool]$Stage6PrerequisiteBringupPlanGovernance.approval_request_write -and
+  -not [bool]$Stage6PrerequisiteBringupPlanGovernance.authority_grant_receipt_write -and
+  -not [bool]$Stage6PrerequisiteBringupPlanGovernance.execution_receipt_write -and
+  -not [bool]$Stage6PrerequisiteBringupPlanGovernance.would_execute -and
+  -not [bool]$Stage6PrerequisiteBringupPlanGovernance.would_mutate -and
+  -not [bool]$Stage6PrerequisiteBringupPlanGovernance.execution_authority -and
+  -not [bool]$Stage6PrerequisiteBringupPlanGovernance.local_process_launch_authority -and
+  -not [bool]$Stage6PrerequisiteBringupPlanGovernance.process_supervision_authority -and
+  -not [bool]$Stage6PrerequisiteBringupPlanGovernance.service_install_authority -and
+  -not [bool]$Stage6PrerequisiteBringupPlanGovernance.service_control_authority -and
+  -not [bool]$Stage6PrerequisiteBringupPlanGovernance.tray_registration_authority -and
+  -not [bool]$Stage6PrerequisiteBringupPlanGovernance.hotkey_registration_authority -and
+  -not [bool]$Stage6PrerequisiteBringupPlanGovernance.overlay_control_authority -and
+  -not [bool]$Stage6PrerequisiteBringupPlanGovernance.summon_authority -and
+  -not [bool]$Stage6PrerequisiteBringupPlanGovernance.memory_write -and
+  -not [bool]$Stage6PrerequisiteBringupPlanGovernance.receipt_write_authority -and
+  -not [bool]$Stage6PrerequisiteBringupPlanGovernance.resident_claim_authority -and
+  -not [bool]$Stage6PrerequisiteBringupPlanGovernance.mutation_authority_granted
 )
 $PersistentSupervisionServiceInstallPlanProofResult = Invoke-JsonScript `
   -PowerShellPath $PowerShell.Source `
@@ -859,6 +937,7 @@ $ChildProofRuns = @(
   New-ChildProofRunSummary -Name 'host_supervision_authority_request' -Result $HostSupervisionAuthorityRequestProofResult
   New-ChildProofRunSummary -Name 'persistent_supervision_plan' -Result $PersistentSupervisionPlanResult
   New-ChildProofRunSummary -Name 'persistent_supervision_prerequisites' -Result $PersistentSupervisionPrerequisitesProofResult
+  New-ChildProofRunSummary -Name 'stage6_prerequisite_bringup_plan' -Result $Stage6PrerequisiteBringupPlanResult
   New-ChildProofRunSummary -Name 'persistent_supervision_service_install_plan' -Result $PersistentSupervisionServiceInstallPlanProofResult
   New-ChildProofRunSummary -Name 'persistent_supervision_enablement_authority' -Result $PersistentSupervisionEnablementAuthorityProofResult
   New-ChildProofRunSummary -Name 'persistent_supervision_execution_authority' -Result $PersistentSupervisionExecutionAuthorityProofResult
@@ -1919,6 +1998,7 @@ $Stage6CompletionEvidenceReviewed = (
 )
 $Stage6CompletionReviewed = (
   $Stage6CompletionEvidenceReviewed -and
+  $Stage6PrerequisiteBringupPlanObserved -and
   $PersistentSupervisionEnablementTransitionPlanProofObserved
 )
 $NextSmallestTruthfulGap = if ($ReadyToClose) {
@@ -2090,6 +2170,18 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $HostSupervisionAuthorityReadinessHandoffObserved -and
   $HostSupervisionAuthorityRequestProofObserved -and
   $PersistentSupervisionPrerequisitesProofObserved -and
+  -not $Stage6PrerequisiteBringupPlanObserved
+) {
+  'stage6_prerequisite_bringup_plan_readback'
+} elseif (
+  $Stage6CompletionEvidenceReviewed -and
+  -not $ReadyToClose -and
+  $BlockedCriterionIds -contains 'summon_anywhere' -and
+  $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $HostSupervisionAuthorityReadinessHandoffObserved -and
+  $HostSupervisionAuthorityRequestProofObserved -and
+  $PersistentSupervisionPrerequisitesProofObserved -and
+  $Stage6PrerequisiteBringupPlanObserved -and
   -not $PersistentSupervisionServiceInstallPlanProofObserved
 ) {
   'persistent_supervision_service_install_plan_proof_readback'
@@ -2101,6 +2193,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $HostSupervisionAuthorityReadinessHandoffObserved -and
   $HostSupervisionAuthorityRequestProofObserved -and
   $PersistentSupervisionPrerequisitesProofObserved -and
+  $Stage6PrerequisiteBringupPlanObserved -and
   $PersistentSupervisionServiceInstallPlanProofObserved -and
   $PersistentSupervisionEnablementAuthorityProofObserved -and
   $PersistentSupervisionExecutionAuthorityProofObserved -and
@@ -2342,18 +2435,24 @@ if (
 } elseif (
   $NextSmallestTruthfulGap -eq 'persistent_supervision_required_prerequisites_missing' -and
   $ResidentHostProcessSupervisionBlockerProofObserved -and
-  $PersistentSupervisionPrerequisitesProofObserved
+  $PersistentSupervisionPrerequisitesProofObserved -and
+  $Stage6PrerequisiteBringupPlanObserved
 ) {
-  $RecommendedHandoffSource = 'resident_host_process_supervision_handoff_consumed'
+  $RecommendedHandoffSource = 'stage6_prerequisite_bringup_operator_plan'
   $RecommendedHandoff = [ordered]@{
     status = 'blocked'
     previous_next_smallest_truthful_gap = [string]$ResidentHostProcessSupervisionBlockerProof.previous_next_smallest_truthful_gap
     consumed_process_supervision_next_smallest_truthful_gap = [string]$ResidentHostProcessSupervisionBlockerProof.next_smallest_truthful_gap
     next_smallest_truthful_gap = 'persistent_supervision_required_prerequisites_missing'
-    next_step = 'resolve_persistent_supervision_required_prerequisites_before_enablement'
-    proof_script = 'scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status'
+    next_step = 'run_stage6_prerequisite_bringup_request_next_for_resident_host_process'
+    proof_script = 'scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status'
     route = '/lens/host/persistent-supervision'
     readiness_route = '/lens/host/persistent-supervision/enablement'
+    operator_plan_script = 'scripts/lens-stage6-prerequisite-bringup-plan.ps1'
+    next_operator_action_requirement = [string]$Stage6PrerequisiteBringupPlan.next_operator_action_requirement
+    next_operator_action = $Stage6PrerequisiteBringupPlanNextOperatorAction
+    next_operator_command = $Stage6PrerequisiteBringupPlanNextOperatorCommand
+    operator_sequence_command_availability = $Stage6PrerequisiteBringupPlanCommandAvailability
     process_supervision_route = [string]$ResidentHostProcessSupervisionBlockerProof.recommended_handoff.route
     process_supervision_readiness_route = [string]$ResidentHostProcessSupervisionBlockerProof.recommended_handoff.readiness_route
     authority_required = 'resident_host_process_tray_hotkey_overlay_and_summon_prerequisites'
@@ -2471,6 +2570,8 @@ $Payload = [ordered]@{
     'The completion audit has consumed the resident-host process-supervision handoff and now reads back the exact host-supervision authority approval request as the first concrete blocker for summon-anywhere resident-host supervision.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_prerequisites_proof_readback') {
     'The audit must consume the persistent-supervision prerequisite proof before treating persistent supervision enablement blockers as fully mapped to the Stage 6 summon-anywhere blocker family chain.'
+  } elseif ($NextSmallestTruthfulGap -eq 'stage6_prerequisite_bringup_plan_readback') {
+    'The completion audit must observe the Stage 6 prerequisite bring-up operator plan before recommending the next governed prerequisite action.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_service_install_plan_proof_readback') {
     'The audit must consume the persistent-supervision service-install plan proof before treating disabled Lens host service configuration as audited Stage 6 enablement evidence.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_enablement_transition_plan_proof_readback') {
@@ -3907,6 +4008,25 @@ $Payload = [ordered]@{
     governance = $PersistentSupervisionEnablementTransitionPlanProofGovernance
     next_smallest_truthful_gap = [string]$PersistentSupervisionEnablementTransitionPlanProof.next_smallest_truthful_gap
   }
+  stage6_prerequisite_bringup_plan = [ordered]@{
+    status = if ($Stage6PrerequisiteBringupPlanObserved) { [string]$Stage6PrerequisiteBringupPlan.status } else { 'missing_or_failed' }
+    ok = $Stage6PrerequisiteBringupPlanObserved
+    exit_code = [int]$Stage6PrerequisiteBringupPlanResult.exit_code
+    evidence = [string[]]@(ConvertTo-StringArray -Value $Stage6PrerequisiteBringupPlan.evidence)
+    current_truthful_gap = [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap
+    current_truthful_gap_basis = [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap_basis
+    current_first_missing_requirement = [string]$Stage6PrerequisiteBringupPlan.current_first_missing_requirement
+    current_first_missing_truthful_gap = [string]$Stage6PrerequisiteBringupPlan.current_first_missing_truthful_gap
+    required_before_enable = [string[]]@($Stage6PrerequisiteBringupPlanRequiredBeforeEnable)
+    missing_required_before_enable = [string[]]@($Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable)
+    required_before_enable_ready = [bool]$Stage6PrerequisiteBringupPlan.required_before_enable_ready
+    next_operator_action_requirement = [string]$Stage6PrerequisiteBringupPlan.next_operator_action_requirement
+    next_operator_action = $Stage6PrerequisiteBringupPlanNextOperatorAction
+    next_operator_command = $Stage6PrerequisiteBringupPlanNextOperatorCommand
+    operator_sequence_command_availability = $Stage6PrerequisiteBringupPlanCommandAvailability
+    checks = @($Stage6PrerequisiteBringupPlan.checks)
+    governance = $Stage6PrerequisiteBringupPlanGovernance
+  }
   evidence = @(
     'docs/canonical/ROADMAP.md#4.12',
     'docs/operations/COMPLETION_LEDGER.md',
@@ -3919,6 +4039,7 @@ $Payload = [ordered]@{
     'scripts/lens-host-supervision-authority-request-proof.ps1 -Mode Status',
     'scripts/lens-persistent-supervision-plan.ps1 -Mode Status',
     'scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status',
+    'scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status',
     'scripts/lens-persistent-supervision-service-install-plan-proof.ps1 -Mode Status',
     'scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status',
     'scripts/lens-persistent-supervision-execution-authority-proof.ps1 -Mode Status',
@@ -4001,6 +4122,7 @@ $Payload = [ordered]@{
     helpful_not_noisy_runtime_authority_readiness_handoff_readback = $ResidentRuntimeAuthorityGrantReadinessHandoffObserved
     persistent_supervision_plan_readback = $PersistentSupervisionPlanObserved
     persistent_supervision_prerequisites_proof_readback = $PersistentSupervisionPrerequisitesProofObserved
+    stage6_prerequisite_bringup_plan_readback = $Stage6PrerequisiteBringupPlanObserved
     persistent_supervision_service_install_plan_proof_readback = $PersistentSupervisionServiceInstallPlanProofObserved
     persistent_supervision_enablement_authority_proof_readback = $PersistentSupervisionEnablementAuthorityProofObserved
     persistent_supervision_execution_authority_proof_readback = $PersistentSupervisionExecutionAuthorityProofObserved

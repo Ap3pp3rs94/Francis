@@ -189,11 +189,28 @@ function Write-ProofSurfaceRuntimeStates {
       updated_at = $Now
       message = 'Synthetic overlay runtime readback bound to the live proof process; no OS overlay window was opened.'
     })
+  $Summon = Write-RuntimeJson -DataRoot $DataRoot -RuntimeName 'lens-summon' -PidFileName 'lens-summon.pid' -ProcessId $ProcessId -Payload ([ordered]@{
+      kind = 'lens.summon.runtime_state'
+      status = 'summon_binding_observed'
+      pid = $ProcessId
+      global_hotkey = 'Ctrl+Alt+Space'
+      binding_scope = 'global'
+      bounded_handoff_ready = $true
+      local_open_ready = $true
+      opened = $false
+      no_launch = $true
+      summon_anywhere = $false
+      os_level_summon = $false
+      proof_only = $true
+      updated_at = $Now
+      message = 'Synthetic summon runtime readback bound to the live proof process; no OS-level summon or browser launch occurred.'
+    })
 
   return [ordered]@{
     tray = $Tray
     hotkey = $Hotkey
     overlay = $Overlay
+    summon = $Summon
   }
 }
 
@@ -323,11 +340,14 @@ $OverlayDependencyReady = (
   [bool](Get-PropertyValue -Payload $OverlayDependency[0] -Name 'overlay_runtime_window_visible' -Default $false) -and
   [bool](Get-PropertyValue -Payload $OverlayDependency[0] -Name 'overlay_runtime_always_on_top' -Default $false)
 )
-$SummonBindingStillBlocked = (
+$SummonDependencyReady = (
   $SummonDependency.Count -gt 0 -and
-  -not [bool](Get-PropertyValue -Payload $SummonDependency[0] -Name 'ready' -Default $true) -and
-  [string](Get-PropertyValue -Payload $SummonDependency[0] -Name 'blocker' -Default '') -eq 'summon_binding_missing' -and
-  [string](Get-PropertyValue -Payload $SummonDependency[0] -Name 'requirement_state' -Default '') -eq 'disabled_pending_authority'
+  [bool](Get-PropertyValue -Payload $SummonDependency[0] -Name 'ready' -Default $false) -and
+  [string](Get-PropertyValue -Payload $SummonDependency[0] -Name 'summon_presence_source' -Default '') -eq 'live_runtime_readback' -and
+  [bool](Get-PropertyValue -Payload $SummonDependency[0] -Name 'summon_runtime_ready' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $SummonDependency[0] -Name 'summon_runtime_bounded_handoff_ready' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $SummonDependency[0] -Name 'summon_runtime_local_open_ready' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $SummonDependency[0] -Name 'summon_runtime_no_launch' -Default $false)
 )
 
 $SurfaceRuntimeObserved = (
@@ -344,10 +364,10 @@ $PlanConsumedSurfaceRuntime = (
   $TrayDependencyReady -and
   $HotkeyDependencyReady -and
   $OverlayDependencyReady -and
-  $SummonBindingStillBlocked -and
-  $FirstMissing -eq 'summon_binding' -and
-  @($MissingRequired).Count -eq 1 -and
-  $MissingRequired -contains 'summon_binding'
+  $SummonDependencyReady -and
+  [bool](Get-PropertyValue -Payload $PlanPayload -Name 'required_before_enable_ready' -Default $false) -and
+  [string]::IsNullOrWhiteSpace($FirstMissing) -and
+  @($MissingRequired).Count -eq 0
 )
 
 $StopObserved = (
@@ -377,9 +397,10 @@ $SideEffectsBounded = (
 )
 
 $ProofPassed = $LiveResidentHostObserved -and $SurfaceRuntimeObserved -and $PlanConsumedSurfaceRuntime -and $StopObserved -and $SideEffectsBounded -and $DataRootRemoved
-$NextGap = if ($PlanConsumedSurfaceRuntime) { 'summon_binding' } elseif ($HotkeyDependencyReady) { 'overlay_window' } elseif ($TrayDependencyReady) { 'global_hotkey_binding' } else { 'resident_host_process' }
+$PlanNextGap = [string](Get-PropertyValue -Payload $PlanPayload -Name 'next_smallest_truthful_gap' -Default '')
+$NextGap = if ($PlanConsumedSurfaceRuntime) { $PlanNextGap } elseif ($OverlayDependencyReady) { 'summon_binding' } elseif ($HotkeyDependencyReady) { 'overlay_window' } elseif ($TrayDependencyReady) { 'global_hotkey_binding' } else { 'resident_host_process' }
 $RecommendedSlice = if ($PlanConsumedSurfaceRuntime) {
-  'resolve_summon_binding_before_persistent_supervision_enablement'
+  'resolve_persistent_supervision_authority_before_enablement'
 } else {
   'debug_coordinated_surface_runtime_plan_consumption_readback'
 }
@@ -400,7 +421,8 @@ $Payload = [ordered]@{
   tray_dependency_ready = $TrayDependencyReady
   global_hotkey_dependency_ready = $HotkeyDependencyReady
   overlay_dependency_ready = $OverlayDependencyReady
-  summon_binding_still_blocked = $SummonBindingStillBlocked
+  summon_dependency_ready = $SummonDependencyReady
+  summon_binding_still_blocked = -not $SummonDependencyReady
   first_missing_required_before_enable = $FirstMissing
   missing_required_before_enable = $MissingRequired
   next_smallest_truthful_gap = $NextGap
@@ -411,11 +433,15 @@ $Payload = [ordered]@{
     synthetic_tray_runtime_readback = $true
     synthetic_hotkey_runtime_readback = $true
     synthetic_overlay_runtime_readback = $true
+    synthetic_summon_runtime_readback = $true
     os_tray_registered = $false
     global_hotkey_registered = $false
     overlay_opened = $false
+    browser_launched = $false
+    os_level_summon = $false
+    summon_anywhere = $false
+    bounded_summon_handoff_readback = $true
     persistent_supervision_enabled = $false
-    summon_binding_enabled = $false
   }
   start_resident = [ordered]@{
     exit_code = [int](Get-PropertyValue -Payload $StartResult -Name 'exit_code' -Default 1)
