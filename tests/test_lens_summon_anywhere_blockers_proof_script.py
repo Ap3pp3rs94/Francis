@@ -125,6 +125,30 @@ def _write_lens_status_with_active_os_binding_grant(path: Path) -> None:
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
+def _write_lens_status_with_approved_os_binding_request_without_authority(path: Path) -> None:
+    _write_lens_status(path)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    authority = payload["os_binding_authority_requests"]
+    authority.update(
+        {
+            "status": "approved_no_authority",
+            "approved_count": 1,
+            "total_count": 1,
+            "authority_granted": False,
+            "os_level_command_palette_binding_authority": False,
+        }
+    )
+    criterion = payload["stage6_readiness"]["criteria"][0]
+    criterion.update(
+        {
+            "authority_request_readback_status": "approved_no_authority",
+            "authority_granted": False,
+            "os_level_command_palette_binding_authority": False,
+        }
+    )
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
 def test_lens_summon_anywhere_blockers_proof_is_readback_only(tmp_path: Path) -> None:
     status_path = tmp_path / "lens-status.json"
     _write_lens_status(status_path)
@@ -251,6 +275,36 @@ def test_lens_summon_anywhere_blockers_proof_is_readback_only(tmp_path: Path) ->
     assert authority_request_readback["pending_count"] == 0
     assert authority_request_readback["approved_count"] == 0
     assert authority_request_readback["total_count"] == 0
+    assert authority_request_readback["authority_granted"] is False
+    assert authority_request_readback["os_level_command_palette_binding_authority"] is False
+    assert authority_request_readback["os_level_command_palette"] is False
+    assert authority_request_readback["summon_anywhere"] is False
+    assert authority_request_readback["opens_palette"] is False
+    assert authority_request_readback["registers_hotkey"] is False
+    assert authority_request_readback["launches_process"] is False
+    assert authority_request_readback["controls_overlay"] is False
+
+
+def test_lens_summon_anywhere_blockers_proof_accepts_approved_request_without_authority(
+    tmp_path: Path,
+) -> None:
+    status_path = tmp_path / "lens-status.json"
+    _write_lens_status_with_approved_os_binding_request_without_authority(status_path)
+
+    proc = _run_proof("-Mode", "Status", "-StatusPath", str(status_path))
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "proof_passed"
+    assert payload["os_binding_authority_request_readback_observed"] is True
+    assert payload["first_blocker_family"] == "resident_host"
+    assert payload["first_blocker_family_handoff_observed"] is True
+
+    authority_request_readback = payload["os_binding_authority_request_readback"]
+    assert authority_request_readback["status"] == "approved_no_authority"
+    assert authority_request_readback["stage6_criterion_status"] == "approved_no_authority"
+    assert authority_request_readback["approved_count"] == 1
+    assert authority_request_readback["total_count"] == 1
     assert authority_request_readback["authority_granted"] is False
     assert authority_request_readback["os_level_command_palette_binding_authority"] is False
     assert authority_request_readback["os_level_command_palette"] is False

@@ -33575,6 +33575,65 @@ hardening:
   `scripts\lens-command-palette-os-binding-proof.ps1`
   Result: `passed; errors=0`
 
+Stage 6 Lens approved-without-authority summon readback hardening on
+`2026-05-18`:
+
+- `scripts/lens-summon-anywhere-blockers-proof.ps1` now treats
+  `approved_no_authority` as a valid OS-binding authority request readback
+  state. This covers the truthful case where an approval request has been
+  accepted for tracking/audit purposes, but it still has not granted OS-level
+  command palette binding authority or summon-anywhere capability.
+- `tests/test_lens_summon_anywhere_blockers_proof_script.py` now has direct
+  regression coverage for `approved_no_authority` while continuing to require
+  `authority_granted=false`, `os_level_command_palette=false`,
+  `summon_anywhere=false`, and no palette open, hotkey registration, process
+  launch, or overlay control effect.
+- `tests/test_lens_summon_resident_host_blocker_proof_script.py` no longer
+  hard-codes the older `none` request state and instead accepts the current
+  no-authority readback status while still requiring all OS-level capability
+  booleans to remain false.
+- This does not close Stage 6. `/lens/status` still reports
+  `ready_to_close=false`, `ready_total=2`, `blocked_total=3`, and closure gap
+  `summon_anywhere_blockers`. After the focused proof-chain validation, the
+  next resident-host handoff readback reports
+  `resident_supervision_not_persistent`, not a resident/summon capability claim.
+
+Latest validation for Stage 6 Lens approved-without-authority summon readback
+hardening:
+
+- `python -m pytest tests\test_lens_summon_anywhere_blockers_proof_script.py tests\test_lens_summon_resident_host_blocker_proof_script.py tests\test_lens_resident_host_runtime_boundary_proof_script.py tests\test_lens_resident_host_process_supervision_blocker_proof_script.py -q`
+  Result: `passed; 8 tests`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-anywhere-blockers-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,ok,next_smallest_truthful_gap,os_binding_authority_request_readback_observed,first_blocker_family,@{Name='authority_status';Expression={$_.os_binding_authority_request_readback.status}},@{Name='criterion_status';Expression={$_.os_binding_authority_request_readback.stage6_criterion_status}},@{Name='authority_granted';Expression={$_.os_binding_authority_request_readback.authority_granted}},@{Name='summon_anywhere';Expression={$_.os_binding_authority_request_readback.summon_anywhere}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed, ok=true,
+  authority_status=approved_no_authority,
+  criterion_status=approved_no_authority, authority_granted=false,
+  summon_anywhere=false`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-resident-host-blocker-proof.ps1 -Mode Status | ConvertFrom-Json | Select-Object status,ok,next_smallest_truthful_gap,summon_os_binding_authority_request_readback_observed,first_summon_blocker_family,resident_host_next_smallest_truthful_gap,@{Name='authority_status';Expression={$_.summon_os_binding_authority_request_readback.status}},@{Name='authority_granted';Expression={$_.summon_os_binding_authority_request_readback.authority_granted}},@{Name='summon_anywhere';Expression={$_.summon_os_binding_authority_request_readback.summon_anywhere}} | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed, ok=true,
+  next_smallest_truthful_gap=resident_host_runtime_blocker_boundary,
+  authority_status=approved_no_authority, authority_granted=false,
+  summon_anywhere=false`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-host-runtime-boundary-proof.ps1 -Mode Status -ForegroundRunSeconds 2 -HostLaunchRunSeconds 3 -ResidentCandidateRunSeconds 2 -ChildProofTimeoutSeconds 180 | ConvertFrom-Json | Select-Object status,ok,next_smallest_truthful_gap,runtime_handoff_observed,bounded_runtime_observed,runtime_heartbeat_observed,process_supervision_handoff_observed,resident_runtime_candidate_observed,resident_host_process,resident_host_supervised,summon_anywhere | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed, ok=true,
+  next_smallest_truthful_gap=resident_host_process_not_supervised,
+  runtime_handoff_observed=true, bounded_runtime_observed=true,
+  runtime_heartbeat_observed=true, process_supervision_handoff_observed=true,
+  resident_host_process=false, resident_host_supervised=false,
+  summon_anywhere=false`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status -StartupTimeoutSeconds 20 -ForegroundRunSeconds 2 -HostLaunchRunSeconds 3 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 180 | ConvertFrom-Json | Select-Object status,ok,next_smallest_truthful_gap,resident_host_process_handoff_observed,process_supervision_boundary_observed,handoff_consumed,authority_denied,resident_host_supervised,ready_for_resident_claim | ConvertTo-Json -Depth 6`
+  Result: `passed; status=proof_passed, ok=true,
+  next_smallest_truthful_gap=stage6_lens_completion_audit,
+  resident_host_process_handoff_observed=true,
+  process_supervision_boundary_observed=true, handoff_consumed=true,
+  authority_denied=true, resident_host_supervised=false,
+  ready_for_resident_claim=false`
+- `python -m ruff check tests\test_lens_summon_anywhere_blockers_proof_script.py tests\test_lens_summon_resident_host_blocker_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_summon_anywhere_blockers_proof_script.py tests\test_lens_summon_resident_host_blocker_proof_script.py`
+  Result: `passed; 2 files already formatted`
+- PowerShell parser check for `scripts\lens-summon-anywhere-blockers-proof.ps1`
+  Result: `passed; errors=0`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

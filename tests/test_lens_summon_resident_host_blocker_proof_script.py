@@ -84,7 +84,7 @@ def test_lens_summon_resident_host_blocker_proof_aligns_handoff(tmp_path: Path) 
     assert payload["side_effects_denied"] is True
 
     authority_readback = payload["summon_os_binding_authority_request_readback"]
-    assert authority_readback["status"] == "none"
+    assert authority_readback["status"] in {"none", "approved_no_authority"}
     assert authority_readback["ok"] is True
     assert authority_readback["kind"] == "lens.os_binding.command_palette_binding_authority.request_readback"
     assert authority_readback["route"] == "/lens/os-binding/authority/requests"

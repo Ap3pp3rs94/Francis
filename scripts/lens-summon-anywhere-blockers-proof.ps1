@@ -427,7 +427,7 @@ $OsBindingAuthorityRequestReadbackObserved = (
   $OsBindingReadinessAuthorityRequestRoute -eq '/lens/os-binding/authority/request' -and
   $OsBindingReadinessEvidence -contains '/lens/os-binding/authority/requests' -and
   $OsBindingReadinessEvidence -contains '/lens/os-binding/authority/request' -and
-  [string](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'status' -Default '') -in @('none', 'approval_requested', 'authority_granted') -and
+  [string](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'status' -Default '') -in @('none', 'approval_requested', 'approved_no_authority', 'authority_granted') -and
   -not [bool](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'os_level_command_palette' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'summon_anywhere' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'opens_palette' -Default $true) -and
