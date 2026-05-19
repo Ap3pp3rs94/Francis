@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -19,7 +20,10 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
+def _run_proof(*args: str, data_dir: Path | None = None) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    if data_dir is not None:
+        env["FRANCIS_DATA_DIR"] = str(data_dir)
     return subprocess.run(
         [
             _powershell(),
@@ -35,10 +39,11 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
         text=True,
         capture_output=True,
         timeout=420,
+        env=env,
     )
 
 
-def test_lens_resident_host_process_supervision_blocker_consumes_handoff() -> None:
+def test_lens_resident_host_process_supervision_blocker_consumes_handoff(tmp_path: Path) -> None:
     proc = _run_proof(
         "-Mode",
         "Status",
@@ -52,6 +57,7 @@ def test_lens_resident_host_process_supervision_blocker_consumes_handoff() -> No
         "3",
         "-ChildProofTimeoutSeconds",
         "180",
+        data_dir=tmp_path / "data",
     )
 
     assert proc.returncode == 0, proc.stderr or proc.stdout

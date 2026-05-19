@@ -223,7 +223,7 @@ if ($null -eq $PowerShell) {
   $PowerShell = Get-Command powershell -ErrorAction Stop
 }
 
-$SummonResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonBlockersScript -ScriptArgs @('-Mode', 'Status')
+$SummonResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonBlockersScript -ScriptArgs @('-Mode', 'Status') -DataRoot $DataDir
 $SummonPayload = $SummonResult.payload
 $SummonBlockerGroups = Get-PropertyValue -Payload $SummonPayload -Name 'blocker_groups'
 $SummonResidentHostBlockers = ConvertTo-StringArray -Value (
@@ -236,7 +236,7 @@ $SummonGovernance = Get-PropertyValue -Payload $SummonPayload -Name 'governance'
 $SummonAuthorityReadback = Get-PropertyValue -Payload $SummonPayload -Name 'os_binding_authority_request_readback'
 $SummonAuthorityReadbackGovernance = Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'governance'
 
-$HostResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $HostLifecycleProofScript -ScriptArgs @('-Mode', 'Status')
+$HostResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $HostLifecycleProofScript -ScriptArgs @('-Mode', 'Status') -DataRoot $DataDir
 $HostPayload = $HostResult.payload
 $HostLifecycleGroups = Get-PropertyValue -Payload $HostPayload -Name 'lifecycle_blocker_groups'
 $HostRuntimeGroup = Get-PropertyValue -Payload $HostLifecycleGroups -Name 'runtime'

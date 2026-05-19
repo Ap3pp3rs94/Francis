@@ -33754,6 +33754,55 @@ Python 3.13 mypy optional-dependency fallback repair on `2026-05-18`:
   a test fixture.
 - Validation: `.\scripts\check.ps1` passed after the repair.
 
+Stage 6 Lens prerequisite bring-up and hotkey runtime-state hardening on
+`2026-05-19`:
+
+- `scripts/lens-hotkey-binding.ps1` now writes the hotkey PID and runtime
+  status through a retrying temp-file move instead of direct `Set-Content`.
+  This fixes the live Stage 6 failure where the parent startup poll could read
+  `data/runtime/lens-hotkey/status.json` while the child process was writing it,
+  causing `global_hotkey_binding_failed` even though the hotkey lease was the
+  current governed action.
+- `scripts/lens-summon-resident-host-blocker-proof.ps1` now propagates
+  `-DataDir` to its summon-anywhere and resident-host lifecycle child
+  readbacks. The related proof tests now isolate `FRANCIS_DATA_DIR` or pass a
+  temporary `-DataDir`, so local Stage 6 runtime receipts and grants cannot
+  leak into read-only proof assertions.
+- The approved Stage 6 prerequisite bring-up sequence was exercised in order:
+  fresh resident supervision, tray presence, global hotkey binding, and overlay
+  window. The final live readback reported
+  `status=persistent_supervision_enablement_applied`,
+  `required_before_enable_ready=true`,
+  `current_truthful_gap=persistent_supervision_execution_boundary`,
+  `next_operator_action=review_persistent_supervision_enablement_receipt`, and
+  `ready_to_close=false`.
+- This advances the validated Stage 6 prerequisite posture but does not close
+  Stage 6. The current remaining gap is the persistent supervision execution
+  boundary / enablement receipt review, not a missing tray, hotkey, or overlay
+  prerequisite. Temporary resident/tray/hotkey/overlay leases were stopped
+  before running the full repository gate to avoid OS-level test collisions.
+
+Latest validation for Stage 6 Lens prerequisite bring-up and hotkey
+runtime-state hardening:
+
+- `.\.venv\Scripts\python.exe -m pytest tests\test_lens_hotkey_binding_script.py`
+  Result: `passed; 4 tests`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_hotkey_execution_advances_to_overlay -q`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_lens_resident_host_process_supervision_blocker_proof_script.py::test_lens_resident_host_process_supervision_blocker_consumes_handoff tests\test_lens_resident_host_runtime_boundary_proof_script.py::test_lens_resident_host_runtime_boundary_consumes_handoff_without_authority tests\test_lens_summon_resident_host_blocker_proof_script.py::test_lens_summon_resident_host_blocker_proof_aligns_handoff tests\test_lens_summon_resident_host_blocker_proof_script.py::test_lens_summon_resident_host_default_proof_keeps_checkpoint_safe_handoff -q`
+  Result: `passed; 4 tests`
+- Stage 6 live runbook readback after resident, tray, hotkey, and overlay
+  bounded leases:
+  Result: `passed; status=persistent_supervision_enablement_applied,
+  current_truthful_gap=persistent_supervision_execution_boundary,
+  required_before_enable_ready=true,
+  next_operator_action=review_persistent_supervision_enablement_receipt,
+  latest_receipt_id=lpsee_1779121165_4c3308821220, ready_to_close=false`
+- `.\scripts\check.ps1`
+  Result: `passed on rerun; branch state OK, Ruff check passed, Ruff format
+  check passed, mypy passed over 501 source files, pytest completed with exit
+  code 0`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

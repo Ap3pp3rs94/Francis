@@ -219,8 +219,8 @@ def test_lens_summon_resident_host_blocker_proof_aligns_handoff(tmp_path: Path) 
     }
 
 
-def test_lens_summon_resident_host_default_proof_keeps_checkpoint_safe_handoff() -> None:
-    proc = _run_proof("-Mode", "Status")
+def test_lens_summon_resident_host_default_proof_keeps_checkpoint_safe_handoff(tmp_path: Path) -> None:
+    proc = _run_proof("-Mode", "Status", "-DataDir", str(tmp_path / "data"))
 
     assert proc.returncode == 0, proc.stderr
     payload = json.loads(proc.stdout)

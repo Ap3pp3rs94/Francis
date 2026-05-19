@@ -124,6 +124,41 @@ function Get-ProcessAlive {
   }
 }
 
+function Write-TextFileWithRetry {
+  param(
+    [string]$Path,
+    [string]$Value,
+    [ValidateRange(1, 100)]
+    [int]$Attempts = 20,
+    [ValidateRange(1, 5000)]
+    [int]$DelayMilliseconds = 100
+  )
+
+  $Directory = Split-Path -Parent $Path
+  if (-not [string]::IsNullOrWhiteSpace($Directory)) {
+    New-Item -ItemType Directory -Force -Path $Directory | Out-Null
+  }
+
+  $LastError = $null
+  for ($Attempt = 1; $Attempt -le $Attempts; $Attempt++) {
+    $TempPath = "$Path.$PID.$([Guid]::NewGuid().ToString('N')).tmp"
+    try {
+      $Utf8NoBom = New-Object System.Text.UTF8Encoding $false
+      [System.IO.File]::WriteAllText($TempPath, $Value, $Utf8NoBom)
+      Move-Item -LiteralPath $TempPath -Destination $Path -Force -ErrorAction Stop
+      return
+    } catch {
+      $LastError = $_
+      Remove-Item -LiteralPath $TempPath -Force -ErrorAction SilentlyContinue
+      if ($Attempt -lt $Attempts) {
+        Start-Sleep -Milliseconds $DelayMilliseconds
+      }
+    }
+  }
+
+  throw $LastError
+}
+
 function Get-HotkeyConfig {
   $ConfigPath = if (-not [string]::IsNullOrWhiteSpace($ConfigOverridePath)) {
     [System.IO.Path]::GetFullPath($ConfigOverridePath)
@@ -207,7 +242,7 @@ function Write-HotkeyState {
   $PidPath = Join-Path $RuntimeRoot 'lens-hotkey.pid'
   $StatusPath = Join-Path $RuntimeRoot 'status.json'
   if ($Status -eq 'hotkey_bound') {
-    Set-Content -LiteralPath $PidPath -Value ([string]$PID) -Encoding UTF8
+    Write-TextFileWithRetry -Path $PidPath -Value ([string]$PID)
   }
   $Payload = [ordered]@{
     kind = 'lens.hotkey.runtime_state'
@@ -236,7 +271,7 @@ function Write-HotkeyState {
       mutation_authority_granted = $HotkeyBound
     }
   }
-  $Payload | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $StatusPath -Encoding UTF8
+  Write-TextFileWithRetry -Path $StatusPath -Value ($Payload | ConvertTo-Json -Depth 8)
 }
 
 function Get-HotkeyRuntimeReadback {
