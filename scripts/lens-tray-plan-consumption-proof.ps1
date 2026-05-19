@@ -308,6 +308,20 @@ $RecommendedSlice = if ($PlanConsumedTrayRuntime) {
 } else {
   'debug_resident_host_plan_consumption_readback'
 }
+$RecommendedHandoff = $null
+$RecommendedHandoffSource = $null
+$RecommendedProofScript = $null
+if ($PlanConsumedTrayRuntime -and $null -ne $PlanHandoff) {
+  $RecommendedHandoff = $PlanHandoff
+  $RecommendedHandoffSource = 'plan_first_missing_requirement_handoff'
+  $RecommendedProofScript = [string](Get-PropertyValue -Payload $PlanHandoff -Name 'proof_script' -Default '')
+  if ([string]::IsNullOrWhiteSpace($RecommendedProofScript)) {
+    $RecommendedProofScript = [string](Get-PropertyValue -Payload $PlanHandoff -Name 'preflight_script' -Default '')
+  }
+  if ([string]::IsNullOrWhiteSpace($RecommendedProofScript)) {
+    $RecommendedProofScript = $null
+  }
+}
 
 $Payload = [ordered]@{
   kind = 'lens.tray_runtime.plan_consumption_proof'
@@ -327,6 +341,9 @@ $Payload = [ordered]@{
   missing_required_before_enable = $MissingRequired
   next_smallest_truthful_gap = $NextGap
   recommended_next_slice = $RecommendedSlice
+  recommended_handoff_source = $RecommendedHandoffSource
+  recommended_proof_script = $RecommendedProofScript
+  recommended_handoff = $RecommendedHandoff
   stop_observed = $StopObserved
   side_effects_bounded = $SideEffectsBounded
   proof_scope = [ordered]@{

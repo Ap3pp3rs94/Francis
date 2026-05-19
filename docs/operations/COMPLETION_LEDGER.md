@@ -34439,6 +34439,53 @@ alignment:
   recommended_handoff.read_only_contract=true,
   recommended_handoff.diagnostic_only=true`
 
+Stage 6 plan-consumption proof handoff promotion on `2026-05-19`:
+
+- `scripts/lens-resident-host-plan-consumption-proof.ps1` now promotes its
+  existing tray `plan_first_missing_requirement_handoff` to top-level
+  `recommended_handoff`, with
+  `recommended_handoff_source=plan_first_missing_requirement_handoff` and
+  `recommended_proof_script=scripts/lens-tray-preflight.ps1 -Mode Status`.
+- `scripts/lens-tray-plan-consumption-proof.ps1` now promotes its existing
+  global-hotkey `plan_first_missing_requirement_handoff` to top-level
+  `recommended_handoff`, with
+  `recommended_handoff_source=plan_first_missing_requirement_handoff` and
+  `recommended_proof_script=scripts/lens-summon-global-hotkey-binding-blocker-proof.ps1 -Mode Status`.
+- This keeps the resident-host and tray plan-consumption proof chain
+  operator-actionable after a bounded resident/tray proof consumes the current
+  prerequisite. The proofs no longer require callers to infer the next
+  prerequisite handoff from a nested field.
+- This does not grant tray, hotkey, overlay, summon, service, resident-claim,
+  memory-write, receipt-write, approval, or persistent-supervision enablement
+  authority. It only promotes already-computed proof readback fields.
+
+Latest validation for Stage 6 plan-consumption proof handoff promotion:
+
+- PowerShell parser check for
+  `scripts/lens-resident-host-plan-consumption-proof.ps1` and
+  `scripts/lens-tray-plan-consumption-proof.ps1`
+  Result: `passed; parse_ok`
+- `python -m pytest tests/test_lens_resident_host_plan_consumption_proof_script.py tests/test_lens_tray_plan_consumption_proof_script.py -q`
+  Result: `passed; 2 passed`
+- `python -m ruff check tests/test_lens_resident_host_plan_consumption_proof_script.py tests/test_lens_tray_plan_consumption_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_resident_host_plan_consumption_proof_script.py tests/test_lens_tray_plan_consumption_proof_script.py`
+  Result: `passed; 2 files already formatted`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-host-plan-consumption-proof.ps1 -Mode Status`
+  Result: `passed; next_smallest_truthful_gap=tray_presence,
+  recommended_next_slice=resolve_tray_presence_before_persistent_supervision_enablement,
+  recommended_handoff_source=plan_first_missing_requirement_handoff,
+  recommended_proof_script=scripts/lens-tray-preflight.ps1 -Mode Status,
+  recommended_handoff.id=tray_presence,
+  recommended_handoff.blocker=tray_host_missing`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-tray-plan-consumption-proof.ps1 -Mode Status`
+  Result: `passed; next_smallest_truthful_gap=global_hotkey_binding,
+  recommended_next_slice=resolve_global_hotkey_binding_before_persistent_supervision_enablement,
+  recommended_handoff_source=plan_first_missing_requirement_handoff,
+  recommended_proof_script=scripts/lens-summon-global-hotkey-binding-blocker-proof.ps1 -Mode Status,
+  recommended_handoff.id=global_hotkey_binding,
+  recommended_handoff.blocker=global_hotkey_binding_missing`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

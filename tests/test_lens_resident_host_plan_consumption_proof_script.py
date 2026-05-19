@@ -65,6 +65,8 @@ def test_lens_resident_host_plan_consumption_proof_moves_handoff_to_tray_presenc
     ]
     assert payload["next_smallest_truthful_gap"] == "tray_presence"
     assert payload["recommended_next_slice"] == "resolve_tray_presence_before_persistent_supervision_enablement"
+    assert payload["recommended_handoff_source"] == "plan_first_missing_requirement_handoff"
+    assert payload["recommended_proof_script"] == "scripts/lens-tray-preflight.ps1 -Mode Status"
     assert payload["stop_observed"] is True
     assert payload["side_effects_bounded"] is True
 
@@ -108,6 +110,7 @@ def test_lens_resident_host_plan_consumption_proof_moves_handoff_to_tray_presenc
     assert handoff["blocker"] == "tray_host_missing"
     assert handoff["requirement_state"] == "tray_host_disabled"
     assert handoff["tray_registration_authority"] is False
+    assert payload["recommended_handoff"] == handoff
 
     stop = payload["stop_resident"]
     assert stop["exit_code"] == 0
