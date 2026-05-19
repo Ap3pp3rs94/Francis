@@ -34583,6 +34583,53 @@ runtime-progress handoff:
   persistent_supervision_resident_claim_boundary_proof.runtime_progress_handoff.current_truthful_gap=persistent_supervision_required_prerequisites_missing;
   persistent_supervision_resident_claim_boundary_proof.runtime_progress_handoff.next_operator_action.id=request_resident_runtime_execution_authority`
 
+Stage 6 resident-runtime API execution proof on `2026-05-19`:
+
+- Added `scripts/lens-resident-runtime-api-execution-proof.ps1` to prove the
+  governed API path can create exact host-supervision and resident-runtime
+  authority requests, approve them in an isolated test-fixture data root, grant
+  bounded receipts, call `/lens/resident-runtime/execute`, and drive the real
+  `scripts/lens-host-supervisor.ps1 -Mode StartResident` runner.
+- The proof then stops the live resident supervisor through
+  `/lens/host/supervision/execute` with `mode=resident_stop` and verifies the
+  Lens host pid file is removed. The observed proof posture is
+  `status=proof_passed`, `resident_host_process_started=true`,
+  `resident_supervised_runtime_started=true`,
+  `resident_supervision_stop_observed=true`, and
+  `next_smallest_truthful_gap=summon_tray_presence_blocker_boundary`.
+- This is still not Stage 6 closure. It explicitly preserves
+  `tray_presence=false`, `global_hotkey=false`, `overlay_window=false`,
+  `summon_anywhere=false`, `service_managed=false`, `memory_write=false`, and
+  `resident_claim_allowed=false`. The next bounded gap remains tray/hotkey/
+  overlay/summon runtime presence and authority.
+
+Latest validation for Stage 6 resident-runtime API execution proof:
+
+- PowerShell parser check for
+  `scripts/lens-resident-runtime-api-execution-proof.ps1`
+  Result: `passed; parse_ok`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-runtime-api-execution-proof.ps1 -Mode Status -RunSeconds 1`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=summon_tray_presence_blocker_boundary;
+  resident_host_process_started=true;
+  resident_supervised_runtime_started=true;
+  resident_supervision_stop_observed=true;
+  pid_file_present_after_stop=false;
+  tray_presence=false;
+  global_hotkey=false;
+  overlay_window=false;
+  summon_anywhere=false;
+  resident_claim_allowed=false`
+- `python -m pytest tests/test_lens_resident_runtime_api_execution_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests/test_lens_resident_runtime_api_execution_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_resident_runtime_api_execution_proof_script.py`
+  Result: `passed; 1 file already formatted`
+- `.\scripts\check.ps1`
+  Result: `passed; branch state OK on main tracking origin/main; ruff lint passed;
+  ruff format check passed; mypy passed; pytest passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
