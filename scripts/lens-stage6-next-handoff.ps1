@@ -823,6 +823,22 @@ if ($PersistentSupervisionResidentClaimBoundaryHandoffObserved) {
   $AuthorityRequired = [string]$PersistentSupervisionResidentClaimBoundaryHandoff.authority_required
   $AuthorityGranted = [bool]$PersistentSupervisionResidentClaimBoundaryHandoff.authority_granted
 }
+$Stage6CompletionAuditHandoffConsumedByClosureReadback = (
+  $PersistentSupervisionResidentClaimBoundaryHandoffObserved -and
+  [string](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundaryHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'stage6_lens_completion_audit' -and
+  $StageNextGap -eq 'summon_anywhere_blockers' -and
+  $FirstBlockedCriterionObserved
+)
+if ($Stage6CompletionAuditHandoffConsumedByClosureReadback) {
+  $RecommendedHandoffSource = 'stage6_closure_readback_summon_anywhere_blockers'
+  $RecommendedNextGap = 'summon_anywhere_blockers'
+  $RecommendedNextSlice = 'run_summon_anywhere_blockers_proof_after_stage6_completion_review'
+  $RecommendedProofScript = 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status'
+  $RecommendedRoute = '/lens/summon'
+  $RecommendedReadinessRoute = '/lens/summon/readiness'
+  $AuthorityRequired = 'summon_hotkey_overlay_and_process_authority'
+  $AuthorityGranted = $false
+}
 $RecommendedFirstMissingAuthorityRequired = [string](
   Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'authority_required' -Default ''
 )
@@ -941,6 +957,7 @@ $Payload = [ordered]@{
   persistent_supervision_enablement_receipt_review_handoff = $PersistentSupervisionEnablementReceiptReviewHandoff
   persistent_supervision_resident_claim_boundary_handoff_observed = $PersistentSupervisionResidentClaimBoundaryHandoffObserved
   persistent_supervision_resident_claim_boundary_handoff = $PersistentSupervisionResidentClaimBoundaryHandoff
+  stage6_completion_audit_handoff_consumed_by_closure_readback = $Stage6CompletionAuditHandoffConsumedByClosureReadback
   persistent_supervision_resident_claim_boundary_proof = [ordered]@{
     status = [string](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundary -Name 'status' -Default '')
     ok = [bool](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundary -Name 'ok' -Default $false)

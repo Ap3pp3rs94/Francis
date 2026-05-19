@@ -34068,6 +34068,44 @@ enablement readback:
   passed, mypy passed over 501 source files, and pytest completed with exit
   code 0`
 
+Stage 6 Lens next-handoff completion-audit readback consumption on
+`2026-05-19`:
+
+- The Stage 6 next-handoff proof now consumes the current closure readback
+  after the persistent-supervision resident-claim boundary has routed to the
+  completion audit. When the Stage 6 closure readback already names
+  `summon_anywhere_blockers`, the top-level next handoff no longer loops back
+  to `stage6_lens_completion_audit`.
+- The operator-facing handoff now routes to
+  `scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status` with
+  `recommended_handoff_source=stage6_closure_readback_summon_anywhere_blockers`
+  and `authority_granted=false`.
+- This does not close Stage 6, grant summon authority, start or supervise a
+  process, claim resident status, mutate service config, write receipts, or
+  write memory. It only removes the stale completion-audit loop from the
+  read-only handoff contract.
+
+Latest validation for Stage 6 Lens next-handoff completion-audit readback
+consumption:
+
+- PowerShell parser check for `scripts/lens-stage6-next-handoff.ps1`
+  Result: `passed; parser_ok`
+- `python -m pytest tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 9 passed`
+- `python -m ruff check tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 1 file already formatted`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status`
+  Result: `passed; status=proof_passed,
+  next_smallest_truthful_gap=summon_anywhere_blockers,
+  recommended_handoff_source=stage6_closure_readback_summon_anywhere_blockers,
+  recommended_next_slice=run_summon_anywhere_blockers_proof_after_stage6_completion_review,
+  recommended_proof_script=scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status,
+  authority_required=summon_hotkey_overlay_and_process_authority,
+  authority_granted=false,
+  stage6_completion_audit_handoff_consumed_by_closure_readback=true`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -1265,13 +1265,11 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     payload = json.loads(proc.stdout)
     assert payload["status"] == "proof_passed"
     assert payload["ok"] is True
-    assert payload["recommended_handoff_source"] == "persistent_supervision_resident_claim_boundary_handoff"
-    assert payload["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
-    assert (
-        payload["recommended_next_slice"] == "run_stage6_lens_completion_audit_after_resident_claim_boundary_readback"
-    )
-    assert payload["recommended_proof_script"] == "scripts/lens-stage6-completion-audit.ps1 -Mode Status"
-    assert payload["authority_required"] == "none_new_stage6_completion_audit"
+    assert payload["recommended_handoff_source"] == "stage6_closure_readback_summon_anywhere_blockers"
+    assert payload["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+    assert payload["recommended_next_slice"] == "run_summon_anywhere_blockers_proof_after_stage6_completion_review"
+    assert payload["recommended_proof_script"] == "scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status"
+    assert payload["authority_required"] == "summon_hotkey_overlay_and_process_authority"
     assert payload["authority_granted"] is False
     assert payload["next_operator_action_requirement"] == "persistent_supervision_enablement_receipt"
     assert payload["next_operator_action"]["id"] == "review_persistent_supervision_enablement_receipt"
@@ -1311,6 +1309,7 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     assert receipt_review_handoff["would_execute"] is False
     assert receipt_review_handoff["would_mutate"] is False
     assert payload["persistent_supervision_resident_claim_boundary_handoff_observed"] is True
+    assert payload["stage6_completion_audit_handoff_consumed_by_closure_readback"] is True
     resident_claim_handoff = payload["persistent_supervision_resident_claim_boundary_handoff"]
     assert resident_claim_handoff["recommended_handoff_source"] == (
         "persistent_supervision_resident_claim_boundary_handoff"
