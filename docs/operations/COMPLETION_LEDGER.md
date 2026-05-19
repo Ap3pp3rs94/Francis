@@ -34743,6 +34743,52 @@ Latest validation for Stage 6 OS-binding API execution proof:
   Result: `passed; branch state OK on main tracking origin/main; ruff lint
   passed; ruff format check passed; mypy passed; pytest passed`
 
+Stage 6 Lens overlay API execution proof on `2026-05-19`:
+
+- Added `scripts/lens-overlay-api-execution-proof.ps1` to prove the governed
+  API path can request and grant bounded host-supervision, resident-runtime,
+  tray-presence, OS-binding, and overlay-window authority in an isolated
+  test-fixture data root, start resident supervision, start real tray presence,
+  bind the real local global hotkey, start the real local overlay window
+  through `/lens/overlay/execute`, and then stop overlay, hotkey, tray, and
+  resident supervision through governed API routes.
+- `scripts/lens-os-binding-api-execution-proof.ps1` now hands off to the new
+  overlay API proof as the next operator-readable slice after OS-level command
+  palette / global-hotkey binding.
+- The proof records `status=proof_passed`,
+  `next_smallest_truthful_gap=summon_binding_blocker_boundary`,
+  `route_next_smallest_truthful_gap=summon_anywhere_blockers`,
+  `overlay_window_started=true`, `overlay_runtime_ready=true`,
+  `overlay_window_visible=true`, `overlay_always_on_top=true`,
+  `overlay_stop_observed=true`, `hotkey_stop_observed=true`,
+  `tray_presence_stop_observed=true`, and
+  `resident_supervision_stop_observed=true`.
+- This is still not Stage 6 closure. It proves a bounded local overlay runtime
+  in an isolated data root only. It does not claim summon-anywhere readiness,
+  service management, memory writes, capture/new-sensing authority, approval
+  decision authority outside the test fixture, or resident claim authority.
+
+Latest validation for Stage 6 overlay API execution proof:
+
+- PowerShell parser check for `scripts/lens-overlay-api-execution-proof.ps1`
+  and `scripts/lens-os-binding-api-execution-proof.ps1`
+  Result: `passed; parse_ok`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-overlay-api-execution-proof.ps1 -Mode Status -RunSeconds 5 -DataDir <temp>`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=summon_binding_blocker_boundary;
+  route_next_smallest_truthful_gap=summon_anywhere_blockers;
+  overlay_window_started=true; overlay_runtime_ready=true;
+  overlay_window_visible=true; overlay_always_on_top=true;
+  overlay_stop_observed=true; hotkey_stop_observed=true;
+  tray_presence_stop_observed=true; resident_supervision_stop_observed=true;
+  blockers=[summon_binding_missing]`
+- `python -m pytest tests/test_lens_overlay_api_execution_proof_script.py tests/test_lens_os_binding_api_execution_proof_script.py -ra`
+  Result: `passed; 4 passed`
+- `python -m ruff check tests/test_lens_overlay_api_execution_proof_script.py tests/test_lens_os_binding_api_execution_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_overlay_api_execution_proof_script.py tests/test_lens_os_binding_api_execution_proof_script.py`
+  Result: `passed; 2 files already formatted`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
