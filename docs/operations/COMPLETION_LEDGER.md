@@ -34789,6 +34789,59 @@ Latest validation for Stage 6 overlay API execution proof:
 - `python -m ruff format --check tests/test_lens_overlay_api_execution_proof_script.py tests/test_lens_os_binding_api_execution_proof_script.py`
   Result: `passed; 2 files already formatted`
 
+Stage 6 Lens summon API execution proof on `2026-05-19`:
+
+- Added `scripts/lens-summon-api-execution-proof.ps1` to prove the governed
+  API path can request and grant bounded host-supervision, resident-runtime,
+  tray-presence, OS-binding, overlay-window, and summon-action authority in an
+  isolated test-fixture data root, start resident supervision, start real tray
+  presence, bind the real local global hotkey, start the real local overlay
+  window, execute the bounded local summon handoff through
+  `/lens/summon/execute` with `allow_launch=false`, and then stop overlay,
+  hotkey, tray, and resident supervision through governed API routes.
+- `scripts/lens-overlay-api-execution-proof.ps1` now hands off to the new
+  summon API proof as the next operator-readable slice after overlay execution.
+- The proof records `status=proof_passed`,
+  `next_smallest_truthful_gap=summon_anywhere_runtime_readback`,
+  `persistent_plan_next_smallest_truthful_gap=persistent_supervision_execution_boundary`,
+  `summon_binding_observed=true`, `summon_runtime_ready=true`,
+  `bounded_handoff_ready=true`, `local_open_ready=true`, `opened=false`,
+  `no_launch=true`, `receipt_written=true`,
+  `required_before_enable_after_summon=[]`,
+  `required_before_enable_ready_after_summon=true`,
+  `overlay_stop_observed=true`, `hotkey_stop_observed=true`,
+  `tray_presence_stop_observed=true`, and
+  `resident_supervision_stop_observed=true`.
+- This is still not Stage 6 closure. It proves a bounded local summon handoff
+  and receipt/runtime readback in an isolated data root only. It does not claim
+  OS-wide summon-anywhere readiness, product approval-decision authority,
+  service management, memory writes, capture/new-sensing authority, resident
+  claim authority, or browser/process launch.
+
+Latest validation for Stage 6 summon API execution proof:
+
+- PowerShell parser check for `scripts/lens-summon-api-execution-proof.ps1`
+  and `scripts/lens-overlay-api-execution-proof.ps1`
+  Result: `passed; parse_ok`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-api-execution-proof.ps1 -Mode Status -RunSeconds 5`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=summon_anywhere_runtime_readback;
+  persistent_plan_next_smallest_truthful_gap=persistent_supervision_execution_boundary;
+  summon_binding_observed=true; summon_runtime_ready=true;
+  bounded_handoff_ready=true; local_open_ready=true; opened=false;
+  no_launch=true; receipt_written=true; required_before_enable_after_summon=[];
+  overlay_stop_observed=true; hotkey_stop_observed=true;
+  tray_presence_stop_observed=true; resident_supervision_stop_observed=true`
+- `python -m pytest tests\test_lens_summon_api_execution_proof_script.py tests\test_lens_overlay_api_execution_proof_script.py -ra`
+  Result: `passed; 4 passed in 27.74s`
+- `python -m ruff check tests\test_lens_summon_api_execution_proof_script.py tests\test_lens_overlay_api_execution_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_summon_api_execution_proof_script.py tests\test_lens_overlay_api_execution_proof_script.py`
+  Result: `passed; 2 files already formatted`
+- `.\scripts\check.ps1`
+  Result: `passed; branch state OK on main tracking origin/main; ruff lint
+  passed; ruff format check passed; mypy passed; pytest passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
