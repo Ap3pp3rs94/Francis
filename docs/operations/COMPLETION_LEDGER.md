@@ -34393,6 +34393,52 @@ alignment:
 - `python -m ruff format --check tests/test_lens_host_supervisor_script.py`
   Result: `passed; 1 file already formatted`
 
+Stage 6 next-handoff closure-readback recommended handoff alignment on
+`2026-05-19`:
+
+- `scripts/lens-stage6-next-handoff.ps1 -Mode Status` now projects a concrete
+  top-level `recommended_handoff` when the current closure readback has already
+  consumed the Stage 6 completion-audit handoff and the next gap is
+  `summon_anywhere_blockers`.
+- Current readback keeps
+  `recommended_handoff_source=stage6_closure_readback_summon_anywhere_blockers`,
+  `recommended_next_slice=run_summon_anywhere_blockers_proof_after_stage6_completion_review`,
+  `recommended_proof_script=scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status`,
+  and `authority_required=summon_hotkey_overlay_and_process_authority`, while
+  the nested handoff names `first_blocker_family=resident_host`.
+- The handoff nests the resident-host blocker handoff and resident-host
+  completion-audit handoff so the next builder can follow the current proof
+  chain instead of re-discovering the first blocker family from a null
+  top-level handoff.
+- This does not grant summon, hotkey, overlay, tray, resident-runtime,
+  process-supervision, resident-claim, service, memory-write, receipt-write, or
+  approval authority. It only makes the read-only Stage 6 next-handoff
+  projection explicit.
+
+Latest validation for Stage 6 next-handoff closure-readback recommended handoff
+alignment:
+
+- PowerShell parser check for `scripts/lens-stage6-next-handoff.ps1`
+  Result: `passed; parse_ok`
+- `python -m pytest tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_applied_bringup_review_state -q`
+  Result: `passed`
+- `python -m pytest tests/test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 1 file already formatted`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status`
+  Result: `passed; next_smallest_truthful_gap=summon_anywhere_blockers,
+  recommended_handoff_source=stage6_closure_readback_summon_anywhere_blockers,
+  recommended_next_slice=run_summon_anywhere_blockers_proof_after_stage6_completion_review,
+  recommended_proof_script=scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status,
+  authority_required=summon_hotkey_overlay_and_process_authority,
+  authority_granted=false, recommended_handoff.status=blocked,
+  recommended_handoff.first_blocker_family=resident_host,
+  recommended_handoff.read_only_contract=true,
+  recommended_handoff.diagnostic_only=true`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

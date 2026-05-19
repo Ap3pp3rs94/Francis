@@ -1271,6 +1271,28 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     assert payload["recommended_proof_script"] == "scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status"
     assert payload["authority_required"] == "summon_hotkey_overlay_and_process_authority"
     assert payload["authority_granted"] is False
+    recommended_handoff = payload["recommended_handoff"]
+    assert recommended_handoff["status"] == "blocked"
+    assert recommended_handoff["previous_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert recommended_handoff["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+    assert recommended_handoff["next_step"] == "run_summon_anywhere_blockers_proof_after_stage6_completion_review"
+    assert recommended_handoff["proof_script"] == "scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status"
+    assert recommended_handoff["route"] == "/lens/summon"
+    assert recommended_handoff["readiness_route"] == "/lens/summon/readiness"
+    assert recommended_handoff["acceptance_criterion"] == "summon_anywhere"
+    assert recommended_handoff["first_blocker_family"] == "resident_host"
+    assert recommended_handoff["authority_required"] == "summon_hotkey_overlay_and_process_authority"
+    assert recommended_handoff["authority_granted"] is False
+    assert recommended_handoff["read_only_contract"] is True
+    assert recommended_handoff["diagnostic_only"] is True
+    assert recommended_handoff["would_execute"] is False
+    assert recommended_handoff["would_mutate"] is False
+    assert recommended_handoff["would_launch_process"] is False
+    assert recommended_handoff["would_supervise_process"] is False
+    assert recommended_handoff["would_register_hotkey"] is False
+    assert recommended_handoff["would_control_overlay"] is False
+    assert recommended_handoff["would_summon"] is False
+    assert recommended_handoff["would_decide_approval"] is False
     assert payload["next_operator_action_requirement"] == "persistent_supervision_enablement_receipt"
     assert payload["next_operator_action"]["id"] == "review_persistent_supervision_enablement_receipt"
     assert payload["next_operator_action"]["method"] == "GET"

@@ -839,6 +839,57 @@ if ($Stage6CompletionAuditHandoffConsumedByClosureReadback) {
   $AuthorityRequired = 'summon_hotkey_overlay_and_process_authority'
   $AuthorityGranted = $false
 }
+$RecommendedHandoff = [ordered]@{}
+if ($Stage6CompletionAuditHandoffConsumedByClosureReadback) {
+  $RecommendedHandoff = [ordered]@{
+    status = 'blocked'
+    previous_next_smallest_truthful_gap = 'stage6_lens_completion_audit'
+    next_smallest_truthful_gap = 'summon_anywhere_blockers'
+    next_step = 'run_summon_anywhere_blockers_proof_after_stage6_completion_review'
+    proof_script = 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status'
+    route = '/lens/summon'
+    readiness_route = '/lens/summon/readiness'
+    acceptance_criterion = 'summon_anywhere'
+    first_blocker_family = $FirstBlockerFamily
+    first_blocker_family_handoff = $FirstBlockerFamilyHandoff
+    first_blocker_family_completion_audit_handoff = $FirstFamilyCompletionAuditHandoff
+    authority_required = 'summon_hotkey_overlay_and_process_authority'
+    authority_granted = $false
+    read_only_contract = $true
+    diagnostic_only = $true
+    would_execute = $false
+    would_mutate = $false
+    would_launch_process = $false
+    would_supervise_process = $false
+    would_register_hotkey = $false
+    would_control_overlay = $false
+    would_summon = $false
+    would_decide_approval = $false
+    blockers = [string[]]@(
+      ConvertTo-StringArray -Value (Get-PropertyValue -Payload $FirstBlockedCriterion -Name 'blockers')
+    )
+  }
+} elseif ($PersistentSupervisionResidentClaimBoundaryHandoffObserved) {
+  $RecommendedHandoff = $PersistentSupervisionResidentClaimBoundaryHandoff
+} elseif ($PersistentSupervisionEnablementReceiptReviewObserved) {
+  $RecommendedHandoff = $PersistentSupervisionEnablementReceiptReviewHandoff
+} elseif ($Stage6PrerequisiteBringupPlanObserved) {
+  $RecommendedHandoff = $Stage6PrerequisiteBringupOperatorPlanHandoff
+} elseif ($ResidentRuntimeCandidateHandoffObserved) {
+  $RecommendedHandoff = $ResidentRuntimeCandidateHandoff
+} elseif ($ActivationExecutionHandoffReady) {
+  $RecommendedHandoff = $ActivationExecutionHandoff
+} elseif ($PersistentSupervisionEnablementAuthorityHandoffObserved) {
+  $RecommendedHandoff = $PersistentSupervisionEnablementAuthorityHandoff
+} elseif ($PersistentSupervisionFirstMissingRequirementHandoffReady) {
+  $RecommendedHandoff = $PersistentSupervisionFirstMissingRequirementHandoff
+} elseif ($PersistentSupervisionRequiredPrerequisitesObserved) {
+  $RecommendedHandoff = $PersistentSupervisionRequiredPrerequisitesHandoff
+} elseif ($CompletionAuditHandoffObserved) {
+  $RecommendedHandoff = $FirstFamilyCompletionAuditHandoff
+} elseif ($FirstFamilyHandoffObserved) {
+  $RecommendedHandoff = $FirstBlockerFamilyHandoff
+}
 $RecommendedFirstMissingAuthorityRequired = [string](
   Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'authority_required' -Default ''
 )
@@ -946,6 +997,7 @@ $Payload = [ordered]@{
   first_blocker_family_next_smallest_truthful_gap = $FamilyNextGap
   recommended_next_slice = $RecommendedNextSlice
   recommended_handoff_source = $RecommendedHandoffSource
+  recommended_handoff = $RecommendedHandoff
   recommended_proof_script = $RecommendedProofScript
   recommended_route = $RecommendedRoute
   recommended_readiness_route = $RecommendedReadinessRoute
