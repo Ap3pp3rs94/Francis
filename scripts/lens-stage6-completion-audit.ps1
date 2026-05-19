@@ -2359,7 +2359,71 @@ $RecommendedNextSlice = ''
 $RecommendedProofScript = ''
 $RecommendedAuthorityRequired = ''
 $RecommendedHandoff = [ordered]@{}
+$Stage6PrerequisiteBringupPlanNextOperatorActionId = [string]$Stage6PrerequisiteBringupPlanNextOperatorAction.id
+$Stage6PrerequisiteBringupPlanRecommendedNextSlice = 'run_stage6_prerequisite_bringup_plan_status'
+if (-not [string]::IsNullOrWhiteSpace($Stage6PrerequisiteBringupPlanNextOperatorActionId)) {
+  $Stage6PrerequisiteBringupPlanRecommendedNextSlice = "run_stage6_prerequisite_bringup_$Stage6PrerequisiteBringupPlanNextOperatorActionId"
+}
+$Stage6PrerequisiteBringupPlanRecommendedAuthorityRequired = 'none_readback_only'
 if (
+  [bool]$Stage6PrerequisiteBringupPlanNextOperatorCommand.requires_approval_id -or
+  [bool]$Stage6PrerequisiteBringupPlanNextOperatorCommand.requires_confirmation -or
+  [bool]$Stage6PrerequisiteBringupPlanNextOperatorAction.operator_supplied_values_required
+) {
+  $Stage6PrerequisiteBringupPlanNextOperatorAuthority = [string]$Stage6PrerequisiteBringupPlanNextOperatorAction.approval_action
+  if ([string]::IsNullOrWhiteSpace($Stage6PrerequisiteBringupPlanNextOperatorAuthority)) {
+    $Stage6PrerequisiteBringupPlanNextOperatorAuthority = 'operator_supplied_authority'
+  }
+  $Stage6PrerequisiteBringupPlanRecommendedAuthorityRequired = $Stage6PrerequisiteBringupPlanNextOperatorAuthority
+}
+if (
+  $NextSmallestTruthfulGap -eq 'summon_anywhere_blockers' -and
+  $Stage6PrerequisiteBringupPlanObserved -and
+  $SummonAnywhereBlockersProofObserved -and
+  $SummonAnywhereFamilyChainProofObserved
+) {
+  $RecommendedHandoffSource = 'stage6_prerequisite_bringup_operator_plan'
+  $RecommendedHandoff = [ordered]@{
+    status = 'blocked'
+    previous_next_smallest_truthful_gap = 'summon_anywhere_blockers'
+    consumed_summon_anywhere_next_smallest_truthful_gap = [string]$SummonAnywhereBlockersProof.next_smallest_truthful_gap
+    consumed_family_chain_next_smallest_truthful_gap = [string]$SummonAnywhereFamilyChainProof.next_smallest_truthful_gap
+    next_smallest_truthful_gap = [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap
+    next_step = $Stage6PrerequisiteBringupPlanRecommendedNextSlice
+    proof_script = 'scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status'
+    route = [string]$Stage6PrerequisiteBringupPlanNextOperatorAction.route
+    operator_plan_script = 'scripts/lens-stage6-prerequisite-bringup-plan.ps1'
+    closure_next_smallest_truthful_gap = [string]$Stage6PrerequisiteBringupPlan.closure_next_smallest_truthful_gap
+    persistent_supervision_next_smallest_truthful_gap = [string]$Stage6PrerequisiteBringupPlan.persistent_supervision_next_smallest_truthful_gap
+    bringup_plan_status = [string]$Stage6PrerequisiteBringupPlan.status
+    bringup_plan_current_truthful_gap = [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap
+    bringup_plan_current_truthful_gap_basis = [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap_basis
+    next_operator_action_requirement = [string]$Stage6PrerequisiteBringupPlan.next_operator_action_requirement
+    next_operator_action = $Stage6PrerequisiteBringupPlanNextOperatorAction
+    next_operator_command = $Stage6PrerequisiteBringupPlanNextOperatorCommand
+    operator_sequence_command_availability = $Stage6PrerequisiteBringupPlanCommandAvailability
+    authority_required = $Stage6PrerequisiteBringupPlanRecommendedAuthorityRequired
+    authority_granted = $false
+    operator_supplied_values_required = [bool]$Stage6PrerequisiteBringupPlanNextOperatorAction.operator_supplied_values_required
+    requires_confirmation = [bool]$Stage6PrerequisiteBringupPlanNextOperatorCommand.requires_confirmation
+    requires_approval_id = [bool]$Stage6PrerequisiteBringupPlanNextOperatorCommand.requires_approval_id
+    requires_operator_approval_decision = [bool]$Stage6PrerequisiteBringupPlanNextOperatorCommand.requires_operator_approval_decision
+    read_only_contract = [bool]$Stage6PrerequisiteBringupPlanGovernance.read_only_contract
+    diagnostic_only = [bool]$Stage6PrerequisiteBringupPlanGovernance.diagnostic_only
+    would_execute = [bool]$Stage6PrerequisiteBringupPlanGovernance.would_execute
+    would_mutate = [bool]$Stage6PrerequisiteBringupPlanGovernance.would_mutate
+    would_request_authority = [bool]$Stage6PrerequisiteBringupPlanGovernance.would_request_authority
+    would_grant_authority = [bool]$Stage6PrerequisiteBringupPlanGovernance.would_grant_authority
+    would_write_memory = [bool]$Stage6PrerequisiteBringupPlanGovernance.memory_write
+    would_decide_approval = [bool]$Stage6PrerequisiteBringupPlanGovernance.approval_decision_authority
+    would_supervise_process = [bool]$Stage6PrerequisiteBringupPlanGovernance.process_supervision_authority
+    blocker_families = [string[]]@(ConvertTo-StringArray -Value $SummonAnywhereBlockersProof.blocked_families)
+    blockers = [string[]]@($Blockers)
+  }
+  $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
+  $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
+  $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
+} elseif (
   $NextSmallestTruthfulGap -eq 'persistent_supervision_enablement_authority_not_granted' -and
   $PersistentSupervisionEnablementDenialObserved -and
   $PersistentSupervisionEnablementExecutionDenialObserved

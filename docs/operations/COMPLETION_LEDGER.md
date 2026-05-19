@@ -34305,6 +34305,43 @@ alignment:
   stage6_applied_enablement_handoff_observed=true,
   persistent_supervision_resident_claim_boundary_handoff_observed=true`
 
+Stage 6 summon-anywhere completion-audit operator handoff alignment on
+`2026-05-19`:
+
+- The Stage 6 completion audit can now keep its top-level
+  `next_smallest_truthful_gap=summon_anywhere_blockers` while still projecting
+  a concrete `recommended_handoff` from the existing Stage 6 prerequisite
+  bring-up plan.
+- The handoff is derived from the current prerequisite-plan
+  `next_operator_action`, so it can truthfully point at an already-applied
+  persistent-supervision enablement receipt review instead of a stale resident
+  host request step.
+- Current readback now reports
+  `recommended_handoff_source=stage6_prerequisite_bringup_operator_plan`,
+  `recommended_next_slice=run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt`,
+  `recommended_proof_script=scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status`,
+  and `authority_required=none_readback_only`.
+- This does not grant resident-runtime, host-supervision, process-supervision,
+  tray, hotkey, overlay, summon, service, memory-write, receipt-write, or
+  resident-claim authority. It only makes the completion audit's operator
+  handoff non-empty and aligned with the governed next readback step.
+
+Latest validation for Stage 6 summon-anywhere completion-audit operator
+handoff alignment:
+
+- PowerShell parser check for `scripts/lens-stage6-completion-audit.ps1`
+  Result: `passed; parse_ok`
+- `python -m pytest tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_consumes_stage6_prerequisite_bringup_plan_readback -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status`
+  Result: `passed; next_smallest_truthful_gap=summon_anywhere_blockers,
+  recommended_handoff_source=stage6_prerequisite_bringup_operator_plan,
+  recommended_next_slice=run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt,
+  recommended_proof_script=scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status,
+  authority_required=none_readback_only, authority_granted=false`
+- `python -m pytest tests/test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed; 36 passed, 1 skipped`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

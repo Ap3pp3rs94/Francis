@@ -219,12 +219,18 @@ def test_lens_stage6_completion_audit_consumes_stage6_prerequisite_bringup_plan_
     assert "stage6_prerequisite_bringup_plan_readback = $Stage6PrerequisiteBringupPlanObserved" in script
     assert "stage6_prerequisite_bringup_plan = [ordered]@{" in script
     assert "'scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status'" in script
+    assert "$Stage6PrerequisiteBringupPlanRecommendedNextSlice" in script
+    assert "$Stage6PrerequisiteBringupPlanRecommendedAuthorityRequired" in script
     assert (
         "$Stage6CompletionReviewed = (\n"
         "  $Stage6CompletionEvidenceReviewed -and\n"
         "  $Stage6PrerequisiteBringupPlanObserved -and"
     ) in script
     assert "stage6_prerequisite_bringup_plan_readback" in script
+    assert "$NextSmallestTruthfulGap -eq 'summon_anywhere_blockers'" in script
+    assert "consumed_summon_anywhere_next_smallest_truthful_gap" in script
+    assert "bringup_plan_current_truthful_gap = [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap" in script
+    assert "authority_required = $Stage6PrerequisiteBringupPlanRecommendedAuthorityRequired" in script
     assert "$RecommendedHandoffSource = 'stage6_prerequisite_bringup_operator_plan'" in script
     assert "next_operator_command = $Stage6PrerequisiteBringupPlanNextOperatorCommand" in script
 
