@@ -34697,6 +34697,52 @@ Latest validation for Stage 6 tray-presence API execution proof:
   Result: `passed; branch state OK on main tracking origin/main; ruff lint
   passed; ruff format check passed; mypy passed; pytest passed`
 
+Stage 6 Lens OS-binding API execution proof on `2026-05-19`:
+
+- Added `scripts/lens-os-binding-api-execution-proof.ps1` to prove the governed
+  API path can request and grant bounded host-supervision, resident-runtime,
+  tray-presence, and OS-binding command-palette authority in an isolated
+  test-fixture data root, start resident supervision, start real tray presence,
+  bind the real local global hotkey through `/lens/os-binding/execute`, and then
+  stop hotkey, tray, and resident supervision through governed API routes.
+- `scripts/lens-tray-presence-api-execution-proof.ps1` now hands off to the new
+  OS-binding API proof as the next operator-readable slice after tray presence.
+- The proof records `status=proof_passed`,
+  `next_smallest_truthful_gap=summon_overlay_window_blocker_boundary`,
+  `route_next_smallest_truthful_gap=summon_binding`,
+  `global_hotkey_bound=true`, `hotkey_runtime_ready=true`,
+  `os_level_command_palette=true`, `hotkey_stop_observed=true`,
+  `tray_presence_stop_observed=true`, and
+  `resident_supervision_stop_observed=true`.
+- This is still not Stage 6 closure. It proves a bounded local OS-level command
+  palette / global-hotkey runtime in an isolated data root only. It does not
+  claim overlay readiness, summon-anywhere readiness, service management, memory
+  writes, approval decision authority outside the test fixture, or resident
+  claim authority.
+
+Latest validation for Stage 6 OS-binding API execution proof:
+
+- PowerShell parser check for `scripts/lens-os-binding-api-execution-proof.ps1`
+  and `scripts/lens-tray-presence-api-execution-proof.ps1`
+  Result: `passed; parse_ok`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-os-binding-api-execution-proof.ps1 -Mode Status -RunSeconds 5 -DataDir <temp>`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=summon_overlay_window_blocker_boundary;
+  route_next_smallest_truthful_gap=summon_binding;
+  global_hotkey_bound=true; hotkey_runtime_ready=true;
+  os_level_command_palette=true; hotkey_stop_observed=true;
+  tray_presence_stop_observed=true; resident_supervision_stop_observed=true;
+  blockers=[overlay_window_missing, summon_binding_missing]`
+- `python -m pytest tests/test_lens_os_binding_api_execution_proof_script.py tests/test_lens_tray_presence_api_execution_proof_script.py -ra`
+  Result: `passed; 4 passed`
+- `python -m ruff check tests/test_lens_os_binding_api_execution_proof_script.py tests/test_lens_tray_presence_api_execution_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_os_binding_api_execution_proof_script.py tests/test_lens_tray_presence_api_execution_proof_script.py`
+  Result: `passed; 2 files already formatted`
+- `.\scripts\check.ps1`
+  Result: `passed; branch state OK on main tracking origin/main; ruff lint
+  passed; ruff format check passed; mypy passed; pytest passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

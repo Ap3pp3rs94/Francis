@@ -28,7 +28,7 @@ function Get-PythonPath {
 }
 
 if ([string]::IsNullOrWhiteSpace($DataDir)) {
-  $DataDir = Join-Path ([System.IO.Path]::GetTempPath()) ("francis-lens-tray-presence-api-execution-proof\" + [guid]::NewGuid().ToString('N') + "\data")
+  $DataDir = Join-Path ([System.IO.Path]::GetTempPath()) ("francis-lens-os-binding-api-execution-proof\" + [guid]::NewGuid().ToString('N') + "\data")
 }
 
 $ProofDataRoot = [System.IO.Path]::GetFullPath($DataDir)
@@ -36,7 +36,7 @@ $PythonPath = Get-PythonPath
 if ([string]::IsNullOrWhiteSpace($PythonPath)) {
   [ordered]@{
     ok = $false
-    kind = 'lens.tray_presence.api_execution.proof'
+    kind = 'lens.os_binding.api_execution.proof'
     status = 'proof_failed'
     mode = $Mode.ToLowerInvariant()
     repo_root = $RepoRoot
@@ -118,6 +118,22 @@ def _approve(client: Any, *, approval_id: str, comment: str) -> dict[str, Any]:
     )
 
 
+def _stop_hotkey(client: Any, *, approval_id: str, actor: str, reason: str) -> dict[str, Any]:
+    if not approval_id:
+        return {"ok": False, "status": "stop_skipped_no_os_binding_approval_id", "global_hotkey_binding": True}
+    return _post(
+        client,
+        "/lens/os-binding/execute",
+        {
+            "approval_id": approval_id,
+            "actor": actor,
+            "reason": reason,
+            "mode": "stop",
+            "run_seconds": 1,
+        },
+    )
+
+
 def _stop_tray(client: Any, *, approval_id: str, actor: str, reason: str) -> dict[str, Any]:
     if not approval_id:
         return {"ok": False, "status": "stop_skipped_no_tray_approval_id", "tray_presence": True}
@@ -186,7 +202,7 @@ def _run() -> tuple[int, dict[str, Any]]:
     actor = "test.system.write"
     set_control_mode(
         "assist",
-        reason="prove Lens tray presence API execution path",
+        reason="prove Lens OS-binding API execution path",
         actor=actor,
     )
 
@@ -194,23 +210,25 @@ def _run() -> tuple[int, dict[str, Any]]:
     host_approval_id = ""
     runtime_approval_id = ""
     tray_approval_id = ""
+    os_binding_approval_id = ""
+    hotkey_stop: dict[str, Any] = {}
     tray_stop: dict[str, Any] = {}
     resident_stop: dict[str, Any] = {}
-    fallback_stop: dict[str, Any] = {}
+    cleanup_errors: list[str] = []
     try:
         host_request = _post(
             client,
             "/lens/host/supervision/authority/request",
             {
                 "actor": actor,
-                "reason": "operator wants host supervision authority before tray API proof",
+                "reason": "operator wants host supervision authority before OS-binding API proof",
             },
         )
         host_approval_id = str(host_request["approval_id"])
         host_decision = _approve(
             client,
             approval_id=host_approval_id,
-            comment="approve only host supervision authority for isolated tray API proof",
+            comment="approve only host supervision authority for isolated OS-binding API proof",
         )
         host_grant = _post(
             client,
@@ -218,7 +236,7 @@ def _run() -> tuple[int, dict[str, Any]]:
             {
                 "approval_id": host_approval_id,
                 "actor": actor,
-                "reason": "grant bounded host supervision authority for isolated tray API proof",
+                "reason": "grant bounded host supervision authority for isolated OS-binding API proof",
                 "lease_seconds": 600,
             },
         )
@@ -229,14 +247,14 @@ def _run() -> tuple[int, dict[str, Any]]:
             "/lens/resident-runtime/authority-grant/request",
             {
                 "actor": actor,
-                "reason": "operator wants resident runtime execution authority before tray API proof",
+                "reason": "operator wants resident runtime execution authority before OS-binding API proof",
             },
         )
         runtime_approval_id = str(runtime_request["approval_id"])
         runtime_decision = _approve(
             client,
             approval_id=runtime_approval_id,
-            comment="approve only resident runtime execution authority for isolated tray API proof",
+            comment="approve only resident runtime execution authority for isolated OS-binding API proof",
         )
         runtime_grant = _post(
             client,
@@ -244,23 +262,19 @@ def _run() -> tuple[int, dict[str, Any]]:
             {
                 "approval_id": runtime_approval_id,
                 "actor": actor,
-                "reason": "grant bounded resident runtime execution authority for isolated tray API proof",
+                "reason": "grant bounded resident runtime execution authority for isolated OS-binding API proof",
                 "lease_seconds": 600,
             },
         )
         runtime_receipt = _as_dict(runtime_grant.get("receipt"))
 
-        runtime_plan = _get(
-            client,
-            f"/lens/resident-runtime/plan?approval_id={runtime_approval_id}&actor={actor}",
-        )
         resident_start = _post(
             client,
             "/lens/resident-runtime/execute",
             {
                 "approval_id": runtime_approval_id,
                 "actor": actor,
-                "reason": "prove governed API path starts resident supervision before tray presence",
+                "reason": "prove governed API path starts resident supervision before OS binding",
                 "run_seconds": run_seconds,
             },
         )
@@ -270,14 +284,14 @@ def _run() -> tuple[int, dict[str, Any]]:
             "/lens/tray/authority/request",
             {
                 "actor": actor,
-                "reason": "operator wants tray presence authority for API proof",
+                "reason": "operator wants tray presence authority before OS-binding API proof",
             },
         )
         tray_approval_id = str(tray_request["approval_id"])
         tray_decision = _approve(
             client,
             approval_id=tray_approval_id,
-            comment="approve only tray presence authority for isolated API proof",
+            comment="approve only tray presence authority for isolated OS-binding API proof",
         )
         tray_grant = _post(
             client,
@@ -285,74 +299,135 @@ def _run() -> tuple[int, dict[str, Any]]:
             {
                 "approval_id": tray_approval_id,
                 "actor": actor,
-                "reason": "grant bounded tray presence authority for isolated API proof",
+                "reason": "grant bounded tray presence authority for isolated OS-binding API proof",
                 "lease_seconds": 600,
             },
         )
         tray_receipt = _as_dict(tray_grant.get("receipt"))
-
         tray_start = _post(
             client,
             "/lens/tray/execute",
             {
                 "approval_id": tray_approval_id,
                 "actor": actor,
-                "reason": "prove governed API path starts the real tray presence runtime",
+                "reason": "prove governed API path starts tray presence before OS binding",
                 "mode": "start",
                 "run_seconds": run_seconds,
             },
         )
-        tray_executions_after_start = _get(client, "/lens/tray/executions?limit=10")
-        lens_status_after_tray_start = _get(client, "/lens/status?limit=10")
-        resident_host = _as_dict(lens_status_after_tray_start.get("resident_host"))
+
+        os_binding_request = _post(
+            client,
+            "/lens/os-binding/authority/request",
+            {
+                "actor": actor,
+                "reason": "operator wants OS-level command palette binding authority for API proof",
+            },
+        )
+        os_binding_approval_id = str(os_binding_request["approval_id"])
+        os_binding_decision = _approve(
+            client,
+            approval_id=os_binding_approval_id,
+            comment="approve only OS-binding command palette authority for isolated API proof",
+        )
+        os_binding_grant = _post(
+            client,
+            "/lens/os-binding/authority",
+            {
+                "approval_id": os_binding_approval_id,
+                "actor": actor,
+                "reason": "grant bounded OS-binding command palette authority for isolated API proof",
+                "lease_seconds": 600,
+            },
+        )
+        os_binding_receipt = _as_dict(os_binding_grant.get("receipt"))
+        readiness_before_execute = _get(client, f"/lens/os-binding/execution/readiness?actor={actor}&limit=10")
+
+        hotkey_start = _post(
+            client,
+            "/lens/os-binding/execute",
+            {
+                "approval_id": os_binding_approval_id,
+                "actor": actor,
+                "reason": "prove governed API path starts the real global hotkey binding runtime",
+                "mode": "bind",
+                "run_seconds": run_seconds,
+            },
+        )
+        os_binding_executions_after_start = _get(client, "/lens/os-binding/executions?limit=10")
+        lens_status_after_hotkey_start = _get(client, "/lens/status?limit=10")
+        os_binding_readiness_after_start = _get(client, f"/lens/os-binding/execution/readiness?actor={actor}&limit=10")
+        resident_host = _as_dict(lens_status_after_hotkey_start.get("resident_host"))
         persistent_plan = _as_dict(resident_host.get("persistent_supervision_plan"))
         dependencies = _dependency_map(persistent_plan)
-        tray_dependency = _as_dict(dependencies.get("tray_presence"))
+        hotkey_dependency = _as_dict(dependencies.get("global_hotkey_binding"))
         recommended_handoff = _as_dict(persistent_plan.get("first_missing_requirement_handoff"))
 
-        tray_runtime_path = data_root / "runtime" / "lens-tray" / "status.json"
-        tray_pid_path = data_root / "runtime" / "lens-tray" / "lens-tray.pid"
-        tray_state_after_start = _read_json(tray_runtime_path)
-        tray_pid_file_present_after_start = tray_pid_path.is_file()
+        hotkey_runtime_path = data_root / "runtime" / "lens-hotkey" / "status.json"
+        hotkey_pid_path = data_root / "runtime" / "lens-hotkey" / "lens-hotkey.pid"
+        hotkey_state_after_start = _read_json(hotkey_runtime_path)
+        hotkey_pid_file_present_after_start = hotkey_pid_path.is_file()
+
+        hotkey_stop = _stop_hotkey(
+            client,
+            approval_id=os_binding_approval_id,
+            actor=actor,
+            reason="stop global hotkey runtime after isolated OS-binding API proof",
+        )
+        hotkey_state_after_stop = _read_json(hotkey_runtime_path)
+        hotkey_pid_file_present_after_stop = hotkey_pid_path.is_file()
 
         tray_stop = _stop_tray(
             client,
             approval_id=tray_approval_id,
             actor=actor,
-            reason="stop tray presence runtime after isolated API proof",
+            reason="stop tray presence runtime after isolated OS-binding API proof",
         )
-        tray_state_after_stop = _read_json(tray_runtime_path)
+        tray_pid_path = data_root / "runtime" / "lens-tray" / "lens-tray.pid"
         tray_pid_file_present_after_stop = tray_pid_path.is_file()
 
         resident_stop = _stop_resident(
             client,
             approval_id=host_approval_id,
             actor=actor,
-            reason="stop supervised resident host lease after isolated tray API proof",
+            reason="stop supervised resident host lease after isolated OS-binding API proof",
         )
         host_pid_path = data_root / "runtime" / "lens-host" / "lens-host.pid"
         host_pid_file_present_after_stop = host_pid_path.is_file()
 
         host_governance = _as_dict(resident_start.get("governance"))
-        tray_start_governance = _as_dict(tray_start.get("governance"))
-        tray_stop_governance = _as_dict(tray_stop.get("governance"))
-        next_gap = str(tray_start.get("next_smallest_truthful_gap") or "os_level_command_palette_binding")
+        tray_governance = _as_dict(tray_start.get("governance"))
+        hotkey_governance = _as_dict(hotkey_start.get("governance"))
+        hotkey_stop_governance = _as_dict(hotkey_stop.get("governance"))
         remaining_required = _str_list(persistent_plan.get("missing_required_before_enable"))
         blockers = _remaining_blockers(persistent_plan)
-        tray_started = (
-            tray_start.get("status") in {"tray_presence_started", "tray_presence_already_running"}
-            and tray_start.get("executed") is True
-            and tray_start.get("tray_presence") is True
-            and tray_start.get("tray_runtime_ready") is True
-            and tray_start.get("tray_icon_visible") is True
-            and tray_state_after_start.get("status") == "tray_running"
-            and tray_pid_file_present_after_start
+        route_next_gap = str(hotkey_start.get("next_smallest_truthful_gap") or "summon_binding")
+        plan_next_gap = str(
+            persistent_plan.get("first_missing_truthful_gap")
+            or recommended_handoff.get("next_smallest_truthful_gap")
+            or "summon_overlay_window_blocker_boundary"
         )
-        plan_consumed_tray = (
-            tray_dependency.get("ready") is True
-            and tray_dependency.get("tray_presence_source") == "live_runtime_readback"
-            and persistent_plan.get("first_missing_required_before_enable") == "global_hotkey_binding"
-            and remaining_required == ["global_hotkey_binding", "overlay_window", "summon_binding"]
+        next_gap = plan_next_gap
+        hotkey_started = (
+            hotkey_start.get("status") in {"global_hotkey_bound", "global_hotkey_binding_already_running"}
+            and hotkey_start.get("executed") is True
+            and hotkey_start.get("global_hotkey_binding") is True
+            and hotkey_start.get("hotkey_runtime_ready") is True
+            and hotkey_start.get("os_level_command_palette") is True
+            and hotkey_state_after_start.get("status") == "hotkey_bound"
+            and hotkey_pid_file_present_after_start
+        )
+        plan_consumed_hotkey = (
+            hotkey_dependency.get("ready") is True
+            and hotkey_dependency.get("hotkey_runtime_ready") is True
+            and persistent_plan.get("first_missing_required_before_enable") == "overlay_window"
+            and remaining_required == ["overlay_window", "summon_binding"]
+        )
+        hotkey_stop_observed = (
+            hotkey_stop.get("status") == "global_hotkey_binding_stopped"
+            and hotkey_stop.get("executed") is True
+            and hotkey_stop.get("global_hotkey_binding") is False
+            and hotkey_pid_file_present_after_stop is False
         )
         tray_stop_observed = (
             tray_stop.get("status") == "tray_presence_stopped"
@@ -369,16 +444,18 @@ def _run() -> tuple[int, dict[str, Any]]:
         authority_boundaries_intact = (
             host_governance.get("service_control_authority") is False
             and host_governance.get("resident_claim_authority") is False
-            and tray_start_governance.get("tray_registration_authority") is True
-            and tray_start_governance.get("tray_icon_authority") is True
-            and tray_start_governance.get("hotkey_registration_authority") is False
-            and tray_start_governance.get("overlay_control_authority") is False
-            and tray_start_governance.get("summon_authority") is False
-            and tray_start_governance.get("service_control_authority") is False
-            and tray_start_governance.get("memory_write") is False
-            and tray_start_governance.get("resident_claim_authority") is False
-            and tray_stop_governance.get("memory_write") is False
-            and tray_stop_governance.get("resident_claim_authority") is False
+            and tray_governance.get("tray_registration_authority") is True
+            and tray_governance.get("hotkey_registration_authority") is False
+            and hotkey_governance.get("hotkey_registration_authority") is True
+            and hotkey_governance.get("local_process_launch_authority") is True
+            and hotkey_governance.get("summon_authority") is False
+            and hotkey_governance.get("overlay_control_authority") is False
+            and hotkey_governance.get("tray_registration_authority") is False
+            and hotkey_governance.get("service_control_authority") is False
+            and hotkey_governance.get("memory_write") is False
+            and hotkey_governance.get("resident_claim_authority") is False
+            and hotkey_stop_governance.get("memory_write") is False
+            and hotkey_stop_governance.get("resident_claim_authority") is False
         )
 
         checks = [
@@ -401,44 +478,74 @@ def _run() -> tuple[int, dict[str, Any]]:
                 "The resident runtime route requires a distinct execution authority grant.",
             ),
             _check(
-                "resident_runtime_started_before_tray",
+                "resident_runtime_started_before_os_binding",
                 str(resident_start.get("status")),
                 resident_start.get("status") == "resident_supervision_started"
                 and resident_start.get("resident_supervised_runtime") is True,
                 "/lens/resident-runtime/execute",
-                "Tray execution must be preceded by live resident supervision.",
+                "OS-binding execution must be preceded by live resident supervision.",
             ),
             _check(
-                "tray_authority_granted",
-                str(tray_grant.get("status")),
-                tray_decision.get("status") == "approved"
-                and tray_grant.get("status") == "authority_granted"
-                and bool(tray_receipt.get("receipt_id")),
-                "/lens/tray/authority",
-                "The tray route requires a distinct tray presence authority grant.",
-            ),
-            _check(
-                "api_execute_started_real_tray_presence",
+                "tray_presence_started_before_os_binding",
                 str(tray_start.get("status")),
-                tray_started,
+                tray_start.get("status") == "tray_presence_started"
+                and tray_start.get("tray_presence") is True
+                and tray_start.get("tray_runtime_ready") is True,
                 "/lens/tray/execute",
-                "The API route must drive the real tray presence entrypoint in the isolated data root.",
+                "OS-binding execution must be preceded by live tray presence.",
             ),
             _check(
-                "status_plan_consumed_live_tray_runtime",
+                "os_binding_authority_granted",
+                str(os_binding_grant.get("status")),
+                os_binding_decision.get("status") == "approved"
+                and os_binding_grant.get("status") == "authority_granted"
+                and bool(os_binding_receipt.get("receipt_id")),
+                "/lens/os-binding/authority",
+                "The OS-binding route requires a distinct command-palette binding authority grant.",
+            ),
+            _check(
+                "readiness_blocked_until_hotkey_runtime",
+                str(readiness_before_execute.get("status")),
+                readiness_before_execute.get("status") == "blocked"
+                and "global_hotkey_binding" in _str_list(readiness_before_execute.get("blocked_requirements")),
+                "/lens/os-binding/execution/readiness",
+                "Before execution, readiness must remain blocked by the missing live hotkey runtime.",
+            ),
+            _check(
+                "api_execute_bound_real_global_hotkey",
+                str(hotkey_start.get("status")),
+                hotkey_started,
+                "/lens/os-binding/execute",
+                "The API route must drive the real global hotkey entrypoint in the isolated data root.",
+            ),
+            _check(
+                "status_plan_consumed_live_hotkey_runtime",
                 str(persistent_plan.get("first_missing_required_before_enable")),
-                plan_consumed_tray,
+                plan_consumed_hotkey,
                 "/lens/status",
-                "The persistent-supervision plan must consume live tray runtime readback and move to global hotkey.",
+                "The persistent-supervision plan must consume live hotkey readback and move to overlay.",
             ),
             _check(
-                "tray_receipt_readback_after_start",
-                str(tray_executions_after_start.get("status")),
-                tray_executions_after_start.get("latest_tray_presence") is True
-                and tray_executions_after_start.get("latest_next_smallest_truthful_gap")
-                == "os_level_command_palette_binding",
-                "/lens/tray/executions",
-                "The tray execution readback must preserve the started-tray receipt.",
+                "os_binding_receipt_readback_after_start",
+                str(os_binding_executions_after_start.get("status")),
+                os_binding_executions_after_start.get("latest_global_hotkey_binding") is True
+                and os_binding_executions_after_start.get("latest_next_smallest_truthful_gap") == "summon_binding",
+                "/lens/os-binding/executions",
+                "The OS-binding execution readback must preserve the started-hotkey receipt.",
+            ),
+            _check(
+                "readiness_observed_os_level_palette_after_start",
+                str(os_binding_readiness_after_start.get("status")),
+                os_binding_readiness_after_start.get("os_level_command_palette") is True,
+                "/lens/os-binding/execution/readiness",
+                "Execution readiness must observe the live OS-level command palette hotkey runtime.",
+            ),
+            _check(
+                "api_stop_cleaned_real_global_hotkey",
+                str(hotkey_stop.get("status")),
+                hotkey_stop_observed,
+                "/lens/os-binding/execute",
+                "The proof must stop the hotkey runtime and remove the hotkey pid file before returning.",
             ),
             _check(
                 "api_stop_cleaned_real_tray_presence",
@@ -452,20 +559,20 @@ def _run() -> tuple[int, dict[str, Any]]:
                 str(resident_stop.get("status")),
                 resident_stop_observed,
                 "/lens/host/supervision/execute",
-                "The proof must stop the live resident supervisor after tray cleanup.",
+                "The proof must stop the live resident supervisor after cleanup.",
             ),
             _check(
                 "authority_boundaries_intact",
                 "bounded" if authority_boundaries_intact else "leaked",
                 authority_boundaries_intact,
                 "response.governance",
-                "The proof may start resident supervision and tray presence but must not gain hotkey, overlay, summon, service, memory, or resident-claim authority.",
+                "The proof may start resident supervision, tray presence, and hotkey binding but must not gain summon, overlay, service, memory, or resident-claim authority.",
             ),
         ]
         proof_passed = all(item["passed"] for item in checks)
         payload = {
             "ok": proof_passed,
-            "kind": "lens.tray_presence.api_execution.proof",
+            "kind": "lens.os_binding.api_execution.proof",
             "status": "proof_passed" if proof_passed else "proof_failed",
             "mode": os.environ.get("FRANCIS_PROOF_MODE", "status"),
             "repo_root": str(repo_root),
@@ -473,36 +580,45 @@ def _run() -> tuple[int, dict[str, Any]]:
             "stage": "Stage 6 / Lens MVP",
             "stage_state": "active",
             "acceptance_criterion": "summon_anywhere",
-            "previous_next_smallest_truthful_gap": "summon_tray_presence_blocker_boundary",
+            "previous_next_smallest_truthful_gap": "os_level_command_palette_binding",
+            "route_next_smallest_truthful_gap": route_next_gap,
             "next_smallest_truthful_gap": next_gap,
-            "recommended_next_slice": "prove_governed_os_binding_api_execution_after_tray_presence",
-            "recommended_proof_script": "scripts/lens-os-binding-api-execution-proof.ps1 -Mode Status",
-            "recommended_handoff_source": "api_tray_presence_execution_global_hotkey_handoff",
+            "recommended_next_slice": "prove_governed_overlay_window_api_execution_after_global_hotkey_binding",
+            "recommended_proof_script": str(
+                recommended_handoff.get("proof_script")
+                or "scripts/lens-summon-overlay-window-blocker-proof.ps1 -Mode Status"
+            ),
+            "recommended_handoff_source": "api_os_binding_execution_overlay_window_handoff",
             "recommended_handoff": recommended_handoff,
             "host_supervision_approval_id": host_approval_id,
             "resident_runtime_approval_id": runtime_approval_id,
             "tray_presence_approval_id": tray_approval_id,
+            "os_binding_approval_id": os_binding_approval_id,
             "host_supervision_authority_grant_receipt_id": str(host_receipt.get("receipt_id") or ""),
             "resident_runtime_authority_grant_receipt_id": str(runtime_receipt.get("receipt_id") or ""),
             "tray_authority_grant_receipt_id": str(tray_receipt.get("receipt_id") or ""),
-            "resident_runtime_plan_ready": runtime_plan.get("bounded_resident_candidate_ready") is True,
+            "os_binding_authority_grant_receipt_id": str(os_binding_receipt.get("receipt_id") or ""),
             "resident_runtime_execution_authority": runtime_grant.get("authority_granted") is True,
             "host_supervision_authority": host_grant.get("authority_granted") is True,
             "tray_presence_authority": tray_grant.get("authority_granted") is True,
-            "execution_applied": tray_start.get("applied") is True,
-            "executed": tray_start.get("executed") is True,
+            "os_binding_authority": os_binding_grant.get("authority_granted") is True,
+            "execution_applied": hotkey_start.get("applied") is True,
+            "executed": hotkey_start.get("executed") is True,
             "resident_host_process_started": resident_start.get("resident_host_process") is True,
             "resident_supervised_runtime_started": resident_start.get("resident_supervised_runtime") is True,
             "tray_presence_started": tray_start.get("tray_presence") is True,
             "tray_runtime_ready": tray_start.get("tray_runtime_ready") is True,
-            "tray_icon_visible": tray_start.get("tray_icon_visible") is True,
+            "global_hotkey_bound": hotkey_start.get("global_hotkey_binding") is True,
+            "hotkey_runtime_ready": hotkey_start.get("hotkey_runtime_ready") is True,
+            "os_level_command_palette": hotkey_start.get("os_level_command_palette") is True,
+            "hotkey_stop_observed": hotkey_stop_observed,
             "tray_presence_stop_observed": tray_stop_observed,
             "resident_supervision_stop_observed": resident_stop_observed,
-            "tray_pid_file_present_after_start": tray_pid_file_present_after_start,
+            "hotkey_pid_file_present_after_start": hotkey_pid_file_present_after_start,
+            "hotkey_pid_file_present_after_stop": hotkey_pid_file_present_after_stop,
             "tray_pid_file_present_after_stop": tray_pid_file_present_after_stop,
             "host_pid_file_present_after_stop": host_pid_file_present_after_stop,
-            "required_before_enable_after_tray": remaining_required,
-            "global_hotkey": False,
+            "required_before_enable_after_hotkey": remaining_required,
             "overlay_window": False,
             "summon_anywhere": False,
             "service_managed": False,
@@ -512,33 +628,35 @@ def _run() -> tuple[int, dict[str, Any]]:
             "proof": {
                 "resident_start_status": str(resident_start.get("status") or ""),
                 "tray_start_status": str(tray_start.get("status") or ""),
-                "tray_runtime_status_after_start": str(tray_state_after_start.get("status") or ""),
-                "tray_runtime_pid_after_start": int(tray_state_after_start.get("pid") or 0),
+                "hotkey_start_status": str(hotkey_start.get("status") or ""),
+                "hotkey_runtime_status_after_start": str(hotkey_state_after_start.get("status") or ""),
+                "hotkey_runtime_pid_after_start": int(hotkey_state_after_start.get("pid") or 0),
+                "hotkey_stop_status": str(hotkey_stop.get("status") or ""),
+                "hotkey_runtime_status_after_stop": str(hotkey_state_after_stop.get("status") or ""),
                 "tray_stop_status": str(tray_stop.get("status") or ""),
-                "tray_runtime_status_after_stop": str(tray_state_after_stop.get("status") or ""),
                 "resident_stop_status": str(resident_stop.get("status") or ""),
-                "tray_receipt_readback_status": str(tray_executions_after_start.get("status") or ""),
-                "tray_receipt_readback_next_gap": str(
-                    tray_executions_after_start.get("latest_next_smallest_truthful_gap") or ""
+                "os_binding_receipt_readback_status": str(os_binding_executions_after_start.get("status") or ""),
+                "os_binding_receipt_readback_next_gap": str(
+                    os_binding_executions_after_start.get("latest_next_smallest_truthful_gap") or ""
                 ),
-                "persistent_plan_first_missing_after_tray": str(
+                "persistent_plan_first_missing_after_hotkey": str(
                     persistent_plan.get("first_missing_required_before_enable") or ""
                 ),
-                "tray_dependency_source": str(tray_dependency.get("tray_presence_source") or ""),
+                "hotkey_dependency_source": str(hotkey_dependency.get("global_hotkey_source") or ""),
             },
             "start_execution": {
-                "status": tray_start.get("status"),
-                "next_smallest_truthful_gap": tray_start.get("next_smallest_truthful_gap"),
-                "tray_presence": tray_start.get("tray_presence"),
-                "tray_runtime_ready": tray_start.get("tray_runtime_ready"),
-                "tray_icon_visible": tray_start.get("tray_icon_visible"),
-                "resident_claim_allowed": tray_start.get("resident_claim_allowed"),
-                "stop_command": tray_start.get("stop_command"),
+                "status": hotkey_start.get("status"),
+                "next_smallest_truthful_gap": hotkey_start.get("next_smallest_truthful_gap"),
+                "global_hotkey_binding": hotkey_start.get("global_hotkey_binding"),
+                "hotkey_runtime_ready": hotkey_start.get("hotkey_runtime_ready"),
+                "os_level_command_palette": hotkey_start.get("os_level_command_palette"),
+                "launch_on_hotkey": hotkey_start.get("launch_on_hotkey"),
+                "stop_command": hotkey_start.get("stop_command"),
             },
             "stop_execution": {
-                "status": tray_stop.get("status"),
-                "tray_presence": tray_stop.get("tray_presence"),
-                "tray_runtime_ready": tray_stop.get("tray_runtime_ready"),
+                "status": hotkey_stop.get("status"),
+                "global_hotkey_binding": hotkey_stop.get("global_hotkey_binding"),
+                "hotkey_runtime_ready": hotkey_stop.get("hotkey_runtime_ready"),
             },
             "governance": {
                 "diagnostic_only": True,
@@ -557,7 +675,7 @@ def _run() -> tuple[int, dict[str, Any]]:
                 "service_control_authority": False,
                 "tray_registration_authority": True,
                 "tray_icon_authority": True,
-                "hotkey_registration_authority": False,
+                "hotkey_registration_authority": True,
                 "overlay_control_authority": False,
                 "summon_authority": False,
                 "capture_authority": False,
@@ -567,47 +685,53 @@ def _run() -> tuple[int, dict[str, Any]]:
                 "mutation_authority_granted": True,
             },
             "message": (
-                "The governed API path can start and stop real Lens tray presence in an isolated data root "
-                "after resident supervision is live. The proof still stops before global hotkey, overlay, "
-                "summon-anywhere, service management, memory writes, and resident-claim authority."
+                "The governed API path can start and stop real Lens OS-level command palette binding "
+                "in an isolated data root after resident supervision and tray presence are live. The proof "
+                "still stops before overlay, summon-anywhere, service management, memory writes, and "
+                "resident-claim authority."
             ),
         }
         return (0 if proof_passed else 1), payload
     finally:
-        if not (tray_stop.get("status") == "tray_presence_stopped" and tray_stop.get("tray_presence") is False):
-            try:
-                fallback_stop = _stop_tray(
+        try:
+            if not (
+                hotkey_stop.get("status") == "global_hotkey_binding_stopped"
+                and hotkey_stop.get("global_hotkey_binding") is False
+            ):
+                _stop_hotkey(
+                    client,
+                    approval_id=os_binding_approval_id,
+                    actor=actor,
+                    reason="fallback cleanup for OS-binding API execution proof",
+                )
+        except Exception as exc:
+            cleanup_errors.append(f"hotkey_stop_failed:{exc}")
+        try:
+            if not (tray_stop.get("status") == "tray_presence_stopped" and tray_stop.get("tray_presence") is False):
+                _stop_tray(
                     client,
                     approval_id=tray_approval_id,
                     actor=actor,
-                    reason="fallback cleanup for tray presence API execution proof",
+                    reason="fallback cleanup for OS-binding API execution proof",
                 )
-            except Exception as exc:
-                fallback_stop = {
-                    "ok": False,
-                    "status": "fallback_tray_stop_failed",
-                    "error": str(exc),
-                }
-        if not (
-            resident_stop.get("status") == "resident_supervision_stopped"
-            and resident_stop.get("resident_host_process") is False
-            and resident_stop.get("resident_supervised_runtime") is False
-        ):
-            try:
-                fallback_stop = _stop_resident(
+        except Exception as exc:
+            cleanup_errors.append(f"tray_stop_failed:{exc}")
+        try:
+            if not (
+                resident_stop.get("status") == "resident_supervision_stopped"
+                and resident_stop.get("resident_host_process") is False
+                and resident_stop.get("resident_supervised_runtime") is False
+            ):
+                _stop_resident(
                     client,
                     approval_id=host_approval_id,
                     actor=actor,
-                    reason="fallback cleanup for tray presence API execution proof",
+                    reason="fallback cleanup for OS-binding API execution proof",
                 )
-            except Exception as exc:
-                fallback_stop = {
-                    "ok": False,
-                    "status": "fallback_resident_stop_failed",
-                    "error": str(exc),
-                }
-        if str(fallback_stop.get("status", "")).endswith("_failed"):
-            raise RuntimeError(f"tray presence API proof cleanup failed: {fallback_stop!r}")
+        except Exception as exc:
+            cleanup_errors.append(f"resident_stop_failed:{exc}")
+        if cleanup_errors:
+            raise RuntimeError(f"OS-binding API proof cleanup failed: {cleanup_errors!r}")
 
 
 try:
@@ -616,7 +740,7 @@ except Exception as exc:
     exit_code = 1
     payload = {
         "ok": False,
-        "kind": "lens.tray_presence.api_execution.proof",
+        "kind": "lens.os_binding.api_execution.proof",
         "status": "proof_failed",
         "error": str(exc),
         "traceback": traceback.format_exc(),
@@ -649,13 +773,14 @@ try {
   } else {
     $env:PYTHONPATH = $SourceRoot + [System.IO.Path]::PathSeparator + $PreviousPythonPath
   }
-  $ProofRuntimeDir = Join-Path $ProofDataRoot 'runtime\lens-tray-presence-api-execution-proof'
+  $ProofRuntimeDir = Join-Path $ProofDataRoot 'runtime\lens-os-binding-api-execution-proof'
   New-Item -ItemType Directory -Force -Path $ProofRuntimeDir | Out-Null
   $PythonScriptPath = Join-Path $ProofRuntimeDir 'proof.py'
   Set-Content -LiteralPath $PythonScriptPath -Value $Source -Encoding UTF8
   $Output = & $PythonPath $PythonScriptPath 2>&1
   $ExitCode = $LASTEXITCODE
 } finally {
+  & (Join-Path $PSScriptRoot 'lens-hotkey-binding.ps1') -Mode Stop -DataDir $ProofDataRoot *> $null
   & (Join-Path $PSScriptRoot 'lens-tray-presence.ps1') -Mode Stop -DataDir $ProofDataRoot *> $null
   & (Join-Path $PSScriptRoot 'lens-host-supervisor.ps1') -Mode StopResident -DataDir $ProofDataRoot *> $null
 
