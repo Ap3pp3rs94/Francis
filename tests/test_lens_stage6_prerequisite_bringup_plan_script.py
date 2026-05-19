@@ -10,6 +10,8 @@ from typing import Any, Iterator
 
 import pytest
 
+_LIVE_STAGE6_PREREQUISITE_RUN_SECONDS = "180"
+
 
 def _powershell() -> str:
     exe = shutil.which("powershell") or shutil.which("pwsh")
@@ -802,7 +804,7 @@ def _execute_next(
     reason: str,
     *,
     service_config_path: Path | None = None,
-    run_seconds: str = "60",
+    run_seconds: str = _LIVE_STAGE6_PREREQUISITE_RUN_SECONDS,
 ) -> dict[str, Any]:
     proc = _run_plan(
         "-Mode",
@@ -845,7 +847,7 @@ def _refresh_resident_host_lease(
         route=LENS_RESIDENT_RUNTIME_EXECUTE_ROUTE,
         method="POST",
         record_receipt=True,
-        run_seconds=60,
+        run_seconds=int(_LIVE_STAGE6_PREREQUISITE_RUN_SECONDS),
     )
     assert result["ok"] is True, json.dumps(result, indent=2)
     assert result["status"] == "resident_supervision_started"
@@ -882,7 +884,7 @@ def _restart_tray_lease(
         method="POST",
         record_receipt=True,
         mode="start",
-        run_seconds=60,
+        run_seconds=int(_LIVE_STAGE6_PREREQUISITE_RUN_SECONDS),
     )
     assert result["ok"] is True, json.dumps(result, indent=2)
     assert result["status"] == "tray_presence_started", json.dumps(result, indent=2)
@@ -919,7 +921,7 @@ def _restart_hotkey_lease(
         method="POST",
         record_receipt=True,
         mode="bind",
-        run_seconds=60,
+        run_seconds=int(_LIVE_STAGE6_PREREQUISITE_RUN_SECONDS),
     )
     assert result["ok"] is True, json.dumps(result, indent=2)
     assert result["status"] == "global_hotkey_bound", json.dumps(result, indent=2)
@@ -956,7 +958,7 @@ def _restart_overlay_lease(
         method="POST",
         record_receipt=True,
         mode="start",
-        run_seconds=60,
+        run_seconds=int(_LIVE_STAGE6_PREREQUISITE_RUN_SECONDS),
     )
     assert result["ok"] is True, json.dumps(result, indent=2)
     assert result["status"] == "overlay_window_started", json.dumps(result, indent=2)
@@ -1164,7 +1166,7 @@ def _execute_prerequisites_through_overlay_window(
         resident_approval_id,
         "test execute resident host before summon handoff",
         service_config_path=service_config_path,
-        run_seconds="60",
+        run_seconds=_LIVE_STAGE6_PREREQUISITE_RUN_SECONDS,
     )
     assert resident_execution["status"] == "resident_supervision_started"
     _wait_for_next_action(
@@ -1195,7 +1197,7 @@ def _execute_prerequisites_through_overlay_window(
         tray_approval_id,
         "test execute tray presence before summon handoff",
         service_config_path=service_config_path,
-        run_seconds="60",
+        run_seconds=_LIVE_STAGE6_PREREQUISITE_RUN_SECONDS,
     )
     assert tray_execution["status"] == "tray_presence_started"
     _wait_for_next_action(
@@ -1226,7 +1228,7 @@ def _execute_prerequisites_through_overlay_window(
         hotkey_approval_id,
         "test execute hotkey binding before summon handoff",
         service_config_path=service_config_path,
-        run_seconds="60",
+        run_seconds=_LIVE_STAGE6_PREREQUISITE_RUN_SECONDS,
     )
     assert hotkey_execution["status"] == "global_hotkey_bound"
     _wait_for_next_action(
@@ -1257,7 +1259,7 @@ def _execute_prerequisites_through_overlay_window(
         overlay_approval_id,
         "test execute overlay window before summon handoff",
         service_config_path=service_config_path,
-        run_seconds="60",
+        run_seconds=_LIVE_STAGE6_PREREQUISITE_RUN_SECONDS,
     )
     assert overlay_execution["status"] == "overlay_window_started"
     _wait_for_next_action(
@@ -1628,7 +1630,7 @@ def test_lens_stage6_prerequisite_bringup_tray_execution_advances_to_hotkey(
         data_dir,
         tray_approval_id,
         "test execute tray presence before hotkey handoff",
-        run_seconds="60",
+        run_seconds=_LIVE_STAGE6_PREREQUISITE_RUN_SECONDS,
     )
     assert tray_execution["status"] == "tray_presence_started", json.dumps(tray_execution, indent=2)
     assert tray_execution["execute_result"]["action_id"] == "execute_tray_presence"
@@ -1693,7 +1695,7 @@ def test_lens_stage6_prerequisite_bringup_hotkey_execution_advances_to_overlay(
         data_dir,
         resident_approval_id,
         "test execute resident host before hotkey handoff",
-        run_seconds="60",
+        run_seconds=_LIVE_STAGE6_PREREQUISITE_RUN_SECONDS,
     )
     assert resident_execution["status"] == "resident_supervision_started"
 
@@ -1709,7 +1711,7 @@ def test_lens_stage6_prerequisite_bringup_hotkey_execution_advances_to_overlay(
         data_dir,
         tray_approval_id,
         "test execute tray presence before hotkey execution",
-        run_seconds="60",
+        run_seconds=_LIVE_STAGE6_PREREQUISITE_RUN_SECONDS,
     )
     assert tray_execution["status"] == "tray_presence_started"
 
@@ -1756,7 +1758,7 @@ def test_lens_stage6_prerequisite_bringup_hotkey_execution_advances_to_overlay(
         data_dir,
         hotkey_approval_id,
         "test execute hotkey binding before overlay handoff",
-        run_seconds="60",
+        run_seconds=_LIVE_STAGE6_PREREQUISITE_RUN_SECONDS,
     )
     assert hotkey_execution["status"] == "global_hotkey_bound", json.dumps(hotkey_execution, indent=2)
     assert hotkey_execution["execute_result"]["action_id"] == "execute_global_hotkey_binding"
@@ -1818,7 +1820,7 @@ def test_lens_stage6_prerequisite_bringup_overlay_execution_advances_to_summon(
         data_dir,
         resident_approval_id,
         "test execute resident host before overlay handoff",
-        run_seconds="60",
+        run_seconds=_LIVE_STAGE6_PREREQUISITE_RUN_SECONDS,
     )
     assert resident_execution["status"] == "resident_supervision_started"
 
@@ -1834,7 +1836,7 @@ def test_lens_stage6_prerequisite_bringup_overlay_execution_advances_to_summon(
         data_dir,
         tray_approval_id,
         "test execute tray presence before overlay handoff",
-        run_seconds="60",
+        run_seconds=_LIVE_STAGE6_PREREQUISITE_RUN_SECONDS,
     )
     assert tray_execution["status"] == "tray_presence_started"
 
@@ -1850,7 +1852,7 @@ def test_lens_stage6_prerequisite_bringup_overlay_execution_advances_to_summon(
         data_dir,
         hotkey_approval_id,
         "test execute hotkey binding before overlay execution",
-        run_seconds="60",
+        run_seconds=_LIVE_STAGE6_PREREQUISITE_RUN_SECONDS,
     )
     assert hotkey_execution["status"] == "global_hotkey_bound"
 
@@ -1894,7 +1896,7 @@ def test_lens_stage6_prerequisite_bringup_overlay_execution_advances_to_summon(
         data_dir,
         overlay_approval_id,
         "test execute overlay window before summon handoff",
-        run_seconds="60",
+        run_seconds=_LIVE_STAGE6_PREREQUISITE_RUN_SECONDS,
     )
     assert overlay_execution["status"] == "overlay_window_started", json.dumps(overlay_execution, indent=2)
     assert overlay_execution["execute_result"]["action_id"] == "execute_overlay_window"
@@ -1992,7 +1994,7 @@ def _execute_prerequisites_through_summon_binding(
         summon_approval_id,
         "test execute summon binding before persistent supervision enablement",
         service_config_path=service_config_path,
-        run_seconds="60",
+        run_seconds=_LIVE_STAGE6_PREREQUISITE_RUN_SECONDS,
     )
     return {
         **chain,
@@ -2084,7 +2086,7 @@ def test_lens_stage6_prerequisite_bringup_summon_execution_advances_to_enablemen
         data_dir,
         summon_approval_id,
         "test execute summon binding before persistent supervision enablement",
-        run_seconds="60",
+        run_seconds=_LIVE_STAGE6_PREREQUISITE_RUN_SECONDS,
     )
     assert summon_execution["status"] == "summon_binding_observed", json.dumps(summon_execution, indent=2)
     assert summon_execution["execute_result"]["action_id"] == "execute_summon_binding"
