@@ -187,6 +187,62 @@ $ExpectedGroupsPresent = (
 )
 $ProofPassed = $PreflightObserved -and $ExpectedReadOnlyGovernance -and $ExpectedGroupsPresent
 
+$FirstBlockerGroupReadback = [ordered]@{}
+if (-not [string]::IsNullOrWhiteSpace($FirstBlockerGroup) -and $Groups.Contains($FirstBlockerGroup)) {
+  $FirstBlockerGroupReadback = $Groups[$FirstBlockerGroup]
+}
+$RecommendedNextSlice = switch ($FirstBlockerGroup) {
+  'runtime' { 'run_resident_host_runtime_boundary_proof' }
+  default {
+    if ([string]::IsNullOrWhiteSpace($FirstBlockerGroup)) {
+      'run_stage6_completion_audit_after_lifecycle_readback'
+    } else {
+      "review_resident_host_$FirstBlockerGroup`_blocker_group"
+    }
+  }
+}
+$RecommendedProofScript = switch ($FirstBlockerGroup) {
+  'runtime' { 'scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status' }
+  default { 'scripts/lens-resident-host-lifecycle-blockers-proof.ps1 -Mode Status' }
+}
+$RecommendedRoute = ''
+if ($FirstBlockerGroupReadback -is [System.Collections.IDictionary] -and $FirstBlockerGroupReadback.Contains('route')) {
+  $RecommendedRoute = [string]$FirstBlockerGroupReadback['route']
+}
+if ([string]::IsNullOrWhiteSpace($RecommendedRoute)) {
+  $RecommendedRoute = '/lens/host'
+}
+$RecommendedReadinessRoute = switch ($FirstBlockerGroup) {
+  'runtime' { '/lens/host/runtime-loop/readiness' }
+  default { '/lens/host' }
+}
+$RecommendedAuthorityRequired = switch ($FirstBlockerGroup) {
+  'runtime' { 'process_supervision_authority' }
+  default { 'none_readback_only' }
+}
+$FirstBlockerGroupBlockers = @()
+if ($FirstBlockerGroupReadback -is [System.Collections.IDictionary] -and $FirstBlockerGroupReadback.Contains('blockers')) {
+  $FirstBlockerGroupBlockers = $FirstBlockerGroupReadback['blockers']
+}
+$RecommendedHandoff = [ordered]@{
+  id = if ([string]::IsNullOrWhiteSpace($FirstBlockerGroup)) { 'stage6_lens_completion_audit' } else { "resident_host_$FirstBlockerGroup`_blocker" }
+  status = if ($ProofPassed) { 'blocked' } else { 'missing_or_unexpected' }
+  next_smallest_truthful_gap = $NextSmallestTruthfulGap
+  next_step = $RecommendedNextSlice
+  proof_script = $RecommendedProofScript
+  route = $RecommendedRoute
+  readiness_route = $RecommendedReadinessRoute
+  acceptance_criterion = 'summon_anywhere'
+  blocker_group = $FirstBlockerGroup
+  blockers = [string[]]@(ConvertTo-StringArray -Value $FirstBlockerGroupBlockers)
+  authority_required = $RecommendedAuthorityRequired
+  authority_granted = $false
+  read_only_contract = $true
+  diagnostic_only = $true
+  would_execute = $false
+  would_mutate = $false
+}
+
 $Payload = [ordered]@{
   ok = $ProofPassed
   kind = 'lens.resident_host.lifecycle_blockers_proof'
@@ -205,6 +261,12 @@ $Payload = [ordered]@{
   blocked_groups = $BlockedGroups
   first_blocker_group = $FirstBlockerGroup
   next_smallest_truthful_gap = $NextSmallestTruthfulGap
+  recommended_handoff_source = 'resident_host_lifecycle_first_blocker_group'
+  recommended_next_slice = $RecommendedNextSlice
+  recommended_proof_script = $RecommendedProofScript
+  recommended_route = $RecommendedRoute
+  recommended_readiness_route = $RecommendedReadinessRoute
+  recommended_handoff = $RecommendedHandoff
   summary = [ordered]@{
     group_total = [int](Get-ItemCount -Value $GroupOrder)
     blocked_group_total = [int](Get-ItemCount -Value $BlockedGroups)

@@ -47,6 +47,11 @@ def test_lens_resident_host_lifecycle_blockers_proof_consumes_preflight_groups()
     assert payload["ok"] is True
     assert payload["first_blocker_group"] == "runtime"
     assert payload["next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
+    assert payload["recommended_handoff_source"] == "resident_host_lifecycle_first_blocker_group"
+    assert payload["recommended_next_slice"] == "run_resident_host_runtime_boundary_proof"
+    assert payload["recommended_proof_script"] == "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status"
+    assert payload["recommended_route"] == "/lens/host/manifest"
+    assert payload["recommended_readiness_route"] == "/lens/host/runtime-loop/readiness"
 
     host_preflight = payload["host_preflight"]
     assert host_preflight["ok"] is True
@@ -73,6 +78,24 @@ def test_lens_resident_host_lifecycle_blockers_proof_consumes_preflight_groups()
     assert groups["runtime"]["status"] == "blocked"
     assert groups["runtime"]["route"] == "/lens/host/manifest"
     assert "lens_host_persistent_supervision_prerequisites_pending" in groups["runtime"]["blockers"]
+
+    recommended_handoff = payload["recommended_handoff"]
+    assert recommended_handoff["id"] == "resident_host_runtime_blocker"
+    assert recommended_handoff["status"] == "blocked"
+    assert recommended_handoff["next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
+    assert recommended_handoff["next_step"] == "run_resident_host_runtime_boundary_proof"
+    assert recommended_handoff["proof_script"] == "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status"
+    assert recommended_handoff["route"] == "/lens/host/manifest"
+    assert recommended_handoff["readiness_route"] == "/lens/host/runtime-loop/readiness"
+    assert recommended_handoff["acceptance_criterion"] == "summon_anywhere"
+    assert recommended_handoff["blocker_group"] == "runtime"
+    assert "lens_host_persistent_supervision_prerequisites_pending" in recommended_handoff["blockers"]
+    assert recommended_handoff["authority_required"] == "process_supervision_authority"
+    assert recommended_handoff["authority_granted"] is False
+    assert recommended_handoff["read_only_contract"] is True
+    assert recommended_handoff["diagnostic_only"] is True
+    assert recommended_handoff["would_execute"] is False
+    assert recommended_handoff["would_mutate"] is False
 
     assert groups["process_readback"]["status"] in {"blocked", "clear"}
     assert groups["process_readback"]["route"] == "/lens/host/manifest"

@@ -34150,6 +34150,42 @@ Latest validation for Stage 6 summon resident-host blocker handoff readback:
   authority_required=none_new_stage6_completion_audit,
   authority_granted=false`
 
+Stage 6 resident-host lifecycle blocker handoff readback on `2026-05-19`:
+
+- The resident-host lifecycle blocker proof now exposes a top-level
+  `recommended_handoff` for its first blocked group. With the current runtime
+  group first, it points to
+  `scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status`.
+- The handoff records `recommended_handoff_source=resident_host_lifecycle_first_blocker_group`,
+  `recommended_next_slice=run_resident_host_runtime_boundary_proof`, and keeps
+  `authority_granted=false`.
+- This does not launch a process, supervise or restart a process, install or
+  control a service, claim resident status, write receipts, write memory, or
+  grant approval-decision authority. It only makes the lifecycle proof's next
+  governed proof target explicit.
+
+Latest validation for Stage 6 resident-host lifecycle blocker handoff readback:
+
+- PowerShell parser check for
+  `scripts/lens-resident-host-lifecycle-blockers-proof.ps1`
+  Result: `passed; parser_ok`
+- `python -m pytest tests/test_lens_resident_host_lifecycle_blockers_proof_script.py`
+  Result: `passed; 1 passed`
+- `python -m ruff check tests/test_lens_resident_host_lifecycle_blockers_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_resident_host_lifecycle_blockers_proof_script.py`
+  Result: `passed; 1 file already formatted`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-host-lifecycle-blockers-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed,
+  next_smallest_truthful_gap=resident_host_runtime_blocker_boundary,
+  recommended_handoff_source=resident_host_lifecycle_first_blocker_group,
+  recommended_next_slice=run_resident_host_runtime_boundary_proof,
+  recommended_proof_script=scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status,
+  recommended_route=/lens/host/manifest,
+  recommended_readiness_route=/lens/host/runtime-loop/readiness,
+  authority_required=process_supervision_authority,
+  authority_granted=false`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
