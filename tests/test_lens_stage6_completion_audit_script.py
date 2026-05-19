@@ -676,6 +676,18 @@ def test_lens_stage6_completion_audit_observes_summon_family_chain_authority_gat
     assert (
         "[string]$SummonAnywhereFamilyChainProof.authority_required -eq 'summon_hotkey_overlay_and_process_authority'"
     ) in script
+    assert (
+        "$SummonAnywhereFamilyChainProofRecommendedHandoff = $SummonAnywhereFamilyChainProof.recommended_handoff"
+    ) in script
+    assert (
+        "[string]$SummonAnywhereFamilyChainProof.recommended_handoff_source -eq "
+        "'summon_anywhere_family_chain_completion_audit_handoff'"
+    ) in script
+    assert (
+        "[string]$SummonAnywhereFamilyChainProofRecommendedHandoff.authority_required -eq "
+        "'none_new_stage6_completion_audit'"
+    ) in script
+    assert "-not [bool]$SummonAnywhereFamilyChainProofRecommendedHandoff.authority_granted" in script
     assert "-not [bool]$SummonAnywhereFamilyChainProof.authority_granted" in script
     assert (
         "[string]$SummonAnywhereFamilyChainProofResidentHost.authority_required -eq 'resident_runtime_execution_authority'"
@@ -2331,6 +2343,33 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert summon_anywhere_family_chain_proof["acceptance_criterion"] == "summon_anywhere"
     assert summon_anywhere_family_chain_proof["summon_next_smallest_truthful_gap"] == "summon_anywhere_blockers"
     assert summon_anywhere_family_chain_proof["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert (
+        summon_anywhere_family_chain_proof["recommended_handoff_source"]
+        == "summon_anywhere_family_chain_completion_audit_handoff"
+    )
+    assert summon_anywhere_family_chain_proof["recommended_next_slice"] == (
+        "run_stage6_lens_completion_audit_after_summon_anywhere_family_chain_readback"
+    )
+    assert (
+        summon_anywhere_family_chain_proof["recommended_proof_script"]
+        == "scripts/lens-stage6-completion-audit.ps1 -Mode Status"
+    )
+    family_chain_recommended_handoff = summon_anywhere_family_chain_proof["recommended_handoff"]
+    assert family_chain_recommended_handoff["id"] == "stage6_lens_completion_audit"
+    assert family_chain_recommended_handoff["status"] == "audit_needed"
+    assert family_chain_recommended_handoff["previous_next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+    assert family_chain_recommended_handoff["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert family_chain_recommended_handoff["next_step"] == (
+        "run_stage6_lens_completion_audit_after_summon_anywhere_family_chain_readback"
+    )
+    assert family_chain_recommended_handoff["proof_script"] == "scripts/lens-stage6-completion-audit.ps1 -Mode Status"
+    assert family_chain_recommended_handoff["authority_required"] == "none_new_stage6_completion_audit"
+    assert family_chain_recommended_handoff["authority_granted"] is False
+    assert family_chain_recommended_handoff["read_only_contract"] is True
+    assert family_chain_recommended_handoff["diagnostic_only"] is True
+    assert family_chain_recommended_handoff["would_execute"] is False
+    assert family_chain_recommended_handoff["would_mutate"] is False
+    assert family_chain_recommended_handoff["blocked_families"] == expected_summon_family_ids
     assert summon_anywhere_family_chain_proof["authority_required"] == "summon_hotkey_overlay_and_process_authority"
     assert summon_anywhere_family_chain_proof["authority_granted"] is False
     assert summon_anywhere_family_chain_proof["family_chain_observed"] is True

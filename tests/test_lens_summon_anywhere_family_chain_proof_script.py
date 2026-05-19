@@ -56,6 +56,9 @@ def test_lens_summon_anywhere_family_chain_requires_child_authority_readbacks() 
     assert "previous_resident_host_bridge" not in script
     assert "wraps_summon_resident_host_blocker_proof" not in script
     assert "New-ChildProofRunSummary -Name 'summon_resident_host_blocker'" not in script
+    assert "recommended_handoff_source = $RecommendedHandoffSource" in script
+    assert "summon_anywhere_family_chain_completion_audit_handoff" in script
+    assert "scripts/lens-stage6-completion-audit.ps1 -Mode Status" in script
     assert (
         "[string](Get-PropertyValue -Payload $AuthorityPayload -Name 'authority_required' -Default '') "
         "-eq 'summon_hotkey_overlay_and_process_authority'"
@@ -85,6 +88,11 @@ def test_lens_summon_anywhere_family_chain_consumes_handoffs(tmp_path: Path) -> 
     assert payload["acceptance_criterion"] == "summon_anywhere"
     assert payload["summon_next_smallest_truthful_gap"] == "summon_anywhere_blockers"
     assert payload["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert payload["recommended_handoff_source"] == "summon_anywhere_family_chain_completion_audit_handoff"
+    assert payload["recommended_next_slice"] == (
+        "run_stage6_lens_completion_audit_after_summon_anywhere_family_chain_readback"
+    )
+    assert payload["recommended_proof_script"] == "scripts/lens-stage6-completion-audit.ps1 -Mode Status"
     assert payload["authority_required"] == "summon_hotkey_overlay_and_process_authority"
     assert payload["authority_granted"] is False
     assert payload["family_chain_observed"] is True
@@ -120,6 +128,32 @@ def test_lens_summon_anywhere_family_chain_consumes_handoffs(tmp_path: Path) -> 
     assert payload["first_blocker_family_handoff"]["next_smallest_truthful_gap"] == (
         "resident_host_runtime_blocker_boundary"
     )
+    recommended_handoff = payload["recommended_handoff"]
+    assert recommended_handoff["id"] == "stage6_lens_completion_audit"
+    assert recommended_handoff["status"] == "audit_needed"
+    assert recommended_handoff["previous_next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+    assert recommended_handoff["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert recommended_handoff["next_step"] == (
+        "run_stage6_lens_completion_audit_after_summon_anywhere_family_chain_readback"
+    )
+    assert recommended_handoff["proof_script"] == "scripts/lens-stage6-completion-audit.ps1 -Mode Status"
+    assert recommended_handoff["route"] == "/lens/status"
+    assert recommended_handoff["readiness_route"] == "/lens/status"
+    assert recommended_handoff["acceptance_criterion"] == "summon_anywhere"
+    assert recommended_handoff["blocker"] == "summon_anywhere_blockers"
+    assert recommended_handoff["requirement_state"] == "summon_anywhere_family_chain_consumed_without_authority"
+    assert recommended_handoff["authority_required"] == "none_new_stage6_completion_audit"
+    assert recommended_handoff["authority_granted"] is False
+    assert recommended_handoff["read_only_contract"] is True
+    assert recommended_handoff["diagnostic_only"] is True
+    assert recommended_handoff["would_execute"] is False
+    assert recommended_handoff["would_mutate"] is False
+    assert recommended_handoff["would_register_hotkey"] is False
+    assert recommended_handoff["would_control_overlay"] is False
+    assert recommended_handoff["would_launch_process"] is False
+    assert recommended_handoff["would_supervise_process"] is False
+    assert recommended_handoff["would_claim_resident"] is False
+    assert recommended_handoff["blocked_families"] == payload["blocked_families"]
 
     resident_host = payload["resident_host"]
     assert resident_host["handoff_source"] == "summon_anywhere_blockers_first_family_handoff"

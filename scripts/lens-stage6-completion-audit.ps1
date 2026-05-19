@@ -1908,6 +1908,7 @@ $SummonAuthorityBlockerProofObserved = (
   -not [bool]$SummonAuthorityBlockerProofGovernance.mutation_authority_granted
 )
 $SummonAnywhereFamilyChainProofGovernance = $SummonAnywhereFamilyChainProof.governance
+$SummonAnywhereFamilyChainProofRecommendedHandoff = $SummonAnywhereFamilyChainProof.recommended_handoff
 $SummonAnywhereFamilyChainProofResidentHost = $SummonAnywhereFamilyChainProof.resident_host
 $SummonAnywhereFamilyChainProofFinalAuthority = $SummonAnywhereFamilyChainProof.final_authority
 $SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding = $SummonAnywhereFamilyChainProofFinalAuthority.previous_binding_handoff
@@ -1948,6 +1949,21 @@ $SummonAnywhereFamilyChainProofObserved = (
   [string]$SummonAnywhereFamilyChainProof.acceptance_criterion -eq 'summon_anywhere' -and
   [string]$SummonAnywhereFamilyChainProof.summon_next_smallest_truthful_gap -eq 'summon_anywhere_blockers' -and
   [string]$SummonAnywhereFamilyChainProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
+  [string]$SummonAnywhereFamilyChainProof.recommended_handoff_source -eq 'summon_anywhere_family_chain_completion_audit_handoff' -and
+  [string]$SummonAnywhereFamilyChainProof.recommended_next_slice -eq 'run_stage6_lens_completion_audit_after_summon_anywhere_family_chain_readback' -and
+  [string]$SummonAnywhereFamilyChainProof.recommended_proof_script -eq 'scripts/lens-stage6-completion-audit.ps1 -Mode Status' -and
+  [string]$SummonAnywhereFamilyChainProofRecommendedHandoff.id -eq 'stage6_lens_completion_audit' -and
+  [string]$SummonAnywhereFamilyChainProofRecommendedHandoff.status -eq 'audit_needed' -and
+  [string]$SummonAnywhereFamilyChainProofRecommendedHandoff.previous_next_smallest_truthful_gap -eq 'summon_anywhere_blockers' -and
+  [string]$SummonAnywhereFamilyChainProofRecommendedHandoff.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
+  [string]$SummonAnywhereFamilyChainProofRecommendedHandoff.next_step -eq 'run_stage6_lens_completion_audit_after_summon_anywhere_family_chain_readback' -and
+  [string]$SummonAnywhereFamilyChainProofRecommendedHandoff.proof_script -eq 'scripts/lens-stage6-completion-audit.ps1 -Mode Status' -and
+  [string]$SummonAnywhereFamilyChainProofRecommendedHandoff.authority_required -eq 'none_new_stage6_completion_audit' -and
+  -not [bool]$SummonAnywhereFamilyChainProofRecommendedHandoff.authority_granted -and
+  [bool]$SummonAnywhereFamilyChainProofRecommendedHandoff.read_only_contract -and
+  [bool]$SummonAnywhereFamilyChainProofRecommendedHandoff.diagnostic_only -and
+  -not [bool]$SummonAnywhereFamilyChainProofRecommendedHandoff.would_execute -and
+  -not [bool]$SummonAnywhereFamilyChainProofRecommendedHandoff.would_mutate -and
   [string]$SummonAnywhereFamilyChainProof.authority_required -eq 'summon_hotkey_overlay_and_process_authority' -and
   -not [bool]$SummonAnywhereFamilyChainProof.authority_granted -and
   [bool]$SummonAnywhereFamilyChainProof.family_chain_observed -and
@@ -3436,6 +3452,34 @@ $Payload = [ordered]@{
     acceptance_criterion = [string]$SummonAnywhereFamilyChainProof.acceptance_criterion
     summon_next_smallest_truthful_gap = [string]$SummonAnywhereFamilyChainProof.summon_next_smallest_truthful_gap
     next_smallest_truthful_gap = [string]$SummonAnywhereFamilyChainProof.next_smallest_truthful_gap
+    recommended_handoff_source = [string]$SummonAnywhereFamilyChainProof.recommended_handoff_source
+    recommended_next_slice = [string]$SummonAnywhereFamilyChainProof.recommended_next_slice
+    recommended_proof_script = [string]$SummonAnywhereFamilyChainProof.recommended_proof_script
+    recommended_handoff = [ordered]@{
+      id = [string]$SummonAnywhereFamilyChainProofRecommendedHandoff.id
+      status = [string]$SummonAnywhereFamilyChainProofRecommendedHandoff.status
+      previous_next_smallest_truthful_gap = [string]$SummonAnywhereFamilyChainProofRecommendedHandoff.previous_next_smallest_truthful_gap
+      next_smallest_truthful_gap = [string]$SummonAnywhereFamilyChainProofRecommendedHandoff.next_smallest_truthful_gap
+      next_step = [string]$SummonAnywhereFamilyChainProofRecommendedHandoff.next_step
+      proof_script = [string]$SummonAnywhereFamilyChainProofRecommendedHandoff.proof_script
+      route = [string]$SummonAnywhereFamilyChainProofRecommendedHandoff.route
+      readiness_route = [string]$SummonAnywhereFamilyChainProofRecommendedHandoff.readiness_route
+      acceptance_criterion = [string]$SummonAnywhereFamilyChainProofRecommendedHandoff.acceptance_criterion
+      blocker = [string]$SummonAnywhereFamilyChainProofRecommendedHandoff.blocker
+      requirement_state = [string]$SummonAnywhereFamilyChainProofRecommendedHandoff.requirement_state
+      authority_required = [string]$SummonAnywhereFamilyChainProofRecommendedHandoff.authority_required
+      authority_granted = [bool]$SummonAnywhereFamilyChainProofRecommendedHandoff.authority_granted
+      read_only_contract = [bool]$SummonAnywhereFamilyChainProofRecommendedHandoff.read_only_contract
+      diagnostic_only = [bool]$SummonAnywhereFamilyChainProofRecommendedHandoff.diagnostic_only
+      would_execute = [bool]$SummonAnywhereFamilyChainProofRecommendedHandoff.would_execute
+      would_mutate = [bool]$SummonAnywhereFamilyChainProofRecommendedHandoff.would_mutate
+      would_register_hotkey = [bool]$SummonAnywhereFamilyChainProofRecommendedHandoff.would_register_hotkey
+      would_control_overlay = [bool]$SummonAnywhereFamilyChainProofRecommendedHandoff.would_control_overlay
+      would_launch_process = [bool]$SummonAnywhereFamilyChainProofRecommendedHandoff.would_launch_process
+      would_supervise_process = [bool]$SummonAnywhereFamilyChainProofRecommendedHandoff.would_supervise_process
+      would_claim_resident = [bool]$SummonAnywhereFamilyChainProofRecommendedHandoff.would_claim_resident
+      blocked_families = [string[]]@(ConvertTo-StringArray -Value $SummonAnywhereFamilyChainProofRecommendedHandoff.blocked_families)
+    }
     authority_required = [string]$SummonAnywhereFamilyChainProof.authority_required
     authority_granted = [bool]$SummonAnywhereFamilyChainProof.authority_granted
     family_chain_observed = [bool]$SummonAnywhereFamilyChainProof.family_chain_observed

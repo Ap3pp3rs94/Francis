@@ -387,7 +387,7 @@ $AppliedReceiptHandoffObserved = (
   [string](Get-PropertyValue -Payload $Stage6NextHandoffAction -Name 'method' -Default '') -eq 'GET' -and
   [string](Get-PropertyValue -Payload $Stage6NextHandoffReceiptReviewHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'persistent_supervision_resident_claim_authority_boundary'
 )
-$AppliedReceiptResidentClaimBoundaryConsumed = (
+$Stage6NextHandoffResidentClaimBoundaryConsumed = (
   $AppliedReceiptHandoffObserved -and
   $ResidentClaimHandoffObserved -and
   [string](Get-PropertyValue -Payload $Stage6NextHandoff -Name 'recommended_handoff_source' -Default '') -eq 'persistent_supervision_resident_claim_boundary_handoff' -and
@@ -398,6 +398,21 @@ $AppliedReceiptResidentClaimBoundaryConsumed = (
   [bool](Get-PropertyValue -Payload $Stage6NextHandoff -Name 'persistent_supervision_resident_claim_boundary_handoff_observed' -Default $false) -and
   [string](Get-PropertyValue -Payload $Stage6NextHandoffResidentClaimBoundaryHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'stage6_lens_completion_audit'
 )
+$AppliedReceiptResidentClaimBoundaryConsumed = (
+  $AppliedReceiptHandoffObserved -and
+  $ResidentClaimHandoffObserved -and
+  (
+    $Stage6NextHandoffResidentClaimBoundaryConsumed -or
+    [string](Get-PropertyValue -Payload $ResidentClaimHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'stage6_lens_completion_audit'
+  )
+)
+$EffectiveResidentClaimBoundaryHandoff = if ($Stage6NextHandoffResidentClaimBoundaryConsumed) {
+  $Stage6NextHandoffResidentClaimBoundaryHandoff
+} elseif ($ResidentClaimHandoffObserved) {
+  $ResidentClaimHandoff
+} else {
+  [ordered]@{}
+}
 $PrerequisiteGapObserved = (
   $PlanObserved -and
   $AuthorityChainConsumed -and
@@ -429,10 +444,10 @@ $AppliedReceiptSideEffectsDenied = (
   (
     -not $AppliedReceiptResidentClaimBoundaryConsumed -or
     (
-      [bool](Get-PropertyValue -Payload $Stage6NextHandoffResidentClaimBoundaryHandoff -Name 'read_only_contract' -Default $false) -and
-      [bool](Get-PropertyValue -Payload $Stage6NextHandoffResidentClaimBoundaryHandoff -Name 'diagnostic_only' -Default $false) -and
-      -not [bool](Get-PropertyValue -Payload $Stage6NextHandoffResidentClaimBoundaryHandoff -Name 'would_execute' -Default $true) -and
-      -not [bool](Get-PropertyValue -Payload $Stage6NextHandoffResidentClaimBoundaryHandoff -Name 'would_mutate' -Default $true) -and
+      [bool](Get-PropertyValue -Payload $EffectiveResidentClaimBoundaryHandoff -Name 'read_only_contract' -Default $false) -and
+      [bool](Get-PropertyValue -Payload $EffectiveResidentClaimBoundaryHandoff -Name 'diagnostic_only' -Default $false) -and
+      -not [bool](Get-PropertyValue -Payload $EffectiveResidentClaimBoundaryHandoff -Name 'would_execute' -Default $true) -and
+      -not [bool](Get-PropertyValue -Payload $EffectiveResidentClaimBoundaryHandoff -Name 'would_mutate' -Default $true) -and
       -not [bool](Get-PropertyValue -Payload $ResidentClaim -Name 'would_claim_resident' -Default $true) -and
       -not [bool](Get-PropertyValue -Payload $ResidentClaim -Name 'would_start_service' -Default $true) -and
       -not [bool](Get-PropertyValue -Payload $ResidentClaim -Name 'would_supervise_process' -Default $true) -and
@@ -540,15 +555,15 @@ if ($AppliedReceiptResidentClaimBoundaryConsumed) {
     next_smallest_truthful_gap = 'stage6_lens_completion_audit'
     next_step = 'run_stage6_lens_completion_audit_after_resident_claim_boundary_readback'
     proof_script = 'scripts/lens-stage6-completion-audit.ps1 -Mode Status'
-    route = [string](Get-PropertyValue -Payload $ResidentClaimHandoff -Name 'route' -Default '/lens/host/persistent-supervision/enablement/execution')
-    readiness_route = [string](Get-PropertyValue -Payload $ResidentClaimHandoff -Name 'readiness_route' -Default '/lens/host/persistent-supervision/enablement/execution/readiness')
+    route = [string](Get-PropertyValue -Payload $EffectiveResidentClaimBoundaryHandoff -Name 'route' -Default '/lens/host/persistent-supervision/enablement/execution')
+    readiness_route = [string](Get-PropertyValue -Payload $EffectiveResidentClaimBoundaryHandoff -Name 'readiness_route' -Default '/lens/host/persistent-supervision/enablement/execution/readiness')
     authority_required = 'none_new_stage6_completion_audit'
     authority_granted = $false
     missing_required_before_enable = [string[]]@()
     first_missing_required_before_enable = ''
     first_missing_requirement_handoff = [ordered]@{}
     applied_enablement_receipt_handoff = $Stage6NextHandoffReceiptReviewHandoff
-    resident_claim_boundary_handoff = $ResidentClaimHandoff
+    resident_claim_boundary_handoff = $EffectiveResidentClaimBoundaryHandoff
     read_only_contract = $true
     diagnostic_only = $true
     would_execute = $false

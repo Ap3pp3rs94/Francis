@@ -34223,6 +34223,88 @@ readback:
   recommended_authority_required=resident_runtime_execution_authority,
   recommended_authority_granted=false`
 
+Stage 6 summon-anywhere family-chain handoff readback on `2026-05-19`:
+
+- The summon-anywhere family-chain proof now exposes the next governed audit
+  handoff at the top level instead of requiring operators to infer it from the
+  final nested authority proof.
+- After the family chain consumes the resident-host, tray, overlay, global
+  hotkey, summon-binding, and authority blocker families, the proof reports
+  `recommended_handoff_source=summon_anywhere_family_chain_completion_audit_handoff`,
+  `recommended_next_slice=run_stage6_lens_completion_audit_after_summon_anywhere_family_chain_readback`,
+  and `recommended_proof_script=scripts/lens-stage6-completion-audit.ps1 -Mode Status`.
+- The Stage 6 completion audit now preserves that family-chain
+  `recommended_handoff` in its own readback, including
+  `authority_required=none_new_stage6_completion_audit`.
+- This does not grant summon authority, hotkey registration authority, overlay
+  control authority, local process launch authority, process supervision
+  authority, service authority, resident-claim authority, memory write
+  authority, or approval-decision authority. It only makes the existing
+  read-only family-chain proof carry its next governed audit target.
+
+Latest validation for Stage 6 summon-anywhere family-chain handoff readback:
+
+- PowerShell parser check for
+  `scripts/lens-summon-anywhere-family-chain-proof.ps1` and
+  `scripts/lens-stage6-completion-audit.ps1`
+  Result: `passed; parser_ok`
+- `python -m pytest tests/test_lens_summon_anywhere_family_chain_proof_script.py tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_observes_summon_family_chain_authority_gates -q`
+  Result: `passed; selected tests completed`
+- `python -m ruff check tests/test_lens_summon_anywhere_family_chain_proof_script.py tests/test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_summon_anywhere_family_chain_proof_script.py tests/test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 2 files already formatted`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-anywhere-family-chain-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed,
+  next_smallest_truthful_gap=stage6_lens_completion_audit,
+  recommended_handoff_source=summon_anywhere_family_chain_completion_audit_handoff,
+  recommended_next_slice=run_stage6_lens_completion_audit_after_summon_anywhere_family_chain_readback,
+  recommended_proof_script=scripts/lens-stage6-completion-audit.ps1 -Mode Status,
+  authority_required=summon_hotkey_overlay_and_process_authority,
+  authority_granted=false`
+
+Stage 6 persistent-supervision current-gap handoff alignment on `2026-05-19`:
+
+- GitHub Actions run `26089892539` failed in pytest because
+  `scripts/lens-persistent-supervision-current-gap-proof.ps1` still required
+  `scripts/lens-stage6-next-handoff.ps1` to expose
+  `persistent_supervision_resident_claim_boundary_handoff` at the top level
+  after an applied enablement receipt.
+- That assumption was stale after the Stage 6 next-handoff proof began routing
+  top-level through closure readback to `summon_anywhere_blockers`.
+- The current-gap proof now treats the direct
+  `scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status`
+  handoff as the authoritative resident-claim boundary evidence once the
+  applied enablement receipt review is observed.
+- This preserves the intended output:
+  `recommended_handoff_source=persistent_supervision_resident_claim_boundary_handoff`,
+  `next_smallest_truthful_gap=stage6_lens_completion_audit`, and
+  `authority_required=none_new_stage6_completion_audit`, without granting
+  process supervision, service, receipt, memory, or resident-claim authority.
+
+Latest validation for Stage 6 persistent-supervision current-gap handoff
+alignment:
+
+- PowerShell parser check for
+  `scripts/lens-persistent-supervision-current-gap-proof.ps1`,
+  `scripts/lens-summon-anywhere-family-chain-proof.ps1`, and
+  `scripts/lens-stage6-completion-audit.ps1`
+  Result: `passed; parser_ok`
+- `python -m pytest tests/test_lens_persistent_supervision_current_gap_proof_script.py tests/test_lens_summon_anywhere_family_chain_proof_script.py tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_observes_summon_family_chain_authority_gates -q`
+  Result: `passed; selected tests completed`
+- `python -m ruff check tests/test_lens_summon_anywhere_family_chain_proof_script.py tests/test_lens_stage6_completion_audit_script.py tests/test_lens_persistent_supervision_current_gap_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_summon_anywhere_family_chain_proof_script.py tests/test_lens_stage6_completion_audit_script.py tests/test_lens_persistent_supervision_current_gap_proof_script.py`
+  Result: `passed; 3 files already formatted`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-current-gap-proof.ps1 -Mode Status -ChildProofTimeoutSeconds 180`
+  Result: `passed; status=proof_passed,
+  next_smallest_truthful_gap=stage6_lens_completion_audit,
+  recommended_handoff_source=persistent_supervision_resident_claim_boundary_handoff,
+  recommended_next_slice=run_stage6_lens_completion_audit_after_resident_claim_boundary_readback,
+  recommended_proof_script=scripts/lens-stage6-completion-audit.ps1 -Mode Status,
+  stage6_applied_enablement_handoff_observed=true,
+  persistent_supervision_resident_claim_boundary_handoff_observed=true`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -415,6 +415,34 @@ $Checks = @(
   (New-Check -Id 'side_effects_denied' -Status $(if ($SideEffectsDenied) { 'diagnostic_bounded' } else { 'unexpected_authority' }) -Passed $SideEffectsDenied -Evidence 'summon family governance payloads plus bounded family contracts' -Reason 'This proof must remain diagnostic/readback only and grant no summon, hotkey, overlay, process, service, memory, approval-decision, receipt, or resident-claim authority.')
 )
 $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
+$RecommendedHandoffSource = 'summon_anywhere_family_chain_completion_audit_handoff'
+$RecommendedNextSlice = 'run_stage6_lens_completion_audit_after_summon_anywhere_family_chain_readback'
+$RecommendedProofScript = 'scripts/lens-stage6-completion-audit.ps1 -Mode Status'
+$RecommendedHandoff = [ordered]@{
+  id = 'stage6_lens_completion_audit'
+  status = 'audit_needed'
+  previous_next_smallest_truthful_gap = 'summon_anywhere_blockers'
+  next_smallest_truthful_gap = 'stage6_lens_completion_audit'
+  next_step = $RecommendedNextSlice
+  proof_script = $RecommendedProofScript
+  route = '/lens/status'
+  readiness_route = '/lens/status'
+  acceptance_criterion = 'summon_anywhere'
+  blocker = 'summon_anywhere_blockers'
+  requirement_state = 'summon_anywhere_family_chain_consumed_without_authority'
+  authority_required = 'none_new_stage6_completion_audit'
+  authority_granted = $false
+  read_only_contract = $true
+  diagnostic_only = $true
+  would_execute = $false
+  would_mutate = $false
+  would_register_hotkey = $false
+  would_control_overlay = $false
+  would_launch_process = $false
+  would_supervise_process = $false
+  would_claim_resident = $false
+  blocked_families = [string[]]@($SummonFamilies)
+}
 
 [ordered]@{
   ok = $ProofPassed
@@ -427,6 +455,10 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
   acceptance_criterion = 'summon_anywhere'
   summon_next_smallest_truthful_gap = 'summon_anywhere_blockers'
   next_smallest_truthful_gap = 'stage6_lens_completion_audit'
+  recommended_handoff_source = $RecommendedHandoffSource
+  recommended_next_slice = $RecommendedNextSlice
+  recommended_proof_script = $RecommendedProofScript
+  recommended_handoff = $RecommendedHandoff
   authority_required = [string](Get-PropertyValue -Payload $AuthorityPayload -Name 'authority_required' -Default 'summon_hotkey_overlay_and_process_authority')
   authority_granted = [bool](Get-PropertyValue -Payload $AuthorityPayload -Name 'authority_granted' -Default $false)
   family_chain_observed = $FamilyChainObserved
