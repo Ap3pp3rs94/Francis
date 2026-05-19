@@ -68,6 +68,37 @@ def test_lens_host_supervisor_status_is_observation_only(tmp_path: Path) -> None
     assert "resident_host_process_missing" in payload["blockers"]
     assert "process_supervision_authority_not_granted" in payload["blockers"]
     assert payload["next_smallest_truthful_gap"] == "resident_host_process_supervision_authority_boundary"
+    assert payload["recommended_handoff_source"] == "lens_host_supervisor_status_process_supervision_handoff"
+    assert payload["recommended_next_slice"] == "run_host_supervision_authority_request_proof_before_resident_start"
+    assert (
+        payload["recommended_proof_script"] == "scripts/lens-host-supervision-authority-request-proof.ps1 -Mode Status"
+    )
+    assert payload["authority_required"] == "process_supervision_authority"
+    assert payload["authority_granted"] is False
+    handoff = payload["recommended_handoff"]
+    assert handoff["id"] == "resident_host_process_supervision_authority_boundary"
+    assert handoff["status"] == "blocked"
+    assert handoff["next_smallest_truthful_gap"] == "host_supervision_authority_exact_approval_request"
+    assert handoff["next_step"] == "run_host_supervision_authority_request_proof_before_resident_start"
+    assert handoff["proof_script"] == "scripts/lens-host-supervision-authority-request-proof.ps1 -Mode Status"
+    assert handoff["route"] == "/lens/host/supervision/authority"
+    assert handoff["readiness_route"] == "/lens/host/supervision/authority/readiness"
+    assert handoff["request_route"] == "/lens/host/supervision/authority/request"
+    assert handoff["requests_route"] == "/lens/host/supervision/authority/requests"
+    assert handoff["grant_route"] == "/lens/host/supervision/authority"
+    assert handoff["grants_route"] == "/lens/host/supervision/authority/grants"
+    assert handoff["denials_route"] == "/lens/host/supervision/authority/denials"
+    assert handoff["execution_route"] == "/lens/resident-runtime/execute"
+    assert handoff["authority_required"] == "process_supervision_authority"
+    assert handoff["authority_granted"] is False
+    assert handoff["read_only_contract"] is True
+    assert handoff["diagnostic_only"] is True
+    assert handoff["would_execute"] is False
+    assert handoff["would_mutate"] is False
+    assert handoff["would_launch_process"] is False
+    assert handoff["would_supervise_process"] is False
+    assert handoff["would_decide_approval"] is False
+    assert "process_supervision_authority_not_granted" in handoff["blockers"]
     assert payload["host_readback"]["state_exists"] is False
     assert payload["host_readback"]["process_alive"] is False
     assert not (data_dir / "runtime" / "lens-host-supervisor" / "status.json").exists()

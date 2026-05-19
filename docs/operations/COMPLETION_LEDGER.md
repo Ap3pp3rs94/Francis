@@ -34342,6 +34342,57 @@ handoff alignment:
 - `python -m pytest tests/test_lens_stage6_completion_audit_script.py -q`
   Result: `passed; 36 passed, 1 skipped`
 
+Stage 6 resident-host supervisor status handoff alignment on `2026-05-19`:
+
+- `scripts/lens-host-supervisor.ps1 -Mode Status` now reports a concrete
+  process-supervision handoff instead of only naming
+  `resident_host_process_supervision_authority_boundary`.
+- Current readback now reports
+  `recommended_handoff_source=lens_host_supervisor_status_process_supervision_handoff`,
+  `recommended_next_slice=run_host_supervision_authority_request_proof_before_resident_start`,
+  `recommended_proof_script=scripts/lens-host-supervision-authority-request-proof.ps1 -Mode Status`,
+  and `authority_required=process_supervision_authority`.
+- The embedded `recommended_handoff` points to
+  `/lens/host/supervision/authority/readiness`,
+  `/lens/host/supervision/authority/request`,
+  `/lens/host/supervision/authority/requests`,
+  `/lens/host/supervision/authority`,
+  `/lens/host/supervision/authority/grants`,
+  `/lens/host/supervision/authority/denials`, and
+  `/lens/resident-runtime/execute`.
+- This does not start a resident host, grant host-supervision authority, grant
+  resident-runtime authority, decide approvals, write memory, claim residency,
+  register tray/hotkey/overlay/summon surfaces, or mutate service state. It
+  makes the read-only supervisor status boundary actionable for the next
+  governed resident-start proof.
+
+Latest validation for Stage 6 resident-host supervisor status handoff
+alignment:
+
+- PowerShell parser check for `scripts/lens-host-supervisor.ps1`
+  Result: `passed; parse_ok`
+- `python -m pytest tests/test_lens_host_supervisor_script.py::test_lens_host_supervisor_status_is_observation_only -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-host-supervisor.ps1 -Mode Status`
+  Result: `passed; status=blocked,
+  next_smallest_truthful_gap=resident_host_process_supervision_authority_boundary,
+  recommended_handoff_source=lens_host_supervisor_status_process_supervision_handoff,
+  recommended_next_slice=run_host_supervision_authority_request_proof_before_resident_start,
+  recommended_proof_script=scripts/lens-host-supervision-authority-request-proof.ps1 -Mode Status,
+  authority_required=process_supervision_authority, authority_granted=false`
+- `python -m pytest tests/test_lens_host_supervisor_script.py -q`
+  Result: `passed; 6 passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-host-supervision-authority-request-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed,
+  next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing,
+  recommended_next_slice=resolve_persistent_supervision_required_prerequisites_without_resident_claim,
+  recommended_proof_script=scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status,
+  authority_granted=true, process_supervision_authority=true`
+- `python -m ruff check tests/test_lens_host_supervisor_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_host_supervisor_script.py`
+  Result: `passed; 1 file already formatted`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
