@@ -415,6 +415,38 @@ $ResidentHostProcessSupervisionNextSmallestTruthfulGap = if ($ConsumeProcessSupe
 } else {
   ''
 }
+$RecommendedHandoffSource = 'resident_host_lifecycle_handoff'
+$RecommendedNextSlice = 'run_resident_host_lifecycle_blockers_proof'
+$RecommendedProofScript = 'scripts/lens-resident-host-lifecycle-blockers-proof.ps1 -Mode Status'
+$RecommendedRoute = '/lens/host'
+$RecommendedReadinessRoute = '/lens/host/runtime-loop/readiness'
+$RecommendedAuthorityRequired = 'process_supervision_authority'
+$RecommendedHandoff = [ordered]@{
+  id = 'resident_host_lifecycle_blocker'
+  status = if ($HostLifecycleObserved) { 'blocked' } else { 'missing_or_unexpected' }
+  next_smallest_truthful_gap = 'resident_host_runtime_blocker_boundary'
+  next_step = $RecommendedNextSlice
+  proof_script = $RecommendedProofScript
+  route = $RecommendedRoute
+  readiness_route = $RecommendedReadinessRoute
+  acceptance_criterion = 'summon_anywhere'
+  blocker = 'resident_host_runtime_blocker_boundary'
+  authority_required = $RecommendedAuthorityRequired
+  authority_granted = $false
+  read_only_contract = $true
+  diagnostic_only = $true
+  would_execute = $false
+  would_mutate = $false
+}
+if ($ConsumeProcessSupervisionHandoff -and $HostProcessSupervisionHandoffObserved) {
+  $RecommendedHandoffSource = 'resident_host_process_supervision_handoff.recommended_handoff'
+  $RecommendedNextSlice = [string](Get-PropertyValue -Payload $HostProcessHandoffRecommendedHandoff -Name 'next_step' -Default '')
+  $RecommendedProofScript = [string](Get-PropertyValue -Payload $HostProcessHandoffRecommendedHandoff -Name 'proof_script' -Default '')
+  $RecommendedRoute = [string](Get-PropertyValue -Payload $HostProcessHandoffRecommendedHandoff -Name 'route' -Default '')
+  $RecommendedReadinessRoute = [string](Get-PropertyValue -Payload $HostProcessHandoffRecommendedHandoff -Name 'readiness_route' -Default '')
+  $RecommendedAuthorityRequired = [string](Get-PropertyValue -Payload $HostProcessHandoffRecommendedHandoff -Name 'authority_required' -Default 'none_new_stage6_completion_audit')
+  $RecommendedHandoff = $HostProcessHandoffRecommendedHandoff
+}
 $Evidence = @(
   'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status',
   'scripts/lens-resident-host-lifecycle-blockers-proof.ps1 -Mode Status'
@@ -469,6 +501,12 @@ $Payload = [ordered]@{
   resident_host_process_supervision_next_smallest_truthful_gap = $ResidentHostProcessSupervisionNextSmallestTruthfulGap
   resident_host_next_smallest_truthful_gap = $ResidentHostNextSmallestTruthfulGap
   next_smallest_truthful_gap = $ResidentHostNextSmallestTruthfulGap
+  recommended_handoff_source = $RecommendedHandoffSource
+  recommended_next_slice = $RecommendedNextSlice
+  recommended_proof_script = $RecommendedProofScript
+  recommended_route = $RecommendedRoute
+  recommended_readiness_route = $RecommendedReadinessRoute
+  recommended_handoff = $RecommendedHandoff
   authority_required = if ($ConsumeProcessSupervisionHandoff -and $HostProcessSupervisionHandoffObserved) {
     [string](Get-PropertyValue -Payload $HostProcessHandoffPayload -Name 'authority_required' -Default 'none_new_stage6_completion_audit')
   } else {

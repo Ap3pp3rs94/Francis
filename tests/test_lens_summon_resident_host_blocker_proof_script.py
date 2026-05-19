@@ -74,6 +74,14 @@ def test_lens_summon_resident_host_blocker_proof_aligns_handoff(tmp_path: Path) 
     assert payload["resident_host_process_supervision_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
     assert payload["resident_host_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
     assert payload["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert payload["recommended_handoff_source"] == "resident_host_process_supervision_handoff.recommended_handoff"
+    assert (
+        payload["recommended_next_slice"]
+        == "run_stage6_lens_completion_audit_after_process_supervision_handoff_readback"
+    )
+    assert payload["recommended_proof_script"] == "scripts/lens-stage6-completion-audit.ps1 -Mode Status"
+    assert payload["recommended_route"] == "/lens/status"
+    assert payload["recommended_readiness_route"] == "/lens/status"
     assert payload["authority_required"] == "none_new_stage6_completion_audit"
     assert payload["authority_granted"] is False
     assert payload["summon_first_family_observed"] is True
@@ -141,6 +149,7 @@ def test_lens_summon_resident_host_blocker_proof_aligns_handoff(tmp_path: Path) 
     assert process_handoff["resident_host_process_state"] == "foreground_observed_not_supervised"
     assert process_handoff["resident_host_process_blocker"] == "resident_host_process_not_supervised"
     recommended_handoff = process_handoff["recommended_handoff"]
+    assert payload["recommended_handoff"] == recommended_handoff
     assert recommended_handoff["id"] == "stage6_lens_completion_audit"
     assert recommended_handoff["status"] == "audit_needed"
     assert recommended_handoff["previous_next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
@@ -234,6 +243,28 @@ def test_lens_summon_resident_host_default_proof_keeps_checkpoint_safe_handoff(t
     assert payload["resident_host_process_supervision_next_smallest_truthful_gap"] == ""
     assert payload["resident_host_next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
     assert payload["next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
+    assert payload["recommended_handoff_source"] == "resident_host_lifecycle_handoff"
+    assert payload["recommended_next_slice"] == "run_resident_host_lifecycle_blockers_proof"
+    assert payload["recommended_proof_script"] == "scripts/lens-resident-host-lifecycle-blockers-proof.ps1 -Mode Status"
+    assert payload["recommended_route"] == "/lens/host"
+    assert payload["recommended_readiness_route"] == "/lens/host/runtime-loop/readiness"
+    assert payload["recommended_handoff"] == {
+        "id": "resident_host_lifecycle_blocker",
+        "status": "blocked",
+        "next_smallest_truthful_gap": "resident_host_runtime_blocker_boundary",
+        "next_step": "run_resident_host_lifecycle_blockers_proof",
+        "proof_script": "scripts/lens-resident-host-lifecycle-blockers-proof.ps1 -Mode Status",
+        "route": "/lens/host",
+        "readiness_route": "/lens/host/runtime-loop/readiness",
+        "acceptance_criterion": "summon_anywhere",
+        "blocker": "resident_host_runtime_blocker_boundary",
+        "authority_required": "process_supervision_authority",
+        "authority_granted": False,
+        "read_only_contract": True,
+        "diagnostic_only": True,
+        "would_execute": False,
+        "would_mutate": False,
+    }
     assert payload["authority_required"] == "process_supervision_authority"
     assert payload["authority_granted"] is False
     assert payload["handoff_aligned"] is True

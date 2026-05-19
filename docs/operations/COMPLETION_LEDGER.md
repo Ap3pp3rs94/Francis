@@ -34106,6 +34106,50 @@ consumption:
   authority_granted=false,
   stage6_completion_audit_handoff_consumed_by_closure_readback=true`
 
+Stage 6 summon resident-host blocker handoff readback on `2026-05-19`:
+
+- The summon resident-host bridge proof now exposes a top-level
+  `recommended_handoff` contract instead of only returning
+  `resident_host_runtime_blocker_boundary`.
+- In the default read-only path, it points operators to
+  `scripts/lens-resident-host-lifecycle-blockers-proof.ps1 -Mode Status` with
+  `recommended_handoff_source=resident_host_lifecycle_handoff`.
+- In the process-supervision consumption path used by the Stage 6 audit chain,
+  it preserves the child process-supervision handoff and exposes
+  `recommended_handoff_source=resident_host_process_supervision_handoff.recommended_handoff`.
+- This does not grant local process launch authority, process supervision
+  authority, summon authority, service authority, resident-claim authority,
+  memory write authority, or approval-decision authority. It only makes the
+  existing read-only bridge proof carry the next governed proof target.
+
+Latest validation for Stage 6 summon resident-host blocker handoff readback:
+
+- PowerShell parser check for
+  `scripts/lens-summon-resident-host-blocker-proof.ps1`
+  Result: `passed; parser_ok`
+- `python -m pytest tests/test_lens_summon_resident_host_blocker_proof_script.py`
+  Result: `passed; 2 passed`
+- `python -m ruff check tests/test_lens_summon_resident_host_blocker_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_summon_resident_host_blocker_proof_script.py`
+  Result: `passed; 1 file already formatted`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-resident-host-blocker-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed,
+  next_smallest_truthful_gap=resident_host_runtime_blocker_boundary,
+  recommended_handoff_source=resident_host_lifecycle_handoff,
+  recommended_next_slice=run_resident_host_lifecycle_blockers_proof,
+  recommended_proof_script=scripts/lens-resident-host-lifecycle-blockers-proof.ps1 -Mode Status,
+  authority_required=process_supervision_authority,
+  authority_granted=false`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-resident-host-blocker-proof.ps1 -Mode Status -ConsumeProcessSupervisionHandoff -StartupTimeoutSeconds 20 -ForegroundRunSeconds 2 -HostLaunchRunSeconds 3 -SupervisorRunSeconds 3`
+  Result: `passed; status=proof_passed,
+  next_smallest_truthful_gap=stage6_lens_completion_audit,
+  recommended_handoff_source=resident_host_process_supervision_handoff.recommended_handoff,
+  recommended_next_slice=run_stage6_lens_completion_audit_after_process_supervision_handoff_readback,
+  recommended_proof_script=scripts/lens-stage6-completion-audit.ps1 -Mode Status,
+  authority_required=none_new_stage6_completion_audit,
+  authority_granted=false`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
