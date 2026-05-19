@@ -318,6 +318,7 @@ $ResidentClaim = Get-PropertyValue -Payload $ResidentClaimResult -Name 'payload'
 $Stage6NextHandoff = Get-PropertyValue -Payload $Stage6NextHandoffResult -Name 'payload'
 $Stage6NextHandoffAction = Get-PropertyValue -Payload $Stage6NextHandoff -Name 'next_operator_action'
 $Stage6NextHandoffHandoff = Get-PropertyValue -Payload $Stage6NextHandoff -Name 'stage6_prerequisite_bringup_operator_plan_handoff'
+$Stage6NextHandoffReceiptReviewHandoff = Get-PropertyValue -Payload $Stage6NextHandoff -Name 'persistent_supervision_enablement_receipt_review_handoff'
 
 $PlanMissingBeforeEnable = [string[]](ConvertTo-StringArray -Value (Get-PropertyValue -Payload $Plan -Name 'missing_required_before_enable'))
 $FirstMissingHandoff = Get-PropertyValue -Payload $Plan -Name 'first_missing_requirement_handoff'
@@ -364,12 +365,15 @@ $AppliedReceiptHandoffObserved = (
   [string](Get-PropertyValue -Payload $Stage6NextHandoff -Name 'kind' -Default '') -eq 'lens.stage6.next_handoff.proof' -and
   [bool](Get-PropertyValue -Payload $Stage6NextHandoff -Name 'ok' -Default $false) -and
   [string](Get-PropertyValue -Payload $Stage6NextHandoff -Name 'status' -Default '') -eq 'proof_passed' -and
-  [string](Get-PropertyValue -Payload $Stage6NextHandoff -Name 'recommended_next_slice' -Default '') -eq 'review_persistent_supervision_enablement_receipt' -and
-  [string](Get-PropertyValue -Payload $Stage6NextHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'persistent_supervision_execution_boundary' -and
-  [string](Get-PropertyValue -Payload $Stage6NextHandoff -Name 'authority_required' -Default '') -eq 'none_readback_only' -and
-  [bool](Get-PropertyValue -Payload $Stage6NextHandoff -Name 'authority_granted' -Default $false) -and
+  [string](Get-PropertyValue -Payload $Stage6NextHandoff -Name 'recommended_handoff_source' -Default '') -eq 'persistent_supervision_enablement_receipt_review_handoff' -and
+  [string](Get-PropertyValue -Payload $Stage6NextHandoff -Name 'recommended_next_slice' -Default '') -eq 'review_persistent_supervision_resident_claim_boundary_without_runtime_start' -and
+  [string](Get-PropertyValue -Payload $Stage6NextHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'persistent_supervision_resident_claim_authority_boundary' -and
+  [string](Get-PropertyValue -Payload $Stage6NextHandoff -Name 'authority_required' -Default '') -eq 'resident_claim_authority' -and
+  -not [bool](Get-PropertyValue -Payload $Stage6NextHandoff -Name 'authority_granted' -Default $true) -and
+  [bool](Get-PropertyValue -Payload $Stage6NextHandoff -Name 'persistent_supervision_enablement_receipt_review_handoff_observed' -Default $false) -and
   [string](Get-PropertyValue -Payload $Stage6NextHandoffAction -Name 'id' -Default '') -eq 'review_persistent_supervision_enablement_receipt' -and
-  [string](Get-PropertyValue -Payload $Stage6NextHandoffAction -Name 'method' -Default '') -eq 'GET'
+  [string](Get-PropertyValue -Payload $Stage6NextHandoffAction -Name 'method' -Default '') -eq 'GET' -and
+  [string](Get-PropertyValue -Payload $Stage6NextHandoffReceiptReviewHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'persistent_supervision_resident_claim_authority_boundary'
 )
 $PrerequisiteGapObserved = (
   $PlanObserved -and
@@ -395,10 +399,10 @@ $FirstMissingHandoffReady = (
 )
 $AppliedReceiptSideEffectsDenied = (
   $AppliedReceiptHandoffObserved -and
-  [bool](Get-PropertyValue -Payload $Stage6NextHandoffHandoff -Name 'read_only_contract' -Default $false) -and
-  [bool](Get-PropertyValue -Payload $Stage6NextHandoffHandoff -Name 'diagnostic_only' -Default $false) -and
-  -not [bool](Get-PropertyValue -Payload $Stage6NextHandoffHandoff -Name 'would_execute' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $Stage6NextHandoffHandoff -Name 'would_mutate' -Default $true) -and
+  [bool](Get-PropertyValue -Payload $Stage6NextHandoffReceiptReviewHandoff -Name 'read_only_contract' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $Stage6NextHandoffReceiptReviewHandoff -Name 'diagnostic_only' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6NextHandoffReceiptReviewHandoff -Name 'would_execute' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6NextHandoffReceiptReviewHandoff -Name 'would_mutate' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $Stage6NextHandoffAction -Name 'script_would_execute' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $Stage6NextHandoffAction -Name 'script_would_mutate' -Default $true)
 )
@@ -421,12 +425,12 @@ $ProductSideEffectsDenied = (
 )
 
 $Checks = @(
-  (New-Check -Id 'persistent_supervision_plan_readback' -Status $(if ($AppliedReceiptHandoffObserved) { 'applied_enablement_receipt_handoff' } elseif ($PlanObserved) { 'required_prerequisites_missing' } else { 'missing_or_unexpected' }) -Passed ($PlanObserved -or $AppliedReceiptHandoffObserved) -Evidence 'scripts/lens-persistent-supervision-plan.ps1 -Mode Status; scripts/lens-stage6-next-handoff.ps1 -Mode Status' -Reason 'The current persistent-supervision proof must either name the prerequisite gap or consume an applied enablement receipt handoff.')
+  (New-Check -Id 'persistent_supervision_plan_readback' -Status $(if ($AppliedReceiptHandoffObserved) { 'applied_enablement_receipt_reviewed' } elseif ($PlanObserved) { 'required_prerequisites_missing' } else { 'missing_or_unexpected' }) -Passed ($PlanObserved -or $AppliedReceiptHandoffObserved) -Evidence 'scripts/lens-persistent-supervision-plan.ps1 -Mode Status; scripts/lens-stage6-next-handoff.ps1 -Mode Status' -Reason 'The current persistent-supervision proof must either name the prerequisite gap or consume an applied enablement receipt review handoff.')
   (New-Check -Id 'enablement_authority_proof' -Status $(if ($EnablementObserved) { 'proof_passed' } else { 'missing_or_failed' }) -Passed $EnablementObserved -Evidence 'scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status' -Reason 'Enablement authority must be directly consumed before treating the remaining gap as prerequisites.')
   (New-Check -Id 'execution_authority_proof' -Status $(if ($ExecutionObserved) { 'proof_passed' } else { 'missing_or_failed' }) -Passed $ExecutionObserved -Evidence 'scripts/lens-persistent-supervision-execution-authority-proof.ps1 -Mode Status' -Reason 'Execution authority must be directly consumed before treating the remaining gap as prerequisites.')
   (New-Check -Id 'resident_claim_boundary_proof' -Status $(if ($ResidentClaimObserved) { 'proof_passed' } else { 'missing_or_failed' }) -Passed $ResidentClaimObserved -Evidence 'scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status' -Reason 'Resident-claim boundary readback must be consumed without claiming residency.')
   (New-Check -Id 'authority_chain_consumed' -Status $(if ($AuthorityChainConsumed) { 'consumed' } else { 'incomplete' }) -Passed $AuthorityChainConsumed -Evidence 'persistent supervision authority proof chain' -Reason 'The focused proof must consume the bounded authority chain without running the Stage 6 completion audit.')
-  (New-Check -Id 'current_gap' -Status $(if ($AppliedReceiptHandoffObserved) { 'persistent_supervision_execution_boundary' } elseif ($CurrentGapObserved) { 'persistent_supervision_required_prerequisites_missing' } else { 'unknown_or_unexpected' }) -Passed $CurrentGapObserved -Evidence 'persistent_supervision_plan.next_smallest_truthful_gap; stage6_prerequisite_bringup_operator_plan_handoff' -Reason 'The current next gap must stay anchored to the strongest observed Stage 6 handoff.')
+  (New-Check -Id 'current_gap' -Status $(if ($AppliedReceiptHandoffObserved) { 'persistent_supervision_resident_claim_authority_boundary' } elseif ($CurrentGapObserved) { 'persistent_supervision_required_prerequisites_missing' } else { 'unknown_or_unexpected' }) -Passed $CurrentGapObserved -Evidence 'persistent_supervision_plan.next_smallest_truthful_gap; persistent_supervision_enablement_receipt_review_handoff' -Reason 'The current next gap must stay anchored to the strongest observed Stage 6 handoff.')
   (New-Check -Id 'first_missing_requirement_handoff' -Status $(if ($AppliedReceiptHandoffObserved) { 'not_applicable_enablement_applied' } elseif ($FirstMissingHandoffReady) { 'resident_host_process_handoff_ready' } else { 'missing_or_unexpected' }) -Passed $FirstMissingHandoffReady -Evidence 'persistent_supervision_plan.first_missing_requirement_handoff; stage6_prerequisite_bringup_operator_plan_handoff' -Reason 'The first actionable handoff must be read-only, or not applicable after the enablement receipt is applied.')
   (New-Check -Id 'product_side_effects_denied' -Status $(if ($ProductSideEffectsDenied) { 'product_read_only' } else { 'unexpected_product_mutation_authority' }) -Passed $ProductSideEffectsDenied -Evidence 'persistent_supervision_plan.governance; stage6_prerequisite_bringup_operator_plan_handoff' -Reason 'The focused proof must not claim product execution, service, memory, receipt, or resident-claim authority.')
 )
@@ -474,18 +478,18 @@ $Handoff = [ordered]@{
 }
 if ($AppliedReceiptHandoffObserved) {
   $Handoff = [ordered]@{
-    status = 'persistent_supervision_enablement_applied'
-    next_smallest_truthful_gap = 'persistent_supervision_execution_boundary'
-    next_step = 'review_persistent_supervision_enablement_receipt'
-    proof_script = 'scripts/lens-stage6-next-handoff.ps1 -Mode Status'
-    route = '/lens/host/persistent-supervision'
-    readiness_route = '/lens/host/persistent-supervision/enablement/executions'
-    authority_required = 'none_readback_only'
-    authority_granted = $true
+    status = 'persistent_supervision_enablement_receipt_reviewed'
+    next_smallest_truthful_gap = 'persistent_supervision_resident_claim_authority_boundary'
+    next_step = 'review_persistent_supervision_resident_claim_boundary_without_runtime_start'
+    proof_script = 'scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status'
+    route = '/lens/host/persistent-supervision/enablement/executions'
+    readiness_route = '/lens/host/persistent-supervision/enablement/execution/readiness'
+    authority_required = 'resident_claim_authority'
+    authority_granted = $false
     missing_required_before_enable = [string[]]@()
     first_missing_required_before_enable = ''
     first_missing_requirement_handoff = [ordered]@{}
-    applied_enablement_receipt_handoff = $Stage6NextHandoffHandoff
+    applied_enablement_receipt_handoff = $Stage6NextHandoffReceiptReviewHandoff
     read_only_contract = $true
     diagnostic_only = $true
     would_execute = $false
@@ -494,38 +498,38 @@ if ($AppliedReceiptHandoffObserved) {
 }
 
 $OutputNextSmallestTruthfulGap = if ($AppliedReceiptHandoffObserved) {
-  'persistent_supervision_execution_boundary'
+  'persistent_supervision_resident_claim_authority_boundary'
 } elseif ($CurrentGapObserved) {
   'persistent_supervision_required_prerequisites_missing'
 } else {
   [string](Get-PropertyValue -Payload $Plan -Name 'next_smallest_truthful_gap' -Default '')
 }
 $OutputRecommendedHandoffSource = if ($AppliedReceiptHandoffObserved) {
-  'stage6_prerequisite_bringup_operator_plan'
+  'persistent_supervision_enablement_receipt_review_handoff'
 } else {
   'persistent_supervision_required_prerequisites_handoff'
 }
 $OutputRecommendedNextSlice = if ($AppliedReceiptHandoffObserved) {
-  'review_persistent_supervision_enablement_receipt'
+  'review_persistent_supervision_resident_claim_boundary_without_runtime_start'
 } else {
   'resolve_persistent_supervision_required_prerequisites_before_enablement'
 }
 $OutputRecommendedProofScript = if ($AppliedReceiptHandoffObserved) {
-  'scripts/lens-stage6-next-handoff.ps1 -Mode Status'
+  'scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status'
 } else {
   'scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status'
 }
 $OutputRecommendedReadinessRoute = if ($AppliedReceiptHandoffObserved) {
-  '/lens/host/persistent-supervision/enablement/executions'
+  '/lens/host/persistent-supervision/enablement/execution/readiness'
 } else {
   '/lens/host/persistent-supervision/enablement'
 }
 $OutputAuthorityRequired = if ($AppliedReceiptHandoffObserved) {
-  'none_readback_only'
+  'resident_claim_authority'
 } else {
   'resident_host_process_tray_hotkey_overlay_and_summon_prerequisites'
 }
-$OutputAuthorityGranted = [bool]$AppliedReceiptHandoffObserved
+$OutputAuthorityGranted = $false
 $OutputMissingRequiredBeforeEnable = if ($AppliedReceiptHandoffObserved) { [string[]]@() } else { [string[]]$PlanMissingBeforeEnable }
 $OutputFirstMissingRequiredBeforeEnable = if ($AppliedReceiptHandoffObserved) { '' } else { $FirstMissingId }
 $OutputFirstMissingRequirementHandoff = if ($AppliedReceiptHandoffObserved) { [ordered]@{} } else { $FirstMissingHandoff }
@@ -613,7 +617,7 @@ $OutputFirstMissingRequirementHandoff = if ($AppliedReceiptHandoffObserved) { [o
     would_execute_product_path = $false
     would_mutate_product_path = $false
   }
-  message = if ($AppliedReceiptHandoffObserved) { 'The persistent-supervision enablement receipt is applied; the current truthful gap is receipt review before resident-claim/audit continuation. The Stage 6 completion audit was not run.' } else { 'The persistent-supervision authority proof chain is consumed, but the current truthful gap remains the required resident host, tray, hotkey, overlay, and summon prerequisites before enablement; the Stage 6 completion audit was not run.' }
+  message = if ($AppliedReceiptHandoffObserved) { 'The persistent-supervision enablement receipt review is consumed; the current truthful gap is resident-claim boundary review before Stage 6 audit continuation. The Stage 6 completion audit was not run.' } else { 'The persistent-supervision authority proof chain is consumed, but the current truthful gap remains the required resident host, tray, hotkey, overlay, and summon prerequisites before enablement; the Stage 6 completion audit was not run.' }
 } | ConvertTo-Json -Depth 10
 
 exit $(if ($ProofPassed) { 0 } else { 1 })

@@ -312,6 +312,10 @@ $PersistentSupervisionPlanReadback = Get-PropertyValue -Payload $ResidentHostRea
 $PersistentSupervisionEnablementReadback = Get-PropertyValue -Payload $ResidentHostReadback -Name 'persistent_supervision_enablement' -Default ([ordered]@{})
 $PersistentSupervisionEnablementAuthorityReadiness = Get-PropertyValue -Payload $ResidentHostReadback -Name 'persistent_supervision_enablement_authority_readiness' -Default ([ordered]@{})
 $PersistentSupervisionEnablementExecutionReadiness = Get-PropertyValue -Payload $ResidentHostReadback -Name 'persistent_supervision_enablement_execution_readiness' -Default ([ordered]@{})
+$PersistentSupervisionEnablementExecutionReceipts = Get-PropertyValue -Payload $ResidentHostReadback -Name 'persistent_supervision_enablement_execution_receipts' -Default ([ordered]@{})
+$PersistentSupervisionEnablementExecutionReceiptLatest = Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReceipts -Name 'latest' -Default ([ordered]@{})
+$PersistentSupervisionEnablementExecutionReceiptGovernance = Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReceipts -Name 'governance' -Default ([ordered]@{})
+$PersistentSupervisionEnablementExecutionReceiptPostPlan = Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReceiptLatest -Name 'post_plan' -Default ([ordered]@{})
 $PersistentSupervisionMissingRequiredBeforeEnable = ConvertTo-StringArray -Value (
   Get-PropertyValue -Payload $PersistentSupervisionPlanReadback -Name 'missing_required_before_enable'
 )
@@ -399,6 +403,46 @@ if ($PersistentSupervisionEnablementAuthorityHandoffObserved) {
     would_execute = $false
     would_mutate = $false
     blockers = [string[]]@($EnablementAuthorityBlockers + $EnablementExecutionBlockers | Sort-Object -Unique)
+  }
+}
+$PersistentSupervisionEnablementExecutionReceiptStatus = [string](
+  Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReceiptLatest -Name 'status' -Default ''
+)
+$PersistentSupervisionEnablementReceiptReviewObserved = (
+  $Stage6PrerequisiteBringupPlanAppliedObserved -and
+  [string](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReceipts -Name 'kind' -Default '') -eq 'lens.host.persistent_supervision_enablement_execution.receipts' -and
+  [string](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReceipts -Name 'status' -Default '') -eq 'readback_ready' -and
+  [int](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReceipts -Name 'total' -Default 0) -gt 0 -and
+  @('service_config_updated', 'service_config_already_enabled') -contains $PersistentSupervisionEnablementExecutionReceiptStatus -and
+  [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReceipts -Name 'persistent_supervision_enablement_allowed' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReceipts -Name 'persistent_supervision_ready' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReceipts -Name 'resident_claim_allowed' -Default $true) -and
+  [string](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReceiptPostPlan -Name 'next_smallest_truthful_gap' -Default '') -eq 'persistent_supervision_execution_boundary' -and
+  [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReceiptGovernance -Name 'read_only_contract' -Default $false) -and
+  [string](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReceiptGovernance -Name 'next_step' -Default '') -eq 'review_persistent_supervision_execution_receipts_before_resident_claim_boundary' -and
+  -not [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReceiptGovernance -Name 'resident_claim_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReceiptGovernance -Name 'mutation_authority_granted' -Default $true)
+)
+$PersistentSupervisionEnablementReceiptReviewHandoff = [ordered]@{}
+if ($PersistentSupervisionEnablementReceiptReviewObserved) {
+  $PersistentSupervisionEnablementReceiptReviewHandoff = [ordered]@{
+    status = 'receipt_reviewed'
+    previous_next_smallest_truthful_gap = 'persistent_supervision_execution_boundary'
+    next_smallest_truthful_gap = 'persistent_supervision_resident_claim_authority_boundary'
+    next_step = 'review_persistent_supervision_resident_claim_boundary_without_runtime_start'
+    proof_script = 'scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status'
+    route = [string](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReceipts -Name 'route' -Default '/lens/host/persistent-supervision/enablement/executions')
+    readiness_route = [string](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReceipts -Name 'readiness_route' -Default '/lens/host/persistent-supervision/enablement/execution/readiness')
+    execution_route = [string](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReceipts -Name 'execution_route' -Default '/lens/host/persistent-supervision/enablement/execution')
+    latest_receipt_id = [string](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReceiptLatest -Name 'receipt_id' -Default '')
+    latest_receipt_status = $PersistentSupervisionEnablementExecutionReceiptStatus
+    post_plan_next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReceiptPostPlan -Name 'next_smallest_truthful_gap' -Default '')
+    authority_required = 'resident_claim_authority'
+    authority_granted = $false
+    read_only_contract = $true
+    diagnostic_only = $true
+    would_execute = $false
+    would_mutate = $false
   }
 }
 $PersistentSupervisionRequiredPrerequisitesObserved = (
@@ -716,6 +760,16 @@ if ($Stage6PrerequisiteBringupPlanObserved) {
   $AuthorityRequired = [string]$Stage6PrerequisiteBringupOperatorPlanHandoff.authority_required
   $AuthorityGranted = [bool]$Stage6PrerequisiteBringupOperatorPlanHandoff.authority_granted
 }
+if ($PersistentSupervisionEnablementReceiptReviewObserved) {
+  $RecommendedHandoffSource = 'persistent_supervision_enablement_receipt_review_handoff'
+  $RecommendedNextGap = [string]$PersistentSupervisionEnablementReceiptReviewHandoff.next_smallest_truthful_gap
+  $RecommendedNextSlice = [string]$PersistentSupervisionEnablementReceiptReviewHandoff.next_step
+  $RecommendedProofScript = [string]$PersistentSupervisionEnablementReceiptReviewHandoff.proof_script
+  $RecommendedRoute = [string]$PersistentSupervisionEnablementReceiptReviewHandoff.route
+  $RecommendedReadinessRoute = [string]$PersistentSupervisionEnablementReceiptReviewHandoff.readiness_route
+  $AuthorityRequired = [string]$PersistentSupervisionEnablementReceiptReviewHandoff.authority_required
+  $AuthorityGranted = [bool]$PersistentSupervisionEnablementReceiptReviewHandoff.authority_granted
+}
 $RecommendedFirstMissingAuthorityRequired = [string](
   Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'authority_required' -Default ''
 )
@@ -751,6 +805,8 @@ $SideEffectsDenied = (
   -not [bool](Get-PropertyValue -Payload $ActivationExecutionHandoff -Name 'would_mutate' -Default $false) -and
   -not [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupOperatorPlanHandoff -Name 'would_execute' -Default $false) -and
   -not [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupOperatorPlanHandoff -Name 'would_mutate' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementReceiptReviewHandoff -Name 'would_execute' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementReceiptReviewHandoff -Name 'would_mutate' -Default $false) -and
   -not [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlanNextOperatorAction -Name 'script_would_execute' -Default $false) -and
   -not [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlanNextOperatorAction -Name 'script_would_mutate' -Default $false)
 )
@@ -793,6 +849,7 @@ $Checks = @(
   New-Check -Id 'persistent_supervision_required_prerequisites' -Status $PersistentSupervisionRequiredPrerequisitesCheckStatus -Passed $PersistentSupervisionRequiredPrerequisitesCheckPassed -Evidence '/lens/status resident_host.persistent_supervision_plan missing_required_before_enable' -Reason 'The latest Stage 6 handoff must preserve the full persistent-supervision prerequisite map after the audit chain consumes the older resident-host proofs, or explicitly report that the prerequisite chain is already ready/applied.'
   New-Check -Id 'persistent_supervision_first_missing_requirement' -Status $PersistentSupervisionFirstMissingRequirementCheckStatus -Passed $PersistentSupervisionFirstMissingRequirementCheckPassed -Evidence '/lens/status resident_host.persistent_supervision_plan first_missing_requirement_handoff' -Reason 'The persistent-supervision prerequisite gap must name the first concrete missing prerequisite before the next slice, unless the governed bring-up plan has already advanced beyond missing prerequisites.'
   New-Check -Id 'stage6_prerequisite_bringup_plan' -Status $(if ($Stage6PrerequisiteBringupPlanObserved) { 'operator_plan_readback_ready' } else { 'missing_or_unexpected' }) -Passed $Stage6PrerequisiteBringupPlanObserved -Evidence 'scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status' -Reason 'The next handoff should point at the governed prerequisite bring-up runbook instead of lower-level proof fragments.'
+  New-Check -Id 'persistent_supervision_enablement_receipt_review' -Status $(if ($PersistentSupervisionEnablementReceiptReviewObserved) { 'receipt_reviewed' } elseif ($Stage6PrerequisiteBringupPlanAppliedObserved) { 'missing_or_unexpected' } else { 'not_applicable' }) -Passed $(-not $Stage6PrerequisiteBringupPlanAppliedObserved -or $PersistentSupervisionEnablementReceiptReviewObserved) -Evidence '/lens/status resident_host.persistent_supervision_enablement_execution_receipts' -Reason 'After enablement is applied, the next handoff must consume the read-only receipt review before advancing to resident-claim boundary review.'
   New-Check -Id 'persistent_supervision_enablement_authority_handoff' -Status $(if ($PersistentSupervisionEnablementAuthorityHandoffObserved) { 'enablement_authority_handoff_ready' } else { 'not_observed' }) -Passed $true -Evidence '/lens/status resident_host.persistent_supervision_enablement_authority_readiness' -Reason 'When the enablement authority denial and execution-denial readiness are already audited, the next handoff can point at the enablement-authority proof without granting authority.'
   New-Check -Id 'activation_execution_handoff' -Status $(if ($ActivationExecutionHandoffReady) { 'activation_execution_handoff_ready' } else { 'not_observed' }) -Passed $true -Evidence '/lens/status resident_host.activation_state latest_execution_handoff' -Reason 'When a bounded activation execution receipt exists, the handoff can point directly at process-supervision proof without claiming resident host status.'
   New-Check -Id 'resident_runtime_candidate_handoff' -Status $(if ($ResidentRuntimeCandidateHandoffObserved -and $CandidateObservedByDurableReceipt) { 'receipt_candidate_handoff_ready' } elseif ($ResidentRuntimeCandidateHandoffObserved) { 'fresh_candidate_handoff_ready' } else { 'not_observed' }) -Passed $true -Evidence '/lens/status resident_host resident candidate readback' -Reason 'When a fresh or receipt-backed supervised resident candidate is present, the handoff can point at persistence; otherwise it remains on the first missing resident-host prerequisite.'
@@ -824,6 +881,8 @@ $Payload = [ordered]@{
   authority_granted = $AuthorityGranted
   stage6_prerequisite_bringup_plan_observed = $Stage6PrerequisiteBringupPlanObserved
   stage6_prerequisite_bringup_operator_plan_handoff = $Stage6PrerequisiteBringupOperatorPlanHandoff
+  persistent_supervision_enablement_receipt_review_handoff_observed = $PersistentSupervisionEnablementReceiptReviewObserved
+  persistent_supervision_enablement_receipt_review_handoff = $PersistentSupervisionEnablementReceiptReviewHandoff
   next_operator_action_requirement = [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'next_operator_action_requirement' -Default '')
   next_operator_action = $Stage6PrerequisiteBringupPlanNextOperatorAction
   next_operator_command = $Stage6PrerequisiteBringupPlanNextOperatorCommand

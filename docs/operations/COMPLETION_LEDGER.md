@@ -33918,6 +33918,58 @@ precedence:
   passed, mypy passed over 501 source files, and pytest completed with exit
   code 0`
 
+Stage 6 Lens enablement receipt review handoff on `2026-05-19`:
+
+- The top-level Stage 6 next-handoff proof now consumes the read-only
+  persistent-supervision enablement execution receipt review exposed through
+  `/lens/host/persistent-supervision/enablement/executions`.
+- Once the applied receipt is directly readable, the next truthful handoff
+  advances from `persistent_supervision_execution_boundary` to
+  `persistent_supervision_resident_claim_authority_boundary` and recommends
+  `review_persistent_supervision_resident_claim_boundary_without_runtime_start`
+  via `scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1
+  -Mode Status`.
+- `scripts/lens-persistent-supervision-current-gap-proof.ps1` now reflects the
+  same strongest observed handoff, so default Stage 6 readback reports the
+  resident-claim authority boundary after enablement receipt review instead of
+  stopping again at the already-reviewed receipt.
+- This does not close Stage 6, grant resident-claim authority, start persistent
+  supervision, mutate service config, or bypass approvals. It only consumes the
+  receipt readback and routes the operator to the existing resident-claim
+  boundary proof.
+
+Latest validation for Stage 6 Lens enablement receipt review handoff:
+
+- `.\.venv\Scripts\python.exe -m pytest tests/test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed; 9 tests`
+- `.\.venv\Scripts\python.exe -m pytest tests/test_lens_persistent_supervision_current_gap_proof_script.py -q`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests/test_lens_persistent_supervision_resident_claim_boundary_proof_script.py -q`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m ruff check tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m ruff format --check tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 1 file already formatted`
+- PowerShell parser check for `scripts/lens-stage6-next-handoff.ps1` and
+  `scripts/lens-persistent-supervision-current-gap-proof.ps1`
+  Result: `passed; parser_ok`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status`
+  Result: `passed; status=proof_passed,
+  next_smallest_truthful_gap=persistent_supervision_resident_claim_authority_boundary,
+  recommended_next_slice=review_persistent_supervision_resident_claim_boundary_without_runtime_start,
+  recommended_handoff_source=persistent_supervision_enablement_receipt_review_handoff,
+  authority_required=resident_claim_authority, authority_granted=false`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-current-gap-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed,
+  next_smallest_truthful_gap=persistent_supervision_resident_claim_authority_boundary,
+  recommended_next_slice=review_persistent_supervision_resident_claim_boundary_without_runtime_start,
+  recommended_handoff_source=persistent_supervision_enablement_receipt_review_handoff,
+  stage6_applied_enablement_handoff_observed=true`
+- `.\scripts\check.ps1`
+  Result: `passed; branch state OK, Ruff check passed, Ruff format check
+  passed, mypy passed over 501 source files, and pytest completed with exit
+  code 0`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

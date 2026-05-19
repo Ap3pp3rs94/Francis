@@ -1265,11 +1265,16 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     payload = json.loads(proc.stdout)
     assert payload["status"] == "proof_passed"
     assert payload["ok"] is True
-    assert payload["recommended_handoff_source"] == "stage6_prerequisite_bringup_operator_plan"
-    assert payload["next_smallest_truthful_gap"] == payload["stage6_prerequisite_bringup_plan"]["current_truthful_gap"]
-    assert payload["recommended_next_slice"] == "review_persistent_supervision_enablement_receipt"
-    assert payload["authority_required"] == "none_readback_only"
-    assert payload["authority_granted"] is True
+    assert payload["recommended_handoff_source"] == "persistent_supervision_enablement_receipt_review_handoff"
+    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_resident_claim_authority_boundary"
+    assert payload["recommended_next_slice"] == (
+        "review_persistent_supervision_resident_claim_boundary_without_runtime_start"
+    )
+    assert payload["recommended_proof_script"] == (
+        "scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status"
+    )
+    assert payload["authority_required"] == "resident_claim_authority"
+    assert payload["authority_granted"] is False
     assert payload["next_operator_action_requirement"] == "persistent_supervision_enablement_receipt"
     assert payload["next_operator_action"]["id"] == "review_persistent_supervision_enablement_receipt"
     assert payload["next_operator_action"]["method"] == "GET"
@@ -1288,10 +1293,30 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     assert payload["stage6_prerequisite_bringup_operator_plan_handoff"]["next_step"] == (
         "review_persistent_supervision_enablement_receipt"
     )
+    assert payload["persistent_supervision_enablement_receipt_review_handoff_observed"] is True
+    receipt_review_handoff = payload["persistent_supervision_enablement_receipt_review_handoff"]
+    assert receipt_review_handoff["status"] == "receipt_reviewed"
+    assert receipt_review_handoff["latest_receipt_id"] == "lpsee_test_applied"
+    assert receipt_review_handoff["previous_next_smallest_truthful_gap"] == (
+        "persistent_supervision_execution_boundary"
+    )
+    assert receipt_review_handoff["next_smallest_truthful_gap"] == (
+        "persistent_supervision_resident_claim_authority_boundary"
+    )
+    assert receipt_review_handoff["next_step"] == (
+        "review_persistent_supervision_resident_claim_boundary_without_runtime_start"
+    )
+    assert receipt_review_handoff["authority_required"] == "resident_claim_authority"
+    assert receipt_review_handoff["authority_granted"] is False
+    assert receipt_review_handoff["read_only_contract"] is True
+    assert receipt_review_handoff["diagnostic_only"] is True
+    assert receipt_review_handoff["would_execute"] is False
+    assert receipt_review_handoff["would_mutate"] is False
     assert payload["persistent_supervision_enablement_authority_handoff_observed"] is False
 
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["persistent_supervision_required_prerequisites"]["status"] == "not_applicable_enablement_applied"
     assert checks["persistent_supervision_first_missing_requirement"]["status"] == "not_applicable_enablement_applied"
     assert checks["stage6_prerequisite_bringup_plan"]["status"] == "operator_plan_readback_ready"
+    assert checks["persistent_supervision_enablement_receipt_review"]["status"] == "receipt_reviewed"
     assert all(item["passed"] for item in payload["checks"])
