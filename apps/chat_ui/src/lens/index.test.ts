@@ -3189,9 +3189,10 @@ test("LensClient overlay and summon methods post governed Stage 6 prerequisite a
     const summonExecuted = await client.executeSummonAction({
       approvalId: "appr_lens_summon_alpha",
       actor: "chat_ui.system",
-      reason: "record bounded Lens summon handoff from operator UI",
+      reason: "open bounded Lens local command palette handoff from operator UI",
       mode: "launch",
       runSeconds: 25,
+      allowLaunch: true,
     });
 
     assert.equal(requests.length, 6);
@@ -3213,10 +3214,10 @@ test("LensClient overlay and summon methods post governed Stage 6 prerequisite a
     assert.deepEqual(requests[5]?.body, {
       approval_id: "appr_lens_summon_alpha",
       actor: "chat_ui.system",
-      reason: "record bounded Lens summon handoff from operator UI",
+      reason: "open bounded Lens local command palette handoff from operator UI",
       run_seconds: 10,
       mode: "launch",
-      allow_launch: false,
+      allow_launch: true,
     });
     assert.equal(overlayRequested.approval_requested, true);
     assert.equal(overlayGranted.authority_granted, true);

@@ -34630,6 +34630,28 @@ Latest validation for Stage 6 resident-runtime API execution proof:
   Result: `passed; branch state OK on main tracking origin/main; ruff lint passed;
   ruff format check passed; mypy passed; pytest passed`
 
+Stage 6 bounded local summon handoff UI update on `2026-05-19`:
+
+- The operator UI now submits the governed summon execution path as an explicit
+  local command-palette handoff instead of a record-only action:
+  `allowLaunch=true`, reason
+  `open bounded Lens local command palette handoff from operator UI`, and button
+  labels `Open local summon handoff` / `Open next local summon handoff`.
+- The UI no longer hides the execute control solely because the latest summon
+  binding receipt is true. With an active summon authority grant and overlay
+  readiness, the bounded local-open action remains repeatable.
+- This remains a local handoff only. It does not claim OS-wide summon,
+  summon-anywhere readiness, global hotkey registration, tray residency, overlay
+  control, memory write, or resident-claim authority.
+
+Latest validation for Stage 6 bounded local summon handoff UI update:
+
+- `cd apps\chat_ui; npm run test -- --test-name-pattern "overlay and summon methods post governed Stage 6 prerequisite actions"`
+  Result: `passed; 107 tests passed; request body now includes
+  allow_launch=true`
+- `cd apps\chat_ui; npm run build`
+  Result: `passed; Vite production build completed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

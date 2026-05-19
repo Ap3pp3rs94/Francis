@@ -4650,17 +4650,17 @@ function SystemPanel(props: {
         const response = await lensClient.executeSummonAction({
           approvalId: safeApprovalId,
           actor: "chat_ui.system",
-          reason: "record bounded Lens summon handoff from operator UI",
+          reason: "open bounded Lens local command palette handoff from operator UI",
           mode: "launch",
           runSeconds: 2,
-          allowLaunch: false,
+          allowLaunch: true,
         });
         const status = safeString(response.status).trim() || "submitted";
         setLensActionNotice({
           tone: response.executed ? "info" : "error",
           text: response.executed
-            ? `Summon handoff ${safeApprovalId} is ${status}.`
-            : `Summon handoff ${safeApprovalId} is blocked: ${response.blockers.join(", ") || status}.`,
+            ? `Local summon handoff ${safeApprovalId} is ${status}.`
+            : `Local summon handoff ${safeApprovalId} is blocked: ${response.blockers.join(", ") || status}.`,
         });
         await refresh();
       } catch (err) {
@@ -5586,8 +5586,7 @@ function SystemPanel(props: {
   const lensSummonCanExecute =
     lensSummonOverlayReady &&
     lensSummonAuthorityGranted &&
-    Boolean(lensSummonAuthorityApprovedId) &&
-    lensSummonExecutionReceipts?.latest_summon_binding !== true;
+    Boolean(lensSummonAuthorityApprovedId);
   const lensSummonRequestRoute =
     safeString(lensSummonAuthorityRequests?.request_route).trim() || "/lens/summon/authority/request";
   const lensSummonGrantRoute =
@@ -7606,7 +7605,7 @@ function SystemPanel(props: {
                         disabled={Boolean(lensActionBusy) || busy}
                         style={buttonStyle}
                       >
-                        {lensActionBusy === "summon_execute" ? "Recording." : "Record summon handoff"}
+                        {lensActionBusy === "summon_execute" ? "Opening." : "Open local summon handoff"}
                       </button>
                     ) : null}
                     <span style={{ fontSize: 11, color: THEME.muted }}>
@@ -8253,7 +8252,7 @@ function SystemPanel(props: {
                     disabled={Boolean(lensActionBusy) || busy}
                     onClick={() => void executeLensSummonAction(lensStage6PrerequisiteBringupReadback.activeApprovalId)}
                   >
-                    {lensActionBusy === "summon_execute" ? "Recording." : "Record next summon handoff"}
+                    {lensActionBusy === "summon_execute" ? "Opening." : "Open next local summon handoff"}
                   </button>
                 ) : null}
                 {lensStage6PrerequisiteBringupReadback.canRequestNextPersistentSupervisionEnablementAuthority ? (
