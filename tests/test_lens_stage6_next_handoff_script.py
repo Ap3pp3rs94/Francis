@@ -1265,15 +1265,13 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     payload = json.loads(proc.stdout)
     assert payload["status"] == "proof_passed"
     assert payload["ok"] is True
-    assert payload["recommended_handoff_source"] == "persistent_supervision_enablement_receipt_review_handoff"
-    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_resident_claim_authority_boundary"
-    assert payload["recommended_next_slice"] == (
-        "review_persistent_supervision_resident_claim_boundary_without_runtime_start"
+    assert payload["recommended_handoff_source"] == "persistent_supervision_resident_claim_boundary_handoff"
+    assert payload["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert (
+        payload["recommended_next_slice"] == "run_stage6_lens_completion_audit_after_resident_claim_boundary_readback"
     )
-    assert payload["recommended_proof_script"] == (
-        "scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status"
-    )
-    assert payload["authority_required"] == "resident_claim_authority"
+    assert payload["recommended_proof_script"] == "scripts/lens-stage6-completion-audit.ps1 -Mode Status"
+    assert payload["authority_required"] == "none_new_stage6_completion_audit"
     assert payload["authority_granted"] is False
     assert payload["next_operator_action_requirement"] == "persistent_supervision_enablement_receipt"
     assert payload["next_operator_action"]["id"] == "review_persistent_supervision_enablement_receipt"
@@ -1312,6 +1310,30 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     assert receipt_review_handoff["diagnostic_only"] is True
     assert receipt_review_handoff["would_execute"] is False
     assert receipt_review_handoff["would_mutate"] is False
+    assert payload["persistent_supervision_resident_claim_boundary_handoff_observed"] is True
+    resident_claim_handoff = payload["persistent_supervision_resident_claim_boundary_handoff"]
+    assert resident_claim_handoff["recommended_handoff_source"] == (
+        "persistent_supervision_resident_claim_boundary_handoff"
+    )
+    assert resident_claim_handoff["status"] == "audit_needed"
+    assert resident_claim_handoff["previous_next_smallest_truthful_gap"] == (
+        "persistent_supervision_resident_claim_authority_boundary"
+    )
+    assert resident_claim_handoff["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert resident_claim_handoff["next_step"] == (
+        "run_stage6_lens_completion_audit_after_resident_claim_boundary_readback"
+    )
+    assert resident_claim_handoff["proof_script"] == "scripts/lens-stage6-completion-audit.ps1 -Mode Status"
+    assert resident_claim_handoff["authority_required"] == "none_new_stage6_completion_audit"
+    assert resident_claim_handoff["authority_granted"] is False
+    assert resident_claim_handoff["read_only_contract"] is True
+    assert resident_claim_handoff["diagnostic_only"] is True
+    assert resident_claim_handoff["would_execute"] is False
+    assert resident_claim_handoff["would_mutate"] is False
+    assert payload["persistent_supervision_resident_claim_boundary_proof"]["status"] == "proof_passed"
+    assert payload["persistent_supervision_resident_claim_boundary_proof"]["next_smallest_truthful_gap"] == (
+        "stage6_lens_completion_audit"
+    )
     assert payload["persistent_supervision_enablement_authority_handoff_observed"] is False
 
     checks = {item["id"]: item for item in payload["checks"]}
@@ -1319,4 +1341,7 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     assert checks["persistent_supervision_first_missing_requirement"]["status"] == "not_applicable_enablement_applied"
     assert checks["stage6_prerequisite_bringup_plan"]["status"] == "operator_plan_readback_ready"
     assert checks["persistent_supervision_enablement_receipt_review"]["status"] == "receipt_reviewed"
+    assert checks["persistent_supervision_resident_claim_boundary_review"]["status"] == (
+        "resident_claim_boundary_consumed"
+    )
     assert all(item["passed"] for item in payload["checks"])

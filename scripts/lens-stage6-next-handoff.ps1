@@ -171,6 +171,7 @@ $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 
 $StatusReadback = Invoke-LensStatusReadback -StatusLimit $Limit
 $Stage6PrerequisiteBringupPlanScript = Join-Path $PSScriptRoot 'lens-stage6-prerequisite-bringup-plan.ps1'
+$PersistentSupervisionResidentClaimBoundaryScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-resident-claim-boundary-proof.ps1'
 $Stage6PrerequisiteBringupDataDir = [string]$env:FRANCIS_DATA_DIR
 if ([string]::IsNullOrWhiteSpace($Stage6PrerequisiteBringupDataDir)) {
   $Stage6PrerequisiteBringupDataDir = Join-Path $RepoRoot 'data'
@@ -445,6 +446,48 @@ if ($PersistentSupervisionEnablementReceiptReviewObserved) {
     would_mutate = $false
   }
 }
+$PersistentSupervisionResidentClaimBoundaryResult = [ordered]@{
+  exit_code = 0
+  payload = [ordered]@{}
+}
+$PersistentSupervisionResidentClaimBoundary = [ordered]@{}
+$PersistentSupervisionResidentClaimBoundaryHandoff = [ordered]@{}
+if ($PersistentSupervisionEnablementReceiptReviewObserved) {
+  if (-not (Test-Path -LiteralPath $PersistentSupervisionResidentClaimBoundaryScript -PathType Leaf)) {
+    throw "Required Lens proof script is missing: $PersistentSupervisionResidentClaimBoundaryScript"
+  }
+  $PersistentSupervisionResidentClaimBoundaryResult = Invoke-JsonScriptReadback `
+    -ScriptPath $PersistentSupervisionResidentClaimBoundaryScript `
+    -Parameters @{ Mode = 'Status' }
+  $PersistentSupervisionResidentClaimBoundary = Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundaryResult -Name 'payload' -Default ([ordered]@{})
+  $PersistentSupervisionResidentClaimBoundaryHandoff = Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundary -Name 'handoff' -Default ([ordered]@{})
+}
+$PersistentSupervisionResidentClaimBoundaryHandoffObserved = (
+  $PersistentSupervisionEnablementReceiptReviewObserved -and
+  [int](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundaryResult -Name 'exit_code' -Default 1) -eq 0 -and
+  [string](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundary -Name 'kind' -Default '') -eq 'lens.host.persistent_supervision_resident_claim_boundary.proof' -and
+  [bool](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundary -Name 'ok' -Default $false) -and
+  [string](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundary -Name 'status' -Default '') -eq 'proof_passed' -and
+  [bool](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundary -Name 'final_persistent_supervision_authority_family_consumed' -Default $false) -and
+  [string](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundary -Name 'recommended_handoff_source' -Default '') -eq 'persistent_supervision_resident_claim_boundary_handoff' -and
+  [string](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundary -Name 'next_smallest_truthful_gap' -Default '') -eq 'stage6_lens_completion_audit' -and
+  [string](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundary -Name 'recommended_next_slice' -Default '') -eq 'run_stage6_lens_completion_audit_after_resident_claim_boundary_readback' -and
+  [string](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundary -Name 'recommended_proof_script' -Default '') -eq 'scripts/lens-stage6-completion-audit.ps1 -Mode Status' -and
+  [string](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundary -Name 'authority_required' -Default '') -eq 'none_new_stage6_completion_audit' -and
+  -not [bool](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundary -Name 'authority_granted' -Default $true) -and
+  [string](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundaryHandoff -Name 'status' -Default '') -eq 'audit_needed' -and
+  [string](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundaryHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'stage6_lens_completion_audit' -and
+  [bool](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundaryHandoff -Name 'read_only_contract' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundaryHandoff -Name 'diagnostic_only' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundaryHandoff -Name 'authority_granted' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundaryHandoff -Name 'would_execute' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundaryHandoff -Name 'would_mutate' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundary -Name 'would_claim_resident' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundary -Name 'would_start_service' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundary -Name 'would_supervise_process' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundary -Name 'would_write_receipt' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundary -Name 'would_write_memory' -Default $true)
+)
 $PersistentSupervisionRequiredPrerequisitesObserved = (
   @($PersistentSupervisionMissingRequiredBeforeEnable).Count -gt 0 -and
   @($PersistentSupervisionEnablementMissingRequiredBeforeEnable).Count -gt 0 -and
@@ -770,6 +813,16 @@ if ($PersistentSupervisionEnablementReceiptReviewObserved) {
   $AuthorityRequired = [string]$PersistentSupervisionEnablementReceiptReviewHandoff.authority_required
   $AuthorityGranted = [bool]$PersistentSupervisionEnablementReceiptReviewHandoff.authority_granted
 }
+if ($PersistentSupervisionResidentClaimBoundaryHandoffObserved) {
+  $RecommendedHandoffSource = 'persistent_supervision_resident_claim_boundary_handoff'
+  $RecommendedNextGap = [string]$PersistentSupervisionResidentClaimBoundaryHandoff.next_smallest_truthful_gap
+  $RecommendedNextSlice = [string]$PersistentSupervisionResidentClaimBoundaryHandoff.next_step
+  $RecommendedProofScript = [string]$PersistentSupervisionResidentClaimBoundaryHandoff.proof_script
+  $RecommendedRoute = [string]$PersistentSupervisionResidentClaimBoundaryHandoff.route
+  $RecommendedReadinessRoute = [string]$PersistentSupervisionResidentClaimBoundaryHandoff.readiness_route
+  $AuthorityRequired = [string]$PersistentSupervisionResidentClaimBoundaryHandoff.authority_required
+  $AuthorityGranted = [bool]$PersistentSupervisionResidentClaimBoundaryHandoff.authority_granted
+}
 $RecommendedFirstMissingAuthorityRequired = [string](
   Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'authority_required' -Default ''
 )
@@ -807,6 +860,8 @@ $SideEffectsDenied = (
   -not [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupOperatorPlanHandoff -Name 'would_mutate' -Default $false) -and
   -not [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementReceiptReviewHandoff -Name 'would_execute' -Default $false) -and
   -not [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementReceiptReviewHandoff -Name 'would_mutate' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundaryHandoff -Name 'would_execute' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundaryHandoff -Name 'would_mutate' -Default $false) -and
   -not [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlanNextOperatorAction -Name 'script_would_execute' -Default $false) -and
   -not [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlanNextOperatorAction -Name 'script_would_mutate' -Default $false)
 )
@@ -850,6 +905,7 @@ $Checks = @(
   New-Check -Id 'persistent_supervision_first_missing_requirement' -Status $PersistentSupervisionFirstMissingRequirementCheckStatus -Passed $PersistentSupervisionFirstMissingRequirementCheckPassed -Evidence '/lens/status resident_host.persistent_supervision_plan first_missing_requirement_handoff' -Reason 'The persistent-supervision prerequisite gap must name the first concrete missing prerequisite before the next slice, unless the governed bring-up plan has already advanced beyond missing prerequisites.'
   New-Check -Id 'stage6_prerequisite_bringup_plan' -Status $(if ($Stage6PrerequisiteBringupPlanObserved) { 'operator_plan_readback_ready' } else { 'missing_or_unexpected' }) -Passed $Stage6PrerequisiteBringupPlanObserved -Evidence 'scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status' -Reason 'The next handoff should point at the governed prerequisite bring-up runbook instead of lower-level proof fragments.'
   New-Check -Id 'persistent_supervision_enablement_receipt_review' -Status $(if ($PersistentSupervisionEnablementReceiptReviewObserved) { 'receipt_reviewed' } elseif ($Stage6PrerequisiteBringupPlanAppliedObserved) { 'missing_or_unexpected' } else { 'not_applicable' }) -Passed $(-not $Stage6PrerequisiteBringupPlanAppliedObserved -or $PersistentSupervisionEnablementReceiptReviewObserved) -Evidence '/lens/status resident_host.persistent_supervision_enablement_execution_receipts' -Reason 'After enablement is applied, the next handoff must consume the read-only receipt review before advancing to resident-claim boundary review.'
+  New-Check -Id 'persistent_supervision_resident_claim_boundary_review' -Status $(if ($PersistentSupervisionResidentClaimBoundaryHandoffObserved) { 'resident_claim_boundary_consumed' } elseif ($PersistentSupervisionEnablementReceiptReviewObserved) { 'missing_or_unexpected' } else { 'not_applicable' }) -Passed $(-not $PersistentSupervisionEnablementReceiptReviewObserved -or $PersistentSupervisionResidentClaimBoundaryHandoffObserved) -Evidence 'scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status' -Reason 'After enablement receipt review, the next handoff must consume the read-only resident-claim boundary before routing to the Stage 6 completion audit.'
   New-Check -Id 'persistent_supervision_enablement_authority_handoff' -Status $(if ($PersistentSupervisionEnablementAuthorityHandoffObserved) { 'enablement_authority_handoff_ready' } else { 'not_observed' }) -Passed $true -Evidence '/lens/status resident_host.persistent_supervision_enablement_authority_readiness' -Reason 'When the enablement authority denial and execution-denial readiness are already audited, the next handoff can point at the enablement-authority proof without granting authority.'
   New-Check -Id 'activation_execution_handoff' -Status $(if ($ActivationExecutionHandoffReady) { 'activation_execution_handoff_ready' } else { 'not_observed' }) -Passed $true -Evidence '/lens/status resident_host.activation_state latest_execution_handoff' -Reason 'When a bounded activation execution receipt exists, the handoff can point directly at process-supervision proof without claiming resident host status.'
   New-Check -Id 'resident_runtime_candidate_handoff' -Status $(if ($ResidentRuntimeCandidateHandoffObserved -and $CandidateObservedByDurableReceipt) { 'receipt_candidate_handoff_ready' } elseif ($ResidentRuntimeCandidateHandoffObserved) { 'fresh_candidate_handoff_ready' } else { 'not_observed' }) -Passed $true -Evidence '/lens/status resident_host resident candidate readback' -Reason 'When a fresh or receipt-backed supervised resident candidate is present, the handoff can point at persistence; otherwise it remains on the first missing resident-host prerequisite.'
@@ -883,6 +939,16 @@ $Payload = [ordered]@{
   stage6_prerequisite_bringup_operator_plan_handoff = $Stage6PrerequisiteBringupOperatorPlanHandoff
   persistent_supervision_enablement_receipt_review_handoff_observed = $PersistentSupervisionEnablementReceiptReviewObserved
   persistent_supervision_enablement_receipt_review_handoff = $PersistentSupervisionEnablementReceiptReviewHandoff
+  persistent_supervision_resident_claim_boundary_handoff_observed = $PersistentSupervisionResidentClaimBoundaryHandoffObserved
+  persistent_supervision_resident_claim_boundary_handoff = $PersistentSupervisionResidentClaimBoundaryHandoff
+  persistent_supervision_resident_claim_boundary_proof = [ordered]@{
+    status = [string](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundary -Name 'status' -Default '')
+    ok = [bool](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundary -Name 'ok' -Default $false)
+    exit_code = [int](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundaryResult -Name 'exit_code' -Default 0)
+    next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundary -Name 'next_smallest_truthful_gap' -Default '')
+    recommended_next_slice = [string](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundary -Name 'recommended_next_slice' -Default '')
+    recommended_proof_script = [string](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundary -Name 'recommended_proof_script' -Default '')
+  }
   next_operator_action_requirement = [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'next_operator_action_requirement' -Default '')
   next_operator_action = $Stage6PrerequisiteBringupPlanNextOperatorAction
   next_operator_command = $Stage6PrerequisiteBringupPlanNextOperatorCommand

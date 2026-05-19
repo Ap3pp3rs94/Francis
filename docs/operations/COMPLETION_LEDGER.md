@@ -33970,6 +33970,54 @@ Latest validation for Stage 6 Lens enablement receipt review handoff:
   passed, mypy passed over 501 source files, and pytest completed with exit
   code 0`
 
+Stage 6 Lens resident-claim boundary handoff consumption on `2026-05-19`:
+
+- The top-level Stage 6 next-handoff proof now consumes the read-only
+  persistent-supervision resident-claim boundary handoff after the applied
+  enablement receipt review has been observed.
+- Once that resident-claim boundary readback is consumed, the current truthful
+  handoff advances from
+  `persistent_supervision_resident_claim_authority_boundary` to
+  `stage6_lens_completion_audit` and recommends
+  `run_stage6_lens_completion_audit_after_resident_claim_boundary_readback`.
+- `scripts/lens-persistent-supervision-current-gap-proof.ps1` now reflects the
+  same strongest observed handoff, so the default Stage 6 current-gap readback
+  routes to the completion audit instead of stopping again at the already
+  consumed resident-claim review boundary.
+- This does not close Stage 6, grant resident-claim authority, start
+  persistent supervision, mutate service config, write receipts, or write
+  memory. The current-gap proof explicitly records that the Stage 6 completion
+  audit is required but not run by that proof.
+
+Latest validation for Stage 6 Lens resident-claim boundary handoff
+consumption:
+
+- `.\.venv\Scripts\python.exe -m pytest tests/test_lens_stage6_next_handoff_script.py tests/test_lens_persistent_supervision_current_gap_proof_script.py tests/test_lens_persistent_supervision_resident_claim_boundary_proof_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests/test_lens_stage6_next_handoff_script.py tests/test_lens_persistent_supervision_current_gap_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_stage6_next_handoff_script.py tests/test_lens_persistent_supervision_current_gap_proof_script.py`
+  Result: `passed; 2 files already formatted`
+- PowerShell parser check for `scripts/lens-stage6-next-handoff.ps1` and
+  `scripts/lens-persistent-supervision-current-gap-proof.ps1`
+  Result: `passed; parser_ok`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status`
+  Result: `passed; status=proof_passed,
+  next_smallest_truthful_gap=stage6_lens_completion_audit,
+  recommended_handoff_source=persistent_supervision_resident_claim_boundary_handoff,
+  recommended_next_slice=run_stage6_lens_completion_audit_after_resident_claim_boundary_readback,
+  authority_required=none_new_stage6_completion_audit`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-current-gap-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed,
+  next_smallest_truthful_gap=stage6_lens_completion_audit,
+  recommended_handoff_source=persistent_supervision_resident_claim_boundary_handoff,
+  stage6_completion_audit_required=true,
+  stage6_completion_audit_not_run=true`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status`
+  Result: `passed; status=blocked, audit_status=complete,
+  ready_to_close=false, child_proof_timeouts=[], and
+  next_smallest_truthful_gap=checkpoint_summon_enablement_gate_handoff`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
