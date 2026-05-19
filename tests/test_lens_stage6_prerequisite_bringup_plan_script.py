@@ -1586,6 +1586,11 @@ def test_lens_stage6_prerequisite_bringup_tray_execution_advances_to_hotkey(
     resident_execution = _execute_next(data_dir, resident_approval_id, "test execute resident host before tray handoff")
     assert resident_execution["status"] == "resident_supervision_started"
     assert resident_execution["execute_result"]["action_id"] == "execute_supervised_resident_host_start"
+    _wait_for_next_action(
+        data_dir,
+        requirement="tray_presence",
+        action_id="request_tray_presence_authority",
+    )
 
     tray_status = _run_plan("-Mode", "Status", "-DataDir", str(data_dir))
     assert tray_status.returncode == 0, tray_status.stderr or tray_status.stdout
@@ -1642,6 +1647,11 @@ def test_lens_stage6_prerequisite_bringup_tray_execution_advances_to_hotkey(
     assert tray_execution["governance"]["execution_receipt_write"] is True
     assert tray_execution["governance"]["would_execute"] is True
     assert tray_execution["governance"]["would_mutate"] is True
+    _wait_for_next_action(
+        data_dir,
+        requirement="global_hotkey_binding",
+        action_id="request_global_hotkey_binding_authority",
+    )
 
     followup = _run_plan("-Mode", "Status", "-DataDir", str(data_dir))
     assert followup.returncode == 0, followup.stderr or followup.stdout
