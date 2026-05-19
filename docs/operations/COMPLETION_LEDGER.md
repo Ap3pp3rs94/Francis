@@ -33803,6 +33803,27 @@ runtime-state hardening:
   check passed, mypy passed over 501 source files, pytest completed with exit
   code 0`
 
+Stage 6 Lens tray execution readback hardening on `2026-05-19`:
+
+- GitHub Actions run `26070725027` for commit `50f1aa41` failed only on
+  `test (windows-2025-vs2026, 3.13)`. The failing path was
+  `tests/test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_config_only`.
+  The denial payload showed `resident_host_process_missing` during tray
+  execution even though the supervisor readback was fresh and
+  `resident_supervised_runtime=true`, which made this a resident-host readiness
+  readback race rather than a missing authority grant.
+- `src/francis/lens/tray_authority.py` now performs a short bounded reread of
+  resident-host readiness only when tray execution is otherwise about to deny
+  on transient resident-host blockers. It still denies if the host remains
+  missing or unsupervised.
+- `tests/test_api_lens.py` now covers the transient-readback case directly by
+  forcing the first resident readiness read to report
+  `resident_host_process_missing` and the bounded reread to report the
+  supervised resident host.
+- Validation: focused pytest for the new tray-readback test and the exact
+  Stage 6 CI failure both passed, followed by a full `.\scripts\check.ps1`
+  pass on Windows/Python 3.13.11.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -32,6 +32,12 @@ _MIN_LEASE_SECONDS = 60
 _MAX_LEASE_SECONDS = 24 * 60 * 60
 _DEFAULT_RUN_SECONDS = 5 * 60
 _MAX_RUN_SECONDS = 60 * 60
+_RESIDENT_HOST_EXECUTION_READINESS_RETRY_ATTEMPTS = 6
+_RESIDENT_HOST_EXECUTION_READINESS_RETRY_SLEEP_SECONDS = 0.2
+_TRANSIENT_RESIDENT_HOST_READINESS_BLOCKERS = {
+    "resident_host_process_missing",
+    "resident_host_process_not_supervised",
+}
 
 
 def _safe_str(value: Any) -> str:
@@ -304,6 +310,17 @@ def _resident_host_readiness(manifest: dict[str, Any] | None = None) -> dict[str
         "supervisor_readback": supervisor_readback,
         "blockers": blockers,
     }
+
+
+def _resident_host_execution_readiness(manifest: dict[str, Any] | None = None) -> dict[str, Any]:
+    readiness = _resident_host_readiness(manifest)
+    for _ in range(max(0, _RESIDENT_HOST_EXECUTION_READINESS_RETRY_ATTEMPTS - 1)):
+        blockers = set(_str_list(readiness.get("blockers")))
+        if bool(readiness.get("ready")) or not blockers.intersection(_TRANSIENT_RESIDENT_HOST_READINESS_BLOCKERS):
+            return readiness
+        time.sleep(_RESIDENT_HOST_EXECUTION_READINESS_RETRY_SLEEP_SECONDS)
+        readiness = _resident_host_readiness()
+    return readiness
 
 
 def _request_payload(*, actor: Any, route: str) -> dict[str, Any]:
@@ -1182,7 +1199,7 @@ def execute_lens_tray_presence(
     active_grant = _as_dict(grants.get("active_latest"))
     authorities = _as_dict(active_grant.get("authorities"))
     manifest = lens_host_launch_manifest()
-    resident_readiness = _resident_host_readiness(manifest)
+    resident_readiness = _resident_host_execution_readiness(manifest)
     blockers: list[str] = []
     if not safe_approval_id:
         blockers.append("approval_id_required")

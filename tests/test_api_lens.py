@@ -10212,6 +10212,145 @@ def test_lens_tray_presence_execute_starts_and_stops_governed_tray_lease(
     assert stopped_body["receipt_written"] is True
 
 
+def test_lens_tray_presence_execute_retries_transient_resident_readback(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    import francis.lens.tray_authority as tray_authority_module
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    pid = os.getpid()
+    _write_lens_host_runtime_state(data_root, pid=pid, status="resident_running", mode="resident")
+    _write_lens_host_supervisor_state(
+        data_root,
+        observed_pid=pid,
+        status="resident_supervising",
+        mode="supervise_resident",
+        host_mode="resident",
+        observed_state="resident_running",
+        resident_supervised_runtime=True,
+        process_supervision_authority=True,
+    )
+
+    def fake_tray_presence_action(*, mode: str, run_seconds: int) -> dict[str, Any]:
+        assert mode == "start"
+        _write_lens_tray_runtime_state(data_root, pid=pid)
+        return {
+            "ok": True,
+            "status": "started",
+            "returncode": 0,
+            "script_mode": "Start",
+            "script": "scripts/lens-tray-presence.ps1",
+            "runner": {
+                "ok": True,
+                "status": "started",
+                "ready": True,
+                "tray_presence": True,
+                "run_seconds": run_seconds,
+            },
+            "blockers": [],
+        }
+
+    monkeypatch.setattr(
+        tray_authority_module,
+        "_run_lens_tray_presence_action",
+        fake_tray_presence_action,
+    )
+
+    client = TestClient(create_app())
+    requested = client.post(
+        "/lens/tray/authority/request",
+        json={
+            "actor": "test.system.write",
+            "reason": "operator wants tray presence authority",
+        },
+    )
+    assert requested.status_code == 200
+    approval_id = str(requested.json()["approval_id"])
+
+    decided = client.post(
+        "/approvals/decision",
+        json={
+            "id": approval_id,
+            "action": "approve",
+            "actor": "test.approvals.decision",
+            "comment": "approved tray presence lease boundary review",
+        },
+    )
+    assert decided.status_code == 200
+
+    grant = client.post(
+        "/lens/tray/authority",
+        json={
+            "approval_id": approval_id,
+            "actor": "test.system.write",
+            "reason": "operator grants tray presence authority",
+            "lease_seconds": 600,
+        },
+    )
+    assert grant.status_code == 200
+    assert grant.json()["status"] == "authority_granted"
+
+    readiness_calls = 0
+
+    def flaky_resident_readiness(manifest: dict[str, Any] | None = None) -> dict[str, Any]:
+        nonlocal readiness_calls
+        readiness_calls += 1
+        if readiness_calls == 1:
+            return {
+                "ready": False,
+                "resident_host_process": False,
+                "resident_supervised_runtime": False,
+                "process_readback": {"status": "state_present_process_not_running"},
+                "supervisor_readback": {"status": "resident_supervising", "fresh_readback": True},
+                "blockers": ["resident_host_process_missing"],
+            }
+        return {
+            "ready": True,
+            "resident_host_process": True,
+            "resident_supervised_runtime": True,
+            "process_readback": {"status": "process_observed"},
+            "supervisor_readback": {"status": "resident_supervising", "fresh_readback": True},
+            "blockers": [],
+        }
+
+    monkeypatch.setattr(tray_authority_module, "_resident_host_readiness", flaky_resident_readiness)
+    monkeypatch.setattr(tray_authority_module, "_RESIDENT_HOST_EXECUTION_READINESS_RETRY_SLEEP_SECONDS", 0)
+
+    started = client.post(
+        "/lens/tray/execute",
+        json={
+            "approval_id": approval_id,
+            "actor": "test.system.write",
+            "reason": "start governed Lens tray presence",
+            "mode": "start",
+            "run_seconds": 60,
+        },
+    )
+    assert started.status_code == 200
+    started_body = started.json()
+    assert readiness_calls >= 2
+    assert started_body["status"] == "tray_presence_started"
+    assert started_body["executed"] is True
+    assert started_body["resident_host_readiness"]["ready"] is True
+    assert started_body["resident_host_readiness"]["resident_supervised_runtime"] is True
+
+
 def test_lens_overlay_execute_starts_and_stops_governed_overlay_lease(
     monkeypatch,
     tmp_path: Path,
