@@ -204,6 +204,13 @@ def test_lens_stage6_completion_audit_consumes_stage6_prerequisite_bringup_plan_
         "-eq 'persistent_supervision_required_prerequisites_missing'"
     ) in script
     assert "$Stage6PrerequisiteBringupPlanAllowedFirstMissingTruthfulGaps" in script
+    assert "$Stage6PrerequisiteBringupPlanMissingPrerequisitesObserved = (" in script
+    assert "$Stage6PrerequisiteBringupPlanAppliedEnablementObserved = (" in script
+    assert ("[string]$Stage6PrerequisiteBringupPlan.status -eq 'persistent_supervision_enablement_applied'") in script
+    assert (
+        "[string]$Stage6PrerequisiteBringupPlan.current_truthful_gap -eq 'persistent_supervision_execution_boundary'"
+    ) in script
+    assert "stage6_prerequisite_bringup_plan_applied_enablement_readback" in script
     assert "'resident_host_process_not_supervised'" in script
     assert "'resident_supervision_not_persistent'" in script
     assert (
@@ -248,6 +255,19 @@ def test_lens_stage6_completion_audit_preserves_checkpoint_enablement_denial_aut
     ) in script
     assert "authority_required = [string]$PersistentSupervisionEnablementDenial.authority_required" in script
     assert "-not [bool]$PersistentSupervisionEnablementDenial.authority_granted" in script
+
+
+def test_lens_stage6_completion_audit_accepts_checkpoint_summon_runtime_readback_handoff() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    assert "$CheckpointSummonEnablementGateSummonBindingBlockerObserved = (" in script
+    assert "$CheckpointSummonEnablementGateSummonRuntimeReadbackObserved = (" in script
+    assert "$CheckpointSummonEnablementGateHandoffBlockers -contains 'summon_anywhere_runtime_readback'" in script
+    assert "@($CheckpointSummonEnablementGateAuthorityBlockers).Count -gt 0" in script
+    assert (
+        "($CheckpointSummonEnablementGateSummonBindingBlockerObserved -or "
+        "$CheckpointSummonEnablementGateSummonRuntimeReadbackObserved)"
+    ) in script
 
 
 def test_lens_stage6_completion_audit_preserves_checkpoint_enablement_execution_denial_authority_readback() -> None:

@@ -34018,6 +34018,56 @@ consumption:
   ready_to_close=false, child_proof_timeouts=[], and
   next_smallest_truthful_gap=checkpoint_summon_enablement_gate_handoff`
 
+Stage 6 Lens completion-audit checkpoint and applied enablement readback on
+`2026-05-19`:
+
+- The Stage 6 checkpoint handoff now treats the newer
+  `summon_anywhere_runtime_readback` family as a valid blocked summon handoff
+  when the summon binding itself has already been read back, while preserving
+  the older `summon_binding_missing` handoff path.
+- The Stage 6 completion audit consumes that updated checkpoint handoff and
+  records `checkpoint_summon_enablement_gate_handoff_readback=true`.
+- The completion audit also consumes the current Stage 6 prerequisite bring-up
+  plan state where persistent-supervision enablement has already been applied
+  and the next read-only action is receipt review, instead of requiring the
+  older `persistent_supervision_required_prerequisites_missing` plan shape.
+- Once the checkpoint handoff and applied enablement readback are consumed, the
+  completion audit reports `stage6_completion_reviewed=true` and the next
+  truthful blocker as `summon_anywhere_blockers`.
+- This does not close Stage 6, grant summon authority, grant process authority,
+  start persistent supervision, claim residency, mutate service config, write
+  receipts, or write memory. It only updates the audit readback contract so it
+  follows the strongest already observed Stage 6 handoffs.
+
+Latest validation for Stage 6 Lens completion-audit checkpoint and applied
+enablement readback:
+
+- PowerShell parser check for `scripts/lens-stage6-checkpoint.ps1` and
+  `scripts/lens-stage6-completion-audit.ps1`
+  Result: `passed; parser_ok`
+- `.\.venv\Scripts\python.exe -m pytest tests/test_lens_stage6_checkpoint_script.py tests/test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed; 37 passed, 1 skipped`
+- `.\.venv\Scripts\python.exe -m ruff check tests/test_lens_stage6_checkpoint_script.py tests/test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m ruff format --check tests/test_lens_stage6_checkpoint_script.py tests/test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 2 files already formatted`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-checkpoint.ps1 -Mode Status`
+  Result: `passed; status=blocked, ready_to_close=false,
+  next_smallest_truthful_gap=stage6_lens_completion_audit,
+  summon_enablement_gate_handoff.ok=true,
+  governance.summon_enablement_gate_handoff_readback=true`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status`
+  Result: `passed; status=blocked, audit_status=complete,
+  ready_to_close=false, stage6_completion_reviewed=true,
+  next_smallest_truthful_gap=summon_anywhere_blockers,
+  checkpoint_summon_enablement_gate_handoff_observed=true,
+  stage6_prerequisite_bringup_plan.applied_enablement_readback=true,
+  child_proof_timeouts=[]`
+- `.\scripts\check.ps1`
+  Result: `passed; branch state OK, Ruff check passed, Ruff format check
+  passed, mypy passed over 501 source files, and pytest completed with exit
+  code 0`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

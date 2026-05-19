@@ -81,6 +81,18 @@ def test_lens_stage6_checkpoint_honors_explicit_observation_windows_without_chan
     assert "'-CachedOverlayWindowBoundaryProofPath', $ResidentRuntimeOverlayWindowBoundaryProofCachePath" in script
 
 
+def test_lens_stage6_checkpoint_accepts_summon_runtime_readback_handoff() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-checkpoint.ps1").read_text(encoding="utf-8")
+
+    assert "$SummonEnablementGateSummonBindingBlockerObserved = (" in script
+    assert "$SummonEnablementGateSummonRuntimeReadbackObserved = (" in script
+    assert "$SummonEnablementGateBlockers -contains 'summon_anywhere_runtime_readback'" in script
+    assert "@($SummonEnablementGateAuthorityBlockers).Count -gt 0" in script
+    assert (
+        "($SummonEnablementGateSummonBindingBlockerObserved -or $SummonEnablementGateSummonRuntimeReadbackObserved)"
+    ) in script
+
+
 def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority() -> None:
     proc = _run_checkpoint(
         "-Mode",

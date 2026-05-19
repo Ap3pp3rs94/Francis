@@ -508,6 +508,17 @@ $SummonEnablementGateFirstHandoffWouldMutate = [bool](Get-PropertyValue -Payload
 $SummonEnablementGateNextSmallestTruthfulGap = [string](Get-PropertyValue -Payload $SummonEnablementGateCriterion -Name 'next_smallest_truthful_gap' -Default '')
 $SummonEnablementGateEvidence = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $SummonEnablementGateCriterion -Name 'evidence' -Default @())
 $SummonEnablementGateBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $SummonEnablementGateCriterion -Name 'blockers' -Default @())
+$SummonEnablementGateAuthorityBlockers = @(
+  $SummonEnablementGateBlockers | Where-Object { [string]$_ -like '*_authority_not_granted' }
+)
+$SummonEnablementGateSummonBindingBlockerObserved = (
+  $SummonEnablementGateBlockedFamilies -contains 'summon_binding' -and
+  $SummonEnablementGateBlockers -contains 'summon_binding_missing'
+)
+$SummonEnablementGateSummonRuntimeReadbackObserved = (
+  $SummonEnablementGateBlockedFamilies -contains 'summon_anywhere' -and
+  $SummonEnablementGateBlockers -contains 'summon_anywhere_runtime_readback'
+)
 $SummonEnablementGateHandoffObserved = (
   $SummonEnablementGateStatus -eq 'blocked' -and
   -not $SummonEnablementGateReady -and
@@ -529,8 +540,8 @@ $SummonEnablementGateHandoffObserved = (
   $SummonEnablementGateEvidence -contains '/lens/status' -and
   $SummonEnablementGateBlockedFamilies -contains 'resident_host' -and
   $SummonEnablementGateBlockedFamilies -contains 'authority' -and
-  $SummonEnablementGateBlockers -contains 'summon_binding_missing' -and
-  $SummonEnablementGateBlockers -contains 'summon_authority_not_granted'
+  @($SummonEnablementGateAuthorityBlockers).Count -gt 0 -and
+  ($SummonEnablementGateSummonBindingBlockerObserved -or $SummonEnablementGateSummonRuntimeReadbackObserved)
 )
 $PersistentSupervisionEnablementDenialStatus = [string](Get-PropertyValue -Payload $PersistentSupervisionEnablementDenialCriterion -Name 'status' -Default 'missing')
 $PersistentSupervisionEnablementDenialBoundaryReady = [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementDenialCriterion -Name 'boundary_ready' -Default $false)
