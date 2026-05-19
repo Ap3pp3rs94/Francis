@@ -66,8 +66,55 @@ def test_lens_surface_plan_consumption_proof_consumes_summon_handoff_readback() 
     assert payload["missing_required_before_enable"] == []
     assert payload["next_smallest_truthful_gap"] == "persistent_supervision_authority_not_granted"
     assert payload["recommended_next_slice"] == "resolve_persistent_supervision_authority_before_enablement"
+    assert payload["recommended_handoff_source"] == "surface_plan_consumption_persistent_supervision_authority_handoff"
+    assert (
+        payload["recommended_proof_script"]
+        == "scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status"
+    )
+    assert payload["recommended_route"] == "/lens/host/persistent-supervision/enablement/authority"
+    assert payload["recommended_readiness_route"] == "/lens/host/persistent-supervision/enablement/authority/readiness"
+    assert payload["authority_required"] == "persistent_supervision_enablement_authority"
+    assert payload["authority_granted"] is False
     assert payload["stop_observed"] is True
     assert payload["side_effects_bounded"] is True
+
+    recommended_handoff = payload["recommended_handoff"]
+    assert recommended_handoff["status"] == "blocked"
+    assert (
+        recommended_handoff["consumed_surface_runtime_next_smallest_truthful_gap"]
+        == "persistent_supervision_authority_not_granted"
+    )
+    assert recommended_handoff["next_smallest_truthful_gap"] == "persistent_supervision_authority_not_granted"
+    assert recommended_handoff["next_step"] == "resolve_persistent_supervision_authority_before_enablement"
+    assert (
+        recommended_handoff["proof_script"]
+        == "scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status"
+    )
+    assert recommended_handoff["route"] == "/lens/host/persistent-supervision/enablement"
+    assert recommended_handoff["authority_route"] == "/lens/host/persistent-supervision/enablement/authority"
+    assert recommended_handoff["readiness_route"] == "/lens/host/persistent-supervision/enablement/authority/readiness"
+    assert recommended_handoff["authority_required"] == "persistent_supervision_enablement_authority"
+    assert recommended_handoff["authority_granted"] is False
+    assert recommended_handoff["required_before_enable_ready"] is True
+    assert recommended_handoff["first_missing_required_before_enable"] == ""
+    assert recommended_handoff["missing_required_before_enable"] == []
+    assert recommended_handoff["read_only_contract"] is True
+    assert recommended_handoff["diagnostic_only"] is True
+    assert recommended_handoff["would_execute"] is False
+    assert recommended_handoff["would_mutate"] is False
+    assert recommended_handoff["would_supervise_process"] is False
+    assert recommended_handoff["would_restart_process"] is False
+    assert recommended_handoff["would_install_service"] is False
+    assert recommended_handoff["would_start_service"] is False
+    assert recommended_handoff["would_write_receipt"] is False
+    assert recommended_handoff["would_write_memory"] is False
+    assert recommended_handoff["would_decide_approval"] is False
+    assert recommended_handoff["would_claim_resident"] is False
+    assert "process_restart_authority_not_granted" in recommended_handoff["blockers"]
+    assert "service_install_authority_not_granted" in recommended_handoff["blockers"]
+    assert "service_control_authority_not_granted" in recommended_handoff["blockers"]
+    assert "receipt_write_authority_not_granted" in recommended_handoff["blockers"]
+    assert "resident_claim_authority_not_granted" in recommended_handoff["blockers"]
 
     scope = payload["proof_scope"]
     assert scope == {

@@ -34486,6 +34486,50 @@ Latest validation for Stage 6 plan-consumption proof handoff promotion:
   recommended_handoff.id=global_hotkey_binding,
   recommended_handoff.blocker=global_hotkey_binding_missing`
 
+Stage 6 surface plan-consumption authority handoff promotion on `2026-05-19`:
+
+- `scripts/lens-surface-plan-consumption-proof.ps1` now emits a top-level
+  persistent-supervision authority handoff when its bounded synthetic surface
+  runtime proof satisfies all required-before-enable prerequisites and the
+  persistent-supervision plan reports
+  `next_smallest_truthful_gap=persistent_supervision_authority_not_granted`.
+- The promoted handoff uses
+  `recommended_handoff_source=surface_plan_consumption_persistent_supervision_authority_handoff`
+  and
+  `recommended_proof_script=scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status`.
+  This is an authority-request proof handoff only; it does not claim persistent
+  supervision enablement, resident claim, service install/control, receipt
+  writes, memory writes, approval decisions, tray registration, hotkey
+  registration, overlay control, or summon authority.
+- This closes the last known Stage 6 plan-consumption proof readback gap after
+  the resident-host and tray plan-consumption proof promotions above. The
+  prerequisite handoff remains `null` here because the bounded surface-runtime
+  proof has consumed all required-before-enable dependencies; the remaining
+  gap is authority, not a missing prerequisite.
+
+Latest validation for Stage 6 surface plan-consumption authority handoff
+promotion:
+
+- PowerShell parser check for
+  `scripts/lens-surface-plan-consumption-proof.ps1`
+  Result: `passed; parse_ok`
+- `python -m pytest tests/test_lens_surface_plan_consumption_proof_script.py -q`
+  Result: `passed; 1 passed`
+- `python -m ruff check tests/test_lens_surface_plan_consumption_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_surface_plan_consumption_proof_script.py`
+  Result: `passed; 1 file already formatted`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-surface-plan-consumption-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=persistent_supervision_authority_not_granted;
+  recommended_next_slice=resolve_persistent_supervision_authority_before_enablement;
+  recommended_handoff_source=surface_plan_consumption_persistent_supervision_authority_handoff;
+  recommended_proof_script=scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status;
+  recommended_route=/lens/host/persistent-supervision/enablement/authority;
+  recommended_readiness_route=/lens/host/persistent-supervision/enablement/authority/readiness;
+  authority_required=persistent_supervision_enablement_authority;
+  authority_granted=false`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

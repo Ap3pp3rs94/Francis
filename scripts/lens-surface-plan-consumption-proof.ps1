@@ -302,6 +302,7 @@ $SummonDependency = @(Get-DependencyById -Dependencies $Dependencies -Id 'summon
 $PlanHandoff = Get-PropertyValue -Payload $PlanPayload -Name 'first_missing_requirement_handoff'
 $MissingRequired = @(ConvertTo-StringArray -Value (Get-PropertyValue -Payload $PlanPayload -Name 'missing_required_before_enable' -Default @()))
 $FirstMissing = [string](Get-PropertyValue -Payload $PlanPayload -Name 'first_missing_required_before_enable' -Default '')
+$PlanBlockers = @(ConvertTo-StringArray -Value (Get-PropertyValue -Payload $PlanPayload -Name 'blockers' -Default @()))
 $StartGovernance = Get-PropertyValue -Payload $StartPayload -Name 'governance'
 $SurfaceGovernance = Get-PropertyValue -Payload $SurfaceRuntimePayload -Name 'governance'
 $PlanGovernance = Get-PropertyValue -Payload $PlanPayload -Name 'governance'
@@ -404,6 +405,51 @@ $RecommendedSlice = if ($PlanConsumedSurfaceRuntime) {
 } else {
   'debug_coordinated_surface_runtime_plan_consumption_readback'
 }
+$RecommendedHandoffSource = ''
+$RecommendedHandoff = $null
+$RecommendedProofScript = ''
+$RecommendedRoute = ''
+$RecommendedReadinessRoute = ''
+$AuthorityRequired = ''
+$AuthorityGranted = $false
+
+if ($PlanConsumedSurfaceRuntime -and $PlanNextGap -eq 'persistent_supervision_authority_not_granted') {
+  $RecommendedHandoffSource = 'surface_plan_consumption_persistent_supervision_authority_handoff'
+  $RecommendedProofScript = 'scripts/lens-persistent-supervision-enablement-authority-proof.ps1 -Mode Status'
+  $RecommendedRoute = '/lens/host/persistent-supervision/enablement/authority'
+  $RecommendedReadinessRoute = '/lens/host/persistent-supervision/enablement/authority/readiness'
+  $AuthorityRequired = 'persistent_supervision_enablement_authority'
+  $RecommendedHandoff = [ordered]@{
+    status = 'blocked'
+    consumed_surface_runtime_next_smallest_truthful_gap = $PlanNextGap
+    next_smallest_truthful_gap = $PlanNextGap
+    next_step = $RecommendedSlice
+    proof_script = $RecommendedProofScript
+    route = '/lens/host/persistent-supervision/enablement'
+    authority_route = $RecommendedRoute
+    readiness_route = $RecommendedReadinessRoute
+    authority_required = $AuthorityRequired
+    authority_granted = $AuthorityGranted
+    required_before_enable_ready = $true
+    first_missing_required_before_enable = ''
+    missing_required_before_enable = @()
+    persistent_supervision_plan_consumed_surface_runtime = $true
+    coordinated_surface_runtime_readback_observed = $true
+    read_only_contract = $true
+    diagnostic_only = $true
+    would_execute = $false
+    would_mutate = $false
+    would_supervise_process = $false
+    would_restart_process = $false
+    would_install_service = $false
+    would_start_service = $false
+    would_write_receipt = $false
+    would_write_memory = $false
+    would_decide_approval = $false
+    would_claim_resident = $false
+    blockers = [string[]]$PlanBlockers
+  }
+}
 
 $Payload = [ordered]@{
   kind = 'lens.surface_runtime.plan_consumption_proof'
@@ -427,6 +473,13 @@ $Payload = [ordered]@{
   missing_required_before_enable = $MissingRequired
   next_smallest_truthful_gap = $NextGap
   recommended_next_slice = $RecommendedSlice
+  recommended_handoff_source = $RecommendedHandoffSource
+  recommended_handoff = $RecommendedHandoff
+  recommended_proof_script = $RecommendedProofScript
+  recommended_route = $RecommendedRoute
+  recommended_readiness_route = $RecommendedReadinessRoute
+  authority_required = $AuthorityRequired
+  authority_granted = $AuthorityGranted
   stop_observed = $StopObserved
   side_effects_bounded = $SideEffectsBounded
   proof_scope = [ordered]@{
