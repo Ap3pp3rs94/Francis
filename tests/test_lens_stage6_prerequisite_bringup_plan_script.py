@@ -65,6 +65,21 @@ def _run_lens_runtime_script(script_name: str, *args: str) -> None:
     )
 
 
+@pytest.fixture(autouse=True)
+def _cleanup_stage6_live_runtime_leases(tmp_path: Path) -> Iterator[None]:
+    yield
+    if platform.system() != "Windows":
+        return
+    data_dir = tmp_path / "data"
+    if not data_dir.exists():
+        return
+
+    _run_lens_runtime_script("lens-hotkey-binding.ps1", "-Mode", "Stop", "-DataDir", str(data_dir))
+    _run_lens_runtime_script("lens-overlay-window.ps1", "-Mode", "Stop", "-DataDir", str(data_dir))
+    _run_lens_runtime_script("lens-tray-presence.ps1", "-Mode", "Stop", "-DataDir", str(data_dir))
+    _run_lens_runtime_script("lens-host-supervisor.ps1", "-Mode", "StopResident", "-DataDir", str(data_dir))
+
+
 def _service_config_args(service_config_path: Path | None) -> tuple[str, ...]:
     if service_config_path is None:
         return ()
@@ -836,6 +851,117 @@ def _refresh_resident_host_lease(
     assert result["status"] == "resident_supervision_started"
     assert result["receipt_written"] is True
     assert result["resident_supervised_runtime"] is True
+    return result
+
+
+def _restart_tray_lease(
+    data_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    approval_id: str,
+    *,
+    service_config_path: Path | None = None,
+) -> dict[str, Any]:
+    _set_stage6_env(monkeypatch, data_dir, service_config_path=service_config_path)
+    from francis.lens.tray_authority import LENS_TRAY_EXECUTE_ROUTE, execute_lens_tray_presence
+
+    execute_lens_tray_presence(
+        approval_id=approval_id,
+        actor="test.system.write",
+        reason="test stop tray lease before refreshing summon prerequisites",
+        route=LENS_TRAY_EXECUTE_ROUTE,
+        method="POST",
+        record_receipt=True,
+        mode="stop",
+        run_seconds=0,
+    )
+    result = execute_lens_tray_presence(
+        approval_id=approval_id,
+        actor="test.system.write",
+        reason="test refresh tray lease before summon execution",
+        route=LENS_TRAY_EXECUTE_ROUTE,
+        method="POST",
+        record_receipt=True,
+        mode="start",
+        run_seconds=60,
+    )
+    assert result["ok"] is True, json.dumps(result, indent=2)
+    assert result["status"] == "tray_presence_started", json.dumps(result, indent=2)
+    assert result["receipt_written"] is True
+    assert result["tray_presence"] is True
+    return result
+
+
+def _restart_hotkey_lease(
+    data_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    approval_id: str,
+    *,
+    service_config_path: Path | None = None,
+) -> dict[str, Any]:
+    _set_stage6_env(monkeypatch, data_dir, service_config_path=service_config_path)
+    from francis.lens.os_binding_authority import LENS_OS_BINDING_EXECUTE_ROUTE, execute_lens_os_binding
+
+    execute_lens_os_binding(
+        approval_id=approval_id,
+        actor="test.system.write",
+        reason="test stop hotkey lease before refreshing summon prerequisites",
+        route=LENS_OS_BINDING_EXECUTE_ROUTE,
+        method="POST",
+        record_receipt=True,
+        mode="stop",
+        run_seconds=0,
+    )
+    result = execute_lens_os_binding(
+        approval_id=approval_id,
+        actor="test.system.write",
+        reason="test refresh hotkey lease before summon execution",
+        route=LENS_OS_BINDING_EXECUTE_ROUTE,
+        method="POST",
+        record_receipt=True,
+        mode="bind",
+        run_seconds=60,
+    )
+    assert result["ok"] is True, json.dumps(result, indent=2)
+    assert result["status"] == "global_hotkey_bound", json.dumps(result, indent=2)
+    assert result["receipt_written"] is True
+    assert result["global_hotkey_binding"] is True
+    return result
+
+
+def _restart_overlay_lease(
+    data_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    approval_id: str,
+    *,
+    service_config_path: Path | None = None,
+) -> dict[str, Any]:
+    _set_stage6_env(monkeypatch, data_dir, service_config_path=service_config_path)
+    from francis.lens.overlay_authority import LENS_OVERLAY_EXECUTE_ROUTE, execute_lens_overlay_window
+
+    execute_lens_overlay_window(
+        approval_id=approval_id,
+        actor="test.system.write",
+        reason="test stop overlay lease before refreshing summon prerequisites",
+        route=LENS_OVERLAY_EXECUTE_ROUTE,
+        method="POST",
+        record_receipt=True,
+        mode="stop",
+        run_seconds=0,
+    )
+    result = execute_lens_overlay_window(
+        approval_id=approval_id,
+        actor="test.system.write",
+        reason="test refresh overlay lease before summon execution",
+        route=LENS_OVERLAY_EXECUTE_ROUTE,
+        method="POST",
+        record_receipt=True,
+        mode="start",
+        run_seconds=60,
+    )
+    assert result["ok"] is True, json.dumps(result, indent=2)
+    assert result["status"] == "overlay_window_started", json.dumps(result, indent=2)
+    assert result["receipt_written"] is True
+    assert result["overlay_window"] is True
     return result
 
 
@@ -1829,6 +1955,24 @@ def _execute_prerequisites_through_summon_binding(
         monkeypatch,
         chain["resident_approval_id"],
         reason="test refresh resident host lease before summon execution",
+        service_config_path=service_config_path,
+    )
+    _restart_tray_lease(
+        data_dir,
+        monkeypatch,
+        chain["tray_approval_id"],
+        service_config_path=service_config_path,
+    )
+    _restart_hotkey_lease(
+        data_dir,
+        monkeypatch,
+        chain["hotkey_approval_id"],
+        service_config_path=service_config_path,
+    )
+    _restart_overlay_lease(
+        data_dir,
+        monkeypatch,
+        chain["overlay_approval_id"],
         service_config_path=service_config_path,
     )
     summon_execute_ready = _run_plan(

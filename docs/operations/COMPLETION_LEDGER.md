@@ -33824,6 +33824,41 @@ Stage 6 Lens tray execution readback hardening on `2026-05-19`:
   Stage 6 CI failure both passed, followed by a full `.\scripts\check.ps1`
   pass on Windows/Python 3.13.11.
 
+Stage 6 Lens Windows 3.12 summon-handoff CI stabilization on `2026-05-19`:
+
+- GitHub Actions run `26072507721` for commit `e1bd1759` passed both Ubuntu
+  jobs and Windows 3.13, but failed `test (windows-2025-vs2026, 3.12)` in
+  `tests/test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_config_only`.
+  The failing path had already advanced through tray, hotkey, and overlay, then
+  the Stage 6 bring-up subprocess exited nonzero at the summon execution handoff
+  without stdout/stderr. This made the remaining CI trend a Windows 3.12
+  timing/resource issue in the live proof harness, not a new authority grant.
+- `tests/test_lens_stage6_prerequisite_bringup_plan_script.py` now cleans up
+  live resident, tray, hotkey, and overlay leases after each test that creates a
+  temporary Stage 6 data root. The summon-boundary helper also renews the
+  already-granted tray, hotkey, and overlay leases through the real governed
+  execution functions immediately before executing the summon handoff, so the
+  proof still requires live readback instead of stale runtime state.
+- This is a CI/proof-harness stabilization only. It does not grant new product
+  authority, does not bypass approvals, does not claim summon-anywhere behavior,
+  and does not close Stage 6.
+
+Latest validation for Stage 6 Lens Windows 3.12 summon-handoff CI
+stabilization:
+
+- `.\.venv\Scripts\python.exe -m pytest tests/test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_config_only -q`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m pytest tests/test_lens_stage6_prerequisite_bringup_plan_script.py -q`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m ruff check tests/test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m ruff format --check tests/test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed; branch state OK, Ruff check passed, Ruff format check
+  passed, mypy passed over 501 source files, and pytest completed with exit
+  code 0`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
