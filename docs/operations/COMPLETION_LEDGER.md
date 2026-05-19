@@ -34530,6 +34530,59 @@ promotion:
   authority_required=persistent_supervision_enablement_authority;
   authority_granted=false`
 
+Stage 6 persistent-supervision resident-claim runtime-progress handoff on
+`2026-05-19`:
+
+- `scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1` now
+  consumes `scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status`
+  after the resident-claim boundary proof has proven the persistent-supervision
+  authority chain is consumed.
+- The proof emits `runtime_progress_handoff_observed=true` plus a
+  `runtime_progress_handoff` that carries the current bring-up-plan gap,
+  next operator action, next operator command, command availability, and
+  governance fields. In the current isolated proof data root this names
+  `current_truthful_gap=persistent_supervision_required_prerequisites_missing`,
+  `next_operator_action.id=request_resident_runtime_execution_authority`, and
+  `next_operator_command.mode=RequestNext`.
+- `scripts/lens-stage6-completion-audit.ps1` now requires that handoff for the
+  resident-claim proof readback and mirrors it through
+  `persistent_supervision_resident_claim_boundary_proof.runtime_progress_handoff`
+  so the completion audit preserves the concrete governed runtime-progress path.
+- This does not request authority, grant authority, execute runtime actions,
+  mutate service config, write memory, write receipts, decide approvals, or
+  claim residency. It only exposes the existing bring-up plan as read-only
+  follow-on evidence from the resident-claim boundary.
+
+Latest validation for Stage 6 persistent-supervision resident-claim
+runtime-progress handoff:
+
+- PowerShell parser check for
+  `scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1` and
+  `scripts/lens-stage6-completion-audit.ps1`
+  Result: `passed; parse_ok`
+- `python -m pytest tests/test_lens_persistent_supervision_resident_claim_boundary_proof_script.py -q`
+  Result: `passed; 1 passed`
+- `python -m pytest tests/test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed; 36 passed, 1 skipped`
+- `python -m ruff check tests/test_lens_persistent_supervision_resident_claim_boundary_proof_script.py tests/test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_persistent_supervision_resident_claim_boundary_proof_script.py tests/test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 2 files already formatted`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=stage6_lens_completion_audit;
+  runtime_progress_handoff_observed=true;
+  runtime_progress_handoff.current_truthful_gap=persistent_supervision_required_prerequisites_missing;
+  runtime_progress_handoff.next_operator_action.id=request_resident_runtime_execution_authority;
+  runtime_progress_handoff.next_operator_command.mode=RequestNext;
+  runtime_progress_handoff.would_execute=false`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status`
+  Result: `passed; status=blocked;
+  next_smallest_truthful_gap=summon_anywhere_blockers;
+  persistent_supervision_resident_claim_boundary_proof.runtime_progress_handoff_observed=true;
+  persistent_supervision_resident_claim_boundary_proof.runtime_progress_handoff.current_truthful_gap=persistent_supervision_required_prerequisites_missing;
+  persistent_supervision_resident_claim_boundary_proof.runtime_progress_handoff.next_operator_action.id=request_resident_runtime_execution_authority`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

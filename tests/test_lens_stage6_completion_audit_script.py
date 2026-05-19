@@ -1538,6 +1538,19 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert persistent_resident_claim_boundary["persistent_supervision_plan_observed"] is True
     assert persistent_resident_claim_boundary["side_effects_denied"] is True
     assert persistent_resident_claim_boundary["final_persistent_supervision_authority_family_consumed"] is True
+    assert persistent_resident_claim_boundary["runtime_progress_handoff_observed"] is True
+    runtime_progress_handoff = persistent_resident_claim_boundary["runtime_progress_handoff"]
+    assert runtime_progress_handoff["source"] == "stage6_prerequisite_bringup_plan_status"
+    assert runtime_progress_handoff["current_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
+    assert runtime_progress_handoff["next_operator_action_requirement"] == "resident_host_process"
+    assert runtime_progress_handoff["next_operator_action"]["id"] == "request_resident_runtime_execution_authority"
+    assert runtime_progress_handoff["next_operator_command"]["mode"] == "RequestNext"
+    assert runtime_progress_handoff["next_operator_command"]["requires_confirmation"] is True
+    assert runtime_progress_handoff["proof_script"] == "scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status"
+    assert runtime_progress_handoff["read_only_contract"] is True
+    assert runtime_progress_handoff["diagnostic_only"] is True
+    assert runtime_progress_handoff["would_execute"] is False
+    assert runtime_progress_handoff["would_mutate"] is False
     assert persistent_resident_claim_boundary["authority_required"] == "none_new_stage6_completion_audit"
     assert persistent_resident_claim_boundary["authority_granted"] is False
     assert persistent_resident_claim_boundary["persistent_supervision_enablement_authority"] is True

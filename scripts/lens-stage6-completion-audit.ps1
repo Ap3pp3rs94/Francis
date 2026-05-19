@@ -854,6 +854,7 @@ $PersistentSupervisionResidentClaimBoundaryObserved = (
   [bool]$PersistentSupervisionResidentClaimBoundaryProof.persistent_supervision_plan_observed -and
   [bool]$PersistentSupervisionResidentClaimBoundaryProof.side_effects_denied -and
   [bool]$PersistentSupervisionResidentClaimBoundaryProof.final_persistent_supervision_authority_family_consumed -and
+  [bool]$PersistentSupervisionResidentClaimBoundaryProof.runtime_progress_handoff_observed -and
   [bool]$PersistentSupervisionResidentClaimBoundaryProof.persistent_supervision_enablement_authority -and
   [bool]$PersistentSupervisionResidentClaimBoundaryProof.service_config_write_authority -and
   [bool]$PersistentSupervisionResidentClaimBoundaryProof.persistent_supervision_execution_authority -and
@@ -4095,6 +4096,8 @@ $Payload = [ordered]@{
     persistent_supervision_plan_observed = [bool]$PersistentSupervisionResidentClaimBoundaryProof.persistent_supervision_plan_observed
     side_effects_denied = [bool]$PersistentSupervisionResidentClaimBoundaryProof.side_effects_denied
     final_persistent_supervision_authority_family_consumed = [bool]$PersistentSupervisionResidentClaimBoundaryProof.final_persistent_supervision_authority_family_consumed
+    runtime_progress_handoff_observed = [bool]$PersistentSupervisionResidentClaimBoundaryProof.runtime_progress_handoff_observed
+    runtime_progress_handoff = $PersistentSupervisionResidentClaimBoundaryProof.runtime_progress_handoff
     authority_required = [string]$PersistentSupervisionResidentClaimBoundaryProof.authority_required
     authority_granted = [bool]$PersistentSupervisionResidentClaimBoundaryProof.authority_granted
     resident_claim = $PersistentSupervisionResidentClaimBoundaryProof.resident_claim

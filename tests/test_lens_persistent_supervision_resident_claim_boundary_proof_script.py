@@ -57,6 +57,7 @@ def test_lens_persistent_supervision_resident_claim_boundary_is_readback_only(
     assert payload["persistent_supervision_plan_observed"] is True
     assert payload["side_effects_denied"] is True
     assert payload["final_persistent_supervision_authority_family_consumed"] is True
+    assert payload["runtime_progress_handoff_observed"] is True
     assert payload["persistent_supervision_enablement_authority"] is True
     assert payload["service_config_write_authority"] is True
     assert payload["persistent_supervision_execution_authority"] is True
@@ -97,6 +98,36 @@ def test_lens_persistent_supervision_resident_claim_boundary_is_readback_only(
     assert "service_config_write_authority_not_granted" not in resident_claim["blockers"]
     assert "persistent_supervision_execution_authority_not_granted" not in resident_claim["blockers"]
     assert "receipt_write_authority_not_granted" not in resident_claim["blockers"]
+
+    runtime_progress_handoff = payload["runtime_progress_handoff"]
+    assert runtime_progress_handoff["status"] == "blocked"
+    assert runtime_progress_handoff["source"] == "stage6_prerequisite_bringup_plan_status"
+    assert runtime_progress_handoff["current_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
+    assert runtime_progress_handoff["current_truthful_gap_basis"] == "missing_required_before_enable"
+    assert runtime_progress_handoff["next_operator_action_requirement"] == "resident_host_process"
+    assert runtime_progress_handoff["next_operator_action"]["id"] == "request_resident_runtime_execution_authority"
+    assert runtime_progress_handoff["next_operator_action"]["route"] == "/lens/resident-runtime/authority-grant/request"
+    assert runtime_progress_handoff["next_operator_command"]["mode"] == "RequestNext"
+    assert runtime_progress_handoff["next_operator_command"]["requires_confirmation"] is True
+    assert runtime_progress_handoff["next_operator_command"]["requires_approval_id"] is False
+    assert (
+        runtime_progress_handoff["next_operator_command"]["command"]
+        == ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 -Mode RequestNext -Actor <actor> -ConfirmRequest"
+    )
+    assert runtime_progress_handoff["operator_sequence_command_availability"]["available_now_count"] == 1
+    assert runtime_progress_handoff["proof_script"] == "scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status"
+    assert runtime_progress_handoff["route"] == "/lens/host/persistent-supervision"
+    assert runtime_progress_handoff["readiness_route"] == "/lens/host/persistent-supervision/enablement"
+    assert runtime_progress_handoff["authority_required"] == "operator_sequence_authority_per_next_action"
+    assert runtime_progress_handoff["authority_granted"] is False
+    assert runtime_progress_handoff["requires_explicit_operator_execution"] is True
+    assert runtime_progress_handoff["read_only_contract"] is True
+    assert runtime_progress_handoff["diagnostic_only"] is True
+    assert runtime_progress_handoff["would_execute"] is False
+    assert runtime_progress_handoff["would_mutate"] is False
+    assert runtime_progress_handoff["would_request_authority"] is False
+    assert runtime_progress_handoff["would_grant_authority"] is False
+    assert runtime_progress_handoff["would_claim_resident"] is False
 
     assert "resident_claim_authority_not_granted" in payload["blockers"]
     assert payload["remaining_authority_families_after_this_boundary"] == []
@@ -141,12 +172,15 @@ def test_lens_persistent_supervision_resident_claim_boundary_is_readback_only(
     assert checks["resident_claim_boundary"]["status"] == "blocked"
     assert checks["resident_claim_side_effects_denied"]["status"] == "denied_no_resident_claim"
     assert checks["authority_boundary"]["status"] == "diagnostic_bounded"
+    assert checks["runtime_progress_handoff"]["status"] == "bringup_plan_status_ready"
     assert all(item["passed"] for item in payload["checks"])
 
     governance = payload["governance"]
     assert governance["diagnostic_only"] is True
     assert governance["wraps_existing_execution_authority_proof"] is True
     assert governance["persistent_supervision_plan_readback"] is True
+    assert governance["wraps_stage6_prerequisite_bringup_plan"] is True
+    assert governance["runtime_progress_handoff_readback"] is True
     assert governance["test_fixture_approval_decisions"] is True
     assert governance["test_fixture_authority_receipts"] is True
     assert governance["product_execution_authority"] is False
