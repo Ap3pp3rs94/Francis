@@ -5728,6 +5728,63 @@ def test_stage6_prerequisite_bringup_selects_persistent_enablement_next_actions(
     assert stale_grants_review_action["latest_receipt_id"] == "lpsee_stale_grants"
 
 
+def test_stage6_prerequisite_bringup_applied_receipt_wins_over_stale_prerequisites() -> None:
+    from francis.lens.status import _stage6_prerequisite_bringup_readback
+
+    payload = _stage6_prerequisite_bringup_readback(
+        closure_readback={"ready_to_close": False, "next_smallest_truthful_gap": "summon_anywhere_blockers"},
+        resident_host={
+            "persistent_supervision_plan": {
+                "next_smallest_truthful_gap": "persistent_supervision_required_prerequisites_missing",
+                "required_before_enable": [
+                    "resident_host_process",
+                    "tray_presence",
+                    "global_hotkey_binding",
+                    "overlay_window",
+                    "summon_binding",
+                ],
+                "missing_required_before_enable": [
+                    "resident_host_process",
+                    "tray_presence",
+                    "global_hotkey_binding",
+                    "overlay_window",
+                ],
+                "required_before_enable_ready": False,
+                "first_missing_required_before_enable": "resident_host_process",
+            },
+            "persistent_supervision_enablement_execution_receipts": {
+                "route": "/lens/host/persistent-supervision/enablement/executions",
+                "persistent_supervision_enablement_allowed": True,
+                "persistent_supervision_ready": True,
+                "latest": {
+                    "status": "service_config_already_enabled",
+                    "receipt_id": "lpsee_applied",
+                    "post_plan": {
+                        "next_smallest_truthful_gap": "persistent_supervision_execution_boundary",
+                    },
+                },
+            },
+        },
+        os_binding_authority_requests={},
+        tray_authority_requests={},
+        overlay_authority_requests={},
+        summon_authority_requests={},
+    )
+
+    assert payload["status"] == "persistent_supervision_enablement_applied"
+    assert payload["current_truthful_gap"] == "persistent_supervision_execution_boundary"
+    assert payload["current_truthful_gap_basis"] == (
+        "persistent_supervision_enablement_execution_receipt.post_plan.next_smallest_truthful_gap"
+    )
+    assert payload["missing_required_before_enable"] == []
+    assert payload["required_before_enable_ready"] is True
+    assert payload["current_first_missing_requirement"] == ""
+    assert payload["first_missing_required_before_enable"] == ""
+    assert payload["next_operator_action_requirement"] == "persistent_supervision_enablement_receipt"
+    assert payload["next_operator_action"]["id"] == "review_persistent_supervision_enablement_receipt"
+    assert payload["next_operator_action"]["latest_receipt_id"] == "lpsee_applied"
+
+
 def test_stage6_prerequisite_bringup_surface_execute_action_uses_active_authority_grant() -> None:
     from francis.lens.status import (
         _stage6_authority_state,

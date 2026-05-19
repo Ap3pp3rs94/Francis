@@ -1250,6 +1250,8 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
         },
     )
 
+    shutil.rmtree(data_root / "runtime", ignore_errors=True)
+
     proc = _run_proof(
         "-Mode",
         "Status",
@@ -1274,6 +1276,8 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     assert payload["next_operator_command"]["mode"] == "Status"
     assert payload["stage6_prerequisite_bringup_plan_observed"] is True
     assert payload["stage6_prerequisite_bringup_plan"]["status"] == "persistent_supervision_enablement_applied"
+    assert payload["stage6_prerequisite_bringup_plan"]["missing_required_before_enable"] == []
+    assert payload["stage6_prerequisite_bringup_plan"]["required_before_enable_ready"] is True
     assert payload["stage6_prerequisite_bringup_operator_plan_handoff"]["status"] == (
         "persistent_supervision_enablement_applied"
     )

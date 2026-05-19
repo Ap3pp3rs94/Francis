@@ -33859,6 +33859,65 @@ stabilization:
   passed, mypy passed over 501 source files, and pytest completed with exit
   code 0`
 
+Stage 6 Lens applied enablement receipt handoff precedence on `2026-05-19`:
+
+- The default Stage 6 data root already contains applied persistent-supervision
+  enablement receipt `lpsee_1779121165_4c3308821220`, with
+  `persistent_supervision_enablement_allowed=true` and
+  `persistent_supervision_ready=true`.
+- Stale bounded resident, tray, hotkey, or overlay lease readbacks could still
+  make Stage 6 handoff surfaces route the operator back to prerequisite
+  bring-up after that receipt had been applied.
+- `src/francis/lens/status.py`,
+  `scripts/lens-stage6-prerequisite-bringup-plan.ps1`,
+  `scripts/lens-stage6-next-handoff.ps1`, and
+  `scripts/lens-persistent-supervision-current-gap-proof.ps1` now treat a
+  valid applied enablement receipt as stronger evidence than expired
+  prerequisite lease state for readback and handoff selection.
+- The current truthful handoff is now
+  `next_smallest_truthful_gap=persistent_supervision_execution_boundary`,
+  `recommended_next_slice=review_persistent_supervision_enablement_receipt`,
+  `authority_required=none_readback_only`, and
+  `stage6_applied_enablement_handoff_observed=true` in the current-gap proof.
+- This does not close Stage 6, grant resident-claim authority, start persistent
+  supervision, or bypass approvals. It only fixes the operator readback
+  precedence after enablement has already been applied.
+
+Latest validation for Stage 6 Lens applied enablement receipt handoff
+precedence:
+
+- `.\.venv\Scripts\python.exe -m pytest tests/test_api_lens.py::test_stage6_prerequisite_bringup_applied_receipt_wins_over_stale_prerequisites tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_applied_bringup_review_state tests/test_lens_persistent_supervision_current_gap_proof_script.py::test_persistent_supervision_current_gap_proof_consumes_authority_chain_without_audit tests/test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_config_only -q`
+  Result: `passed; 4 targeted test selections`
+- `.\.venv\Scripts\python.exe -m ruff check src/francis/lens/status.py tests/test_api_lens.py tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `.\.venv\Scripts\python.exe -m ruff format --check src/francis/lens/status.py tests/test_api_lens.py tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 3 files already formatted`
+- PowerShell parser check for
+  `scripts/lens-stage6-prerequisite-bringup-plan.ps1`,
+  `scripts/lens-stage6-next-handoff.ps1`, and
+  `scripts/lens-persistent-supervision-current-gap-proof.ps1`
+  Result: `passed; parser_ok`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status`
+  Result: `passed; status=persistent_supervision_enablement_applied,
+  current_truthful_gap=persistent_supervision_execution_boundary,
+  current_truthful_gap_basis=persistent_supervision_enablement_execution_receipt.post_plan.next_smallest_truthful_gap,
+  required_before_enable_ready=true, missing_required_before_enable=[],
+  next_operator_action=review_persistent_supervision_enablement_receipt`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status`
+  Result: `passed; status=proof_passed,
+  next_smallest_truthful_gap=persistent_supervision_execution_boundary,
+  recommended_next_slice=review_persistent_supervision_enablement_receipt,
+  authority_required=none_readback_only, authority_granted=true`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-current-gap-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed,
+  next_smallest_truthful_gap=persistent_supervision_execution_boundary,
+  recommended_next_slice=review_persistent_supervision_enablement_receipt,
+  stage6_applied_enablement_handoff_observed=true`
+- `.\scripts\check.ps1`
+  Result: `passed; branch state OK, Ruff check passed, Ruff format check
+  passed, mypy passed over 501 source files, and pytest completed with exit
+  code 0`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

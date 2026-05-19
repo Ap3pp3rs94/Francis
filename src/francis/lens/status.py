@@ -2258,10 +2258,13 @@ def _stage6_prerequisite_bringup_readback(
     missing_required = [
         _safe_str(item).strip() for item in _as_list(persistent_plan.get("missing_required_before_enable"))
     ]
-    missing_steps = [item for item in ordered_steps if _safe_str(item.get("id")).strip() in missing_required]
     enablement_steps = _stage6_persistent_supervision_enablement_steps(first_missing_handoff)
     execution_receipts = status_readbacks["persistent_supervision_enablement_execution_receipts"]
     enablement_execution_applied = _stage6_persistent_supervision_enablement_execution_applied(execution_receipts)
+    effective_missing_required = [] if enablement_execution_applied else missing_required
+    missing_steps = [item for item in ordered_steps if _safe_str(item.get("id")).strip() in effective_missing_required]
+    applied_receipt_post_plan = _as_dict(_as_dict(execution_receipts.get("latest")).get("post_plan"))
+    applied_receipt_next_gap = _safe_str(applied_receipt_post_plan.get("next_smallest_truthful_gap")).strip()
     next_operator_action = (
         _as_dict(missing_steps[0].get("next_operator_action"))
         if missing_steps
@@ -2273,12 +2276,16 @@ def _stage6_prerequisite_bringup_readback(
     current_gap = (
         "persistent_supervision_required_prerequisites_missing"
         if missing_steps
+        else applied_receipt_next_gap
+        if enablement_execution_applied and applied_receipt_next_gap
         else _safe_str(persistent_plan.get("next_smallest_truthful_gap")).strip()
         or "persistent_supervision_enablement_sequence_ready"
     )
     current_gap_basis = (
         "missing_required_before_enable"
         if missing_steps
+        else "persistent_supervision_enablement_execution_receipt.post_plan.next_smallest_truthful_gap"
+        if enablement_execution_applied and applied_receipt_next_gap
         else ("persistent_supervision_plan.next_smallest_truthful_gap")
     )
     first_missing_step = missing_steps[0] if missing_steps else {}
@@ -2331,11 +2338,12 @@ def _stage6_prerequisite_bringup_readback(
             persistent_plan.get("next_smallest_truthful_gap")
         ).strip(),
         "required_before_enable": required_before_enable,
-        "missing_required_before_enable": missing_required,
-        "required_before_enable_ready": bool(persistent_plan.get("required_before_enable_ready")),
-        "first_missing_required_before_enable": _safe_str(
-            persistent_plan.get("first_missing_required_before_enable")
-        ).strip(),
+        "missing_required_before_enable": effective_missing_required,
+        "required_before_enable_ready": enablement_execution_applied
+        or bool(persistent_plan.get("required_before_enable_ready")),
+        "first_missing_required_before_enable": ""
+        if enablement_execution_applied
+        else _safe_str(persistent_plan.get("first_missing_required_before_enable")).strip(),
         "first_missing_requirement_handoff": first_missing_handoff,
         "ordered_prerequisite_steps": ordered_steps,
         "persistent_supervision_enablement_steps": enablement_steps,

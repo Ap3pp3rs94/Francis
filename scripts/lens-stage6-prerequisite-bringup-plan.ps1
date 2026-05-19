@@ -720,6 +720,25 @@ def _current_truthful_gap(plan: dict[str, Any], missing_steps: list[dict[str, An
     }
 
 
+def _applied_receipt_truthful_gap(plan: dict[str, Any], execution_receipts: dict[str, Any]) -> dict[str, Any]:
+    latest = _as_dict(execution_receipts.get("latest"))
+    post_plan = _as_dict(latest.get("post_plan"))
+    receipt_gap = _safe_str(post_plan.get("next_smallest_truthful_gap"))
+    return {
+        "gap": receipt_gap
+        or _safe_str(plan.get("next_smallest_truthful_gap"))
+        or "persistent_supervision_execution_boundary",
+        "basis": (
+            "persistent_supervision_enablement_execution_receipt.post_plan.next_smallest_truthful_gap"
+            if receipt_gap
+            else "persistent_supervision_plan.next_smallest_truthful_gap"
+        ),
+        "first_missing_requirement": "",
+        "first_missing_truthful_gap": "",
+        "raw_persistent_supervision_gap": _safe_str(plan.get("next_smallest_truthful_gap")),
+    }
+
+
 def _operator_command(action: dict[str, Any]) -> dict[str, Any]:
     action_id = _safe_str(action.get("id"))
     approval_id = _safe_str(action.get("approved_approval_id")) or _safe_str(action.get("active_approval_id"))
@@ -1304,17 +1323,26 @@ def _run() -> tuple[int, dict[str, Any]]:
         _requirement_step(requirement, dependency_by_id.get(requirement, {}), handoff, status)
         for requirement in REQUIREMENT_ORDER
     ]
-    missing_steps = [step for step in ordered_steps if step["id"] in missing or not bool(step["ready"])]
     enablement_sequence = _enablement_steps(handoff)
     enablement_execution_receipts = _as_dict(resident_host.get("persistent_supervision_enablement_execution_receipts"))
     enablement_execution_applied = _enablement_execution_applied(enablement_execution_receipts)
+    effective_missing = [] if enablement_execution_applied else missing
+    missing_steps = (
+        []
+        if enablement_execution_applied
+        else [step for step in ordered_steps if step["id"] in effective_missing or not bool(step["ready"])]
+    )
     next_operator_action = (
         missing_steps[0]["next_operator_action"]
         if missing_steps
         else _next_enablement_action(enablement_sequence, resident_host)
     )
     next_operator_actor_scope_readiness = _next_operator_actor_scope_readiness(actor, next_operator_action)
-    current_gap = _current_truthful_gap(plan, missing_steps)
+    current_gap = (
+        _applied_receipt_truthful_gap(plan, enablement_execution_receipts)
+        if enablement_execution_applied
+        else _current_truthful_gap(plan, missing_steps)
+    )
     next_operator_command = _operator_command(next_operator_action)
     operator_sequence = _operator_sequence_with_commands(
         [step["next_operator_action"] for step in missing_steps] or [next_operator_action],
@@ -1331,7 +1359,7 @@ def _run() -> tuple[int, dict[str, Any]]:
         and available_now_count == 1
         and available_now_count + preview_only_count == len(operator_sequence)
     )
-    prerequisites_ready = len(missing_steps) == 0
+    prerequisites_ready = enablement_execution_applied or len(missing_steps) == 0
     chain_complete = all(step["actions"] for step in ordered_steps) and len(enablement_sequence) == 5
     no_first_handoff_required = prerequisites_ready and not handoff
     first_handoff_bounded = (
@@ -1472,9 +1500,11 @@ def _run() -> tuple[int, dict[str, Any]]:
         "current_first_missing_truthful_gap": current_gap["first_missing_truthful_gap"],
         "raw_persistent_supervision_next_smallest_truthful_gap": current_gap["raw_persistent_supervision_gap"],
         "required_before_enable": required,
-        "missing_required_before_enable": missing,
+        "missing_required_before_enable": effective_missing,
         "required_before_enable_ready": prerequisites_ready,
-        "first_missing_required_before_enable": _safe_str(plan.get("first_missing_required_before_enable")),
+        "first_missing_required_before_enable": ""
+        if enablement_execution_applied
+        else _safe_str(plan.get("first_missing_required_before_enable")),
         "first_missing_requirement_handoff": handoff,
         "ordered_prerequisite_steps": ordered_steps,
         "persistent_supervision_enablement_steps": enablement_sequence,

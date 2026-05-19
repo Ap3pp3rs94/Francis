@@ -266,7 +266,10 @@ $Stage6PrerequisiteBringupPlanAppliedObserved = (
   @($Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable).Count -eq 0 -and
   [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'required_before_enable_ready' -Default $false) -and
   $Stage6PrerequisiteBringupPlanCurrentGap -ne 'persistent_supervision_required_prerequisites_missing' -and
-  $Stage6PrerequisiteBringupPlanCurrentGapBasis -eq 'persistent_supervision_plan.next_smallest_truthful_gap' -and
+  @(
+    'persistent_supervision_plan.next_smallest_truthful_gap',
+    'persistent_supervision_enablement_execution_receipt.post_plan.next_smallest_truthful_gap'
+  ) -contains $Stage6PrerequisiteBringupPlanCurrentGapBasis -and
   $Stage6PrerequisiteBringupPlanNextOperatorRequirement -eq 'persistent_supervision_enablement_receipt' -and
   $Stage6PrerequisiteBringupNextOperatorActionId -eq 'review_persistent_supervision_enablement_receipt' -and
   $Stage6PrerequisiteBringupNextOperatorActionMethod -eq 'GET' -and
@@ -756,10 +759,10 @@ $PersistentSupervisionRequiredPrerequisitesCheckPassed = (
   $Stage6PrerequisiteBringupPlanReadyForEnablementObserved -or
   $Stage6PrerequisiteBringupPlanAppliedObserved
 )
-$PersistentSupervisionRequiredPrerequisitesCheckStatus = if ($PersistentSupervisionRequiredPrerequisitesObserved) {
-  'required_prerequisites_handoff_ready'
-} elseif ($Stage6PrerequisiteBringupPlanAppliedObserved) {
+$PersistentSupervisionRequiredPrerequisitesCheckStatus = if ($Stage6PrerequisiteBringupPlanAppliedObserved) {
   'not_applicable_enablement_applied'
+} elseif ($PersistentSupervisionRequiredPrerequisitesObserved) {
+  'required_prerequisites_handoff_ready'
 } elseif ($Stage6PrerequisiteBringupPlanReadyForEnablementObserved) {
   'not_applicable_prerequisites_ready'
 } else {
@@ -770,10 +773,10 @@ $PersistentSupervisionFirstMissingRequirementCheckPassed = (
   $Stage6PrerequisiteBringupPlanReadyForEnablementObserved -or
   $Stage6PrerequisiteBringupPlanAppliedObserved
 )
-$PersistentSupervisionFirstMissingRequirementCheckStatus = if ($PersistentSupervisionFirstMissingRequirementHandoffReady) {
-  'first_missing_requirement_handoff_ready'
-} elseif ($Stage6PrerequisiteBringupPlanAppliedObserved) {
+$PersistentSupervisionFirstMissingRequirementCheckStatus = if ($Stage6PrerequisiteBringupPlanAppliedObserved) {
   'not_applicable_enablement_applied'
+} elseif ($PersistentSupervisionFirstMissingRequirementHandoffReady) {
+  'first_missing_requirement_handoff_ready'
 } elseif ($Stage6PrerequisiteBringupPlanReadyForEnablementObserved) {
   'not_applicable_prerequisites_ready'
 } else {
