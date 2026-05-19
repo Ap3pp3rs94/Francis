@@ -34186,6 +34186,43 @@ Latest validation for Stage 6 resident-host lifecycle blocker handoff readback:
   authority_required=process_supervision_authority,
   authority_granted=false`
 
+Stage 6 summon-anywhere blocker top-level handoff readback on `2026-05-19`:
+
+- The summon-anywhere blocker proof now mirrors its first blocked family as a
+  top-level `recommended_handoff` instead of requiring operators to inspect
+  only `first_blocker_family_handoff`.
+- With the current first family `resident_host`, the proof reports
+  `recommended_handoff_source=first_blocker_family_handoff`,
+  `recommended_next_slice=run_resident_host_blocker_proof`, and
+  `recommended_proof_script=scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status`.
+- This does not grant resident runtime execution authority, summon authority,
+  hotkey registration authority, overlay control authority, local process
+  launch authority, memory write authority, or approval-decision authority. It
+  only makes the existing nested read-only handoff available as the top-level
+  operator recommendation.
+
+Latest validation for Stage 6 summon-anywhere blocker top-level handoff
+readback:
+
+- PowerShell parser check for `scripts/lens-summon-anywhere-blockers-proof.ps1`
+  Result: `passed; parser_ok`
+- `python -m pytest tests/test_lens_summon_anywhere_blockers_proof_script.py`
+  Result: `passed; 3 passed`
+- `python -m ruff check tests/test_lens_summon_anywhere_blockers_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_summon_anywhere_blockers_proof_script.py`
+  Result: `passed; 1 file already formatted`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-anywhere-blockers-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed,
+  next_smallest_truthful_gap=summon_anywhere_blockers,
+  recommended_handoff_source=first_blocker_family_handoff,
+  recommended_next_slice=run_resident_host_blocker_proof,
+  recommended_proof_script=scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status,
+  recommended_route=/lens/host,
+  recommended_readiness_route=/lens/host/runtime-loop/readiness,
+  recommended_authority_required=resident_runtime_execution_authority,
+  recommended_authority_granted=false`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -170,6 +170,13 @@ def test_lens_summon_anywhere_blockers_proof_is_readback_only(tmp_path: Path) ->
     assert payload["os_binding_authority_request_readback_observed"] is True
     assert payload["first_blocker_family_handoff_observed"] is True
     assert payload["first_blocker_family"] == "resident_host"
+    assert payload["recommended_handoff_source"] == "first_blocker_family_handoff"
+    assert payload["recommended_next_slice"] == "run_resident_host_blocker_proof"
+    assert payload["recommended_proof_script"] == "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status"
+    assert payload["recommended_route"] == "/lens/host"
+    assert payload["recommended_readiness_route"] == "/lens/host/runtime-loop/readiness"
+    assert payload["recommended_authority_required"] == "resident_runtime_execution_authority"
+    assert payload["recommended_authority_granted"] is False
     assert payload["first_blocker_family_handoff"] == {
         "id": "resident_host",
         "label": "Resident host",
@@ -187,6 +194,7 @@ def test_lens_summon_anywhere_blockers_proof_is_readback_only(tmp_path: Path) ->
         "would_execute": False,
         "would_mutate": False,
     }
+    assert payload["recommended_handoff"] == payload["first_blocker_family_handoff"]
     assert payload["blocked_families"] == [
         "resident_host",
         "tray_presence",

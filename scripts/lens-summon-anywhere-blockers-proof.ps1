@@ -484,6 +484,14 @@ $FirstBlockerFamilyHandoffObserved = (
   [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'authority_required' -Default '') -eq 'resident_runtime_execution_authority' -and
   $AllFamilyHandoffsBounded
 )
+$RecommendedHandoffSource = if ($FirstBlockerFamilyHandoffObserved) { 'first_blocker_family_handoff' } else { '' }
+$RecommendedNextSlice = [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'next_step' -Default '')
+$RecommendedProofScript = [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'proof_script' -Default '')
+$RecommendedRoute = [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'route' -Default '')
+$RecommendedReadinessRoute = [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'readiness_route' -Default '')
+$RecommendedAuthorityRequired = [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'authority_required' -Default '')
+$RecommendedAuthorityGranted = [bool](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'authority_granted' -Default $false)
+$RecommendedHandoff = if ($FirstBlockerFamilyHandoffObserved) { $FirstBlockerFamilyHandoff } else { [ordered]@{} }
 
 $Checks = @(
   (New-Check -Id 'summon_preflight_readback' -Status $(if ($SummonPreflightObserved) { 'blocked_readback_ready' } else { 'missing_or_unexpected' }) -Passed $SummonPreflightObserved -Evidence 'scripts/lens-summon-preflight.ps1 -Mode Status' -Reason 'The direct summon preflight must name summon-anywhere as blocked and point to summon_anywhere_blockers.'),
@@ -505,6 +513,14 @@ $Payload = [ordered]@{
   stage_state = 'active'
   acceptance_criterion = 'summon_anywhere'
   next_smallest_truthful_gap = 'summon_anywhere_blockers'
+  recommended_handoff_source = $RecommendedHandoffSource
+  recommended_next_slice = $RecommendedNextSlice
+  recommended_proof_script = $RecommendedProofScript
+  recommended_route = $RecommendedRoute
+  recommended_readiness_route = $RecommendedReadinessRoute
+  recommended_authority_required = $RecommendedAuthorityRequired
+  recommended_authority_granted = $RecommendedAuthorityGranted
+  recommended_handoff = $RecommendedHandoff
   summon_preflight_observed = $SummonPreflightObserved
   stage6_family_projection_observed = $Stage6FamilyProjectionObserved
   side_effects_denied = $SideEffectsDenied
