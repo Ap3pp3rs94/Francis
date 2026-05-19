@@ -34652,6 +34652,51 @@ Latest validation for Stage 6 bounded local summon handoff UI update:
 - `cd apps\chat_ui; npm run build`
   Result: `passed; Vite production build completed`
 
+Stage 6 tray-presence API execution proof on `2026-05-19`:
+
+- Added `scripts/lens-tray-presence-api-execution-proof.ps1` to prove the
+  governed API path can request and grant bounded host-supervision,
+  resident-runtime, and tray-presence authority in an isolated test-fixture data
+  root, start resident supervision through `/lens/resident-runtime/execute`,
+  start the real local tray presence through `/lens/tray/execute`, and then
+  stop tray and resident supervision through their governed API routes.
+- `scripts/lens-resident-runtime-api-execution-proof.ps1` now points its tray
+  handoff at the new API proof instead of the older plan-consumption proof, so
+  the next operator-readable slice is the governed tray execution boundary.
+- The proof records `status=proof_passed`,
+  `next_smallest_truthful_gap=os_level_command_palette_binding`,
+  `tray_presence_started=true`, `tray_presence_stop_observed=true`,
+  `resident_supervision_stop_observed=true`, and
+  `recommended_handoff.id=global_hotkey_binding`.
+- This is still not Stage 6 closure. It proves a bounded local tray runtime in
+  an isolated data root only. It does not claim global hotkey registration,
+  overlay readiness, summon-anywhere readiness, service management, memory
+  writes, approval decision authority outside the test fixture, or resident
+  claim authority.
+
+Latest validation for Stage 6 tray-presence API execution proof:
+
+- PowerShell parser check for
+  `scripts/lens-tray-presence-api-execution-proof.ps1` and
+  `scripts/lens-resident-runtime-api-execution-proof.ps1`
+  Result: `passed; parse_ok`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-tray-presence-api-execution-proof.ps1 -Mode Status -RunSeconds 5 -DataDir <temp>`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=os_level_command_palette_binding;
+  tray_presence_started=true; tray_runtime_ready=true;
+  tray_presence_stop_observed=true; resident_supervision_stop_observed=true;
+  blockers=[global_hotkey_binding_missing, overlay_window_missing,
+  summon_binding_missing]`
+- `python -m pytest tests/test_lens_tray_presence_api_execution_proof_script.py tests/test_lens_resident_runtime_api_execution_proof_script.py -ra`
+  Result: `passed; 4 passed`
+- `python -m ruff check tests/test_lens_tray_presence_api_execution_proof_script.py tests/test_lens_resident_runtime_api_execution_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_tray_presence_api_execution_proof_script.py tests/test_lens_resident_runtime_api_execution_proof_script.py`
+  Result: `passed; 2 files already formatted`
+- `.\scripts\check.ps1`
+  Result: `passed; branch state OK on main tracking origin/main; ruff lint
+  passed; ruff format check passed; mypy passed; pytest passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

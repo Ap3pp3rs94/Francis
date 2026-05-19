@@ -77,8 +77,8 @@ def test_lens_resident_runtime_api_execution_proof_starts_and_stops_real_supervi
     assert payload["acceptance_criterion"] == "summon_anywhere"
     assert payload["previous_next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
     assert payload["next_smallest_truthful_gap"] == "summon_tray_presence_blocker_boundary"
-    assert payload["recommended_next_slice"] == "consume_tray_presence_runtime_boundary_after_api_resident_supervision"
-    assert payload["recommended_proof_script"] == "scripts/lens-tray-plan-consumption-proof.ps1 -Mode Status"
+    assert payload["recommended_next_slice"] == "prove_governed_tray_presence_api_execution_after_resident_supervision"
+    assert payload["recommended_proof_script"] == "scripts/lens-tray-presence-api-execution-proof.ps1 -Mode Status"
     assert payload["recommended_handoff_source"] == "api_resident_runtime_execution_tray_presence_handoff"
     handoff = payload["recommended_handoff"]
     assert handoff["id"] == "tray_presence"

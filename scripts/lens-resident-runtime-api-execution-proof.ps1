@@ -388,16 +388,16 @@ def _run() -> tuple[int, dict[str, Any]]:
             "next_smallest_truthful_gap": str(
                 executed.get("next_smallest_truthful_gap") or "summon_tray_presence_blocker_boundary"
             ),
-            "recommended_next_slice": "consume_tray_presence_runtime_boundary_after_api_resident_supervision",
-            "recommended_proof_script": "scripts/lens-tray-plan-consumption-proof.ps1 -Mode Status",
+            "recommended_next_slice": "prove_governed_tray_presence_api_execution_after_resident_supervision",
+            "recommended_proof_script": "scripts/lens-tray-presence-api-execution-proof.ps1 -Mode Status",
             "recommended_handoff_source": "api_resident_runtime_execution_tray_presence_handoff",
             "recommended_handoff": {
                 "id": "tray_presence",
                 "status": "blocked",
                 "previous_next_smallest_truthful_gap": "resident_host_process_not_supervised",
                 "next_smallest_truthful_gap": "summon_tray_presence_blocker_boundary",
-                "next_step": "consume_tray_presence_runtime_boundary_after_api_resident_supervision",
-                "proof_script": "scripts/lens-tray-plan-consumption-proof.ps1 -Mode Status",
+                "next_step": "prove_governed_tray_presence_api_execution_after_resident_supervision",
+                "proof_script": "scripts/lens-tray-presence-api-execution-proof.ps1 -Mode Status",
                 "route": "/lens/tray",
                 "readiness_route": "/lens/tray/readiness",
                 "authority_required": "tray_registration_authority",
