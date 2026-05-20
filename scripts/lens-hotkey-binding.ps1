@@ -573,6 +573,7 @@ $PowerShell = Get-Command powershell -ErrorAction SilentlyContinue
 if ($null -eq $PowerShell) {
   $PowerShell = Get-Command pwsh -ErrorAction Stop
 }
+$StartedProcess = $null
 $ArgumentList = @(
   '-NoProfile',
   '-ExecutionPolicy',
@@ -593,7 +594,7 @@ if ($NoLaunch) {
 if (-not [string]::IsNullOrWhiteSpace($ConfigOverridePath)) {
   $ArgumentList += @('-ConfigOverridePath', $ConfigOverridePath)
 }
-Start-Process -FilePath $PowerShell.Source -ArgumentList $ArgumentList -WindowStyle Hidden | Out-Null
+$StartedProcess = Start-Process -FilePath $PowerShell.Source -ArgumentList $ArgumentList -WindowStyle Hidden -PassThru
 
 $Deadline = [DateTimeOffset]::UtcNow.AddSeconds($StartupTimeoutSeconds)
 do {
@@ -605,9 +606,24 @@ do {
   }
 } while ([DateTimeOffset]::UtcNow -lt $Deadline)
 
+$StartedProcessStopped = $false
+if ($null -ne $StartedProcess) {
+  try {
+    $StartedProcess.Refresh()
+    if (-not $StartedProcess.HasExited) {
+      Stop-Process -Id $StartedProcess.Id -Force -ErrorAction Stop
+      $StartedProcessStopped = $true
+    }
+  } catch {
+    $StartedProcessStopped = $false
+  }
+}
+
 $Payload = New-StatusPayload -Root $DataRoot -ModeName $ModeName -StatusOverride 'start_timeout'
 $Payload.ok = $false
 $Payload.error = 'lens_hotkey_binding_start_timeout'
+$Payload.started_process_id = if ($null -ne $StartedProcess) { [int]$StartedProcess.Id } else { 0 }
+$Payload.started_process_stopped = $StartedProcessStopped
 $Payload.message = 'Lens global hotkey binding did not report a live bound hotkey before the startup timeout.'
 $Payload | ConvertTo-Json -Depth 8
 exit 1

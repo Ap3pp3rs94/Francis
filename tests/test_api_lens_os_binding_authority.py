@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 from pathlib import Path
 
 
@@ -139,6 +140,45 @@ def _write_lens_overlay_config(repo_root: Path) -> None:
         ),
         encoding="utf-8",
     )
+
+
+def test_lens_os_binding_hotkey_runner_uses_ci_tolerant_startup_budget(monkeypatch, tmp_path: Path) -> None:
+    from francis.lens import os_binding_authority as module
+
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    script_root = repo_root / "scripts"
+    script_root.mkdir(parents=True)
+    (script_root / "lens-hotkey-binding.ps1").write_text("# test hotkey runner\n", encoding="utf-8")
+    _write_lens_summon_config(repo_root)
+    monkeypatch.setattr(module, "repo_root", lambda: repo_root)
+    monkeypatch.setattr(module, "data_dir", lambda: data_root)
+    monkeypatch.setattr(module.shutil, "which", lambda name: "powershell.exe")
+    captured: dict[str, object] = {}
+
+    def fake_run(
+        command: list[str],
+        **kwargs: object,
+    ) -> subprocess.CompletedProcess[str]:
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=json.dumps({"ok": True, "status": "started", "blockers": []}),
+            stderr="",
+        )
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+    result = module._run_lens_os_binding_hotkey_action(mode="bind", run_seconds=180)
+
+    assert result["ok"] is True
+    command = captured["command"]
+    assert isinstance(command, list)
+    timeout_index = command.index("-StartupTimeoutSeconds")
+    assert command[timeout_index + 1] == "30"
+    assert "-ConfigOverridePath" in command
 
 
 def test_lens_os_binding_authority_grant_requires_approved_request(monkeypatch, tmp_path: Path) -> None:

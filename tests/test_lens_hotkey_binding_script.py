@@ -20,6 +20,14 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
+def test_lens_hotkey_binding_start_timeout_stops_started_child_process() -> None:
+    source = (_repo_root() / "scripts" / "lens-hotkey-binding.ps1").read_text(encoding="utf-8")
+
+    assert "-PassThru" in source
+    assert "Stop-Process -Id $StartedProcess.Id -Force" in source
+    assert "started_process_stopped" in source
+
+
 def _run_hotkey_binding(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [

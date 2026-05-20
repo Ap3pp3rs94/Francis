@@ -35554,6 +35554,49 @@ Latest validation for Stage 6 summon-anywhere governed prerequisite handoff:
   Result: `passed; warning only that PowerShell LF will be replaced by CRLF when
   Git next touches the script`
 
+Stage 6 Windows hotkey live-runtime CI hardening on `2026-05-20`:
+
+- GitHub Actions run `26193067917` for commit `7980670d` completed with a
+  single red matrix leg: `test (windows-2025-vs2026, 3.13)`. Ubuntu 3.12,
+  Ubuntu 3.13, and Windows 3.12 passed.
+- The failed Windows 3.13 leg stopped in
+  `tests/test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_hotkey_execution_advances_to_overlay`
+  with `status=global_hotkey_binding_failed`, `hotkey_runtime_ready=false`,
+  `hotkey_runtime_pid=0`, followed by a scoped teardown error reporting one
+  remaining `lens-hotkey-binding.ps1` process for that test data directory.
+- `src/francis/lens/os_binding_authority.py` now gives the governed hotkey
+  runner the full script-supported startup budget, `-StartupTimeoutSeconds 30`,
+  before deciding the live child did not become ready.
+- `scripts/lens-hotkey-binding.ps1` now starts the hidden `Run` child with
+  `-PassThru` and, if readiness still times out, stops that exact child before
+  returning `lens_hotkey_binding_start_timeout`. The timeout payload reports
+  `started_process_id` and `started_process_stopped` for auditability.
+- This is a CI/live-runtime robustness fix only. It does not grant summon,
+  hotkey, overlay, process-supervision, service, memory, or resident-claim
+  authority; it does not close Stage 6 or start Stage 7.
+
+Latest validation for Stage 6 Windows hotkey live-runtime CI hardening:
+
+- `python -m pytest tests\test_api_lens_os_binding_authority.py::test_lens_os_binding_hotkey_runner_uses_ci_tolerant_startup_budget tests\test_lens_hotkey_binding_script.py::test_lens_hotkey_binding_start_timeout_stops_started_child_process -q`
+  Result: `passed; 2 focused contract tests exited 0`
+- `python -m ruff check src\francis\lens\os_binding_authority.py tests\test_api_lens_os_binding_authority.py tests\test_lens_hotkey_binding_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\os_binding_authority.py tests\test_api_lens_os_binding_authority.py tests\test_lens_hotkey_binding_script.py`
+  Result: `passed; 3 files already formatted`
+- PowerShell parser check for `scripts\lens-hotkey-binding.ps1`
+  Result: `passed; parse_ok`
+- `git diff --check`
+  Result: `passed; warning only that PowerShell LF will be replaced by CRLF when
+  Git next touches the script`
+- `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_hotkey_execution_advances_to_overlay -q`
+  Result: `passed; exact Windows live test that failed in CI exited 0 locally`
+- `python -m pytest tests\test_api_lens_os_binding_authority.py tests\test_lens_hotkey_binding_script.py -q`
+  Result: `passed; 11 API/hotkey script tests exited 0`
+- `.\scripts\check.ps1`
+  Result: `passed; branch state OK, Ruff lint passed, Ruff format check passed,
+  mypy passed with no issues in 501 source files, and pytest completed to 100%
+  with expected skips`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

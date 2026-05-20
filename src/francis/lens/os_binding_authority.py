@@ -1163,7 +1163,7 @@ def _run_lens_os_binding_hotkey_action(*, mode: str, run_seconds: int) -> dict[s
     )
     if script_mode == "Start":
         override_path = _write_hotkey_binding_config_override()
-        command.extend(["-StartupTimeoutSeconds", "10", "-ConfigOverridePath", str(override_path)])
+        command.extend(["-StartupTimeoutSeconds", "30", "-ConfigOverridePath", str(override_path)])
     env = dict(os.environ)
     env.setdefault("FRANCIS_ROOT", str(root))
     env.setdefault("FRANCIS_DATA_DIR", str(data_dir()))
