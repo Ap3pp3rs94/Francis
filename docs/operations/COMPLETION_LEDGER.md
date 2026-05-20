@@ -35429,6 +35429,46 @@ Latest validation for Stage 6 prerequisite bring-up CI resident-readback and cle
 - `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py -q`
   Result: `passed; 14-file-scope tests exited 0`
 
+Stage 6 next-handoff concrete blocker readback on `2026-05-20`:
+
+- `scripts/lens-stage6-next-handoff.ps1 -Mode Status` now keeps the broad
+  closure recommendation at `summon_anywhere_blockers` while also exposing a
+  top-level `recommended_concrete_handoff`.
+- On the current Stage 6 posture, that concrete handoff points at the resident
+  host process-supervision diagnostic path:
+  `scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status
+  -ConsumeProcessSupervisionHandoff`.
+- The new fields include `recommended_concrete_handoff_source`,
+  `recommended_concrete_next_slice`, `recommended_concrete_proof_script`,
+  `recommended_concrete_next_smallest_truthful_gap`,
+  `recommended_concrete_authority_required`, and
+  `recommended_concrete_authority_granted`.
+- This is an operator-surface truth improvement only. It does not grant process
+  supervision authority, launch a product runtime, claim `summon_anywhere=true`,
+  close Stage 6, or start Stage 7.
+
+Latest validation for Stage 6 next-handoff concrete blocker readback:
+
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed; full next-handoff proof test file exited 0`
+- `python -m ruff check tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 1 file already formatted`
+- PowerShell parser check for `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed; parse_ok`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status`
+  Result: `passed; ok=true; status=proof_passed;
+  next_smallest_truthful_gap=summon_anywhere_blockers;
+  recommended_concrete_handoff_source=stage6_closure_readback_summon_anywhere_blockers.first_blocker_family_completion_audit_handoff;
+  recommended_concrete_next_slice=consume_resident_host_process_supervision_handoff_before_stage6_closure;
+  recommended_concrete_proof_script=scripts/lens-summon-resident-host-blocker-proof.ps1
+  -Mode Status -ConsumeProcessSupervisionHandoff`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 120`
+  Result: `passed; ok=true; status=blocked; audit_status=complete;
+  ready_to_close=false; transition_allowed=false;
+  next_smallest_truthful_gap=summon_anywhere_blockers; child_proof_timeouts=0`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -1293,6 +1293,25 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     assert recommended_handoff["would_control_overlay"] is False
     assert recommended_handoff["would_summon"] is False
     assert recommended_handoff["would_decide_approval"] is False
+    concrete_handoff = payload["recommended_concrete_handoff"]
+    assert (
+        payload["recommended_concrete_handoff_source"]
+        == "stage6_closure_readback_summon_anywhere_blockers.first_blocker_family_completion_audit_handoff"
+    )
+    assert payload["recommended_concrete_next_slice"] == (
+        "consume_resident_host_process_supervision_handoff_before_stage6_closure"
+    )
+    assert payload["recommended_concrete_proof_script"] == (
+        "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status -ConsumeProcessSupervisionHandoff"
+    )
+    assert payload["recommended_concrete_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert payload["recommended_concrete_authority_required"] == "process_supervision_authority"
+    assert payload["recommended_concrete_authority_granted"] is False
+    assert concrete_handoff == recommended_handoff["first_blocker_family_completion_audit_handoff"]
+    assert concrete_handoff["read_only_contract"] is True
+    assert concrete_handoff["diagnostic_only"] is True
+    assert concrete_handoff["would_execute"] is False
+    assert concrete_handoff["would_mutate"] is False
     assert payload["next_operator_action_requirement"] == "persistent_supervision_enablement_receipt"
     assert payload["next_operator_action"]["id"] == "review_persistent_supervision_enablement_receipt"
     assert payload["next_operator_action"]["method"] == "GET"
@@ -1358,6 +1377,7 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     assert payload["persistent_supervision_enablement_authority_handoff_observed"] is False
 
     checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["concrete_handoff"]["status"] == "concrete_handoff_ready"
     assert checks["persistent_supervision_required_prerequisites"]["status"] == "not_applicable_enablement_applied"
     assert checks["persistent_supervision_first_missing_requirement"]["status"] == "not_applicable_enablement_applied"
     assert checks["stage6_prerequisite_bringup_plan"]["status"] == "operator_plan_readback_ready"

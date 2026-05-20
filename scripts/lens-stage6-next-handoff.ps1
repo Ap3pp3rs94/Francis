@@ -890,6 +890,45 @@ if ($Stage6CompletionAuditHandoffConsumedByClosureReadback) {
 } elseif ($FirstFamilyHandoffObserved) {
   $RecommendedHandoff = $FirstBlockerFamilyHandoff
 }
+
+$RecommendedConcreteHandoffSource = $RecommendedHandoffSource
+$RecommendedConcreteHandoff = $RecommendedHandoff
+if ($Stage6CompletionAuditHandoffConsumedByClosureReadback) {
+  if (-not [string]::IsNullOrWhiteSpace([string](Get-PropertyValue -Payload $FirstFamilyCompletionAuditHandoff -Name 'next_step' -Default ''))) {
+    $RecommendedConcreteHandoffSource = 'stage6_closure_readback_summon_anywhere_blockers.first_blocker_family_completion_audit_handoff'
+    $RecommendedConcreteHandoff = $FirstFamilyCompletionAuditHandoff
+  } elseif (-not [string]::IsNullOrWhiteSpace([string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'next_step' -Default ''))) {
+    $RecommendedConcreteHandoffSource = 'stage6_closure_readback_summon_anywhere_blockers.first_blocker_family_handoff'
+    $RecommendedConcreteHandoff = $FirstBlockerFamilyHandoff
+  }
+}
+$RecommendedConcreteNextSlice = [string](
+  Get-PropertyValue -Payload $RecommendedConcreteHandoff -Name 'next_step' -Default $RecommendedNextSlice
+)
+$RecommendedConcreteProofScript = [string](
+  Get-PropertyValue -Payload $RecommendedConcreteHandoff -Name 'proof_script' -Default $RecommendedProofScript
+)
+$RecommendedConcreteNextGap = [string](
+  Get-PropertyValue -Payload $RecommendedConcreteHandoff -Name 'next_smallest_truthful_gap' -Default $RecommendedNextGap
+)
+$RecommendedConcreteAuthorityRequired = [string](
+  Get-PropertyValue -Payload $RecommendedConcreteHandoff -Name 'authority_required' -Default $AuthorityRequired
+)
+$RecommendedConcreteAuthorityGranted = [bool](
+  Get-PropertyValue -Payload $RecommendedConcreteHandoff -Name 'authority_granted' -Default $AuthorityGranted
+)
+$ConcreteHandoffObserved = (
+  -not $Stage6CompletionAuditHandoffConsumedByClosureReadback -or
+  (
+    -not [string]::IsNullOrWhiteSpace($RecommendedConcreteNextSlice) -and
+    -not [string]::IsNullOrWhiteSpace($RecommendedConcreteProofScript) -and
+    [bool](Get-PropertyValue -Payload $RecommendedConcreteHandoff -Name 'read_only_contract' -Default $false) -and
+    [bool](Get-PropertyValue -Payload $RecommendedConcreteHandoff -Name 'diagnostic_only' -Default $false) -and
+    -not [bool](Get-PropertyValue -Payload $RecommendedConcreteHandoff -Name 'would_execute' -Default $true) -and
+    -not [bool](Get-PropertyValue -Payload $RecommendedConcreteHandoff -Name 'would_mutate' -Default $true)
+  )
+)
+
 $RecommendedFirstMissingAuthorityRequired = [string](
   Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'authority_required' -Default ''
 )
@@ -968,6 +1007,7 @@ $Checks = @(
   New-Check -Id 'first_blocker_family_handoff' -Status 'resident_host_handoff_ready' -Passed $FirstFamilyHandoffObserved -Evidence 'summon_anywhere.handoff.first_blocker_family_handoff' -Reason 'The next concrete handoff points at the resident host runtime boundary.'
   New-Check -Id 'completion_audit_handoff' -Status 'process_supervision_audit_handoff_ready' -Passed $CompletionAuditHandoffObserved -Evidence 'summon_anywhere.handoff.first_blocker_family_completion_audit_handoff' -Reason 'The process-supervision handoff is present but diagnostic-only.'
   New-Check -Id 'family_chain_handoff' -Status 'summon_family_chain_handoff_ready' -Passed $FamilyChainHandoffObserved -Evidence 'summon_anywhere.handoff.summon_anywhere_family_chain_completion_audit_handoff' -Reason 'The summon blocker family chain can still be consumed by audit.'
+  New-Check -Id 'concrete_handoff' -Status $(if ($ConcreteHandoffObserved) { 'concrete_handoff_ready' } else { 'missing_or_unexpected' }) -Passed $ConcreteHandoffObserved -Evidence 'recommended_concrete_handoff' -Reason 'The broad closure blocker must also expose the concrete diagnostic handoff an operator can run next.'
   New-Check -Id 'persistent_supervision_required_prerequisites' -Status $PersistentSupervisionRequiredPrerequisitesCheckStatus -Passed $PersistentSupervisionRequiredPrerequisitesCheckPassed -Evidence '/lens/status resident_host.persistent_supervision_plan missing_required_before_enable' -Reason 'The latest Stage 6 handoff must preserve the full persistent-supervision prerequisite map after the audit chain consumes the older resident-host proofs, or explicitly report that the prerequisite chain is already ready/applied.'
   New-Check -Id 'persistent_supervision_first_missing_requirement' -Status $PersistentSupervisionFirstMissingRequirementCheckStatus -Passed $PersistentSupervisionFirstMissingRequirementCheckPassed -Evidence '/lens/status resident_host.persistent_supervision_plan first_missing_requirement_handoff' -Reason 'The persistent-supervision prerequisite gap must name the first concrete missing prerequisite before the next slice, unless the governed bring-up plan has already advanced beyond missing prerequisites.'
   New-Check -Id 'stage6_prerequisite_bringup_plan' -Status $(if ($Stage6PrerequisiteBringupPlanObserved) { 'operator_plan_readback_ready' } else { 'missing_or_unexpected' }) -Passed $Stage6PrerequisiteBringupPlanObserved -Evidence 'scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status' -Reason 'The next handoff should point at the governed prerequisite bring-up runbook instead of lower-level proof fragments.'
@@ -998,6 +1038,13 @@ $Payload = [ordered]@{
   recommended_next_slice = $RecommendedNextSlice
   recommended_handoff_source = $RecommendedHandoffSource
   recommended_handoff = $RecommendedHandoff
+  recommended_concrete_handoff_source = $RecommendedConcreteHandoffSource
+  recommended_concrete_handoff = $RecommendedConcreteHandoff
+  recommended_concrete_next_slice = $RecommendedConcreteNextSlice
+  recommended_concrete_proof_script = $RecommendedConcreteProofScript
+  recommended_concrete_next_smallest_truthful_gap = $RecommendedConcreteNextGap
+  recommended_concrete_authority_required = $RecommendedConcreteAuthorityRequired
+  recommended_concrete_authority_granted = $RecommendedConcreteAuthorityGranted
   recommended_proof_script = $RecommendedProofScript
   recommended_route = $RecommendedRoute
   recommended_readiness_route = $RecommendedReadinessRoute
