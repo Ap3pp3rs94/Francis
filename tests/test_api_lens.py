@@ -458,7 +458,7 @@ def _write_lens_tray_runtime_state(data_root: Path, *, pid: int) -> None:
     )
 
 
-def _write_lens_hotkey_runtime_state(data_root: Path, *, pid: int) -> None:
+def _write_lens_hotkey_runtime_state(data_root: Path, *, pid: int, launch_on_hotkey: bool = False) -> None:
     runtime_root = data_root / "runtime" / "lens-hotkey"
     runtime_root.mkdir(parents=True, exist_ok=True)
     (runtime_root / "lens-hotkey.pid").write_text(str(pid), encoding="ascii")
@@ -471,7 +471,7 @@ def _write_lens_hotkey_runtime_state(data_root: Path, *, pid: int) -> None:
                 "global_hotkey": "Ctrl+Alt+Space",
                 "binding_scope": "global",
                 "hotkey_bound": True,
-                "launch_on_hotkey": False,
+                "launch_on_hotkey": launch_on_hotkey,
                 "summon_runner": "scripts/lens-summon.ps1",
                 "press_count": 0,
                 "updated_at": "2026-05-12T22:30:00Z",
@@ -11050,6 +11050,8 @@ def test_lens_summon_execute_records_bounded_handoff_without_summon_anywhere_cla
     assert runtime_state["opened"] is False
     assert runtime_state["no_launch"] is True
     assert runtime_state["summon_anywhere"] is False
+    assert runtime_state["os_level_summon"] is False
+    assert runtime_state["hotkey_launch_on_press"] is False
 
     executions = client.get("/lens/summon/executions?limit=10")
     assert executions.status_code == 200
@@ -11068,6 +11070,7 @@ def test_lens_summon_execute_records_bounded_handoff_without_summon_anywhere_cla
     assert summon_readiness_body["summon_binding_ready"] is True
     assert summon_readiness_body["summon_runtime_ready"] is True
     assert summon_readiness_body["summon_runtime_bounded_handoff_ready"] is True
+    assert summon_readiness_body["summon_anywhere_runtime_ready"] is False
     assert summon_readiness_body["summon_anywhere"] is False
     assert summon_readiness_body["blocker_groups"]["summon_binding"] == []
     assert "summon_anywhere_runtime_readback" in summon_readiness_body["blocker_groups"]["summon_anywhere"]
@@ -11082,6 +11085,190 @@ def test_lens_summon_execute_records_bounded_handoff_without_summon_anywhere_cla
     assert dependencies["summon_binding"]["summon_runtime_ready"] is True
     assert dependencies["summon_binding"]["summon_presence_source"] == "live_runtime_readback"
     assert dependencies["summon_binding"]["summon_runtime_bounded_handoff_ready"] is True
+
+
+def test_lens_summon_execute_records_summon_anywhere_when_hotkey_launch_runtime_observed(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    service_config_path = repo_root / "config" / "runtime" / "services" / "lens-host.json"
+    service_config = json.loads(service_config_path.read_text(encoding="utf-8"))
+    service_config["process_supervision_enabled"] = True
+    service_config["persistent_supervision_enabled"] = True
+    service_config["supervision_blocked_reason"] = "resident_supervision_prerequisites_pending"
+    service_config["blocked_reason"] = "lens_host_persistent_supervision_prerequisites_pending"
+    service_config_path.write_text(json.dumps(service_config, indent=2), encoding="utf-8")
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    import francis.lens.summon_authority as summon_authority_module
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    pid = os.getpid()
+    _write_lens_host_runtime_state(data_root, pid=pid, status="resident_running", mode="resident")
+    _write_lens_host_supervisor_state(
+        data_root,
+        observed_pid=pid,
+        status="resident_supervising",
+        mode="supervise_resident",
+        host_mode="resident",
+        observed_state="resident_running",
+        resident_supervised_runtime=True,
+        process_supervision_authority=True,
+    )
+    _write_lens_tray_runtime_state(data_root, pid=pid)
+    _write_lens_hotkey_runtime_state(data_root, pid=pid, launch_on_hotkey=True)
+    _write_lens_overlay_runtime_state(data_root, pid=pid)
+
+    def fake_summon_action(*, mode: str, run_seconds: int, allow_launch: bool) -> dict[str, Any]:
+        assert mode == "launch"
+        assert run_seconds == 1
+        assert allow_launch is True
+        return {
+            "ok": True,
+            "status": "handoff_completed",
+            "returncode": 0,
+            "script_mode": "Launch",
+            "script": "scripts/lens-summon-action.ps1",
+            "runner": {
+                "ok": True,
+                "kind": "lens.summon.action",
+                "status": "handoff_completed",
+                "mode": "launch",
+                "preflight_ready": True,
+                "execution_attempted": True,
+                "handoff_attempted": True,
+                "launch_attempted": True,
+                "allow_launch": True,
+                "bounded_handoff": {
+                    "status": "opened",
+                    "exit_code": 0,
+                    "json_parsed": True,
+                    "payload": {
+                        "kind": "lens.summon.local_launcher",
+                        "status": "opened",
+                        "local_binding_ready": True,
+                        "summon_binding_target_ready": True,
+                        "local_summon_available": True,
+                        "os_level_summon": False,
+                        "summon_anywhere": False,
+                        "global_hotkey": "Ctrl+Alt+Space",
+                        "binding_scope": "global",
+                        "local_open_target_url": "http://127.0.0.1:5173/?lens=command-palette",
+                        "opened": True,
+                        "no_launch": False,
+                    },
+                },
+                "next_smallest_truthful_gap": "stage6_lens_completion_audit",
+                "governance": {
+                    "execution_authority": True,
+                    "approval_decision_authority": False,
+                    "memory_write": False,
+                    "summon_authority": True,
+                    "hotkey_registration_authority": False,
+                    "local_process_launch_authority": True,
+                    "mutation_authority_granted": True,
+                },
+            },
+            "blockers": [],
+        }
+
+    monkeypatch.setattr(
+        summon_authority_module,
+        "_run_lens_summon_action",
+        fake_summon_action,
+    )
+
+    client = TestClient(create_app())
+    requested = client.post(
+        "/lens/summon/authority/request",
+        json={
+            "actor": "test.system.write",
+            "reason": "operator wants bounded summon action authority",
+        },
+    )
+    assert requested.status_code == 200
+    approval_id = str(requested.json()["approval_id"])
+    decided = client.post(
+        "/approvals/decision",
+        json={
+            "id": approval_id,
+            "action": "approve",
+            "actor": "test.approvals.decision",
+            "comment": "approved summon action authority",
+        },
+    )
+    assert decided.status_code == 200
+    grant = client.post(
+        "/lens/summon/authority",
+        json={
+            "approval_id": approval_id,
+            "actor": "test.system.write",
+            "reason": "operator grants bounded summon action authority",
+            "lease_seconds": 600,
+        },
+    )
+    assert grant.status_code == 200
+
+    executed = client.post(
+        "/lens/summon/execute",
+        json={
+            "approval_id": approval_id,
+            "actor": "test.system.write",
+            "reason": "record summon-anywhere runtime readback",
+            "mode": "launch",
+            "run_seconds": 1,
+            "allow_launch": True,
+        },
+    )
+
+    assert executed.status_code == 200
+    executed_body = executed.json()
+    assert executed_body["status"] == "summon_binding_observed"
+    assert executed_body["summon_binding"] is True
+    assert executed_body["summon_runtime_ready"] is True
+    assert executed_body["bounded_handoff_ready"] is True
+    assert executed_body["local_open_ready"] is True
+    assert executed_body["opened"] is True
+    assert executed_body["no_launch"] is False
+    assert executed_body["allow_launch"] is True
+    assert executed_body["summon_anywhere"] is True
+    assert executed_body["os_level_summon"] is True
+    assert executed_body["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert executed_body["governance"]["summon_anywhere_authority"] is False
+    assert executed_body["governance"]["os_level_summon_authority"] is False
+    assert executed_body["governance"]["local_process_launch_authority"] is True
+    assert executed_body["receipt_written"] is True
+    receipt = executed_body["receipt"]
+    assert receipt["execution"]["summon_anywhere"] is True
+    assert receipt["execution"]["os_level_summon"] is True
+
+    runtime_state = json.loads((data_root / "runtime" / "lens-summon" / "status.json").read_text(encoding="utf-8"))
+    assert runtime_state["summon_anywhere"] is True
+    assert runtime_state["os_level_summon"] is True
+    assert runtime_state["hotkey_runtime_ready"] is True
+    assert runtime_state["hotkey_launch_on_press"] is True
+
+    summon_readiness = client.get("/lens/summon/readiness")
+    assert summon_readiness.status_code == 200
+    summon_readiness_body = summon_readiness.json()
+    assert summon_readiness_body["ready"] is True
+    assert summon_readiness_body["summon_anywhere"] is True
+    assert summon_readiness_body["summon_anywhere_runtime_ready"] is True
+    assert summon_readiness_body["hotkey_launch_on_press"] is True
+    assert "summon_anywhere_runtime_readback" not in summon_readiness_body["blockers"]
 
 
 def test_lens_resident_runtime_execute_starts_supervised_resident_host_lease(

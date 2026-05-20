@@ -1055,10 +1055,15 @@ def _write_summon_runtime_state(
     route: str,
 ) -> dict[str, Any]:
     config = _read_json(repo_root() / "config" / "runtime" / "lens" / "summon.json") or {}
+    launch_manifest = lens_host_launch_manifest()
+    hotkey_runtime = _as_dict(launch_manifest.get("hotkey_runtime_readback"))
+    hotkey_runtime_ready = bool(hotkey_runtime.get("ready"))
+    hotkey_launch_on_press = hotkey_runtime_ready and bool(hotkey_runtime.get("launch_on_hotkey"))
     handoff_payload = _summon_handoff_payload(runner_payload)
     bounded_ready = _summon_bounded_handoff_ready(runner_ok=runner_ok, runner_payload=runner_payload)
     opened = bool(handoff_payload.get("opened"))
     local_open_ready = bounded_ready or bool(handoff_payload.get("local_open_available"))
+    summon_anywhere_ready = allow_launch and bounded_ready and hotkey_launch_on_press
     runtime_state = {
         "kind": "lens.summon.runtime_state",
         "status": "summon_binding_observed" if bounded_ready else "summon_binding_failed",
@@ -1077,8 +1082,11 @@ def _write_summon_runtime_state(
         "opened": opened,
         "no_launch": bool(handoff_payload.get("no_launch")) or not allow_launch,
         "allow_launch": allow_launch,
-        "summon_anywhere": False,
-        "os_level_summon": False,
+        "summon_anywhere": summon_anywhere_ready,
+        "os_level_summon": summon_anywhere_ready,
+        "hotkey_runtime_ready": hotkey_runtime_ready,
+        "hotkey_launch_on_press": hotkey_launch_on_press,
+        "hotkey_runtime_pid": int(hotkey_runtime.get("pid") or 0),
         "local_open_target_url": _safe_str(handoff_payload.get("local_open_target_url")).strip(),
         "runner_status": _safe_str(runner_payload.get("status")).strip(),
         "handoff_status": _safe_str(_as_dict(runner_payload.get("bounded_handoff")).get("status")).strip(),
@@ -1359,8 +1367,12 @@ def execute_lens_summon_action(
     local_open_ready = bool(summon_runtime.get("local_open_ready"))
     opened = bool(summon_runtime.get("opened"))
     summon_binding = bool(summon_runtime.get("ready"))
+    summon_anywhere_ready = bool(summon_runtime.get("summon_anywhere")) and bool(summon_runtime.get("os_level_summon"))
     status = "summon_binding_observed" if runner_ok and summon_binding else "summon_action_failed"
-    next_gap = _first_missing_gap(post_plan, fallback="summon_anywhere_runtime_readback")
+    next_gap = _first_missing_gap(
+        post_plan,
+        fallback="stage6_lens_completion_audit" if summon_anywhere_ready else "summon_anywhere_runtime_readback",
+    )
     response: dict[str, Any] = {
         "ok": True,
         "applied": runner_ok,
@@ -1393,8 +1405,8 @@ def execute_lens_summon_action(
         "local_open_ready": local_open_ready,
         "opened": opened,
         "no_launch": bool(summon_runtime.get("no_launch")),
-        "summon_anywhere": False,
-        "os_level_summon": False,
+        "summon_anywhere": summon_anywhere_ready,
+        "os_level_summon": summon_anywhere_ready,
         "resident_claim_allowed": False,
         "next_smallest_truthful_gap": next_gap,
         "blockers": _dedupe_strs(_str_list(runner.get("blockers"))),

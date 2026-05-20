@@ -35312,6 +35312,45 @@ Latest validation for Stage 6 summon-action ready-preflight CI hardening:
 - PowerShell parser check for `scripts/lens-summon-preflight.ps1`
   Result: `passed; parse_ok`
 
+Stage 6 summon-anywhere runtime readback guard on `2026-05-20`:
+
+- `scripts/lens-hotkey-binding.ps1 -Mode Status` now reports
+  `summon_anywhere=true` and `os_level_summon=true` only when live hotkey
+  runtime readback is ready and explicitly has `launch_on_hotkey=true`. A bound
+  hotkey without launch handoff still reports both fields as false.
+- `/lens/summon/execute` now records `summon_anywhere=true` only when the bounded
+  local summon handoff is ready, launch was allowed, and live hotkey runtime
+  readback confirms `launch_on_hotkey=true`. It still keeps
+  `summon_anywhere_authority=false`, `os_level_summon_authority=false`, memory
+  write false, resident-claim authority false, and hotkey-registration authority
+  false.
+- `/lens/summon/readiness` now treats summon-anywhere as ready only when the
+  full live chain is observed: supervised resident host, tray runtime, hotkey
+  launch-on-press runtime, overlay runtime, and summon runtime readback all
+  agree. Partial local summon handoff still routes to
+  `summon_anywhere_runtime_readback`.
+- This is a runtime-readback guard, not Stage 6 closure. The default repo
+  posture remains blocked at `summon_anywhere_blockers`, and Stage 7 must not
+  start until the Stage 6 completion audit reports transition allowed.
+
+Latest validation for Stage 6 summon-anywhere runtime readback guard:
+
+- `python -m ruff check src\francis\lens\preflight.py src\francis\lens\summon_authority.py tests\test_api_lens.py tests\test_lens_hotkey_binding_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\preflight.py src\francis\lens\summon_authority.py tests\test_api_lens.py tests\test_lens_hotkey_binding_script.py`
+  Result: `passed; 4 files already formatted`
+- `python -m pytest tests\test_lens_hotkey_binding_script.py tests\test_api_lens.py::test_lens_summon_execute_records_bounded_handoff_without_summon_anywhere_claim tests\test_api_lens.py::test_lens_summon_execute_records_summon_anywhere_when_hotkey_launch_runtime_observed -q`
+  Result: `passed; 7 focused tests exited 0`
+- `python -m pytest tests\test_api_lens.py tests\test_api_lens_os_binding_authority.py tests\test_lens_hotkey_binding_script.py -q`
+  Result: `passed; broader Lens API, OS-binding authority, and hotkey script
+  slice exited 0`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status`
+  Result: `passed; ok=true; status=blocked; audit_status=complete;
+  ready_to_close=false; transition_allowed=false;
+  next_smallest_truthful_gap=summon_anywhere_blockers;
+  recommended_proof_script=scripts/lens-summon-anywhere-blockers-proof.ps1
+  -Mode Status; child_proof_timeouts=0`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

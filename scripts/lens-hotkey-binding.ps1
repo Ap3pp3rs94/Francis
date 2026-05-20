@@ -356,6 +356,7 @@ function New-StatusPayload {
 
   $Readback = Get-HotkeyRuntimeReadback -Root $Root
   $Ready = [bool]$Readback.ready
+  $LaunchOnHotkeyReady = $Ready -and [bool]$Readback.launch_on_hotkey
   return [ordered]@{
     ok = $true
     kind = 'lens.hotkey.binding.runtime'
@@ -363,7 +364,8 @@ function New-StatusPayload {
     mode = $ModeName
     ready = $Ready
     global_hotkey_binding = $Ready
-    summon_anywhere = $false
+    summon_anywhere = $LaunchOnHotkeyReady
+    os_level_summon = $LaunchOnHotkeyReady
     data_root = $Root
     runtime_state_path = 'data/runtime/lens-hotkey/status.json'
     pid_path = 'data/runtime/lens-hotkey/lens-hotkey.pid'

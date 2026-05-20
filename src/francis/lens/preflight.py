@@ -1181,13 +1181,30 @@ def lens_summon_enablement_gate(*, preflight: dict[str, Any] | None = None) -> d
         *_blockers(overlay),
     }
     blockers = sorted(blocker_set)
+    launch_manifest = lens_host_launch_manifest()
+    supervisor_readback = _dict_value(launch_manifest, "supervisor_readback")
+    resident_host_runtime_ready = bool(supervisor_readback.get("resident_supervised_runtime"))
+    tray_runtime = _dict_value(launch_manifest, "tray_runtime_readback")
+    tray_runtime_ready = bool(tray_runtime.get("ready"))
     hotkey_runtime = _dict_value(summon, "hotkey_runtime_readback")
     hotkey_runtime_ready = bool(hotkey_runtime.get("ready"))
-    overlay_runtime = _dict_value(overlay, "overlay_runtime")
+    hotkey_launch_on_press = hotkey_runtime_ready and bool(hotkey_runtime.get("launch_on_hotkey"))
+    overlay_runtime = _dict_value(launch_manifest, "overlay_runtime_readback") or _dict_value(
+        overlay,
+        "overlay_runtime",
+    )
     overlay_runtime_ready = bool(overlay_runtime.get("ready"))
-    launch_manifest = lens_host_launch_manifest()
     summon_runtime = _dict_value(launch_manifest, "summon_runtime_readback")
     summon_runtime_ready = bool(summon_runtime.get("ready"))
+    summon_anywhere_runtime_ready = (
+        summon_runtime_ready
+        and hotkey_launch_on_press
+        and resident_host_runtime_ready
+        and tray_runtime_ready
+        and overlay_runtime_ready
+        and bool(summon_runtime.get("summon_anywhere"))
+        and bool(summon_runtime.get("os_level_summon"))
+    )
     if hotkey_runtime_ready:
         blockers = [blocker for blocker in blockers if blocker != "global_hotkey_binding_missing"]
     if overlay_runtime_ready:
@@ -1207,12 +1224,44 @@ def lens_summon_enablement_gate(*, preflight: dict[str, Any] | None = None) -> d
                 "summon_binding_missing",
             }
         ]
-        blockers.append("summon_anywhere_runtime_readback")
+        if not summon_anywhere_runtime_ready:
+            blockers.append("summon_anywhere_runtime_readback")
+    if summon_anywhere_runtime_ready:
+        blockers = [
+            blocker
+            for blocker in blockers
+            if blocker
+            not in {
+                "always_on_top_disabled",
+                "capture_authority_not_granted",
+                "global_hotkey_binding_disabled",
+                "global_hotkey_registration_disabled",
+                "hotkey_registration_authority_not_granted",
+                "lens_host_persistent_supervision_prerequisites_pending",
+                "lens_tray_presence_disabled_pending_authority",
+                "local_process_launch_authority_not_granted",
+                "notification_authority_not_granted",
+                "overlay_click_through_not_supported",
+                "overlay_control_authority_not_granted",
+                "overlay_dock_not_supported",
+                "overlay_focus_not_supported",
+                "overlay_window_disabled",
+                "service_control_authority_not_granted",
+                "summon_anywhere_runtime_readback",
+                "tray_host_disabled",
+                "tray_host_missing",
+                "tray_icon_authority_not_granted",
+                "tray_icon_disabled",
+                "tray_registration_authority_not_granted",
+                "tray_startup_registration_disabled",
+                "window_management_authority_not_granted",
+            }
+        ]
     summon_ready = bool(summon.get("ready")) or summon_runtime_ready
-    resident_host_ready = bool(host.get("ready"))
-    tray_ready = bool(tray.get("ready"))
-    overlay_ready = bool(overlay.get("ready"))
-    ready = summon_ready and resident_host_ready and tray_ready and overlay_ready
+    resident_host_ready = bool(host.get("ready")) or (summon_anywhere_runtime_ready and resident_host_runtime_ready)
+    tray_ready = bool(tray.get("ready")) or (summon_anywhere_runtime_ready and tray_runtime_ready)
+    overlay_ready = bool(overlay.get("ready")) or (summon_anywhere_runtime_ready and overlay_runtime_ready)
+    ready = summon_anywhere_runtime_ready and resident_host_ready and tray_ready and overlay_ready
     blocker_groups = {
         "resident_host": _select_blockers(
             blockers,
@@ -1259,7 +1308,7 @@ def lens_summon_enablement_gate(*, preflight: dict[str, Any] | None = None) -> d
         ),
         "authority": _authority_blockers(blockers),
     }
-    if summon_runtime_ready:
+    if summon_runtime_ready and not summon_anywhere_runtime_ready:
         blocker_groups["summon_anywhere"] = _select_blockers(blockers, "summon_anywhere_runtime_readback")
     blocker_family_readback = _summon_blocker_family_readback(blocker_groups)
     blocked_families = [_safe_str(item.get("id")).strip() for item in blocker_family_readback if not item["ready"]]
@@ -1292,6 +1341,7 @@ def lens_summon_enablement_gate(*, preflight: dict[str, Any] | None = None) -> d
         "operator_surface_readback_ready": True,
         "summon_binding_ready": summon_ready,
         "summon_runtime_ready": summon_runtime_ready,
+        "summon_anywhere_runtime_ready": summon_anywhere_runtime_ready,
         "summon_runtime_bounded_handoff_ready": bool(summon_runtime.get("bounded_handoff_ready")),
         "summon_runtime_local_open_ready": bool(summon_runtime.get("local_open_ready")),
         "summon_runtime_readback": summon_runtime,
@@ -1303,6 +1353,7 @@ def lens_summon_enablement_gate(*, preflight: dict[str, Any] | None = None) -> d
         "palette_route": _safe_str(summon.get("palette_route"), "/lens/status"),
         "required_before_enable": _string_list(summon.get("required_before_enable")),
         "global_hotkey_runtime_ready": hotkey_runtime_ready,
+        "hotkey_launch_on_press": hotkey_launch_on_press,
         "hotkey_runtime_readback": hotkey_runtime,
         "overlay_runtime_ready": overlay_runtime_ready,
         "overlay_runtime_readback": overlay_runtime,
