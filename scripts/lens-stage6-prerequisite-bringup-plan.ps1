@@ -1316,16 +1316,17 @@ def _run() -> tuple[int, dict[str, Any]]:
     dependency_by_id = {_safe_str(item.get("id")): _as_dict(item) for item in dependencies if isinstance(item, dict)}
     required = _string_list(plan.get("required_before_enable")) or REQUIREMENT_ORDER
     missing = _string_list(plan.get("missing_required_before_enable"))
-    handoff = _as_dict(plan.get("first_missing_requirement_handoff")) or _as_dict(
+    raw_handoff = _as_dict(plan.get("first_missing_requirement_handoff")) or _as_dict(
         enablement.get("first_missing_requirement_handoff")
     )
     ordered_steps = [
-        _requirement_step(requirement, dependency_by_id.get(requirement, {}), handoff, status)
+        _requirement_step(requirement, dependency_by_id.get(requirement, {}), raw_handoff, status)
         for requirement in REQUIREMENT_ORDER
     ]
-    enablement_sequence = _enablement_steps(handoff)
+    enablement_sequence = _enablement_steps(raw_handoff)
     enablement_execution_receipts = _as_dict(resident_host.get("persistent_supervision_enablement_execution_receipts"))
     enablement_execution_applied = _enablement_execution_applied(enablement_execution_receipts)
+    handoff = {} if enablement_execution_applied else raw_handoff
     effective_missing = [] if enablement_execution_applied else missing
     missing_steps = (
         []

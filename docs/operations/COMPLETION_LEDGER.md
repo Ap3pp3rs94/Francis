@@ -35351,6 +35351,46 @@ Latest validation for Stage 6 summon-anywhere runtime readback guard:
   recommended_proof_script=scripts/lens-summon-anywhere-blockers-proof.ps1
   -Mode Status; child_proof_timeouts=0`
 
+Stage 6 prerequisite bring-up applied-receipt handoff hardening on `2026-05-20`:
+
+- `scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status` and
+  `/lens/status stage6_readiness.prerequisite_bringup` now suppress the stale
+  `first_missing_requirement_handoff` after persistent-supervision enablement
+  execution has already been applied. The ordered prerequisite history remains
+  available for audit context, but the current operator handoff points only at
+  the read-only enablement receipt review and
+  `persistent_supervision_execution_boundary`.
+- This fixes a Stage 6 operator-surface truth mismatch. It does not close Stage
+  6 and does not start Stage 7; the current closure posture remains
+  `ready_to_close=false`, `transition_allowed=false`, and
+  `next_smallest_truthful_gap=summon_anywhere_blockers`.
+
+Latest validation for Stage 6 prerequisite bring-up applied-receipt handoff hardening:
+
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed; 3 files already formatted`
+- `python -m pytest tests\test_api_lens.py::test_stage6_prerequisite_bringup_applied_receipt_wins_over_stale_prerequisites tests\test_api_lens.py::test_stage6_next_handoff_promotes_prerequisite_bringup_receipt_review_over_stale_first_missing tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_config_only -q`
+  Result: `passed; 3 focused tests exited 0`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status`
+  Result: `passed; ok=true; status=persistent_supervision_enablement_applied;
+  first_missing_requirement_handoff={};
+  next_operator_action_requirement=persistent_supervision_enablement_receipt;
+  next_smallest_truthful_gap=persistent_supervision_execution_boundary`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status`
+  Result: `passed; ok=true; status=proof_passed; ready_to_close=false;
+  stage6_prerequisite_bringup_plan_observed=true;
+  stage6_prerequisite_bringup_operator_plan_handoff.first_missing_requirement_handoff={};
+  next_smallest_truthful_gap=summon_anywhere_blockers`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 120`
+  Result: `passed; ok=true; status=blocked; audit_status=complete;
+  ready_to_close=false; transition_allowed=false;
+  next_smallest_truthful_gap=summon_anywhere_blockers; child_proof_timeouts=0`
+- `.\scripts\check.ps1`
+  Result: `passed; branch state OK; Ruff check passed; Ruff format check passed;
+  mypy passed; pytest completed 100% with expected skips`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

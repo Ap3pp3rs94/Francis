@@ -5751,6 +5751,16 @@ def test_stage6_prerequisite_bringup_applied_receipt_wins_over_stale_prerequisit
                 ],
                 "required_before_enable_ready": False,
                 "first_missing_required_before_enable": "resident_host_process",
+                "first_missing_requirement_handoff": {
+                    "id": "resident_host_process",
+                    "next_smallest_truthful_gap": "resident_supervision_not_persistent",
+                    "next_step": "resolve_resident_supervision_persistence_before_persistent_supervision_enablement",
+                    "route": "/lens/host",
+                    "read_only_contract": True,
+                    "diagnostic_only": True,
+                    "would_execute": False,
+                    "would_mutate": False,
+                },
             },
             "persistent_supervision_enablement_execution_receipts": {
                 "route": "/lens/host/persistent-supervision/enablement/executions",
@@ -5780,6 +5790,7 @@ def test_stage6_prerequisite_bringup_applied_receipt_wins_over_stale_prerequisit
     assert payload["required_before_enable_ready"] is True
     assert payload["current_first_missing_requirement"] == ""
     assert payload["first_missing_required_before_enable"] == ""
+    assert payload["first_missing_requirement_handoff"] == {}
     assert payload["next_operator_action_requirement"] == "persistent_supervision_enablement_receipt"
     assert payload["next_operator_action"]["id"] == "review_persistent_supervision_enablement_receipt"
     assert payload["next_operator_action"]["latest_receipt_id"] == "lpsee_applied"
@@ -5792,6 +5803,9 @@ def test_stage6_prerequisite_bringup_applied_receipt_wins_over_stale_prerequisit
     assert payload["authority_granted"] is False
     assert payload["would_execute"] is False
     assert payload["would_mutate"] is False
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["first_missing_handoff_bounded"]["status"] == "not_applicable_enablement_applied"
+    assert checks["first_missing_handoff_bounded"]["passed"] is True
 
 
 def test_stage6_next_handoff_promotes_prerequisite_bringup_receipt_review_over_stale_first_missing() -> None:

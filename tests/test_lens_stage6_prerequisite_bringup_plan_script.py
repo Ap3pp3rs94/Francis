@@ -2063,6 +2063,12 @@ def test_lens_stage6_prerequisite_bringup_summon_execution_advances_to_enablemen
     chain = _execute_prerequisites_through_overlay_window(data_dir, monkeypatch)
     assert chain["overlay_execution"]["execute_result"]["result"]["overlay_window"] is True
 
+    _refresh_resident_host_lease(
+        data_dir,
+        monkeypatch,
+        chain["resident_approval_id"],
+        reason="test refresh resident host lease before summon status readback",
+    )
     summon_status = _run_plan("-Mode", "Status", "-DataDir", str(data_dir))
     assert summon_status.returncode == 0, summon_status.stderr or summon_status.stdout
     summon_status_payload = json.loads(summon_status.stdout)
@@ -2272,6 +2278,7 @@ def test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_con
     assert followup.returncode == 0, followup.stderr or followup.stdout
     followup_payload = json.loads(followup.stdout)
     assert followup_payload["status"] == "persistent_supervision_enablement_applied"
+    assert followup_payload["first_missing_requirement_handoff"] == {}
     assert followup_payload["next_operator_action_requirement"] == "persistent_supervision_enablement_receipt"
     assert followup_payload["next_operator_action"]["id"] == "review_persistent_supervision_enablement_receipt"
     assert followup_payload["next_operator_action"]["method"] == "GET"
@@ -2301,6 +2308,7 @@ def test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_con
     assert stale_grants_followup.returncode == 0, stale_grants_followup.stderr or stale_grants_followup.stdout
     stale_grants_payload = json.loads(stale_grants_followup.stdout)
     assert stale_grants_payload["status"] == "persistent_supervision_enablement_applied"
+    assert stale_grants_payload["first_missing_requirement_handoff"] == {}
     assert stale_grants_payload["next_operator_action_requirement"] == "persistent_supervision_enablement_receipt"
     assert stale_grants_payload["next_operator_action"]["id"] == "review_persistent_supervision_enablement_receipt"
     assert stale_grants_payload["next_operator_action"]["method"] == "GET"

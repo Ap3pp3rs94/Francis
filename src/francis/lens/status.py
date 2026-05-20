@@ -2335,7 +2335,7 @@ def _stage6_prerequisite_bringup_readback(
         for requirement_id in required_before_enable
         if requirement_id and requirement_id not in ordered_requirement_ids
     )
-    first_missing_handoff = _as_dict(persistent_plan.get("first_missing_requirement_handoff")) or _as_dict(
+    raw_first_missing_handoff = _as_dict(persistent_plan.get("first_missing_requirement_handoff")) or _as_dict(
         persistent_enablement.get("first_missing_requirement_handoff")
     )
     status_readbacks = {
@@ -2369,7 +2369,7 @@ def _stage6_prerequisite_bringup_readback(
         _stage6_prerequisite_step(
             requirement_id,
             dependency=dependency_by_id.get(requirement_id, {}),
-            first_missing_handoff=first_missing_handoff,
+            first_missing_handoff=raw_first_missing_handoff,
             status_readbacks=status_readbacks,
         )
         for requirement_id in ordered_requirement_ids
@@ -2377,9 +2377,10 @@ def _stage6_prerequisite_bringup_readback(
     missing_required = [
         _safe_str(item).strip() for item in _as_list(persistent_plan.get("missing_required_before_enable"))
     ]
-    enablement_steps = _stage6_persistent_supervision_enablement_steps(first_missing_handoff)
+    enablement_steps = _stage6_persistent_supervision_enablement_steps(raw_first_missing_handoff)
     execution_receipts = status_readbacks["persistent_supervision_enablement_execution_receipts"]
     enablement_execution_applied = _stage6_persistent_supervision_enablement_execution_applied(execution_receipts)
+    first_missing_handoff = {} if enablement_execution_applied else raw_first_missing_handoff
     effective_missing_required = [] if enablement_execution_applied else missing_required
     missing_steps = [item for item in ordered_steps if _safe_str(item.get("id")).strip() in effective_missing_required]
     applied_receipt_post_plan = _as_dict(_as_dict(execution_receipts.get("latest")).get("post_plan"))
@@ -2521,7 +2522,11 @@ def _stage6_prerequisite_bringup_readback(
             },
             {
                 "id": "first_missing_handoff_bounded",
-                "status": "readback_only" if bool(first_missing_handoff) else "missing",
+                "status": "not_applicable_enablement_applied"
+                if enablement_execution_applied and not bool(first_missing_handoff)
+                else "readback_only"
+                if bool(first_missing_handoff)
+                else "missing",
                 "passed": (
                     not bool(first_missing_handoff)
                     or (
