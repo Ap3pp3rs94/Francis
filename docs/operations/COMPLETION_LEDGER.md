@@ -34925,6 +34925,44 @@ Latest validation for Stage 6 persistent-supervision API execution proof:
   Result: `passed; branch state OK on main tracking origin/main; ruff lint
   passed; ruff format check passed; mypy passed; pytest passed`
 
+Stage 6 summon blocker authority readback promotion on `2026-05-20`:
+
+- `scripts/lens-summon-anywhere-blockers-proof.ps1` now promotes the first
+  blocked family authority requirement to top-level `authority_required` /
+  `authority_granted`, matching its already-emitted
+  `recommended_authority_required` and nested `recommended_handoff`.
+- `scripts/lens-resident-host-lifecycle-blockers-proof.ps1` now promotes the
+  resident-host lifecycle blocker authority requirement to top-level
+  `authority_required` / `authority_granted`, matching the nested lifecycle
+  handoff.
+- This keeps the Stage 6 summon-anywhere and resident-host blocker chain
+  operator-readable without requiring callers to infer the current authority
+  boundary from nested payloads.
+- This does not close Stage 6, grant resident-runtime, process-supervision,
+  tray, hotkey, overlay, summon, service, memory-write, resident-claim, or
+  approval-decision authority. It only exposes the already-computed read-only
+  authority boundary at the proof payload top level.
+
+Latest validation for Stage 6 summon blocker authority readback promotion:
+
+- PowerShell parser check for `scripts/lens-summon-anywhere-blockers-proof.ps1`
+  and `scripts/lens-resident-host-lifecycle-blockers-proof.ps1`
+  Result: `passed; parse_ok`
+- `python -m pytest tests/test_lens_summon_anywhere_blockers_proof_script.py tests/test_lens_resident_host_lifecycle_blockers_proof_script.py -q`
+  Result: `passed; 4 passed`
+- `python -m ruff check tests/test_lens_summon_anywhere_blockers_proof_script.py tests/test_lens_resident_host_lifecycle_blockers_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_summon_anywhere_blockers_proof_script.py tests/test_lens_resident_host_lifecycle_blockers_proof_script.py`
+  Result: `passed; 2 files already formatted`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-anywhere-blockers-proof.ps1 -Mode Status`
+  Result: `passed; authority_required=resident_runtime_execution_authority;
+  authority_granted=false; recommended_handoff.authority_required=resident_runtime_execution_authority`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-host-lifecycle-blockers-proof.ps1 -Mode Status`
+  Result: `passed; authority_required=process_supervision_authority;
+  authority_granted=false; recommended_handoff.authority_required=process_supervision_authority`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

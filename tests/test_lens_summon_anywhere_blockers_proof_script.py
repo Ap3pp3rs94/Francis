@@ -177,6 +177,8 @@ def test_lens_summon_anywhere_blockers_proof_is_readback_only(tmp_path: Path) ->
     assert payload["recommended_readiness_route"] == "/lens/host/runtime-loop/readiness"
     assert payload["recommended_authority_required"] == "resident_runtime_execution_authority"
     assert payload["recommended_authority_granted"] is False
+    assert payload["authority_required"] == "resident_runtime_execution_authority"
+    assert payload["authority_granted"] is False
     assert payload["first_blocker_family_handoff"] == {
         "id": "resident_host",
         "label": "Resident host",

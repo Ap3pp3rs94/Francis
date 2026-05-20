@@ -52,6 +52,8 @@ def test_lens_resident_host_lifecycle_blockers_proof_consumes_preflight_groups()
     assert payload["recommended_proof_script"] == "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status"
     assert payload["recommended_route"] == "/lens/host/manifest"
     assert payload["recommended_readiness_route"] == "/lens/host/runtime-loop/readiness"
+    assert payload["authority_required"] == "process_supervision_authority"
+    assert payload["authority_granted"] is False
 
     host_preflight = payload["host_preflight"]
     assert host_preflight["ok"] is True
