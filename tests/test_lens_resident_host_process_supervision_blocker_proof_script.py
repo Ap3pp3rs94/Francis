@@ -78,6 +78,16 @@ def test_lens_resident_host_process_supervision_blocker_consumes_handoff(tmp_pat
     assert payload["recommended_proof_script"] == ("scripts/lens-stage6-completion-audit.ps1 -Mode Status")
     assert payload["authority_required"] == "none_new_stage6_completion_audit"
     assert payload["authority_granted"] is False
+    assert payload["blocked_authority_required"] == "process_supervision_and_service_control"
+    assert payload["blocked_authority_granted"] is False
+    assert payload["process_supervision_authority_required"] == "process_supervision_authority"
+    assert payload["process_supervision_authority_granted"] is False
+    assert payload["process_restart_authority_required"] == "process_restart_authority"
+    assert payload["process_restart_authority_granted"] is False
+    assert payload["service_install_authority_required"] == "service_install_authority"
+    assert payload["service_install_authority_granted"] is False
+    assert payload["service_control_authority_required"] == "service_control_authority"
+    assert payload["service_control_authority_granted"] is False
     recommended_handoff = payload["recommended_handoff"]
     assert recommended_handoff["id"] == "stage6_lens_completion_audit"
     assert recommended_handoff["status"] == "audit_needed"

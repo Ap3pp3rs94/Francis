@@ -34963,6 +34963,50 @@ Latest validation for Stage 6 summon blocker authority readback promotion:
 - `git diff --check`
   Result: `passed`
 
+Stage 6 process-supervision blocker authority readback promotion on
+`2026-05-20`:
+
+- `scripts/lens-resident-host-process-supervision-blocker-proof.ps1` now keeps
+  its top-level recommended handoff on the read-only Stage 6 completion audit
+  with `authority_required=none_new_stage6_completion_audit`, while also
+  exposing the blocked runtime authority set at top level:
+  `blocked_authority_required=process_supervision_and_service_control`,
+  `process_supervision_authority_required=process_supervision_authority`,
+  `process_restart_authority_required=process_restart_authority`,
+  `service_install_authority_required=service_install_authority`, and
+  `service_control_authority_required=service_control_authority`.
+- This keeps the resident-host process-supervision boundary operator-readable
+  without requiring callers to infer the current process/service authority
+  blockers from the nested `proof` payload.
+- This does not close Stage 6, start persistent supervision, supervise or
+  restart a process, install or control a service, write memory, claim resident
+  presence, or decide approvals. It only exposes already-computed read-only
+  authority boundary fields at the proof payload top level.
+
+Latest validation for Stage 6 process-supervision blocker authority readback
+promotion:
+
+- PowerShell parser check for
+  `scripts/lens-resident-host-process-supervision-blocker-proof.ps1`
+  Result: `passed; parse_ok`
+- `python -m pytest tests/test_lens_resident_host_process_supervision_blocker_proof_script.py -q`
+  Result: `passed; 1 passed`
+- `python -m ruff check tests/test_lens_resident_host_process_supervision_blocker_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_resident_host_process_supervision_blocker_proof_script.py`
+  Result: `passed; 1 file already formatted`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status`
+  Result: `passed; blocked_authority_required=process_supervision_and_service_control;
+  process_supervision_authority_required=process_supervision_authority;
+  process_restart_authority_required=process_restart_authority;
+  service_install_authority_required=service_install_authority;
+  service_control_authority_required=service_control_authority`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed; branch state OK on main tracking origin/main; ruff lint
+  passed; ruff format check passed; mypy passed; pytest passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
