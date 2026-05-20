@@ -1294,20 +1294,14 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     assert recommended_handoff["would_summon"] is False
     assert recommended_handoff["would_decide_approval"] is False
     concrete_handoff = payload["recommended_concrete_handoff"]
-    assert (
-        payload["recommended_concrete_handoff_source"]
-        == "stage6_closure_readback_summon_anywhere_blockers.first_blocker_family_completion_audit_handoff"
-    )
+    assert payload["recommended_concrete_handoff_source"] == "persistent_supervision_resident_claim_boundary_handoff"
     assert payload["recommended_concrete_next_slice"] == (
-        "consume_resident_host_process_supervision_handoff_before_stage6_closure"
+        "run_stage6_lens_completion_audit_after_resident_claim_boundary_readback"
     )
-    assert payload["recommended_concrete_proof_script"] == (
-        "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status -ConsumeProcessSupervisionHandoff"
-    )
+    assert payload["recommended_concrete_proof_script"] == "scripts/lens-stage6-completion-audit.ps1 -Mode Status"
     assert payload["recommended_concrete_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
-    assert payload["recommended_concrete_authority_required"] == "process_supervision_authority"
+    assert payload["recommended_concrete_authority_required"] == "none_new_stage6_completion_audit"
     assert payload["recommended_concrete_authority_granted"] is False
-    assert concrete_handoff == recommended_handoff["first_blocker_family_completion_audit_handoff"]
     assert concrete_handoff["read_only_contract"] is True
     assert concrete_handoff["diagnostic_only"] is True
     assert concrete_handoff["would_execute"] is False
@@ -1352,6 +1346,7 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     assert payload["persistent_supervision_resident_claim_boundary_handoff_observed"] is True
     assert payload["stage6_completion_audit_handoff_consumed_by_closure_readback"] is True
     resident_claim_handoff = payload["persistent_supervision_resident_claim_boundary_handoff"]
+    assert concrete_handoff == resident_claim_handoff
     assert resident_claim_handoff["recommended_handoff_source"] == (
         "persistent_supervision_resident_claim_boundary_handoff"
     )

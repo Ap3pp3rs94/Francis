@@ -894,7 +894,19 @@ if ($Stage6CompletionAuditHandoffConsumedByClosureReadback) {
 $RecommendedConcreteHandoffSource = $RecommendedHandoffSource
 $RecommendedConcreteHandoff = $RecommendedHandoff
 if ($Stage6CompletionAuditHandoffConsumedByClosureReadback) {
-  if (-not [string]::IsNullOrWhiteSpace([string](Get-PropertyValue -Payload $FirstFamilyCompletionAuditHandoff -Name 'next_step' -Default ''))) {
+  if ($PersistentSupervisionResidentClaimBoundaryHandoffObserved) {
+    $RecommendedConcreteHandoffSource = 'persistent_supervision_resident_claim_boundary_handoff'
+    $RecommendedConcreteHandoff = $PersistentSupervisionResidentClaimBoundaryHandoff
+  } elseif ($PersistentSupervisionEnablementReceiptReviewObserved) {
+    $RecommendedConcreteHandoffSource = 'persistent_supervision_enablement_receipt_review_handoff'
+    $RecommendedConcreteHandoff = $PersistentSupervisionEnablementReceiptReviewHandoff
+  } elseif ($Stage6PrerequisiteBringupPlanObserved) {
+    $RecommendedConcreteHandoffSource = 'stage6_prerequisite_bringup_operator_plan'
+    $RecommendedConcreteHandoff = $Stage6PrerequisiteBringupOperatorPlanHandoff
+  } elseif ($ResidentRuntimeCandidateHandoffObserved) {
+    $RecommendedConcreteHandoffSource = 'resident_runtime_candidate_handoff'
+    $RecommendedConcreteHandoff = $ResidentRuntimeCandidateHandoff
+  } elseif (-not [string]::IsNullOrWhiteSpace([string](Get-PropertyValue -Payload $FirstFamilyCompletionAuditHandoff -Name 'next_step' -Default ''))) {
     $RecommendedConcreteHandoffSource = 'stage6_closure_readback_summon_anywhere_blockers.first_blocker_family_completion_audit_handoff'
     $RecommendedConcreteHandoff = $FirstFamilyCompletionAuditHandoff
   } elseif (-not [string]::IsNullOrWhiteSpace([string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'next_step' -Default ''))) {

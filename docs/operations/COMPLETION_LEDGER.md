@@ -35469,6 +35469,47 @@ Latest validation for Stage 6 next-handoff concrete blocker readback:
   ready_to_close=false; transition_allowed=false;
   next_smallest_truthful_gap=summon_anywhere_blockers; child_proof_timeouts=0`
 
+Stage 6 next-handoff concrete handoff loop guard on `2026-05-20`:
+
+- `scripts/lens-stage6-next-handoff.ps1 -Mode Status` now keeps the broad
+  closure recommendation at `summon_anywhere_blockers`, but its
+  `recommended_concrete_handoff` no longer loops back to the resident-host
+  process-supervision proof after later governed handoffs are observed.
+- When the persistent-supervision resident-claim boundary has already been
+  consumed, the concrete handoff now points at that furthest observed boundary:
+  `persistent_supervision_resident_claim_boundary_handoff`, with
+  `recommended_concrete_proof_script=scripts/lens-stage6-completion-audit.ps1
+  -Mode Status`.
+- If that boundary is not observed, the concrete handoff falls back through the
+  enablement receipt review, Stage 6 prerequisite bring-up plan, resident-runtime
+  candidate handoff, and only then the resident-host process-supervision bridge.
+- This is an operator-surface loop guard only. It does not grant summon,
+  hotkey, overlay, process-supervision, service, memory, or resident-claim
+  authority; it does not close Stage 6 or start Stage 7.
+
+Latest validation for Stage 6 next-handoff concrete handoff loop guard:
+
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_applied_bringup_review_state -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed; full next-handoff proof test file exited 0`
+- `python -m ruff check tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 1 file already formatted`
+- `git diff --check`
+  Result: `passed; warning only that PowerShell LF will be replaced by CRLF when
+  Git next touches the script`
+- PowerShell parser check for `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed; parse_ok`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status`
+  Result: `passed; ok=true; status=proof_passed;
+  next_smallest_truthful_gap=summon_anywhere_blockers;
+  recommended_concrete_handoff_source=persistent_supervision_resident_claim_boundary_handoff;
+  recommended_concrete_next_slice=run_stage6_lens_completion_audit_after_resident_claim_boundary_readback;
+  recommended_concrete_proof_script=scripts/lens-stage6-completion-audit.ps1
+  -Mode Status`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
