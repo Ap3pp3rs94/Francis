@@ -637,12 +637,13 @@ $RecommendedHandoffSource = ''
 $RecommendedNextSlice = ''
 $RecommendedProofScript = ''
 $RecommendedAuthorityRequired = ''
-if (-not [string]::IsNullOrWhiteSpace([string]$RecommendedHandoff.id)) {
+$RecommendedHandoffId = if ($RecommendedHandoff.Contains('id')) { [string]$RecommendedHandoff['id'] } else { '' }
+if (-not [string]::IsNullOrWhiteSpace($RecommendedHandoffId)) {
   $RecommendedHandoffObserved = $true
   $RecommendedHandoffSource = 'summon_preflight_first_missing_requirement_handoff'
-  $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
-  $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
-  $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
+  $RecommendedNextSlice = [string]$RecommendedHandoff['next_step']
+  $RecommendedProofScript = [string]$RecommendedHandoff['proof_script']
+  $RecommendedAuthorityRequired = [string]$RecommendedHandoff['authority_required']
 }
 
 $Ready = $Blockers.Count -eq 0
@@ -670,7 +671,7 @@ $Payload = [ordered]@{
   recommended_proof_script = $RecommendedProofScript
   authority_required = $RecommendedAuthorityRequired
   authority_granted = $false
-  first_blocker_family = if ($RecommendedHandoffObserved) { [string]$RecommendedHandoff.family } else { '' }
+  first_blocker_family = if ($RecommendedHandoffObserved) { [string]$RecommendedHandoff['family'] } else { '' }
   first_blocker_family_handoff = $RecommendedHandoff
   enablement_dependency_readback = @($RequiredBeforeEnableDependencyArray)
   resident_host_process_readback = $ResidentHostProcessReadback

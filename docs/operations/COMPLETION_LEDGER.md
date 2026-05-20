@@ -35292,6 +35292,26 @@ Latest validation for Stage 6 foreground proof CI state-readback hardening:
   foreground_process_observed=true; foreground_status_readback_matched=true;
   foreground_completed=true`
 
+Stage 6 summon-action ready-preflight CI hardening on `2026-05-20`:
+
+- GitHub Actions run `26168444425` failed on Ubuntu Python 3.12 and 3.13 in
+  `tests/test_lens_summon_action_script.py::test_lens_summon_action_ready_launch_uses_bounded_no_launch_handoff`.
+  The ready preflight path has no first missing requirement, so the new
+  status-mode recommended handoff fields must treat the handoff as optional.
+  `scripts/lens-summon-preflight.ps1` now reads the optional handoff keys
+  defensively instead of dereferencing an absent `.id` member under strict
+  PowerShell mode.
+- This keeps the ready action wrapper behavior bounded: the test still uses
+  the no-launch local-open handoff, does not register a hotkey, and does not
+  claim summon-anywhere runtime readiness.
+
+Latest validation for Stage 6 summon-action ready-preflight CI hardening:
+
+- `python -m pytest tests\test_lens_summon_preflight_script.py tests\test_lens_summon_action_script.py -q`
+  Result: `passed; 7 focused tests exited 0`
+- PowerShell parser check for `scripts/lens-summon-preflight.ps1`
+  Result: `passed; parse_ok`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
