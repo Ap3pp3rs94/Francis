@@ -65,6 +65,30 @@ def test_lens_summon_overlay_window_blocker_proof_is_readback_only(tmp_path: Pat
         "resident_runtime_resident_claim_authority_boundary"
     )
     assert payload["next_smallest_truthful_gap"] == "summon_global_hotkey_binding_blocker_boundary"
+    assert payload["recommended_handoff_source"] == "summon_overlay_window_handoff"
+    assert payload["recommended_next_slice"] == "run_global_hotkey_binding_blocker_proof"
+    assert (
+        payload["recommended_proof_script"]
+        == "scripts/lens-summon-global-hotkey-binding-blocker-proof.ps1 -Mode Status"
+    )
+    assert payload["recommended_route"] == "/lens/summon"
+    assert payload["recommended_readiness_route"] == "/lens/summon/readiness"
+    assert payload["authority_required"] == "hotkey_registration_authority"
+    assert payload["authority_granted"] is False
+    recommended_handoff = payload["recommended_handoff"]
+    assert recommended_handoff["id"] == "global_hotkey_binding"
+    assert recommended_handoff["next_step"] == "run_global_hotkey_binding_blocker_proof"
+    assert (
+        recommended_handoff["proof_script"]
+        == "scripts/lens-summon-global-hotkey-binding-blocker-proof.ps1 -Mode Status"
+    )
+    assert recommended_handoff["next_smallest_truthful_gap"] == "summon_global_hotkey_binding_blocker_boundary"
+    assert recommended_handoff["authority_required"] == "hotkey_registration_authority"
+    assert recommended_handoff["authority_granted"] is False
+    assert recommended_handoff["read_only_contract"] is True
+    assert recommended_handoff["diagnostic_only"] is True
+    assert recommended_handoff["would_execute"] is False
+    assert recommended_handoff["would_mutate"] is False
     assert payload["summon_overlay_family_observed"] is True
     assert payload["previous_tray_presence_contract_observed"] is True
     assert payload["previous_tray_presence_contract_readback_observed"] is True

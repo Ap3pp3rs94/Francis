@@ -67,6 +67,23 @@ def test_lens_summon_authority_blocker_proof_is_readback_only(tmp_path: Path) ->
     assert payload["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
     assert payload["authority_required"] == "summon_hotkey_overlay_and_process_authority"
     assert payload["authority_granted"] is False
+    assert payload["recommended_handoff_source"] == "summon_authority_handoff"
+    assert payload["recommended_next_slice"] == "run_stage6_lens_completion_audit_after_summon_authority_handoff"
+    assert payload["recommended_proof_script"] == "scripts/lens-stage6-completion-audit.ps1 -Mode Status"
+    assert payload["recommended_route"] == "/lens/status"
+    assert payload["recommended_readiness_route"] == "/lens/status"
+    recommended_handoff = payload["recommended_handoff"]
+    assert recommended_handoff["id"] == "stage6_lens_completion_audit"
+    assert recommended_handoff["status"] == "audit_needed"
+    assert recommended_handoff["next_step"] == "run_stage6_lens_completion_audit_after_summon_authority_handoff"
+    assert recommended_handoff["proof_script"] == "scripts/lens-stage6-completion-audit.ps1 -Mode Status"
+    assert recommended_handoff["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert recommended_handoff["authority_required"] == "none_new_stage6_completion_audit"
+    assert recommended_handoff["authority_granted"] is False
+    assert recommended_handoff["read_only_contract"] is True
+    assert recommended_handoff["diagnostic_only"] is True
+    assert recommended_handoff["would_execute"] is False
+    assert recommended_handoff["would_mutate"] is False
     assert payload["summon_authority_family_observed"] is True
     assert payload["previous_summon_binding_contract_observed"] is True
     assert payload["previous_summon_binding_contract_readback_observed"] is True

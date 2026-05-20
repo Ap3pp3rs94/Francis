@@ -68,6 +68,24 @@ def test_lens_summon_tray_presence_blocker_proof_is_readback_only(tmp_path: Path
         "resident_runtime_hotkey_summon_authority_boundary"
     )
     assert payload["next_smallest_truthful_gap"] == "summon_overlay_window_blocker_boundary"
+    assert payload["recommended_handoff_source"] == "summon_tray_presence_handoff"
+    assert payload["recommended_next_slice"] == "run_overlay_window_blocker_proof"
+    assert payload["recommended_proof_script"] == "scripts/lens-summon-overlay-window-blocker-proof.ps1 -Mode Status"
+    assert payload["recommended_route"] == "/lens/overlay"
+    assert payload["recommended_readiness_route"] == "/lens/overlay/readiness"
+    assert payload["authority_required"] == "overlay_control_authority"
+    assert payload["authority_granted"] is False
+    recommended_handoff = payload["recommended_handoff"]
+    assert recommended_handoff["id"] == "overlay_window"
+    assert recommended_handoff["next_step"] == "run_overlay_window_blocker_proof"
+    assert recommended_handoff["proof_script"] == "scripts/lens-summon-overlay-window-blocker-proof.ps1 -Mode Status"
+    assert recommended_handoff["next_smallest_truthful_gap"] == "summon_overlay_window_blocker_boundary"
+    assert recommended_handoff["authority_required"] == "overlay_control_authority"
+    assert recommended_handoff["authority_granted"] is False
+    assert recommended_handoff["read_only_contract"] is True
+    assert recommended_handoff["diagnostic_only"] is True
+    assert recommended_handoff["would_execute"] is False
+    assert recommended_handoff["would_mutate"] is False
     assert payload["summon_tray_family_observed"] is True
     assert payload["previous_resident_host_contract_observed"] is True
     assert payload["previous_resident_host_contract_readback_observed"] is True

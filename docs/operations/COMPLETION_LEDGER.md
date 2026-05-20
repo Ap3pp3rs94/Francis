@@ -35126,6 +35126,82 @@ Latest validation for Stage 6 governed API proof check-status truthfulness:
 - `git diff --check`
   Result: `passed`
 
+Stage 6 summon-family proof handoff readback promotion on `2026-05-20`:
+
+- `scripts/lens-summon-tray-presence-blocker-proof.ps1` now emits a top-level
+  `recommended_handoff` to `scripts/lens-summon-overlay-window-blocker-proof.ps1
+  -Mode Status` with `authority_required=overlay_control_authority`.
+- `scripts/lens-summon-overlay-window-blocker-proof.ps1` now emits a top-level
+  `recommended_handoff` to
+  `scripts/lens-summon-global-hotkey-binding-blocker-proof.ps1 -Mode Status`
+  with `authority_required=hotkey_registration_authority`.
+- `scripts/lens-summon-global-hotkey-binding-blocker-proof.ps1` now emits a
+  top-level `recommended_handoff` to
+  `scripts/lens-summon-binding-blocker-proof.ps1 -Mode Status` with
+  `authority_required=summon_authority`.
+- `scripts/lens-summon-binding-blocker-proof.ps1` now emits a top-level
+  `recommended_handoff` to
+  `scripts/lens-summon-authority-blocker-proof.ps1 -Mode Status` with
+  `authority_required=summon_hotkey_overlay_and_process_authority`.
+- `scripts/lens-summon-authority-blocker-proof.ps1` now emits a top-level
+  `recommended_handoff` back to `scripts/lens-stage6-completion-audit.ps1 -Mode
+  Status` after the final summon-authority blocker family is consumed.
+- This is a proof-contract/readback change only. It does not close Stage 6,
+  grant product execution authority, grant approval-decision authority, register
+  a hotkey, control a tray/overlay surface, launch a resident process, supervise
+  a service, write memory, or claim OS-wide summon-anywhere readiness.
+
+Latest validation for Stage 6 summon-family proof handoff readback promotion:
+
+- PowerShell parser check for the five changed summon-family proof scripts
+  Result: `passed; parse_ok`
+- `python -m ruff check tests/test_lens_summon_tray_presence_blocker_proof_script.py tests/test_lens_summon_overlay_window_blocker_proof_script.py tests/test_lens_summon_global_hotkey_binding_blocker_proof_script.py tests/test_lens_summon_binding_blocker_proof_script.py tests/test_lens_summon_authority_blocker_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_summon_tray_presence_blocker_proof_script.py tests/test_lens_summon_overlay_window_blocker_proof_script.py tests/test_lens_summon_global_hotkey_binding_blocker_proof_script.py tests/test_lens_summon_binding_blocker_proof_script.py tests/test_lens_summon_authority_blocker_proof_script.py`
+  Result: `passed; 5 files already formatted`
+- `python -m pytest tests/test_lens_summon_tray_presence_blocker_proof_script.py tests/test_lens_summon_overlay_window_blocker_proof_script.py tests/test_lens_summon_global_hotkey_binding_blocker_proof_script.py tests/test_lens_summon_binding_blocker_proof_script.py tests/test_lens_summon_authority_blocker_proof_script.py -q`
+  Result: `passed; 5 focused tests exited 0`
+- `python -m pytest tests/test_lens_summon_tray_presence_blocker_proof_script.py tests/test_lens_summon_overlay_window_blocker_proof_script.py tests/test_lens_summon_global_hotkey_binding_blocker_proof_script.py tests/test_lens_summon_binding_blocker_proof_script.py tests/test_lens_summon_authority_blocker_proof_script.py tests/test_lens_summon_anywhere_family_chain_proof_script.py -q`
+  Result: `passed; 7 focused tests exited 0`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-tray-presence-blocker-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=summon_overlay_window_blocker_boundary;
+  recommended_next_slice=run_overlay_window_blocker_proof;
+  authority_required=overlay_control_authority; authority_granted=false`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-overlay-window-blocker-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=summon_global_hotkey_binding_blocker_boundary;
+  recommended_next_slice=run_global_hotkey_binding_blocker_proof;
+  authority_required=hotkey_registration_authority; authority_granted=false`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-global-hotkey-binding-blocker-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=summon_binding_blocker_boundary;
+  recommended_next_slice=run_summon_binding_blocker_proof;
+  authority_required=summon_authority; authority_granted=false`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-binding-blocker-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=summon_authority_blocker_boundary;
+  recommended_next_slice=run_summon_authority_blocker_proof;
+  authority_required=summon_hotkey_overlay_and_process_authority;
+  authority_granted=false`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-authority-blocker-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=stage6_lens_completion_audit;
+  recommended_next_slice=run_stage6_lens_completion_audit_after_summon_authority_handoff;
+  authority_required=summon_hotkey_overlay_and_process_authority;
+  authority_granted=false`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-anywhere-family-chain-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=stage6_lens_completion_audit;
+  recommended_next_slice=run_stage6_lens_completion_audit_after_summon_anywhere_family_chain_readback;
+  authority_required=summon_hotkey_overlay_and_process_authority;
+  authority_granted=false`
+- `git diff --check`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed; branch state OK on main tracking origin/main; ruff lint
+  passed; ruff format check passed; mypy passed; pytest passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
