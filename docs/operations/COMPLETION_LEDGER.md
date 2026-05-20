@@ -35391,6 +35391,33 @@ Latest validation for Stage 6 prerequisite bring-up applied-receipt handoff hard
   Result: `passed; branch state OK; Ruff check passed; Ruff format check passed;
   mypy passed; pytest completed 100% with expected skips`
 
+Stage 6 prerequisite bring-up CI resident-readback wait hardening on `2026-05-20`:
+
+- GitHub Actions run `26180193961` failed on Windows Python 3.13 in
+  `tests/test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_config_only`.
+  The live helper refreshed the resident-host lease, then immediately continued
+  to later prerequisite execution before Status mode had confirmed the exact
+  next operator action for that refreshed lease.
+- The Stage 6 prerequisite bring-up helper now waits for the exact next action
+  after resident-host lease refresh before executing tray, hotkey, overlay, or
+  summon follow-up steps. This hardens the live proof against slower Windows
+  CI readback propagation without changing the governed operator sequence.
+- This is CI proof hardening only. It does not close Stage 6 and does not start
+  Stage 7; the closure posture remains `ready_to_close=false`,
+  `transition_allowed=false`, and
+  `next_smallest_truthful_gap=summon_anywhere_blockers`.
+
+Latest validation for Stage 6 prerequisite bring-up CI resident-readback wait hardening:
+
+- `python -m ruff check tests\test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed; 1 file already formatted`
+- `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_config_only tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_summon_execution_advances_to_enablement -q`
+  Result: `passed; 2 focused live tests exited 0`
+- `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py -q`
+  Result: `passed; 14-file-scope tests exited 0`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

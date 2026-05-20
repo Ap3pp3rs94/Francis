@@ -1206,6 +1206,12 @@ def _execute_prerequisites_through_overlay_window(
         reason="test refresh resident host lease before tray execution",
         service_config_path=service_config_path,
     )
+    _wait_for_next_action(
+        data_dir,
+        requirement="tray_presence",
+        action_id="execute_tray_presence",
+        service_config_path=service_config_path,
+    )
     tray_execution = _execute_next(
         data_dir,
         tray_approval_id,
@@ -1237,6 +1243,12 @@ def _execute_prerequisites_through_overlay_window(
         reason="test refresh resident host lease before hotkey execution",
         service_config_path=service_config_path,
     )
+    _wait_for_next_action(
+        data_dir,
+        requirement="global_hotkey_binding",
+        action_id="execute_global_hotkey_binding",
+        service_config_path=service_config_path,
+    )
     hotkey_execution = _execute_next(
         data_dir,
         hotkey_approval_id,
@@ -1266,6 +1278,12 @@ def _execute_prerequisites_through_overlay_window(
         monkeypatch,
         resident_approval_id,
         reason="test refresh resident host lease before overlay execution",
+        service_config_path=service_config_path,
+    )
+    _wait_for_next_action(
+        data_dir,
+        requirement="overlay_window",
+        action_id="execute_overlay_window",
         service_config_path=service_config_path,
     )
     overlay_execution = _execute_next(
@@ -2068,6 +2086,11 @@ def test_lens_stage6_prerequisite_bringup_summon_execution_advances_to_enablemen
         monkeypatch,
         chain["resident_approval_id"],
         reason="test refresh resident host lease before summon status readback",
+    )
+    _wait_for_next_action(
+        data_dir,
+        requirement="summon_binding",
+        action_id="request_summon_binding_authority",
     )
     summon_status = _run_plan("-Mode", "Status", "-DataDir", str(data_dir))
     assert summon_status.returncode == 0, summon_status.stderr or summon_status.stdout
