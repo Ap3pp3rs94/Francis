@@ -153,7 +153,7 @@ def test_lens_summon_api_execution_proof_executes_bounded_summon_handoff(
     assert checks["summon_authority_granted"]["status"] == "authority_granted"
     assert checks["api_execute_observed_bounded_summon_handoff"]["status"] == "summon_binding_observed"
     assert checks["summon_runtime_state_written"]["status"] == "summon_binding_observed"
-    assert checks["status_plan_consumed_live_summon_runtime"]["status"] == ""
+    assert checks["status_plan_consumed_live_summon_runtime"]["status"] == "required_before_enable_clear"
     assert checks["summon_receipt_readback_after_execute"]["status"] == "readback_ready"
     assert checks["summon_readiness_consumes_runtime_without_closure"]["status"] == "blocked"
     assert checks["api_stop_cleaned_real_overlay_window"]["status"] == "overlay_window_stopped"

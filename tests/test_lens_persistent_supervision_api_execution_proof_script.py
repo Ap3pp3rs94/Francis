@@ -172,7 +172,7 @@ def test_lens_persistent_supervision_api_execution_proof_executes_isolated_apply
     assert checks["authority_chain_granted"]["status"] == "authority_granted"
     assert checks["resident_tray_hotkey_overlay_started_before_apply"]["status"] == "ready"
     assert checks["api_execute_observed_bounded_summon_handoff"]["status"] == "summon_binding_observed"
-    assert checks["persistent_plan_consumed_required_runtime_prerequisites"]["status"] == ""
+    assert checks["persistent_plan_consumed_required_runtime_prerequisites"]["status"] == "required_before_enable_clear"
     assert checks["execution_readiness_reaches_resident_claim_boundary"]["status"] == "blocked"
     assert checks["execution_denial_before_apply_preserved"]["status"] == "denied_no_resident_claim_authority"
     assert checks["api_apply_updated_isolated_service_config"]["status"] == "service_config_updated"

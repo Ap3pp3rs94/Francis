@@ -35084,6 +35084,48 @@ Latest validation for Stage 6 foreground proof Windows state-readback tolerance:
   Result: `passed; branch state OK on main tracking origin/main; ruff lint
   passed; ruff format check passed; mypy passed; pytest passed`
 
+Stage 6 governed API proof check-status truthfulness on `2026-05-20`:
+
+- `scripts/lens-summon-api-execution-proof.ps1` now reports
+  `required_before_enable_clear` for
+  `status_plan_consumed_live_summon_runtime` when the governed bounded summon
+  proof clears the persistent-supervision prerequisite list. Previously this
+  successful check emitted an empty status string.
+- `scripts/lens-persistent-supervision-api-execution-proof.ps1` now reports
+  `required_before_enable_clear` for
+  `persistent_plan_consumed_required_runtime_prerequisites` when resident, tray,
+  hotkey, overlay, and summon runtime readbacks are all consumed before the
+  isolated persistent-supervision apply. Previously this successful check also
+  emitted an empty status string.
+- This is an operator-readback truthfulness correction only. It does not close
+  Stage 6, grant product execution authority, grant approval-decision authority,
+  claim OS-wide summon-anywhere readiness, install/control a service, write
+  memory, claim resident status, or change live runtime behavior.
+
+Latest validation for Stage 6 governed API proof check-status truthfulness:
+
+- PowerShell parser check for `scripts/lens-summon-api-execution-proof.ps1`
+  Result: `passed; parse_ok`
+- PowerShell parser check for
+  `scripts/lens-persistent-supervision-api-execution-proof.ps1`
+  Result: `passed; parse_ok`
+- `python -m ruff check tests/test_lens_summon_api_execution_proof_script.py tests/test_lens_persistent_supervision_api_execution_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_summon_api_execution_proof_script.py tests/test_lens_persistent_supervision_api_execution_proof_script.py`
+  Result: `passed; 2 files already formatted`
+- `python -m pytest tests/test_lens_summon_api_execution_proof_script.py tests/test_lens_persistent_supervision_api_execution_proof_script.py -q`
+  Result: `passed; 4 focused tests exited 0`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-api-execution-proof.ps1 -Mode Status -RunSeconds 5`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=summon_anywhere_runtime_readback;
+  status_plan_consumed_live_summon_runtime=required_before_enable_clear`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-api-execution-proof.ps1 -Mode Status -RunSeconds 5`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=stage6_lens_completion_audit;
+  persistent_plan_consumed_required_runtime_prerequisites=required_before_enable_clear`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

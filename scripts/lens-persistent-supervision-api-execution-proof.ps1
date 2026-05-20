@@ -693,7 +693,9 @@ def _run() -> tuple[int, dict[str, Any]]:
             ),
             _check(
                 "persistent_plan_consumed_required_runtime_prerequisites",
-                str(persistent_plan_after_summon.get("first_missing_required_before_enable") or ""),
+                "required_before_enable_clear"
+                if dependencies_ready_after_summon
+                else str(persistent_plan_after_summon.get("first_missing_required_before_enable") or "blocked"),
                 dependencies_ready_after_summon,
                 "/lens/status resident_host.persistent_supervision_plan",
                 "The persistent plan must consume resident, tray, hotkey, overlay, and summon readback before apply.",

@@ -565,7 +565,9 @@ def _run() -> tuple[int, dict[str, Any]]:
             ),
             _check(
                 "status_plan_consumed_live_summon_runtime",
-                str(persistent_plan.get("first_missing_required_before_enable") or ""),
+                "required_before_enable_clear"
+                if plan_consumed_summon
+                else str(persistent_plan.get("first_missing_required_before_enable") or "blocked"),
                 plan_consumed_summon,
                 "/lens/status resident_host.persistent_supervision_plan",
                 "The persistent supervision plan must consume live summon runtime and clear required-before-enable blockers.",
