@@ -35234,6 +35234,42 @@ Latest validation for Stage 6 summon-action CI hardening:
   broadening; branch state OK on main tracking origin/main; ruff lint passed;
   ruff format check passed; mypy passed; pytest passed`
 
+Stage 6 summon-preflight handoff readback alignment on `2026-05-20`:
+
+- `scripts/lens-summon-preflight.ps1 -Mode Status` now exposes the existing
+  first missing summon prerequisite as a recommended handoff instead of leaving
+  status-mode operators to infer the next proof from raw blocker groups.
+- The new status readback includes `recommended_handoff_source`,
+  `recommended_handoff`, `recommended_next_slice`, `recommended_proof_script`,
+  `authority_required`, `authority_granted`, `first_blocker_family`, and
+  `first_blocker_family_handoff`. On the current default repo posture this
+  points to the resident-host prerequisite and
+  `scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status`.
+- This is a readback alignment only. It does not register a hotkey, start or
+  supervise a process, open an overlay, grant resident runtime authority, or
+  claim `summon_anywhere=true`.
+- The Stage 6 completion audit still reports
+  `stage6_completion_reviewed=true`, `ready_to_close=false`, and
+  `next_smallest_truthful_gap=summon_anywhere_blockers`; the current
+  closure blocker remains resident summon-anywhere runtime, not CI.
+
+Latest validation for Stage 6 summon-preflight handoff readback alignment:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status`
+  Result: `passed; status=blocked; ok=true; stage6_completion_reviewed=true;
+  ready_to_close=false; next_smallest_truthful_gap=summon_anywhere_blockers;
+  recommended_proof_script=scripts/lens-summon-anywhere-blockers-proof.ps1
+  -Mode Status`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-preflight.ps1 -Mode Status`
+  Result: `passed; status=blocked; ok=true;
+  recommended_handoff_source=summon_preflight_first_missing_requirement_handoff;
+  recommended_next_slice=resolve_resident_host_process_before_summon_enablement;
+  recommended_proof_script=scripts/lens-resident-host-runtime-boundary-proof.ps1
+  -Mode Status; authority_required=resident_runtime_execution_authority;
+  authority_granted=false; first_blocker_family=resident_host`
+- `python -m pytest tests\test_lens_summon_preflight_script.py -q`
+  Result: `passed; 4 focused tests exited 0`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

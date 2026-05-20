@@ -631,6 +631,19 @@ $FirstMissingRequiredBeforeEnable = if (@($MissingRequiredBeforeEnable).Count -g
 } else {
   ''
 }
+$RecommendedHandoff = $FirstMissingRequirementHandoff
+$RecommendedHandoffObserved = $false
+$RecommendedHandoffSource = ''
+$RecommendedNextSlice = ''
+$RecommendedProofScript = ''
+$RecommendedAuthorityRequired = ''
+if (-not [string]::IsNullOrWhiteSpace([string]$RecommendedHandoff.id)) {
+  $RecommendedHandoffObserved = $true
+  $RecommendedHandoffSource = 'summon_preflight_first_missing_requirement_handoff'
+  $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
+  $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
+  $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
+}
 
 $Ready = $Blockers.Count -eq 0
 $Payload = [ordered]@{
@@ -650,6 +663,15 @@ $Payload = [ordered]@{
   required_before_enable_ready = (@($MissingRequiredBeforeEnable).Count -eq 0)
   first_missing_required_before_enable = $FirstMissingRequiredBeforeEnable
   first_missing_requirement_handoff = $FirstMissingRequirementHandoff
+  recommended_handoff_observed = $RecommendedHandoffObserved
+  recommended_handoff_source = $RecommendedHandoffSource
+  recommended_handoff = $RecommendedHandoff
+  recommended_next_slice = $RecommendedNextSlice
+  recommended_proof_script = $RecommendedProofScript
+  authority_required = $RecommendedAuthorityRequired
+  authority_granted = $false
+  first_blocker_family = if ($RecommendedHandoffObserved) { [string]$RecommendedHandoff.family } else { '' }
+  first_blocker_family_handoff = $RecommendedHandoff
   enablement_dependency_readback = @($RequiredBeforeEnableDependencyArray)
   resident_host_process_readback = $ResidentHostProcessReadback
   hotkey_runtime_readback = $HotkeyRuntimeReadback

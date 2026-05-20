@@ -75,6 +75,15 @@ def test_lens_summon_preflight_reports_disabled_hotkey_without_authority() -> No
     assert first_handoff["family"] == "resident_host"
     assert first_handoff["blocker"] == "resident_host_process_missing"
     assert first_handoff["next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
+    assert payload["recommended_handoff_observed"] is True
+    assert payload["recommended_handoff_source"] == "summon_preflight_first_missing_requirement_handoff"
+    assert payload["recommended_handoff"] == first_handoff
+    assert payload["recommended_next_slice"] == "resolve_resident_host_process_before_summon_enablement"
+    assert payload["recommended_proof_script"] == "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status"
+    assert payload["authority_required"] == "resident_runtime_execution_authority"
+    assert payload["authority_granted"] is False
+    assert payload["first_blocker_family"] == "resident_host"
+    assert payload["first_blocker_family_handoff"] == first_handoff
     dependencies = {item["id"]: item for item in payload["enablement_dependency_readback"]}
     assert list(dependencies) == expected_required_before_enable
     assert dependencies["resident_host_process"]["blockers"] == ["resident_host_process_missing"]
