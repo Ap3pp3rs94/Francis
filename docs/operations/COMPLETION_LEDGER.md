@@ -35391,23 +35391,32 @@ Latest validation for Stage 6 prerequisite bring-up applied-receipt handoff hard
   Result: `passed; branch state OK; Ruff check passed; Ruff format check passed;
   mypy passed; pytest completed 100% with expected skips`
 
-Stage 6 prerequisite bring-up CI resident-readback wait hardening on `2026-05-20`:
+Stage 6 prerequisite bring-up CI resident-readback and cleanup hardening on `2026-05-20`:
 
 - GitHub Actions run `26180193961` failed on Windows Python 3.13 in
   `tests/test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_config_only`.
   The live helper refreshed the resident-host lease, then immediately continued
   to later prerequisite execution before Status mode had confirmed the exact
   next operator action for that refreshed lease.
+- Follow-up GitHub Actions run `26182698798` fixed the Windows Python 3.13 lane
+  but failed on Windows Python 3.12 in the same final proof after the prior
+  summon test had passed. That failure occurred while starting the next hotkey
+  binding, matching a Windows live-resource cleanup race between sequential
+  hotkey tests rather than a product posture change.
 - The Stage 6 prerequisite bring-up helper now waits for the exact next action
   after resident-host lease refresh before executing tray, hotkey, overlay, or
   summon follow-up steps. This hardens the live proof against slower Windows
   CI readback propagation without changing the governed operator sequence.
+- The test teardown now uses one cleanup path that stops each live Stage 6
+  runtime script and waits until matching PowerShell runtime processes for the
+  test data directory have exited before the next live test can bind the global
+  hotkey.
 - This is CI proof hardening only. It does not close Stage 6 and does not start
   Stage 7; the closure posture remains `ready_to_close=false`,
   `transition_allowed=false`, and
   `next_smallest_truthful_gap=summon_anywhere_blockers`.
 
-Latest validation for Stage 6 prerequisite bring-up CI resident-readback wait hardening:
+Latest validation for Stage 6 prerequisite bring-up CI resident-readback and cleanup hardening:
 
 - `python -m ruff check tests\test_lens_stage6_prerequisite_bringup_plan_script.py`
   Result: `passed`
@@ -35415,6 +35424,8 @@ Latest validation for Stage 6 prerequisite bring-up CI resident-readback wait ha
   Result: `passed; 1 file already formatted`
 - `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_config_only tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_summon_execution_advances_to_enablement -q`
   Result: `passed; 2 focused live tests exited 0`
+- `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_summon_execution_advances_to_enablement tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_config_only -q`
+  Result: `passed; CI-failure-order live test pair exited 0`
 - `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py -q`
   Result: `passed; 14-file-scope tests exited 0`
 

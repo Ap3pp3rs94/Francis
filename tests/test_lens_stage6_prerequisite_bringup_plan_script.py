@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import platform
 import shutil
 import subprocess
@@ -11,6 +12,18 @@ from typing import Any, Iterator
 import pytest
 
 _LIVE_STAGE6_PREREQUISITE_RUN_SECONDS = "180"
+_STAGE6_RUNTIME_PROCESSES = (
+    "lens-hotkey-binding.ps1",
+    "lens-overlay-window.ps1",
+    "lens-tray-presence.ps1",
+    "lens-host-supervisor.ps1",
+)
+_STAGE6_RUNTIME_STOP_MODES = (
+    ("lens-hotkey-binding.ps1", "Stop"),
+    ("lens-overlay-window.ps1", "Stop"),
+    ("lens-tray-presence.ps1", "Stop"),
+    ("lens-host-supervisor.ps1", "StopResident"),
+)
 
 
 def _powershell() -> str:
@@ -81,6 +94,59 @@ def _run_lens_runtime_script(script_name: str, *args: str) -> None:
     )
 
 
+def _count_stage6_runtime_processes(data_dir: Path) -> int:
+    env = dict(os.environ)
+    env["FRANCIS_STAGE6_TEST_CLEANUP_DATA_DIR"] = str(data_dir)
+    process_filter = " -or ".join(
+        f"$_.CommandLine -like '*{process_name}*'" for process_name in _STAGE6_RUNTIME_PROCESSES
+    )
+    proc = subprocess.run(
+        [
+            _powershell(),
+            "-NoProfile",
+            "-Command",
+            (
+                "$DataDir = $env:FRANCIS_STAGE6_TEST_CLEANUP_DATA_DIR; "
+                "$CurrentPid = $PID; "
+                "$Matches = Get-CimInstance Win32_Process "
+                "-Filter \"Name = 'powershell.exe' OR Name = 'pwsh.exe'\" | "
+                'Where-Object { $_.ProcessId -ne $CurrentPid -and $_.CommandLine -like "*$DataDir*" -and ('
+                + process_filter
+                + ") }; "
+                "Write-Output ([string]@($Matches).Count)"
+            ),
+        ],
+        cwd=_repo_root(),
+        check=False,
+        text=True,
+        capture_output=True,
+        timeout=10,
+        env=env,
+    )
+    try:
+        return int((proc.stdout or "0").strip() or "0")
+    except ValueError:
+        return 0
+
+
+def _wait_for_stage6_runtime_processes_to_stop(data_dir: Path) -> None:
+    if platform.system() != "Windows":
+        return
+    remaining = 0
+    for _ in range(20):
+        remaining = _count_stage6_runtime_processes(data_dir)
+        if remaining == 0:
+            return
+        time.sleep(0.25)
+    assert remaining == 0, f"Stage 6 live test runtime processes still running for {data_dir}: {remaining}"
+
+
+def _stop_stage6_live_runtime_leases(data_dir: Path) -> None:
+    for script_name, mode in _STAGE6_RUNTIME_STOP_MODES:
+        _run_lens_runtime_script(script_name, "-Mode", mode, "-DataDir", str(data_dir))
+    _wait_for_stage6_runtime_processes_to_stop(data_dir)
+
+
 @pytest.fixture(autouse=True)
 def _cleanup_stage6_live_runtime_leases(tmp_path: Path) -> Iterator[None]:
     yield
@@ -90,10 +156,7 @@ def _cleanup_stage6_live_runtime_leases(tmp_path: Path) -> Iterator[None]:
     if not data_dir.exists():
         return
 
-    _run_lens_runtime_script("lens-hotkey-binding.ps1", "-Mode", "Stop", "-DataDir", str(data_dir))
-    _run_lens_runtime_script("lens-overlay-window.ps1", "-Mode", "Stop", "-DataDir", str(data_dir))
-    _run_lens_runtime_script("lens-tray-presence.ps1", "-Mode", "Stop", "-DataDir", str(data_dir))
-    _run_lens_runtime_script("lens-host-supervisor.ps1", "-Mode", "StopResident", "-DataDir", str(data_dir))
+    _stop_stage6_live_runtime_leases(data_dir)
 
 
 def _service_config_args(service_config_path: Path | None) -> tuple[str, ...]:
@@ -290,22 +353,6 @@ def _wait_for_next_action(
     assert payload["next_operator_action_requirement"] == requirement
     assert payload["next_operator_action"]["id"] == action_id
     return payload
-
-
-@pytest.fixture(autouse=True)
-def _cleanup_stage6_temp_runtimes(tmp_path: Path) -> Iterator[None]:
-    yield
-
-    data_dir = tmp_path / "data"
-    if not data_dir.exists():
-        return
-    for script_name, mode in (
-        ("lens-hotkey-binding.ps1", "Stop"),
-        ("lens-tray-presence.ps1", "Stop"),
-        ("lens-overlay-window.ps1", "Stop"),
-        ("lens-host-supervisor.ps1", "StopResident"),
-    ):
-        _run_lens_runtime_script(script_name, "-Mode", mode, "-DataDir", str(data_dir))
 
 
 def test_lens_stage6_prerequisite_bringup_plan_has_confirmed_request_and_grant_boundaries() -> None:
