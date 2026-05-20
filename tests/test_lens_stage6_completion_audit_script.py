@@ -710,6 +710,26 @@ def test_lens_stage6_completion_audit_observes_summon_family_chain_authority_gat
     assert "-not [bool]$SummonAnywhereFamilyChainProofFinalAuthority.authority_granted" in script
 
 
+def test_lens_stage6_completion_audit_prefers_closure_handoff_after_resident_claim_boundary() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    consumed_flag = "$Stage6CompletionAuditHandoffConsumedByClosureReadback = ("
+    closure_source = "$RecommendedHandoffSource = 'stage6_closure_readback_summon_anywhere_blockers'"
+    prerequisite_source = "$RecommendedHandoffSource = 'stage6_prerequisite_bringup_operator_plan'"
+
+    assert consumed_flag in script
+    assert (
+        "[string]$PersistentSupervisionResidentClaimBoundaryProof.next_smallest_truthful_gap "
+        "-eq 'stage6_lens_completion_audit'"
+    ) in script
+    assert "stage6_completion_audit_handoff_consumed_by_closure_readback" in script
+    assert closure_source in script
+    assert "next_step = 'run_summon_anywhere_blockers_proof_after_stage6_completion_review'" in script
+    assert "proof_script = 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status'" in script
+    assert script.index(consumed_flag) < script.index(closure_source)
+    assert script.index(closure_source) < script.index(prerequisite_source)
+
+
 @pytest.mark.skipif(
     os.environ.get(_FULL_AUDIT_ENV) != "1",
     reason=(

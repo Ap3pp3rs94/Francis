@@ -2377,7 +2377,57 @@ if (
   }
   $Stage6PrerequisiteBringupPlanRecommendedAuthorityRequired = $Stage6PrerequisiteBringupPlanNextOperatorAuthority
 }
+$Stage6CompletionAuditHandoffConsumedByClosureReadback = (
+  $NextSmallestTruthfulGap -eq 'summon_anywhere_blockers' -and
+  $Stage6CompletionReviewed -and
+  -not $ReadyToClose -and
+  $BlockedCriterionIds -contains 'summon_anywhere' -and
+  $PersistentSupervisionResidentClaimBoundaryObserved -and
+  [string]$PersistentSupervisionResidentClaimBoundaryProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
+  $SummonAnywhereBlockersProofObserved -and
+  $SummonAnywhereFamilyChainProofObserved -and
+  $SummonAnywhereBlockersProofFirstFamilyHandoffObserved
+)
 if (
+  $Stage6CompletionAuditHandoffConsumedByClosureReadback
+) {
+  $RecommendedHandoffSource = 'stage6_closure_readback_summon_anywhere_blockers'
+  $RecommendedHandoff = [ordered]@{
+    status = 'blocked'
+    previous_next_smallest_truthful_gap = 'stage6_lens_completion_audit'
+    consumed_summon_anywhere_next_smallest_truthful_gap = [string]$SummonAnywhereBlockersProof.next_smallest_truthful_gap
+    consumed_family_chain_next_smallest_truthful_gap = [string]$SummonAnywhereFamilyChainProof.next_smallest_truthful_gap
+    next_smallest_truthful_gap = 'summon_anywhere_blockers'
+    next_step = 'run_summon_anywhere_blockers_proof_after_stage6_completion_review'
+    proof_script = 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status'
+    route = '/lens/summon'
+    readiness_route = '/lens/summon/readiness'
+    acceptance_criterion = 'summon_anywhere'
+    first_blocker_family = [string]$SummonAnywhereBlockersProof.first_blocker_family
+    first_blocker_family_handoff = $SummonAnywhereBlockersProofFirstFamilyHandoff
+    blocker_families = [string[]]@(ConvertTo-StringArray -Value $SummonAnywhereBlockersProof.blocked_families)
+    blocked_family_handoffs = @($SummonAnywhereBlockersProofFamilyHandoffs)
+    stage6_prerequisite_bringup_plan_status = [string]$Stage6PrerequisiteBringupPlan.status
+    stage6_prerequisite_bringup_current_truthful_gap = [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap
+    stage6_prerequisite_bringup_next_operator_action_requirement = [string]$Stage6PrerequisiteBringupPlan.next_operator_action_requirement
+    persistent_supervision_resident_claim_boundary_next_smallest_truthful_gap = [string]$PersistentSupervisionResidentClaimBoundaryProof.next_smallest_truthful_gap
+    authority_required = 'summon_hotkey_overlay_and_process_authority'
+    authority_granted = $false
+    read_only_contract = $true
+    diagnostic_only = $true
+    would_execute = $false
+    would_mutate = $false
+    would_supervise_process = $false
+    would_register_hotkey = $false
+    would_control_overlay = $false
+    would_summon = $false
+    would_decide_approval = $false
+    blockers = [string[]]@($Blockers)
+  }
+  $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
+  $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
+  $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
+} elseif (
   $NextSmallestTruthfulGap -eq 'summon_anywhere_blockers' -and
   $Stage6PrerequisiteBringupPlanObserved -and
   $SummonAnywhereBlockersProofObserved -and
@@ -2653,6 +2703,7 @@ $Payload = [ordered]@{
   authority_required = $RecommendedAuthorityRequired
   authority_granted = $RecommendedAuthorityGranted
   recommended_handoff = $RecommendedHandoff
+  stage6_completion_audit_handoff_consumed_by_closure_readback = $Stage6CompletionAuditHandoffConsumedByClosureReadback
   persistent_supervision_first_missing_required_before_enable = $PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable
   persistent_supervision_first_missing_requirement_handoff = $PersistentSupervisionPrerequisitesFirstMissingRequirementHandoff
   next_smallest_truthful_gap_basis = if ($NextSmallestTruthfulGap -eq 'stage6_lens_completion_audit') {
@@ -4310,6 +4361,7 @@ $Payload = [ordered]@{
     checkpoint_summon_enablement_gate_handoff_readback = $CheckpointSummonEnablementGateHandoffObserved
     summon_authority_blocker_proof_readback = $SummonAuthorityBlockerProofObserved
     summon_anywhere_family_chain_proof_readback = $SummonAnywhereFamilyChainProofObserved
+    stage6_completion_audit_handoff_consumed_by_closure_readback = $Stage6CompletionAuditHandoffConsumedByClosureReadback
     process_supervision_boundary_observed = [bool]$ProcessSupervisionBoundary.process_supervision_boundary_observed
     service_activation_plan_observed = [bool]$ProcessSupervisionBoundary.service_activation_plan_observed
     execution_authority = $false
