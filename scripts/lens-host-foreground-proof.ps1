@@ -247,7 +247,8 @@ $RunningPid = [int](Get-PropertyValue -Payload $RunningState -Name 'pid' -Defaul
 $StatusPayload = Get-PropertyValue -Payload $StatusResult -Name 'payload'
 $StatusProcess = Get-PropertyValue -Payload $StatusPayload -Name 'process_readback'
 $StatusPid = [int](Get-PropertyValue -Payload $StatusProcess -Name 'pid' -Default 0)
-$StatusState = [string](Get-PropertyValue -Payload $StatusProcess -Name 'state_status' -Default '')
+$RawStatusState = [string](Get-PropertyValue -Payload $StatusProcess -Name 'state_status' -Default '')
+$StatusState = if ([string]::IsNullOrWhiteSpace($RawStatusState)) { 'unreadable' } else { $RawStatusState }
 $ForegroundObserved = (
   $ProofStarted -and
   [string](Get-PropertyValue -Payload $RunningState -Name 'status' -Default '') -eq 'foreground_running' -and

@@ -35270,6 +35270,28 @@ Latest validation for Stage 6 summon-preflight handoff readback alignment:
 - `python -m pytest tests\test_lens_summon_preflight_script.py -q`
   Result: `passed; 4 focused tests exited 0`
 
+Stage 6 foreground proof CI state-readback hardening on `2026-05-20`:
+
+- GitHub Actions run `26167736153` failed on Windows Python 3.13 in
+  `tests/test_lens_host_foreground_proof_script.py::test_lens_host_foreground_proof_observes_bounded_process_without_authority`.
+  The bounded foreground process and PID were observed and the process stopped
+  cleanly, but the status runner returned a blank `state_status` for the same
+  live PID. The proof already accepts transient unreadable state readback on
+  Windows; blank state is now normalized into that same `unreadable` path.
+- This preserves the existing boundary: the proof remains diagnostic-only,
+  writes only temporary runtime state, does not supervise a resident process,
+  does not grant process authority, and does not claim Stage 6 resident or
+  summon-anywhere closure.
+
+Latest validation for Stage 6 foreground proof CI state-readback hardening:
+
+- `python -m pytest tests\test_lens_host_foreground_proof_script.py -q`
+  Result: `passed; 1 focused test exited 0`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-host-foreground-proof.ps1 -Mode Status -RunSeconds 8`
+  Result: `passed; status=proof_passed; ok=true;
+  foreground_process_observed=true; foreground_status_readback_matched=true;
+  foreground_completed=true`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
