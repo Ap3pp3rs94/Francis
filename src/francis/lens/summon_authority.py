@@ -33,6 +33,8 @@ _MIN_LEASE_SECONDS = 60
 _MAX_LEASE_SECONDS = 24 * 60 * 60
 _DEFAULT_RUN_SECONDS = 5
 _MAX_RUN_SECONDS = 60
+_SUMMON_ACTION_RUNNER_MAX_ATTEMPTS = 3
+_SUMMON_ACTION_RUNNER_RETRY_SECONDS = 0.5
 
 
 def _safe_str(value: Any) -> str:
@@ -935,46 +937,89 @@ def _run_lens_summon_action(*, mode: str, run_seconds: int, allow_launch: bool) 
     env = dict(os.environ)
     env.setdefault("FRANCIS_ROOT", str(root))
     env.setdefault("FRANCIS_DATA_DIR", str(data_dir()))
-    try:
-        completed = subprocess.run(
-            command,
-            cwd=str(root),
-            env=env,
-            text=True,
-            capture_output=True,
-            timeout=120,
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        return {
-            "ok": False,
-            "status": "summon_action_timeout",
-            "script_mode": "Launch",
-            "blockers": ["lens_summon_action_timeout"],
-            "script": "scripts/lens-summon-action.ps1",
-        }
-    except OSError as exc:
-        return {
-            "ok": False,
-            "status": "summon_action_launch_failed",
-            "script_mode": "Launch",
-            "blockers": ["lens_summon_action_failed"],
-            "error": _redact_free_text(str(exc)),
-            "script": "scripts/lens-summon-action.ps1",
-        }
+    attempts: list[dict[str, Any]] = []
+    for attempt_number in range(1, _SUMMON_ACTION_RUNNER_MAX_ATTEMPTS + 1):
+        try:
+            completed = subprocess.run(
+                command,
+                cwd=str(root),
+                env=env,
+                text=True,
+                capture_output=True,
+                timeout=120,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            attempt = {
+                "ok": False,
+                "status": "summon_action_timeout",
+                "attempt": attempt_number,
+                "returncode": None,
+                "script_mode": "Launch",
+                "script": "scripts/lens-summon-action.ps1",
+                "runner": {},
+                "blockers": ["lens_summon_action_timeout"],
+                "stderr": "",
+            }
+            attempts.append(attempt)
+            return {
+                **attempt,
+                "attempt_count": attempt_number,
+                "attempts": attempts,
+            }
+        except OSError as exc:
+            attempt = {
+                "ok": False,
+                "status": "summon_action_launch_failed",
+                "attempt": attempt_number,
+                "returncode": None,
+                "script_mode": "Launch",
+                "script": "scripts/lens-summon-action.ps1",
+                "runner": {},
+                "blockers": ["lens_summon_action_failed"],
+                "error": _redact_free_text(str(exc)),
+                "stderr": "",
+            }
+            attempts.append(attempt)
+            return {
+                **attempt,
+                "attempt_count": attempt_number,
+                "attempts": attempts,
+            }
 
-    payload = _parse_json_process_stdout(completed.stdout)
-    runner_ok = completed.returncode == 0 and bool(payload.get("ok"))
-    stderr = (completed.stderr or "").strip()
+        payload = _parse_json_process_stdout(completed.stdout)
+        runner_ok = completed.returncode == 0 and bool(payload.get("ok"))
+        stderr = (completed.stderr or "").strip()
+        attempt = {
+            "ok": runner_ok,
+            "status": _safe_str(payload.get("status")).strip() or "summon_action_failed",
+            "attempt": attempt_number,
+            "returncode": completed.returncode,
+            "script_mode": "Launch",
+            "script": "scripts/lens-summon-action.ps1",
+            "runner": _display(payload),
+            "blockers": _str_list(payload.get("blockers")),
+            "stderr": _redact_free_text(stderr[:500]) if stderr else "",
+        }
+        attempts.append(attempt)
+        if runner_ok or attempt_number == _SUMMON_ACTION_RUNNER_MAX_ATTEMPTS:
+            return {
+                **attempt,
+                "attempt_count": attempt_number,
+                "attempts": attempts,
+            }
+        time.sleep(_SUMMON_ACTION_RUNNER_RETRY_SECONDS)
+
     return {
-        "ok": runner_ok,
-        "status": _safe_str(payload.get("status")).strip() or "summon_action_failed",
-        "returncode": completed.returncode,
+        "ok": False,
+        "status": "summon_action_failed",
+        "attempt_count": len(attempts),
+        "attempts": attempts,
         "script_mode": "Launch",
         "script": "scripts/lens-summon-action.ps1",
-        "runner": _display(payload),
-        "blockers": _str_list(payload.get("blockers")),
-        "stderr": _redact_free_text(stderr[:500]) if stderr else "",
+        "runner": {},
+        "blockers": ["lens_summon_action_failed"],
+        "stderr": "",
     }
 
 

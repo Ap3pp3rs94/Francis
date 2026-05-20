@@ -35202,6 +35202,38 @@ Latest validation for Stage 6 summon-family proof handoff readback promotion:
   Result: `passed; branch state OK on main tracking origin/main; ruff lint
   passed; ruff format check passed; mypy passed; pytest passed`
 
+Stage 6 summon-action CI hardening on `2026-05-20`:
+
+- `src/francis/lens/summon_authority.py` now records bounded retry attempts
+  around the existing `scripts/lens-summon-action.ps1 -Mode Launch` runner.
+  A transient non-OK handoff/preflight result is retried up to three times with
+  each attempt preserved in `attempts` and `attempt_count`.
+- The retry path does not bypass preflight, does not create fake runtime state,
+  does not grant approval-decision authority, does not register a hotkey, does
+  not claim OS-wide summon-anywhere readiness, and still reports the final
+  runner/readback payload as the execution truth source.
+- `tests/test_lens_stage6_prerequisite_bringup_plan_script.py` now refreshes
+  the bounded resident-host lease before the standalone overlay-readiness
+  assertion. This matches the existing longer helper path and prevents the
+  plan from truthfully falling back to `resident_host_process` after the
+  resident lease ages out during slow Windows process tests.
+- The same bringup test harness now formats failed RequestNext/GrantNext/
+  ExecuteNext subprocess payloads into bounded JSON diagnostics so CI logs
+  expose the underlying status instead of a swallowed one-line payload.
+
+Latest validation for Stage 6 summon-action CI hardening:
+
+- `python -m ruff check src/francis/lens/summon_authority.py tests/test_api_lens.py tests/test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/lens/summon_authority.py tests/test_api_lens.py tests/test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed; 3 files already formatted`
+- `python -m pytest tests/test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_overlay_execution_advances_to_summon tests/test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_config_only tests/test_api_lens.py::test_lens_summon_action_runner_retries_transient_preflight_failure -q`
+  Result: `passed; 3 focused tests exited 0`
+- `.\scripts\check.ps1`
+  Result: `passed before the final GrantNext/ExecuteNext diagnostic-message
+  broadening; branch state OK on main tracking origin/main; ruff lint passed;
+  ruff format check passed; mypy passed; pytest passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

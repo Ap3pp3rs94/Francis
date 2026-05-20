@@ -48,6 +48,20 @@ def _run_plan(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _process_failure_message(proc: subprocess.CompletedProcess[str]) -> str:
+    parts = [f"returncode={proc.returncode}"]
+    stdout = (proc.stdout or "").strip()
+    stderr = (proc.stderr or "").strip()
+    if stdout:
+        try:
+            parts.append(json.dumps(json.loads(stdout), indent=2, sort_keys=True)[:5000])
+        except json.JSONDecodeError:
+            parts.append(stdout[:5000])
+    if stderr:
+        parts.append(stderr[:2000])
+    return "\n".join(parts)
+
+
 def _run_lens_runtime_script(script_name: str, *args: str) -> None:
     subprocess.run(
         [
@@ -110,7 +124,7 @@ def _status_payload(
     service_config_path: Path | None = None,
 ) -> dict[str, Any]:
     proc = _run_plan("-Mode", "Status", "-DataDir", str(data_dir), *_service_config_args(service_config_path))
-    assert proc.returncode == 0, proc.stderr or proc.stdout
+    assert proc.returncode == 0, _process_failure_message(proc)
     return json.loads(proc.stdout)
 
 
@@ -339,7 +353,7 @@ def test_lens_stage6_prerequisite_bringup_plan_projects_ordered_governed_sequenc
 ) -> None:
     proc = _run_plan("-Mode", "Status", "-DataDir", str(tmp_path / "data"))
 
-    assert proc.returncode == 0, proc.stderr or proc.stdout
+    assert proc.returncode == 0, _process_failure_message(proc)
     payload = json.loads(proc.stdout)
 
     assert payload["kind"] == "lens.stage6.prerequisite_bringup.plan"
@@ -769,7 +783,7 @@ def _request_next(
         reason,
         "-ConfirmRequest",
     )
-    assert proc.returncode == 0, proc.stderr or proc.stdout
+    assert proc.returncode == 0, _process_failure_message(proc)
     return json.loads(proc.stdout)
 
 
@@ -1884,6 +1898,12 @@ def test_lens_stage6_prerequisite_bringup_overlay_execution_advances_to_summon(
     assert overlay_grant["grant_result"]["action_id"] == "grant_overlay_window_authority"
     assert overlay_grant["grant_result"]["authority_granted"] is True
 
+    _refresh_resident_host_lease(
+        data_dir,
+        monkeypatch,
+        resident_approval_id,
+        reason="test refresh resident host lease before overlay readiness",
+    )
     overlay_ready = _run_plan("-Mode", "Status", "-DataDir", str(data_dir))
     assert overlay_ready.returncode == 0, overlay_ready.stderr or overlay_ready.stdout
     overlay_ready_payload = json.loads(overlay_ready.stdout)

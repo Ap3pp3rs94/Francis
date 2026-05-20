@@ -10779,6 +10779,77 @@ def test_lens_overlay_execute_starts_and_stops_governed_overlay_lease(
     assert stopped_body["receipt_written"] is True
 
 
+def test_lens_summon_action_runner_retries_transient_preflight_failure(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    scripts_root = repo_root / "scripts"
+    config_root = repo_root / "config" / "runtime" / "lens"
+    scripts_root.mkdir(parents=True)
+    config_root.mkdir(parents=True)
+    (scripts_root / "lens-summon-action.ps1").write_text("# test stub\n", encoding="utf-8")
+    (config_root / "summon.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    import francis.lens.summon_authority as summon_authority_module
+
+    payloads: list[dict[str, Any]] = [
+        {
+            "returncode": 1,
+            "payload": {
+                "ok": False,
+                "status": "blocked_by_preflight",
+                "blockers": ["chat_ui_command_palette_local_open_missing"],
+            },
+        },
+        {
+            "returncode": 0,
+            "payload": {
+                "ok": True,
+                "status": "handoff_completed",
+                "blockers": [],
+                "bounded_handoff": {
+                    "status": "local_open_ready",
+                    "payload": {"status": "local_open_ready"},
+                },
+            },
+        },
+    ]
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
+        calls.append(command)
+        payload = payloads.pop(0)
+        return subprocess.CompletedProcess(
+            command,
+            payload["returncode"],
+            json.dumps(payload["payload"]),
+            "",
+        )
+
+    monkeypatch.setattr(summon_authority_module, "_powershell_path", lambda: "pwsh")
+    monkeypatch.setattr(summon_authority_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(summon_authority_module.time, "sleep", lambda _: None)
+
+    result = summon_authority_module._run_lens_summon_action(
+        mode="launch",
+        run_seconds=1,
+        allow_launch=False,
+    )
+
+    assert result["ok"] is True
+    assert result["status"] == "handoff_completed"
+    assert result["attempt_count"] == 2
+    assert len(result["attempts"]) == 2
+    assert result["attempts"][0]["status"] == "blocked_by_preflight"
+    assert result["attempts"][1]["status"] == "handoff_completed"
+    assert result["runner"]["status"] == "handoff_completed"
+    assert len(calls) == 2
+
+
 def test_lens_summon_execute_records_bounded_handoff_without_summon_anywhere_claim(
     monkeypatch,
     tmp_path: Path,
