@@ -1327,6 +1327,49 @@ def _stage6_next_handoff_readback(
     enablement_execution_blockers = [
         _safe_str(item).strip() for item in _as_list(enablement_execution_readiness.get("blockers"))
     ]
+    enablement_execution_receipts = _as_dict(resident_host.get("persistent_supervision_enablement_execution_receipts"))
+    enablement_execution_receipt_latest = _as_dict(enablement_execution_receipts.get("latest"))
+    enablement_execution_receipt_post_plan = _as_dict(enablement_execution_receipt_latest.get("post_plan"))
+    enablement_execution_receipt_status = _safe_str(enablement_execution_receipt_latest.get("status")).strip()
+    enablement_execution_receipt_gap = _safe_str(
+        enablement_execution_receipt_post_plan.get("next_smallest_truthful_gap")
+    ).strip()
+    enablement_receipt_review_observed = (
+        _safe_str(enablement_execution_receipts.get("kind")).strip()
+        == "lens.host.persistent_supervision_enablement_execution.receipts"
+        and _safe_str(enablement_execution_receipts.get("status")).strip() == "readback_ready"
+        and int(enablement_execution_receipts.get("total") or 0) > 0
+        and enablement_execution_receipt_status in {"service_config_updated", "service_config_already_enabled"}
+        and bool(enablement_execution_receipts.get("persistent_supervision_enablement_allowed"))
+        and bool(enablement_execution_receipts.get("persistent_supervision_ready"))
+        and not bool(enablement_execution_receipts.get("resident_claim_allowed"))
+        and enablement_execution_receipt_gap == "persistent_supervision_execution_boundary"
+    )
+    enablement_receipt_review_handoff: dict[str, Any] = {}
+    if enablement_receipt_review_observed:
+        enablement_receipt_review_handoff = {
+            "status": "receipt_reviewed",
+            "previous_next_smallest_truthful_gap": "persistent_supervision_execution_boundary",
+            "next_smallest_truthful_gap": "persistent_supervision_resident_claim_authority_boundary",
+            "next_step": "review_persistent_supervision_resident_claim_boundary_without_runtime_start",
+            "proof_script": "scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status",
+            "route": _safe_str(enablement_execution_receipts.get("route")).strip()
+            or "/lens/host/persistent-supervision/enablement/executions",
+            "readiness_route": _safe_str(enablement_execution_receipts.get("readiness_route")).strip()
+            or "/lens/host/persistent-supervision/enablement/execution/readiness",
+            "execution_route": _safe_str(enablement_execution_receipts.get("execution_route")).strip()
+            or "/lens/host/persistent-supervision/enablement/execution",
+            "latest_receipt_id": _safe_str(enablement_execution_receipt_latest.get("receipt_id")).strip()
+            or _safe_str(enablement_execution_receipt_latest.get("id")).strip(),
+            "latest_receipt_status": enablement_execution_receipt_status,
+            "post_plan_next_smallest_truthful_gap": enablement_execution_receipt_gap,
+            "authority_required": "resident_claim_authority",
+            "authority_granted": False,
+            "read_only_contract": True,
+            "diagnostic_only": True,
+            "would_execute": False,
+            "would_mutate": False,
+        }
     enablement_authority_handoff_observed = (
         _safe_str(enablement_authority_readiness.get("kind")).strip()
         == "lens.host.persistent_supervision_enablement_authority.readiness_audit"
@@ -1504,6 +1547,16 @@ def _stage6_next_handoff_readback(
         recommended_readiness_route = _safe_str(resident_candidate_handoff.get("readiness_route")).strip()
         authority_required = _safe_str(resident_candidate_handoff.get("authority_required")).strip()
 
+    if enablement_receipt_review_observed:
+        recommended_handoff_source = "persistent_supervision_enablement_receipt_review_handoff"
+        recommended_handoff = enablement_receipt_review_handoff
+        next_gap = _safe_str(enablement_receipt_review_handoff.get("next_smallest_truthful_gap")).strip()
+        recommended_next_slice = _safe_str(enablement_receipt_review_handoff.get("next_step")).strip()
+        recommended_proof_script = _safe_str(enablement_receipt_review_handoff.get("proof_script")).strip()
+        recommended_route = _safe_str(enablement_receipt_review_handoff.get("route")).strip()
+        recommended_readiness_route = _safe_str(enablement_receipt_review_handoff.get("readiness_route")).strip()
+        authority_required = _safe_str(enablement_receipt_review_handoff.get("authority_required")).strip()
+
     recommended_first_missing_authority_required = _safe_str(first_missing_handoff.get("authority_required")).strip()
     first_missing_handoff_next_gap = _safe_str(first_missing_handoff.get("next_smallest_truthful_gap")).strip()
     if first_missing_handoff_ready:
@@ -1568,6 +1621,8 @@ def _stage6_next_handoff_readback(
         "activation_execution_handoff": activation_execution_handoff if activation_execution_handoff_ready else {},
         "persistent_supervision_enablement_authority_handoff_observed": enablement_authority_handoff_observed,
         "persistent_supervision_enablement_authority_handoff": enablement_authority_handoff,
+        "persistent_supervision_enablement_receipt_review_handoff_observed": enablement_receipt_review_observed,
+        "persistent_supervision_enablement_receipt_review_handoff": enablement_receipt_review_handoff,
         "resident_runtime_candidate_handoff_observed": resident_candidate_observed,
         "resident_runtime_candidate_handoff": resident_candidate_handoff,
         "governance": {

@@ -5794,6 +5794,98 @@ def test_stage6_prerequisite_bringup_applied_receipt_wins_over_stale_prerequisit
     assert payload["would_mutate"] is False
 
 
+def test_stage6_next_handoff_consumes_enablement_receipt_review_over_stale_first_missing() -> None:
+    from francis.lens.status import _stage6_next_handoff_readback
+
+    first_missing_handoff = {
+        "id": "resident_host_process",
+        "next_smallest_truthful_gap": "resident_host_process_not_supervised",
+        "next_step": "resolve_resident_host_process_before_persistent_supervision_enablement",
+        "proof_script": "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status",
+        "route": "/lens/host",
+        "readiness_route": "/lens/host/runtime-loop/readiness",
+        "authority_required": "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites",
+        "authority_granted": False,
+        "read_only_contract": True,
+        "diagnostic_only": True,
+        "would_execute": False,
+        "would_mutate": False,
+    }
+
+    payload = _stage6_next_handoff_readback(
+        closure_readback={
+            "ready_to_close": False,
+            "next_smallest_truthful_gap": "summon_anywhere_blockers",
+            "blocked_criteria": ["summon_anywhere"],
+            "criteria": [
+                {
+                    "id": "summon_anywhere",
+                    "status": "blocked",
+                    "next_smallest_truthful_gap": "summon_anywhere_blockers",
+                    "handoff": {},
+                }
+            ],
+        },
+        resident_host={
+            "persistent_supervision_plan": {
+                "required_before_enable_ready": False,
+                "missing_required_before_enable": ["resident_host_process"],
+                "first_missing_required_before_enable": "resident_host_process",
+                "first_missing_requirement_handoff": first_missing_handoff,
+            },
+            "persistent_supervision_enablement": {
+                "required_before_enable_ready": False,
+                "missing_required_before_enable": ["resident_host_process"],
+            },
+            "persistent_supervision_enablement_execution_receipts": {
+                "kind": "lens.host.persistent_supervision_enablement_execution.receipts",
+                "status": "readback_ready",
+                "route": "/lens/host/persistent-supervision/enablement/executions",
+                "readiness_route": "/lens/host/persistent-supervision/enablement/execution/readiness",
+                "execution_route": "/lens/host/persistent-supervision/enablement/execution",
+                "total": 1,
+                "persistent_supervision_enablement_allowed": True,
+                "persistent_supervision_ready": True,
+                "resident_claim_allowed": False,
+                "latest": {
+                    "status": "service_config_already_enabled",
+                    "receipt_id": "lpsee_applied",
+                    "post_plan": {
+                        "next_smallest_truthful_gap": "persistent_supervision_execution_boundary",
+                    },
+                },
+            },
+        },
+    )
+
+    assert payload["recommended_handoff_source"] == "persistent_supervision_enablement_receipt_review_handoff"
+    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_resident_claim_authority_boundary"
+    assert (
+        payload["recommended_next_slice"]
+        == "review_persistent_supervision_resident_claim_boundary_without_runtime_start"
+    )
+    assert payload["recommended_proof_script"] == (
+        "scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status"
+    )
+    assert payload["recommended_route"] == "/lens/host/persistent-supervision/enablement/executions"
+    assert payload["authority_required"] == "resident_claim_authority"
+    assert payload["authority_granted"] is False
+    assert payload["persistent_supervision_enablement_receipt_review_handoff_observed"] is True
+    handoff = payload["persistent_supervision_enablement_receipt_review_handoff"]
+    assert handoff["status"] == "receipt_reviewed"
+    assert handoff["latest_receipt_id"] == "lpsee_applied"
+    assert handoff["read_only_contract"] is True
+    assert handoff["diagnostic_only"] is True
+    assert handoff["would_execute"] is False
+    assert handoff["would_mutate"] is False
+    assert payload["recommended_first_missing_handoff_source"] == (
+        "persistent_supervision_first_missing_requirement_handoff"
+    )
+    assert payload["recommended_first_missing_next_slice"] == (
+        "resolve_resident_host_process_before_persistent_supervision_enablement"
+    )
+
+
 def test_stage6_prerequisite_bringup_surface_execute_action_uses_active_authority_grant() -> None:
     from francis.lens.status import (
         _stage6_authority_state,
