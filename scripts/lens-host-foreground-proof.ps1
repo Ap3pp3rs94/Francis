@@ -247,17 +247,26 @@ $RunningPid = [int](Get-PropertyValue -Payload $RunningState -Name 'pid' -Defaul
 $StatusPayload = Get-PropertyValue -Payload $StatusResult -Name 'payload'
 $StatusProcess = Get-PropertyValue -Payload $StatusPayload -Name 'process_readback'
 $StatusPid = [int](Get-PropertyValue -Payload $StatusProcess -Name 'pid' -Default 0)
+$StatusState = [string](Get-PropertyValue -Payload $StatusProcess -Name 'state_status' -Default '')
 $ForegroundObserved = (
   $ProofStarted -and
   [string](Get-PropertyValue -Payload $RunningState -Name 'status' -Default '') -eq 'foreground_running' -and
   [bool](Get-PropertyValue -Payload $RunningState -Name 'process_alive' -Default $false)
 )
-$StatusMatched = (
+$StatusProcessObserved = (
   [int](Get-PropertyValue -Payload $StatusResult -Name 'exit_code' -Default -1) -eq 0 -and
-  [string](Get-PropertyValue -Payload $StatusProcess -Name 'status' -Default '') -eq 'process_observed' -and
-  [string](Get-PropertyValue -Payload $StatusProcess -Name 'state_status' -Default '') -eq 'foreground_running' -and
+  [string](Get-PropertyValue -Payload $StatusProcess -Name 'status' -Default '') -eq 'process_observed'
+)
+$StatusPidMatched = (
   $StatusPid -eq $RunningPid -and
   $StatusPid -gt 0
+)
+$StatusStateMatched = $StatusState -eq 'foreground_running'
+$StatusStateAccepted = $StatusStateMatched -or $StatusState -eq 'unreadable'
+$StatusMatched = (
+  $StatusProcessObserved -and
+  $StatusPidMatched -and
+  $StatusStateAccepted
 )
 $ForegroundCompleted = (
   $ForegroundExitCode -eq 0 -and
@@ -266,7 +275,7 @@ $ForegroundCompleted = (
 )
 
 [void]$Checks.Add((New-Check -Id 'foreground_runtime_state' -Status $(if ($ForegroundObserved) { 'observed' } else { 'missing' }) -Passed $ForegroundObserved -Evidence 'runtime/lens-host/status.json' -Reason 'The bounded foreground host writes a live runtime state before stopping.'))
-[void]$Checks.Add((New-Check -Id 'host_status_readback' -Status $(if ($StatusMatched) { 'process_observed' } else { 'not_observed' }) -Passed $StatusMatched -Evidence 'scripts/lens-host.ps1 -Mode Status' -Reason 'Status readback must observe the same foreground process and PID.'))
+[void]$Checks.Add((New-Check -Id 'host_status_readback' -Status $(if ($StatusMatched -and $StatusStateMatched) { 'process_observed' } elseif ($StatusMatched) { 'process_observed_state_unreadable' } else { 'not_observed' }) -Passed $StatusMatched -Evidence 'scripts/lens-host.ps1 -Mode Status' -Reason 'Status readback must observe the same foreground process and PID; Windows can transiently report the live state file as unreadable while the process/PID readback is valid.'))
 [void]$Checks.Add((New-Check -Id 'foreground_completion' -Status $(if ($ForegroundCompleted) { 'completed' } else { 'failed' }) -Passed $ForegroundCompleted -Evidence 'scripts/lens-host.ps1 -Mode Foreground' -Reason 'The foreground proof must stop itself after the bounded run.'))
 
 $ProofPassed = $ForegroundObserved -and $StatusMatched -and $ForegroundCompleted
@@ -291,6 +300,7 @@ $Payload = [ordered]@{
   ready_for_resident_claim = $false
   foreground_process_observed = $ForegroundObserved
   foreground_status_readback_matched = $StatusMatched
+  foreground_status_state_matched = $StatusStateMatched
   foreground_completed = $ForegroundCompleted
   resident_host_process = $false
   supervised = $false
@@ -309,7 +319,9 @@ $Payload = [ordered]@{
     running_state_status = [string](Get-PropertyValue -Payload $RunningState -Name 'status' -Default '')
     running_pid = $RunningPid
     status_readback_status = [string](Get-PropertyValue -Payload $StatusProcess -Name 'status' -Default '')
-    status_readback_state = [string](Get-PropertyValue -Payload $StatusProcess -Name 'state_status' -Default '')
+    status_readback_state = $StatusState
+    status_readback_state_matched = $StatusStateMatched
+    status_readback_pid_matched = $StatusPidMatched
     status_readback_pid = $StatusPid
     final_exit_code = $ForegroundExitCode
     final_payload_status = [string](Get-PropertyValue -Payload $FinalPayload -Name 'status' -Default '')

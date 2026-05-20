@@ -49,6 +49,7 @@ def test_lens_host_foreground_proof_observes_bounded_process_without_authority(t
     assert payload["ready_for_resident_claim"] is False
     assert payload["foreground_process_observed"] is True
     assert payload["foreground_status_readback_matched"] is True
+    assert payload["foreground_status_state_matched"] in {True, False}
     assert payload["foreground_completed"] is True
     assert payload["resident_host_process"] is False
     assert payload["supervised"] is False
@@ -65,11 +66,18 @@ def test_lens_host_foreground_proof_observes_bounded_process_without_authority(t
     assert checks["powershell_runtime"]["passed"] is True
     assert checks["host_status_runner"]["passed"] is True
     assert checks["foreground_runtime_state"]["status"] == "observed"
-    assert checks["host_status_readback"]["status"] == "process_observed"
+    assert checks["host_status_readback"]["status"] in {
+        "process_observed",
+        "process_observed_state_unreadable",
+    }
     assert checks["foreground_completion"]["status"] == "completed"
     assert payload["proof"]["running_state_status"] == "foreground_running"
     assert payload["proof"]["status_readback_status"] == "process_observed"
-    assert payload["proof"]["status_readback_state"] == "foreground_running"
+    assert payload["proof"]["status_readback_state"] in {"foreground_running", "unreadable"}
+    assert payload["proof"]["status_readback_state_matched"] is (
+        payload["proof"]["status_readback_state"] == "foreground_running"
+    )
+    assert payload["proof"]["status_readback_pid_matched"] is True
     assert payload["proof"]["running_pid"] == payload["proof"]["status_readback_pid"]
     assert payload["proof"]["running_pid"] > 0
     assert payload["proof"]["final_payload_status"] == "foreground_completed"

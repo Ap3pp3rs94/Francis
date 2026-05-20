@@ -35051,6 +35051,39 @@ Latest validation for Stage 6 completion-audit closure handoff alignment:
   Result: `passed; branch state OK on main tracking origin/main; ruff lint
   passed; ruff format check passed; mypy passed; pytest passed`
 
+Stage 6 foreground proof Windows state-readback tolerance on `2026-05-20`:
+
+- `scripts/lens-host-foreground-proof.ps1` now treats a live
+  `process_observed` status readback with matching PID as a valid foreground
+  process readback even when Windows transiently reports the live state file as
+  `unreadable`. The proof exposes `foreground_status_state_matched`,
+  `status_readback_state_matched`, and `status_readback_pid_matched` separately
+  so callers can distinguish process/PID proof from strict state-file proof.
+- This is a CI hardening fix for the bounded foreground diagnostic. It does not
+  claim resident-host status, process supervision, service control, tray,
+  hotkey, overlay, summon-anywhere, memory-write, resident-claim, or
+  approval-decision authority.
+
+Latest validation for Stage 6 foreground proof Windows state-readback tolerance:
+
+- PowerShell parser check for `scripts/lens-host-foreground-proof.ps1`
+  Result: `passed; parse_ok`
+- `python -m pytest tests\test_lens_host_foreground_proof_script.py tests\test_lens_host_supervision_proof_script.py -q`
+  Result: `passed; 2 passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed; 37 passed, 1 skipped`
+- `python -m ruff check tests\test_lens_host_foreground_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_host_foreground_proof_script.py tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 2 files already formatted`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-host-foreground-proof.ps1 -Mode Status -RunSeconds 8`
+  Result: `passed; status=proof_passed; foreground_process_observed=true;
+  foreground_status_readback_matched=true; foreground_completed=true;
+  status_readback_pid_matched=true`
+- `.\scripts\check.ps1`
+  Result: `passed; branch state OK on main tracking origin/main; ruff lint
+  passed; ruff format check passed; mypy passed; pytest passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
