@@ -10907,7 +10907,7 @@ def test_lens_resident_runtime_execute_starts_supervised_resident_host_lease(
 
     def fake_resident_supervision_action(*, mode: str, run_seconds: Any = 5) -> dict[str, Any]:
         assert mode == "resident_start"
-        assert run_seconds == 1
+        assert run_seconds == 20
         _write_lens_host_runtime_state(data_root, pid=pid, status="resident_running", mode="resident")
         _write_lens_host_supervisor_state(
             data_root,
@@ -11041,7 +11041,7 @@ def test_lens_resident_runtime_execute_starts_supervised_resident_host_lease(
             "approval_id": runtime_approval_id,
             "actor": "test.system.write",
             "reason": "prove resident runtime starts supervised resident host lease",
-            "run_seconds": 1,
+            "run_seconds": 20,
         },
     )
     assert executed.status_code == 200

@@ -29,7 +29,7 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
             "-ExecutionPolicy",
             "Bypass",
             "-File",
-            str(_repo_root() / "scripts" / "lens-summon-api-execution-proof.ps1"),
+            str(_repo_root() / "scripts" / "lens-persistent-supervision-api-execution-proof.ps1"),
             *args,
         ],
         cwd=_repo_root(),
@@ -40,8 +40,10 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_lens_summon_api_execution_proof_uses_governed_routes() -> None:
-    script = (_repo_root() / "scripts" / "lens-summon-api-execution-proof.ps1").read_text(encoding="utf-8")
+def test_lens_persistent_supervision_api_execution_proof_uses_governed_routes() -> None:
+    script = (_repo_root() / "scripts" / "lens-persistent-supervision-api-execution-proof.ps1").read_text(
+        encoding="utf-8"
+    )
 
     assert '"/lens/host/supervision/authority/request"' in script
     assert '"/lens/resident-runtime/authority-grant/request"' in script
@@ -53,26 +55,37 @@ def test_lens_summon_api_execution_proof_uses_governed_routes() -> None:
     assert '"/lens/overlay/authority/request"' in script
     assert '"/lens/overlay/execute"' in script
     assert '"/lens/summon/authority/request"' in script
-    assert '"/lens/summon/authority"' in script
     assert '"/lens/summon/execute"' in script
-    assert '"/lens/summon/executions?limit=10"' in script
-    assert '"/lens/summon/readiness"' in script
-    assert '"/lens/host/supervision/execute"' in script
-    assert '"mode": "resident_stop"' in script
+    assert '"/lens/host/persistent-supervision/enablement/authority/request"' in script
+    assert '"/lens/host/persistent-supervision/enablement/authority"' in script
+    assert '"/lens/host/persistent-supervision/enablement/execution/request"' in script
+    assert '"/lens/host/persistent-supervision/enablement/execution/authority"' in script
+    assert '"/lens/host/persistent-supervision/enablement/execution/readiness"' in script
+    assert '"/lens/host/persistent-supervision/enablement/execution"' in script
+    assert '"/lens/host/persistent-supervision/enablement/execution/apply"' in script
+    assert (
+        '"/lens/host/persistent-supervision/enablement/executions?limit=10&approval_id={execution_approval_id}"'
+        in script
+    )
+    assert "FRANCIS_LENS_HOST_SERVICE_CONFIG_PATH" in script
     assert '"allow_launch": False' in script
-    assert '"summon_anywhere_authority": False' in script
+    assert '"local_process_launch_authority": False' in script
+    assert '"service_control_authority": False' in script
+    assert '"memory_write": False' in script
     assert '"resident_claim_authority": False' in script
 
 
-def test_lens_summon_api_execution_proof_executes_bounded_summon_handoff(
+def test_lens_persistent_supervision_api_execution_proof_executes_isolated_apply(
     tmp_path: Path,
 ) -> None:
     if platform.system() != "Windows":
-        pytest.skip("Live Lens summon API execution proof is Windows-hosted.")
+        pytest.skip("Live Lens persistent-supervision API execution proof is Windows-hosted.")
     if os.environ.get("CI", "").lower() == "true":
-        pytest.skip("Live summon proof requires an interactive Windows user session.")
+        pytest.skip("Live persistent-supervision proof requires an interactive Windows user session.")
 
     data_dir = tmp_path / "data"
+    live_service_config = _repo_root() / "config" / "runtime" / "services" / "lens-host.json"
+    live_service_config_before = live_service_config.read_text(encoding="utf-8")
     proc = _run_proof(
         "-Mode",
         "Status",
@@ -81,22 +94,23 @@ def test_lens_summon_api_execution_proof_executes_bounded_summon_handoff(
         "-DataDir",
         str(data_dir),
     )
+    live_service_config_after = live_service_config.read_text(encoding="utf-8")
 
     assert proc.returncode == 0, proc.stderr or proc.stdout
     payload = json.loads(proc.stdout)
-    assert payload["kind"] == "lens.summon.api_execution.proof"
+    assert payload["kind"] == "lens.host.persistent_supervision.api_execution.proof"
     assert payload["status"] == "proof_passed"
     assert payload["ok"] is True
     assert payload["stage"] == "Stage 6 / Lens MVP"
     assert payload["stage_state"] == "active"
-    assert payload["acceptance_criterion"] == "summon_anywhere"
-    assert payload["previous_next_smallest_truthful_gap"] == "summon_binding_blocker_boundary"
-    assert payload["route_next_smallest_truthful_gap"] == "summon_anywhere_runtime_readback"
-    assert payload["next_smallest_truthful_gap"] == "summon_anywhere_runtime_readback"
-    assert (
-        payload["recommended_proof_script"]
-        == "scripts/lens-persistent-supervision-api-execution-proof.ps1 -Mode Status"
-    )
+    assert payload["acceptance_criterion"] == "persistent_supervision_enablement"
+    assert payload["previous_next_smallest_truthful_gap"] == "persistent_supervision_execution_boundary"
+    assert payload["route_next_smallest_truthful_gap"] == "persistent_supervision_execution_boundary"
+    assert payload["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert payload["recommended_proof_script"] == "scripts/lens-stage6-completion-audit.ps1 -Mode Status"
+    assert payload["recommended_handoff_source"] == "api_persistent_supervision_execution_handoff"
+    assert payload["live_service_config_unchanged"] is True
+    assert live_service_config_after == live_service_config_before
 
     assert payload["host_supervision_authority_grant_receipt_id"]
     assert payload["resident_runtime_authority_grant_receipt_id"]
@@ -104,12 +118,18 @@ def test_lens_summon_api_execution_proof_executes_bounded_summon_handoff(
     assert payload["os_binding_authority_grant_receipt_id"]
     assert payload["overlay_authority_grant_receipt_id"]
     assert payload["summon_authority_grant_receipt_id"]
+    assert payload["persistent_supervision_enablement_authority_grant_receipt_id"]
+    assert payload["persistent_supervision_execution_authority_grant_receipt_id"]
     assert payload["resident_runtime_execution_authority"] is True
     assert payload["host_supervision_authority"] is True
     assert payload["tray_presence_authority"] is True
     assert payload["os_binding_authority"] is True
     assert payload["overlay_authority"] is True
     assert payload["summon_authority"] is True
+    assert payload["persistent_supervision_enablement_authority"] is True
+    assert payload["service_config_write_authority"] is True
+    assert payload["persistent_supervision_execution_authority"] is True
+    assert payload["receipt_write_authority"] is True
     assert payload["execution_applied"] is True
     assert payload["executed"] is True
     assert payload["resident_host_process_started"] is True
@@ -126,9 +146,18 @@ def test_lens_summon_api_execution_proof_executes_bounded_summon_handoff(
     assert payload["local_open_ready"] is True
     assert payload["opened"] is False
     assert payload["no_launch"] is True
-    assert payload["receipt_written"] is True
     assert payload["summon_runtime_state_observed"] is True
-    assert payload["summon_config_override_present"] is True
+    assert payload["required_before_enable_after_summon"] == []
+    assert payload["required_before_enable_ready_after_summon"] is True
+    assert payload["persistent_supervision_apply_status"] == "service_config_updated"
+    assert payload["persistent_supervision_ready_after_apply"] is True
+    assert payload["persistent_supervision_enablement_allowed"] is True
+    assert payload["service_config_updated"] is True
+    assert payload["receipt_written"] is True
+    assert payload["resident_claim_allowed"] is False
+    assert payload["service_managed"] is False
+    assert payload["summon_anywhere"] is False
+    assert payload["os_level_summon"] is False
     assert payload["overlay_stop_observed"] is True
     assert payload["hotkey_stop_observed"] is True
     assert payload["tray_presence_stop_observed"] is True
@@ -137,25 +166,21 @@ def test_lens_summon_api_execution_proof_executes_bounded_summon_handoff(
     assert payload["hotkey_pid_file_present_after_stop"] is False
     assert payload["tray_pid_file_present_after_stop"] is False
     assert payload["host_pid_file_present_after_stop"] is False
-    assert payload["required_before_enable_after_summon"] == []
-    assert payload["required_before_enable_ready_after_summon"] is True
-    assert payload["summon_readiness_summon_runtime_ready"] is True
-    assert "summon_anywhere_runtime_readback" in payload["summon_readiness_blockers_after_execute"]
-    assert payload["blockers"] == []
-    assert payload["summon_anywhere"] is False
-    assert payload["os_level_summon"] is False
-    assert payload["service_managed"] is False
-    assert payload["resident_claim_allowed"] is False
+    assert "resident_claim_authority_not_granted" in payload["blockers"]
 
     checks = {item["id"]: item for item in payload["checks"]}
-    assert checks["host_supervision_authority_granted"]["status"] == "authority_granted"
-    assert checks["resident_tray_hotkey_overlay_started_before_summon"]["status"] == "ready"
-    assert checks["summon_authority_granted"]["status"] == "authority_granted"
+    assert checks["authority_chain_granted"]["status"] == "authority_granted"
+    assert checks["resident_tray_hotkey_overlay_started_before_apply"]["status"] == "ready"
     assert checks["api_execute_observed_bounded_summon_handoff"]["status"] == "summon_binding_observed"
-    assert checks["summon_runtime_state_written"]["status"] == "summon_binding_observed"
-    assert checks["status_plan_consumed_live_summon_runtime"]["status"] == ""
-    assert checks["summon_receipt_readback_after_execute"]["status"] == "readback_ready"
-    assert checks["summon_readiness_consumes_runtime_without_closure"]["status"] == "blocked"
+    assert checks["persistent_plan_consumed_required_runtime_prerequisites"]["status"] == ""
+    assert checks["execution_readiness_reaches_resident_claim_boundary"]["status"] == "blocked"
+    assert checks["execution_denial_before_apply_preserved"]["status"] == "denied_no_resident_claim_authority"
+    assert checks["api_apply_updated_isolated_service_config"]["status"] == "service_config_updated"
+    assert checks["status_plan_consumed_persistent_supervision_enablement"]["status"] == (
+        "persistent_supervision_execution_boundary"
+    )
+    assert checks["persistent_execution_receipt_readback"]["status"] == "readback_ready"
+    assert checks["isolated_service_config_only"]["status"] == "isolated_temp_config"
     assert checks["api_stop_cleaned_real_overlay_window"]["status"] == "overlay_window_stopped"
     assert checks["api_stop_cleaned_real_global_hotkey"]["status"] == "global_hotkey_binding_stopped"
     assert checks["api_stop_cleaned_real_tray_presence"]["status"] == "tray_presence_stopped"
@@ -169,25 +194,34 @@ def test_lens_summon_api_execution_proof_executes_bounded_summon_handoff(
     assert proof["hotkey_start_status"] == "global_hotkey_bound"
     assert proof["overlay_start_status"] == "overlay_window_started"
     assert proof["summon_execute_status"] == "summon_binding_observed"
-    assert proof["summon_receipt_readback_status"] == "readback_ready"
-    assert proof["summon_receipt_readback_next_gap"] == "summon_anywhere_runtime_readback"
     assert proof["summon_runtime_state_status"] == "summon_binding_observed"
-    assert proof["summon_runtime_readback_status"] == "observed"
-    assert proof["persistent_plan_first_missing_after_summon"] == ""
+    assert proof["persistent_apply_status"] == "service_config_updated"
+    assert proof["persistent_apply_receipt_id"]
+    assert proof["persistent_executions_readback_status"] == "readback_ready"
+    assert proof["persistent_plan_after_apply_status"] == "ready_for_operator_review"
+    assert proof["persistent_plan_after_apply_next_gap"] == "persistent_supervision_execution_boundary"
+    assert proof["temp_service_config_process_supervision_enabled"] is True
+    assert proof["temp_service_config_persistent_supervision_enabled"] is True
     assert proof["overlay_stop_status"] == "overlay_window_stopped"
     assert proof["hotkey_stop_status"] == "global_hotkey_binding_stopped"
     assert proof["tray_stop_status"] == "tray_presence_stopped"
     assert proof["resident_stop_status"] == "resident_supervision_stopped"
 
-    assert payload["start_execution"] == {
-        "status": "summon_binding_observed",
-        "next_smallest_truthful_gap": "summon_anywhere_runtime_readback",
-        "summon_binding": True,
-        "summon_runtime_ready": True,
-        "bounded_handoff_ready": True,
-        "local_open_ready": True,
-        "opened": False,
-        "no_launch": True,
+    assert payload["handoff"] == {
+        "recommended_handoff_source": "api_persistent_supervision_execution_handoff",
+        "status": "audit_needed",
+        "previous_next_smallest_truthful_gap": "persistent_supervision_execution_boundary",
+        "next_smallest_truthful_gap": "stage6_lens_completion_audit",
+        "next_step": "run_stage6_lens_completion_audit_after_persistent_supervision_api_execution",
+        "proof_script": "scripts/lens-stage6-completion-audit.ps1 -Mode Status",
+        "route": "/lens/host/persistent-supervision/enablement/execution/apply",
+        "readiness_route": "/lens/host/persistent-supervision/enablement/execution/readiness",
+        "authority_required": "none_new_stage6_completion_audit",
+        "authority_granted": False,
+        "read_only_contract": True,
+        "diagnostic_only": True,
+        "would_execute": False,
+        "would_mutate": False,
     }
     assert payload["governance"] == {
         "diagnostic_only": True,
@@ -197,11 +231,17 @@ def test_lens_summon_api_execution_proof_executes_bounded_summon_handoff(
         "test_fixture_approval_decisions": True,
         "approval_decision_authority": False,
         "product_execution_authority": False,
-        "execution_authority": True,
+        "execution_authority": False,
         "temporary_runtime_state_write": True,
+        "isolated_service_config_write": True,
+        "service_config_write_authority": True,
+        "service_config_mutation_authority": True,
+        "persistent_supervision_enablement_authority": True,
+        "persistent_supervision_execution_authority": True,
+        "receipt_write_authority": True,
         "local_process_launch_authority": False,
         "process_supervision_authority": True,
-        "process_restart_authority": False,
+        "process_restart_authority": True,
         "service_install_authority": False,
         "service_control_authority": False,
         "tray_registration_authority": True,
@@ -220,6 +260,12 @@ def test_lens_summon_api_execution_proof_executes_bounded_summon_handoff(
         "mutation_authority_granted": True,
     }
 
+    temp_service_config = json.loads(Path(payload["service_config_path"]).read_text(encoding="utf-8"))
+    assert temp_service_config["process_supervision_enabled"] is True
+    assert temp_service_config["persistent_supervision_enabled"] is True
+    assert temp_service_config["installable"] is False
+    assert temp_service_config["service_control_authority"] is False
+    assert temp_service_config["resident_claim_authority"] is False
     assert (data_dir / "runtime" / "lens-summon" / "status.json").exists()
     assert not (data_dir / "runtime" / "lens-overlay" / "lens-overlay.pid").exists()
     assert not (data_dir / "runtime" / "lens-hotkey" / "lens-hotkey.pid").exists()

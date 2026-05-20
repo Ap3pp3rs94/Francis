@@ -70,7 +70,7 @@ def test_lens_tray_presence_api_execution_proof_starts_and_stops_real_tray_runti
         "-Mode",
         "Status",
         "-RunSeconds",
-        "5",
+        "10",
         "-DataDir",
         str(data_dir),
     )

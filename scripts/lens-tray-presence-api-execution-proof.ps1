@@ -4,7 +4,7 @@ param(
   [string]$Mode = 'Status',
 
   [ValidateRange(1, 60)]
-  [int]$RunSeconds = 5,
+  [int]$RunSeconds = 10,
 
   [string]$DataDir = ''
 )
@@ -181,6 +181,7 @@ def _run() -> tuple[int, dict[str, Any]]:
     repo_root = Path(os.environ["FRANCIS_ROOT"]).resolve()
     data_root = Path(os.environ["FRANCIS_DATA_DIR"]).resolve()
     run_seconds = int(os.environ.get("FRANCIS_PROOF_RUN_SECONDS", "5"))
+    dependency_run_seconds = max(run_seconds, 20)
     data_root.mkdir(parents=True, exist_ok=True)
 
     actor = "test.system.write"
@@ -261,7 +262,7 @@ def _run() -> tuple[int, dict[str, Any]]:
                 "approval_id": runtime_approval_id,
                 "actor": actor,
                 "reason": "prove governed API path starts resident supervision before tray presence",
-                "run_seconds": run_seconds,
+                "run_seconds": dependency_run_seconds,
             },
         )
 
@@ -299,7 +300,7 @@ def _run() -> tuple[int, dict[str, Any]]:
                 "actor": actor,
                 "reason": "prove governed API path starts the real tray presence runtime",
                 "mode": "start",
-                "run_seconds": run_seconds,
+                "run_seconds": dependency_run_seconds,
             },
         )
         tray_executions_after_start = _get(client, "/lens/tray/executions?limit=10")

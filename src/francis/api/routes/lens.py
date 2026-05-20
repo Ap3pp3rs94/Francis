@@ -128,7 +128,7 @@ class LensResidentRuntimeExecuteIn(BaseModel):
     actor: str | None = None
     approval_id: str = ""
     reason: str = "attempt Lens resident runtime activation"
-    run_seconds: int = Field(default=2, ge=1, le=10)
+    run_seconds: int = Field(default=2, ge=1, le=60)
 
 
 class LensHostRuntimeLoopExecuteIn(BaseModel):

@@ -34842,6 +34842,89 @@ Latest validation for Stage 6 summon API execution proof:
   Result: `passed; branch state OK on main tracking origin/main; ruff lint
   passed; ruff format check passed; mypy passed; pytest passed`
 
+Stage 6 Lens persistent-supervision API execution proof on `2026-05-19`:
+
+- Added `scripts/lens-persistent-supervision-api-execution-proof.ps1` to prove
+  the governed API path can carry the bounded resident, tray, hotkey, overlay,
+  and summon runtime chain into persistent-supervision enablement execution in
+  an isolated data root.
+- The proof writes a temporary `FRANCIS_LENS_HOST_SERVICE_CONFIG_PATH`, requests
+  and grants only the exact host-supervision, resident-runtime, tray, OS-binding,
+  overlay, summon, persistent-supervision enablement, and persistent-supervision
+  execution authorities needed for this isolated test fixture, executes
+  `/lens/host/persistent-supervision/enablement/execution/apply`, and verifies
+  the live repo service config remains unchanged.
+- `scripts/lens-summon-api-execution-proof.ps1` now hands off to the persistent
+  supervision API execution proof as the next operator-readable slice after the
+  bounded summon handoff.
+- Hardened the live Stage 6 API execution proof harness after full-suite
+  failures showed short proof leases could expire before post-start readback.
+  Tray, OS-binding, overlay, summon, and persistent-supervision API proofs now
+  use a bounded 20-second dependency lease internally, and
+  `/lens/resident-runtime/execute` accepts the existing 60-second bounded
+  runtime cap so persistent-supervision apply can validate live prerequisites
+  without adding service-control, memory-write, or resident-claim authority.
+- The proof records `status=proof_passed`,
+  `next_smallest_truthful_gap=stage6_lens_completion_audit`,
+  `route_next_smallest_truthful_gap=persistent_supervision_execution_boundary`,
+  `live_service_config_unchanged=true`,
+  `required_before_enable_after_summon=[]`,
+  `persistent_supervision_apply_status=service_config_updated`,
+  `persistent_supervision_ready_after_apply=true`,
+  `persistent_supervision_enablement_allowed=true`,
+  `service_config_updated=true`, `receipt_written=true`,
+  `blockers=[resident_claim_authority_not_granted]`,
+  `overlay_stop_observed=true`, `hotkey_stop_observed=true`,
+  `tray_presence_stop_observed=true`, and
+  `resident_supervision_stop_observed=true`.
+- This is still not Stage 6 closure. It proves a bounded local
+  persistent-supervision enablement execution against an isolated service config
+  only. It does not claim Windows service install/control, product
+  approval-decision authority, OS-wide summon-anywhere readiness, memory writes,
+  capture/new-sensing authority, resident claim authority, or browser/process
+  launch.
+
+Latest validation for Stage 6 persistent-supervision API execution proof:
+
+- PowerShell parser check for
+  `scripts/lens-persistent-supervision-api-execution-proof.ps1`
+  Result: `passed; parse_ok`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-persistent-supervision-api-execution-proof.ps1 -Mode Status -RunSeconds 5`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=stage6_lens_completion_audit;
+  route_next_smallest_truthful_gap=persistent_supervision_execution_boundary;
+  live_service_config_unchanged=true; required_before_enable_after_summon=[];
+  persistent_supervision_apply_status=service_config_updated;
+  persistent_supervision_ready_after_apply=true;
+  persistent_supervision_enablement_allowed=true;
+  service_config_updated=true; receipt_written=true;
+  blockers=[resident_claim_authority_not_granted];
+  overlay_stop_observed=true; hotkey_stop_observed=true;
+  tray_presence_stop_observed=true; resident_supervision_stop_observed=true`
+- `python -m pytest tests\test_lens_persistent_supervision_api_execution_proof_script.py -q`
+  Result: `passed; 2 passed`
+- `python -m pytest tests\test_lens_persistent_supervision_api_execution_proof_script.py::test_lens_persistent_supervision_api_execution_proof_uses_governed_routes tests\test_lens_summon_api_execution_proof_script.py::test_lens_summon_api_execution_proof_uses_governed_routes -q`
+  Result: `passed; 2 passed`
+- `python -m pytest tests\test_lens_summon_api_execution_proof_script.py -q`
+  Result: `passed; 2 passed`
+- `python -m ruff check --no-cache tests\test_lens_persistent_supervision_api_execution_proof_script.py tests\test_lens_summon_api_execution_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check --no-cache tests\test_lens_persistent_supervision_api_execution_proof_script.py tests\test_lens_summon_api_execution_proof_script.py`
+  Result: `passed; 2 files already formatted`
+- `python -m pytest tests\test_api_lens.py::test_lens_resident_runtime_execute_starts_supervised_resident_host_lease -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_tray_presence_api_execution_proof_script.py tests\test_lens_os_binding_api_execution_proof_script.py tests\test_lens_overlay_api_execution_proof_script.py tests\test_lens_summon_api_execution_proof_script.py tests\test_lens_persistent_supervision_api_execution_proof_script.py -q`
+  Result: `passed`
+- PowerShell parser check for `scripts/lens-tray-presence-api-execution-proof.ps1`,
+  `scripts/lens-os-binding-api-execution-proof.ps1`,
+  `scripts/lens-overlay-api-execution-proof.ps1`,
+  `scripts/lens-summon-api-execution-proof.ps1`, and
+  `scripts/lens-persistent-supervision-api-execution-proof.ps1`
+  Result: `passed; parse_ok`
+- `.\scripts\check.ps1`
+  Result: `passed; branch state OK on main tracking origin/main; ruff lint
+  passed; ruff format check passed; mypy passed; pytest passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

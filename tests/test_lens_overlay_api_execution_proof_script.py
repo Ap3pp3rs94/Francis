@@ -75,7 +75,7 @@ def test_lens_overlay_api_execution_proof_starts_and_stops_real_overlay_runtime(
         "-Mode",
         "Status",
         "-RunSeconds",
-        "5",
+        "10",
         "-DataDir",
         str(data_dir),
     )
