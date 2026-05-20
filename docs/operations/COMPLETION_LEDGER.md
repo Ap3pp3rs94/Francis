@@ -35510,6 +35510,50 @@ Latest validation for Stage 6 next-handoff concrete handoff loop guard:
   recommended_concrete_proof_script=scripts/lens-stage6-completion-audit.ps1
   -Mode Status`
 
+Stage 6 summon-anywhere governed prerequisite handoff readback on `2026-05-20`:
+
+- `scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status` now consumes
+  the `stage6_readiness.prerequisite_bringup` readback from `/lens/status` when
+  that governed plan is present.
+- The proof still reports the broad Stage 6 closure gap as
+  `summon_anywhere_blockers`, preserves the first blocker family inventory, and
+  keeps all summon, hotkey, overlay, process, memory, approval-decision, and
+  mutation authority denied.
+- On the current local posture, the recommended handoff no longer loops back to
+  the stale resident-host blocker proof. It now points at the governed Stage 6
+  prerequisite bring-up receipt review:
+  `run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt`
+  via `scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status`.
+- This is an operator-surface truth and loop-guard improvement only. It does
+  not claim `summon_anywhere=true`, close Stage 6, or start Stage 7.
+
+Latest validation for Stage 6 summon-anywhere governed prerequisite handoff:
+
+- `python -m pytest tests\test_lens_summon_anywhere_blockers_proof_script.py -q`
+  Result: `passed; 4 focused proof tests exited 0`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-anywhere-blockers-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=summon_anywhere_blockers;
+  recommended_handoff_source=stage6_prerequisite_bringup_operator_plan;
+  recommended_next_slice=run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt;
+  recommended_proof_script=scripts/lens-stage6-prerequisite-bringup-plan.ps1
+  -Mode Status; stage6_prerequisite_bringup_plan_observed=true;
+  plan_status=persistent_supervision_enablement_applied;
+  governed_handoff_gap=persistent_supervision_execution_boundary`
+- `python -m pytest tests\test_lens_summon_anywhere_blockers_proof_script.py tests\test_lens_summon_anywhere_family_chain_proof_script.py tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed; adjacent summon-family and completion-audit consumers exited
+  0 with one existing skip`
+- `python -m ruff check tests\test_lens_summon_anywhere_blockers_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_summon_anywhere_blockers_proof_script.py`
+  Result: `passed; 1 file already formatted`
+- PowerShell parser check for
+  `scripts\lens-summon-anywhere-blockers-proof.ps1`
+  Result: `passed; parse_ok`
+- `git diff --check`
+  Result: `passed; warning only that PowerShell LF will be replaced by CRLF when
+  Git next touches the script`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

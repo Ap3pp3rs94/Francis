@@ -149,6 +149,62 @@ def _write_lens_status_with_approved_os_binding_request_without_authority(path: 
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
+def _write_lens_status_with_applied_stage6_prerequisite_bringup(path: Path) -> None:
+    _write_lens_status(path)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["stage6_readiness"]["prerequisite_bringup"] = {
+        "ok": True,
+        "kind": "lens.stage6.prerequisite_bringup.plan",
+        "status": "persistent_supervision_enablement_applied",
+        "stage": "Stage 6 / Lens MVP",
+        "stage_state": "active",
+        "ready_to_close": False,
+        "acceptance_criterion": "system_resident_presence",
+        "current_truthful_gap": "persistent_supervision_execution_boundary",
+        "current_truthful_gap_basis": (
+            "persistent_supervision_enablement_execution_receipt.post_plan.next_smallest_truthful_gap"
+        ),
+        "current_first_missing_requirement": "",
+        "current_first_missing_truthful_gap": "",
+        "next_operator_action_requirement": "persistent_supervision_enablement_receipt",
+        "next_operator_action": {
+            "id": "review_persistent_supervision_enablement_receipt",
+            "method": "GET",
+            "route": "/lens/host/persistent-supervision/enablement/executions",
+            "script_would_execute": False,
+            "script_would_mutate": False,
+        },
+        "next_operator_command": {
+            "mode": "Status",
+            "command": ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status",
+        },
+        "required_before_enable": [
+            "resident_host_process",
+            "tray_presence",
+            "global_hotkey_binding",
+            "overlay_window",
+            "summon_binding",
+        ],
+        "missing_required_before_enable": [],
+        "required_before_enable_ready": True,
+        "recommended_next_slice": "run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt",
+        "recommended_proof_script": "scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status",
+        "governance": {
+            "read_only_contract": True,
+            "diagnostic_only": True,
+            "plan_only": True,
+            "requires_explicit_operator_execution": True,
+            "execution_authority": False,
+            "approval_decision_authority": False,
+            "memory_write": False,
+            "mutation_authority_granted": False,
+            "would_execute": False,
+            "would_mutate": False,
+        },
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
 def test_lens_summon_anywhere_blockers_proof_is_readback_only(tmp_path: Path) -> None:
     status_path = tmp_path / "lens-status.json"
     _write_lens_status(status_path)
@@ -197,6 +253,7 @@ def test_lens_summon_anywhere_blockers_proof_is_readback_only(tmp_path: Path) ->
         "would_mutate": False,
     }
     assert payload["recommended_handoff"] == payload["first_blocker_family_handoff"]
+    assert payload["stage6_prerequisite_bringup_plan_observed"] is False
     assert payload["blocked_families"] == [
         "resident_host",
         "tray_presence",
@@ -295,6 +352,72 @@ def test_lens_summon_anywhere_blockers_proof_is_readback_only(tmp_path: Path) ->
     assert authority_request_readback["controls_overlay"] is False
 
 
+def test_lens_summon_anywhere_blockers_proof_prefers_stage6_prerequisite_bringup_readback(
+    tmp_path: Path,
+) -> None:
+    status_path = tmp_path / "lens-status.json"
+    _write_lens_status_with_applied_stage6_prerequisite_bringup(status_path)
+
+    proc = _run_proof("-Mode", "Status", "-StatusPath", str(status_path))
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "proof_passed"
+    assert payload["ok"] is True
+    assert payload["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+    assert payload["first_blocker_family"] == "resident_host"
+    assert payload["first_blocker_family_handoff_observed"] is True
+    assert payload["recommended_handoff_source"] == "stage6_prerequisite_bringup_operator_plan"
+    assert payload["recommended_next_slice"] == (
+        "run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt"
+    )
+    assert payload["recommended_proof_script"] == "scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status"
+    assert payload["recommended_route"] == "/lens/host/persistent-supervision"
+    assert payload["recommended_readiness_route"] == "/lens/host/persistent-supervision/enablement"
+    assert payload["recommended_authority_required"] == "none_readback_only"
+    assert payload["recommended_authority_granted"] is True
+    assert payload["authority_required"] == "none_readback_only"
+    assert payload["authority_granted"] is True
+    assert payload["stage6_prerequisite_bringup_plan_observed"] is True
+
+    handoff = payload["stage6_prerequisite_bringup_operator_plan_handoff"]
+    assert payload["recommended_handoff"] == handoff
+    assert handoff["status"] == "persistent_supervision_enablement_applied"
+    assert handoff["previous_next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+    assert handoff["next_smallest_truthful_gap"] == "persistent_supervision_execution_boundary"
+    assert handoff["next_step"] == ("run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt")
+    assert handoff["proof_script"] == "scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status"
+    assert handoff["current_truthful_gap_basis"] == (
+        "persistent_supervision_enablement_execution_receipt.post_plan.next_smallest_truthful_gap"
+    )
+    assert handoff["next_operator_action_requirement"] == "persistent_supervision_enablement_receipt"
+    assert handoff["next_operator_action"]["id"] == "review_persistent_supervision_enablement_receipt"
+    assert handoff["next_operator_command"]["mode"] == "Status"
+    assert handoff["required_before_enable_ready"] is True
+    assert handoff["missing_required_before_enable"] == []
+    assert handoff["read_only_contract"] is True
+    assert handoff["diagnostic_only"] is True
+    assert handoff["plan_only"] is True
+    assert handoff["requires_explicit_operator_execution"] is True
+    assert handoff["would_execute"] is False
+    assert handoff["would_mutate"] is False
+
+    plan = payload["stage6_prerequisite_bringup_plan"]
+    assert plan["present"] is True
+    assert plan["status"] == "persistent_supervision_enablement_applied"
+    assert plan["required_before_enable_ready"] is True
+    assert plan["missing_required_before_enable"] == []
+
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["first_blocker_family_handoff"]["status"] == "handoff_ready"
+    assert checks["stage6_prerequisite_bringup_plan"]["status"] == "operator_plan_readback_ready"
+    assert all(item["passed"] for item in payload["checks"])
+
+    assert payload["governance"]["stage6_prerequisite_bringup_plan_readback"] is True
+    assert payload["governance"]["execution_authority"] is False
+    assert payload["governance"]["mutation_authority_granted"] is False
+
+
 def test_lens_summon_anywhere_blockers_proof_accepts_approved_request_without_authority(
     tmp_path: Path,
 ) -> None:
@@ -345,6 +468,7 @@ def test_lens_summon_anywhere_blockers_proof_accepts_approved_request_without_au
         "read_only_contract": True,
         "os_binding_authority_request_readback": True,
         "first_blocker_family_handoff_readback": True,
+        "stage6_prerequisite_bringup_plan_readback": False,
         "approval_request_write": False,
         "product_execution_authority": False,
         "execution_authority": False,
