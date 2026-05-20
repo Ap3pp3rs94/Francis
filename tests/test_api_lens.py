@@ -5794,7 +5794,7 @@ def test_stage6_prerequisite_bringup_applied_receipt_wins_over_stale_prerequisit
     assert payload["would_mutate"] is False
 
 
-def test_stage6_next_handoff_consumes_enablement_receipt_review_over_stale_first_missing() -> None:
+def test_stage6_next_handoff_promotes_prerequisite_bringup_receipt_review_over_stale_first_missing() -> None:
     from francis.lens.status import _stage6_next_handoff_readback
 
     first_missing_handoff = {
@@ -5856,20 +5856,58 @@ def test_stage6_next_handoff_consumes_enablement_receipt_review_over_stale_first
                 },
             },
         },
+        prerequisite_bringup={
+            "kind": "lens.stage6.prerequisite_bringup.plan",
+            "status": "persistent_supervision_enablement_applied",
+            "current_truthful_gap": "persistent_supervision_execution_boundary",
+            "recommended_next_slice": "run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt",
+            "recommended_proof_script": "scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status",
+            "authority_required": "none_readback_only",
+            "authority_granted": False,
+            "would_execute": False,
+            "would_mutate": False,
+            "next_operator_action_requirement": "persistent_supervision_enablement_receipt",
+            "next_operator_action": {
+                "id": "review_persistent_supervision_enablement_receipt",
+                "route": "/lens/host/persistent-supervision/enablement/executions",
+                "method": "GET",
+                "latest_receipt_id": "lpsee_applied",
+            },
+            "next_operator_command": {
+                "command": ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status",
+                "mode": "Status",
+                "requires_confirmation": False,
+                "requires_approval_id": False,
+                "requires_operator_approval_decision": False,
+            },
+            "governance": {
+                "read_only_contract": True,
+                "diagnostic_only": True,
+                "requires_explicit_operator_execution": True,
+            },
+        },
     )
 
-    assert payload["recommended_handoff_source"] == "persistent_supervision_enablement_receipt_review_handoff"
-    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_resident_claim_authority_boundary"
+    assert payload["recommended_handoff_source"] == "stage6_prerequisite_bringup_operator_plan"
+    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_execution_boundary"
     assert (
         payload["recommended_next_slice"]
-        == "review_persistent_supervision_resident_claim_boundary_without_runtime_start"
+        == "run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt"
     )
-    assert payload["recommended_proof_script"] == (
-        "scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status"
-    )
+    assert payload["recommended_proof_script"] == "scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status"
     assert payload["recommended_route"] == "/lens/host/persistent-supervision/enablement/executions"
-    assert payload["authority_required"] == "resident_claim_authority"
+    assert payload["authority_required"] == "none_readback_only"
     assert payload["authority_granted"] is False
+    assert payload["stage6_prerequisite_bringup_receipt_review_handoff_observed"] is True
+    bringup_handoff = payload["stage6_prerequisite_bringup_receipt_review_handoff"]
+    assert bringup_handoff["status"] == "receipt_review_ready"
+    assert bringup_handoff["latest_receipt_id"] == "lpsee_applied"
+    assert bringup_handoff["read_only_contract"] is True
+    assert bringup_handoff["diagnostic_only"] is True
+    assert bringup_handoff["would_execute"] is False
+    assert bringup_handoff["would_mutate"] is False
+    assert bringup_handoff["next_operator_action_requirement"] == "persistent_supervision_enablement_receipt"
+    assert bringup_handoff["next_operator_command"]["mode"] == "Status"
     assert payload["persistent_supervision_enablement_receipt_review_handoff_observed"] is True
     handoff = payload["persistent_supervision_enablement_receipt_review_handoff"]
     assert handoff["status"] == "receipt_reviewed"

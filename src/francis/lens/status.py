@@ -1256,7 +1256,9 @@ def _stage6_next_handoff_readback(
     *,
     closure_readback: dict[str, Any],
     resident_host: dict[str, Any],
+    prerequisite_bringup: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    prerequisite_bringup = _as_dict(prerequisite_bringup)
     blocked_criteria = [_safe_str(item).strip() for item in _as_list(closure_readback.get("blocked_criteria"))]
     criteria = [_as_dict(item) for item in _as_list(closure_readback.get("criteria"))]
     criteria_by_id = {_safe_str(item.get("id")).strip(): item for item in criteria}
@@ -1364,6 +1366,54 @@ def _stage6_next_handoff_readback(
             "latest_receipt_status": enablement_execution_receipt_status,
             "post_plan_next_smallest_truthful_gap": enablement_execution_receipt_gap,
             "authority_required": "resident_claim_authority",
+            "authority_granted": False,
+            "read_only_contract": True,
+            "diagnostic_only": True,
+            "would_execute": False,
+            "would_mutate": False,
+        }
+    prerequisite_bringup_action = _as_dict(prerequisite_bringup.get("next_operator_action"))
+    prerequisite_bringup_command = _as_dict(prerequisite_bringup.get("next_operator_command"))
+    prerequisite_bringup_governance = _as_dict(prerequisite_bringup.get("governance"))
+    prerequisite_bringup_receipt_review_observed = (
+        _safe_str(prerequisite_bringup.get("kind")).strip() == "lens.stage6.prerequisite_bringup.plan"
+        and _safe_str(prerequisite_bringup.get("status")).strip() == "persistent_supervision_enablement_applied"
+        and _safe_str(prerequisite_bringup.get("next_operator_action_requirement")).strip()
+        == "persistent_supervision_enablement_receipt"
+        and _safe_str(prerequisite_bringup_action.get("id")).strip()
+        == "review_persistent_supervision_enablement_receipt"
+        and _safe_str(prerequisite_bringup_command.get("mode")).strip() == "Status"
+        and bool(prerequisite_bringup_governance.get("read_only_contract"))
+        and bool(prerequisite_bringup_governance.get("diagnostic_only"))
+        and bool(prerequisite_bringup_governance.get("requires_explicit_operator_execution"))
+        and not bool(prerequisite_bringup.get("would_execute"))
+        and not bool(prerequisite_bringup.get("would_mutate"))
+        and not bool(prerequisite_bringup.get("authority_granted"))
+        and not bool(prerequisite_bringup_command.get("requires_confirmation"))
+        and not bool(prerequisite_bringup_command.get("requires_approval_id"))
+        and not bool(prerequisite_bringup_command.get("requires_operator_approval_decision"))
+    )
+    prerequisite_bringup_receipt_review_handoff: dict[str, Any] = {}
+    if prerequisite_bringup_receipt_review_observed:
+        prerequisite_bringup_receipt_review_handoff = {
+            "status": "receipt_review_ready",
+            "previous_next_smallest_truthful_gap": "persistent_supervision_execution_boundary",
+            "next_smallest_truthful_gap": _safe_str(prerequisite_bringup.get("current_truthful_gap")).strip()
+            or "persistent_supervision_execution_boundary",
+            "next_step": _safe_str(prerequisite_bringup.get("recommended_next_slice")).strip()
+            or "run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt",
+            "proof_script": _safe_str(prerequisite_bringup.get("recommended_proof_script")).strip()
+            or "scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status",
+            "route": _safe_str(prerequisite_bringup_action.get("route")).strip()
+            or "/lens/host/persistent-supervision/enablement/executions",
+            "next_operator_action_requirement": _safe_str(
+                prerequisite_bringup.get("next_operator_action_requirement")
+            ).strip(),
+            "next_operator_action": prerequisite_bringup_action,
+            "next_operator_command": prerequisite_bringup_command,
+            "latest_receipt_id": _safe_str(prerequisite_bringup_action.get("latest_receipt_id")).strip(),
+            "authority_required": _safe_str(prerequisite_bringup.get("authority_required")).strip()
+            or "none_readback_only",
             "authority_granted": False,
             "read_only_contract": True,
             "diagnostic_only": True,
@@ -1557,6 +1607,18 @@ def _stage6_next_handoff_readback(
         recommended_readiness_route = _safe_str(enablement_receipt_review_handoff.get("readiness_route")).strip()
         authority_required = _safe_str(enablement_receipt_review_handoff.get("authority_required")).strip()
 
+    if prerequisite_bringup_receipt_review_observed:
+        recommended_handoff_source = "stage6_prerequisite_bringup_operator_plan"
+        recommended_handoff = prerequisite_bringup_receipt_review_handoff
+        next_gap = _safe_str(prerequisite_bringup_receipt_review_handoff.get("next_smallest_truthful_gap")).strip()
+        recommended_next_slice = _safe_str(prerequisite_bringup_receipt_review_handoff.get("next_step")).strip()
+        recommended_proof_script = _safe_str(prerequisite_bringup_receipt_review_handoff.get("proof_script")).strip()
+        recommended_route = _safe_str(prerequisite_bringup_receipt_review_handoff.get("route")).strip()
+        recommended_readiness_route = _safe_str(
+            prerequisite_bringup_receipt_review_handoff.get("readiness_route")
+        ).strip()
+        authority_required = _safe_str(prerequisite_bringup_receipt_review_handoff.get("authority_required")).strip()
+
     recommended_first_missing_authority_required = _safe_str(first_missing_handoff.get("authority_required")).strip()
     first_missing_handoff_next_gap = _safe_str(first_missing_handoff.get("next_smallest_truthful_gap")).strip()
     if first_missing_handoff_ready:
@@ -1623,6 +1685,8 @@ def _stage6_next_handoff_readback(
         "persistent_supervision_enablement_authority_handoff": enablement_authority_handoff,
         "persistent_supervision_enablement_receipt_review_handoff_observed": enablement_receipt_review_observed,
         "persistent_supervision_enablement_receipt_review_handoff": enablement_receipt_review_handoff,
+        "stage6_prerequisite_bringup_receipt_review_handoff_observed": (prerequisite_bringup_receipt_review_observed),
+        "stage6_prerequisite_bringup_receipt_review_handoff": prerequisite_bringup_receipt_review_handoff,
         "resident_runtime_candidate_handoff_observed": resident_candidate_observed,
         "resident_runtime_candidate_handoff": resident_candidate_handoff,
         "governance": {
@@ -2904,8 +2968,6 @@ def _stage6_readiness(
         overlay_enablement_gate=overlay_enablement_gate,
         resident_surface_activation=resident_surface_activation,
     )
-    ready_to_close = bool(closure_readback.get("ready_to_close"))
-    next_handoff = _stage6_next_handoff_readback(closure_readback=closure_readback, resident_host=resident_host)
     prerequisite_bringup = _stage6_prerequisite_bringup_readback(
         closure_readback=closure_readback,
         resident_host=resident_host,
@@ -2913,6 +2975,12 @@ def _stage6_readiness(
         tray_authority_requests=tray_authority_requests,
         overlay_authority_requests=overlay_authority_requests,
         summon_authority_requests=summon_authority_requests,
+    )
+    ready_to_close = bool(closure_readback.get("ready_to_close"))
+    next_handoff = _stage6_next_handoff_readback(
+        closure_readback=closure_readback,
+        resident_host=resident_host,
+        prerequisite_bringup=prerequisite_bringup,
     )
     return {
         "stage": "Stage 6 / Lens MVP",
