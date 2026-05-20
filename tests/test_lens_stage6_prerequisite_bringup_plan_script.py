@@ -2257,6 +2257,17 @@ def test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_con
     assert followup_payload["next_operator_action"]["method"] == "GET"
     assert followup_payload["next_operator_action"]["script_would_mutate"] is False
     assert followup_payload["next_operator_command"]["mode"] == "Status"
+    assert followup_payload["next_smallest_truthful_gap"] == "persistent_supervision_execution_boundary"
+    assert followup_payload["recommended_next_slice"] == (
+        "run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt"
+    )
+    assert followup_payload["recommended_proof_script"] == (
+        "scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status"
+    )
+    assert followup_payload["authority_required"] == "none_readback_only"
+    assert followup_payload["authority_granted"] is False
+    assert followup_payload["would_execute"] is False
+    assert followup_payload["would_mutate"] is False
 
     shutil.rmtree(data_dir / "lens" / "pse_authority_grants", ignore_errors=True)
     shutil.rmtree(data_dir / "lens" / "pse_execution_authority_grants", ignore_errors=True)
@@ -2273,3 +2284,10 @@ def test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_con
     assert stale_grants_payload["next_operator_action_requirement"] == "persistent_supervision_enablement_receipt"
     assert stale_grants_payload["next_operator_action"]["id"] == "review_persistent_supervision_enablement_receipt"
     assert stale_grants_payload["next_operator_action"]["method"] == "GET"
+    assert stale_grants_payload["next_smallest_truthful_gap"] == "persistent_supervision_execution_boundary"
+    assert stale_grants_payload["recommended_next_slice"] == (
+        "run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt"
+    )
+    assert stale_grants_payload["authority_required"] == "none_readback_only"
+    assert stale_grants_payload["would_execute"] is False
+    assert stale_grants_payload["would_mutate"] is False

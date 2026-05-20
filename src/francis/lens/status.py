@@ -2313,6 +2313,22 @@ def _stage6_prerequisite_bringup_readback(
         and available_now_count == 1
         and available_now_count + preview_only_count == len(operator_sequence)
     )
+    next_operator_command = _stage6_prerequisite_operator_command(next_operator_action)
+    next_operator_action_id = _safe_str(next_operator_action.get("id")).strip()
+    recommended_next_slice = (
+        f"run_stage6_prerequisite_bringup_{next_operator_action_id}"
+        if next_operator_action_id
+        else "run_stage6_prerequisite_bringup_plan_status"
+    )
+    authority_required = "none_readback_only"
+    if (
+        bool(next_operator_command.get("requires_approval_id"))
+        or bool(next_operator_command.get("requires_confirmation"))
+        or bool(next_operator_action.get("operator_supplied_values_required"))
+    ):
+        authority_required = (
+            _safe_str(next_operator_action.get("approval_action")).strip() or "operator_supplied_authority"
+        )
     return {
         "ok": True,
         "kind": "lens.stage6.prerequisite_bringup.plan",
@@ -2337,6 +2353,18 @@ def _stage6_prerequisite_bringup_readback(
         "raw_persistent_supervision_next_smallest_truthful_gap": _safe_str(
             persistent_plan.get("next_smallest_truthful_gap")
         ).strip(),
+        "next_smallest_truthful_gap": current_gap,
+        "next_smallest_truthful_gap_basis": current_gap_basis,
+        "recommended_next_slice": recommended_next_slice,
+        "recommended_proof_script": "scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status",
+        "authority_required": authority_required,
+        "authority_granted": False,
+        "operator_supplied_values_required": bool(next_operator_action.get("operator_supplied_values_required")),
+        "requires_confirmation": bool(next_operator_command.get("requires_confirmation")),
+        "requires_approval_id": bool(next_operator_command.get("requires_approval_id")),
+        "requires_operator_approval_decision": bool(next_operator_command.get("requires_operator_approval_decision")),
+        "would_execute": False,
+        "would_mutate": False,
         "required_before_enable": required_before_enable,
         "missing_required_before_enable": effective_missing_required,
         "required_before_enable_ready": enablement_execution_applied
@@ -2349,7 +2377,7 @@ def _stage6_prerequisite_bringup_readback(
         "persistent_supervision_enablement_steps": enablement_steps,
         "next_operator_action": next_operator_action,
         "next_operator_action_requirement": next_operator_action_requirement,
-        "next_operator_command": _stage6_prerequisite_operator_command(next_operator_action),
+        "next_operator_command": next_operator_command,
         "operator_sequence": operator_sequence,
         "operator_sequence_command_availability": {
             "available_now_count": available_now_count,

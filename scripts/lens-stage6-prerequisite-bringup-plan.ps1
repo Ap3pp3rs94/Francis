@@ -1359,6 +1359,21 @@ def _run() -> tuple[int, dict[str, Any]]:
         and available_now_count == 1
         and available_now_count + preview_only_count == len(operator_sequence)
     )
+    next_operator_action_id = _safe_str(next_operator_action.get("id"))
+    recommended_next_slice = (
+        f"run_stage6_prerequisite_bringup_{next_operator_action_id}"
+        if next_operator_action_id
+        else "run_stage6_prerequisite_bringup_plan_status"
+    )
+    recommended_authority_required = "none_readback_only"
+    if (
+        bool(next_operator_command.get("requires_approval_id"))
+        or bool(next_operator_command.get("requires_confirmation"))
+        or bool(next_operator_action.get("operator_supplied_values_required"))
+    ):
+        recommended_authority_required = (
+            _safe_str(next_operator_action.get("approval_action")) or "operator_supplied_authority"
+        )
     prerequisites_ready = enablement_execution_applied or len(missing_steps) == 0
     chain_complete = all(step["actions"] for step in ordered_steps) and len(enablement_sequence) == 5
     no_first_handoff_required = prerequisites_ready and not handoff
@@ -1499,6 +1514,18 @@ def _run() -> tuple[int, dict[str, Any]]:
         "current_first_missing_requirement": current_gap["first_missing_requirement"],
         "current_first_missing_truthful_gap": current_gap["first_missing_truthful_gap"],
         "raw_persistent_supervision_next_smallest_truthful_gap": current_gap["raw_persistent_supervision_gap"],
+        "next_smallest_truthful_gap": current_gap["gap"],
+        "next_smallest_truthful_gap_basis": current_gap["basis"],
+        "recommended_next_slice": recommended_next_slice,
+        "recommended_proof_script": "scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status",
+        "authority_required": recommended_authority_required,
+        "authority_granted": mode == "grantnext" and bool(grant_result.get("authority_granted")),
+        "operator_supplied_values_required": bool(next_operator_action.get("operator_supplied_values_required")),
+        "requires_confirmation": bool(next_operator_command.get("requires_confirmation")),
+        "requires_approval_id": bool(next_operator_command.get("requires_approval_id")),
+        "requires_operator_approval_decision": bool(next_operator_command.get("requires_operator_approval_decision")),
+        "would_execute": mode == "executenext" and confirm_execute,
+        "would_mutate": mode == "executenext" and bool(execute_result.get("executed")),
         "required_before_enable": required,
         "missing_required_before_enable": effective_missing,
         "required_before_enable_ready": prerequisites_ready,
