@@ -205,6 +205,43 @@ def _write_lens_status_with_applied_stage6_prerequisite_bringup(path: Path) -> N
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
+def _write_lens_status_with_summon_closure_completion_audit_handoff(path: Path) -> None:
+    _write_lens_status(path)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["stage6_readiness"]["closure_readback"] = {
+        "kind": "lens.stage6.closure_readback",
+        "status": "blocked",
+        "ready_to_close": False,
+        "criteria": [
+            {
+                "id": "summon_anywhere",
+                "status": "blocked",
+                "ready": False,
+                "next_smallest_truthful_gap": "summon_anywhere_blockers",
+                "handoff": {
+                    "first_blocker_family": "resident_host",
+                    "first_blocker_family_completion_audit_handoff": {
+                        "authority_granted": False,
+                        "authority_required": "process_supervision_authority",
+                        "diagnostic_only": True,
+                        "next_smallest_truthful_gap": "stage6_lens_completion_audit",
+                        "next_step": "consume_resident_host_process_supervision_handoff_before_stage6_closure",
+                        "previous_next_smallest_truthful_gap": "resident_host_process_not_supervised",
+                        "proof_script": (
+                            "scripts/lens-summon-resident-host-blocker-proof.ps1 "
+                            "-Mode Status -ConsumeProcessSupervisionHandoff"
+                        ),
+                        "read_only_contract": True,
+                        "would_execute": False,
+                        "would_mutate": False,
+                    },
+                },
+            }
+        ],
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
 def test_lens_summon_anywhere_blockers_proof_is_readback_only(tmp_path: Path) -> None:
     status_path = tmp_path / "lens-status.json"
     _write_lens_status(status_path)
@@ -235,6 +272,15 @@ def test_lens_summon_anywhere_blockers_proof_is_readback_only(tmp_path: Path) ->
     assert payload["recommended_authority_granted"] is False
     assert payload["authority_required"] == "resident_runtime_execution_authority"
     assert payload["authority_granted"] is False
+    assert payload["first_blocker_family_completion_audit_handoff_observed"] is False
+    assert payload["recommended_concrete_handoff_source"] == "first_blocker_family_handoff"
+    assert payload["recommended_concrete_next_slice"] == "run_resident_host_blocker_proof"
+    assert payload["recommended_concrete_proof_script"] == (
+        "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status"
+    )
+    assert payload["recommended_concrete_next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
+    assert payload["recommended_concrete_authority_required"] == "resident_runtime_execution_authority"
+    assert payload["recommended_concrete_authority_granted"] is False
     assert payload["first_blocker_family_handoff"] == {
         "id": "resident_host",
         "label": "Resident host",
@@ -350,6 +396,54 @@ def test_lens_summon_anywhere_blockers_proof_is_readback_only(tmp_path: Path) ->
     assert authority_request_readback["registers_hotkey"] is False
     assert authority_request_readback["launches_process"] is False
     assert authority_request_readback["controls_overlay"] is False
+
+
+def test_lens_summon_anywhere_blockers_proof_projects_closure_completion_handoff(
+    tmp_path: Path,
+) -> None:
+    status_path = tmp_path / "lens-status.json"
+    _write_lens_status_with_summon_closure_completion_audit_handoff(status_path)
+
+    proc = _run_proof("-Mode", "Status", "-StatusPath", str(status_path))
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "proof_passed"
+    assert payload["ok"] is True
+    assert payload["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+    assert payload["recommended_handoff_source"] == "first_blocker_family_handoff"
+    assert payload["recommended_next_slice"] == "run_resident_host_blocker_proof"
+    assert payload["recommended_proof_script"] == "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status"
+    assert payload["first_blocker_family_completion_audit_handoff_observed"] is True
+    assert payload["recommended_concrete_handoff_source"] == "first_blocker_family_completion_audit_handoff"
+    assert payload["recommended_concrete_next_slice"] == (
+        "consume_resident_host_process_supervision_handoff_before_stage6_closure"
+    )
+    assert payload["recommended_concrete_proof_script"] == (
+        "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status -ConsumeProcessSupervisionHandoff"
+    )
+    assert payload["recommended_concrete_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert payload["recommended_concrete_authority_required"] == "process_supervision_authority"
+    assert payload["recommended_concrete_authority_granted"] is False
+
+    concrete = payload["first_blocker_family_completion_audit_handoff"]
+    assert payload["recommended_concrete_handoff"] == concrete
+    assert concrete["previous_next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
+    assert concrete["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert concrete["authority_required"] == "process_supervision_authority"
+    assert concrete["authority_granted"] is False
+    assert concrete["read_only_contract"] is True
+    assert concrete["diagnostic_only"] is True
+    assert concrete["would_execute"] is False
+    assert concrete["would_mutate"] is False
+
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["first_blocker_family_handoff"]["status"] == "handoff_ready"
+    assert checks["first_blocker_family_completion_audit_handoff"]["status"] == "closure_handoff_ready"
+    assert all(item["passed"] for item in payload["checks"])
+    assert payload["governance"]["first_blocker_family_completion_audit_handoff_readback"] is True
+    assert payload["governance"]["execution_authority"] is False
+    assert payload["governance"]["mutation_authority_granted"] is False
 
 
 def test_lens_summon_anywhere_blockers_proof_keeps_applied_prerequisite_bringup_out_of_next_handoff(
@@ -469,6 +563,7 @@ def test_lens_summon_anywhere_blockers_proof_accepts_approved_request_without_au
         "read_only_contract": True,
         "os_binding_authority_request_readback": True,
         "first_blocker_family_handoff_readback": True,
+        "first_blocker_family_completion_audit_handoff_readback": False,
         "stage6_prerequisite_bringup_plan_readback": False,
         "approval_request_write": False,
         "product_execution_authority": False,

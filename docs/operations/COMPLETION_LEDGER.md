@@ -35718,6 +35718,77 @@ Latest validation for Stage 6 completion-audit concrete handoff readback:
   mypy passed with no issues in 501 source files, and pytest completed to 100%
   with expected skips`
 
+Stage 6 summon-anywhere concrete resident-host handoff readback on
+`2026-05-20`:
+
+- `scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status` now keeps its
+  default first-family recommendation on the resident-host blocker front door
+  while separately projecting the concrete completion-audit handoff already
+  present in `/lens/status stage6_readiness.closure_readback`.
+- On the current local posture, the broad summon-anywhere proof still reports
+  `next_smallest_truthful_gap=summon_anywhere_blockers`,
+  `recommended_handoff_source=first_blocker_family_handoff`,
+  `recommended_next_slice=run_resident_host_blocker_proof`, and
+  `recommended_proof_script=scripts/lens-summon-resident-host-blocker-proof.ps1
+  -Mode Status`.
+- The same proof now also reports
+  `recommended_concrete_handoff_source=first_blocker_family_completion_audit_handoff`,
+  `recommended_concrete_next_slice=consume_resident_host_process_supervision_handoff_before_stage6_closure`,
+  `recommended_concrete_proof_script=scripts/lens-summon-resident-host-blocker-proof.ps1
+  -Mode Status -ConsumeProcessSupervisionHandoff`, and
+  `recommended_concrete_next_smallest_truthful_gap=stage6_lens_completion_audit`.
+- The concrete handoff is a readback of the resident-host process-supervision
+  boundary only: `recommended_concrete_authority_required=process_supervision_authority`,
+  `recommended_concrete_authority_granted=false`, and
+  `first_blocker_family_completion_audit_handoff_observed=true`.
+- This is a readback/proof-contract fix only. It does not grant summon, hotkey,
+  overlay, process-supervision, service, resident-claim, memory, mutation,
+  approval-decision, or Stage 7 authority; it does not close Stage 6 or start
+  Stage 7.
+
+Latest validation for Stage 6 summon-anywhere concrete resident-host handoff
+readback:
+
+- PowerShell parser check for
+  `scripts\lens-summon-anywhere-blockers-proof.ps1`
+  Result: `passed; parse_ok`
+- `python -m pytest tests\test_lens_summon_anywhere_blockers_proof_script.py -q`
+  Result: `passed; 5 passed`
+- `python -m ruff check tests\test_lens_summon_anywhere_blockers_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_summon_anywhere_blockers_proof_script.py`
+  Result: `passed; 1 file already formatted`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-anywhere-blockers-proof.ps1 -Mode Status`
+  Result: `passed; ok=true; status=proof_passed;
+  next_smallest_truthful_gap=summon_anywhere_blockers;
+  recommended_handoff_source=first_blocker_family_handoff;
+  recommended_next_slice=run_resident_host_blocker_proof;
+  recommended_proof_script=scripts/lens-summon-resident-host-blocker-proof.ps1
+  -Mode Status;
+  recommended_concrete_handoff_source=first_blocker_family_completion_audit_handoff;
+  recommended_concrete_next_slice=consume_resident_host_process_supervision_handoff_before_stage6_closure;
+  recommended_concrete_proof_script=scripts/lens-summon-resident-host-blocker-proof.ps1
+  -Mode Status -ConsumeProcessSupervisionHandoff;
+  recommended_concrete_next_smallest_truthful_gap=stage6_lens_completion_audit;
+  recommended_concrete_authority_required=process_supervision_authority;
+  recommended_concrete_authority_granted=false;
+  first_blocker_family_completion_audit_handoff_observed=true;
+  stage6_prerequisite_bringup_plan_applied=true`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed; 37 passed, 1 skipped`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 120`
+  Result: `passed; ok=true; status=blocked; audit_status=complete;
+  ready_to_close=false; transition_allowed=false;
+  next_smallest_truthful_gap=summon_anywhere_blockers;
+  recommended_handoff_source=stage6_closure_readback_summon_anywhere_blockers;
+  recommended_concrete_handoff_source=persistent_supervision_resident_claim_boundary_handoff;
+  stage6_completion_audit_concrete_handoff_observed=true;
+  child_proof_timeouts={}`
+- `.\scripts\check.ps1`
+  Result: `passed; branch state OK, Ruff lint passed, Ruff format check passed,
+  mypy passed with no issues in 501 source files, and pytest completed to 100%
+  with expected skips`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

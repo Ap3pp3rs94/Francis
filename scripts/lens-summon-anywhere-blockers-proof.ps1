@@ -296,6 +296,23 @@ function Get-ReadinessCriterion {
   return $null
 }
 
+function Get-ClosureReadinessCriterion {
+  param(
+    [AllowNull()]
+    [object]$Stage6Readiness,
+    [string]$CriterionId
+  )
+
+  $ClosureReadback = Get-PropertyValue -Payload $Stage6Readiness -Name 'closure_readback'
+  $Criteria = Get-PropertyValue -Payload $ClosureReadback -Name 'criteria' -Default @()
+  foreach ($Criterion in @($Criteria)) {
+    if ((Get-PropertyValue -Payload $Criterion -Name 'id' -Default '') -eq $CriterionId) {
+      return $Criterion
+    }
+  }
+  return $null
+}
+
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 & (Join-Path $PSScriptRoot 'assert-runtime-root.ps1') -Root $RepoRoot
 
@@ -321,6 +338,10 @@ $SummonPreflightGovernance = Get-PropertyValue -Payload $SummonPreflightPayload 
 $LensStatusRead = Get-LensStatus -StatusPath $StatusPath
 $LensStatus = Get-PropertyValue -Payload $LensStatusRead -Name 'payload'
 $Stage6Readiness = Get-PropertyValue -Payload $LensStatus -Name 'stage6_readiness'
+$Stage6ClosureReadback = Get-PropertyValue -Payload $Stage6Readiness -Name 'closure_readback'
+$SummonAnywhereClosureCriterion = Get-ClosureReadinessCriterion -Stage6Readiness $Stage6Readiness -CriterionId 'summon_anywhere'
+$SummonAnywhereClosureHandoff = Get-PropertyValue -Payload $SummonAnywhereClosureCriterion -Name 'handoff' -Default ([ordered]@{})
+$FirstBlockerFamilyCompletionAuditHandoff = Get-PropertyValue -Payload $SummonAnywhereClosureHandoff -Name 'first_blocker_family_completion_audit_handoff' -Default ([ordered]@{})
 $Stage6PrerequisiteBringupPlan = Get-PropertyValue -Payload $Stage6Readiness -Name 'prerequisite_bringup' -Default ([ordered]@{})
 $Stage6PrerequisiteBringupPlanGovernance = Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'governance' -Default ([ordered]@{})
 $Stage6PrerequisiteBringupPlanNextOperatorAction = Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'next_operator_action' -Default ([ordered]@{})
@@ -547,6 +568,23 @@ $FirstBlockerFamilyHandoffObserved = (
   [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'authority_required' -Default '') -eq 'resident_runtime_execution_authority' -and
   $AllFamilyHandoffsBounded
 )
+$FirstBlockerFamilyCompletionAuditHandoffObserved = (
+  [bool](Get-PropertyValue -Payload $LensStatusRead -Name 'ok' -Default $false) -and
+  [string](Get-PropertyValue -Payload $Stage6ClosureReadback -Name 'kind' -Default '') -eq 'lens.stage6.closure_readback' -and
+  [string](Get-PropertyValue -Payload $SummonAnywhereClosureCriterion -Name 'id' -Default '') -eq 'summon_anywhere' -and
+  [string](Get-PropertyValue -Payload $SummonAnywhereClosureCriterion -Name 'status' -Default '') -eq 'blocked' -and
+  [string](Get-PropertyValue -Payload $SummonAnywhereClosureCriterion -Name 'next_smallest_truthful_gap' -Default '') -eq 'summon_anywhere_blockers' -and
+  [string](Get-PropertyValue -Payload $SummonAnywhereClosureHandoff -Name 'first_blocker_family' -Default '') -eq 'resident_host' -and
+  [string](Get-PropertyValue -Payload $FirstBlockerFamilyCompletionAuditHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'stage6_lens_completion_audit' -and
+  [string](Get-PropertyValue -Payload $FirstBlockerFamilyCompletionAuditHandoff -Name 'next_step' -Default '') -eq 'consume_resident_host_process_supervision_handoff_before_stage6_closure' -and
+  [string](Get-PropertyValue -Payload $FirstBlockerFamilyCompletionAuditHandoff -Name 'proof_script' -Default '') -eq 'scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status -ConsumeProcessSupervisionHandoff' -and
+  [string](Get-PropertyValue -Payload $FirstBlockerFamilyCompletionAuditHandoff -Name 'authority_required' -Default '') -eq 'process_supervision_authority' -and
+  -not [bool](Get-PropertyValue -Payload $FirstBlockerFamilyCompletionAuditHandoff -Name 'authority_granted' -Default $true) -and
+  [bool](Get-PropertyValue -Payload $FirstBlockerFamilyCompletionAuditHandoff -Name 'read_only_contract' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $FirstBlockerFamilyCompletionAuditHandoff -Name 'diagnostic_only' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $FirstBlockerFamilyCompletionAuditHandoff -Name 'would_execute' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $FirstBlockerFamilyCompletionAuditHandoff -Name 'would_mutate' -Default $true)
+)
 $RecommendedHandoffSource = if ($FirstBlockerFamilyHandoffObserved) { 'first_blocker_family_handoff' } else { '' }
 $RecommendedNextSlice = [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'next_step' -Default '')
 $RecommendedProofScript = [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'proof_script' -Default '')
@@ -612,12 +650,25 @@ if ($Stage6PrerequisiteBringupPlanObserved) {
   }
 }
 
+$RecommendedConcreteHandoffSource = $RecommendedHandoffSource
+$RecommendedConcreteHandoff = $RecommendedHandoff
+if ($FirstBlockerFamilyCompletionAuditHandoffObserved) {
+  $RecommendedConcreteHandoffSource = 'first_blocker_family_completion_audit_handoff'
+  $RecommendedConcreteHandoff = $FirstBlockerFamilyCompletionAuditHandoff
+}
+$RecommendedConcreteNextSlice = [string](Get-PropertyValue -Payload $RecommendedConcreteHandoff -Name 'next_step' -Default $RecommendedNextSlice)
+$RecommendedConcreteProofScript = [string](Get-PropertyValue -Payload $RecommendedConcreteHandoff -Name 'proof_script' -Default $RecommendedProofScript)
+$RecommendedConcreteNextGap = [string](Get-PropertyValue -Payload $RecommendedConcreteHandoff -Name 'next_smallest_truthful_gap' -Default 'summon_anywhere_blockers')
+$RecommendedConcreteAuthorityRequired = [string](Get-PropertyValue -Payload $RecommendedConcreteHandoff -Name 'authority_required' -Default $RecommendedAuthorityRequired)
+$RecommendedConcreteAuthorityGranted = [bool](Get-PropertyValue -Payload $RecommendedConcreteHandoff -Name 'authority_granted' -Default $RecommendedAuthorityGranted)
+
 $Checks = @(
   (New-Check -Id 'summon_preflight_readback' -Status $(if ($SummonPreflightObserved) { 'blocked_readback_ready' } else { 'missing_or_unexpected' }) -Passed $SummonPreflightObserved -Evidence 'scripts/lens-summon-preflight.ps1 -Mode Status' -Reason 'The direct summon preflight must name summon-anywhere as blocked and point to summon_anywhere_blockers.'),
   (New-Check -Id 'stage6_family_projection' -Status $(if ($Stage6FamilyProjectionObserved) { 'blocked_families_projected' } else { 'missing_or_unexpected' }) -Passed $Stage6FamilyProjectionObserved -Evidence 'summon preflight blockers projected into Stage 6 acceptance families' -Reason 'The handoff proof must expose the same blocker-family shape used by the Stage 6 completion audit.'),
   (New-Check -Id 'first_blocker_family_handoff' -Status $(if ($FirstBlockerFamilyHandoffObserved) { 'handoff_ready' } else { 'missing_or_unexpected' }) -Passed $FirstBlockerFamilyHandoffObserved -Evidence 'summon first blocker family to resident-host proof script' -Reason 'The aggregate summon-anywhere blocker proof must hand the first blocked acceptance family to its bounded proof without granting authority.'),
   (New-Check -Id 'summon_side_effects_denied' -Status $(if ($SideEffectsDenied) { 'diagnostic_bounded' } else { 'unexpected_authority' }) -Passed $SideEffectsDenied -Evidence 'lens.summon.preflight.governance' -Reason 'The proof must not grant summon, hotkey, overlay, process, memory, capture, sensing, approval-decision, or execution authority.'),
   (New-Check -Id 'os_binding_authority_request_readback' -Status $(if ($OsBindingAuthorityRequestReadbackObserved) { 'readback_ready' } else { 'missing_or_unexpected' }) -Passed $OsBindingAuthorityRequestReadbackObserved -Evidence '/lens/status:/lens/os-binding/authority/requests' -Reason 'The summon-anywhere blocker proof must consume OS-binding authority request readback before treating command-palette authority visibility as audited.'),
+  (New-Check -Id 'first_blocker_family_completion_audit_handoff' -Status $(if ($FirstBlockerFamilyCompletionAuditHandoffObserved) { 'closure_handoff_ready' } else { 'not_present' }) -Passed $true -Evidence '/lens/status stage6_readiness.closure_readback' -Reason 'When Lens status exposes the summon-anywhere resident-host completion-audit handoff, the aggregate proof should project it separately from the default family front door.'),
   (New-Check -Id 'stage6_prerequisite_bringup_plan' -Status $(if ($Stage6PrerequisiteBringupPlanObserved -and $Stage6PrerequisiteBringupPlanApplied) { 'applied_readback_ready' } elseif ($Stage6PrerequisiteBringupPlanObserved) { 'operator_plan_readback_ready' } elseif ($Stage6PrerequisiteBringupPlanPresent) { 'missing_or_unexpected' } else { 'not_present' }) -Passed $(-not $Stage6PrerequisiteBringupPlanPresent -or $Stage6PrerequisiteBringupPlanObserved) -Evidence '/lens/status stage6_readiness.prerequisite_bringup' -Reason 'When Lens status exposes the governed Stage 6 prerequisite bring-up plan, the aggregate summon-anywhere proof should consume its readback without routing back to an already-applied operator handoff.')
 )
 
@@ -643,13 +694,22 @@ $Payload = [ordered]@{
   authority_required = $RecommendedAuthorityRequired
   authority_granted = $RecommendedAuthorityGranted
   recommended_handoff = $RecommendedHandoff
+  recommended_concrete_handoff_source = $RecommendedConcreteHandoffSource
+  recommended_concrete_next_slice = $RecommendedConcreteNextSlice
+  recommended_concrete_proof_script = $RecommendedConcreteProofScript
+  recommended_concrete_next_smallest_truthful_gap = $RecommendedConcreteNextGap
+  recommended_concrete_authority_required = $RecommendedConcreteAuthorityRequired
+  recommended_concrete_authority_granted = $RecommendedConcreteAuthorityGranted
+  recommended_concrete_handoff = $RecommendedConcreteHandoff
   summon_preflight_observed = $SummonPreflightObserved
   stage6_family_projection_observed = $Stage6FamilyProjectionObserved
   side_effects_denied = $SideEffectsDenied
   os_binding_authority_request_readback_observed = $OsBindingAuthorityRequestReadbackObserved
   first_blocker_family_handoff_observed = $FirstBlockerFamilyHandoffObserved
+  first_blocker_family_completion_audit_handoff_observed = $FirstBlockerFamilyCompletionAuditHandoffObserved
   first_blocker_family = if (@($Stage6BlockedFamilies).Count -gt 0) { [string]$Stage6BlockedFamilies[0] } else { '' }
   first_blocker_family_handoff = $FirstBlockerFamilyHandoff
+  first_blocker_family_completion_audit_handoff = $FirstBlockerFamilyCompletionAuditHandoff
   blocked_families = [string[]]@($Stage6BlockedFamilies)
   blocked_family_handoffs = @($Stage6BlockerFamilyHandoffs)
   stage6_prerequisite_bringup_plan_observed = $Stage6PrerequisiteBringupPlanObserved
@@ -741,6 +801,7 @@ $Payload = [ordered]@{
     read_only_contract = [bool](Get-PropertyValue -Payload $SummonPreflightGovernance -Name 'read_only_contract' -Default $false)
     os_binding_authority_request_readback = $OsBindingAuthorityRequestReadbackObserved
     first_blocker_family_handoff_readback = $FirstBlockerFamilyHandoffObserved
+    first_blocker_family_completion_audit_handoff_readback = $FirstBlockerFamilyCompletionAuditHandoffObserved
     stage6_prerequisite_bringup_plan_readback = $Stage6PrerequisiteBringupPlanObserved
     approval_request_write = $false
     product_execution_authority = $false
