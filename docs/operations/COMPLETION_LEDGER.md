@@ -35597,6 +35597,70 @@ Latest validation for Stage 6 Windows hotkey live-runtime CI hardening:
   mypy passed with no issues in 501 source files, and pytest completed to 100%
   with expected skips`
 
+Stage 6 summon-anywhere applied-prerequisite loop guard on `2026-05-20`:
+
+- `scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status` now
+  distinguishes an actionable Stage 6 prerequisite bring-up plan from an
+  already-applied prerequisite bring-up receipt readback.
+- When `/lens/status stage6_readiness.prerequisite_bringup` reports
+  `status=persistent_supervision_enablement_applied`,
+  `required_before_enable_ready=true`, no missing required-before-enable items,
+  and `current_truthful_gap=persistent_supervision_execution_boundary`, the
+  summon-anywhere blockers proof still exposes that readback but no longer
+  routes the recommended next handoff back to
+  `scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status`.
+- On the current local posture, the proof now keeps the broad Stage 6 closure
+  gap at `summon_anywhere_blockers` and recommends the first blocked acceptance
+  family handoff:
+  `recommended_handoff_source=first_blocker_family_handoff`,
+  `recommended_next_slice=run_resident_host_blocker_proof`, and
+  `recommended_proof_script=scripts/lens-summon-resident-host-blocker-proof.ps1
+  -Mode Status`.
+- `/lens/status stage6_readiness.next_handoff` now applies the same
+  forward-only rule for an already-applied prerequisite readback: the applied
+  prerequisite plan remains observed, but the recommended handoff advances to
+  `persistent_supervision_enablement_receipt_review_handoff` and
+  `scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode
+  Status` instead of re-running the prerequisite bring-up review.
+- This supersedes the earlier Stage 6 summon-anywhere governed prerequisite
+  handoff readback note for applied-prerequisite posture only. It does not
+  grant summon, hotkey, overlay, process, memory, approval-decision, mutation,
+  or resident-claim authority; it does not claim `summon_anywhere=true`, close
+  Stage 6, or start Stage 7.
+
+Latest validation for Stage 6 summon-anywhere applied-prerequisite loop guard:
+
+- `python -m pytest tests\test_lens_summon_anywhere_blockers_proof_script.py -q`
+  Result: `passed; 4 focused proof tests exited 0`
+- `python -m pytest tests\test_api_lens.py::test_stage6_next_handoff_promotes_enablement_receipt_review_over_applied_prerequisite_plan -q`
+  Result: `passed`
+- PowerShell parser check for
+  `scripts\lens-summon-anywhere-blockers-proof.ps1`
+  Result: `passed; parse_ok`
+- `python -c "import json; from francis.lens.status import lens_status; ..."`
+  Result: `passed; stage6_readiness.next_handoff recommended
+  persistent_supervision_enablement_receipt_review_handoff;
+  next_smallest_truthful_gap=persistent_supervision_resident_claim_authority_boundary;
+  recommended_proof_script=scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1
+  -Mode Status`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-anywhere-blockers-proof.ps1 -Mode Status`
+  Result: `passed; ok=true; status=proof_passed;
+  next_smallest_truthful_gap=summon_anywhere_blockers;
+  recommended_handoff_source=first_blocker_family_handoff;
+  recommended_next_slice=run_resident_host_blocker_proof;
+  recommended_proof_script=scripts/lens-summon-resident-host-blocker-proof.ps1
+  -Mode Status; recommended_authority_granted=false;
+  stage6_prerequisite_bringup_plan_observed=true;
+  stage6_prerequisite_bringup_plan_applied=true`
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_summon_anywhere_blockers_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\lens\status.py tests\test_api_lens.py tests\test_lens_summon_anywhere_blockers_proof_script.py`
+  Result: `passed; 3 files already formatted`
+- `.\scripts\check.ps1`
+  Result: `passed; branch state OK, Ruff lint passed, Ruff format check passed,
+  mypy passed with no issues in 501 source files, and pytest completed to 100%
+  with expected skips`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

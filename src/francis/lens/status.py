@@ -1607,7 +1607,7 @@ def _stage6_next_handoff_readback(
         recommended_readiness_route = _safe_str(enablement_receipt_review_handoff.get("readiness_route")).strip()
         authority_required = _safe_str(enablement_receipt_review_handoff.get("authority_required")).strip()
 
-    if prerequisite_bringup_receipt_review_observed:
+    if prerequisite_bringup_receipt_review_observed and not enablement_receipt_review_observed:
         recommended_handoff_source = "stage6_prerequisite_bringup_operator_plan"
         recommended_handoff = prerequisite_bringup_receipt_review_handoff
         next_gap = _safe_str(prerequisite_bringup_receipt_review_handoff.get("next_smallest_truthful_gap")).strip()

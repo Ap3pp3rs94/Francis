@@ -5808,7 +5808,7 @@ def test_stage6_prerequisite_bringup_applied_receipt_wins_over_stale_prerequisit
     assert checks["first_missing_handoff_bounded"]["passed"] is True
 
 
-def test_stage6_next_handoff_promotes_prerequisite_bringup_receipt_review_over_stale_first_missing() -> None:
+def test_stage6_next_handoff_promotes_enablement_receipt_review_over_applied_prerequisite_plan() -> None:
     from francis.lens.status import _stage6_next_handoff_readback
 
     first_missing_handoff = {
@@ -5902,15 +5902,18 @@ def test_stage6_next_handoff_promotes_prerequisite_bringup_receipt_review_over_s
         },
     )
 
-    assert payload["recommended_handoff_source"] == "stage6_prerequisite_bringup_operator_plan"
-    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_execution_boundary"
+    assert payload["recommended_handoff_source"] == "persistent_supervision_enablement_receipt_review_handoff"
+    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_resident_claim_authority_boundary"
     assert (
         payload["recommended_next_slice"]
-        == "run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt"
+        == "review_persistent_supervision_resident_claim_boundary_without_runtime_start"
     )
-    assert payload["recommended_proof_script"] == "scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status"
+    assert (
+        payload["recommended_proof_script"]
+        == "scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status"
+    )
     assert payload["recommended_route"] == "/lens/host/persistent-supervision/enablement/executions"
-    assert payload["authority_required"] == "none_readback_only"
+    assert payload["authority_required"] == "resident_claim_authority"
     assert payload["authority_granted"] is False
     assert payload["stage6_prerequisite_bringup_receipt_review_handoff_observed"] is True
     bringup_handoff = payload["stage6_prerequisite_bringup_receipt_review_handoff"]

@@ -342,6 +342,18 @@ $Stage6PrerequisiteBringupPlanNextOperatorRequirement = [string](Get-PropertyVal
 $Stage6PrerequisiteBringupPlanRecommendedNextSlice = [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'recommended_next_slice' -Default '')
 $Stage6PrerequisiteBringupPlanRecommendedProofScript = [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'recommended_proof_script' -Default '')
 $Stage6PrerequisiteBringupNextOperatorActionId = [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlanNextOperatorAction -Name 'id' -Default '')
+$Stage6PrerequisiteBringupPlanRequiredBeforeEnableReady = [bool](
+  Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'required_before_enable_ready' -Default $false
+)
+$Stage6PrerequisiteBringupPlanApplied = (
+  $Stage6PrerequisiteBringupPlanStatus -eq 'persistent_supervision_enablement_applied' -and
+  $Stage6PrerequisiteBringupPlanRequiredBeforeEnableReady -and
+  @($Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable).Count -eq 0 -and
+  $Stage6PrerequisiteBringupPlanCurrentGap -eq 'persistent_supervision_execution_boundary' -and
+  $Stage6PrerequisiteBringupPlanNextOperatorRequirement -eq 'persistent_supervision_enablement_receipt' -and
+  $Stage6PrerequisiteBringupNextOperatorActionId -eq 'review_persistent_supervision_enablement_receipt'
+)
+$Stage6PrerequisiteBringupNeedsOperatorPlanHandoff = -not $Stage6PrerequisiteBringupPlanApplied
 $OsBindingAuthorityRequests = Get-PropertyValue -Payload $LensStatus -Name 'os_binding_authority_requests'
 $OsBindingAuthorityRequestsGovernance = Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'governance'
 $OsBindingReadinessCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'os_binding_readiness'
@@ -572,7 +584,8 @@ if ($Stage6PrerequisiteBringupPlanObserved) {
     next_operator_command = $Stage6PrerequisiteBringupPlanNextOperatorCommand
     required_before_enable = [string[]]@($Stage6PrerequisiteBringupPlanRequiredBeforeEnable)
     missing_required_before_enable = [string[]]@($Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable)
-    required_before_enable_ready = [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'required_before_enable_ready' -Default $false)
+    required_before_enable_ready = $Stage6PrerequisiteBringupPlanRequiredBeforeEnableReady
+    applied = $Stage6PrerequisiteBringupPlanApplied
     authority_required = $Stage6PrerequisiteBringupAuthorityRequired
     authority_granted = $Stage6PrerequisiteBringupAuthorityGranted
     read_only_contract = $true
@@ -587,14 +600,16 @@ if ($Stage6PrerequisiteBringupPlanObserved) {
       ) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Sort-Object -Unique)
   }
 
-  $RecommendedHandoffSource = 'stage6_prerequisite_bringup_operator_plan'
-  $RecommendedNextSlice = [string]$Stage6PrerequisiteBringupOperatorPlanHandoff.next_step
-  $RecommendedProofScript = [string]$Stage6PrerequisiteBringupOperatorPlanHandoff.proof_script
-  $RecommendedRoute = [string]$Stage6PrerequisiteBringupOperatorPlanHandoff.route
-  $RecommendedReadinessRoute = [string]$Stage6PrerequisiteBringupOperatorPlanHandoff.readiness_route
-  $RecommendedAuthorityRequired = [string]$Stage6PrerequisiteBringupOperatorPlanHandoff.authority_required
-  $RecommendedAuthorityGranted = [bool]$Stage6PrerequisiteBringupOperatorPlanHandoff.authority_granted
-  $RecommendedHandoff = $Stage6PrerequisiteBringupOperatorPlanHandoff
+  if ($Stage6PrerequisiteBringupNeedsOperatorPlanHandoff) {
+    $RecommendedHandoffSource = 'stage6_prerequisite_bringup_operator_plan'
+    $RecommendedNextSlice = [string]$Stage6PrerequisiteBringupOperatorPlanHandoff.next_step
+    $RecommendedProofScript = [string]$Stage6PrerequisiteBringupOperatorPlanHandoff.proof_script
+    $RecommendedRoute = [string]$Stage6PrerequisiteBringupOperatorPlanHandoff.route
+    $RecommendedReadinessRoute = [string]$Stage6PrerequisiteBringupOperatorPlanHandoff.readiness_route
+    $RecommendedAuthorityRequired = [string]$Stage6PrerequisiteBringupOperatorPlanHandoff.authority_required
+    $RecommendedAuthorityGranted = [bool]$Stage6PrerequisiteBringupOperatorPlanHandoff.authority_granted
+    $RecommendedHandoff = $Stage6PrerequisiteBringupOperatorPlanHandoff
+  }
 }
 
 $Checks = @(
@@ -603,7 +618,7 @@ $Checks = @(
   (New-Check -Id 'first_blocker_family_handoff' -Status $(if ($FirstBlockerFamilyHandoffObserved) { 'handoff_ready' } else { 'missing_or_unexpected' }) -Passed $FirstBlockerFamilyHandoffObserved -Evidence 'summon first blocker family to resident-host proof script' -Reason 'The aggregate summon-anywhere blocker proof must hand the first blocked acceptance family to its bounded proof without granting authority.'),
   (New-Check -Id 'summon_side_effects_denied' -Status $(if ($SideEffectsDenied) { 'diagnostic_bounded' } else { 'unexpected_authority' }) -Passed $SideEffectsDenied -Evidence 'lens.summon.preflight.governance' -Reason 'The proof must not grant summon, hotkey, overlay, process, memory, capture, sensing, approval-decision, or execution authority.'),
   (New-Check -Id 'os_binding_authority_request_readback' -Status $(if ($OsBindingAuthorityRequestReadbackObserved) { 'readback_ready' } else { 'missing_or_unexpected' }) -Passed $OsBindingAuthorityRequestReadbackObserved -Evidence '/lens/status:/lens/os-binding/authority/requests' -Reason 'The summon-anywhere blocker proof must consume OS-binding authority request readback before treating command-palette authority visibility as audited.'),
-  (New-Check -Id 'stage6_prerequisite_bringup_plan' -Status $(if ($Stage6PrerequisiteBringupPlanObserved) { 'operator_plan_readback_ready' } elseif ($Stage6PrerequisiteBringupPlanPresent) { 'missing_or_unexpected' } else { 'not_present' }) -Passed $(-not $Stage6PrerequisiteBringupPlanPresent -or $Stage6PrerequisiteBringupPlanObserved) -Evidence '/lens/status stage6_readiness.prerequisite_bringup' -Reason 'When Lens status exposes the governed Stage 6 prerequisite bring-up plan, the aggregate summon-anywhere proof should prefer that operator handoff over stale lower-level proof loops.')
+  (New-Check -Id 'stage6_prerequisite_bringup_plan' -Status $(if ($Stage6PrerequisiteBringupPlanObserved -and $Stage6PrerequisiteBringupPlanApplied) { 'applied_readback_ready' } elseif ($Stage6PrerequisiteBringupPlanObserved) { 'operator_plan_readback_ready' } elseif ($Stage6PrerequisiteBringupPlanPresent) { 'missing_or_unexpected' } else { 'not_present' }) -Passed $(-not $Stage6PrerequisiteBringupPlanPresent -or $Stage6PrerequisiteBringupPlanObserved) -Evidence '/lens/status stage6_readiness.prerequisite_bringup' -Reason 'When Lens status exposes the governed Stage 6 prerequisite bring-up plan, the aggregate summon-anywhere proof should consume its readback without routing back to an already-applied operator handoff.')
 )
 
 $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
@@ -638,6 +653,7 @@ $Payload = [ordered]@{
   blocked_families = [string[]]@($Stage6BlockedFamilies)
   blocked_family_handoffs = @($Stage6BlockerFamilyHandoffs)
   stage6_prerequisite_bringup_plan_observed = $Stage6PrerequisiteBringupPlanObserved
+  stage6_prerequisite_bringup_plan_applied = $Stage6PrerequisiteBringupPlanApplied
   stage6_prerequisite_bringup_operator_plan_handoff = $Stage6PrerequisiteBringupOperatorPlanHandoff
   stage6_prerequisite_bringup_plan = [ordered]@{
     present = $Stage6PrerequisiteBringupPlanPresent
@@ -652,7 +668,8 @@ $Payload = [ordered]@{
     next_operator_command = $Stage6PrerequisiteBringupPlanNextOperatorCommand
     required_before_enable = [string[]]@($Stage6PrerequisiteBringupPlanRequiredBeforeEnable)
     missing_required_before_enable = [string[]]@($Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable)
-    required_before_enable_ready = [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'required_before_enable_ready' -Default $false)
+    required_before_enable_ready = $Stage6PrerequisiteBringupPlanRequiredBeforeEnableReady
+    applied = $Stage6PrerequisiteBringupPlanApplied
     recommended_next_slice = $Stage6PrerequisiteBringupPlanRecommendedNextSlice
     recommended_proof_script = $Stage6PrerequisiteBringupPlanRecommendedProofScript
   }
