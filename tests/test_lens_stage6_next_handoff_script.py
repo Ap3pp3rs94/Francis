@@ -1346,6 +1346,25 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     assert payload["next_operator_action"]["id"] == "review_persistent_supervision_enablement_receipt"
     assert payload["next_operator_action"]["method"] == "GET"
     assert payload["next_operator_command"]["mode"] == "Status"
+    assert payload["recommended_operator_handoff"]["source"] == (
+        "stage6_completion_audit_launch_on_hotkey_readback_required"
+    )
+    assert payload["recommended_next_operator_action_requirement"] == "stage6_completion_audit_runtime_readback"
+    assert payload["recommended_next_operator_action"]["id"] == (
+        "run_stage6_completion_audit_with_launch_on_hotkey_runtime_readback"
+    )
+    assert payload["recommended_next_operator_action"]["requires_explicit_operator_opt_in"] is True
+    assert payload["recommended_next_operator_action"]["script_would_execute"] is False
+    assert payload["recommended_next_operator_action"]["script_would_mutate"] is False
+    assert payload["recommended_next_operator_command"] == {
+        "command": ".\\scripts\\lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey",
+        "mode": "Status",
+        "requires_confirmation": False,
+        "requires_explicit_operator_opt_in": True,
+        "requires_approval_id": False,
+        "requires_operator_approval_decision": False,
+        "completion_audit_json_parameter": "-CompletionAuditJsonPath",
+    }
     assert payload["stage6_prerequisite_bringup_plan_observed"] is True
     assert payload["stage6_prerequisite_bringup_plan"]["status"] == "persistent_supervision_enablement_applied"
     assert payload["stage6_prerequisite_bringup_plan"]["missing_required_before_enable"] == []
@@ -1479,6 +1498,35 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     assert consumed_payload["stage6_completion_audit_recommended_handoff_consumed"] is True
     assert consumed_payload["stage6_completion_audit_runtime_readback_required"] is False
     assert consumed_payload["recommended_handoff"]["status"] == "authority_readiness_handoff_ready"
+    assert consumed_payload["recommended_operator_handoff"]["source"] == "resident_runtime_authority_readiness_handoff"
+    assert consumed_payload["recommended_next_operator_action_requirement"] == (
+        "exact_resident_runtime_execution_authority_approval"
+    )
+    assert consumed_payload["recommended_next_operator_action"]["id"] == (
+        "request_resident_runtime_execution_authority"
+    )
+    assert consumed_payload["recommended_next_operator_action"]["route"] == (
+        "/lens/resident-runtime/authority-grant/request"
+    )
+    assert consumed_payload["recommended_next_operator_action"]["approval_action"] == (
+        "lens.resident_runtime.execution_authority"
+    )
+    assert consumed_payload["recommended_next_operator_action"]["script_would_request_authority"] is True
+    assert consumed_payload["recommended_next_operator_action"]["script_would_grant_authority"] is False
+    assert consumed_payload["recommended_next_operator_action"]["script_would_decide_approval"] is False
+    assert consumed_payload["recommended_next_operator_command"] == {
+        "command": (
+            ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 -Mode RequestNext -Actor <actor> -ConfirmRequest"
+        ),
+        "mode": "RequestNext",
+        "requires_confirmation": True,
+        "requires_explicit_operator_opt_in": True,
+        "requires_actor": True,
+        "requires_approval_id": False,
+        "requires_operator_approval_decision": False,
+    }
+    assert consumed_payload["recommended_next_operator_actor_scope_readiness"]["required_scope"] == "system.write"
+    assert consumed_payload["recommended_next_operator_actor_scope_readiness"]["operator_must_supply_actor"] is True
     consumed_checks = {item["id"]: item for item in consumed_payload["checks"]}
     assert consumed_checks["stage6_completion_audit_runtime_authority_handoff"]["status"] == (
         "runtime_authority_handoff_consumed"

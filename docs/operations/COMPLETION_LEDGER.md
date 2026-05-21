@@ -36081,6 +36081,61 @@ convergence:
   Result: `passed; branch state OK; Ruff check passed; Ruff format check
   passed; mypy passed with no issues in 501 source files; pytest reached 100%`
 
+Stage 6 next-handoff recommended operator command readback on `2026-05-21`:
+
+- `scripts/lens-stage6-next-handoff.ps1 -Mode Status` now carries a
+  `recommended_operator_handoff` alongside the existing prerequisite bring-up
+  plan readback. When the next recommended slice is the explicit
+  launch-on-hotkey runtime readback, that handoff names the exact opt-in local
+  command:
+  `.\scripts\lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey`.
+- When a supplied completion-audit JSON has already consumed the runtime
+  readback and selected
+  `create_or_select_exact_approved_resident_runtime_execution_authority_request`,
+  the next-handoff payload now exposes the exact guarded operator command:
+  `.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode RequestNext -Actor <actor> -ConfirmRequest`.
+  The command is marked as requiring an actor, explicit confirmation, and
+  `system.write` scope; it creates only a pending approval request and does not
+  grant authority or decide approval.
+- This does not close Stage 6, start Stage 7, grant launch-on-hotkey authority,
+  operator approval, approval-decision authority, process-supervision authority,
+  resident-runtime execution authority, service control, memory write, resident
+  claim, or mutation authority. It makes the recommended Stage 6 operator path
+  inspectable without replacing the governed approval model.
+
+Latest validation for Stage 6 next-handoff recommended operator command
+readback:
+
+- PowerShell parser check for `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed; parser_ok`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 1 file already formatted`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status`
+  Result: `passed; ok=true; status=proof_passed;
+  recommended_handoff_source=
+  stage6_completion_audit_launch_on_hotkey_readback_required;
+  recommended_next_slice=
+  run_stage6_completion_audit_with_launch_on_hotkey_runtime_readback;
+  recommended_next_operator_action_requirement=
+  stage6_completion_audit_runtime_readback;
+  recommended_next_operator_command=.\scripts\lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey`
+  Result: `passed; ok=true; status=blocked;
+  next_smallest_truthful_gap=resident_surface_runtime_not_supervised;
+  recommended_handoff_source=
+  stage6_helpful_not_noisy_runtime_authority_readiness_handoff;
+  recommended_next_slice=
+  create_or_select_exact_approved_resident_runtime_execution_authority_request;
+  recommended_proof_script=scripts/lens-stage6-checkpoint.ps1 -Mode Status;
+  authority_required=operator_approval; allow_launch_on_hotkey=true`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\check.ps1`
+  Result: `passed; branch state OK; Ruff check passed; Ruff format check
+  passed; mypy passed with no issues in 501 source files; pytest reached 100%`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -90,6 +90,138 @@ function New-Check {
   }
 }
 
+function New-Stage6CompletionAuditRuntimeOperatorHandoff {
+  return [ordered]@{
+    source = 'stage6_completion_audit_launch_on_hotkey_readback_required'
+    status = 'operator_opt_in_required'
+    next_operator_action_requirement = 'stage6_completion_audit_runtime_readback'
+    next_operator_action = [ordered]@{
+      id = 'run_stage6_completion_audit_with_launch_on_hotkey_runtime_readback'
+      route = '/lens/status'
+      method = 'LOCAL_SCRIPT'
+      mode = 'runtime_readback'
+      proof_script = 'scripts/lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey'
+      live_effect = 'reads back the launch-on-hotkey runtime posture before advancing the Stage 6 authority-readiness handoff'
+      operator_supplied_values_required = $false
+      requires_explicit_operator_opt_in = $true
+      script_would_execute = $false
+      script_would_mutate = $false
+      script_would_request_authority = $false
+      script_would_grant_authority = $false
+      script_would_decide_approval = $false
+    }
+    next_operator_command = [ordered]@{
+      command = '.\scripts\lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey'
+      mode = 'Status'
+      requires_confirmation = $false
+      requires_explicit_operator_opt_in = $true
+      requires_approval_id = $false
+      requires_operator_approval_decision = $false
+      completion_audit_json_parameter = '-CompletionAuditJsonPath'
+    }
+    read_only_status_command = '.\scripts\lens-stage6-next-handoff.ps1 -Mode Status'
+    operator_sequence_command_availability = [ordered]@{
+      available_now_count = 1
+      preview_only_count = 0
+      sequence_length = 1
+      truthful = $true
+    }
+    read_only_contract = $true
+    diagnostic_only = $true
+    approval_request_write_if_run = $false
+    approval_decision_authority = $false
+    would_execute = $false
+    would_mutate = $false
+  }
+}
+
+function New-ResidentRuntimeAuthorityRequestOperatorHandoff {
+  param(
+    [AllowNull()]
+    [object]$SourceHandoff
+  )
+
+  $FirstBlockedRequirementHandoff = Get-PropertyValue `
+    -Payload $SourceHandoff `
+    -Name 'resident_runtime_authority_grant_first_blocked_requirement_handoff' `
+    -Default ([ordered]@{})
+  $RequestRoute = [string](Get-PropertyValue `
+      -Payload $FirstBlockedRequirementHandoff `
+      -Name 'request_route' `
+      -Default '/lens/resident-runtime/authority-grant/request')
+  $RequestsRoute = [string](Get-PropertyValue `
+      -Payload $FirstBlockedRequirementHandoff `
+      -Name 'requests_route' `
+      -Default '/lens/resident-runtime/authority-grant/requests')
+  $ReadinessRoute = [string](Get-PropertyValue `
+      -Payload $FirstBlockedRequirementHandoff `
+      -Name 'readiness_route' `
+      -Default '/lens/resident-runtime/authority-grant/readiness')
+  $ApprovalAction = [string](Get-PropertyValue `
+      -Payload $FirstBlockedRequirementHandoff `
+      -Name 'approval_action' `
+      -Default 'lens.resident_runtime.execution_authority')
+
+  return [ordered]@{
+    source = 'resident_runtime_authority_readiness_handoff'
+    status = 'operator_action_available'
+    next_operator_action_requirement = 'exact_resident_runtime_execution_authority_approval'
+    next_operator_action = [ordered]@{
+      id = 'request_resident_runtime_execution_authority'
+      route = $RequestRoute
+      requests_route = $RequestsRoute
+      readiness_route = $ReadinessRoute
+      method = 'POST'
+      approval_action = $ApprovalAction
+      requires = [string[]]@('system.write actor scope', 'explicit -ConfirmRequest operator execution')
+      mode = 'approval_request'
+      live_effect = 'creates a pending resident-runtime execution authority approval request only'
+      operator_supplied_values_required = $true
+      script_would_execute = $false
+      script_would_mutate = $false
+      script_would_request_authority = $true
+      script_would_grant_authority = $false
+      script_would_decide_approval = $false
+    }
+    next_operator_command = [ordered]@{
+      command = '.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode RequestNext -Actor <actor> -ConfirmRequest'
+      mode = 'RequestNext'
+      requires_confirmation = $true
+      requires_explicit_operator_opt_in = $true
+      requires_actor = $true
+      requires_approval_id = $false
+      requires_operator_approval_decision = $false
+    }
+    read_only_status_command = '.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status'
+    next_operator_actor_scope_readiness = [ordered]@{
+      ready = $false
+      reason = 'actor_not_supplied'
+      actor_present = $false
+      scope_required = $true
+      required_scope = 'system.write'
+      action_id = 'request_resident_runtime_execution_authority'
+      route = $RequestRoute
+      method = 'POST'
+      operator_must_supply_actor = $true
+      env_var = 'FRANCIS_API_ACTOR_SCOPES'
+      json_shape = [ordered]@{ '<actor>' = [string[]]@('system.write') }
+      powershell_example = '$env:FRANCIS_API_ACTOR_SCOPES = ''{"<actor>":["system.write"]}'''
+    }
+    operator_sequence_command_availability = [ordered]@{
+      available_now_count = 1
+      preview_only_count = 0
+      sequence_length = 1
+      truthful = $true
+    }
+    read_only_contract = $true
+    diagnostic_only = $true
+    approval_request_write_if_run = $true
+    approval_decision_authority = $false
+    would_execute = $false
+    would_mutate = $false
+  }
+}
+
 function Find-Criterion {
   param(
     [AllowNull()]
@@ -987,6 +1119,49 @@ $ConcreteHandoffObserved = (
   )
 )
 
+$RecommendedOperatorHandoff = [ordered]@{
+  source = 'stage6_prerequisite_bringup_plan'
+  status = if ($Stage6PrerequisiteBringupPlanObserved) { 'operator_plan_readback_ready' } else { 'operator_plan_missing' }
+  next_operator_action_requirement = [string](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlan -Name 'next_operator_action_requirement' -Default '')
+  next_operator_action = $Stage6PrerequisiteBringupPlanNextOperatorAction
+  next_operator_command = $Stage6PrerequisiteBringupPlanNextOperatorCommand
+  next_operator_actor_scope_readiness = $Stage6PrerequisiteBringupPlanNextOperatorActorScopeReadiness
+  operator_sequence_command_availability = $Stage6PrerequisiteBringupPlanCommandAvailability
+  read_only_contract = $true
+  diagnostic_only = $true
+  approval_request_write_if_run = $false
+  approval_decision_authority = $false
+  would_execute = $false
+  would_mutate = $false
+}
+if ($Stage6CompletionAuditRuntimeReadbackRequired) {
+  $RecommendedOperatorHandoff = New-Stage6CompletionAuditRuntimeOperatorHandoff
+} elseif (
+  $Stage6CompletionAuditRecommendedHandoffConsumed -and
+  $RecommendedNextSlice -eq 'create_or_select_exact_approved_resident_runtime_execution_authority_request'
+) {
+  $RecommendedOperatorHandoff = New-ResidentRuntimeAuthorityRequestOperatorHandoff -SourceHandoff $RecommendedHandoff
+}
+$RecommendedOperatorActionRequirement = [string](
+  Get-PropertyValue -Payload $RecommendedOperatorHandoff -Name 'next_operator_action_requirement' -Default ''
+)
+$RecommendedOperatorAction = Get-PropertyValue `
+  -Payload $RecommendedOperatorHandoff `
+  -Name 'next_operator_action' `
+  -Default ([ordered]@{})
+$RecommendedOperatorCommand = Get-PropertyValue `
+  -Payload $RecommendedOperatorHandoff `
+  -Name 'next_operator_command' `
+  -Default ([ordered]@{})
+$RecommendedOperatorActorScopeReadiness = Get-PropertyValue `
+  -Payload $RecommendedOperatorHandoff `
+  -Name 'next_operator_actor_scope_readiness' `
+  -Default ([ordered]@{})
+$RecommendedOperatorSequenceCommandAvailability = Get-PropertyValue `
+  -Payload $RecommendedOperatorHandoff `
+  -Name 'operator_sequence_command_availability' `
+  -Default ([ordered]@{})
+
 $RecommendedFirstMissingAuthorityRequired = [string](
   Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'authority_required' -Default ''
 )
@@ -1146,6 +1321,12 @@ $Payload = [ordered]@{
   next_operator_command = $Stage6PrerequisiteBringupPlanNextOperatorCommand
   next_operator_actor_scope_readiness = $Stage6PrerequisiteBringupPlanNextOperatorActorScopeReadiness
   operator_sequence_command_availability = $Stage6PrerequisiteBringupPlanCommandAvailability
+  recommended_operator_handoff = $RecommendedOperatorHandoff
+  recommended_next_operator_action_requirement = $RecommendedOperatorActionRequirement
+  recommended_next_operator_action = $RecommendedOperatorAction
+  recommended_next_operator_command = $RecommendedOperatorCommand
+  recommended_next_operator_actor_scope_readiness = $RecommendedOperatorActorScopeReadiness
+  recommended_operator_sequence_command_availability = $RecommendedOperatorSequenceCommandAvailability
   recommended_prerequisites_handoff_source = $(if ($PersistentSupervisionRequiredPrerequisitesObserved) { 'persistent_supervision_required_prerequisites_handoff' } else { '' })
   recommended_prerequisites_next_slice = [string](Get-PropertyValue -Payload $PersistentSupervisionRequiredPrerequisitesHandoff -Name 'next_step' -Default '')
   recommended_prerequisites_proof_script = [string](Get-PropertyValue -Payload $PersistentSupervisionRequiredPrerequisitesHandoff -Name 'proof_script' -Default '')
