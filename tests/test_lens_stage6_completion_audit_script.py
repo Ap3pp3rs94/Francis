@@ -763,12 +763,35 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     assert "'stage6_helpful_not_noisy_runtime_authority_readiness_handoff'" in script
     assert "'stage6_helpful_not_noisy_resident_surface_runtime_handoff'" in script
     assert "$ResidentSurfaceForegroundRuntimeProofObserved = (" in script
+    assert "$ResidentSurfaceForegroundRuntimeProofRecommendedHandoffSource" in script
+    assert "$ResidentSurfaceForegroundRuntimeProofRecommendedNextSlice" in script
+    assert "$ResidentSurfaceForegroundRuntimeProofRecommendedProofScript" in script
+    assert "$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff" in script
+    assert "$ResidentSurfaceForegroundRuntimeProofResidentRuntimeAuthorityGrantHandoffObserved" in script
+    assert "$ResidentSurfaceRuntimeSupervisionHandoffObserved = (" in script
+    assert "'resident_surface_runtime_supervision_handoff'" in script
+    assert "'resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim'" in script
     assert (
         "resident_surface_foreground_runtime_proof_readback = $ResidentSurfaceForegroundRuntimeProofObserved" in script
     )
     assert "resident_surface_foreground_runtime_proof = [ordered]@{" in script
+    assert "recommended_handoff_source = $ResidentSurfaceForegroundRuntimeProofRecommendedHandoffSource" in script
+    assert "recommended_next_slice = $ResidentSurfaceForegroundRuntimeProofRecommendedNextSlice" in script
+    assert "recommended_handoff = $ResidentSurfaceForegroundRuntimeProofRecommendedHandoff" in script
+    assert (
+        "resident_surface_runtime_supervision_handoff_observed = "
+        "$ResidentSurfaceRuntimeSupervisionHandoffObserved" in script
+    )
+    assert (
+        "resident_surface_runtime_supervision_handoff = "
+        "$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff" in script
+    )
     assert (
         "consumed_resident_surface_foreground_runtime_proof = $ResidentSurfaceForegroundRuntimeProofObserved" in script
+    )
+    assert (
+        "resident_surface_runtime_supervision_handoff = "
+        "$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff" in script
     )
     assert "resident_runtime_authority_grant_first_blocked_requirement_handoff" in script
     assert "$HelpfulNotNoisyProofScript = 'scripts/lens-stage6-checkpoint.ps1 -Mode Status'" in script
@@ -3000,6 +3023,60 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         resident_surface_foreground_runtime_proof["next_smallest_truthful_gap"]
         == "resident_surface_runtime_not_supervised"
     )
+    assert (
+        resident_surface_foreground_runtime_proof["recommended_handoff_source"]
+        == "resident_surface_runtime_supervision_handoff"
+    )
+    assert (
+        resident_surface_foreground_runtime_proof["recommended_next_slice"]
+        == "resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim"
+    )
+    assert (
+        resident_surface_foreground_runtime_proof["recommended_proof_script"]
+        == "scripts/lens-resident-surface-proof.ps1 -Mode Status"
+    )
+    assert resident_surface_foreground_runtime_proof["authority_required"] == "process_supervision_authority"
+    assert resident_surface_foreground_runtime_proof["authority_granted"] is False
+    assert resident_surface_foreground_runtime_proof["resident_surface_runtime_supervision_handoff_observed"] is True
+    assert resident_surface_foreground_runtime_proof["resident_runtime_authority_grant_handoff_observed"] is True
+    resident_surface_runtime_supervision_handoff = resident_surface_foreground_runtime_proof[
+        "resident_surface_runtime_supervision_handoff"
+    ]
+    assert (
+        resident_surface_runtime_supervision_handoff == resident_surface_foreground_runtime_proof["recommended_handoff"]
+    )
+    assert resident_surface_runtime_supervision_handoff["id"] == "resident_surface_runtime_supervision"
+    assert (
+        resident_surface_runtime_supervision_handoff["next_smallest_truthful_gap"]
+        == "resident_surface_runtime_not_supervised"
+    )
+    assert (
+        resident_surface_runtime_supervision_handoff["next_step"]
+        == "resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim"
+    )
+    assert (
+        resident_surface_runtime_supervision_handoff["proof_script"]
+        == "scripts/lens-resident-surface-proof.ps1 -Mode Status"
+    )
+    assert resident_surface_runtime_supervision_handoff["route"] == "/lens/resident-surface"
+    assert (
+        resident_surface_runtime_supervision_handoff["readiness_route"]
+        == "/lens/resident-runtime/authority-grant/readiness"
+    )
+    assert resident_surface_runtime_supervision_handoff["authority_required"] == "process_supervision_authority"
+    assert resident_surface_runtime_supervision_handoff["authority_granted"] is False
+    assert resident_surface_runtime_supervision_handoff["read_only_contract"] is True
+    assert resident_surface_runtime_supervision_handoff["diagnostic_only"] is True
+    assert resident_surface_runtime_supervision_handoff["would_execute"] is False
+    assert resident_surface_runtime_supervision_handoff["would_mutate"] is False
+    assert resident_surface_runtime_supervision_handoff["would_supervise_process"] is False
+    assert resident_surface_runtime_supervision_handoff["would_restart_process"] is False
+    assert resident_surface_runtime_supervision_handoff["would_claim_resident"] is False
+    assert payload["resident_surface_runtime_supervision_handoff_observed"] is True
+    assert payload["resident_surface_runtime_supervision_handoff_source"] == (
+        "resident_surface_runtime_supervision_handoff"
+    )
+    assert payload["resident_surface_runtime_supervision_handoff"] == resident_surface_runtime_supervision_handoff
     governance = payload["governance"]
     assert governance["read_only_contract"] is True
     assert governance["diagnostic_only"] is True

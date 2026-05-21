@@ -1252,6 +1252,60 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert payload["resident_surface_foreground_runtime_proof"]["status"] == "proof_passed"
     assert payload["resident_surface_foreground_runtime_proof"]["ok"] is True
     assert payload["resident_surface_foreground_runtime_proof"]["exit_code"] == 0
+    assert (
+        payload["resident_surface_foreground_runtime_proof"]["recommended_handoff_source"]
+        == "resident_surface_runtime_supervision_handoff"
+    )
+    assert (
+        payload["resident_surface_foreground_runtime_proof"]["recommended_next_slice"]
+        == "resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim"
+    )
+    assert (
+        payload["resident_surface_foreground_runtime_proof"]["recommended_proof_script"]
+        == "scripts/lens-resident-surface-proof.ps1 -Mode Status"
+    )
+    assert payload["resident_surface_foreground_runtime_proof"]["authority_required"] == "process_supervision_authority"
+    assert payload["resident_surface_foreground_runtime_proof"]["authority_granted"] is False
+    assert (
+        payload["resident_surface_foreground_runtime_proof"]["resident_surface_runtime_supervision_handoff_observed"]
+        is True
+    )
+    assert (
+        payload["resident_surface_foreground_runtime_proof"]["resident_runtime_authority_grant_handoff_observed"]
+        is True
+    )
+    resident_surface_runtime_supervision_handoff = payload["resident_surface_foreground_runtime_proof"][
+        "resident_surface_runtime_supervision_handoff"
+    ]
+    assert (
+        resident_surface_runtime_supervision_handoff
+        == payload["resident_surface_foreground_runtime_proof"]["recommended_handoff"]
+    )
+    assert resident_surface_runtime_supervision_handoff["id"] == "resident_surface_runtime_supervision"
+    assert (
+        resident_surface_runtime_supervision_handoff["next_smallest_truthful_gap"]
+        == "resident_surface_runtime_not_supervised"
+    )
+    assert (
+        resident_surface_runtime_supervision_handoff["next_step"]
+        == "resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim"
+    )
+    assert (
+        resident_surface_runtime_supervision_handoff["proof_script"]
+        == "scripts/lens-resident-surface-proof.ps1 -Mode Status"
+    )
+    assert resident_surface_runtime_supervision_handoff["readiness_route"] == (
+        "/lens/resident-runtime/authority-grant/readiness"
+    )
+    assert resident_surface_runtime_supervision_handoff["authority_required"] == "process_supervision_authority"
+    assert resident_surface_runtime_supervision_handoff["authority_granted"] is False
+    assert resident_surface_runtime_supervision_handoff["read_only_contract"] is True
+    assert resident_surface_runtime_supervision_handoff["diagnostic_only"] is True
+    assert resident_surface_runtime_supervision_handoff["would_execute"] is False
+    assert resident_surface_runtime_supervision_handoff["would_mutate"] is False
+    assert resident_surface_runtime_supervision_handoff["would_supervise_process"] is False
+    assert resident_surface_runtime_supervision_handoff["would_restart_process"] is False
+    assert resident_surface_runtime_supervision_handoff["would_claim_resident"] is False
     assert payload["resident_surface_foreground_runtime_proof"]["resident_surface_content_readback"] is True
     assert payload["resident_surface_foreground_runtime_proof"]["resident_surface_foreground_runtime_readback"] is True
     assert payload["resident_surface_foreground_runtime_proof"]["resident_surface_foreground_runtime_observed"] is True

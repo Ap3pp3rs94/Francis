@@ -36377,6 +36377,65 @@ Latest validation for Stage 6 resident-surface runtime supervision handoff:
   Result: `passed; branch state OK; Ruff check passed; Ruff format check
   passed; mypy passed with no issues in 501 source files; pytest reached 100%`
 
+Stage 6 completion-audit resident-surface supervision handoff readback on
+`2026-05-21`:
+
+- `scripts/lens-stage6-checkpoint.ps1` now preserves the resident-surface proof's
+  read-only `resident_surface_runtime_supervision_handoff` in its nested
+  `resident_surface_foreground_runtime_proof` payload, including the handoff
+  source, next slice, proof script, authority requirement, grant state, and
+  resident-runtime authority-grant handoff readback.
+- `scripts/lens-stage6-completion-audit.ps1` now consumes that checkpoint
+  readback and carries the same resident-surface supervision handoff into the
+  completion-audit payload and the helpful-not-noisy recommended handoff. This
+  keeps the completion audit from dropping the concrete runtime supervision
+  handoff after the foreground resident-surface proof has already observed it.
+- This is audit/checkpoint readback only. It does not close Stage 6, start Stage
+  7, grant operator approval, grant process-supervision authority, launch or
+  supervise a resident process, install or control a service, write memory, or
+  claim resident runtime.
+
+Latest validation for Stage 6 completion-audit resident-surface supervision
+handoff readback:
+
+- PowerShell parser checks for `scripts\lens-stage6-checkpoint.ps1` and
+  `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed; parser_ok`
+- `python -m ruff check tests\test_lens_stage6_checkpoint_script.py
+  tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests\test_lens_stage6_checkpoint_script.py
+  tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 2 files already formatted`
+- `python -m pytest tests\test_lens_stage6_checkpoint_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed; 38 passed, 1 skipped`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  scripts\lens-stage6-checkpoint.ps1 -Mode Status`
+  Result: `passed; status=blocked; ok=true;
+  next_smallest_truthful_gap=stage6_lens_completion_audit;
+  proof_handoff_source=resident_surface_runtime_supervision_handoff;
+  proof_next_slice=resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim;
+  proof_authority_required=process_supervision_authority;
+  proof_authority_granted=false; proof_handoff_observed=true;
+  runtime_grant_handoff=true`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  scripts\lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey`
+  Result: `passed; status=blocked; ok=true; audit_status=complete;
+  ready_to_close=false; transition_allowed=false;
+  next_smallest_truthful_gap=resident_surface_runtime_not_supervised;
+  recommended_handoff_source=stage6_helpful_not_noisy_runtime_authority_readiness_handoff;
+  recommended_next_slice=create_or_select_exact_approved_resident_runtime_execution_authority_request;
+  resident_surface_runtime_supervision_handoff_observed=true;
+  resident_surface_runtime_supervision_handoff_source=resident_surface_runtime_supervision_handoff;
+  resident_surface_proof_handoff_source=resident_surface_runtime_supervision_handoff;
+  resident_surface_proof_next_slice=resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim;
+  resident_surface_proof_handoff_observed=true;
+  resident_surface_proof_authority_required=process_supervision_authority;
+  resident_surface_proof_authority_granted=false;
+  resident_surface_proof_resident_runtime_authority_handoff=true`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

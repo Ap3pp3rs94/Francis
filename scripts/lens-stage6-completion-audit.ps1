@@ -1051,6 +1051,13 @@ $BlockedCriterionIds = @($BlockedCriteria | ForEach-Object { [string]$_.id })
 $ResidentSurfaceForegroundRuntimeProof = $Checkpoint.resident_surface_foreground_runtime_proof
 $ResidentSurfaceForegroundRuntimeProofBlockers = ConvertTo-StringArray -Value $ResidentSurfaceForegroundRuntimeProof.blockers
 $ResidentSurfaceForegroundRuntimeProofEvidence = ConvertTo-StringArray -Value $ResidentSurfaceForegroundRuntimeProof.evidence
+$ResidentSurfaceForegroundRuntimeProofRecommendedHandoffSource = [string]$ResidentSurfaceForegroundRuntimeProof.recommended_handoff_source
+$ResidentSurfaceForegroundRuntimeProofRecommendedNextSlice = [string]$ResidentSurfaceForegroundRuntimeProof.recommended_next_slice
+$ResidentSurfaceForegroundRuntimeProofRecommendedProofScript = [string]$ResidentSurfaceForegroundRuntimeProof.recommended_proof_script
+$ResidentSurfaceForegroundRuntimeProofAuthorityRequired = [string]$ResidentSurfaceForegroundRuntimeProof.authority_required
+$ResidentSurfaceForegroundRuntimeProofAuthorityGranted = [bool]$ResidentSurfaceForegroundRuntimeProof.authority_granted
+$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff = $ResidentSurfaceForegroundRuntimeProof.recommended_handoff
+$ResidentSurfaceForegroundRuntimeProofResidentRuntimeAuthorityGrantHandoffObserved = [bool]$ResidentSurfaceForegroundRuntimeProof.resident_runtime_authority_grant_handoff_observed
 $ResidentSurfaceForegroundRuntimeProofObserved = (
   [bool]$ResidentSurfaceForegroundRuntimeProof.ok -and
   [string]$ResidentSurfaceForegroundRuntimeProof.status -eq 'proof_passed' -and
@@ -1072,6 +1079,26 @@ $ResidentSurfaceForegroundRuntimeProofObserved = (
   -not [bool]$ResidentSurfaceForegroundRuntimeProof.process_supervision_authority -and
   -not [bool]$ResidentSurfaceForegroundRuntimeProof.service_control_authority -and
   -not [bool]$ResidentSurfaceForegroundRuntimeProof.resident_claim_authority
+)
+$ResidentSurfaceRuntimeSupervisionHandoffObserved = (
+  $ResidentSurfaceForegroundRuntimeProofObserved -and
+  $ResidentSurfaceForegroundRuntimeProofRecommendedHandoffSource -eq 'resident_surface_runtime_supervision_handoff' -and
+  $ResidentSurfaceForegroundRuntimeProofRecommendedNextSlice -eq 'resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim' -and
+  $ResidentSurfaceForegroundRuntimeProofRecommendedProofScript -eq 'scripts/lens-resident-surface-proof.ps1 -Mode Status' -and
+  $ResidentSurfaceForegroundRuntimeProofAuthorityRequired -eq 'process_supervision_authority' -and
+  -not $ResidentSurfaceForegroundRuntimeProofAuthorityGranted -and
+  [string]$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff.id -eq 'resident_surface_runtime_supervision' -and
+  [string]$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff.next_smallest_truthful_gap -eq 'resident_surface_runtime_not_supervised' -and
+  [string]$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff.readiness_route -eq '/lens/resident-runtime/authority-grant/readiness' -and
+  [string]$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff.authority_required -eq 'process_supervision_authority' -and
+  -not [bool]$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff.authority_granted -and
+  [bool]$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff.read_only_contract -and
+  [bool]$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff.diagnostic_only -and
+  -not [bool]$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff.would_execute -and
+  -not [bool]$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff.would_mutate -and
+  -not [bool]$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff.would_supervise_process -and
+  -not [bool]$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff.would_restart_process -and
+  -not [bool]$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff.would_claim_resident
 )
 $Stage6CompletionReviewed = $false
 $Stage6AcceptanceNextGap = if ($BlockedCriterionIds -contains 'summon_anywhere') {
@@ -2706,6 +2733,9 @@ if (
     resident_runtime_authority_grant_next_smallest_truthful_gap = [string]$ResidentRuntimeAuthorityGrantReadiness.next_smallest_truthful_gap
     resident_runtime_authority_grant_first_blocked_requirement = $HelpfulNotNoisyFirstBlockedRequirement
     resident_runtime_authority_grant_first_blocked_requirement_handoff = $HelpfulNotNoisyFirstBlockedRequirementHandoff
+    resident_surface_runtime_supervision_handoff_observed = $ResidentSurfaceRuntimeSupervisionHandoffObserved
+    resident_surface_runtime_supervision_handoff_source = $ResidentSurfaceForegroundRuntimeProofRecommendedHandoffSource
+    resident_surface_runtime_supervision_handoff = $ResidentSurfaceForegroundRuntimeProofRecommendedHandoff
     persistent_supervision_resident_claim_boundary_observed = $PersistentSupervisionResidentClaimBoundaryObserved
     stage6_prerequisite_bringup_applied_enablement_observed = $Stage6PrerequisiteBringupPlanAppliedEnablementObserved
     summon_api_launch_on_hotkey_runtime_readback_observed = $SummonApiLaunchOnHotkeyProofObserved
@@ -2988,6 +3018,9 @@ $Payload = [ordered]@{
   authority_required = $RecommendedAuthorityRequired
   authority_granted = $RecommendedAuthorityGranted
   recommended_handoff = $RecommendedHandoff
+  resident_surface_runtime_supervision_handoff_observed = $ResidentSurfaceRuntimeSupervisionHandoffObserved
+  resident_surface_runtime_supervision_handoff_source = $ResidentSurfaceForegroundRuntimeProofRecommendedHandoffSource
+  resident_surface_runtime_supervision_handoff = $ResidentSurfaceForegroundRuntimeProofRecommendedHandoff
   recommended_concrete_handoff_source = $RecommendedConcreteHandoffSource
   recommended_concrete_next_slice = $RecommendedConcreteNextSlice
   recommended_concrete_proof_script = $RecommendedConcreteProofScript
@@ -4588,6 +4621,15 @@ $Payload = [ordered]@{
     ok = $ResidentSurfaceForegroundRuntimeProofObserved
     exit_code = [int]$ResidentSurfaceForegroundRuntimeProof.exit_code
     evidence = [string[]]@($ResidentSurfaceForegroundRuntimeProofEvidence)
+    recommended_handoff_source = $ResidentSurfaceForegroundRuntimeProofRecommendedHandoffSource
+    recommended_next_slice = $ResidentSurfaceForegroundRuntimeProofRecommendedNextSlice
+    recommended_proof_script = $ResidentSurfaceForegroundRuntimeProofRecommendedProofScript
+    authority_required = $ResidentSurfaceForegroundRuntimeProofAuthorityRequired
+    authority_granted = $ResidentSurfaceForegroundRuntimeProofAuthorityGranted
+    recommended_handoff = $ResidentSurfaceForegroundRuntimeProofRecommendedHandoff
+    resident_surface_runtime_supervision_handoff_observed = $ResidentSurfaceRuntimeSupervisionHandoffObserved
+    resident_surface_runtime_supervision_handoff = $ResidentSurfaceForegroundRuntimeProofRecommendedHandoff
+    resident_runtime_authority_grant_handoff_observed = $ResidentSurfaceForegroundRuntimeProofResidentRuntimeAuthorityGrantHandoffObserved
     resident_surface_content_readback = [bool]$ResidentSurfaceForegroundRuntimeProof.resident_surface_content_readback
     resident_surface_foreground_runtime_readback = [bool]$ResidentSurfaceForegroundRuntimeProof.resident_surface_foreground_runtime_readback
     resident_surface_foreground_runtime_observed = [bool]$ResidentSurfaceForegroundRuntimeProof.resident_surface_foreground_runtime_observed

@@ -1012,6 +1012,25 @@ $ResidentSurfaceProofDetails = Get-PropertyValue -Payload $ResidentSurfaceProofP
 $ResidentSurfaceForegroundRuntimeBlockers = ConvertTo-StringArray -Value (
   Get-PropertyValue -Payload $ResidentSurfaceProofDetails -Name 'resident_surface_foreground_runtime_blockers' -Default @()
 )
+$ResidentSurfaceForegroundRuntimeRecommendedHandoffSource = [string](
+  Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'recommended_handoff_source' -Default ''
+)
+$ResidentSurfaceForegroundRuntimeRecommendedNextSlice = [string](
+  Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'recommended_next_slice' -Default ''
+)
+$ResidentSurfaceForegroundRuntimeRecommendedProofScript = [string](
+  Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'recommended_proof_script' -Default ''
+)
+$ResidentSurfaceForegroundRuntimeAuthorityRequired = [string](
+  Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'authority_required' -Default ''
+)
+$ResidentSurfaceForegroundRuntimeAuthorityGranted = [bool](
+  Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'authority_granted' -Default $false
+)
+$ResidentSurfaceForegroundRuntimeRecommendedHandoff = Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'recommended_handoff' -Default ([ordered]@{})
+$ResidentSurfaceForegroundRuntimeAuthorityGrantHandoffObserved = [bool](
+  Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'resident_runtime_authority_grant_handoff_observed' -Default $false
+)
 $ResidentSurfaceForegroundRuntimeProofPassed = (
   $ResidentSurfaceProofExitCode -eq 0 -and
   [string](Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'kind' -Default '') -eq 'lens.resident_surface.readiness_proof' -and
@@ -1028,6 +1047,26 @@ $ResidentSurfaceForegroundRuntimeProofPassed = (
   -not [bool](Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'resident_surface_ready' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'resident_claim_allowed' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'resident_host_process' -Default $true)
+)
+$ResidentSurfaceRuntimeSupervisionHandoffObserved = (
+  $ResidentSurfaceForegroundRuntimeProofPassed -and
+  $ResidentSurfaceForegroundRuntimeRecommendedHandoffSource -eq 'resident_surface_runtime_supervision_handoff' -and
+  $ResidentSurfaceForegroundRuntimeRecommendedNextSlice -eq 'resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim' -and
+  $ResidentSurfaceForegroundRuntimeRecommendedProofScript -eq 'scripts/lens-resident-surface-proof.ps1 -Mode Status' -and
+  $ResidentSurfaceForegroundRuntimeAuthorityRequired -eq 'process_supervision_authority' -and
+  -not $ResidentSurfaceForegroundRuntimeAuthorityGranted -and
+  [string](Get-PropertyValue -Payload $ResidentSurfaceForegroundRuntimeRecommendedHandoff -Name 'id' -Default '') -eq 'resident_surface_runtime_supervision' -and
+  [string](Get-PropertyValue -Payload $ResidentSurfaceForegroundRuntimeRecommendedHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'resident_surface_runtime_not_supervised' -and
+  [string](Get-PropertyValue -Payload $ResidentSurfaceForegroundRuntimeRecommendedHandoff -Name 'readiness_route' -Default '') -eq '/lens/resident-runtime/authority-grant/readiness' -and
+  [string](Get-PropertyValue -Payload $ResidentSurfaceForegroundRuntimeRecommendedHandoff -Name 'authority_required' -Default '') -eq 'process_supervision_authority' -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfaceForegroundRuntimeRecommendedHandoff -Name 'authority_granted' -Default $true) -and
+  [bool](Get-PropertyValue -Payload $ResidentSurfaceForegroundRuntimeRecommendedHandoff -Name 'read_only_contract' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $ResidentSurfaceForegroundRuntimeRecommendedHandoff -Name 'diagnostic_only' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfaceForegroundRuntimeRecommendedHandoff -Name 'would_execute' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfaceForegroundRuntimeRecommendedHandoff -Name 'would_mutate' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfaceForegroundRuntimeRecommendedHandoff -Name 'would_supervise_process' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfaceForegroundRuntimeRecommendedHandoff -Name 'would_restart_process' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfaceForegroundRuntimeRecommendedHandoff -Name 'would_claim_resident' -Default $true)
 )
 $ResidentSurfaceRuntimeProofBlockers = if ($ResidentSurfaceForegroundRuntimeProofPassed) {
   @(
@@ -2742,6 +2781,15 @@ $Payload = [ordered]@{
     ok = $ResidentSurfaceForegroundRuntimeProofPassed
     exit_code = $ResidentSurfaceProofExitCode
     evidence = @('/lens/resident-surface?limit=5', 'scripts/lens-resident-surface-proof.ps1')
+    recommended_handoff_source = $ResidentSurfaceForegroundRuntimeRecommendedHandoffSource
+    recommended_next_slice = $ResidentSurfaceForegroundRuntimeRecommendedNextSlice
+    recommended_proof_script = $ResidentSurfaceForegroundRuntimeRecommendedProofScript
+    authority_required = $ResidentSurfaceForegroundRuntimeAuthorityRequired
+    authority_granted = $ResidentSurfaceForegroundRuntimeAuthorityGranted
+    recommended_handoff = $ResidentSurfaceForegroundRuntimeRecommendedHandoff
+    resident_surface_runtime_supervision_handoff_observed = $ResidentSurfaceRuntimeSupervisionHandoffObserved
+    resident_surface_runtime_supervision_handoff = $ResidentSurfaceForegroundRuntimeRecommendedHandoff
+    resident_runtime_authority_grant_handoff_observed = $ResidentSurfaceForegroundRuntimeAuthorityGrantHandoffObserved
     resident_surface_content_readback = [bool](Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'resident_surface_content_readback' -Default $false)
     resident_surface_foreground_runtime_readback = [bool](Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'resident_surface_foreground_runtime_readback' -Default $false)
     resident_surface_foreground_runtime_observed = [bool](Get-PropertyValue -Payload $ResidentSurfaceProofPayload -Name 'resident_surface_foreground_runtime_observed' -Default $false)
