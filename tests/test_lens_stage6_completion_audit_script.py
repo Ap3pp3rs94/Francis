@@ -754,8 +754,20 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     )
     assert "$SummonAnywhereRuntimeReadbackObserved = [bool]$SummonApiLaunchOnHotkeyProofObserved" in script
     assert "$BlockedCriterionIds -contains 'summon_anywhere' -and -not $SummonAnywhereRuntimeReadbackObserved" in script
+    assert (
+        "$BlockedCriterionIds -contains 'helpful_not_noisy' -and "
+        "$Blockers -contains 'resident_surface_runtime_not_supervised'"
+    ) in script
     assert "$NextSmallestTruthfulGap -eq 'persistent_supervision_execution_boundary'" in script
     assert "$RecommendedHandoffSource = 'stage6_prerequisite_bringup_enablement_receipt_review'" in script
+    assert "$RecommendedHandoffSource = 'stage6_helpful_not_noisy_resident_surface_runtime_handoff'" in script
+    assert "proof_script = 'scripts/lens-resident-surface-proof.ps1 -Mode Status'" in script
+    assert "next_smallest_truthful_gap = 'resident_surface_runtime_not_supervised'" in script
+    assert (
+        "$PersistentSupervisionResidentClaimBoundaryObserved -and\n"
+        "    [string]$PersistentSupervisionResidentClaimBoundaryProof.next_smallest_truthful_gap "
+        "-eq 'stage6_lens_completion_audit'"
+    ) in script
     assert "summon_api_launch_on_hotkey_runtime_readback_observed = $SummonApiLaunchOnHotkeyProofObserved" in script
     assert "summon_api_launch_on_hotkey_proof = [ordered]@{" in script
     assert "launch_on_hotkey_runtime_readback_opt_in = [bool]$AllowLaunchOnHotkey" in script

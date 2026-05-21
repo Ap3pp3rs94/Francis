@@ -1051,6 +1051,12 @@ $BlockedCriterionIds = @($BlockedCriteria | ForEach-Object { [string]$_.id })
 $Stage6CompletionReviewed = $false
 $Stage6AcceptanceNextGap = if ($BlockedCriterionIds -contains 'summon_anywhere') {
   'summon_anywhere_blockers'
+} elseif ($BlockedCriterionIds -contains 'helpful_not_noisy' -and $Blockers -contains 'resident_surface_runtime_not_supervised') {
+  'resident_surface_runtime_not_supervised'
+} elseif ($BlockedCriterionIds -contains 'helpful_not_noisy' -and $Blockers -contains 'resident_surface_runtime_missing') {
+  'resident_surface_runtime_missing'
+} elseif ($BlockedCriterionIds -contains 'helpful_not_noisy' -and $Blockers -contains 'resident_surface_missing') {
+  'resident_surface_missing'
 } elseif ($BlockedCriterionIds -contains 'helpful_not_noisy') {
   'helpful_not_noisy_blockers'
 } elseif ($BlockedCriterionIds -contains 'system_resident_presence') {
@@ -2111,6 +2117,12 @@ $SummonApiLaunchOnHotkeyProofObserved = (
 $SummonAnywhereRuntimeReadbackObserved = [bool]$SummonApiLaunchOnHotkeyProofObserved
 $Stage6AcceptanceNextGap = if ($BlockedCriterionIds -contains 'summon_anywhere' -and -not $SummonAnywhereRuntimeReadbackObserved) {
   'summon_anywhere_blockers'
+} elseif ($BlockedCriterionIds -contains 'helpful_not_noisy' -and $Blockers -contains 'resident_surface_runtime_not_supervised') {
+  'resident_surface_runtime_not_supervised'
+} elseif ($BlockedCriterionIds -contains 'helpful_not_noisy' -and $Blockers -contains 'resident_surface_runtime_missing') {
+  'resident_surface_runtime_missing'
+} elseif ($BlockedCriterionIds -contains 'helpful_not_noisy' -and $Blockers -contains 'resident_surface_missing') {
+  'resident_surface_missing'
 } elseif ($BlockedCriterionIds -contains 'helpful_not_noisy') {
   'helpful_not_noisy_blockers'
 } elseif ($BlockedCriterionIds -contains 'system_resident_presence') {
@@ -2393,7 +2405,11 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $Stage6CompletionReviewed -and
   -not $ReadyToClose -and
   $SummonAnywhereRuntimeReadbackObserved -and
-  $Stage6PrerequisiteBringupPlanAppliedEnablementObserved
+  $Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and
+  -not (
+    $PersistentSupervisionResidentClaimBoundaryObserved -and
+    [string]$PersistentSupervisionResidentClaimBoundaryProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit'
+  )
 ) {
   [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap
 } elseif (
@@ -2605,6 +2621,45 @@ if (
     summon_api_launch_on_hotkey_runtime_readback_observed = $SummonApiLaunchOnHotkeyProofObserved
     summon_anywhere = [bool]$SummonApiLaunchOnHotkeyProof.summon_anywhere
     os_level_summon = [bool]$SummonApiLaunchOnHotkeyProof.os_level_summon
+    blockers = [string[]]@($Blockers)
+  }
+  $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
+  $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
+  $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
+} elseif (
+  $NextSmallestTruthfulGap -eq 'resident_surface_runtime_not_supervised' -and
+  $BlockedCriterionIds -contains 'helpful_not_noisy'
+) {
+  $RecommendedHandoffSource = 'stage6_helpful_not_noisy_resident_surface_runtime_handoff'
+  $RecommendedHandoff = [ordered]@{
+    status = 'blocked'
+    previous_next_smallest_truthful_gap = 'stage6_lens_completion_audit'
+    consumed_stage6_prerequisite_bringup_status = [string]$Stage6PrerequisiteBringupPlan.status
+    consumed_stage6_prerequisite_bringup_current_truthful_gap = [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap
+    consumed_persistent_supervision_resident_claim_boundary_next_smallest_truthful_gap = [string]$PersistentSupervisionResidentClaimBoundaryProof.next_smallest_truthful_gap
+    consumed_summon_api_next_smallest_truthful_gap = [string]$SummonApiLaunchOnHotkeyProof.next_smallest_truthful_gap
+    next_smallest_truthful_gap = 'resident_surface_runtime_not_supervised'
+    next_step = 'consume_resident_surface_foreground_runtime_proof_before_helpful_not_noisy_claim'
+    proof_script = 'scripts/lens-resident-surface-proof.ps1 -Mode Status'
+    route = '/lens/resident-surface'
+    readiness_route = '/lens/resident-surface/activation'
+    host_route = '/lens/host'
+    runtime_loop_readiness_route = '/lens/host/runtime-loop/readiness'
+    acceptance_criterion = 'helpful_not_noisy'
+    authority_required = 'process_supervision_authority'
+    authority_granted = $false
+    persistent_supervision_resident_claim_boundary_observed = $PersistentSupervisionResidentClaimBoundaryObserved
+    stage6_prerequisite_bringup_applied_enablement_observed = $Stage6PrerequisiteBringupPlanAppliedEnablementObserved
+    summon_api_launch_on_hotkey_runtime_readback_observed = $SummonApiLaunchOnHotkeyProofObserved
+    resident_surface_runtime_not_supervised = $true
+    read_only_contract = $true
+    diagnostic_only = $true
+    would_execute = $false
+    would_mutate = $false
+    would_supervise_process = $false
+    would_claim_resident = $false
+    would_write_memory = $false
+    would_decide_approval = $false
     blockers = [string[]]@($Blockers)
   }
   $RecommendedNextSlice = [string]$RecommendedHandoff.next_step

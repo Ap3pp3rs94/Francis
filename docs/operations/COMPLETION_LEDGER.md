@@ -35929,6 +35929,59 @@ consumption:
   not_requested; governance.read_only_contract=true;
   governance.mutation_authority_granted=false`
 
+Stage 6 completion-audit resident-surface runtime handoff on `2026-05-21`:
+
+- `scripts/lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey`
+  now consumes the existing applied persistent-supervision enablement receipt
+  and resident-claim boundary readback before selecting the next Stage 6
+  closure handoff.
+- Once launch-on-hotkey summon readback, the applied enablement receipt, and
+  the resident-claim boundary proof are all observed, the audit no longer stops
+  at the already-reviewed
+  `persistent_supervision_execution_boundary`. It advances to the sharper
+  remaining `helpful_not_noisy` blocker:
+  `next_smallest_truthful_gap=resident_surface_runtime_not_supervised`.
+- The recommended next slice is
+  `consume_resident_surface_foreground_runtime_proof_before_helpful_not_noisy_claim`
+  via `scripts/lens-resident-surface-proof.ps1 -Mode Status`, with
+  `authority_required=process_supervision_authority` and
+  `authority_granted=false`.
+- This does not close Stage 6, start Stage 7, grant process-supervision
+  authority, claim resident status, write memory, or start persistent
+  supervision. It only corrects the audit handoff so the operator sees the next
+  remaining closure blocker after prior readbacks have already been consumed.
+
+Latest validation for Stage 6 completion-audit resident-surface runtime
+handoff:
+
+- PowerShell parser check for `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed; parse_ok`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed; 38 passed, 1 skipped`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 1 file already formatted`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 120 -AllowLaunchOnHotkey`
+  Result: `passed; ok=true; status=blocked; audit_status=complete;
+  allow_launch_on_hotkey=true; ready_to_close=false; transition_allowed=false;
+  next_smallest_truthful_gap=resident_surface_runtime_not_supervised;
+  recommended_handoff_source=
+  stage6_helpful_not_noisy_resident_surface_runtime_handoff;
+  recommended_next_slice=
+  consume_resident_surface_foreground_runtime_proof_before_helpful_not_noisy_claim;
+  recommended_proof_script=scripts/lens-resident-surface-proof.ps1 -Mode Status;
+  authority_required=process_supervision_authority; authority_granted=false`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-resident-surface-proof.ps1 -Mode Status`
+  Result: `passed; ok=true; status=proof_passed;
+  resident_surface_runtime_status=foreground_runtime_observed;
+  next_smallest_truthful_gap=resident_surface_runtime_not_supervised`
+- `git diff --check`
+  Result: `passed; no whitespace errors`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\check.ps1`
+  Result: `passed; branch state OK; Ruff check passed; Ruff format check
+  passed; mypy passed with no issues in 501 source files; pytest reached 100%`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
