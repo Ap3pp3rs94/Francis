@@ -1531,3 +1531,65 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     assert consumed_checks["stage6_completion_audit_runtime_authority_handoff"]["status"] == (
         "runtime_authority_handoff_consumed"
     )
+
+    approved_approval_id = "approved-runtime-authority-test"
+    write_json(
+        data_root / "approvals" / "approved" / f"{approved_approval_id}.json",
+        {
+            "id": approved_approval_id,
+            "ts": created_ts,
+            "action": "lens.resident_runtime.execution_authority",
+            "reason": "test approved resident runtime authority",
+            "payload": {
+                "actor": "test.system.write",
+                "route": "/lens/resident-runtime/authority-grant/request",
+            },
+            "status": "approved",
+            "decision": "approve",
+            "decision_actor": "test.approvals.decision",
+            "decided_ts": created_ts,
+        },
+    )
+
+    approved_proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-CompletionAuditJsonPath",
+        str(audit_json),
+        env=proof_env,
+    )
+
+    assert approved_proc.returncode == 0, approved_proc.stderr or approved_proc.stdout
+    approved_payload = json.loads(approved_proc.stdout)
+    assert approved_payload["stage6_completion_audit_recommended_handoff_consumed"] is True
+    assert approved_payload["recommended_operator_handoff"]["source"] == "resident_runtime_authority_readiness_handoff"
+    assert approved_payload["recommended_next_operator_action_requirement"] == (
+        "resident_runtime_execution_authority_grant_receipt"
+    )
+    assert approved_payload["recommended_next_operator_action"]["id"] == ("grant_resident_runtime_execution_authority")
+    assert approved_payload["recommended_next_operator_action"]["route"] == "/lens/resident-runtime/authority-grant"
+    assert approved_payload["recommended_next_operator_action"]["approved_approval_id"] == approved_approval_id
+    assert approved_payload["recommended_next_operator_action"]["script_would_request_authority"] is False
+    assert approved_payload["recommended_next_operator_action"]["script_would_grant_authority"] is True
+    assert approved_payload["recommended_next_operator_action"]["script_would_decide_approval"] is False
+    assert approved_payload["recommended_next_operator_command"] == {
+        "command": (
+            ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 "
+            f"-Mode GrantNext -Actor <actor> -ApprovalId {approved_approval_id} -ConfirmGrant"
+        ),
+        "mode": "GrantNext",
+        "requires_confirmation": True,
+        "requires_explicit_operator_opt_in": True,
+        "requires_actor": True,
+        "requires_approval_id": True,
+        "requires_operator_approval_decision": False,
+    }
+    assert approved_payload["recommended_next_operator_actor_scope_readiness"]["required_scope"] == "system.write"
+    assert approved_payload["recommended_next_operator_actor_scope_readiness"]["operator_must_supply_actor"] is True
+    assert approved_payload["recommended_operator_handoff"]["approval_request_write_if_run"] is False
+    assert approved_payload["recommended_operator_handoff"]["authority_grant_receipt_write_if_run"] is True
+    assert approved_payload["recommended_operator_handoff"]["approval_decision_authority"] is False
+    approved_checks = {item["id"]: item for item in approved_payload["checks"]}
+    assert approved_checks["stage6_completion_audit_runtime_authority_handoff"]["status"] == (
+        "runtime_authority_handoff_consumed"
+    )

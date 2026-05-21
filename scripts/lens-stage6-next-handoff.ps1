@@ -135,10 +135,89 @@ function New-Stage6CompletionAuditRuntimeOperatorHandoff {
   }
 }
 
+function Get-ApprovalReadbackLatestApprovedId {
+  param(
+    [AllowNull()]
+    [object]$Readback
+  )
+
+  foreach ($Item in @(
+      Get-PropertyValue -Payload $Readback -Name 'items' -Default @()
+    )) {
+    if (
+      [string](Get-PropertyValue -Payload $Item -Name 'status' -Default '') -eq 'approved' -and
+      -not [string]::IsNullOrWhiteSpace([string](Get-PropertyValue -Payload $Item -Name 'id' -Default ''))
+    ) {
+      return [string](Get-PropertyValue -Payload $Item -Name 'id' -Default '')
+    }
+  }
+
+  $Latest = Get-PropertyValue -Payload $Readback -Name 'latest' -Default ([ordered]@{})
+  if (
+    [string](Get-PropertyValue -Payload $Latest -Name 'status' -Default '') -eq 'approved' -and
+    -not [string]::IsNullOrWhiteSpace([string](Get-PropertyValue -Payload $Latest -Name 'id' -Default ''))
+  ) {
+    return [string](Get-PropertyValue -Payload $Latest -Name 'id' -Default '')
+  }
+
+  return [string](Get-PropertyValue -Payload $Readback -Name 'latest_approval_id' -Default '')
+}
+
+function Get-ApprovalReadbackLatestPendingId {
+  param(
+    [AllowNull()]
+    [object]$Readback
+  )
+
+  foreach ($Item in @(
+      Get-PropertyValue -Payload $Readback -Name 'items' -Default @()
+    )) {
+    if (
+      [string](Get-PropertyValue -Payload $Item -Name 'status' -Default '') -eq 'pending' -and
+      -not [string]::IsNullOrWhiteSpace([string](Get-PropertyValue -Payload $Item -Name 'id' -Default ''))
+    ) {
+      return [string](Get-PropertyValue -Payload $Item -Name 'id' -Default '')
+    }
+  }
+
+  $Latest = Get-PropertyValue -Payload $Readback -Name 'latest' -Default ([ordered]@{})
+  if (
+    [string](Get-PropertyValue -Payload $Latest -Name 'status' -Default '') -eq 'pending' -and
+    -not [string]::IsNullOrWhiteSpace([string](Get-PropertyValue -Payload $Latest -Name 'id' -Default ''))
+  ) {
+    return [string](Get-PropertyValue -Payload $Latest -Name 'id' -Default '')
+  }
+
+  return [string](Get-PropertyValue -Payload $Readback -Name 'latest_pending_approval_id' -Default '')
+}
+
+function Get-AuthorityGrantActiveReceiptId {
+  param(
+    [AllowNull()]
+    [object]$Readback
+  )
+
+  foreach ($Name in @('active_authority_grant', 'active_latest', 'active_grant')) {
+    $Active = Get-PropertyValue -Payload $Readback -Name $Name -Default ([ordered]@{})
+    $ReceiptId = [string](Get-PropertyValue -Payload $Active -Name 'receipt_id' -Default '')
+    if (-not [string]::IsNullOrWhiteSpace($ReceiptId)) {
+      return $ReceiptId
+    }
+  }
+
+  return [string](Get-PropertyValue -Payload $Readback -Name 'active_grant_receipt_id' -Default '')
+}
+
 function New-ResidentRuntimeAuthorityRequestOperatorHandoff {
   param(
     [AllowNull()]
-    [object]$SourceHandoff
+    [object]$SourceHandoff,
+
+    [AllowNull()]
+    [object]$ResidentRuntimeAuthorityRequests,
+
+    [AllowNull()]
+    [object]$ResidentRuntimeAuthorityGrants
   )
 
   $FirstBlockedRequirementHandoff = Get-PropertyValue `
@@ -161,6 +240,167 @@ function New-ResidentRuntimeAuthorityRequestOperatorHandoff {
       -Payload $FirstBlockedRequirementHandoff `
       -Name 'approval_action' `
       -Default 'lens.resident_runtime.execution_authority')
+  $ApprovedApprovalId = Get-ApprovalReadbackLatestApprovedId -Readback $ResidentRuntimeAuthorityRequests
+  $PendingApprovalId = Get-ApprovalReadbackLatestPendingId -Readback $ResidentRuntimeAuthorityRequests
+  $ActiveGrantReceiptId = Get-AuthorityGrantActiveReceiptId -Readback $ResidentRuntimeAuthorityGrants
+
+  if (-not [string]::IsNullOrWhiteSpace($ActiveGrantReceiptId)) {
+    return [ordered]@{
+      source = 'resident_runtime_authority_readiness_handoff'
+      status = 'authority_grant_receipt_already_active'
+      next_operator_action_requirement = 'resident_runtime_execution_authority_grant_receipt'
+      next_operator_action = [ordered]@{
+        id = 'review_resident_runtime_execution_authority_grant_receipt'
+        route = '/lens/resident-runtime/authority-grant/grants'
+        readiness_route = $ReadinessRoute
+        method = 'GET'
+        approval_action = $ApprovalAction
+        mode = 'readback'
+        live_effect = 'resident runtime authority grant receipt is already recorded'
+        latest_receipt_id = $ActiveGrantReceiptId
+        operator_supplied_values_required = $false
+        script_would_execute = $false
+        script_would_mutate = $false
+        script_would_request_authority = $false
+        script_would_grant_authority = $false
+        script_would_decide_approval = $false
+      }
+      next_operator_command = [ordered]@{
+        command = '.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status'
+        mode = 'Status'
+        requires_confirmation = $false
+        requires_explicit_operator_opt_in = $false
+        requires_actor = $false
+        requires_approval_id = $false
+        requires_operator_approval_decision = $false
+      }
+      read_only_status_command = '.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status'
+      operator_sequence_command_availability = [ordered]@{
+        available_now_count = 1
+        preview_only_count = 0
+        sequence_length = 1
+        truthful = $true
+      }
+      read_only_contract = $true
+      diagnostic_only = $true
+      approval_request_write_if_run = $false
+      authority_grant_receipt_write_if_run = $false
+      approval_decision_authority = $false
+      would_execute = $false
+      would_mutate = $false
+    }
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($ApprovedApprovalId)) {
+    return [ordered]@{
+      source = 'resident_runtime_authority_readiness_handoff'
+      status = 'operator_action_available'
+      next_operator_action_requirement = 'resident_runtime_execution_authority_grant_receipt'
+      next_operator_action = [ordered]@{
+        id = 'grant_resident_runtime_execution_authority'
+        route = '/lens/resident-runtime/authority-grant'
+        requests_route = $RequestsRoute
+        readiness_route = $ReadinessRoute
+        method = 'POST'
+        approval_action = $ApprovalAction
+        approved_approval_id = $ApprovedApprovalId
+        requires = [string[]]@('exact approved resident runtime authority approval_id', 'system.write actor scope', 'explicit -ConfirmGrant operator execution')
+        mode = 'authority_grant'
+        live_effect = 'writes the resident-runtime execution authority grant receipt only'
+        operator_supplied_values_required = $true
+        script_would_execute = $false
+        script_would_mutate = $false
+        script_would_request_authority = $false
+        script_would_grant_authority = $true
+        script_would_decide_approval = $false
+      }
+      next_operator_command = [ordered]@{
+        command = ".\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode GrantNext -Actor <actor> -ApprovalId $ApprovedApprovalId -ConfirmGrant"
+        mode = 'GrantNext'
+        requires_confirmation = $true
+        requires_explicit_operator_opt_in = $true
+        requires_actor = $true
+        requires_approval_id = $true
+        requires_operator_approval_decision = $false
+      }
+      read_only_status_command = '.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status'
+      next_operator_actor_scope_readiness = [ordered]@{
+        ready = $false
+        reason = 'actor_not_supplied'
+        actor_present = $false
+        scope_required = $true
+        required_scope = 'system.write'
+        action_id = 'grant_resident_runtime_execution_authority'
+        route = '/lens/resident-runtime/authority-grant'
+        method = 'POST'
+        operator_must_supply_actor = $true
+        env_var = 'FRANCIS_API_ACTOR_SCOPES'
+        json_shape = [ordered]@{ '<actor>' = [string[]]@('system.write') }
+        powershell_example = '$env:FRANCIS_API_ACTOR_SCOPES = ''{"<actor>":["system.write"]}'''
+      }
+      operator_sequence_command_availability = [ordered]@{
+        available_now_count = 1
+        preview_only_count = 0
+        sequence_length = 1
+        truthful = $true
+      }
+      read_only_contract = $true
+      diagnostic_only = $true
+      approval_request_write_if_run = $false
+      authority_grant_receipt_write_if_run = $true
+      approval_decision_authority = $false
+      would_execute = $false
+      would_mutate = $false
+    }
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($PendingApprovalId)) {
+    return [ordered]@{
+      source = 'resident_runtime_authority_readiness_handoff'
+      status = 'operator_approval_decision_required'
+      next_operator_action_requirement = 'exact_resident_runtime_execution_authority_approval'
+      next_operator_action = [ordered]@{
+        id = 'await_resident_runtime_execution_authority_approval'
+        route = $RequestsRoute
+        readiness_route = $ReadinessRoute
+        method = 'GET'
+        approval_action = $ApprovalAction
+        pending_approval_id = $PendingApprovalId
+        mode = 'approval_wait'
+        live_effect = 'approval request exists; operator approval decision is required before grant receipt'
+        operator_supplied_values_required = $false
+        requires_operator_approval_decision = $true
+        script_would_execute = $false
+        script_would_mutate = $false
+        script_would_request_authority = $false
+        script_would_grant_authority = $false
+        script_would_decide_approval = $false
+      }
+      next_operator_command = [ordered]@{
+        command = '.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status'
+        mode = 'Status'
+        requires_confirmation = $false
+        requires_explicit_operator_opt_in = $false
+        requires_actor = $false
+        requires_approval_id = $false
+        requires_operator_approval_decision = $true
+      }
+      read_only_status_command = '.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status'
+      operator_sequence_command_availability = [ordered]@{
+        available_now_count = 1
+        preview_only_count = 0
+        sequence_length = 1
+        truthful = $true
+      }
+      read_only_contract = $true
+      diagnostic_only = $true
+      approval_request_write_if_run = $false
+      authority_grant_receipt_write_if_run = $false
+      approval_decision_authority = $false
+      would_execute = $false
+      would_mutate = $false
+    }
+  }
 
   return [ordered]@{
     source = 'resident_runtime_authority_readiness_handoff'
@@ -434,6 +674,14 @@ $FirstBlockerFamilyHandoff = Get-PropertyValue -Payload $CriterionHandoff -Name 
 $FirstFamilyCompletionAuditHandoff = Get-PropertyValue -Payload $CriterionHandoff -Name 'first_blocker_family_completion_audit_handoff' -Default ([ordered]@{})
 $FamilyChainCompletionAuditHandoff = Get-PropertyValue -Payload $CriterionHandoff -Name 'summon_anywhere_family_chain_completion_audit_handoff' -Default ([ordered]@{})
 $ResidentHostReadback = Get-PropertyValue -Payload $StatusReadback -Name 'resident_host' -Default ([ordered]@{})
+$ResidentRuntimeAuthorityRequests = Get-PropertyValue -Payload $ResidentHostReadback -Name 'resident_runtime_authority_requests' -Default $null
+if ($null -eq $ResidentRuntimeAuthorityRequests) {
+  $ResidentRuntimeAuthorityRequests = Get-PropertyValue -Payload $StatusReadback -Name 'resident_runtime_authority_requests' -Default ([ordered]@{})
+}
+$ResidentRuntimeAuthorityGrants = Get-PropertyValue -Payload $ResidentHostReadback -Name 'resident_runtime_authority_grant_receipts' -Default $null
+if ($null -eq $ResidentRuntimeAuthorityGrants) {
+  $ResidentRuntimeAuthorityGrants = Get-PropertyValue -Payload $StatusReadback -Name 'resident_runtime_authority_grant_receipts' -Default ([ordered]@{})
+}
 $FreshResidentRuntimeCandidateSupervised = [bool](
   Get-PropertyValue -Payload $ResidentHostReadback -Name 'fresh_resident_runtime_candidate_supervised' -Default $false
 )
@@ -1140,7 +1388,10 @@ if ($Stage6CompletionAuditRuntimeReadbackRequired) {
   $Stage6CompletionAuditRecommendedHandoffConsumed -and
   $RecommendedNextSlice -eq 'create_or_select_exact_approved_resident_runtime_execution_authority_request'
 ) {
-  $RecommendedOperatorHandoff = New-ResidentRuntimeAuthorityRequestOperatorHandoff -SourceHandoff $RecommendedHandoff
+  $RecommendedOperatorHandoff = New-ResidentRuntimeAuthorityRequestOperatorHandoff `
+    -SourceHandoff $RecommendedHandoff `
+    -ResidentRuntimeAuthorityRequests $ResidentRuntimeAuthorityRequests `
+    -ResidentRuntimeAuthorityGrants $ResidentRuntimeAuthorityGrants
 }
 $RecommendedOperatorActionRequirement = [string](
   Get-PropertyValue -Payload $RecommendedOperatorHandoff -Name 'next_operator_action_requirement' -Default ''
