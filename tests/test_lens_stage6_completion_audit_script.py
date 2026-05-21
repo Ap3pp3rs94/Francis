@@ -772,6 +772,11 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     assert "'resident_surface_runtime_supervision_handoff'" in script
     assert "'resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim'" in script
     assert (
+        "$HelpfulNotNoisyNextStep = [string]$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff.next_step"
+        in script
+    )
+    assert "$RecommendedHandoff = $ResidentSurfaceForegroundRuntimeProofRecommendedHandoff" in script
+    assert (
         "resident_surface_foreground_runtime_proof_readback = $ResidentSurfaceForegroundRuntimeProofObserved" in script
     )
     assert "resident_surface_foreground_runtime_proof = [ordered]@{" in script

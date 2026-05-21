@@ -979,25 +979,52 @@ $Stage6CompletionAuditHelpfulNotNoisyRuntimeAuthorityHandoffObserved = (
   -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_execute' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_mutate' -Default $true)
 )
+$Stage6CompletionAuditResidentSurfaceRuntimeSupervisionHandoff = Get-PropertyValue `
+  -Payload $Stage6CompletionAuditRecommendedHandoff `
+  -Name 'resident_surface_runtime_supervision_handoff' `
+  -Default $Stage6CompletionAuditRecommendedHandoff
+$Stage6CompletionAuditResidentSurfaceRuntimeSupervisionHandoffObserved = (
+  $Stage6CompletionAuditReadbackObserved -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_handoff_source' -Default '') -eq 'stage6_helpful_not_noisy_resident_surface_runtime_handoff' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_next_slice' -Default '') -eq 'resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditResidentSurfaceRuntimeSupervisionHandoff -Name 'id' -Default '') -eq 'resident_surface_runtime_supervision' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditResidentSurfaceRuntimeSupervisionHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'resident_surface_runtime_not_supervised' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditResidentSurfaceRuntimeSupervisionHandoff -Name 'next_step' -Default '') -eq 'resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditResidentSurfaceRuntimeSupervisionHandoff -Name 'proof_script' -Default '') -eq 'scripts/lens-resident-surface-proof.ps1 -Mode Status' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditResidentSurfaceRuntimeSupervisionHandoff -Name 'readiness_route' -Default '') -eq '/lens/resident-runtime/authority-grant/readiness' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditResidentSurfaceRuntimeSupervisionHandoff -Name 'authority_required' -Default '') -eq 'process_supervision_authority' -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditResidentSurfaceRuntimeSupervisionHandoff -Name 'authority_granted' -Default $true) -and
+  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditResidentSurfaceRuntimeSupervisionHandoff -Name 'read_only_contract' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditResidentSurfaceRuntimeSupervisionHandoff -Name 'diagnostic_only' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditResidentSurfaceRuntimeSupervisionHandoff -Name 'would_execute' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditResidentSurfaceRuntimeSupervisionHandoff -Name 'would_mutate' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditResidentSurfaceRuntimeSupervisionHandoff -Name 'would_supervise_process' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditResidentSurfaceRuntimeSupervisionHandoff -Name 'would_claim_resident' -Default $true)
+)
 $Stage6CompletionAuditHelpfulNotNoisyResidentSurfaceRuntimeHandoffObserved = (
   $Stage6CompletionAuditReadbackObserved -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_handoff_source' -Default '') -eq 'stage6_helpful_not_noisy_resident_surface_runtime_handoff' -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'next_smallest_truthful_gap' -Default '') -eq 'resident_surface_runtime_not_supervised' -and
-  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_next_slice' -Default '') -eq 'consume_resident_surface_foreground_runtime_proof_before_helpful_not_noisy_claim' -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_proof_script' -Default '') -eq 'scripts/lens-resident-surface-proof.ps1 -Mode Status' -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'authority_required' -Default '') -eq 'process_supervision_authority' -and
   -not [bool](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'authority_granted' -Default $true) -and
-  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'status' -Default '') -eq 'authority_readiness_handoff_ready' -and
-  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'consumed_resident_surface_foreground_runtime_proof' -Default $false) -and
-  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'read_only_contract' -Default $false) -and
-  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'diagnostic_only' -Default $false) -and
-  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'authority_granted' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_execute' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_mutate' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_supervise_process' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_claim_resident' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_write_memory' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_decide_approval' -Default $true)
+  (
+    $Stage6CompletionAuditResidentSurfaceRuntimeSupervisionHandoffObserved -or
+    (
+      [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_next_slice' -Default '') -eq 'consume_resident_surface_foreground_runtime_proof_before_helpful_not_noisy_claim' -and
+      [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'status' -Default '') -eq 'authority_readiness_handoff_ready' -and
+      [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'consumed_resident_surface_foreground_runtime_proof' -Default $false) -and
+      [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'read_only_contract' -Default $false) -and
+      [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'diagnostic_only' -Default $false) -and
+      -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'authority_granted' -Default $true) -and
+      -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_execute' -Default $true) -and
+      -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_mutate' -Default $true) -and
+      -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_supervise_process' -Default $true) -and
+      -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_claim_resident' -Default $true) -and
+      -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_write_memory' -Default $true) -and
+      -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_decide_approval' -Default $true)
+    )
+  )
 )
 $PersistentSupervisionRequiredPrerequisitesObserved = (
   @($PersistentSupervisionMissingRequiredBeforeEnable).Count -gt 0 -and

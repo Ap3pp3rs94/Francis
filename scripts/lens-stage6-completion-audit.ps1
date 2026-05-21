@@ -2708,6 +2708,15 @@ if (
     $HelpfulNotNoisyAuthorityRequired = [string]$ResidentRuntimeAuthorityGrantReadinessFirstBlockedRequirementHandoff.authority_required
     $HelpfulNotNoisyFirstBlockedRequirement = [string]$ResidentRuntimeAuthorityGrantReadinessFirstBlockedRequirement
     $HelpfulNotNoisyFirstBlockedRequirementHandoff = $ResidentRuntimeAuthorityGrantReadinessFirstBlockedRequirementHandoff
+  } elseif (
+    $ResidentSurfaceForegroundRuntimeProofObserved -and
+    $ResidentSurfaceRuntimeSupervisionHandoffObserved
+  ) {
+    $HelpfulNotNoisyNextStep = [string]$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff.next_step
+    $HelpfulNotNoisyProofScript = [string]$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff.proof_script
+    $HelpfulNotNoisyRoute = [string]$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff.route
+    $HelpfulNotNoisyReadinessRoute = [string]$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff.readiness_route
+    $HelpfulNotNoisyAuthorityRequired = [string]$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff.authority_required
   }
   $RecommendedHandoff = [ordered]@{
     status = if ($ResidentSurfaceForegroundRuntimeProofObserved) { 'authority_readiness_handoff_ready' } else { 'blocked' }
@@ -2749,6 +2758,13 @@ if (
     would_write_memory = $false
     would_decide_approval = $false
     blockers = [string[]]@($Blockers)
+  }
+  if (
+    $ResidentSurfaceForegroundRuntimeProofObserved -and
+    $ResidentSurfaceRuntimeSupervisionHandoffObserved -and
+    -not $ResidentRuntimeAuthorityGrantReadinessHandoffObserved
+  ) {
+    $RecommendedHandoff = $ResidentSurfaceForegroundRuntimeProofRecommendedHandoff
   }
   $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
   $RecommendedProofScript = [string]$RecommendedHandoff.proof_script

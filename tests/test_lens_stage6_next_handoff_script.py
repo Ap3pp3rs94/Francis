@@ -1456,21 +1456,26 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
                 "next_smallest_truthful_gap": "resident_surface_runtime_not_supervised",
                 "recommended_handoff_source": "stage6_helpful_not_noisy_resident_surface_runtime_handoff",
                 "recommended_next_slice": (
-                    "consume_resident_surface_foreground_runtime_proof_before_helpful_not_noisy_claim"
+                    "resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim"
                 ),
                 "recommended_proof_script": "scripts/lens-resident-surface-proof.ps1 -Mode Status",
                 "authority_required": "process_supervision_authority",
                 "authority_granted": False,
                 "recommended_handoff": {
-                    "status": "authority_readiness_handoff_ready",
+                    "id": "resident_surface_runtime_supervision",
+                    "status": "blocked",
+                    "previous_next_smallest_truthful_gap": "resident_surface_runtime_missing",
                     "next_smallest_truthful_gap": "resident_surface_runtime_not_supervised",
-                    "next_step": ("consume_resident_surface_foreground_runtime_proof_before_helpful_not_noisy_claim"),
+                    "next_step": "resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim",
                     "proof_script": "scripts/lens-resident-surface-proof.ps1 -Mode Status",
                     "route": "/lens/resident-surface",
-                    "readiness_route": "/lens/resident-surface/activation",
+                    "activation_route": "/lens/resident-surface/activation",
+                    "readiness_route": "/lens/resident-runtime/authority-grant/readiness",
+                    "acceptance_criterion": "helpful_not_noisy",
+                    "blocker": "resident_surface_runtime_not_supervised",
+                    "requirement_state": "foreground_observed_not_supervised",
                     "authority_required": "process_supervision_authority",
                     "authority_granted": False,
-                    "consumed_resident_surface_foreground_runtime_proof": True,
                     "read_only_contract": True,
                     "diagnostic_only": True,
                     "would_execute": False,
@@ -1500,7 +1505,7 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     )
     assert resident_surface_payload["next_smallest_truthful_gap"] == "resident_surface_runtime_not_supervised"
     assert resident_surface_payload["recommended_next_slice"] == (
-        "consume_resident_surface_foreground_runtime_proof_before_helpful_not_noisy_claim"
+        "resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim"
     )
     assert resident_surface_payload["recommended_proof_script"] == (
         "scripts/lens-resident-surface-proof.ps1 -Mode Status"
@@ -1512,6 +1517,22 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     assert resident_surface_payload["stage6_completion_audit_resident_surface_runtime_handoff_observed"] is True
     assert resident_surface_payload["stage6_completion_audit_recommended_handoff_consumed"] is True
     assert resident_surface_payload["stage6_completion_audit_runtime_readback_required"] is False
+    resident_surface_handoff = resident_surface_payload["recommended_handoff"]
+    assert resident_surface_handoff["id"] == "resident_surface_runtime_supervision"
+    assert resident_surface_handoff["next_step"] == (
+        "resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim"
+    )
+    assert resident_surface_handoff["proof_script"] == "scripts/lens-resident-surface-proof.ps1 -Mode Status"
+    assert resident_surface_handoff["readiness_route"] == "/lens/resident-runtime/authority-grant/readiness"
+    assert resident_surface_handoff["authority_required"] == "process_supervision_authority"
+    assert resident_surface_handoff["authority_granted"] is False
+    assert resident_surface_handoff["read_only_contract"] is True
+    assert resident_surface_handoff["diagnostic_only"] is True
+    assert resident_surface_handoff["would_execute"] is False
+    assert resident_surface_handoff["would_mutate"] is False
+    assert resident_surface_handoff["would_supervise_process"] is False
+    assert resident_surface_handoff["would_claim_resident"] is False
+    assert resident_surface_payload["recommended_concrete_handoff"] == resident_surface_handoff
     assert resident_surface_payload["recommended_operator_handoff"]["source"] == (
         "stage6_completion_audit_recommended_handoff"
     )
@@ -1519,7 +1540,7 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
         "stage6_completion_audit_recommended_readback"
     )
     assert resident_surface_payload["recommended_next_operator_action"]["id"] == (
-        "consume_resident_surface_foreground_runtime_proof_before_helpful_not_noisy_claim"
+        "resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim"
     )
     assert resident_surface_payload["recommended_next_operator_action"]["method"] == "LOCAL_SCRIPT"
     assert resident_surface_payload["recommended_next_operator_action"]["script_would_execute"] is False

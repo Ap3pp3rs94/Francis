@@ -94,12 +94,13 @@ def _run_lens_runtime_script(script_name: str, *args: str) -> None:
     )
 
 
-def _count_stage6_runtime_processes(data_dir: Path) -> int:
+def _count_stage6_runtime_processes(
+    data_dir: Path,
+    process_names: tuple[str, ...] = _STAGE6_RUNTIME_PROCESSES,
+) -> int:
     env = dict(os.environ)
     env["FRANCIS_STAGE6_TEST_CLEANUP_DATA_DIR"] = str(data_dir)
-    process_filter = " -or ".join(
-        f"$_.CommandLine -like '*{process_name}*'" for process_name in _STAGE6_RUNTIME_PROCESSES
-    )
+    process_filter = " -or ".join(f"$_.CommandLine -like '*{process_name}*'" for process_name in process_names)
     proc = subprocess.run(
         [
             _powershell(),
@@ -160,16 +161,21 @@ def _stop_stage6_runtime_processes_by_name(data_dir: Path, process_names: tuple[
     )
 
 
-def _wait_for_stage6_runtime_processes_to_stop(data_dir: Path) -> None:
+def _wait_for_stage6_runtime_processes_to_stop(
+    data_dir: Path,
+    process_names: tuple[str, ...] = _STAGE6_RUNTIME_PROCESSES,
+) -> None:
     if platform.system() != "Windows":
         return
     remaining = 0
     for _ in range(20):
-        remaining = _count_stage6_runtime_processes(data_dir)
+        remaining = _count_stage6_runtime_processes(data_dir, process_names)
         if remaining == 0:
             return
         time.sleep(0.25)
-    assert remaining == 0, f"Stage 6 live test runtime processes still running for {data_dir}: {remaining}"
+    assert remaining == 0, (
+        f"Stage 6 live test runtime processes still running for {data_dir}: {remaining}; process_names={process_names}"
+    )
 
 
 def _stop_stage6_live_runtime_leases(data_dir: Path) -> None:
@@ -970,6 +976,7 @@ def _restart_tray_lease(
         run_seconds=0,
     )
     _stop_stage6_runtime_processes_by_name(data_dir, ("lens-tray-presence.ps1",))
+    _wait_for_stage6_runtime_processes_to_stop(data_dir, ("lens-tray-presence.ps1",))
     result = execute_lens_tray_presence(
         approval_id=approval_id,
         actor="test.system.write",
@@ -1008,6 +1015,7 @@ def _restart_hotkey_lease(
         run_seconds=0,
     )
     _stop_stage6_runtime_processes_by_name(data_dir, ("lens-hotkey-binding.ps1",))
+    _wait_for_stage6_runtime_processes_to_stop(data_dir, ("lens-hotkey-binding.ps1",))
     result = execute_lens_os_binding(
         approval_id=approval_id,
         actor="test.system.write",
@@ -1046,6 +1054,7 @@ def _restart_overlay_lease(
         run_seconds=0,
     )
     _stop_stage6_runtime_processes_by_name(data_dir, ("lens-overlay-window.ps1",))
+    _wait_for_stage6_runtime_processes_to_stop(data_dir, ("lens-overlay-window.ps1",))
     result = execute_lens_overlay_window(
         approval_id=approval_id,
         actor="test.system.write",
@@ -1056,6 +1065,31 @@ def _restart_overlay_lease(
         mode="start",
         run_seconds=int(_LIVE_STAGE6_PREREQUISITE_RUN_SECONDS),
     )
+    if result.get("status") == "overlay_window_start_failed" and result.get("runner", {}).get("status") == (
+        "start_timeout"
+    ):
+        execute_lens_overlay_window(
+            approval_id=approval_id,
+            actor="test.system.write",
+            reason="test stop overlay lease before retrying timed-out refresh",
+            route=LENS_OVERLAY_EXECUTE_ROUTE,
+            method="POST",
+            record_receipt=True,
+            mode="stop",
+            run_seconds=0,
+        )
+        _stop_stage6_runtime_processes_by_name(data_dir, ("lens-overlay-window.ps1",))
+        _wait_for_stage6_runtime_processes_to_stop(data_dir, ("lens-overlay-window.ps1",))
+        result = execute_lens_overlay_window(
+            approval_id=approval_id,
+            actor="test.system.write",
+            reason="test retry overlay lease refresh after start timeout",
+            route=LENS_OVERLAY_EXECUTE_ROUTE,
+            method="POST",
+            record_receipt=True,
+            mode="start",
+            run_seconds=int(_LIVE_STAGE6_PREREQUISITE_RUN_SECONDS),
+        )
     assert result["ok"] is True, json.dumps(result, indent=2)
     assert result["status"] == "overlay_window_started", json.dumps(result, indent=2)
     assert result["receipt_written"] is True

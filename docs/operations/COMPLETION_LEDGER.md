@@ -36436,6 +36436,66 @@ handoff readback:
   resident_surface_proof_authority_granted=false;
   resident_surface_proof_resident_runtime_authority_handoff=true`
 
+Stage 6 completion-audit resident-surface fallback handoff promotion on
+`2026-05-21`:
+
+- When the completion audit has consumed a foreground resident-surface proof but
+  has not yet observed resident-runtime authority readiness, the helpful-not-noisy
+  fallback now promotes the concrete
+  `resident_surface_runtime_supervision_handoff` instead of routing back through
+  the older
+  `consume_resident_surface_foreground_runtime_proof_before_helpful_not_noisy_claim`
+  wording.
+- `scripts/lens-stage6-next-handoff.ps1` now accepts supplied completion-audit
+  JSON that carries this concrete resident-surface supervision handoff. The
+  synthetic regression fixture now asserts the handoff id, next step, proof
+  script, readiness route, authority requirement, denied authority grant state,
+  and non-mutating/non-supervising flags.
+- The live Stage 6 prerequisite bring-up test harness now waits for only the
+  specific tray, hotkey, or overlay runtime process being refreshed, and retries
+  the overlay lease start once after the exact `start_timeout` readback shape.
+  This hardens the Windows live runtime chain without treating unrelated
+  intentionally-running prerequisite leases as cleanup failures.
+- This is audit/next-handoff truthfulness only. It does not run the completion
+  audit from default next-handoff status, grant process-supervision authority,
+  start or supervise a process, install or control a service, write memory, close
+  Stage 6, or start Stage 7.
+
+Latest validation for Stage 6 completion-audit resident-surface fallback
+handoff promotion:
+
+- PowerShell parser checks for `scripts\lens-stage6-completion-audit.ps1` and
+  `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed; parser_ok`
+- `python -m ruff check tests\test_lens_stage6_next_handoff_script.py
+  tests\test_lens_stage6_completion_audit_script.py
+  tests\test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests\test_lens_stage6_next_handoff_script.py
+  tests\test_lens_stage6_completion_audit_script.py
+  tests\test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed; 3 files already formatted`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed; 38 passed, 1 skipped`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `python -m pytest
+  tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_summon_execution_advances_to_enablement
+  -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  scripts\lens-stage6-next-handoff.ps1 -Mode Status`
+  Result: `passed; status=proof_passed; ok=true;
+  next_smallest_truthful_gap=stage6_lens_completion_audit_runtime_readback;
+  recommended_handoff_source=stage6_completion_audit_launch_on_hotkey_readback_required;
+  recommended_next_slice=run_stage6_completion_audit_with_launch_on_hotkey_runtime_readback;
+  recommended_proof_script=scripts/lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey;
+  authority_required=launch_on_hotkey_runtime_readback_opt_in;
+  authority_granted=false`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\check.ps1`
+  Result: `passed; branch state OK; Ruff check passed; Ruff format check
+  passed; mypy passed with no issues in 501 source files; pytest reached 100%`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
