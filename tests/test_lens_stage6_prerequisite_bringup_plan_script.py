@@ -374,7 +374,7 @@ def _wait_for_next_action(
     service_config_path: Path | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {}
-    for _ in range(20):
+    for _ in range(60):
         payload = _status_payload(data_dir, service_config_path=service_config_path)
         if (
             payload["next_operator_action_requirement"] == requirement
@@ -2270,9 +2270,11 @@ def test_lens_stage6_prerequisite_bringup_summon_execution_advances_to_enablemen
         chain,
         reason="test refresh active prerequisite leases after summon authority grant",
     )
-    summon_ready = _run_plan("-Mode", "Status", "-DataDir", str(data_dir))
-    assert summon_ready.returncode == 0, summon_ready.stderr or summon_ready.stdout
-    summon_ready_payload = json.loads(summon_ready.stdout)
+    summon_ready_payload = _wait_for_next_action(
+        data_dir,
+        requirement="summon_binding",
+        action_id="execute_summon_binding",
+    )
     assert summon_ready_payload["next_operator_action_requirement"] == "summon_binding"
     assert summon_ready_payload["next_operator_action"]["id"] == "execute_summon_binding"
     assert summon_ready_payload["next_operator_action"]["route"] == "/lens/summon/execute"
@@ -2294,9 +2296,11 @@ def test_lens_stage6_prerequisite_bringup_summon_execution_advances_to_enablemen
         chain,
         reason="test refresh active prerequisite leases before summon execution",
     )
-    refreshed_ready = _run_plan("-Mode", "Status", "-DataDir", str(data_dir))
-    assert refreshed_ready.returncode == 0, refreshed_ready.stderr or refreshed_ready.stdout
-    refreshed_ready_payload = json.loads(refreshed_ready.stdout)
+    refreshed_ready_payload = _wait_for_next_action(
+        data_dir,
+        requirement="summon_binding",
+        action_id="execute_summon_binding",
+    )
     assert refreshed_ready_payload["next_operator_action_requirement"] == "summon_binding"
     assert refreshed_ready_payload["next_operator_action"]["id"] == "execute_summon_binding"
     assert refreshed_ready_payload["next_operator_action"]["active_approval_id"] == summon_approval_id

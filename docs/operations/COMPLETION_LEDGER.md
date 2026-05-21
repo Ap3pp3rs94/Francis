@@ -36189,6 +36189,29 @@ selection:
   Result: `passed; branch state OK; Ruff check passed; Ruff format check
   passed; mypy passed with no issues in 501 source files; pytest reached 100%`
 
+Stage 6 Windows summon execution-readiness CI hardening on `2026-05-21`:
+
+- `tests/test_lens_stage6_prerequisite_bringup_plan_script.py` now waits for
+  the summon execution handoff after refreshing active prerequisite leases
+  instead of asserting on the first immediate status read. The shared wait helper
+  now allows up to thirty seconds for slow Windows live-runtime readbacks before
+  failing with the same exact requirement/action assertions.
+- This addresses the Windows 3.13 CI failure where the prerequisite bring-up
+  test observed a transient `resident_host_process` requirement immediately
+  after summon authority was granted, even though the same flow passed locally
+  and on the other matrix legs. It does not change runtime authority,
+  approvals, summon execution behavior, Stage 6 closure posture, or Stage 7
+  authority.
+
+Latest validation for Stage 6 Windows summon execution-readiness CI hardening:
+
+- `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_summon_execution_advances_to_enablement -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests\test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed; 1 file already formatted`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
