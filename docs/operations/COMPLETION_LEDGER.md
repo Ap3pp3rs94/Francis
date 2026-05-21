@@ -36273,6 +36273,60 @@ Latest validation for Stage 6 resident-runtime authority grant receipt handoff:
   latest_receipt_id=lrag_1779383660_76dcbe1d2ad9;
   authority_required=none_readback_only; authority_granted=true`
 
+Stage 6 completion-audit resident-surface handoff consumption on `2026-05-21`:
+
+- `scripts/lens-stage6-next-handoff.ps1` now consumes a supplied Stage 6
+  completion-audit JSON when the audit has already advanced to
+  `stage6_helpful_not_noisy_resident_surface_runtime_handoff`. It no longer
+  routes that safe readback state back to
+  `run_stage6_completion_audit_with_launch_on_hotkey_runtime_readback`.
+- The consumed handoff points at
+  `consume_resident_surface_foreground_runtime_proof_before_helpful_not_noisy_claim`
+  with `scripts/lens-resident-surface-proof.ps1 -Mode Status`, keeps
+  `authority_required=process_supervision_authority`, and reports that the
+  recommended operator command is read-only `Status`.
+- This is an operator-surface truth fix only. It does not grant process
+  supervision authority, start or supervise a resident process, write memory,
+  claim `helpful_not_noisy`, close Stage 6, or start Stage 7.
+
+Latest validation for Stage 6 completion-audit resident-surface handoff
+consumption:
+
+- PowerShell parser check for `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed; parser_ok`
+- `scripts\lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey`
+  with bounded runtime arguments
+  Result: `passed; status=blocked; ok=true; audit_status=complete;
+  ready_to_close=false; transition_allowed=false;
+  next_smallest_truthful_gap=resident_surface_runtime_not_supervised;
+  recommended_handoff_source=
+  stage6_helpful_not_noisy_resident_surface_runtime_handoff;
+  recommended_next_slice=
+  consume_resident_surface_foreground_runtime_proof_before_helpful_not_noisy_claim;
+  recommended_proof_script=scripts/lens-resident-surface-proof.ps1 -Mode Status;
+  child_timeouts=0`
+- `scripts\lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath <audit.json>`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=resident_surface_runtime_not_supervised;
+  recommended_handoff_source=
+  stage6_helpful_not_noisy_resident_surface_runtime_handoff;
+  recommended_next_slice=
+  consume_resident_surface_foreground_runtime_proof_before_helpful_not_noisy_claim;
+  recommended_proof_script=scripts/lens-resident-surface-proof.ps1 -Mode Status;
+  stage6_completion_audit_recommended_handoff_consumed=true;
+  stage6_completion_audit_runtime_readback_required=false`
+- `scripts\lens-resident-surface-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=resident_surface_runtime_not_supervised;
+  resident_surface_runtime_status=foreground_runtime_observed`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 1 file already formatted`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

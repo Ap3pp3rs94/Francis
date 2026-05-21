@@ -79,6 +79,9 @@ def test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback() -> N
 
     assert "[string]$CompletionAuditJsonPath" in script
     assert "Get-Content -LiteralPath $ResolvedCompletionAuditJsonPath -Raw | ConvertFrom-Json" in script
+    assert "$Stage6CompletionAuditHelpfulNotNoisyResidentSurfaceRuntimeHandoffObserved = (" in script
+    assert "'stage6_helpful_not_noisy_resident_surface_runtime_handoff'" in script
+    assert "New-Stage6CompletionAuditReadbackOperatorHandoff" in script
     assert "$Stage6CompletionAuditRuntimeReadbackRequired = (" in script
     assert "'stage6_completion_audit_launch_on_hotkey_readback_required'" in script
     assert "'scripts/lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey'" in script
@@ -755,6 +758,8 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority(tm
         "uses_stage6_completion_audit_readback": False,
         "stage6_prerequisite_bringup_plan_readback": True,
         "stage6_prerequisite_bringup_actor_scope_readback": True,
+        "stage6_completion_audit_runtime_authority_handoff_observed": False,
+        "stage6_completion_audit_resident_surface_runtime_handoff_observed": False,
         "stage6_completion_audit_recommended_handoff_consumed": False,
         "stage6_completion_audit_runtime_readback_required": False,
         "stage6_completion_audit_json_path_supplied": False,
@@ -1438,6 +1443,100 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     )
     assert checks["stage6_completion_audit_runtime_authority_handoff"]["status"] == "runtime_readback_required"
     assert all(item["passed"] for item in payload["checks"])
+
+    resident_surface_audit_json = tmp_path / "stage6-completion-audit-resident-surface.json"
+    resident_surface_audit_json.write_text(
+        json.dumps(
+            {
+                "kind": "lens.stage6.completion_audit",
+                "ok": True,
+                "status": "blocked",
+                "audit_status": "complete",
+                "allow_launch_on_hotkey": True,
+                "next_smallest_truthful_gap": "resident_surface_runtime_not_supervised",
+                "recommended_handoff_source": "stage6_helpful_not_noisy_resident_surface_runtime_handoff",
+                "recommended_next_slice": (
+                    "consume_resident_surface_foreground_runtime_proof_before_helpful_not_noisy_claim"
+                ),
+                "recommended_proof_script": "scripts/lens-resident-surface-proof.ps1 -Mode Status",
+                "authority_required": "process_supervision_authority",
+                "authority_granted": False,
+                "recommended_handoff": {
+                    "status": "authority_readiness_handoff_ready",
+                    "next_smallest_truthful_gap": "resident_surface_runtime_not_supervised",
+                    "next_step": ("consume_resident_surface_foreground_runtime_proof_before_helpful_not_noisy_claim"),
+                    "proof_script": "scripts/lens-resident-surface-proof.ps1 -Mode Status",
+                    "route": "/lens/resident-surface",
+                    "readiness_route": "/lens/resident-surface/activation",
+                    "authority_required": "process_supervision_authority",
+                    "authority_granted": False,
+                    "consumed_resident_surface_foreground_runtime_proof": True,
+                    "read_only_contract": True,
+                    "diagnostic_only": True,
+                    "would_execute": False,
+                    "would_mutate": False,
+                    "would_supervise_process": False,
+                    "would_claim_resident": False,
+                    "would_write_memory": False,
+                    "would_decide_approval": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    resident_surface_proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-CompletionAuditJsonPath",
+        str(resident_surface_audit_json),
+        env=proof_env,
+    )
+
+    assert resident_surface_proc.returncode == 0, resident_surface_proc.stderr or resident_surface_proc.stdout
+    resident_surface_payload = json.loads(resident_surface_proc.stdout)
+    assert resident_surface_payload["recommended_handoff_source"] == (
+        "stage6_helpful_not_noisy_resident_surface_runtime_handoff"
+    )
+    assert resident_surface_payload["next_smallest_truthful_gap"] == "resident_surface_runtime_not_supervised"
+    assert resident_surface_payload["recommended_next_slice"] == (
+        "consume_resident_surface_foreground_runtime_proof_before_helpful_not_noisy_claim"
+    )
+    assert resident_surface_payload["recommended_proof_script"] == (
+        "scripts/lens-resident-surface-proof.ps1 -Mode Status"
+    )
+    assert resident_surface_payload["authority_required"] == "process_supervision_authority"
+    assert resident_surface_payload["authority_granted"] is False
+    assert resident_surface_payload["stage6_completion_audit_readback_observed"] is True
+    assert resident_surface_payload["stage6_completion_audit_runtime_authority_handoff_observed"] is False
+    assert resident_surface_payload["stage6_completion_audit_resident_surface_runtime_handoff_observed"] is True
+    assert resident_surface_payload["stage6_completion_audit_recommended_handoff_consumed"] is True
+    assert resident_surface_payload["stage6_completion_audit_runtime_readback_required"] is False
+    assert resident_surface_payload["recommended_operator_handoff"]["source"] == (
+        "stage6_completion_audit_recommended_handoff"
+    )
+    assert resident_surface_payload["recommended_next_operator_action_requirement"] == (
+        "stage6_completion_audit_recommended_readback"
+    )
+    assert resident_surface_payload["recommended_next_operator_action"]["id"] == (
+        "consume_resident_surface_foreground_runtime_proof_before_helpful_not_noisy_claim"
+    )
+    assert resident_surface_payload["recommended_next_operator_action"]["method"] == "LOCAL_SCRIPT"
+    assert resident_surface_payload["recommended_next_operator_action"]["script_would_execute"] is False
+    assert resident_surface_payload["recommended_next_operator_action"]["script_would_mutate"] is False
+    assert resident_surface_payload["recommended_next_operator_command"] == {
+        "command": ".\\scripts\\lens-resident-surface-proof.ps1 -Mode Status",
+        "mode": "Status",
+        "requires_confirmation": False,
+        "requires_explicit_operator_opt_in": False,
+        "requires_actor": False,
+        "requires_approval_id": False,
+        "requires_operator_approval_decision": False,
+    }
+    resident_surface_checks = {item["id"]: item for item in resident_surface_payload["checks"]}
+    assert resident_surface_checks["stage6_completion_audit_runtime_authority_handoff"]["status"] == (
+        "completion_audit_recommended_handoff_consumed"
+    )
 
     audit_json = tmp_path / "stage6-completion-audit.json"
     audit_json.write_text(
