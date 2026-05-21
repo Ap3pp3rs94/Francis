@@ -36212,6 +36212,67 @@ Latest validation for Stage 6 Windows summon execution-readiness CI hardening:
 - `python -m ruff format --check tests\test_lens_stage6_prerequisite_bringup_plan_script.py`
   Result: `passed; 1 file already formatted`
 
+Stage 6 resident-runtime authority grant receipt handoff on `2026-05-21`:
+
+- `scripts/lens-stage6-prerequisite-bringup-plan.ps1` can now honor an exact
+  approved grant handoff by `ApprovalId` even when the high-level current
+  prerequisite action is a read-only persistent-supervision receipt review. The
+  grant target is selected only from existing approved grant actions already
+  present in the prerequisite sequence, and `GrantNext` still requires
+  `-Actor`, `-ApprovalId`, and `-ConfirmGrant`.
+- `scripts/lens-stage6-next-handoff.ps1` now advances the supplied
+  completion-audit handoff to
+  `review_resident_runtime_execution_authority_grant_receipt` when an active
+  resident-runtime execution authority grant receipt exists, instead of keeping
+  the stale create/select request wording.
+- The local governed grant was executed for approved resident-runtime authority
+  approval `a4b0f2b0-b32c-4f32-9b95-d4576be2f463` by actor `codex` with
+  `system.write` scope. It wrote grant receipt `lrag_1779383660_76dcbe1d2ad9`.
+  The receipt grants resident-runtime execution authority for the next boundary
+  only; it does not launch or supervise a process, grant resident-claim
+  authority, decide approval, write memory, close Stage 6, or start Stage 7.
+
+Latest validation for Stage 6 resident-runtime authority grant receipt handoff:
+
+- PowerShell parser checks for `scripts\lens-stage6-prerequisite-bringup-plan.ps1`
+  and `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed; parser_ok`
+- `python -m pytest tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_config_only -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_applied_bringup_review_state -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_next_handoff_script.py tests\test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests\test_lens_stage6_next_handoff_script.py tests\test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed; 2 files already formatted`
+- `scripts\lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey`
+  with bounded runtime arguments
+  Result: `passed; status=blocked; ok=true; ready_to_close=false;
+  transition_allowed=false;
+  next_smallest_truthful_gap=resident_surface_runtime_not_supervised;
+  recommended_handoff_source=
+  stage6_helpful_not_noisy_runtime_authority_readiness_handoff;
+  recommended_next_slice=
+  create_or_select_exact_approved_resident_runtime_execution_authority_request;
+  child_timeouts=0`
+- `scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode GrantNext -Actor codex
+  -ApprovalId a4b0f2b0-b32c-4f32-9b95-d4576be2f463 -ConfirmGrant`
+  Result: `passed; status=authority_granted;
+  grant_target_action_id=grant_resident_runtime_execution_authority;
+  grant_target_source=approved_approval_id_handoff;
+  receipt_written=true; receipt_id=lrag_1779383660_76dcbe1d2ad9;
+  execution_authority=false; resident_claim_authority=false; memory_write=false`
+- `scripts\lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath <audit.json>`
+  Result: `passed; recommended_next_slice=
+  review_resident_runtime_execution_authority_grant_receipt;
+  recommended_next_operator_action_requirement=
+  resident_runtime_execution_authority_grant_receipt;
+  recommended_next_operator_action.id=
+  review_resident_runtime_execution_authority_grant_receipt;
+  latest_receipt_id=lrag_1779383660_76dcbe1d2ad9;
+  authority_required=none_readback_only; authority_granted=true`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -1412,6 +1412,20 @@ $RecommendedOperatorSequenceCommandAvailability = Get-PropertyValue `
   -Payload $RecommendedOperatorHandoff `
   -Name 'operator_sequence_command_availability' `
   -Default ([ordered]@{})
+$RecommendedOperatorHandoffStatus = [string](
+  Get-PropertyValue -Payload $RecommendedOperatorHandoff -Name 'status' -Default ''
+)
+if (
+  $Stage6CompletionAuditRecommendedHandoffConsumed -and
+  $RecommendedOperatorHandoffStatus -eq 'authority_grant_receipt_already_active'
+) {
+  $RecommendedNextSlice = 'review_resident_runtime_execution_authority_grant_receipt'
+  $RecommendedProofScript = 'scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status'
+  $RecommendedRoute = '/lens/resident-runtime/authority-grant/grants'
+  $RecommendedReadinessRoute = '/lens/resident-runtime/authority-grant/readiness'
+  $AuthorityRequired = 'none_readback_only'
+  $AuthorityGranted = $true
+}
 
 $RecommendedFirstMissingAuthorityRequired = [string](
   Get-PropertyValue -Payload $PersistentSupervisionFirstMissingRequirementHandoff -Name 'authority_required' -Default ''

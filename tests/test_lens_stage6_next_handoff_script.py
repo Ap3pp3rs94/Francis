@@ -1593,3 +1593,68 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     assert approved_checks["stage6_completion_audit_runtime_authority_handoff"]["status"] == (
         "runtime_authority_handoff_consumed"
     )
+
+    active_grant_receipt_id = "active-runtime-authority-grant-test"
+    write_json(
+        data_root / "lens" / "resident_runtime_authority_grants" / f"{active_grant_receipt_id}.json",
+        {
+            "id": active_grant_receipt_id,
+            "receipt_id": active_grant_receipt_id,
+            "kind": "lens.resident_runtime.execution_authority_grant.grant.receipt",
+            "status": "authority_granted",
+            "route": "/lens/resident-runtime/authority-grant",
+            "method": "POST",
+            "approval_id": approved_approval_id,
+            "actor": "test.system.write",
+            "created_ts": created_ts,
+            "expires_ts": created_ts + 3600,
+            "lease": {
+                "active": True,
+                "lease_seconds": 3600,
+                "created_ts": created_ts,
+                "expires_ts": created_ts + 3600,
+            },
+            "authority_grant": {
+                "authority_granted": True,
+                "resident_runtime_execution_authority": True,
+            },
+            "governance": {
+                "resident_runtime_execution_authority": True,
+                "authority_granted": True,
+            },
+        },
+    )
+
+    active_grant_proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-CompletionAuditJsonPath",
+        str(audit_json),
+        env=proof_env,
+    )
+
+    assert active_grant_proc.returncode == 0, active_grant_proc.stderr or active_grant_proc.stdout
+    active_grant_payload = json.loads(active_grant_proc.stdout)
+    assert active_grant_payload["recommended_next_slice"] == (
+        "review_resident_runtime_execution_authority_grant_receipt"
+    )
+    assert active_grant_payload["authority_required"] == "none_readback_only"
+    assert active_grant_payload["authority_granted"] is True
+    assert active_grant_payload["recommended_operator_handoff"]["status"] == "authority_grant_receipt_already_active"
+    assert active_grant_payload["recommended_next_operator_action_requirement"] == (
+        "resident_runtime_execution_authority_grant_receipt"
+    )
+    assert active_grant_payload["recommended_next_operator_action"]["id"] == (
+        "review_resident_runtime_execution_authority_grant_receipt"
+    )
+    assert active_grant_payload["recommended_next_operator_action"]["latest_receipt_id"] == active_grant_receipt_id
+    assert active_grant_payload["recommended_next_operator_command"] == {
+        "command": ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status",
+        "mode": "Status",
+        "requires_confirmation": False,
+        "requires_explicit_operator_opt_in": False,
+        "requires_actor": False,
+        "requires_approval_id": False,
+        "requires_operator_approval_decision": False,
+    }
+    assert active_grant_payload["recommended_operator_handoff"]["authority_grant_receipt_write_if_run"] is False

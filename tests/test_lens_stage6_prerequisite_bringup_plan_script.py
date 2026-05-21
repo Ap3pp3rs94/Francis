@@ -2483,6 +2483,30 @@ def test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_con
     assert followup_payload["would_execute"] is False
     assert followup_payload["would_mutate"] is False
 
+    shutil.rmtree(data_dir / "lens" / "resident_runtime_authority_grants", ignore_errors=True)
+    late_resident_grant = _grant_next(
+        data_dir,
+        chain["resident_approval_id"],
+        "test grant approved resident runtime authority after enablement receipt review is current",
+        service_config_path=service_config_path,
+    )
+    assert late_resident_grant["status"] == "authority_granted", json.dumps(late_resident_grant, indent=2)
+    assert late_resident_grant["next_operator_action"]["id"] == "review_persistent_supervision_enablement_receipt"
+    assert late_resident_grant["grant_target_action"]["id"] == "grant_resident_runtime_execution_authority"
+    assert late_resident_grant["grant_target_action"]["approved_approval_id"] == chain["resident_approval_id"]
+    assert late_resident_grant["grant_target_action"]["grant_target_source"] == "approved_approval_id_handoff"
+    assert late_resident_grant["grant_target_action"]["selected_instead_of_next_operator_action_id"] == (
+        "review_persistent_supervision_enablement_receipt"
+    )
+    late_grant_result = late_resident_grant["grant_result"]
+    assert late_grant_result["ok"] is True
+    assert late_grant_result["action_id"] == "grant_resident_runtime_execution_authority"
+    assert late_grant_result["authority_granted"] is True
+    assert late_grant_result["receipt_written"] is True
+    assert late_grant_result["governance"]["approval_decision_authority"] is False
+    assert late_grant_result["governance"]["execution_authority"] is False
+    assert late_grant_result["governance"]["resident_claim_authority"] is False
+
     shutil.rmtree(data_dir / "lens" / "pse_authority_grants", ignore_errors=True)
     shutil.rmtree(data_dir / "lens" / "pse_execution_authority_grants", ignore_errors=True)
     stale_grants_followup = _run_plan(
