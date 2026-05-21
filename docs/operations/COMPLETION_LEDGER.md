@@ -35661,6 +35661,63 @@ Latest validation for Stage 6 summon-anywhere applied-prerequisite loop guard:
   mypy passed with no issues in 501 source files, and pytest completed to 100%
   with expected skips`
 
+Stage 6 completion-audit concrete handoff readback on `2026-05-20`:
+
+- `scripts/lens-stage6-completion-audit.ps1 -Mode Status` now preserves the
+  broad Stage 6 closure handoff and separately exposes the concrete current
+  handoff when the completion-audit handoff has already been consumed by the
+  closure readback.
+- On the current local posture, the broad audit result remains truthful:
+  `ready_to_close=false`, `transition_allowed=false`,
+  `next_smallest_truthful_gap=summon_anywhere_blockers`, and
+  `recommended_handoff_source=stage6_closure_readback_summon_anywhere_blockers`.
+- The same audit now also reports
+  `recommended_concrete_handoff_source=persistent_supervision_resident_claim_boundary_handoff`,
+  `recommended_concrete_next_slice=run_stage6_lens_completion_audit_after_resident_claim_boundary_readback`,
+  `recommended_concrete_proof_script=scripts/lens-stage6-completion-audit.ps1
+  -Mode Status`, and
+  `recommended_concrete_next_smallest_truthful_gap=stage6_lens_completion_audit`.
+- The concrete handoff is read-only and diagnostic:
+  `recommended_concrete_authority_required=none_new_stage6_completion_audit`,
+  `recommended_concrete_authority_granted=false`, and
+  `stage6_completion_audit_concrete_handoff_observed=true`.
+- This is a receipt/readback correctness fix only. It does not grant summon,
+  hotkey, overlay, process, service, resident-claim, memory, mutation,
+  approval-decision, or Stage 7 authority; it does not close Stage 6 or start
+  Stage 7.
+
+Latest validation for Stage 6 completion-audit concrete handoff readback:
+
+- PowerShell parser check for `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed; parse_ok`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_prefers_closure_handoff_after_resident_claim_boundary -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed; 37 passed, 1 skipped`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 1 file already formatted`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 120`
+  Result: `passed; ok=true; status=blocked; audit_status=complete;
+  ready_to_close=false; transition_allowed=false;
+  next_smallest_truthful_gap=summon_anywhere_blockers;
+  recommended_handoff_source=stage6_closure_readback_summon_anywhere_blockers;
+  recommended_concrete_handoff_source=persistent_supervision_resident_claim_boundary_handoff;
+  recommended_concrete_next_slice=run_stage6_lens_completion_audit_after_resident_claim_boundary_readback;
+  recommended_concrete_proof_script=scripts/lens-stage6-completion-audit.ps1
+  -Mode Status;
+  recommended_concrete_next_smallest_truthful_gap=stage6_lens_completion_audit;
+  recommended_concrete_authority_required=none_new_stage6_completion_audit;
+  recommended_concrete_authority_granted=false;
+  stage6_completion_audit_handoff_consumed_by_closure_readback=true;
+  stage6_completion_audit_concrete_handoff_observed=true;
+  child_proof_timeouts={}`
+- `.\scripts\check.ps1`
+  Result: `passed; branch state OK, Ruff lint passed, Ruff format check passed,
+  mypy passed with no issues in 501 source files, and pytest completed to 100%
+  with expected skips`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

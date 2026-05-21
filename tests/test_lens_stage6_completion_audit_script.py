@@ -726,6 +726,13 @@ def test_lens_stage6_completion_audit_prefers_closure_handoff_after_resident_cla
     assert closure_source in script
     assert "next_step = 'run_summon_anywhere_blockers_proof_after_stage6_completion_review'" in script
     assert "proof_script = 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status'" in script
+    assert "$RecommendedConcreteHandoffSource = $RecommendedHandoffSource" in script
+    assert "$RecommendedConcreteHandoffSource = 'persistent_supervision_resident_claim_boundary_handoff'" in script
+    assert "$RecommendedConcreteHandoff = $PersistentSupervisionResidentClaimBoundaryProof.handoff" in script
+    assert "recommended_concrete_handoff_source = $RecommendedConcreteHandoffSource" in script
+    assert "recommended_concrete_next_slice = $RecommendedConcreteNextSlice" in script
+    assert "recommended_concrete_proof_script = $RecommendedConcreteProofScript" in script
+    assert "stage6_completion_audit_concrete_handoff_observed = $ConcreteHandoffObserved" in script
     assert script.index(consumed_flag) < script.index(closure_source)
     assert script.index(closure_source) < script.index(prerequisite_source)
 

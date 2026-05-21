@@ -2673,6 +2673,41 @@ if (
 }
 
 $RecommendedAuthorityGranted = [bool]$RecommendedHandoff.authority_granted
+$RecommendedConcreteHandoffSource = $RecommendedHandoffSource
+$RecommendedConcreteHandoff = $RecommendedHandoff
+if ($Stage6CompletionAuditHandoffConsumedByClosureReadback -and $PersistentSupervisionResidentClaimBoundaryObserved) {
+  $RecommendedConcreteHandoffSource = 'persistent_supervision_resident_claim_boundary_handoff'
+  $RecommendedConcreteHandoff = $PersistentSupervisionResidentClaimBoundaryProof.handoff
+}
+$RecommendedConcreteNextSlice = [string]$RecommendedConcreteHandoff.next_step
+if ([string]::IsNullOrWhiteSpace($RecommendedConcreteNextSlice)) {
+  $RecommendedConcreteNextSlice = $RecommendedNextSlice
+}
+$RecommendedConcreteProofScript = [string]$RecommendedConcreteHandoff.proof_script
+if ([string]::IsNullOrWhiteSpace($RecommendedConcreteProofScript)) {
+  $RecommendedConcreteProofScript = $RecommendedProofScript
+}
+$RecommendedConcreteNextGap = [string]$RecommendedConcreteHandoff.next_smallest_truthful_gap
+if ([string]::IsNullOrWhiteSpace($RecommendedConcreteNextGap)) {
+  $RecommendedConcreteNextGap = $NextSmallestTruthfulGap
+}
+$RecommendedConcreteAuthorityRequired = [string]$RecommendedConcreteHandoff.authority_required
+if ([string]::IsNullOrWhiteSpace($RecommendedConcreteAuthorityRequired)) {
+  $RecommendedConcreteAuthorityRequired = $RecommendedAuthorityRequired
+}
+$RecommendedConcreteAuthorityGranted = [bool]$RecommendedConcreteHandoff.authority_granted
+$ConcreteHandoffObserved = (
+  -not $Stage6CompletionAuditHandoffConsumedByClosureReadback -or
+  (
+    -not [string]::IsNullOrWhiteSpace($RecommendedConcreteNextSlice) -and
+    -not [string]::IsNullOrWhiteSpace($RecommendedConcreteProofScript) -and
+    [bool]$RecommendedConcreteHandoff.read_only_contract -and
+    [bool]$RecommendedConcreteHandoff.diagnostic_only -and
+    -not [bool]$RecommendedConcreteHandoff.authority_granted -and
+    -not [bool]$RecommendedConcreteHandoff.would_execute -and
+    -not [bool]$RecommendedConcreteHandoff.would_mutate
+  )
+)
 
 $Payload = [ordered]@{
   ok = $true
@@ -2703,7 +2738,15 @@ $Payload = [ordered]@{
   authority_required = $RecommendedAuthorityRequired
   authority_granted = $RecommendedAuthorityGranted
   recommended_handoff = $RecommendedHandoff
+  recommended_concrete_handoff_source = $RecommendedConcreteHandoffSource
+  recommended_concrete_next_slice = $RecommendedConcreteNextSlice
+  recommended_concrete_proof_script = $RecommendedConcreteProofScript
+  recommended_concrete_next_smallest_truthful_gap = $RecommendedConcreteNextGap
+  recommended_concrete_authority_required = $RecommendedConcreteAuthorityRequired
+  recommended_concrete_authority_granted = $RecommendedConcreteAuthorityGranted
+  recommended_concrete_handoff = $RecommendedConcreteHandoff
   stage6_completion_audit_handoff_consumed_by_closure_readback = $Stage6CompletionAuditHandoffConsumedByClosureReadback
+  stage6_completion_audit_concrete_handoff_observed = $ConcreteHandoffObserved
   persistent_supervision_first_missing_required_before_enable = $PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable
   persistent_supervision_first_missing_requirement_handoff = $PersistentSupervisionPrerequisitesFirstMissingRequirementHandoff
   next_smallest_truthful_gap_basis = if ($NextSmallestTruthfulGap -eq 'stage6_lens_completion_audit') {
