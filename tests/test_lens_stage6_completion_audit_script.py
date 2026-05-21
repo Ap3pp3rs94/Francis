@@ -737,6 +737,31 @@ def test_lens_stage6_completion_audit_prefers_closure_handoff_after_resident_cla
     assert script.index(closure_source) < script.index(prerequisite_source)
 
 
+def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_readback() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    assert "[switch]$AllowLaunchOnHotkey" in script
+    assert "$SummonApiExecutionProofScript" in script
+    assert "lens-summon-api-execution-proof.ps1" in script
+    assert "if ($AllowLaunchOnHotkey) {" in script
+    assert "'-RunSeconds', '10', '-AllowLaunchOnHotkey'" in script
+    assert "New-ChildProofRunSummary -Name 'summon_api_launch_on_hotkey'" in script
+    assert "$SummonApiLaunchOnHotkeyProofObserved = (" in script
+    assert "[bool]$SummonApiLaunchOnHotkeyProof.allow_launch_on_hotkey" in script
+    assert "[bool]$SummonApiLaunchOnHotkeyProof.summon_anywhere" in script
+    assert (
+        "[string]$SummonApiLaunchOnHotkeyProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit'" in script
+    )
+    assert "$SummonAnywhereRuntimeReadbackObserved = [bool]$SummonApiLaunchOnHotkeyProofObserved" in script
+    assert "$BlockedCriterionIds -contains 'summon_anywhere' -and -not $SummonAnywhereRuntimeReadbackObserved" in script
+    assert "$NextSmallestTruthfulGap -eq 'persistent_supervision_execution_boundary'" in script
+    assert "$RecommendedHandoffSource = 'stage6_prerequisite_bringup_enablement_receipt_review'" in script
+    assert "summon_api_launch_on_hotkey_runtime_readback_observed = $SummonApiLaunchOnHotkeyProofObserved" in script
+    assert "summon_api_launch_on_hotkey_proof = [ordered]@{" in script
+    assert "launch_on_hotkey_runtime_readback_opt_in = [bool]$AllowLaunchOnHotkey" in script
+    assert "read_only_contract = -not [bool]$AllowLaunchOnHotkey" in script
+
+
 @pytest.mark.skipif(
     os.environ.get(_FULL_AUDIT_ENV) != "1",
     reason=(

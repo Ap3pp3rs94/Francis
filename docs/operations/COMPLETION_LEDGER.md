@@ -35876,6 +35876,59 @@ Latest validation for Stage 6 summon API launch-on-hotkey runtime readback:
   Result: `passed; branch state OK, Ruff lint passed, Ruff format check passed,
   mypy passed with no issues in 501 source files, and pytest completed to 100%`
 
+Stage 6 completion-audit launch-on-hotkey readback consumption on `2026-05-21`:
+
+- `scripts/lens-stage6-completion-audit.ps1` now preserves its default
+  non-launching `Status` audit and adds an explicit `-AllowLaunchOnHotkey`
+  mode that consumes the governed summon API launch-on-hotkey proof.
+- Default audit mode remains read-only for this runtime handoff:
+  `allow_launch_on_hotkey=false`, `summon_api_launch_on_hotkey_proof.status=
+  not_requested`, and `governance.read_only_contract=true`.
+- In explicit launch-on-hotkey mode, the audit now observes
+  `summon_api_launch_on_hotkey_proof.ok=true`, `opened=true`,
+  `summon_anywhere=true`, and no child proof timeouts, then advances the current
+  handoff from the stale `summon_anywhere_blockers` projector to
+  `next_smallest_truthful_gap=persistent_supervision_execution_boundary`.
+- The recommended next slice is now the receipt-backed Stage 6 prerequisite
+  bring-up review:
+  `run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt`
+  via `scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status`, with
+  `authority_required=none_readback_only`.
+- This does not close Stage 6 or start Stage 7. The opt-in launch readback is
+  bounded and does not grant memory, capture, service-control, product
+  execution, approval-decision, or resident-claim authority.
+
+Latest validation for Stage 6 completion-audit launch-on-hotkey readback
+consumption:
+
+- PowerShell parser check for `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed; parse_ok`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed; 38 passed, 1 skipped`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 1 file already formatted`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 120 -AllowLaunchOnHotkey`
+  Result: `passed; ok=true; status=blocked; audit_status=complete;
+  allow_launch_on_hotkey=true; next_smallest_truthful_gap=
+  persistent_supervision_execution_boundary;
+  recommended_handoff_source=
+  stage6_prerequisite_bringup_enablement_receipt_review;
+  recommended_next_slice=
+  run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt;
+  authority_required=none_readback_only; authority_granted=false;
+  summon_api_launch_on_hotkey_proof.ok=true;
+  summon_api_launch_on_hotkey_proof.opened=true;
+  summon_api_launch_on_hotkey_proof.summon_anywhere=true;
+  child_proof_timeouts=[]`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 120`
+  Result: `passed; ok=true; status=blocked; audit_status=complete;
+  allow_launch_on_hotkey=false; next_smallest_truthful_gap=
+  summon_anywhere_blockers; summon_api_launch_on_hotkey_proof.status=
+  not_requested; governance.read_only_contract=true;
+  governance.mutation_authority_granted=false`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

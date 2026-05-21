@@ -15,7 +15,9 @@ param(
   [int]$SupervisorRunSeconds = 20,
 
   [ValidateRange(30, 600)]
-  [int]$ChildProofTimeoutSeconds = 420
+  [int]$ChildProofTimeoutSeconds = 420,
+
+  [switch]$AllowLaunchOnHotkey
 )
 
 $ErrorActionPreference = 'Stop'
@@ -257,6 +259,7 @@ $Stage6PrerequisiteBringupPlanScript = Join-Path $PSScriptRoot 'lens-stage6-prer
 $SummonAnywhereBlockersProofScript = Join-Path $PSScriptRoot 'lens-summon-anywhere-blockers-proof.ps1'
 $SummonAuthorityBlockerProofScript = Join-Path $PSScriptRoot 'lens-summon-authority-blocker-proof.ps1'
 $SummonAnywhereFamilyChainProofScript = Join-Path $PSScriptRoot 'lens-summon-anywhere-family-chain-proof.ps1'
+$SummonApiExecutionProofScript = Join-Path $PSScriptRoot 'lens-summon-api-execution-proof.ps1'
 
 if (-not (Test-Path -LiteralPath $CheckpointScript)) {
   throw "Stage 6 checkpoint script is missing: $CheckpointScript"
@@ -297,6 +300,23 @@ $SummonAnywhereFamilyChainProofResult = Invoke-JsonScript -PowerShellPath $Power
   '-ChildProofTimeoutSeconds', [string]$SummonAnywhereFamilyChainProofChildTimeoutSeconds
 ) -TimeoutSeconds $SummonAnywhereFamilyChainProofTimeoutSeconds
 $SummonAnywhereFamilyChainProof = $SummonAnywhereFamilyChainProofResult.payload
+$SummonApiLaunchOnHotkeyProofResult = [ordered]@{
+  exit_code = 0
+  payload = $null
+  output = ''
+  error = ''
+  timed_out = $false
+  timeout_seconds = 0
+  duration_ms = 0
+}
+if ($AllowLaunchOnHotkey) {
+  $SummonApiLaunchOnHotkeyProofResult = Invoke-JsonScript `
+    -PowerShellPath $PowerShell.Source `
+    -ScriptPath $SummonApiExecutionProofScript `
+    -ScriptArgs @('-Mode', 'Status', '-RunSeconds', '10', '-AllowLaunchOnHotkey') `
+    -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 120))
+}
+$SummonApiLaunchOnHotkeyProof = $SummonApiLaunchOnHotkeyProofResult.payload
 $ResidentHostRuntimeBoundaryProofResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $ResidentHostRuntimeBoundaryProofScript -ScriptArgs @(
   '-Mode', 'Status',
   '-ForegroundRunSeconds', '2',
@@ -976,6 +996,9 @@ $ChildProofRuns = @(
   New-ChildProofRunSummary -Name 'persistent_supervision_resident_claim_boundary' -Result $PersistentSupervisionResidentClaimBoundaryProofResult
   New-ChildProofRunSummary -Name 'persistent_supervision_enablement_transition_plan' -Result $PersistentSupervisionEnablementTransitionPlanProofResult
 )
+if ($AllowLaunchOnHotkey) {
+  $ChildProofRuns += New-ChildProofRunSummary -Name 'summon_api_launch_on_hotkey' -Result $SummonApiLaunchOnHotkeyProofResult
+}
 $ChildProofTimeouts = [string[]]@(
   $ChildProofRuns | Where-Object { [bool]$_.timed_out } | ForEach-Object { [string]$_.name }
 )
@@ -2039,6 +2062,62 @@ $SummonAnywhereFamilyChainProofObserved = (
   -not [bool]$SummonAnywhereFamilyChainProofGovernance.resident_claim_authority -and
   -not [bool]$SummonAnywhereFamilyChainProofGovernance.mutation_authority_granted
 )
+$SummonApiLaunchOnHotkeyProofGovernance = $SummonApiLaunchOnHotkeyProof.governance
+$SummonApiLaunchOnHotkeyReadinessBlockers = ConvertTo-StringArray -Value (
+  $SummonApiLaunchOnHotkeyProof.summon_readiness_blockers_after_execute
+)
+$SummonApiLaunchOnHotkeyProofObserved = (
+  [bool]$AllowLaunchOnHotkey -and
+  [int]$SummonApiLaunchOnHotkeyProofResult.exit_code -eq 0 -and
+  [bool]$SummonApiLaunchOnHotkeyProof.ok -and
+  [string]$SummonApiLaunchOnHotkeyProof.kind -eq 'lens.summon.api_execution.proof' -and
+  [string]$SummonApiLaunchOnHotkeyProof.status -eq 'proof_passed' -and
+  [bool]$SummonApiLaunchOnHotkeyProof.allow_launch_on_hotkey -and
+  [bool]$SummonApiLaunchOnHotkeyProof.opened -and
+  -not [bool]$SummonApiLaunchOnHotkeyProof.no_launch -and
+  [bool]$SummonApiLaunchOnHotkeyProof.summon_anywhere -and
+  [bool]$SummonApiLaunchOnHotkeyProof.os_level_summon -and
+  [bool]$SummonApiLaunchOnHotkeyProof.hotkey_launch_on_press_authority -and
+  [string]$SummonApiLaunchOnHotkeyProof.summon_readiness_status_after_execute -eq 'ready_for_operator_review' -and
+  @($SummonApiLaunchOnHotkeyReadinessBlockers).Count -eq 0 -and
+  [string]$SummonApiLaunchOnHotkeyProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
+  [bool]$SummonApiLaunchOnHotkeyProofGovernance.diagnostic_only -and
+  [bool]$SummonApiLaunchOnHotkeyProofGovernance.api_route_proof -and
+  [bool]$SummonApiLaunchOnHotkeyProofGovernance.api_execution_authority -and
+  [bool]$SummonApiLaunchOnHotkeyProofGovernance.approval_request_write -and
+  [bool]$SummonApiLaunchOnHotkeyProofGovernance.test_fixture_approval_decisions -and
+  [bool]$SummonApiLaunchOnHotkeyProofGovernance.execution_authority -and
+  [bool]$SummonApiLaunchOnHotkeyProofGovernance.temporary_runtime_state_write -and
+  [bool]$SummonApiLaunchOnHotkeyProofGovernance.process_supervision_authority -and
+  [bool]$SummonApiLaunchOnHotkeyProofGovernance.tray_registration_authority -and
+  [bool]$SummonApiLaunchOnHotkeyProofGovernance.hotkey_registration_authority -and
+  [bool]$SummonApiLaunchOnHotkeyProofGovernance.overlay_control_authority -and
+  [bool]$SummonApiLaunchOnHotkeyProofGovernance.window_management_authority -and
+  [bool]$SummonApiLaunchOnHotkeyProofGovernance.bounded_local_open_handoff_authority -and
+  [bool]$SummonApiLaunchOnHotkeyProofGovernance.summon_authority -and
+  [bool]$SummonApiLaunchOnHotkeyProofGovernance.mutation_authority_granted -and
+  -not [bool]$SummonApiLaunchOnHotkeyProofGovernance.product_execution_authority -and
+  -not [bool]$SummonApiLaunchOnHotkeyProofGovernance.approval_decision_authority -and
+  -not [bool]$SummonApiLaunchOnHotkeyProofGovernance.local_process_launch_authority -and
+  -not [bool]$SummonApiLaunchOnHotkeyProofGovernance.service_install_authority -and
+  -not [bool]$SummonApiLaunchOnHotkeyProofGovernance.service_control_authority -and
+  -not [bool]$SummonApiLaunchOnHotkeyProofGovernance.summon_anywhere_authority -and
+  -not [bool]$SummonApiLaunchOnHotkeyProofGovernance.os_level_summon_authority -and
+  -not [bool]$SummonApiLaunchOnHotkeyProofGovernance.capture_authority -and
+  -not [bool]$SummonApiLaunchOnHotkeyProofGovernance.new_sensing_authority -and
+  -not [bool]$SummonApiLaunchOnHotkeyProofGovernance.memory_write -and
+  -not [bool]$SummonApiLaunchOnHotkeyProofGovernance.resident_claim_authority
+)
+$SummonAnywhereRuntimeReadbackObserved = [bool]$SummonApiLaunchOnHotkeyProofObserved
+$Stage6AcceptanceNextGap = if ($BlockedCriterionIds -contains 'summon_anywhere' -and -not $SummonAnywhereRuntimeReadbackObserved) {
+  'summon_anywhere_blockers'
+} elseif ($BlockedCriterionIds -contains 'helpful_not_noisy') {
+  'helpful_not_noisy_blockers'
+} elseif ($BlockedCriterionIds -contains 'system_resident_presence') {
+  'system_resident_presence_blockers'
+} else {
+  ''
+}
 $Stage6CompletionEvidenceReviewed = (
   $ResidentRuntimeResidentClaimBoundaryObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
@@ -2053,7 +2132,8 @@ $Stage6CompletionEvidenceReviewed = (
   $SummonAnywhereBlockersProofObserved -and
   $CheckpointSummonEnablementGateHandoffObserved -and
   $SummonAuthorityBlockerProofObserved -and
-  $SummonAnywhereFamilyChainProofObserved
+  $SummonAnywhereFamilyChainProofObserved -and
+  (-not [bool]$AllowLaunchOnHotkey -or $SummonApiLaunchOnHotkeyProofObserved)
 )
 $Stage6CompletionReviewed = (
   $Stage6CompletionEvidenceReviewed -and
@@ -2310,6 +2390,22 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
 ) {
   'persistent_supervision_authority_not_granted'
 } elseif (
+  $Stage6CompletionReviewed -and
+  -not $ReadyToClose -and
+  $SummonAnywhereRuntimeReadbackObserved -and
+  $Stage6PrerequisiteBringupPlanAppliedEnablementObserved
+) {
+  [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap
+} elseif (
+  $AllowLaunchOnHotkey -and
+  $SummonAnywhereBlockersProofObserved -and
+  $CheckpointSummonEnablementGateHandoffObserved -and
+  $SummonAuthorityBlockerProofObserved -and
+  $SummonAnywhereFamilyChainProofObserved -and
+  -not $SummonApiLaunchOnHotkeyProofObserved
+) {
+  'summon_api_launch_on_hotkey_readback'
+} elseif (
   $PersistentSupervisionEnablementDenialObserved -and
   $PersistentSupervisionEnablementExecutionDenialObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved
@@ -2469,6 +2565,46 @@ if (
     would_decide_approval = [bool]$Stage6PrerequisiteBringupPlanGovernance.approval_decision_authority
     would_supervise_process = [bool]$Stage6PrerequisiteBringupPlanGovernance.process_supervision_authority
     blocker_families = [string[]]@(ConvertTo-StringArray -Value $SummonAnywhereBlockersProof.blocked_families)
+    blockers = [string[]]@($Blockers)
+  }
+  $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
+  $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
+  $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
+} elseif (
+  $NextSmallestTruthfulGap -eq 'persistent_supervision_execution_boundary' -and
+  $SummonAnywhereRuntimeReadbackObserved -and
+  $Stage6PrerequisiteBringupPlanAppliedEnablementObserved
+) {
+  $RecommendedHandoffSource = 'stage6_prerequisite_bringup_enablement_receipt_review'
+  $RecommendedHandoff = [ordered]@{
+    status = 'receipt_review_ready'
+    previous_next_smallest_truthful_gap = 'stage6_lens_completion_audit'
+    consumed_summon_api_next_smallest_truthful_gap = [string]$SummonApiLaunchOnHotkeyProof.next_smallest_truthful_gap
+    consumed_stage6_prerequisite_bringup_status = [string]$Stage6PrerequisiteBringupPlan.status
+    next_smallest_truthful_gap = [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap
+    next_step = [string]$Stage6PrerequisiteBringupPlan.recommended_next_slice
+    proof_script = [string]$Stage6PrerequisiteBringupPlan.recommended_proof_script
+    route = [string]$Stage6PrerequisiteBringupPlanNextOperatorAction.route
+    operator_plan_script = 'scripts/lens-stage6-prerequisite-bringup-plan.ps1'
+    current_truthful_gap_basis = [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap_basis
+    next_operator_action_requirement = [string]$Stage6PrerequisiteBringupPlan.next_operator_action_requirement
+    next_operator_action = $Stage6PrerequisiteBringupPlanNextOperatorAction
+    next_operator_command = $Stage6PrerequisiteBringupPlanNextOperatorCommand
+    operator_sequence_command_availability = $Stage6PrerequisiteBringupPlanCommandAvailability
+    latest_receipt_id = [string]$Stage6PrerequisiteBringupPlanNextOperatorAction.latest_receipt_id
+    authority_required = [string]$Stage6PrerequisiteBringupPlan.authority_required
+    authority_granted = $false
+    read_only_contract = [bool]$Stage6PrerequisiteBringupPlanGovernance.read_only_contract
+    diagnostic_only = [bool]$Stage6PrerequisiteBringupPlanGovernance.diagnostic_only
+    would_execute = [bool]$Stage6PrerequisiteBringupPlanGovernance.would_execute
+    would_mutate = [bool]$Stage6PrerequisiteBringupPlanGovernance.would_mutate
+    would_request_authority = [bool]$Stage6PrerequisiteBringupPlanGovernance.would_request_authority
+    would_grant_authority = [bool]$Stage6PrerequisiteBringupPlanGovernance.would_grant_authority
+    would_write_memory = [bool]$Stage6PrerequisiteBringupPlanGovernance.memory_write
+    would_decide_approval = [bool]$Stage6PrerequisiteBringupPlanGovernance.approval_decision_authority
+    summon_api_launch_on_hotkey_runtime_readback_observed = $SummonApiLaunchOnHotkeyProofObserved
+    summon_anywhere = [bool]$SummonApiLaunchOnHotkeyProof.summon_anywhere
+    os_level_summon = [bool]$SummonApiLaunchOnHotkeyProof.os_level_summon
     blockers = [string[]]@($Blockers)
   }
   $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
@@ -2729,6 +2865,7 @@ $Payload = [ordered]@{
   requested_child_host_launch_run_seconds = $HostLaunchRunSeconds
   child_host_launch_run_seconds = $ChildHostLaunchRunSeconds
   child_proof_timeout_seconds = $ChildProofTimeoutSeconds
+  allow_launch_on_hotkey = [bool]$AllowLaunchOnHotkey
   child_proof_timeouts = [string[]]@($ChildProofTimeouts)
   child_proof_runs = @($ChildProofRuns)
   next_smallest_truthful_gap = $NextSmallestTruthfulGap
@@ -2753,8 +2890,12 @@ $Payload = [ordered]@{
     'The audit consumes the resident-runtime resident-claim boundary proof and the persistent-supervision resident-claim boundary proof: both final authority families are now read back as blocked and non-mutating, so the next bounded step is a Stage 6 closure audit/readiness review rather than Stage 7 transition.'
   } elseif ($NextSmallestTruthfulGap -eq 'summon_anywhere_blockers') {
     'The completion audit has consumed the final resident-runtime and persistent-supervision authority-family proofs, and the first resident-host runtime boundary is now read back as consumed. Stage 6 still cannot close because summon-anywhere is blocked by process supervision plus grouped tray, overlay, global hotkey, summon binding, and authority behavior.'
+  } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_execution_boundary') {
+    'The completion audit consumed an explicit launch-on-hotkey summon execution readback: summon-anywhere is observed through the governed API proof, but Stage 6 still cannot close because the persistent-supervision enablement receipt must be reviewed before resident-claim and persistent runtime closure can be trusted. The launch readback is opt-in, bounded, and does not grant memory, capture, service-control, product execution, approval-decision, or resident-claim authority.'
   } elseif ($NextSmallestTruthfulGap -eq 'summon_anywhere_family_chain_proof_readback') {
     'The audit must consume the summon-anywhere family-chain proof before treating the grouped resident-host, tray, overlay, hotkey, summon-binding, and authority blockers as one audited handoff.'
+  } elseif ($NextSmallestTruthfulGap -eq 'summon_api_launch_on_hotkey_readback') {
+    'The audit was asked to consume the explicit launch-on-hotkey summon execution proof, but that child proof did not produce the governed runtime readback required to move past the summon-anywhere blocker family.'
   } elseif ($NextSmallestTruthfulGap -eq 'checkpoint_summon_enablement_gate_handoff') {
     'The audit must consume the checkpoint summon-enable gate handoff before treating summon-anywhere blocker families as fully audited through the checkpoint surface.'
   } elseif ($NextSmallestTruthfulGap -eq 'helpful_not_noisy_blockers') {
@@ -2861,6 +3002,54 @@ $Payload = [ordered]@{
     memory_write = $false
     receipt_write_authority = $false
     resident_claim_authority = $false
+  }
+  summon_api_launch_on_hotkey_proof = [ordered]@{
+    status = if ($AllowLaunchOnHotkey) {
+      if ($SummonApiLaunchOnHotkeyProofObserved) { [string]$SummonApiLaunchOnHotkeyProof.status } else { 'missing_or_failed' }
+    } else {
+      'not_requested'
+    }
+    ok = $SummonApiLaunchOnHotkeyProofObserved
+    exit_code = [int]$SummonApiLaunchOnHotkeyProofResult.exit_code
+    timeout_seconds = [int]$SummonApiLaunchOnHotkeyProofResult.timeout_seconds
+    timed_out = [bool]$SummonApiLaunchOnHotkeyProofResult.timed_out
+    allow_launch_on_hotkey = [bool]$SummonApiLaunchOnHotkeyProof.allow_launch_on_hotkey
+    opened = [bool]$SummonApiLaunchOnHotkeyProof.opened
+    no_launch = [bool]$SummonApiLaunchOnHotkeyProof.no_launch
+    summon_anywhere = [bool]$SummonApiLaunchOnHotkeyProof.summon_anywhere
+    os_level_summon = [bool]$SummonApiLaunchOnHotkeyProof.os_level_summon
+    hotkey_launch_on_press_authority = [bool]$SummonApiLaunchOnHotkeyProof.hotkey_launch_on_press_authority
+    summon_readiness_status_after_execute = [string]$SummonApiLaunchOnHotkeyProof.summon_readiness_status_after_execute
+    summon_readiness_blockers_after_execute = [string[]]@($SummonApiLaunchOnHotkeyReadinessBlockers)
+    next_smallest_truthful_gap = [string]$SummonApiLaunchOnHotkeyProof.next_smallest_truthful_gap
+    governance = [ordered]@{
+      diagnostic_only = [bool]$SummonApiLaunchOnHotkeyProofGovernance.diagnostic_only
+      api_route_proof = [bool]$SummonApiLaunchOnHotkeyProofGovernance.api_route_proof
+      api_execution_authority = [bool]$SummonApiLaunchOnHotkeyProofGovernance.api_execution_authority
+      approval_request_write = [bool]$SummonApiLaunchOnHotkeyProofGovernance.approval_request_write
+      test_fixture_approval_decisions = [bool]$SummonApiLaunchOnHotkeyProofGovernance.test_fixture_approval_decisions
+      execution_authority = [bool]$SummonApiLaunchOnHotkeyProofGovernance.execution_authority
+      temporary_runtime_state_write = [bool]$SummonApiLaunchOnHotkeyProofGovernance.temporary_runtime_state_write
+      process_supervision_authority = [bool]$SummonApiLaunchOnHotkeyProofGovernance.process_supervision_authority
+      tray_registration_authority = [bool]$SummonApiLaunchOnHotkeyProofGovernance.tray_registration_authority
+      hotkey_registration_authority = [bool]$SummonApiLaunchOnHotkeyProofGovernance.hotkey_registration_authority
+      overlay_control_authority = [bool]$SummonApiLaunchOnHotkeyProofGovernance.overlay_control_authority
+      window_management_authority = [bool]$SummonApiLaunchOnHotkeyProofGovernance.window_management_authority
+      bounded_local_open_handoff_authority = [bool]$SummonApiLaunchOnHotkeyProofGovernance.bounded_local_open_handoff_authority
+      summon_authority = [bool]$SummonApiLaunchOnHotkeyProofGovernance.summon_authority
+      product_execution_authority = [bool]$SummonApiLaunchOnHotkeyProofGovernance.product_execution_authority
+      approval_decision_authority = [bool]$SummonApiLaunchOnHotkeyProofGovernance.approval_decision_authority
+      local_process_launch_authority = [bool]$SummonApiLaunchOnHotkeyProofGovernance.local_process_launch_authority
+      service_install_authority = [bool]$SummonApiLaunchOnHotkeyProofGovernance.service_install_authority
+      service_control_authority = [bool]$SummonApiLaunchOnHotkeyProofGovernance.service_control_authority
+      summon_anywhere_authority = [bool]$SummonApiLaunchOnHotkeyProofGovernance.summon_anywhere_authority
+      os_level_summon_authority = [bool]$SummonApiLaunchOnHotkeyProofGovernance.os_level_summon_authority
+      capture_authority = [bool]$SummonApiLaunchOnHotkeyProofGovernance.capture_authority
+      new_sensing_authority = [bool]$SummonApiLaunchOnHotkeyProofGovernance.new_sensing_authority
+      memory_write = [bool]$SummonApiLaunchOnHotkeyProofGovernance.memory_write
+      resident_claim_authority = [bool]$SummonApiLaunchOnHotkeyProofGovernance.resident_claim_authority
+      mutation_authority_granted = [bool]$SummonApiLaunchOnHotkeyProofGovernance.mutation_authority_granted
+    }
   }
   summary = [ordered]@{
     criteria_total = [int]$Checkpoint.summary.criteria_total
@@ -4363,8 +4552,9 @@ $Payload = [ordered]@{
     resident_claim_authority = $false
   }
   governance = [ordered]@{
-    read_only_contract = $true
+    read_only_contract = -not [bool]$AllowLaunchOnHotkey
     diagnostic_only = $true
+    launch_on_hotkey_runtime_readback_opt_in = [bool]$AllowLaunchOnHotkey
     checkpoint_readback = $true
     child_proof_timeout_readback = $true
     process_supervision_authority_boundary_readback = $ProcessSupervisionBoundaryObserved
@@ -4404,28 +4594,31 @@ $Payload = [ordered]@{
     checkpoint_summon_enablement_gate_handoff_readback = $CheckpointSummonEnablementGateHandoffObserved
     summon_authority_blocker_proof_readback = $SummonAuthorityBlockerProofObserved
     summon_anywhere_family_chain_proof_readback = $SummonAnywhereFamilyChainProofObserved
+    summon_api_launch_on_hotkey_proof_readback = $SummonApiLaunchOnHotkeyProofObserved
     stage6_completion_audit_handoff_consumed_by_closure_readback = $Stage6CompletionAuditHandoffConsumedByClosureReadback
     process_supervision_boundary_observed = [bool]$ProcessSupervisionBoundary.process_supervision_boundary_observed
     service_activation_plan_observed = [bool]$ProcessSupervisionBoundary.service_activation_plan_observed
-    execution_authority = $false
+    execution_authority = [bool]$SummonApiLaunchOnHotkeyProofGovernance.execution_authority
     approval_decision_authority = $false
     memory_write = $false
     resident_overlay_activation_authority = $false
     local_process_launch_authority = $false
     process_restart_authority = $false
-    process_supervision_authority = $false
+    process_supervision_authority = [bool]$SummonApiLaunchOnHotkeyProofGovernance.process_supervision_authority
     service_install_authority = $false
     service_control_authority = $false
-    hotkey_registration_authority = $false
-    tray_registration_authority = $false
-    overlay_control_authority = $false
-    summon_authority = $false
+    hotkey_registration_authority = [bool]$SummonApiLaunchOnHotkeyProofGovernance.hotkey_registration_authority
+    tray_registration_authority = [bool]$SummonApiLaunchOnHotkeyProofGovernance.tray_registration_authority
+    overlay_control_authority = [bool]$SummonApiLaunchOnHotkeyProofGovernance.overlay_control_authority
+    summon_authority = [bool]$SummonApiLaunchOnHotkeyProofGovernance.summon_authority
     capture_authority = $false
     new_sensing_authority = $false
     telemetry_authority = $false
     receipt_write_authority = $false
     denial_receipt_write_authority = $false
-    mutation_authority_granted = $false
+    temporary_runtime_state_write = [bool]$SummonApiLaunchOnHotkeyProofGovernance.temporary_runtime_state_write
+    bounded_local_open_handoff_authority = [bool]$SummonApiLaunchOnHotkeyProofGovernance.bounded_local_open_handoff_authority
+    mutation_authority_granted = [bool]$SummonApiLaunchOnHotkeyProofGovernance.mutation_authority_granted
   }
 }
 
