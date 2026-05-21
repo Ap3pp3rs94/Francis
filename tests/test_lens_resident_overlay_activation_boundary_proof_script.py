@@ -38,6 +38,35 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _write_cached_resident_overlay_runtime_proof(path: Path) -> None:
+    payload = {
+        "kind": "lens.resident_overlay_runtime.proof",
+        "status": "proof_passed",
+        "ok": True,
+        "bounded_supervisor_observed": True,
+        "resident_overlay_runtime_ready": False,
+        "ready_for_lens_resident_claim": False,
+        "resident_overlay_runtime": False,
+        "overlay_window": False,
+        "tray_presence": False,
+        "global_hotkey_bound": False,
+        "summon_anywhere": False,
+        "blockers": [
+            "resident_overlay_runtime_missing",
+            "resident_host_process_not_supervised",
+            "overlay_window_missing",
+            "tray_presence_missing",
+            "global_hotkey_binding_missing",
+            "summon_anywhere_missing",
+        ],
+        "governance": {
+            "diagnostic_only": True,
+            "bounded_supervisor_observation": True,
+        },
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
 def test_lens_resident_overlay_activation_boundary_supports_cached_overlay_runtime() -> None:
     script = (_repo_root() / "scripts" / "lens-resident-overlay-activation-boundary-proof.ps1").read_text(
         encoding="utf-8"
@@ -45,6 +74,11 @@ def test_lens_resident_overlay_activation_boundary_supports_cached_overlay_runti
 
     assert "[string]$CachedResidentOverlayRuntimeProofPath = ''" in script
     assert "Read-CachedJsonScriptResult -Path $CachedResidentOverlayRuntimeProofPath" in script
+    assert "if ($null -ne $CachedOverlayResult)" in script
+    assert (
+        "$OverlayResult = Invoke-JsonScript -PowerShellPath $PowerShellPath "
+        "-ScriptPath $ResidentOverlayRuntimeProofPath -ScriptArgs $OverlayArgs"
+    ) in script
     assert "overlay_runtime_source = if ([bool](Get-PropertyValue -Payload $OverlayResult" in script
 
 
@@ -52,6 +86,9 @@ def test_lens_resident_overlay_activation_boundary_proof_blocks_activation_witho
     tmp_path: Path,
 ) -> None:
     data_dir = tmp_path / "data"
+    cached_overlay_runtime_proof = tmp_path / "resident-overlay-runtime-proof.json"
+    _write_cached_resident_overlay_runtime_proof(cached_overlay_runtime_proof)
+
     proc = _run_proof(
         "-Mode",
         "Status",
@@ -63,6 +100,8 @@ def test_lens_resident_overlay_activation_boundary_proof_blocks_activation_witho
         "5",
         "-DataDir",
         str(data_dir),
+        "-CachedResidentOverlayRuntimeProofPath",
+        str(cached_overlay_runtime_proof),
     )
 
     assert proc.returncode == 0, proc.stderr or proc.stdout
@@ -107,7 +146,7 @@ def test_lens_resident_overlay_activation_boundary_proof_blocks_activation_witho
 
     proof = payload["proof"]
     assert proof["live_operator_source"] == "script_execution"
-    assert proof["overlay_runtime_source"] == "script_execution"
+    assert proof["overlay_runtime_source"] == "checkpoint_cached_payload"
     assert proof["live_operator_status"] == "proof_passed"
     assert proof["live_http_status_readback"] is True
     assert proof["helpful_not_noisy_readback"] is True
@@ -176,5 +215,5 @@ def test_lens_resident_overlay_activation_boundary_proof_blocks_activation_witho
         "mutation_authority_granted": False,
     }
 
-    assert (data_dir / "runtime" / "lens-host" / "status.json").is_file()
+    assert cached_overlay_runtime_proof.is_file()
     assert not (data_dir / "runtime" / "lens-host" / "lens-host.pid").exists()

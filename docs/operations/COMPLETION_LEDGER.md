@@ -36496,6 +36496,57 @@ handoff promotion:
   Result: `passed; branch state OK; Ruff check passed; Ruff format check
   passed; mypy passed with no issues in 501 source files; pytest reached 100%`
 
+Stage 6 CI hardening for resident overlay activation-boundary proof and
+prerequisite live-chain freshness on `2026-05-21`:
+
+- The resident overlay activation-boundary regression now uses the existing
+  `-CachedResidentOverlayRuntimeProofPath` contract for the resident overlay
+  runtime subproof. This keeps the activation-boundary assertions focused on
+  the boundary script while avoiding the short Windows CI live overlay runtime
+  startup timeout that made the standalone test fail on the Windows 3.12
+  Actions job.
+- The test still statically guards the uncached orchestration contract: when no
+  cached overlay runtime proof is supplied, the activation-boundary script must
+  continue invoking `scripts/lens-resident-overlay-runtime-proof.ps1`. The
+  dedicated resident overlay runtime proof test remains the live `script_execution`
+  coverage for that runtime proof.
+- The Stage 6 prerequisite bring-up test harness now refreshes the resident-host
+  lease after tray, hotkey, and overlay lease refreshes. This preserves the
+  truthful live prerequisite chain through the summon-binding execution step
+  without allowing stale resident supervision receipts to satisfy the live
+  resident-host requirement.
+- This is CI/test-harness hardening only. It does not change production
+  readiness rules, does not allow stale resident-host evidence to satisfy live
+  prerequisites, does not grant authority, does not install/control a service,
+  does not write memory, does not close Stage 6, and does not start Stage 7.
+
+Latest validation for Stage 6 CI hardening:
+
+- `python -m ruff check tests\test_lens_stage6_prerequisite_bringup_plan_script.py
+  tests\test_lens_resident_overlay_activation_boundary_proof_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check
+  tests\test_lens_stage6_prerequisite_bringup_plan_script.py
+  tests\test_lens_resident_overlay_activation_boundary_proof_script.py`
+  Result: `passed; 2 files already formatted`
+- `python -m pytest
+  tests\test_lens_resident_overlay_activation_boundary_proof_script.py::test_lens_resident_overlay_activation_boundary_proof_blocks_activation_without_authority
+  -q --tb=short`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_overlay_activation_boundary_proof_script.py
+  -q --tb=short --durations=8 --durations-min=1`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_overlay_runtime_proof_script.py -q
+  --tb=short --durations=8 --durations-min=1`
+  Result: `passed`
+- `python -m pytest
+  tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_config_only
+  -q --tb=short --durations=12 --durations-min=1`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\check.ps1`
+  Result: `passed; branch state OK; Ruff check passed; Ruff format check
+  passed; mypy passed with no issues in 501 source files; pytest reached 100%`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

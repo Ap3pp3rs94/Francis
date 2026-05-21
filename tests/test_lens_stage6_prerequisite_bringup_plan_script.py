@@ -1130,6 +1130,13 @@ def _refresh_active_prerequisite_leases(
         chain["overlay_approval_id"],
         service_config_path=service_config_path,
     )
+    _refresh_resident_host_lease(
+        data_dir,
+        monkeypatch,
+        chain["resident_approval_id"],
+        reason=f"{reason}: resident host after surface refreshes",
+        service_config_path=service_config_path,
+    )
 
 
 def _request_approve_grant_next(
