@@ -129,6 +129,37 @@ def _count_stage6_runtime_processes(data_dir: Path) -> int:
         return 0
 
 
+def _stop_stage6_runtime_processes_by_name(data_dir: Path, process_names: tuple[str, ...]) -> None:
+    if platform.system() != "Windows":
+        return
+    env = dict(os.environ)
+    env["FRANCIS_STAGE6_TEST_CLEANUP_DATA_DIR"] = str(data_dir)
+    process_filter = " -or ".join(f"$_.CommandLine -like '*{process_name}*'" for process_name in process_names)
+    subprocess.run(
+        [
+            _powershell(),
+            "-NoProfile",
+            "-Command",
+            (
+                "$DataDir = $env:FRANCIS_STAGE6_TEST_CLEANUP_DATA_DIR; "
+                "$CurrentPid = $PID; "
+                "$Matches = Get-CimInstance Win32_Process "
+                "-Filter \"Name = 'powershell.exe' OR Name = 'pwsh.exe'\" | "
+                'Where-Object { $_.ProcessId -ne $CurrentPid -and $_.CommandLine -like "*$DataDir*" -and ('
+                + process_filter
+                + ") }; "
+                "foreach ($Match in @($Matches)) { Stop-Process -Id $Match.ProcessId -Force -ErrorAction SilentlyContinue }"
+            ),
+        ],
+        cwd=_repo_root(),
+        check=False,
+        text=True,
+        capture_output=True,
+        timeout=30,
+        env=env,
+    )
+
+
 def _wait_for_stage6_runtime_processes_to_stop(data_dir: Path) -> None:
     if platform.system() != "Windows":
         return
@@ -144,6 +175,7 @@ def _wait_for_stage6_runtime_processes_to_stop(data_dir: Path) -> None:
 def _stop_stage6_live_runtime_leases(data_dir: Path) -> None:
     for script_name, mode in _STAGE6_RUNTIME_STOP_MODES:
         _run_lens_runtime_script(script_name, "-Mode", mode, "-DataDir", str(data_dir))
+    _stop_stage6_runtime_processes_by_name(data_dir, _STAGE6_RUNTIME_PROCESSES)
     _wait_for_stage6_runtime_processes_to_stop(data_dir)
 
 
@@ -937,6 +969,7 @@ def _restart_tray_lease(
         mode="stop",
         run_seconds=0,
     )
+    _stop_stage6_runtime_processes_by_name(data_dir, ("lens-tray-presence.ps1",))
     result = execute_lens_tray_presence(
         approval_id=approval_id,
         actor="test.system.write",
@@ -974,6 +1007,7 @@ def _restart_hotkey_lease(
         mode="stop",
         run_seconds=0,
     )
+    _stop_stage6_runtime_processes_by_name(data_dir, ("lens-hotkey-binding.ps1",))
     result = execute_lens_os_binding(
         approval_id=approval_id,
         actor="test.system.write",
@@ -1011,6 +1045,7 @@ def _restart_overlay_lease(
         mode="stop",
         run_seconds=0,
     )
+    _stop_stage6_runtime_processes_by_name(data_dir, ("lens-overlay-window.ps1",))
     result = execute_lens_overlay_window(
         approval_id=approval_id,
         actor="test.system.write",
@@ -1727,6 +1762,13 @@ def test_lens_stage6_prerequisite_bringup_tray_execution_advances_to_hotkey(
     assert tray_grant["grant_result"]["action_id"] == "grant_tray_presence_authority"
     assert tray_grant["grant_result"]["authority_granted"] is True
 
+    _refresh_resident_host_lease(
+        data_dir,
+        monkeypatch,
+        resident_approval_id,
+        reason="test refresh resident host lease before tray execution",
+    )
+
     tray_ready = _run_plan("-Mode", "Status", "-DataDir", str(data_dir))
     assert tray_ready.returncode == 0, tray_ready.stderr or tray_ready.stdout
     tray_ready_payload = json.loads(tray_ready.stdout)
@@ -1839,6 +1881,13 @@ def test_lens_stage6_prerequisite_bringup_hotkey_execution_advances_to_overlay(
     )
     assert tray_execution["status"] == "tray_presence_started"
 
+    _refresh_resident_host_lease(
+        data_dir,
+        monkeypatch,
+        resident_approval_id,
+        reason="test refresh resident host lease before hotkey authority request",
+    )
+
     hotkey_status = _run_plan("-Mode", "Status", "-DataDir", str(data_dir))
     assert hotkey_status.returncode == 0, hotkey_status.stderr or hotkey_status.stdout
     hotkey_status_payload = json.loads(hotkey_status.stdout)
@@ -1859,6 +1908,13 @@ def test_lens_stage6_prerequisite_bringup_hotkey_execution_advances_to_overlay(
     hotkey_grant = _grant_next(data_dir, hotkey_approval_id, "test grant hotkey binding before overlay handoff")
     assert hotkey_grant["grant_result"]["action_id"] == "grant_global_hotkey_binding_authority"
     assert hotkey_grant["grant_result"]["authority_granted"] is True
+
+    _refresh_resident_host_lease(
+        data_dir,
+        monkeypatch,
+        resident_approval_id,
+        reason="test refresh resident host lease before hotkey execution",
+    )
 
     hotkey_ready = _run_plan("-Mode", "Status", "-DataDir", str(data_dir))
     assert hotkey_ready.returncode == 0, hotkey_ready.stderr or hotkey_ready.stdout
@@ -1896,6 +1952,13 @@ def test_lens_stage6_prerequisite_bringup_hotkey_execution_advances_to_overlay(
     assert hotkey_execution["governance"]["execution_receipt_write"] is True
     assert hotkey_execution["governance"]["would_execute"] is True
     assert hotkey_execution["governance"]["would_mutate"] is True
+
+    _refresh_resident_host_lease(
+        data_dir,
+        monkeypatch,
+        resident_approval_id,
+        reason="test refresh resident host lease before overlay authority request",
+    )
 
     followup = _run_plan("-Mode", "Status", "-DataDir", str(data_dir))
     assert followup.returncode == 0, followup.stderr or followup.stdout
@@ -1964,6 +2027,13 @@ def test_lens_stage6_prerequisite_bringup_overlay_execution_advances_to_summon(
     )
     assert tray_execution["status"] == "tray_presence_started"
 
+    _refresh_resident_host_lease(
+        data_dir,
+        monkeypatch,
+        resident_approval_id,
+        reason="test refresh resident host lease before hotkey authority request",
+    )
+
     hotkey_approval_id, _, _ = _request_approve_grant_surface_in_process(
         data_dir,
         monkeypatch,
@@ -1979,6 +2049,13 @@ def test_lens_stage6_prerequisite_bringup_overlay_execution_advances_to_summon(
         run_seconds=_LIVE_STAGE6_PREREQUISITE_RUN_SECONDS,
     )
     assert hotkey_execution["status"] == "global_hotkey_bound"
+
+    _refresh_resident_host_lease(
+        data_dir,
+        monkeypatch,
+        resident_approval_id,
+        reason="test refresh resident host lease before overlay authority request",
+    )
 
     overlay_status = _run_plan("-Mode", "Status", "-DataDir", str(data_dir))
     assert overlay_status.returncode == 0, overlay_status.stderr or overlay_status.stdout
@@ -2040,6 +2117,13 @@ def test_lens_stage6_prerequisite_bringup_overlay_execution_advances_to_summon(
     assert overlay_execution["governance"]["execution_receipt_write"] is True
     assert overlay_execution["governance"]["would_execute"] is True
     assert overlay_execution["governance"]["would_mutate"] is True
+
+    _refresh_resident_host_lease(
+        data_dir,
+        monkeypatch,
+        resident_approval_id,
+        reason="test refresh resident host lease before summon authority request",
+    )
 
     followup = _run_plan("-Mode", "Status", "-DataDir", str(data_dir))
     assert followup.returncode == 0, followup.stderr or followup.stdout
