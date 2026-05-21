@@ -69,6 +69,39 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
     assert payload["live_operator_experience_proof"] is True
     assert payload["live_operator_experience_ready"] is False
     assert payload["next_smallest_truthful_gap"] == "resident_surface_runtime_not_supervised"
+    assert payload["recommended_handoff_source"] == "resident_surface_runtime_supervision_handoff"
+    assert (
+        payload["recommended_next_slice"]
+        == "resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim"
+    )
+    assert payload["recommended_proof_script"] == "scripts/lens-resident-surface-proof.ps1 -Mode Status"
+    assert payload["authority_required"] == "process_supervision_authority"
+    assert payload["authority_granted"] is False
+    assert payload["resident_runtime_authority_grant_readiness_route"] == (
+        "/lens/resident-runtime/authority-grant/readiness"
+    )
+    assert payload["resident_runtime_authority_grant_handoff_observed"] is True
+
+    recommended_handoff = payload["recommended_handoff"]
+    assert recommended_handoff["id"] == "resident_surface_runtime_supervision"
+    assert recommended_handoff["next_smallest_truthful_gap"] == "resident_surface_runtime_not_supervised"
+    assert recommended_handoff["next_step"] == (
+        "resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim"
+    )
+    assert recommended_handoff["proof_script"] == "scripts/lens-resident-surface-proof.ps1 -Mode Status"
+    assert recommended_handoff["route"] == "/lens/resident-surface"
+    assert recommended_handoff["readiness_route"] == "/lens/resident-runtime/authority-grant/readiness"
+    assert recommended_handoff["blocker"] == "resident_surface_runtime_not_supervised"
+    assert recommended_handoff["requirement_state"] == "foreground_observed_not_supervised"
+    assert recommended_handoff["authority_required"] == "process_supervision_authority"
+    assert recommended_handoff["authority_granted"] is False
+    assert recommended_handoff["read_only_contract"] is True
+    assert recommended_handoff["diagnostic_only"] is True
+    assert recommended_handoff["would_execute"] is False
+    assert recommended_handoff["would_mutate"] is False
+    assert recommended_handoff["would_supervise_process"] is False
+    assert recommended_handoff["would_restart_process"] is False
+    assert recommended_handoff["would_claim_resident"] is False
 
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["resident_surface_content_readback"]["status"] == "readback_ready"

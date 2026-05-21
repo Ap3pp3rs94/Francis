@@ -8366,6 +8366,44 @@ def test_lens_api_observes_live_foreground_process_readback(monkeypatch, tmp_pat
     assert resident_surface_runtime["foreground_session_only"] is True
     assert resident_surface_runtime["runtime_ready"] is False
     assert resident_surface_runtime["resident_claim_allowed"] is False
+    assert resident_surface["next_smallest_truthful_gap"] == "resident_surface_runtime_not_supervised"
+    assert resident_surface["recommended_handoff_source"] == "resident_surface_runtime_supervision_handoff"
+    assert (
+        resident_surface["recommended_next_slice"]
+        == "resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim"
+    )
+    assert resident_surface["recommended_proof_script"] == "scripts/lens-resident-surface-proof.ps1 -Mode Status"
+    assert resident_surface["authority_required"] == "process_supervision_authority"
+    assert resident_surface["authority_granted"] is False
+    assert resident_surface["resident_runtime_authority_grant_readiness_route"] == (
+        "/lens/resident-runtime/authority-grant/readiness"
+    )
+    assert resident_surface["resident_runtime_authority_grant_handoff_observed"] is True
+    resident_surface_handoff = resident_surface["recommended_handoff"]
+    assert resident_surface_handoff["id"] == "resident_surface_runtime_supervision"
+    assert resident_surface_handoff["next_smallest_truthful_gap"] == "resident_surface_runtime_not_supervised"
+    assert resident_surface_handoff["next_step"] == (
+        "resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim"
+    )
+    assert resident_surface_handoff["proof_script"] == "scripts/lens-resident-surface-proof.ps1 -Mode Status"
+    assert resident_surface_handoff["readiness_route"] == "/lens/resident-runtime/authority-grant/readiness"
+    assert resident_surface_handoff["blocker"] == "resident_surface_runtime_not_supervised"
+    assert resident_surface_handoff["requirement_state"] == "foreground_observed_not_supervised"
+    assert resident_surface_handoff["authority_required"] == "process_supervision_authority"
+    assert resident_surface_handoff["authority_granted"] is False
+    assert resident_surface_handoff["read_only_contract"] is True
+    assert resident_surface_handoff["diagnostic_only"] is True
+    assert resident_surface_handoff["would_execute"] is False
+    assert resident_surface_handoff["would_mutate"] is False
+    assert resident_surface_handoff["would_supervise_process"] is False
+    assert resident_surface_handoff["would_restart_process"] is False
+    assert resident_surface_handoff["would_claim_resident"] is False
+    assert (
+        resident_surface_handoff["resident_runtime_authority_grant_first_blocked_requirement_handoff"][
+            "readiness_route"
+        ]
+        == "/lens/resident-runtime/authority-grant/readiness"
+    )
     assert "resident_surface_runtime_missing" not in resident_surface["blockers"]
     assert "resident_surface_runtime_not_supervised" in resident_surface["blockers"]
     assert "resident_surface_not_resident" in resident_surface["blockers"]
@@ -8436,6 +8474,16 @@ def test_lens_api_observes_live_foreground_process_readback(monkeypatch, tmp_pat
     assert "resident_surface_runtime_not_supervised" in activation_body["blockers"]
     assert "resident_surface_not_resident" in activation_body["blockers"]
     assert activation_body["governance"]["execution_authority"] is False
+
+    resident_surface_response = client.get("/lens/resident-surface?limit=1")
+    assert resident_surface_response.status_code == 200
+    resident_surface_body = resident_surface_response.json()
+    assert resident_surface_body["next_smallest_truthful_gap"] == "resident_surface_runtime_not_supervised"
+    assert resident_surface_body["recommended_handoff"]["readiness_route"] == (
+        "/lens/resident-runtime/authority-grant/readiness"
+    )
+    assert resident_surface_body["recommended_handoff"]["would_supervise_process"] is False
+    assert resident_surface_body["governance"]["process_supervision_authority"] is False
 
     manifest = client.get("/lens/host/manifest")
     assert manifest.status_code == 200

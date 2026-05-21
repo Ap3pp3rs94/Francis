@@ -36327,6 +36327,56 @@ consumption:
 - `python -m ruff format --check tests\test_lens_stage6_next_handoff_script.py`
   Result: `passed; 1 file already formatted`
 
+Stage 6 resident-surface runtime supervision handoff on `2026-05-21`:
+
+- `/lens/resident-surface` now reports
+  `next_smallest_truthful_gap=resident_surface_runtime_not_supervised` when a
+  bounded foreground Lens host runtime is directly observed, instead of keeping
+  the stale `resident_surface_runtime_missing` next gap.
+- The resident-surface readback now exposes a read-only
+  `resident_surface_runtime_supervision_handoff` pointing to
+  `/lens/resident-runtime/authority-grant/readiness`, with
+  `authority_required=process_supervision_authority` and all execution,
+  mutation, process-supervision, restart, and resident-claim effects denied.
+- `scripts/lens-resident-surface-proof.ps1` now passes that same handoff through
+  after its foreground runtime proof, so the operator command that Stage 6
+  recommends no longer stops at a bare `resident_surface_runtime_not_supervised`
+  blocker.
+- This is an operator/API truth fix only. It does not grant process supervision
+  authority, start or supervise a resident process, install or control a
+  service, write memory, claim resident runtime, close Stage 6, or start Stage
+  7.
+
+Latest validation for Stage 6 resident-surface runtime supervision handoff:
+
+- PowerShell parser check for `scripts\lens-resident-surface-proof.ps1`
+  Result: `passed; parser_ok`
+- `python -m ruff check src\francis\lens\status.py tests\test_api_lens.py
+  tests\test_lens_resident_surface_proof_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check src\francis\lens\status.py
+  tests\test_api_lens.py tests\test_lens_resident_surface_proof_script.py`
+  Result: `passed; 3 files already formatted`
+- `python -m pytest
+  tests\test_api_lens.py::test_lens_api_observes_live_foreground_process_readback
+  -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_surface_proof_script.py -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  scripts\lens-resident-surface-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=resident_surface_runtime_not_supervised;
+  recommended_handoff_source=resident_surface_runtime_supervision_handoff;
+  recommended_next_slice=resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim;
+  recommended_proof_script=scripts/lens-resident-surface-proof.ps1 -Mode Status;
+  authority_required=process_supervision_authority; authority_granted=false;
+  resident_runtime_authority_grant_readiness_route=/lens/resident-runtime/authority-grant/readiness;
+  resident_runtime_authority_grant_handoff_observed=true`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\check.ps1`
+  Result: `passed; branch state OK; Ruff check passed; Ruff format check
+  passed; mypy passed with no issues in 501 source files; pytest reached 100%`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

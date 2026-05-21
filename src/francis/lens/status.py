@@ -4517,8 +4517,58 @@ def _resident_surface_readback_from_status(status: dict[str, Any]) -> dict[str, 
     tray_enablement_gate = _as_dict(status.get("tray_enablement_gate"))
     overlay_enablement_gate = _as_dict(status.get("overlay_enablement_gate"))
     resident_surface_activation = _as_dict(status.get("resident_surface_activation"))
+    resident_runtime_authority_grant_readiness = _as_dict(
+        resident_surface_activation.get("resident_runtime_authority_grant_readiness")
+    )
+    resident_runtime_authority_grant_handoff = _as_dict(
+        resident_surface_activation.get("resident_runtime_authority_grant_handoff")
+    )
     hud_runtime = _as_dict(hud.get("runtime"))
     resident_surface_runtime = _resident_surface_runtime_from_host(resident_host)
+    foreground_runtime_observed = bool(resident_surface_runtime.get("foreground_runtime_observed"))
+    next_smallest_truthful_gap = (
+        "resident_surface_runtime_not_supervised" if foreground_runtime_observed else "resident_surface_runtime_missing"
+    )
+    recommended_next_slice = (
+        "resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim"
+        if foreground_runtime_observed
+        else "prove_resident_surface_foreground_runtime_before_helpful_not_noisy_claim"
+    )
+    authority_required = "process_supervision_authority" if foreground_runtime_observed else "none_readback_first"
+    recommended_handoff = {
+        "id": "resident_surface_runtime_supervision",
+        "status": "blocked",
+        "previous_next_smallest_truthful_gap": "resident_surface_runtime_missing",
+        "next_smallest_truthful_gap": next_smallest_truthful_gap,
+        "next_step": recommended_next_slice,
+        "proof_script": "scripts/lens-resident-surface-proof.ps1 -Mode Status",
+        "route": "/lens/resident-surface",
+        "activation_route": "/lens/resident-surface/activation",
+        "readiness_route": "/lens/resident-runtime/authority-grant/readiness",
+        "host_route": "/lens/host",
+        "acceptance_criterion": "helpful_not_noisy",
+        "blocker": next_smallest_truthful_gap,
+        "requirement_state": "foreground_observed_not_supervised" if foreground_runtime_observed else "runtime_missing",
+        "authority_required": authority_required,
+        "authority_granted": False,
+        "resident_runtime_authority_grant_readiness_route": "/lens/resident-runtime/authority-grant/readiness",
+        "resident_runtime_authority_grant_next_smallest_truthful_gap": _safe_str(
+            resident_runtime_authority_grant_readiness.get("next_smallest_truthful_gap")
+        ).strip(),
+        "resident_runtime_authority_grant_first_blocked_requirement": _safe_str(
+            resident_runtime_authority_grant_readiness.get("first_blocked_requirement")
+        ).strip(),
+        "resident_runtime_authority_grant_first_blocked_requirement_handoff": (
+            resident_runtime_authority_grant_handoff
+        ),
+        "read_only_contract": True,
+        "diagnostic_only": True,
+        "would_execute": False,
+        "would_mutate": False,
+        "would_supervise_process": False,
+        "would_restart_process": False,
+        "would_claim_resident": False,
+    }
 
     blockers: list[str] = []
     for source in (
@@ -4534,7 +4584,7 @@ def _resident_surface_readback_from_status(status: dict[str, Any]) -> dict[str, 
             blocker_id = _safe_str(blocker).strip()
             if blocker_id and blocker_id not in blockers:
                 blockers.append(blocker_id)
-    if bool(resident_surface_runtime.get("foreground_runtime_observed")):
+    if foreground_runtime_observed:
         blockers = [blocker for blocker in blockers if blocker != "resident_surface_runtime_missing"]
     elif "resident_surface_runtime_missing" not in blockers:
         blockers.insert(0, "resident_surface_runtime_missing")
@@ -4605,7 +4655,7 @@ def _resident_surface_readback_from_status(status: dict[str, Any]) -> dict[str, 
         "host_route": "/lens/host",
         "hud_route": "/lens/hud",
         "content_contract_ready": True,
-        "foreground_runtime_observed": bool(resident_surface_runtime.get("foreground_runtime_observed")),
+        "foreground_runtime_observed": foreground_runtime_observed,
         "resident_surface_ready": False,
         "resident_claim_allowed": False,
         "resident_overlay_runtime": bool(hud_runtime.get("resident_overlay")),
@@ -4659,7 +4709,16 @@ def _resident_surface_readback_from_status(status: dict[str, Any]) -> dict[str, 
         "activation_boundary": resident_surface_activation,
         "reactor_readback_surfaces": _as_dict(reactor.get("readback_surfaces")),
         "blockers": blockers,
-        "next_smallest_truthful_gap": "resident_surface_runtime_missing",
+        "next_smallest_truthful_gap": next_smallest_truthful_gap,
+        "recommended_handoff_source": "resident_surface_runtime_supervision_handoff",
+        "recommended_next_slice": recommended_next_slice,
+        "recommended_proof_script": "scripts/lens-resident-surface-proof.ps1 -Mode Status",
+        "authority_required": authority_required,
+        "authority_granted": False,
+        "recommended_handoff": recommended_handoff,
+        "resident_runtime_authority_grant_readiness_route": "/lens/resident-runtime/authority-grant/readiness",
+        "resident_runtime_authority_grant_handoff_observed": bool(resident_runtime_authority_grant_handoff),
+        "resident_runtime_authority_grant_handoff": resident_runtime_authority_grant_handoff,
         "message": "Resident surface content is readable from backend truth, but no resident runtime or OS surface is active.",
         "governance": {
             "gate": "lens_resident_surface_readback",

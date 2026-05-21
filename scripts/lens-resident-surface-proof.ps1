@@ -671,6 +671,31 @@ if (-not $ResidentSurfaceContentReadback) {
   $BaseBlockers += 'resident_surface_readback_missing'
 }
 $AllBlockers = @($BaseBlockers | Sort-Object -Unique)
+$ResidentSurfaceNextSmallestTruthfulGap = if ($ResidentSurfaceForegroundRuntimeReadback) { 'resident_surface_runtime_not_supervised' } else { 'resident_surface_runtime_missing' }
+$RecommendedHandoffSource = 'resident_surface_runtime_supervision_handoff'
+$RecommendedNextSlice = if ($ResidentSurfaceForegroundRuntimeReadback) { 'resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim' } else { 'prove_resident_surface_foreground_runtime_before_helpful_not_noisy_claim' }
+$RecommendedProofScript = 'scripts/lens-resident-surface-proof.ps1 -Mode Status'
+$RecommendedAuthorityRequired = if ($ResidentSurfaceForegroundRuntimeReadback) { 'process_supervision_authority' } else { 'none_readback_first' }
+$ForegroundRecommendedHandoff = Get-PropertyValue -Payload $ForegroundSurfacePayload -Name 'recommended_handoff'
+if ($null -eq $ForegroundRecommendedHandoff) {
+  $ForegroundRecommendedHandoff = [ordered]@{}
+}
+$ForegroundRecommendedHandoffSource = [string](Get-PropertyValue -Payload $ForegroundSurfacePayload -Name 'recommended_handoff_source' -Default '')
+if (-not [string]::IsNullOrWhiteSpace($ForegroundRecommendedHandoffSource)) {
+  $RecommendedHandoffSource = $ForegroundRecommendedHandoffSource
+}
+$ForegroundRecommendedNextSlice = [string](Get-PropertyValue -Payload $ForegroundSurfacePayload -Name 'recommended_next_slice' -Default '')
+if (-not [string]::IsNullOrWhiteSpace($ForegroundRecommendedNextSlice)) {
+  $RecommendedNextSlice = $ForegroundRecommendedNextSlice
+}
+$ForegroundRecommendedProofScript = [string](Get-PropertyValue -Payload $ForegroundSurfacePayload -Name 'recommended_proof_script' -Default '')
+if (-not [string]::IsNullOrWhiteSpace($ForegroundRecommendedProofScript)) {
+  $RecommendedProofScript = $ForegroundRecommendedProofScript
+}
+$ForegroundRecommendedAuthorityRequired = [string](Get-PropertyValue -Payload $ForegroundSurfacePayload -Name 'authority_required' -Default '')
+if (-not [string]::IsNullOrWhiteSpace($ForegroundRecommendedAuthorityRequired)) {
+  $RecommendedAuthorityRequired = $ForegroundRecommendedAuthorityRequired
+}
 
 $Payload = [ordered]@{
   ok = $ProofPassed
@@ -702,6 +727,14 @@ $Payload = [ordered]@{
   live_operator_experience_ready = $false
   checks = @($Checks)
   blockers = @($AllBlockers)
+  recommended_handoff_source = $RecommendedHandoffSource
+  recommended_next_slice = $RecommendedNextSlice
+  recommended_proof_script = $RecommendedProofScript
+  authority_required = $RecommendedAuthorityRequired
+  authority_granted = $false
+  recommended_handoff = $ForegroundRecommendedHandoff
+  resident_runtime_authority_grant_readiness_route = [string](Get-PropertyValue -Payload $ForegroundSurfacePayload -Name 'resident_runtime_authority_grant_readiness_route' -Default '/lens/resident-runtime/authority-grant/readiness')
+  resident_runtime_authority_grant_handoff_observed = [bool](Get-PropertyValue -Payload $ForegroundSurfacePayload -Name 'resident_runtime_authority_grant_handoff_observed' -Default $false)
   proof = [ordered]@{
     resident_surface_readback_status = [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'status' -Default '')
     resident_surface_contract_status = [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'contract_status' -Default '')
@@ -742,7 +775,7 @@ $Payload = [ordered]@{
     overlay_blockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $OverlayPayload -Name 'blockers' -Default @())
     summon_blockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $SummonPayload -Name 'blockers' -Default @())
   }
-  next_smallest_truthful_gap = if ($ResidentSurfaceForegroundRuntimeReadback) { 'resident_surface_runtime_not_supervised' } else { 'resident_surface_runtime_missing' }
+  next_smallest_truthful_gap = $ResidentSurfaceNextSmallestTruthfulGap
   governance = [ordered]@{
     read_only_contract = $true
     diagnostic_only = $true
