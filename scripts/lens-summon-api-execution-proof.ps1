@@ -6,6 +6,8 @@ param(
   [ValidateRange(1, 60)]
   [int]$RunSeconds = 10,
 
+  [switch]$AllowLaunchOnHotkey,
+
   [string]$DataDir = ''
 )
 
@@ -229,6 +231,7 @@ def _run() -> tuple[int, dict[str, Any]]:
     repo_root = Path(os.environ["FRANCIS_ROOT"]).resolve()
     data_root = Path(os.environ["FRANCIS_DATA_DIR"]).resolve()
     run_seconds = int(os.environ.get("FRANCIS_PROOF_RUN_SECONDS", "5"))
+    allow_launch_on_hotkey = os.environ.get("FRANCIS_PROOF_ALLOW_LAUNCH_ON_HOTKEY", "").lower() == "true"
     dependency_run_seconds = max(run_seconds, 20)
     resident_dependency_run_seconds = dependency_run_seconds
     data_root.mkdir(parents=True, exist_ok=True)
@@ -318,17 +321,6 @@ def _run() -> tuple[int, dict[str, Any]]:
             grant_reason="grant bounded OS-binding authority for isolated summon API proof",
         )
         os_binding_receipt = _as_dict(os_binding_grant.get("receipt"))
-        hotkey_start = _post(
-            client,
-            "/lens/os-binding/execute",
-            {
-                "approval_id": os_binding_approval_id,
-                "actor": actor,
-                "reason": "prove governed API path starts hotkey before summon",
-                "mode": "bind",
-                "run_seconds": dependency_run_seconds,
-            },
-        )
 
         overlay_approval_id, overlay_request, overlay_decision, overlay_grant = _request_approve_grant(
             client,
@@ -352,7 +344,6 @@ def _run() -> tuple[int, dict[str, Any]]:
             },
         )
 
-        summon_readiness_before_execute = _get(client, "/lens/summon/readiness")
         summon_approval_id, summon_request, summon_decision, summon_grant = _request_approve_grant(
             client,
             request_route="/lens/summon/authority/request",
@@ -364,16 +355,37 @@ def _run() -> tuple[int, dict[str, Any]]:
         )
         summon_receipt = _as_dict(summon_grant.get("receipt"))
 
+        hotkey_execute_payload = {
+            "approval_id": os_binding_approval_id,
+            "actor": actor,
+            "reason": "prove governed API path starts hotkey before summon",
+            "mode": "bind",
+            "run_seconds": dependency_run_seconds,
+            "allow_launch": allow_launch_on_hotkey,
+        }
+        if allow_launch_on_hotkey:
+            hotkey_execute_payload["summon_approval_id"] = summon_approval_id
+            hotkey_execute_payload["overlay_approval_id"] = overlay_approval_id
+            hotkey_execute_payload["reason"] = (
+                "prove governed API path starts hotkey with explicit summon launch handoff authority"
+            )
+        hotkey_start = _post(client, "/lens/os-binding/execute", hotkey_execute_payload)
+
+        summon_readiness_before_execute = _get(client, "/lens/summon/readiness")
         summon_execute = _post(
             client,
             "/lens/summon/execute",
             {
                 "approval_id": summon_approval_id,
                 "actor": actor,
-                "reason": "prove governed API path executes bounded local summon handoff without launch",
+                "reason": (
+                    "prove governed API path executes launch-on-hotkey summon runtime readback"
+                    if allow_launch_on_hotkey
+                    else "prove governed API path executes bounded local summon handoff without launch"
+                ),
                 "mode": "launch",
                 "run_seconds": dependency_run_seconds,
-                "allow_launch": False,
+                "allow_launch": allow_launch_on_hotkey,
             },
         )
         summon_executions_after_execute = _get(client, "/lens/summon/executions?limit=10")
@@ -437,6 +449,11 @@ def _run() -> tuple[int, dict[str, Any]]:
         )
         next_gap = route_next_gap or persistent_plan_next_gap
         summon_runtime_readback = _as_dict(summon_execute.get("summon_runtime_readback"))
+        expected_opened = allow_launch_on_hotkey
+        expected_no_launch = not allow_launch_on_hotkey
+        expected_summon_anywhere = allow_launch_on_hotkey
+        readiness_blockers_after_execute = _str_list(summon_readiness_after_execute.get("blockers"))
+        readiness_status_after_execute = str(summon_readiness_after_execute.get("status") or "")
         summon_started = (
             summon_execute.get("status") == "summon_binding_observed"
             and summon_execute.get("executed") is True
@@ -444,18 +461,21 @@ def _run() -> tuple[int, dict[str, Any]]:
             and summon_execute.get("summon_runtime_ready") is True
             and summon_execute.get("bounded_handoff_ready") is True
             and summon_execute.get("local_open_ready") is True
-            and summon_execute.get("opened") is False
-            and summon_execute.get("no_launch") is True
+            and summon_execute.get("opened") is expected_opened
+            and summon_execute.get("no_launch") is expected_no_launch
+            and summon_execute.get("summon_anywhere") is expected_summon_anywhere
+            and summon_execute.get("os_level_summon") is expected_summon_anywhere
         )
         runtime_state_observed = (
             summon_state_after_execute.get("kind") == "lens.summon.runtime_state"
             and summon_state_after_execute.get("status") == "summon_binding_observed"
             and summon_state_after_execute.get("bounded_handoff_ready") is True
             and summon_state_after_execute.get("local_open_ready") is True
-            and summon_state_after_execute.get("opened") is False
-            and summon_state_after_execute.get("no_launch") is True
-            and summon_state_after_execute.get("summon_anywhere") is False
-            and summon_state_after_execute.get("os_level_summon") is False
+            and summon_state_after_execute.get("opened") is expected_opened
+            and summon_state_after_execute.get("no_launch") is expected_no_launch
+            and summon_state_after_execute.get("allow_launch") is allow_launch_on_hotkey
+            and summon_state_after_execute.get("summon_anywhere") is expected_summon_anywhere
+            and summon_state_after_execute.get("os_level_summon") is expected_summon_anywhere
         )
         plan_consumed_summon = (
             summon_dependency.get("ready") is True
@@ -466,15 +486,27 @@ def _run() -> tuple[int, dict[str, Any]]:
         summon_receipt_readback = (
             summon_executions_after_execute.get("status") == "readback_ready"
             and summon_executions_after_execute.get("latest_summon_binding") is True
-            and summon_executions_after_execute.get("latest_summon_anywhere") is False
+            and summon_executions_after_execute.get("latest_summon_anywhere") is expected_summon_anywhere
         )
-        summon_readiness_observed = (
+        summon_readiness_base_observed = (
             summon_readiness_after_execute.get("summon_binding_ready") is True
             and summon_readiness_after_execute.get("summon_runtime_ready") is True
             and summon_readiness_after_execute.get("summon_runtime_bounded_handoff_ready") is True
             and summon_readiness_after_execute.get("summon_runtime_local_open_ready") is True
-            and "summon_anywhere_runtime_readback" in _str_list(summon_readiness_after_execute.get("blockers"))
         )
+        if allow_launch_on_hotkey:
+            summon_readiness_observed = (
+                summon_readiness_base_observed
+                and summon_readiness_after_execute.get("summon_anywhere_runtime_ready") is True
+                and readiness_status_after_execute == "ready_for_operator_review"
+                and "summon_anywhere_runtime_readback" not in readiness_blockers_after_execute
+            )
+        else:
+            summon_readiness_observed = (
+                summon_readiness_base_observed
+                and summon_readiness_after_execute.get("summon_anywhere_runtime_ready") is False
+                and "summon_anywhere_runtime_readback" in readiness_blockers_after_execute
+            )
         overlay_stop_observed = (
             overlay_stop.get("status") == "overlay_window_stopped"
             and overlay_stop.get("executed") is True
@@ -502,13 +534,16 @@ def _run() -> tuple[int, dict[str, Any]]:
         authority_boundaries_intact = (
             host_governance.get("service_control_authority") is False
             and tray_governance.get("summon_authority") is False
-            and hotkey_governance.get("summon_authority") is False
+            and hotkey_governance.get("summon_authority") is allow_launch_on_hotkey
+            and hotkey_governance.get("hotkey_launch_on_press_authority") is allow_launch_on_hotkey
+            and hotkey_governance.get("overlay_control_authority") is allow_launch_on_hotkey
+            and hotkey_governance.get("window_management_authority") is allow_launch_on_hotkey
             and overlay_governance.get("summon_authority") is False
             and summon_governance.get("execution_authority") is True
             and summon_governance.get("summon_authority") is True
             and summon_governance.get("bounded_local_open_handoff_authority") is True
-            and summon_governance.get("local_process_launch_authority") is False
-            and summon_governance.get("mutation_authority_granted") is False
+            and summon_governance.get("local_process_launch_authority") is allow_launch_on_hotkey
+            and summon_governance.get("mutation_authority_granted") is allow_launch_on_hotkey
             and summon_governance.get("hotkey_registration_authority") is False
             and summon_governance.get("overlay_control_authority") is False
             and summon_governance.get("summon_anywhere_authority") is False
@@ -554,7 +589,11 @@ def _run() -> tuple[int, dict[str, Any]]:
                 "summon_binding_observed" if summon_started else str(summon_execute.get("status") or "blocked"),
                 summon_started,
                 "/lens/summon/execute",
-                "The governed route must execute a bounded local summon handoff without launching a process.",
+                (
+                    "The governed route must execute launch-on-hotkey summon readback only when explicitly allowed."
+                    if allow_launch_on_hotkey
+                    else "The governed route must execute a bounded local summon handoff without launching a process."
+                ),
             ),
             _check(
                 "summon_runtime_state_written",
@@ -581,10 +620,14 @@ def _run() -> tuple[int, dict[str, Any]]:
             ),
             _check(
                 "summon_readiness_consumes_runtime_without_closure",
-                str(summon_readiness_after_execute.get("status") or ""),
+                readiness_status_after_execute,
                 summon_readiness_observed,
                 "/lens/summon/readiness",
-                "The route must expose summon runtime readback while preserving the final summon-anywhere runtime boundary.",
+                (
+                    "The route must expose summon-anywhere runtime readback without claiming product approval authority."
+                    if allow_launch_on_hotkey
+                    else "The route must expose summon runtime readback while preserving the final summon-anywhere runtime boundary."
+                ),
             ),
             _check(
                 "api_stop_cleaned_real_overlay_window",
@@ -619,7 +662,11 @@ def _run() -> tuple[int, dict[str, Any]]:
                 "bounded" if authority_boundaries_intact else "leaked",
                 authority_boundaries_intact,
                 "response.governance",
-                "The proof may execute a bounded local summon handoff but must not launch, write memory, claim OS-level summon, or claim resident authority.",
+                (
+                    "The proof may launch only through explicit launch-on-hotkey authority and must not write memory or claim resident authority."
+                    if allow_launch_on_hotkey
+                    else "The proof may execute a bounded local summon handoff but must not launch, write memory, claim OS-level summon, or claim resident authority."
+                ),
             ),
         ]
         proof_passed = all(item["passed"] for item in checks)
@@ -637,9 +684,22 @@ def _run() -> tuple[int, dict[str, Any]]:
             "route_next_smallest_truthful_gap": route_next_gap,
             "persistent_plan_next_smallest_truthful_gap": persistent_plan_next_gap,
             "next_smallest_truthful_gap": next_gap,
-            "recommended_next_slice": "execute_persistent_supervision_api_enablement_after_bounded_summon_handoff",
-            "recommended_proof_script": "scripts/lens-persistent-supervision-api-execution-proof.ps1 -Mode Status",
-            "recommended_handoff_source": "api_summon_to_persistent_supervision_execution_handoff",
+            "recommended_next_slice": (
+                "run_stage6_completion_audit_after_launch_on_hotkey_runtime_readback"
+                if allow_launch_on_hotkey
+                else "execute_persistent_supervision_api_enablement_after_bounded_summon_handoff"
+            ),
+            "recommended_proof_script": (
+                "scripts/lens-stage6-completion-audit.ps1 -Mode Status"
+                if allow_launch_on_hotkey
+                else "scripts/lens-persistent-supervision-api-execution-proof.ps1 -Mode Status"
+            ),
+            "recommended_handoff_source": (
+                "api_launch_on_hotkey_runtime_readback_handoff"
+                if allow_launch_on_hotkey
+                else "api_summon_to_persistent_supervision_execution_handoff"
+            ),
+            "allow_launch_on_hotkey": allow_launch_on_hotkey,
             "host_supervision_approval_id": host_approval_id,
             "resident_runtime_approval_id": runtime_approval_id,
             "tray_presence_approval_id": tray_approval_id,
@@ -652,6 +712,12 @@ def _run() -> tuple[int, dict[str, Any]]:
             "os_binding_authority_grant_receipt_id": str(os_binding_receipt.get("receipt_id") or ""),
             "overlay_authority_grant_receipt_id": str(overlay_receipt.get("receipt_id") or ""),
             "summon_authority_grant_receipt_id": str(summon_receipt.get("receipt_id") or ""),
+            "os_binding_summon_authority_grant_receipt_id": str(
+                hotkey_start.get("summon_authority_grant_receipt_id") or ""
+            ),
+            "os_binding_overlay_authority_grant_receipt_id": str(
+                hotkey_start.get("overlay_authority_grant_receipt_id") or ""
+            ),
             "resident_runtime_execution_authority": runtime_grant.get("authority_granted") is True,
             "host_supervision_authority": host_grant.get("authority_granted") is True,
             "tray_presence_authority": tray_grant.get("authority_granted") is True,
@@ -666,6 +732,8 @@ def _run() -> tuple[int, dict[str, Any]]:
             "tray_runtime_ready": tray_start.get("tray_runtime_ready") is True,
             "global_hotkey_bound": hotkey_start.get("global_hotkey_binding") is True,
             "hotkey_runtime_ready": hotkey_start.get("hotkey_runtime_ready") is True,
+            "hotkey_launch_on_press": hotkey_start.get("launch_on_hotkey") is True,
+            "hotkey_launch_on_press_authority": hotkey_governance.get("hotkey_launch_on_press_authority") is True,
             "overlay_window_started": overlay_start.get("overlay_window") is True,
             "overlay_runtime_ready": overlay_start.get("overlay_runtime_ready") is True,
             "summon_binding_observed": summon_execute.get("summon_binding") is True,
@@ -688,19 +756,25 @@ def _run() -> tuple[int, dict[str, Any]]:
             "host_pid_file_present_after_stop": host_pid_file_present_after_stop,
             "required_before_enable_after_summon": remaining_required,
             "required_before_enable_ready_after_summon": persistent_plan.get("required_before_enable_ready") is True,
-            "summon_readiness_status_after_execute": str(summon_readiness_after_execute.get("status") or ""),
+            "summon_readiness_status_after_execute": readiness_status_after_execute,
             "summon_readiness_summon_runtime_ready": summon_readiness_after_execute.get("summon_runtime_ready") is True,
-            "summon_readiness_blockers_after_execute": _str_list(summon_readiness_after_execute.get("blockers")),
+            "summon_readiness_summon_anywhere_runtime_ready": summon_readiness_after_execute.get(
+                "summon_anywhere_runtime_ready"
+            ) is True,
+            "summon_readiness_blockers_after_execute": readiness_blockers_after_execute,
             "blockers": _str_list(summon_execute.get("blockers")),
-            "summon_anywhere": False,
-            "os_level_summon": False,
+            "summon_anywhere": summon_execute.get("summon_anywhere") is True,
+            "os_level_summon": summon_execute.get("os_level_summon") is True,
             "service_managed": False,
             "resident_claim_allowed": False,
             "checks": checks,
             "proof": {
+                "allow_launch_on_hotkey": allow_launch_on_hotkey,
                 "resident_start_status": str(resident_start.get("status") or ""),
                 "tray_start_status": str(tray_start.get("status") or ""),
                 "hotkey_start_status": str(hotkey_start.get("status") or ""),
+                "hotkey_launch_on_press": hotkey_start.get("launch_on_hotkey") is True,
+                "hotkey_launch_on_press_authority": hotkey_governance.get("hotkey_launch_on_press_authority") is True,
                 "overlay_start_status": str(overlay_start.get("status") or ""),
                 "summon_execute_status": str(summon_execute.get("status") or ""),
                 "summon_receipt_readback_status": str(summon_executions_after_execute.get("status") or ""),
@@ -761,9 +835,17 @@ def _run() -> tuple[int, dict[str, Any]]:
                 "mutation_authority_granted": True,
             },
             "notes": (
-                "This proof executes a bounded local summon handoff only. It does not claim "
-                "Stage 6 closure, OS-wide summon-anywhere readiness, memory write, capture, "
-                "service control, product approval-decision authority, or resident-claim authority."
+                (
+                    "This proof executes an explicit launch-on-hotkey summon readback. It does not claim "
+                    "Stage 6 closure, memory write, capture, service control, product approval-decision "
+                    "authority, or resident-claim authority."
+                )
+                if allow_launch_on_hotkey
+                else (
+                    "This proof executes a bounded local summon handoff only. It does not claim "
+                    "Stage 6 closure, OS-wide summon-anywhere readiness, memory write, capture, "
+                    "service control, product approval-decision authority, or resident-claim authority."
+                )
             ),
         }
         return (0 if proof_passed else 1), payload
@@ -844,6 +926,7 @@ $PreviousProfile = [string]$env:FRANCIS_ENV_PROFILE
 $PreviousRunMode = [string]$env:FRANCIS_RUN_MODE
 $PreviousProofMode = [string]$env:FRANCIS_PROOF_MODE
 $PreviousProofRunSeconds = [string]$env:FRANCIS_PROOF_RUN_SECONDS
+$PreviousProofAllowLaunchOnHotkey = [string]$env:FRANCIS_PROOF_ALLOW_LAUNCH_ON_HOTKEY
 $PreviousActorScopes = [string]$env:FRANCIS_API_ACTOR_SCOPES
 $PreviousPythonPath = [string]$env:PYTHONPATH
 
@@ -854,6 +937,7 @@ try {
   $env:FRANCIS_RUN_MODE = 'api'
   $env:FRANCIS_PROOF_MODE = $Mode.ToLowerInvariant()
   $env:FRANCIS_PROOF_RUN_SECONDS = [string]$RunSeconds
+  $env:FRANCIS_PROOF_ALLOW_LAUNCH_ON_HOTKEY = if ($AllowLaunchOnHotkey) { 'true' } else { 'false' }
   $env:FRANCIS_API_ACTOR_SCOPES = '{"test.system.write":["system.write"],"test.approvals.decision":["approvals.decide"]}'
   $SourceRoot = Join-Path $RepoRoot 'src'
   if ([string]::IsNullOrWhiteSpace($PreviousPythonPath)) {
@@ -902,6 +986,11 @@ try {
     Remove-Item Env:\FRANCIS_PROOF_RUN_SECONDS -ErrorAction SilentlyContinue
   } else {
     $env:FRANCIS_PROOF_RUN_SECONDS = $PreviousProofRunSeconds
+  }
+  if ([string]::IsNullOrWhiteSpace($PreviousProofAllowLaunchOnHotkey)) {
+    Remove-Item Env:\FRANCIS_PROOF_ALLOW_LAUNCH_ON_HOTKEY -ErrorAction SilentlyContinue
+  } else {
+    $env:FRANCIS_PROOF_ALLOW_LAUNCH_ON_HOTKEY = $PreviousProofAllowLaunchOnHotkey
   }
   if ([string]::IsNullOrWhiteSpace($PreviousActorScopes)) {
     Remove-Item Env:\FRANCIS_API_ACTOR_SCOPES -ErrorAction SilentlyContinue

@@ -58,8 +58,14 @@ def test_lens_summon_api_execution_proof_uses_governed_routes() -> None:
     assert '"/lens/summon/executions?limit=10"' in script
     assert '"/lens/summon/readiness"' in script
     assert '"/lens/host/supervision/execute"' in script
+    assert "$AllowLaunchOnHotkey" in script
+    assert "FRANCIS_PROOF_ALLOW_LAUNCH_ON_HOTKEY" in script
     assert '"mode": "resident_stop"' in script
-    assert '"allow_launch": False' in script
+    assert '"allow_launch": allow_launch_on_hotkey' in script
+    assert '"summon_approval_id"' in script
+    assert '"overlay_approval_id"' in script
+    assert 'hotkey_execute_payload["summon_approval_id"] = summon_approval_id' in script
+    assert 'hotkey_execute_payload["overlay_approval_id"] = overlay_approval_id' in script
     assert '"summon_anywhere_authority": False' in script
     assert '"resident_claim_authority": False' in script
 

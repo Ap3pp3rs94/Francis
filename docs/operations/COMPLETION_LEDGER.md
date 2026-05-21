@@ -35823,6 +35823,59 @@ Latest validation for Stage 6 OS-binding launch-on-hotkey authority boundary:
   mypy passed with no issues in 501 source files, and pytest completed to 100%
   with expected skips`
 
+Stage 6 summon API launch-on-hotkey runtime readback on `2026-05-21`:
+
+- `scripts/lens-summon-api-execution-proof.ps1` now preserves its default
+  non-launching proof path and adds an explicit `-AllowLaunchOnHotkey` mode for
+  the previously proved OS-binding launch-on-hotkey authority boundary.
+- The default proof continues to execute `/lens/os-binding/execute` and
+  `/lens/summon/execute` with `allow_launch=false`, keeping
+  `opened=false`, `no_launch=true`, and
+  `route_next_smallest_truthful_gap=summon_anywhere_runtime_readback`.
+- The explicit launch-on-hotkey proof now passes the active summon-action and
+  overlay-window authority grant IDs into `/lens/os-binding/execute`, then
+  executes `/lens/summon/execute` with `allow_launch=true`.
+- The explicit proof observed `hotkey_launch_on_press_authority=true`,
+  `opened=true`, `no_launch=false`, `summon_anywhere=true`,
+  `os_level_summon=true`,
+  `summon_readiness_status_after_execute=ready_for_operator_review`,
+  `summon_readiness_blockers_after_execute=[]`, and
+  `next_smallest_truthful_gap=stage6_lens_completion_audit`.
+- This is a governed runtime-readback proof only. It does not grant memory,
+  capture, service-control, product approval-decision, or resident-claim
+  authority; it does not close Stage 6 or start Stage 7. The next truthful step
+  remains the Stage 6 completion audit against this new readback posture.
+
+Latest validation for Stage 6 summon API launch-on-hotkey runtime readback:
+
+- PowerShell parser check for
+  `scripts\lens-summon-api-execution-proof.ps1`
+  Result: `passed; parse_ok`
+- `python -m pytest tests\test_lens_summon_api_execution_proof_script.py -q`
+  Result: `passed; exit code 0`
+- `python -m pytest tests\test_api_lens.py::test_lens_summon_execute_records_summon_anywhere_when_hotkey_launch_runtime_observed tests\test_api_lens_os_binding_authority.py::test_lens_os_binding_launch_on_hotkey_records_authorized_runtime_readback -q`
+  Result: `passed; 2 passed`
+- `python -m ruff check tests\test_lens_summon_api_execution_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests\test_lens_summon_api_execution_proof_script.py`
+  Result: `passed; 1 file already formatted`
+- `git diff --check`
+  Result: `passed; whitespace clean`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-api-execution-proof.ps1 -Mode Status -RunSeconds 10`
+  Result: `passed; ok=true; status=proof_passed;
+  allow_launch_on_hotkey=false; opened=false; no_launch=true;
+  route_next_smallest_truthful_gap=summon_anywhere_runtime_readback`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-summon-api-execution-proof.ps1 -Mode Status -RunSeconds 10 -AllowLaunchOnHotkey`
+  Result: `passed; ok=true; status=proof_passed;
+  allow_launch_on_hotkey=true; hotkey_launch_on_press_authority=true;
+  opened=true; no_launch=false; summon_anywhere=true; os_level_summon=true;
+  summon_readiness_status_after_execute=ready_for_operator_review;
+  summon_readiness_blockers_after_execute=[];
+  next_smallest_truthful_gap=stage6_lens_completion_audit`
+- `.\scripts\check.ps1`
+  Result: `passed; branch state OK, Ruff lint passed, Ruff format check passed,
+  mypy passed with no issues in 501 source files, and pytest completed to 100%`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
