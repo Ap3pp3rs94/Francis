@@ -35789,6 +35789,40 @@ readback:
   mypy passed with no issues in 501 source files, and pytest completed to 100%
   with expected skips`
 
+Stage 6 OS-binding launch-on-hotkey authority boundary on `2026-05-21`:
+
+- `/lens/os-binding/execute` now exposes an explicit `allow_launch` path for the
+  governed global-hotkey runtime. The default remains non-launching and still
+  passes `-NoLaunch` to `scripts/lens-hotkey-binding.ps1`.
+- When `allow_launch=true`, the OS-binding execution path now requires exact,
+  active summon-action and overlay-window authority grant IDs before it can
+  start the hotkey binding without `-NoLaunch`.
+- Execution receipts now preserve the OS-binding grant receipt plus the summon
+  and overlay grant receipt IDs used to authorize the launch-on-hotkey handoff.
+- This closes a narrow runtime-authority boundary only. It does not claim
+  `summon_anywhere=true`, does not close Stage 6, and does not permit Stage 7.
+  The next truthful step remains a governed runtime readback through the summon
+  execution path after the launch-on-hotkey binding is observed.
+
+Latest validation for Stage 6 OS-binding launch-on-hotkey authority boundary:
+
+- `python -m pytest tests\test_api_lens_os_binding_authority.py -q`
+  Result: `passed; 9 passed`
+- `python -m pytest tests\test_api_lens.py::test_lens_summon_execute_records_summon_anywhere_when_hotkey_launch_runtime_observed -q`
+  Result: `passed; 1 passed`
+- `python -m ruff check src\francis\api\routes\lens.py src\francis\lens\os_binding_authority.py tests\test_api_lens_os_binding_authority.py`
+  Result: `passed`
+- `python -m ruff format --check src\francis\api\routes\lens.py src\francis\lens\os_binding_authority.py tests\test_api_lens_os_binding_authority.py`
+  Result: `passed; 3 files already formatted`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 120`
+  Result: `passed; ok=true; status=blocked; audit_status=complete;
+  ready_to_close=false; transition_allowed=false;
+  next_smallest_truthful_gap=summon_anywhere_blockers; child_proof_timeouts=[]`
+- `.\scripts\check.ps1`
+  Result: `passed; branch state OK, Ruff lint passed, Ruff format check passed,
+  mypy passed with no issues in 501 source files, and pytest completed to 100%
+  with expected skips`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

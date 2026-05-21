@@ -219,9 +219,12 @@ class LensOsBindingAuthorityGrantIn(BaseModel):
 class LensOsBindingExecuteIn(BaseModel):
     actor: str | None = None
     approval_id: str = ""
+    summon_approval_id: str = ""
+    overlay_approval_id: str = ""
     reason: str = "attempt Lens OS-binding command palette execution"
     mode: str = Field(default="bind")
     run_seconds: int = Field(default=300, ge=0, le=3600)
+    allow_launch: bool = False
 
 
 class LensSummonAuthorityRequestIn(BaseModel):
@@ -389,6 +392,8 @@ def os_binding_execute(
         )
     return execute_lens_os_binding(
         approval_id=payload.approval_id,
+        summon_approval_id=payload.summon_approval_id,
+        overlay_approval_id=payload.overlay_approval_id,
         actor=payload.actor,
         reason=payload.reason,
         route=request.url.path,
@@ -396,6 +401,7 @@ def os_binding_execute(
         record_receipt=True,
         mode=payload.mode,
         run_seconds=payload.run_seconds,
+        allow_launch=payload.allow_launch,
     )
 
 

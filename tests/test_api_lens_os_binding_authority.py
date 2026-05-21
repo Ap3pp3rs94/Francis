@@ -22,7 +22,7 @@ def _client(monkeypatch, tmp_path: Path):
     return TestClient(create_app()), data_root
 
 
-def _write_lens_hotkey_runtime_state(data_root: Path, *, pid: int) -> None:
+def _write_lens_hotkey_runtime_state(data_root: Path, *, pid: int, launch_on_hotkey: bool = False) -> None:
     runtime_root = data_root / "runtime" / "lens-hotkey"
     runtime_root.mkdir(parents=True, exist_ok=True)
     (runtime_root / "lens-hotkey.pid").write_text(str(pid), encoding="ascii")
@@ -35,7 +35,7 @@ def _write_lens_hotkey_runtime_state(data_root: Path, *, pid: int) -> None:
                 "global_hotkey": "Ctrl+Alt+Space",
                 "binding_scope": "global",
                 "hotkey_bound": True,
-                "launch_on_hotkey": False,
+                "launch_on_hotkey": launch_on_hotkey,
                 "summon_runner": "scripts/lens-summon.ps1",
                 "press_count": 0,
                 "updated_at": "2026-05-13T00:30:00Z",
@@ -142,6 +142,50 @@ def _write_lens_overlay_config(repo_root: Path) -> None:
     )
 
 
+def _grant_lens_authority(
+    client,
+    *,
+    request_route: str,
+    grant_route: str,
+    reason: str,
+) -> tuple[str, str]:
+    request_response = client.post(
+        request_route,
+        json={
+            "actor": "test.system.write",
+            "reason": reason,
+        },
+    )
+    assert request_response.status_code == 200
+    approval_id = request_response.json()["approval_id"]
+
+    decision = client.post(
+        "/approvals/decision",
+        json={
+            "id": approval_id,
+            "action": "approve",
+            "actor": "test.approvals.decision",
+            "comment": f"approve {reason}",
+        },
+    )
+    assert decision.status_code == 200
+    assert decision.json()["status"] == "approved"
+
+    grant = client.post(
+        grant_route,
+        json={
+            "actor": "test.system.write",
+            "approval_id": approval_id,
+            "reason": f"grant {reason}",
+            "lease_seconds": 120,
+        },
+    )
+    assert grant.status_code == 200
+    grant_body = grant.json()
+    assert grant_body["authority_granted"] is True
+    return approval_id, grant_body["receipt"]["receipt_id"]
+
+
 def test_lens_os_binding_hotkey_runner_uses_ci_tolerant_startup_budget(monkeypatch, tmp_path: Path) -> None:
     from francis.lens import os_binding_authority as module
 
@@ -179,6 +223,54 @@ def test_lens_os_binding_hotkey_runner_uses_ci_tolerant_startup_budget(monkeypat
     timeout_index = command.index("-StartupTimeoutSeconds")
     assert command[timeout_index + 1] == "30"
     assert "-ConfigOverridePath" in command
+    assert "-NoLaunch" in command
+
+
+def test_lens_os_binding_hotkey_runner_can_enable_launch_on_hotkey_when_explicitly_allowed(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from francis.lens import os_binding_authority as module
+
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    script_root = repo_root / "scripts"
+    script_root.mkdir(parents=True)
+    (script_root / "lens-hotkey-binding.ps1").write_text("# test hotkey runner\n", encoding="utf-8")
+    _write_lens_summon_config(repo_root)
+    monkeypatch.setattr(module, "repo_root", lambda: repo_root)
+    monkeypatch.setattr(module, "data_dir", lambda: data_root)
+    monkeypatch.setattr(module.shutil, "which", lambda name: "powershell.exe")
+    captured: dict[str, object] = {}
+
+    def fake_run(
+        command: list[str],
+        **kwargs: object,
+    ) -> subprocess.CompletedProcess[str]:
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=json.dumps({"ok": True, "status": "started", "blockers": []}),
+            stderr="",
+        )
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+    result = module._run_lens_os_binding_hotkey_action(mode="bind", run_seconds=180, allow_launch=True)
+
+    assert result["ok"] is True
+    command = captured["command"]
+    assert isinstance(command, list)
+    assert "-NoLaunch" not in command
+    override_index = command.index("-ConfigOverridePath")
+    override_path = Path(command[override_index + 1])
+    override = json.loads(override_path.read_text(encoding="utf-8"))
+    assert override["summon_authority"] is True
+    assert override["overlay_control_authority"] is True
+    assert override["hotkey_registration_authority"] is True
+    assert override["local_process_launch_authority"] is True
 
 
 def test_lens_os_binding_authority_grant_requires_approved_request(monkeypatch, tmp_path: Path) -> None:
@@ -724,3 +816,142 @@ def test_lens_os_binding_execution_denial_writes_receipt_after_authority_grant(
     assert readiness["governance"]["mutation_authority_granted"] is False
     assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
     assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
+
+
+def test_lens_os_binding_launch_on_hotkey_requires_exact_cross_authority_grants(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    client, _data_root = _client(monkeypatch, tmp_path)
+    approval_id, _grant_receipt_id = _grant_lens_authority(
+        client,
+        request_route="/lens/os-binding/authority/request",
+        grant_route="/lens/os-binding/authority",
+        reason="request governed OS-binding authority",
+    )
+
+    execute = client.post(
+        "/lens/os-binding/execute",
+        json={
+            "actor": "test.system.write",
+            "approval_id": approval_id,
+            "reason": "attempt launch-on-hotkey binding without cross grants",
+            "run_seconds": 1,
+            "allow_launch": True,
+        },
+    )
+
+    assert execute.status_code == 200
+    body = execute.json()
+    assert body["kind"] == "lens.os_binding.command_palette_binding.execution_denial"
+    assert body["status"] == "blocked"
+    assert body["approval_id"] == approval_id
+    assert body["allow_launch"] is True
+    assert body["launch_on_hotkey"] is False
+    assert body["executed"] is False
+    assert "summon_approval_id_required_for_launch_on_hotkey" in body["blockers"]
+    assert "overlay_approval_id_required_for_launch_on_hotkey" in body["blockers"]
+    assert "summon_authority_not_granted_for_launch_on_hotkey" in body["blockers"]
+    assert "overlay_control_authority_not_granted_for_launch_on_hotkey" in body["blockers"]
+    assert body["governance"]["execution_authority"] is False
+    assert body["governance"]["hotkey_registration_authority"] is True
+    assert body["governance"]["hotkey_launch_on_press_authority"] is False
+    assert body["governance"]["summon_authority"] is False
+    assert body["governance"]["overlay_control_authority"] is False
+    assert body["governance"]["local_process_launch_authority"] is True
+
+
+def test_lens_os_binding_launch_on_hotkey_records_authorized_runtime_readback(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from francis.lens import os_binding_authority as module
+
+    client, data_root = _client(monkeypatch, tmp_path)
+    repo_root = data_root.parent
+    _write_lens_summon_config(repo_root)
+
+    os_approval_id, os_grant_receipt_id = _grant_lens_authority(
+        client,
+        request_route="/lens/os-binding/authority/request",
+        grant_route="/lens/os-binding/authority",
+        reason="request governed OS-binding authority",
+    )
+    summon_approval_id, summon_grant_receipt_id = _grant_lens_authority(
+        client,
+        request_route="/lens/summon/authority/request",
+        grant_route="/lens/summon/authority",
+        reason="request governed summon action authority",
+    )
+    overlay_approval_id, overlay_grant_receipt_id = _grant_lens_authority(
+        client,
+        request_route="/lens/overlay/authority/request",
+        grant_route="/lens/overlay/authority",
+        reason="request governed overlay window authority",
+    )
+
+    def fake_hotkey_runner(*, mode: str, run_seconds: int, allow_launch: bool = False) -> dict[str, object]:
+        assert mode == "bind"
+        assert run_seconds == 1
+        assert allow_launch is True
+        _write_lens_hotkey_runtime_state(data_root, pid=os.getpid(), launch_on_hotkey=True)
+        return {
+            "ok": True,
+            "status": "started",
+            "script_mode": "Start",
+            "blockers": [],
+            "runner": {
+                "ok": True,
+                "status": "started",
+                "launch_on_hotkey": True,
+            },
+        }
+
+    monkeypatch.setattr(module, "_run_lens_os_binding_hotkey_action", fake_hotkey_runner)
+
+    result = module.execute_lens_os_binding(
+        approval_id=os_approval_id,
+        summon_approval_id=summon_approval_id,
+        overlay_approval_id=overlay_approval_id,
+        actor="test.system.write",
+        reason="bind hotkey with governed launch handoff authority",
+        route="/lens/os-binding/execute",
+        method="POST",
+        record_receipt=True,
+        mode="bind",
+        run_seconds=1,
+        allow_launch=True,
+    )
+
+    assert result["kind"] == "lens.os_binding.command_palette_binding.execution"
+    assert result["status"] == "global_hotkey_bound"
+    assert result["approval_id"] == os_approval_id
+    assert result["active_grant_receipt_id"] == os_grant_receipt_id
+    assert result["summon_approval_id"] == summon_approval_id
+    assert result["summon_authority_grant_receipt_id"] == summon_grant_receipt_id
+    assert result["overlay_approval_id"] == overlay_approval_id
+    assert result["overlay_authority_grant_receipt_id"] == overlay_grant_receipt_id
+    assert result["allow_launch"] is True
+    assert result["global_hotkey_binding"] is True
+    assert result["hotkey_runtime_ready"] is True
+    assert result["launch_on_hotkey"] is True
+    assert result["summon_anywhere"] is False
+    assert result["next_smallest_truthful_gap"] == "summon_binding"
+    assert result["governance"]["execution_authority"] is True
+    assert result["governance"]["hotkey_registration_authority"] is True
+    assert result["governance"]["hotkey_launch_on_press_authority"] is True
+    assert result["governance"]["summon_authority"] is True
+    assert result["governance"]["overlay_control_authority"] is True
+    assert result["governance"]["window_management_authority"] is True
+    assert result["governance"]["local_process_launch_authority"] is True
+    assert result["governance"]["next_step"] == (
+        "continue_with_summon_anywhere_runtime_readback_after_launch_hotkey_binding"
+    )
+    assert result["receipt_written"] is True
+    receipt = result["receipt"]
+    assert receipt["kind"] == "lens.os_binding.command_palette_binding.execution_receipt"
+    assert receipt["active_grant_receipt_id"] == os_grant_receipt_id
+    assert receipt["summon_authority_grant_receipt_id"] == summon_grant_receipt_id
+    assert receipt["overlay_authority_grant_receipt_id"] == overlay_grant_receipt_id
+    assert receipt["execution"]["allow_launch"] is True
+    assert receipt["execution"]["launch_on_hotkey"] is True

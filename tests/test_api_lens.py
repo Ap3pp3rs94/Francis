@@ -1198,7 +1198,8 @@ def test_lens_os_binding_execute_binds_governed_hotkey_lease(
 
     pid = os.getpid()
 
-    def fake_hotkey_action(*, mode: str, run_seconds: int) -> dict[str, Any]:
+    def fake_hotkey_action(*, mode: str, run_seconds: int, allow_launch: bool = False) -> dict[str, Any]:
+        assert allow_launch is False
         if mode == "stop":
             runtime_root = data_root / "runtime" / "lens-hotkey"
             runtime_root.mkdir(parents=True, exist_ok=True)
