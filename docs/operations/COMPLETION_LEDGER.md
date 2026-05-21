@@ -35982,6 +35982,105 @@ handoff:
   Result: `passed; branch state OK; Ruff check passed; Ruff format check
   passed; mypy passed with no issues in 501 source files; pytest reached 100%`
 
+Stage 6 completion-audit resident-surface proof consumption handoff on
+`2026-05-21`:
+
+- `scripts/lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey`
+  now surfaces the checkpoint's resident-surface foreground runtime proof in the
+  audit payload and governance readback instead of only pointing the operator
+  back at `scripts/lens-resident-surface-proof.ps1`.
+- When the resident-surface proof has already observed bounded foreground
+  runtime and the resident-runtime authority-grant readiness handoff is present,
+  the audit still keeps the truthful closure blocker
+  `next_smallest_truthful_gap=resident_surface_runtime_not_supervised`, but the
+  recommended handoff advances to
+  `stage6_helpful_not_noisy_runtime_authority_readiness_handoff`.
+- The next recommended slice is now the existing authority-readiness path:
+  `create_or_select_exact_approved_resident_runtime_execution_authority_request`
+  via `scripts/lens-stage6-checkpoint.ps1 -Mode Status`, with
+  `authority_required=operator_approval`.
+- This does not close Stage 6, start Stage 7, grant operator approval,
+  approval-decision authority, process-supervision authority, resident-runtime
+  execution authority, service control, memory write, resident claim, or mutation
+  authority. It only removes a stale proof-consumption handoff after the
+  foreground-runtime proof is already observed.
+
+Latest validation for Stage 6 completion-audit resident-surface proof
+consumption handoff:
+
+- PowerShell parser check for `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed; parse_ok`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed; 38 passed, 1 skipped`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-completion-audit.ps1 -Mode Status -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2 -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 120 -AllowLaunchOnHotkey`
+  Result: `passed; ok=true; status=blocked; audit_status=complete;
+  ready_to_close=false; transition_allowed=false;
+  next_smallest_truthful_gap=resident_surface_runtime_not_supervised;
+  recommended_handoff_source=
+  stage6_helpful_not_noisy_runtime_authority_readiness_handoff;
+  recommended_next_slice=
+  create_or_select_exact_approved_resident_runtime_execution_authority_request;
+  recommended_proof_script=scripts/lens-stage6-checkpoint.ps1 -Mode Status;
+  authority_required=operator_approval;
+  resident_surface_foreground_runtime_proof_readback=true;
+  resident_surface_foreground_runtime_proof.status=proof_passed;
+  resident_runtime_authority_grant_next_smallest_truthful_gap=
+  approve_resident_runtime_execution_authority_grant_receipt;
+  first_blocked_requirement=
+  exact_resident_runtime_execution_authority_approval`
+
+Stage 6 next-handoff completion-audit runtime-readback convergence on
+`2026-05-21`:
+
+- `scripts/lens-stage6-next-handoff.ps1 -Mode Status` no longer routes the
+  operator back to the stale `summon_anywhere_blockers` proof after the
+  persistent-supervision resident-claim boundary has already been consumed into
+  the Stage 6 completion-audit boundary.
+- The fast, read-only status path now reports
+  `recommended_handoff_source=stage6_completion_audit_launch_on_hotkey_readback_required`,
+  `next_smallest_truthful_gap=stage6_lens_completion_audit_runtime_readback`,
+  and `recommended_proof_script=scripts/lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey`.
+- `scripts/lens-stage6-next-handoff.ps1` does not invoke the heavy completion
+  audit itself. It can consume a previously captured completion-audit JSON via
+  `-CompletionAuditJsonPath`; when that payload contains the validated
+  `stage6_helpful_not_noisy_runtime_authority_readiness_handoff`, the
+  next-handoff payload promotes directly to the existing resident-runtime
+  authority-readiness handoff without re-running the audit.
+- This does not close Stage 6, start Stage 7, grant launch-on-hotkey authority,
+  operator approval, approval-decision authority, process-supervision authority,
+  resident-runtime execution authority, service control, memory write, resident
+  claim, or mutation authority. It removes a stale handoff loop and makes the
+  required explicit runtime-readback gate visible.
+
+Latest validation for Stage 6 next-handoff completion-audit runtime-readback
+convergence:
+
+- PowerShell parser checks for `scripts\lens-stage6-next-handoff.ps1` and
+  `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed; next_handoff_parse_ok; completion_audit_parse_ok`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests\test_lens_stage6_completion_audit_script.py tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 2 files already formatted`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\lens-stage6-next-handoff.ps1 -Mode Status`
+  Result: `passed; ok=true; status=proof_passed;
+  next_smallest_truthful_gap=stage6_lens_completion_audit_runtime_readback;
+  recommended_handoff_source=
+  stage6_completion_audit_launch_on_hotkey_readback_required;
+  recommended_next_slice=
+  run_stage6_completion_audit_with_launch_on_hotkey_runtime_readback;
+  recommended_proof_script=scripts/lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey;
+  authority_required=launch_on_hotkey_runtime_readback_opt_in;
+  stage6_completion_audit_runtime_readback_required=true`
+- `git diff --check`
+  Result: `passed; no whitespace errors; Git reported line-ending normalization
+  warnings for the touched PowerShell scripts`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\check.ps1`
+  Result: `passed; branch state OK; Ruff check passed; Ruff format check
+  passed; mypy passed with no issues in 501 source files; pytest reached 100%`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

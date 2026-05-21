@@ -760,8 +760,20 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     ) in script
     assert "$NextSmallestTruthfulGap -eq 'persistent_supervision_execution_boundary'" in script
     assert "$RecommendedHandoffSource = 'stage6_prerequisite_bringup_enablement_receipt_review'" in script
-    assert "$RecommendedHandoffSource = 'stage6_helpful_not_noisy_resident_surface_runtime_handoff'" in script
-    assert "proof_script = 'scripts/lens-resident-surface-proof.ps1 -Mode Status'" in script
+    assert "'stage6_helpful_not_noisy_runtime_authority_readiness_handoff'" in script
+    assert "'stage6_helpful_not_noisy_resident_surface_runtime_handoff'" in script
+    assert "$ResidentSurfaceForegroundRuntimeProofObserved = (" in script
+    assert (
+        "resident_surface_foreground_runtime_proof_readback = $ResidentSurfaceForegroundRuntimeProofObserved" in script
+    )
+    assert "resident_surface_foreground_runtime_proof = [ordered]@{" in script
+    assert (
+        "consumed_resident_surface_foreground_runtime_proof = $ResidentSurfaceForegroundRuntimeProofObserved" in script
+    )
+    assert "resident_runtime_authority_grant_first_blocked_requirement_handoff" in script
+    assert "$HelpfulNotNoisyProofScript = 'scripts/lens-stage6-checkpoint.ps1 -Mode Status'" in script
+    assert "$HelpfulNotNoisyProofScript = 'scripts/lens-resident-surface-proof.ps1 -Mode Status'" in script
+    assert "proof_script = $HelpfulNotNoisyProofScript" in script
     assert "next_smallest_truthful_gap = 'resident_surface_runtime_not_supervised'" in script
     assert (
         "$PersistentSupervisionResidentClaimBoundaryObserved -and\n"
@@ -2939,6 +2951,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
 
     assert "docs/canonical/ROADMAP.md#4.12" in payload["evidence"]
     assert "scripts/lens-stage6-checkpoint.ps1 -Mode Status" in payload["evidence"]
+    assert "scripts/lens-resident-surface-proof.ps1 -Mode Status" in payload["evidence"]
     assert "scripts/lens-command-palette.ps1 -Mode Status -StatusPath <checkpoint-lens-status>" in payload["evidence"]
     assert "scripts/lens-resident-runtime-boundary-proof.ps1 -Mode Status" in payload["evidence"]
     assert "scripts/lens-resident-runtime-authority-blockers-proof.ps1 -Mode Status" in payload["evidence"]
@@ -2966,6 +2979,27 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert "/lens/host/persistent-supervision/enablement/execution" in payload["evidence"]
     assert "/lens/host/persistent-supervision/enablement/execution/readiness" in payload["evidence"]
     assert "/lens/resident-surface" in payload["evidence"]
+    resident_surface_foreground_runtime_proof = payload["resident_surface_foreground_runtime_proof"]
+    assert resident_surface_foreground_runtime_proof["status"] == "proof_passed"
+    assert resident_surface_foreground_runtime_proof["ok"] is True
+    assert resident_surface_foreground_runtime_proof["resident_surface_content_readback"] is True
+    assert resident_surface_foreground_runtime_proof["resident_surface_foreground_runtime_readback"] is True
+    assert resident_surface_foreground_runtime_proof["resident_surface_foreground_runtime_observed"] is True
+    assert resident_surface_foreground_runtime_proof["resident_surface_runtime_status"] == "foreground_runtime_observed"
+    assert resident_surface_foreground_runtime_proof["foreground_host_process_observed"] is True
+    assert resident_surface_foreground_runtime_proof["foreground_host_runtime_completed"] is True
+    assert resident_surface_foreground_runtime_proof["resident_surface_ready"] is False
+    assert resident_surface_foreground_runtime_proof["resident_claim_allowed"] is False
+    assert resident_surface_foreground_runtime_proof["resident_host_process"] is False
+    assert resident_surface_foreground_runtime_proof["process_supervision_authority"] is False
+    assert resident_surface_foreground_runtime_proof["service_control_authority"] is False
+    assert resident_surface_foreground_runtime_proof["resident_claim_authority"] is False
+    assert "resident_surface_runtime_not_supervised" in resident_surface_foreground_runtime_proof["blockers"]
+    assert "resident_surface_runtime_missing" not in resident_surface_foreground_runtime_proof["blockers"]
+    assert (
+        resident_surface_foreground_runtime_proof["next_smallest_truthful_gap"]
+        == "resident_surface_runtime_not_supervised"
+    )
     governance = payload["governance"]
     assert governance["read_only_contract"] is True
     assert governance["diagnostic_only"] is True
@@ -2979,6 +3013,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert governance["helpful_not_noisy_runtime_authority_readiness_handoff_readback"] is True
     assert governance["persistent_supervision_plan_readback"] is True
     assert governance["persistent_supervision_prerequisites_proof_readback"] is True
+    assert governance["resident_surface_foreground_runtime_proof_readback"] is True
     assert governance["persistent_supervision_service_install_plan_proof_readback"] is True
     assert governance["persistent_supervision_enablement_authority_proof_readback"] is True
     assert governance["persistent_supervision_execution_authority_proof_readback"] is True

@@ -1048,6 +1048,31 @@ $BlockedCriteria = @($Criteria | Where-Object { -not [bool]$_.ready })
 $Blockers = ConvertTo-StringArray -Value $Checkpoint.blockers
 $ReadyToClose = [bool]$Checkpoint.ready_to_close
 $BlockedCriterionIds = @($BlockedCriteria | ForEach-Object { [string]$_.id })
+$ResidentSurfaceForegroundRuntimeProof = $Checkpoint.resident_surface_foreground_runtime_proof
+$ResidentSurfaceForegroundRuntimeProofBlockers = ConvertTo-StringArray -Value $ResidentSurfaceForegroundRuntimeProof.blockers
+$ResidentSurfaceForegroundRuntimeProofEvidence = ConvertTo-StringArray -Value $ResidentSurfaceForegroundRuntimeProof.evidence
+$ResidentSurfaceForegroundRuntimeProofObserved = (
+  [bool]$ResidentSurfaceForegroundRuntimeProof.ok -and
+  [string]$ResidentSurfaceForegroundRuntimeProof.status -eq 'proof_passed' -and
+  [bool]$ResidentSurfaceForegroundRuntimeProof.resident_surface_content_readback -and
+  [bool]$ResidentSurfaceForegroundRuntimeProof.resident_surface_foreground_runtime_readback -and
+  [bool]$ResidentSurfaceForegroundRuntimeProof.resident_surface_foreground_runtime_observed -and
+  [string]$ResidentSurfaceForegroundRuntimeProof.resident_surface_runtime_status -eq 'foreground_runtime_observed' -and
+  [bool]$ResidentSurfaceForegroundRuntimeProof.foreground_host_process_observed -and
+  [bool]$ResidentSurfaceForegroundRuntimeProof.foreground_host_runtime_completed -and
+  $ResidentSurfaceForegroundRuntimeProofBlockers -contains 'resident_surface_runtime_not_supervised' -and
+  $ResidentSurfaceForegroundRuntimeProofBlockers -contains 'resident_surface_not_resident' -and
+  -not ($ResidentSurfaceForegroundRuntimeProofBlockers -contains 'resident_surface_runtime_missing') -and
+  -not [bool]$ResidentSurfaceForegroundRuntimeProof.resident_surface_ready -and
+  -not [bool]$ResidentSurfaceForegroundRuntimeProof.resident_claim_allowed -and
+  -not [bool]$ResidentSurfaceForegroundRuntimeProof.resident_host_process -and
+  -not [bool]$ResidentSurfaceForegroundRuntimeProof.execution_authority -and
+  -not [bool]$ResidentSurfaceForegroundRuntimeProof.approval_decision_authority -and
+  -not [bool]$ResidentSurfaceForegroundRuntimeProof.memory_write -and
+  -not [bool]$ResidentSurfaceForegroundRuntimeProof.process_supervision_authority -and
+  -not [bool]$ResidentSurfaceForegroundRuntimeProof.service_control_authority -and
+  -not [bool]$ResidentSurfaceForegroundRuntimeProof.resident_claim_authority
+)
 $Stage6CompletionReviewed = $false
 $Stage6AcceptanceNextGap = if ($BlockedCriterionIds -contains 'summon_anywhere') {
   'summon_anywhere_blockers'
@@ -2630,24 +2655,57 @@ if (
   $NextSmallestTruthfulGap -eq 'resident_surface_runtime_not_supervised' -and
   $BlockedCriterionIds -contains 'helpful_not_noisy'
 ) {
-  $RecommendedHandoffSource = 'stage6_helpful_not_noisy_resident_surface_runtime_handoff'
+  $RecommendedHandoffSource = if (
+    $ResidentSurfaceForegroundRuntimeProofObserved -and
+    $ResidentRuntimeAuthorityGrantReadinessHandoffObserved
+  ) {
+    'stage6_helpful_not_noisy_runtime_authority_readiness_handoff'
+  } else {
+    'stage6_helpful_not_noisy_resident_surface_runtime_handoff'
+  }
+  $HelpfulNotNoisyNextStep = 'consume_resident_surface_foreground_runtime_proof_before_helpful_not_noisy_claim'
+  $HelpfulNotNoisyProofScript = 'scripts/lens-resident-surface-proof.ps1 -Mode Status'
+  $HelpfulNotNoisyRoute = '/lens/resident-surface'
+  $HelpfulNotNoisyReadinessRoute = '/lens/resident-surface/activation'
+  $HelpfulNotNoisyAuthorityRequired = 'process_supervision_authority'
+  $HelpfulNotNoisyFirstBlockedRequirement = ''
+  $HelpfulNotNoisyFirstBlockedRequirementHandoff = [ordered]@{}
+  if (
+    $ResidentSurfaceForegroundRuntimeProofObserved -and
+    $ResidentRuntimeAuthorityGrantReadinessHandoffObserved
+  ) {
+    $HelpfulNotNoisyNextStep = [string]$ResidentRuntimeAuthorityGrantReadinessFirstBlockedRequirementHandoff.next_step
+    $HelpfulNotNoisyProofScript = 'scripts/lens-stage6-checkpoint.ps1 -Mode Status'
+    $HelpfulNotNoisyRoute = '/lens/resident-runtime/authority-grant/readiness'
+    $HelpfulNotNoisyReadinessRoute = '/lens/resident-runtime/authority-grant/readiness'
+    $HelpfulNotNoisyAuthorityRequired = [string]$ResidentRuntimeAuthorityGrantReadinessFirstBlockedRequirementHandoff.authority_required
+    $HelpfulNotNoisyFirstBlockedRequirement = [string]$ResidentRuntimeAuthorityGrantReadinessFirstBlockedRequirement
+    $HelpfulNotNoisyFirstBlockedRequirementHandoff = $ResidentRuntimeAuthorityGrantReadinessFirstBlockedRequirementHandoff
+  }
   $RecommendedHandoff = [ordered]@{
-    status = 'blocked'
+    status = if ($ResidentSurfaceForegroundRuntimeProofObserved) { 'authority_readiness_handoff_ready' } else { 'blocked' }
     previous_next_smallest_truthful_gap = 'stage6_lens_completion_audit'
+    consumed_resident_surface_foreground_runtime_proof = $ResidentSurfaceForegroundRuntimeProofObserved
+    consumed_resident_surface_foreground_runtime_proof_status = [string]$ResidentSurfaceForegroundRuntimeProof.status
+    consumed_resident_surface_runtime_status = [string]$ResidentSurfaceForegroundRuntimeProof.resident_surface_runtime_status
     consumed_stage6_prerequisite_bringup_status = [string]$Stage6PrerequisiteBringupPlan.status
     consumed_stage6_prerequisite_bringup_current_truthful_gap = [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap
     consumed_persistent_supervision_resident_claim_boundary_next_smallest_truthful_gap = [string]$PersistentSupervisionResidentClaimBoundaryProof.next_smallest_truthful_gap
     consumed_summon_api_next_smallest_truthful_gap = [string]$SummonApiLaunchOnHotkeyProof.next_smallest_truthful_gap
     next_smallest_truthful_gap = 'resident_surface_runtime_not_supervised'
-    next_step = 'consume_resident_surface_foreground_runtime_proof_before_helpful_not_noisy_claim'
-    proof_script = 'scripts/lens-resident-surface-proof.ps1 -Mode Status'
-    route = '/lens/resident-surface'
-    readiness_route = '/lens/resident-surface/activation'
+    next_step = $HelpfulNotNoisyNextStep
+    proof_script = $HelpfulNotNoisyProofScript
+    route = $HelpfulNotNoisyRoute
+    readiness_route = $HelpfulNotNoisyReadinessRoute
     host_route = '/lens/host'
     runtime_loop_readiness_route = '/lens/host/runtime-loop/readiness'
     acceptance_criterion = 'helpful_not_noisy'
-    authority_required = 'process_supervision_authority'
+    authority_required = $HelpfulNotNoisyAuthorityRequired
     authority_granted = $false
+    resident_runtime_authority_grant_readiness_observed = $ResidentRuntimeAuthorityGrantReadinessHandoffObserved
+    resident_runtime_authority_grant_next_smallest_truthful_gap = [string]$ResidentRuntimeAuthorityGrantReadiness.next_smallest_truthful_gap
+    resident_runtime_authority_grant_first_blocked_requirement = $HelpfulNotNoisyFirstBlockedRequirement
+    resident_runtime_authority_grant_first_blocked_requirement_handoff = $HelpfulNotNoisyFirstBlockedRequirementHandoff
     persistent_supervision_resident_claim_boundary_observed = $PersistentSupervisionResidentClaimBoundaryObserved
     stage6_prerequisite_bringup_applied_enablement_observed = $Stage6PrerequisiteBringupPlanAppliedEnablementObserved
     summon_api_launch_on_hotkey_runtime_readback_observed = $SummonApiLaunchOnHotkeyProofObserved
@@ -4525,10 +4583,34 @@ $Payload = [ordered]@{
     checks = @($Stage6PrerequisiteBringupPlan.checks)
     governance = $Stage6PrerequisiteBringupPlanGovernance
   }
+  resident_surface_foreground_runtime_proof = [ordered]@{
+    status = if ($ResidentSurfaceForegroundRuntimeProofObserved) { [string]$ResidentSurfaceForegroundRuntimeProof.status } else { 'missing_or_failed' }
+    ok = $ResidentSurfaceForegroundRuntimeProofObserved
+    exit_code = [int]$ResidentSurfaceForegroundRuntimeProof.exit_code
+    evidence = [string[]]@($ResidentSurfaceForegroundRuntimeProofEvidence)
+    resident_surface_content_readback = [bool]$ResidentSurfaceForegroundRuntimeProof.resident_surface_content_readback
+    resident_surface_foreground_runtime_readback = [bool]$ResidentSurfaceForegroundRuntimeProof.resident_surface_foreground_runtime_readback
+    resident_surface_foreground_runtime_observed = [bool]$ResidentSurfaceForegroundRuntimeProof.resident_surface_foreground_runtime_observed
+    resident_surface_runtime_status = [string]$ResidentSurfaceForegroundRuntimeProof.resident_surface_runtime_status
+    foreground_host_process_observed = [bool]$ResidentSurfaceForegroundRuntimeProof.foreground_host_process_observed
+    foreground_host_runtime_completed = [bool]$ResidentSurfaceForegroundRuntimeProof.foreground_host_runtime_completed
+    resident_surface_ready = [bool]$ResidentSurfaceForegroundRuntimeProof.resident_surface_ready
+    resident_claim_allowed = [bool]$ResidentSurfaceForegroundRuntimeProof.resident_claim_allowed
+    resident_host_process = [bool]$ResidentSurfaceForegroundRuntimeProof.resident_host_process
+    execution_authority = [bool]$ResidentSurfaceForegroundRuntimeProof.execution_authority
+    approval_decision_authority = [bool]$ResidentSurfaceForegroundRuntimeProof.approval_decision_authority
+    memory_write = [bool]$ResidentSurfaceForegroundRuntimeProof.memory_write
+    process_supervision_authority = [bool]$ResidentSurfaceForegroundRuntimeProof.process_supervision_authority
+    service_control_authority = [bool]$ResidentSurfaceForegroundRuntimeProof.service_control_authority
+    resident_claim_authority = [bool]$ResidentSurfaceForegroundRuntimeProof.resident_claim_authority
+    blockers = [string[]]@($ResidentSurfaceForegroundRuntimeProofBlockers)
+    next_smallest_truthful_gap = if ($ResidentSurfaceForegroundRuntimeProofObserved) { 'resident_surface_runtime_not_supervised' } else { 'resident_surface_runtime_missing' }
+  }
   evidence = @(
     'docs/canonical/ROADMAP.md#4.12',
     'docs/operations/COMPLETION_LEDGER.md',
     'scripts/lens-stage6-checkpoint.ps1 -Mode Status',
+    'scripts/lens-resident-surface-proof.ps1 -Mode Status',
     'scripts/lens-command-palette.ps1 -Mode Status -StatusPath <checkpoint-lens-status>',
     'scripts/lens-resident-runtime-boundary-proof.ps1 -Mode Status',
     'scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status',
@@ -4624,6 +4706,7 @@ $Payload = [ordered]@{
     stage6_prerequisite_bringup_plan_readback = $Stage6PrerequisiteBringupPlanObserved
     stage6_prerequisite_bringup_plan_missing_prerequisites_readback = $Stage6PrerequisiteBringupPlanMissingPrerequisitesObserved
     stage6_prerequisite_bringup_plan_applied_enablement_readback = $Stage6PrerequisiteBringupPlanAppliedEnablementObserved
+    resident_surface_foreground_runtime_proof_readback = $ResidentSurfaceForegroundRuntimeProofObserved
     persistent_supervision_service_install_plan_proof_readback = $PersistentSupervisionServiceInstallPlanProofObserved
     persistent_supervision_enablement_authority_proof_readback = $PersistentSupervisionEnablementAuthorityProofObserved
     persistent_supervision_execution_authority_proof_readback = $PersistentSupervisionExecutionAuthorityProofObserved

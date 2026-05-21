@@ -22,6 +22,10 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
+def _script_text() -> str:
+    return (_repo_root() / "scripts" / "lens-stage6-next-handoff.ps1").read_text(encoding="utf-8")
+
+
 def _run_proof(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     run_env = os.environ.copy()
     if env:
@@ -68,6 +72,17 @@ def _run_bringup(*args: str, env: dict[str, str] | None = None) -> subprocess.Co
         timeout=60,
         env=run_env,
     )
+
+
+def test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback() -> None:
+    script = _script_text()
+
+    assert "[string]$CompletionAuditJsonPath" in script
+    assert "Get-Content -LiteralPath $ResolvedCompletionAuditJsonPath -Raw | ConvertFrom-Json" in script
+    assert "$Stage6CompletionAuditRuntimeReadbackRequired = (" in script
+    assert "'stage6_completion_audit_launch_on_hotkey_readback_required'" in script
+    assert "'scripts/lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey'" in script
+    assert "Invoke-JsonScriptReadback `\n    -ScriptPath $Stage6CompletionAuditScript" not in script
 
 
 def _write_lens_host_runtime_state(data_root: Path, *, pid: int) -> None:
@@ -725,6 +740,7 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority(tm
         "enablement_authority_handoff_ready"
     )
     assert checks["stage6_prerequisite_bringup_plan"]["status"] == "operator_plan_readback_ready"
+    assert checks["stage6_completion_audit_runtime_authority_handoff"]["status"] == "not_requested"
     assert checks["resident_runtime_candidate_handoff"]["status"] == "not_observed"
     assert checks["side_effects_denied"]["status"] == "readback_only"
     assert all(item["passed"] for item in payload["checks"])
@@ -732,11 +748,16 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority(tm
     assert payload["governance"] == {
         "diagnostic_only": True,
         "read_only_contract": True,
+        "launch_on_hotkey_runtime_readback_opt_in": False,
         "uses_lens_status_readback": True,
         "uses_persistent_supervision_readback": True,
         "uses_stage6_prerequisite_bringup_plan_readback": True,
+        "uses_stage6_completion_audit_readback": False,
         "stage6_prerequisite_bringup_plan_readback": True,
         "stage6_prerequisite_bringup_actor_scope_readback": True,
+        "stage6_completion_audit_recommended_handoff_consumed": False,
+        "stage6_completion_audit_runtime_readback_required": False,
+        "stage6_completion_audit_json_path_supplied": False,
         "proof_script": "scripts/lens-stage6-next-handoff.ps1 -Mode Status",
         "would_execute": False,
         "would_mutate": False,
@@ -1252,37 +1273,45 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
 
     shutil.rmtree(data_root / "runtime", ignore_errors=True)
 
+    proof_env = {
+        "FRANCIS_DATA_DIR": str(data_root),
+        "FRANCIS_LENS_HOST_SERVICE_CONFIG_PATH": str(service_config_path),
+    }
     proc = _run_proof(
         "-Mode",
         "Status",
-        env={
-            "FRANCIS_DATA_DIR": str(data_root),
-            "FRANCIS_LENS_HOST_SERVICE_CONFIG_PATH": str(service_config_path),
-        },
+        env=proof_env,
     )
 
     assert proc.returncode == 0, proc.stderr or proc.stdout
     payload = json.loads(proc.stdout)
     assert payload["status"] == "proof_passed"
     assert payload["ok"] is True
-    assert payload["recommended_handoff_source"] == "stage6_closure_readback_summon_anywhere_blockers"
-    assert payload["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
-    assert payload["recommended_next_slice"] == "run_summon_anywhere_blockers_proof_after_stage6_completion_review"
-    assert payload["recommended_proof_script"] == "scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status"
-    assert payload["authority_required"] == "summon_hotkey_overlay_and_process_authority"
+    assert payload["recommended_handoff_source"] == "stage6_completion_audit_launch_on_hotkey_readback_required"
+    assert payload["next_smallest_truthful_gap"] == "stage6_lens_completion_audit_runtime_readback"
+    assert payload["recommended_next_slice"] == "run_stage6_completion_audit_with_launch_on_hotkey_runtime_readback"
+    assert payload["recommended_proof_script"] == (
+        "scripts/lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey"
+    )
+    assert payload["authority_required"] == "launch_on_hotkey_runtime_readback_opt_in"
     assert payload["authority_granted"] is False
     recommended_handoff = payload["recommended_handoff"]
-    assert recommended_handoff["status"] == "blocked"
+    assert recommended_handoff["status"] == "runtime_readback_required"
     assert recommended_handoff["previous_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
-    assert recommended_handoff["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
-    assert recommended_handoff["next_step"] == "run_summon_anywhere_blockers_proof_after_stage6_completion_review"
-    assert recommended_handoff["proof_script"] == "scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status"
-    assert recommended_handoff["route"] == "/lens/summon"
-    assert recommended_handoff["readiness_route"] == "/lens/summon/readiness"
-    assert recommended_handoff["acceptance_criterion"] == "summon_anywhere"
+    assert recommended_handoff["previous_closure_readback_next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+    assert recommended_handoff["next_smallest_truthful_gap"] == "stage6_lens_completion_audit_runtime_readback"
+    assert recommended_handoff["next_step"] == "run_stage6_completion_audit_with_launch_on_hotkey_runtime_readback"
+    assert recommended_handoff["proof_script"] == (
+        "scripts/lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey"
+    )
+    assert recommended_handoff["route"] == "/lens/status"
+    assert recommended_handoff["readiness_route"] == "/lens/resident-runtime/authority-grant/readiness"
+    assert recommended_handoff["acceptance_criterion"] == "helpful_not_noisy"
     assert recommended_handoff["first_blocker_family"] == "resident_host"
-    assert recommended_handoff["authority_required"] == "summon_hotkey_overlay_and_process_authority"
+    assert recommended_handoff["authority_required"] == "launch_on_hotkey_runtime_readback_opt_in"
     assert recommended_handoff["authority_granted"] is False
+    assert recommended_handoff["requires_explicit_operator_opt_in"] is True
+    assert recommended_handoff["completion_audit_json_parameter"] == "-CompletionAuditJsonPath"
     assert recommended_handoff["read_only_contract"] is True
     assert recommended_handoff["diagnostic_only"] is True
     assert recommended_handoff["would_execute"] is False
@@ -1294,14 +1323,21 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     assert recommended_handoff["would_summon"] is False
     assert recommended_handoff["would_decide_approval"] is False
     concrete_handoff = payload["recommended_concrete_handoff"]
-    assert payload["recommended_concrete_handoff_source"] == "persistent_supervision_resident_claim_boundary_handoff"
-    assert payload["recommended_concrete_next_slice"] == (
-        "run_stage6_lens_completion_audit_after_resident_claim_boundary_readback"
+    assert payload["recommended_concrete_handoff_source"] == (
+        "stage6_completion_audit_launch_on_hotkey_readback_required"
     )
-    assert payload["recommended_concrete_proof_script"] == "scripts/lens-stage6-completion-audit.ps1 -Mode Status"
-    assert payload["recommended_concrete_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
-    assert payload["recommended_concrete_authority_required"] == "none_new_stage6_completion_audit"
+    assert payload["recommended_concrete_next_slice"] == (
+        "run_stage6_completion_audit_with_launch_on_hotkey_runtime_readback"
+    )
+    assert payload["recommended_concrete_proof_script"] == (
+        "scripts/lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey"
+    )
+    assert payload["recommended_concrete_next_smallest_truthful_gap"] == (
+        "stage6_lens_completion_audit_runtime_readback"
+    )
+    assert payload["recommended_concrete_authority_required"] == "launch_on_hotkey_runtime_readback_opt_in"
     assert payload["recommended_concrete_authority_granted"] is False
+    assert concrete_handoff == recommended_handoff
     assert concrete_handoff["read_only_contract"] is True
     assert concrete_handoff["diagnostic_only"] is True
     assert concrete_handoff["would_execute"] is False
@@ -1345,8 +1381,9 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     assert receipt_review_handoff["would_mutate"] is False
     assert payload["persistent_supervision_resident_claim_boundary_handoff_observed"] is True
     assert payload["stage6_completion_audit_handoff_consumed_by_closure_readback"] is True
+    assert payload["stage6_completion_audit_runtime_readback_required"] is True
+    assert payload["stage6_completion_audit_recommended_handoff_consumed"] is False
     resident_claim_handoff = payload["persistent_supervision_resident_claim_boundary_handoff"]
-    assert concrete_handoff == resident_claim_handoff
     assert resident_claim_handoff["recommended_handoff_source"] == (
         "persistent_supervision_resident_claim_boundary_handoff"
     )
@@ -1380,4 +1417,69 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     assert checks["persistent_supervision_resident_claim_boundary_review"]["status"] == (
         "resident_claim_boundary_consumed"
     )
+    assert checks["stage6_completion_audit_runtime_authority_handoff"]["status"] == "runtime_readback_required"
     assert all(item["passed"] for item in payload["checks"])
+
+    audit_json = tmp_path / "stage6-completion-audit.json"
+    audit_json.write_text(
+        json.dumps(
+            {
+                "kind": "lens.stage6.completion_audit",
+                "ok": True,
+                "status": "blocked",
+                "audit_status": "complete",
+                "allow_launch_on_hotkey": True,
+                "next_smallest_truthful_gap": "resident_surface_runtime_not_supervised",
+                "recommended_handoff_source": "stage6_helpful_not_noisy_runtime_authority_readiness_handoff",
+                "recommended_next_slice": "create_or_select_exact_approved_resident_runtime_execution_authority_request",
+                "recommended_proof_script": "scripts/lens-stage6-checkpoint.ps1 -Mode Status",
+                "authority_required": "operator_approval",
+                "authority_granted": False,
+                "recommended_handoff": {
+                    "status": "authority_readiness_handoff_ready",
+                    "next_smallest_truthful_gap": "resident_surface_runtime_not_supervised",
+                    "next_step": "create_or_select_exact_approved_resident_runtime_execution_authority_request",
+                    "proof_script": "scripts/lens-stage6-checkpoint.ps1 -Mode Status",
+                    "route": "/lens/resident-runtime/authority-grant/readiness",
+                    "readiness_route": "/lens/resident-runtime/authority-grant/readiness",
+                    "authority_required": "operator_approval",
+                    "authority_granted": False,
+                    "consumed_resident_surface_foreground_runtime_proof": True,
+                    "resident_runtime_authority_grant_readiness_observed": True,
+                    "read_only_contract": True,
+                    "diagnostic_only": True,
+                    "would_execute": False,
+                    "would_mutate": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    consumed_proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-CompletionAuditJsonPath",
+        str(audit_json),
+        env=proof_env,
+    )
+
+    assert consumed_proc.returncode == 0, consumed_proc.stderr or consumed_proc.stdout
+    consumed_payload = json.loads(consumed_proc.stdout)
+    assert consumed_payload["recommended_handoff_source"] == (
+        "stage6_helpful_not_noisy_runtime_authority_readiness_handoff"
+    )
+    assert consumed_payload["next_smallest_truthful_gap"] == "resident_surface_runtime_not_supervised"
+    assert consumed_payload["recommended_next_slice"] == (
+        "create_or_select_exact_approved_resident_runtime_execution_authority_request"
+    )
+    assert consumed_payload["recommended_proof_script"] == "scripts/lens-stage6-checkpoint.ps1 -Mode Status"
+    assert consumed_payload["authority_required"] == "operator_approval"
+    assert consumed_payload["stage6_completion_audit_readback_observed"] is True
+    assert consumed_payload["stage6_completion_audit_recommended_handoff_consumed"] is True
+    assert consumed_payload["stage6_completion_audit_runtime_readback_required"] is False
+    assert consumed_payload["recommended_handoff"]["status"] == "authority_readiness_handoff_ready"
+    consumed_checks = {item["id"]: item for item in consumed_payload["checks"]}
+    assert consumed_checks["stage6_completion_audit_runtime_authority_handoff"]["status"] == (
+        "runtime_authority_handoff_consumed"
+    )

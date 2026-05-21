@@ -4,7 +4,9 @@ param(
   [string]$Mode = 'Status',
 
   [ValidateRange(1, 50)]
-  [int]$Limit = 5
+  [int]$Limit = 5,
+
+  [string]$CompletionAuditJsonPath = ''
 )
 
 Set-StrictMode -Version 2
@@ -488,6 +490,50 @@ $PersistentSupervisionResidentClaimBoundaryHandoffObserved = (
   -not [bool](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundary -Name 'would_write_receipt' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundary -Name 'would_write_memory' -Default $true)
 )
+$Stage6CompletionAuditResult = [ordered]@{
+  exit_code = 0
+  payload = [ordered]@{}
+}
+$Stage6CompletionAudit = [ordered]@{}
+$Stage6CompletionAuditRecommendedHandoff = [ordered]@{}
+if (-not [string]::IsNullOrWhiteSpace($CompletionAuditJsonPath)) {
+  if (-not (Test-Path -LiteralPath $CompletionAuditJsonPath -PathType Leaf)) {
+    throw "Completion audit JSON readback is missing: $CompletionAuditJsonPath"
+  }
+  $ResolvedCompletionAuditJsonPath = (Resolve-Path -LiteralPath $CompletionAuditJsonPath).Path
+  $Stage6CompletionAuditReadback = Get-Content -LiteralPath $ResolvedCompletionAuditJsonPath -Raw | ConvertFrom-Json -ErrorAction Stop
+  $Stage6CompletionAudit = $Stage6CompletionAuditReadback
+  $WrappedCompletionAuditPayload = Get-PropertyValue -Payload $Stage6CompletionAuditReadback -Name 'payload' -Default ([ordered]@{})
+  if (
+    [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'kind' -Default '') -ne 'lens.stage6.completion_audit' -and
+    [string](Get-PropertyValue -Payload $WrappedCompletionAuditPayload -Name 'kind' -Default '') -eq 'lens.stage6.completion_audit'
+  ) {
+    $Stage6CompletionAudit = $WrappedCompletionAuditPayload
+  }
+  $Stage6CompletionAuditRecommendedHandoff = Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_handoff' -Default ([ordered]@{})
+}
+$Stage6CompletionAuditReadbackObserved = (
+  -not [string]::IsNullOrWhiteSpace($CompletionAuditJsonPath) -and
+  [int](Get-PropertyValue -Payload $Stage6CompletionAuditResult -Name 'exit_code' -Default 1) -eq 0 -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'kind' -Default '') -eq 'lens.stage6.completion_audit' -and
+  [bool](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'ok' -Default $false) -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'audit_status' -Default '') -eq 'complete'
+)
+$Stage6CompletionAuditHelpfulNotNoisyRuntimeAuthorityHandoffObserved = (
+  $Stage6CompletionAuditReadbackObserved -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_handoff_source' -Default '') -eq 'stage6_helpful_not_noisy_runtime_authority_readiness_handoff' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'next_smallest_truthful_gap' -Default '') -eq 'resident_surface_runtime_not_supervised' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_proof_script' -Default '') -eq 'scripts/lens-stage6-checkpoint.ps1 -Mode Status' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'authority_required' -Default '') -eq 'operator_approval' -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'authority_granted' -Default $true) -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'status' -Default '') -eq 'authority_readiness_handoff_ready' -and
+  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'consumed_resident_surface_foreground_runtime_proof' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'resident_runtime_authority_grant_readiness_observed' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'read_only_contract' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'diagnostic_only' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_execute' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_mutate' -Default $true)
+)
 $PersistentSupervisionRequiredPrerequisitesObserved = (
   @($PersistentSupervisionMissingRequiredBeforeEnable).Count -gt 0 -and
   @($PersistentSupervisionEnablementMissingRequiredBeforeEnable).Count -gt 0 -and
@@ -829,32 +875,53 @@ $Stage6CompletionAuditHandoffConsumedByClosureReadback = (
   $StageNextGap -eq 'summon_anywhere_blockers' -and
   $FirstBlockedCriterionObserved
 )
-if ($Stage6CompletionAuditHandoffConsumedByClosureReadback) {
-  $RecommendedHandoffSource = 'stage6_closure_readback_summon_anywhere_blockers'
-  $RecommendedNextGap = 'summon_anywhere_blockers'
-  $RecommendedNextSlice = 'run_summon_anywhere_blockers_proof_after_stage6_completion_review'
-  $RecommendedProofScript = 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status'
-  $RecommendedRoute = '/lens/summon'
-  $RecommendedReadinessRoute = '/lens/summon/readiness'
-  $AuthorityRequired = 'summon_hotkey_overlay_and_process_authority'
+$Stage6CompletionAuditRecommendedHandoffConsumed = $Stage6CompletionAuditHelpfulNotNoisyRuntimeAuthorityHandoffObserved
+if ($Stage6CompletionAuditRecommendedHandoffConsumed) {
+  $RecommendedHandoffSource = [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_handoff_source' -Default '')
+  $RecommendedNextGap = [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'next_smallest_truthful_gap' -Default '')
+  $RecommendedNextSlice = [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_next_slice' -Default '')
+  $RecommendedProofScript = [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_proof_script' -Default '')
+  $RecommendedRoute = [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'route' -Default '')
+  $RecommendedReadinessRoute = [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'readiness_route' -Default '')
+  $AuthorityRequired = [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'authority_required' -Default '')
+  $AuthorityGranted = [bool](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'authority_granted' -Default $false)
+}
+$Stage6CompletionAuditRuntimeReadbackRequired = (
+  $Stage6CompletionAuditHandoffConsumedByClosureReadback -and
+  -not $Stage6CompletionAuditRecommendedHandoffConsumed
+)
+if ($Stage6CompletionAuditRuntimeReadbackRequired) {
+  $RecommendedHandoffSource = 'stage6_completion_audit_launch_on_hotkey_readback_required'
+  $RecommendedNextGap = 'stage6_lens_completion_audit_runtime_readback'
+  $RecommendedNextSlice = 'run_stage6_completion_audit_with_launch_on_hotkey_runtime_readback'
+  $RecommendedProofScript = 'scripts/lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey'
+  $RecommendedRoute = '/lens/status'
+  $RecommendedReadinessRoute = '/lens/resident-runtime/authority-grant/readiness'
+  $AuthorityRequired = 'launch_on_hotkey_runtime_readback_opt_in'
   $AuthorityGranted = $false
 }
 $RecommendedHandoff = [ordered]@{}
-if ($Stage6CompletionAuditHandoffConsumedByClosureReadback) {
+if ($Stage6CompletionAuditRecommendedHandoffConsumed) {
+  $RecommendedHandoff = $Stage6CompletionAuditRecommendedHandoff
+} elseif ($Stage6CompletionAuditRuntimeReadbackRequired) {
   $RecommendedHandoff = [ordered]@{
-    status = 'blocked'
+    status = 'runtime_readback_required'
     previous_next_smallest_truthful_gap = 'stage6_lens_completion_audit'
-    next_smallest_truthful_gap = 'summon_anywhere_blockers'
-    next_step = 'run_summon_anywhere_blockers_proof_after_stage6_completion_review'
-    proof_script = 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status'
-    route = '/lens/summon'
-    readiness_route = '/lens/summon/readiness'
-    acceptance_criterion = 'summon_anywhere'
+    previous_closure_readback_next_smallest_truthful_gap = 'summon_anywhere_blockers'
+    next_smallest_truthful_gap = 'stage6_lens_completion_audit_runtime_readback'
+    next_step = 'run_stage6_completion_audit_with_launch_on_hotkey_runtime_readback'
+    proof_script = 'scripts/lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey'
+    route = '/lens/status'
+    readiness_route = '/lens/resident-runtime/authority-grant/readiness'
+    acceptance_criterion = 'helpful_not_noisy'
     first_blocker_family = $FirstBlockerFamily
     first_blocker_family_handoff = $FirstBlockerFamilyHandoff
     first_blocker_family_completion_audit_handoff = $FirstFamilyCompletionAuditHandoff
-    authority_required = 'summon_hotkey_overlay_and_process_authority'
+    authority_required = 'launch_on_hotkey_runtime_readback_opt_in'
     authority_granted = $false
+    requires_explicit_operator_opt_in = $true
+    consumes_completion_audit_when_supplied = $true
+    completion_audit_json_parameter = '-CompletionAuditJsonPath'
     read_only_contract = $true
     diagnostic_only = $true
     would_execute = $false
@@ -893,27 +960,6 @@ if ($Stage6CompletionAuditHandoffConsumedByClosureReadback) {
 
 $RecommendedConcreteHandoffSource = $RecommendedHandoffSource
 $RecommendedConcreteHandoff = $RecommendedHandoff
-if ($Stage6CompletionAuditHandoffConsumedByClosureReadback) {
-  if ($PersistentSupervisionResidentClaimBoundaryHandoffObserved) {
-    $RecommendedConcreteHandoffSource = 'persistent_supervision_resident_claim_boundary_handoff'
-    $RecommendedConcreteHandoff = $PersistentSupervisionResidentClaimBoundaryHandoff
-  } elseif ($PersistentSupervisionEnablementReceiptReviewObserved) {
-    $RecommendedConcreteHandoffSource = 'persistent_supervision_enablement_receipt_review_handoff'
-    $RecommendedConcreteHandoff = $PersistentSupervisionEnablementReceiptReviewHandoff
-  } elseif ($Stage6PrerequisiteBringupPlanObserved) {
-    $RecommendedConcreteHandoffSource = 'stage6_prerequisite_bringup_operator_plan'
-    $RecommendedConcreteHandoff = $Stage6PrerequisiteBringupOperatorPlanHandoff
-  } elseif ($ResidentRuntimeCandidateHandoffObserved) {
-    $RecommendedConcreteHandoffSource = 'resident_runtime_candidate_handoff'
-    $RecommendedConcreteHandoff = $ResidentRuntimeCandidateHandoff
-  } elseif (-not [string]::IsNullOrWhiteSpace([string](Get-PropertyValue -Payload $FirstFamilyCompletionAuditHandoff -Name 'next_step' -Default ''))) {
-    $RecommendedConcreteHandoffSource = 'stage6_closure_readback_summon_anywhere_blockers.first_blocker_family_completion_audit_handoff'
-    $RecommendedConcreteHandoff = $FirstFamilyCompletionAuditHandoff
-  } elseif (-not [string]::IsNullOrWhiteSpace([string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'next_step' -Default ''))) {
-    $RecommendedConcreteHandoffSource = 'stage6_closure_readback_summon_anywhere_blockers.first_blocker_family_handoff'
-    $RecommendedConcreteHandoff = $FirstBlockerFamilyHandoff
-  }
-}
 $RecommendedConcreteNextSlice = [string](
   Get-PropertyValue -Payload $RecommendedConcreteHandoff -Name 'next_step' -Default $RecommendedNextSlice
 )
@@ -1025,6 +1071,7 @@ $Checks = @(
   New-Check -Id 'stage6_prerequisite_bringup_plan' -Status $(if ($Stage6PrerequisiteBringupPlanObserved) { 'operator_plan_readback_ready' } else { 'missing_or_unexpected' }) -Passed $Stage6PrerequisiteBringupPlanObserved -Evidence 'scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status' -Reason 'The next handoff should point at the governed prerequisite bring-up runbook instead of lower-level proof fragments.'
   New-Check -Id 'persistent_supervision_enablement_receipt_review' -Status $(if ($PersistentSupervisionEnablementReceiptReviewObserved) { 'receipt_reviewed' } elseif ($Stage6PrerequisiteBringupPlanAppliedObserved) { 'missing_or_unexpected' } else { 'not_applicable' }) -Passed $(-not $Stage6PrerequisiteBringupPlanAppliedObserved -or $PersistentSupervisionEnablementReceiptReviewObserved) -Evidence '/lens/status resident_host.persistent_supervision_enablement_execution_receipts' -Reason 'After enablement is applied, the next handoff must consume the read-only receipt review before advancing to resident-claim boundary review.'
   New-Check -Id 'persistent_supervision_resident_claim_boundary_review' -Status $(if ($PersistentSupervisionResidentClaimBoundaryHandoffObserved) { 'resident_claim_boundary_consumed' } elseif ($PersistentSupervisionEnablementReceiptReviewObserved) { 'missing_or_unexpected' } else { 'not_applicable' }) -Passed $(-not $PersistentSupervisionEnablementReceiptReviewObserved -or $PersistentSupervisionResidentClaimBoundaryHandoffObserved) -Evidence 'scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status' -Reason 'After enablement receipt review, the next handoff must consume the read-only resident-claim boundary before routing to the Stage 6 completion audit.'
+  New-Check -Id 'stage6_completion_audit_runtime_authority_handoff' -Status $(if ($Stage6CompletionAuditRecommendedHandoffConsumed) { 'runtime_authority_handoff_consumed' } elseif ($Stage6CompletionAuditReadbackObserved) { 'completion_audit_readback_observed' } elseif ($Stage6CompletionAuditRuntimeReadbackRequired) { 'runtime_readback_required' } else { 'not_requested' }) -Passed $([string]::IsNullOrWhiteSpace($CompletionAuditJsonPath) -or $Stage6CompletionAuditReadbackObserved) -Evidence 'scripts/lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey or -CompletionAuditJsonPath <audit.json>' -Reason 'When Stage 6 closure readback reaches the completion-audit boundary, the next handoff should require the explicit launch-on-hotkey audit readback or consume a supplied completion-audit JSON payload instead of falling back to stale closure readback.'
   New-Check -Id 'persistent_supervision_enablement_authority_handoff' -Status $(if ($PersistentSupervisionEnablementAuthorityHandoffObserved) { 'enablement_authority_handoff_ready' } else { 'not_observed' }) -Passed $true -Evidence '/lens/status resident_host.persistent_supervision_enablement_authority_readiness' -Reason 'When the enablement authority denial and execution-denial readiness are already audited, the next handoff can point at the enablement-authority proof without granting authority.'
   New-Check -Id 'activation_execution_handoff' -Status $(if ($ActivationExecutionHandoffReady) { 'activation_execution_handoff_ready' } else { 'not_observed' }) -Passed $true -Evidence '/lens/status resident_host.activation_state latest_execution_handoff' -Reason 'When a bounded activation execution receipt exists, the handoff can point directly at process-supervision proof without claiming resident host status.'
   New-Check -Id 'resident_runtime_candidate_handoff' -Status $(if ($ResidentRuntimeCandidateHandoffObserved -and $CandidateObservedByDurableReceipt) { 'receipt_candidate_handoff_ready' } elseif ($ResidentRuntimeCandidateHandoffObserved) { 'fresh_candidate_handoff_ready' } else { 'not_observed' }) -Passed $true -Evidence '/lens/status resident_host resident candidate readback' -Reason 'When a fresh or receipt-backed supervised resident candidate is present, the handoff can point at persistence; otherwise it remains on the first missing resident-host prerequisite.'
@@ -1069,6 +1116,23 @@ $Payload = [ordered]@{
   persistent_supervision_resident_claim_boundary_handoff_observed = $PersistentSupervisionResidentClaimBoundaryHandoffObserved
   persistent_supervision_resident_claim_boundary_handoff = $PersistentSupervisionResidentClaimBoundaryHandoff
   stage6_completion_audit_handoff_consumed_by_closure_readback = $Stage6CompletionAuditHandoffConsumedByClosureReadback
+  stage6_completion_audit_readback_observed = $Stage6CompletionAuditReadbackObserved
+  stage6_completion_audit_recommended_handoff_consumed = $Stage6CompletionAuditRecommendedHandoffConsumed
+  stage6_completion_audit_runtime_readback_required = $Stage6CompletionAuditRuntimeReadbackRequired
+  stage6_completion_audit_json_path_supplied = -not [string]::IsNullOrWhiteSpace($CompletionAuditJsonPath)
+  stage6_completion_audit = [ordered]@{
+    status = [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'status' -Default '')
+    audit_status = [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'audit_status' -Default '')
+    ok = $Stage6CompletionAuditReadbackObserved
+    exit_code = [int](Get-PropertyValue -Payload $Stage6CompletionAuditResult -Name 'exit_code' -Default 0)
+    allow_launch_on_hotkey = [bool](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'allow_launch_on_hotkey' -Default $false)
+    next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'next_smallest_truthful_gap' -Default '')
+    recommended_handoff_source = [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_handoff_source' -Default '')
+    recommended_next_slice = [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_next_slice' -Default '')
+    recommended_proof_script = [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_proof_script' -Default '')
+    authority_required = [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'authority_required' -Default '')
+    authority_granted = [bool](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'authority_granted' -Default $false)
+  }
   persistent_supervision_resident_claim_boundary_proof = [ordered]@{
     status = [string](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundary -Name 'status' -Default '')
     ok = [bool](Get-PropertyValue -Payload $PersistentSupervisionResidentClaimBoundary -Name 'ok' -Default $false)
@@ -1137,11 +1201,16 @@ $Payload = [ordered]@{
   governance = [ordered]@{
     diagnostic_only = $true
     read_only_contract = $true
+    launch_on_hotkey_runtime_readback_opt_in = $false
     uses_lens_status_readback = $true
     uses_persistent_supervision_readback = $true
     uses_stage6_prerequisite_bringup_plan_readback = $true
+    uses_stage6_completion_audit_readback = $Stage6CompletionAuditReadbackObserved
     stage6_prerequisite_bringup_plan_readback = $Stage6PrerequisiteBringupPlanObserved
     stage6_prerequisite_bringup_actor_scope_readback = [bool](Get-PropertyValue -Payload $Stage6PrerequisiteBringupPlanGovernance -Name 'actor_scope_readback' -Default $false)
+    stage6_completion_audit_recommended_handoff_consumed = $Stage6CompletionAuditRecommendedHandoffConsumed
+    stage6_completion_audit_runtime_readback_required = $Stage6CompletionAuditRuntimeReadbackRequired
+    stage6_completion_audit_json_path_supplied = -not [string]::IsNullOrWhiteSpace($CompletionAuditJsonPath)
     proof_script = 'scripts/lens-stage6-next-handoff.ps1 -Mode Status'
     would_execute = $false
     would_mutate = $false
