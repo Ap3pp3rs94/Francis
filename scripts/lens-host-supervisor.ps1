@@ -228,7 +228,7 @@ function Get-HostState {
   if ($PidValue -le 0 -and $null -ne $StatePayload) {
     $PidValue = [int](Get-PropertyValue -Payload $StatePayload -Name 'pid' -Default 0)
   }
-  $ProcessAlive = if ($StateStatus -eq 'foreground_stopped' -and -not $PidPresent) {
+  $ProcessAlive = if (@('foreground_stopped', 'resident_stopped') -contains $StateStatus -and -not $PidPresent) {
     $false
   } else {
     Test-ProcessAlive -ProcessId $PidValue
@@ -1067,6 +1067,55 @@ if ($Mode -eq 'SuperviseOnce' -or $Mode -eq 'SuperviseResidentOnce') {
   $Payload.governance.temporary_runtime_state_write = $true
   $Payload.governance.local_process_launch_authority = $true
   $Payload.next_smallest_truthful_gap = $NextGap
+
+  $InitialStateStatus = [string](Get-PropertyValue -Payload $InitialHostState -Name 'state_status' -Default '')
+  $ExistingResidentCandidateObserved = (
+    $ResidentCandidateMode -and
+    $InitialStateStatus -eq 'resident_running' -and
+    $InitialProcessAlive -and
+    $InitialPid -gt 0
+  )
+  if ($ExistingResidentCandidateObserved) {
+    $Payload.status = 'resident_candidate_already_running_observed'
+    $Payload.supervisor_started_process = $false
+    $Payload.bounded_supervisor_observed = $false
+    $Payload.bounded_supervised_session = $false
+    $Payload.temporary_host_process_observed = $true
+    $Payload.supervisor_observed_running_state = $true
+    $Payload.supervisor_observed_stopped_state = $false
+    $Payload.resident_runtime_candidate_supervised = $false
+    $Payload.resident_supervised_runtime = $false
+    $Payload.resident_host_process = $false
+    $Payload.supervised = $false
+    $Payload.host_readback = $InitialHostState
+    $Payload.blockers = @(
+      'resident_host_process_not_supervised',
+      'resident_runtime_candidate_not_persistent',
+      'resident_supervision_not_persistent',
+      'process_supervision_authority_not_granted',
+      'process_restart_authority_not_granted',
+      'service_control_authority_not_granted',
+      'tray_host_missing',
+      'global_hotkey_binding_missing',
+      'overlay_window_missing',
+      'summon_binding_missing'
+    ) | Sort-Object -Unique
+    $Payload.proof.running_state_status = $InitialStateStatus
+    $Payload.proof.running_pid = $InitialPid
+    $Payload.proof.running_process_alive = $InitialProcessAlive
+    $Payload.proof.stopped_state_status = ''
+    $Payload.proof.stopped_pid = 0
+    $Payload.proof.stopped_process_alive = $false
+    $Payload.proof.same_process_observed = $false
+    $Payload.proof.pid_file_present_after_stop = Test-LeafPathPresent -Path $HostPidPath
+    $Payload.proof.supervisor_owned_launch = $false
+    $Payload.proof.host_mode = $HostModeName
+    $Payload.proof.host_exit_code = -1
+    $Payload.proof.existing_resident_candidate_observed = $true
+
+    $Payload | ConvertTo-Json -Depth 8
+    exit 0
+  }
 
   $StartedProcess = Start-BoundedHostProcess `
     -PowerShellPath $PowerShellPath `

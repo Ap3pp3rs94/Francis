@@ -36652,6 +36652,85 @@ handoff consumption:
   resident_surface_runtime_supervision_handoff_observed=true;
   child_proof_timeouts=[]`
 
+Stage 6 resident-candidate existing-process proof consumption on `2026-05-21`:
+
+- `scripts/lens-host-supervisor.ps1 -Mode SuperviseResidentOnce` now has a
+  truthful existing-process branch for default local data that already contains
+  a live resident Lens host candidate. It returns
+  `resident_candidate_already_running_observed` without launching another
+  resident process, without claiming a fresh bounded supervised session, and
+  without marking the resident runtime as supervised, claimable, persistent, or
+  service managed.
+- `scripts/lens-resident-host-runtime-boundary-proof.ps1` now consumes either
+  the prior fresh bounded resident-candidate proof or the new existing resident
+  candidate observation. Its payload distinguishes
+  `resident_runtime_candidate_fresh_bounded_launch` from
+  `resident_runtime_candidate_existing_process_observed`, so the runtime proof
+  can advance without hiding whether it reused an already-running candidate.
+- `scripts/lens-host-supervisor.ps1` also treats `resident_stopped` plus a
+  missing pid file as not alive, matching the existing foreground-stopped
+  readback semantics and avoiding stale stopped-PID truth drift.
+- This removes the false default-data failure in the resident-host
+  process-supervision blocker proof. It does not grant process-supervision
+  authority, restart authority, service install/control authority,
+  resident-claim authority, memory write, approval-decision authority,
+  launch-on-hotkey authority, summon authority, or Stage 7 transition authority.
+- A fresh completion audit with launch-on-hotkey readback still reports Stage 6
+  blocked, but the active local evidence moved past the resident-host
+  process-supervision handoff: `ready_to_close=false`,
+  `transition_allowed=false`, and
+  `next_smallest_truthful_gap=resident_surface_runtime_not_supervised`.
+
+Latest validation for Stage 6 resident-candidate existing-process proof
+consumption:
+
+- PowerShell parser check for `scripts\lens-host-supervisor.ps1`
+  Result: `passed; parser_ok`
+- PowerShell parser check for
+  `scripts\lens-resident-host-runtime-boundary-proof.ps1`
+  Result: `passed; parser_ok`
+- `python -m ruff check tests/test_lens_host_supervisor_script.py
+  tests/test_lens_resident_host_runtime_boundary_proof_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests/test_lens_host_supervisor_script.py
+  tests/test_lens_resident_host_runtime_boundary_proof_script.py`
+  Result: `passed; 2 files already formatted`
+- `python -m pytest tests/test_lens_host_supervisor_script.py -q`
+  Result: `passed`
+- `python -m pytest tests/test_lens_resident_host_runtime_boundary_proof_script.py
+  -q`
+  Result: `passed`
+- `python -m pytest
+  tests/test_lens_resident_host_process_supervision_blocker_proof_script.py -q`
+  Result: `passed`
+- `scripts\lens-host-supervisor.ps1 -Mode SuperviseResidentOnce -RunSeconds 2`
+  against default local data
+  Result: `passed as observation; status=resident_candidate_already_running_observed;
+  supervisor_started_process=false; bounded_supervised_session=false;
+  resident_runtime_candidate_supervised=false;
+  next_smallest_truthful_gap=resident_supervision_not_persistent`
+- `scripts\lens-resident-host-runtime-boundary-proof.ps1 -Mode Status
+  -ForegroundRunSeconds 2 -HostLaunchRunSeconds 3 -ResidentCandidateRunSeconds
+  2 -ChildProofTimeoutSeconds 180`
+  Result: `passed; status=proof_passed;
+  resident_runtime_candidate_existing_process_observed=true;
+  resident_runtime_candidate_fresh_bounded_launch=false;
+  resident_runtime_candidate_supervised=false;
+  next_smallest_truthful_gap=resident_host_process_not_supervised`
+- `scripts\lens-resident-host-process-supervision-blocker-proof.ps1 -Mode
+  Status -StartupTimeoutSeconds 20 -ForegroundRunSeconds 2 -HostLaunchRunSeconds
+  3 -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 180`
+  Result: `passed; status=proof_passed;
+  resident_host_process_handoff_observed=true;
+  process_supervision_boundary_observed=true; handoff_consumed=true;
+  authority_denied=true; next_smallest_truthful_gap=stage6_lens_completion_audit;
+  child_proof_timeouts=[]`
+- `scripts\lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey`
+  Result: `passed as blocked audit; ok=true; status=blocked;
+  audit_status=complete; ready_to_close=false; transition_allowed=false;
+  next_smallest_truthful_gap=resident_surface_runtime_not_supervised;
+  recommended_next_slice=create_or_select_exact_approved_resident_runtime_execution_authority_request`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

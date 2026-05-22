@@ -5,6 +5,7 @@ import os
 import platform
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -38,6 +39,18 @@ def _run_script(script_name: str, *args: str, timeout: int = 60) -> subprocess.C
         capture_output=True,
         timeout=timeout,
     )
+
+
+def _wait_for_runtime_status(path: Path, status: str, timeout_seconds: int = 15) -> dict[str, object]:
+    deadline = time.monotonic() + timeout_seconds
+    latest: dict[str, object] = {}
+    while time.monotonic() < deadline:
+        if path.is_file():
+            latest = json.loads(path.read_text(encoding="utf-8-sig"))
+            if latest.get("status") == status:
+                return latest
+        time.sleep(0.1)
+    raise AssertionError(f"Timed out waiting for {status}; latest={latest!r}")
 
 
 def test_lens_host_supervisor_status_is_observation_only(tmp_path: Path) -> None:
@@ -399,6 +412,110 @@ def test_lens_host_supervisor_supervises_bounded_resident_candidate_without_clai
     assert supervisor_state["host_mode"] == "resident"
     assert supervisor_state["observed_state"] == "resident_stopped"
     assert (data_dir / "runtime" / "lens-host" / "status.json").is_file()
+    assert not (data_dir / "runtime" / "lens-host" / "lens-host.pid").exists()
+
+
+def test_lens_host_supervisor_observes_existing_resident_candidate_without_relaunch(tmp_path: Path) -> None:
+    if platform.system() != "Windows":
+        pytest.skip("Live Lens resident candidate observation proof is Windows-hosted.")
+
+    data_dir = tmp_path / "data"
+    host = subprocess.Popen(
+        [
+            _powershell(),
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(_repo_root() / "scripts" / "lens-host.ps1"),
+            "-Mode",
+            "Resident",
+            "-RunSeconds",
+            "0",
+        ],
+        cwd=_repo_root(),
+        env={**os.environ, "FRANCIS_DATA_DIR": str(data_dir)},
+        text=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+    )
+    stopped: subprocess.CompletedProcess[str] | None = None
+    try:
+        running_state = _wait_for_runtime_status(
+            data_dir / "runtime" / "lens-host" / "status.json",
+            "resident_running",
+        )
+        proc = _run_script(
+            "lens-host-supervisor.ps1",
+            "-Mode",
+            "SuperviseResidentOnce",
+            "-RunSeconds",
+            "2",
+            "-DataDir",
+            str(data_dir),
+            timeout=90,
+        )
+
+        assert proc.returncode == 0, proc.stderr or proc.stdout
+        payload = json.loads(proc.stdout)
+        assert payload["kind"] == "lens.host.supervisor_runner"
+        assert payload["status"] == "resident_candidate_already_running_observed"
+        assert payload["mode"] == "superviseresidentonce"
+        assert payload["ok"] is True
+        assert payload["supervisor_started_process"] is False
+        assert payload["bounded_supervised_session"] is False
+        assert payload["bounded_supervisor_observed"] is False
+        assert payload["supervisor_observed_running_state"] is True
+        assert payload["supervisor_observed_stopped_state"] is False
+        assert payload["temporary_host_process_observed"] is True
+        assert payload["resident_runtime_candidate_supervised"] is False
+        assert payload["resident_supervised_runtime"] is False
+        assert payload["ready_for_resident_claim"] is False
+        assert payload["resident_claim_allowed"] is False
+        assert payload["resident_host_process"] is False
+        assert payload["supervised"] is False
+        assert payload["next_smallest_truthful_gap"] == "resident_supervision_not_persistent"
+        assert "resident_host_process_missing" not in payload["blockers"]
+        assert "resident_host_process_not_supervised" in payload["blockers"]
+        assert "resident_runtime_candidate_not_persistent" in payload["blockers"]
+        assert "resident_supervision_not_persistent" in payload["blockers"]
+        assert "process_supervision_authority_not_granted" in payload["blockers"]
+        assert "service_control_authority_not_granted" in payload["blockers"]
+
+        proof = payload["proof"]
+        assert proof["existing_resident_candidate_observed"] is True
+        assert proof["host_mode"] == "resident"
+        assert proof["running_state_status"] == "resident_running"
+        assert proof["running_pid"] == running_state["pid"]
+        assert proof["running_process_alive"] is True
+        assert proof["stopped_state_status"] == ""
+        assert proof["stopped_pid"] == 0
+        assert proof["stopped_process_alive"] is False
+        assert proof["same_process_observed"] is False
+        assert proof["pid_file_present_after_stop"] is True
+        assert proof["supervisor_owned_launch"] is False
+        assert proof["host_exit_code"] == -1
+
+        assert (data_dir / "runtime" / "lens-host" / "lens-host.pid").is_file()
+        assert not (data_dir / "runtime" / "lens-host-supervisor" / "status.json").exists()
+    finally:
+        stopped = _run_script(
+            "lens-host-supervisor.ps1",
+            "-Mode",
+            "StopResident",
+            "-DataDir",
+            str(data_dir),
+            timeout=90,
+        )
+        if host.poll() is None:
+            host.terminate()
+        try:
+            host.communicate(timeout=30)
+        except subprocess.TimeoutExpired:
+            host.kill()
+            host.communicate(timeout=30)
+
+    assert stopped.returncode == 0, stopped.stderr or stopped.stdout
     assert not (data_dir / "runtime" / "lens-host" / "lens-host.pid").exists()
 
 

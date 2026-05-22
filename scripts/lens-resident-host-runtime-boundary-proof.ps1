@@ -393,10 +393,11 @@ $ProcessSupervisionHandoffObserved = (
   @('blocked', 'enabled') -contains [string](Get-PropertyValue -Payload $HostProof -Name 'process_supervision_status' -Default '') -and
   [string](Get-PropertyValue -Payload $HostProof -Name 'service_control_status' -Default '') -eq 'blocked'
 )
-$ResidentCandidateObserved = (
+$ResidentCandidateStatus = [string](Get-PropertyValue -Payload $ResidentCandidatePayload -Name 'status' -Default '')
+$FreshResidentCandidateObserved = (
   [int](Get-PropertyValue -Payload $ResidentCandidateResult -Name 'exit_code' -Default -1) -eq 0 -and
   [string](Get-PropertyValue -Payload $ResidentCandidatePayload -Name 'kind' -Default '') -eq 'lens.host.supervisor_runner' -and
-  [string](Get-PropertyValue -Payload $ResidentCandidatePayload -Name 'status' -Default '') -eq 'supervised_session_completed' -and
+  $ResidentCandidateStatus -eq 'supervised_session_completed' -and
   [bool](Get-PropertyValue -Payload $ResidentCandidatePayload -Name 'bounded_supervised_session' -Default $false) -and
   [bool](Get-PropertyValue -Payload $ResidentCandidatePayload -Name 'resident_runtime_candidate_supervised' -Default $false) -and
   [string](Get-PropertyValue -Payload $ResidentCandidatePayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'resident_supervision_not_persistent' -and
@@ -409,6 +410,29 @@ $ResidentCandidateObserved = (
   -not [bool](Get-PropertyValue -Payload $ResidentCandidatePayload -Name 'resident_supervised_runtime' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ResidentCandidatePayload -Name 'supervised' -Default $true)
 )
+$ExistingResidentCandidateObserved = (
+  [int](Get-PropertyValue -Payload $ResidentCandidateResult -Name 'exit_code' -Default -1) -eq 0 -and
+  [string](Get-PropertyValue -Payload $ResidentCandidatePayload -Name 'kind' -Default '') -eq 'lens.host.supervisor_runner' -and
+  $ResidentCandidateStatus -eq 'resident_candidate_already_running_observed' -and
+  -not [bool](Get-PropertyValue -Payload $ResidentCandidatePayload -Name 'supervisor_started_process' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentCandidatePayload -Name 'bounded_supervised_session' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentCandidatePayload -Name 'bounded_supervisor_observed' -Default $true) -and
+  [bool](Get-PropertyValue -Payload $ResidentCandidatePayload -Name 'temporary_host_process_observed' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $ResidentCandidatePayload -Name 'supervisor_observed_running_state' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentCandidatePayload -Name 'supervisor_observed_stopped_state' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentCandidatePayload -Name 'resident_runtime_candidate_supervised' -Default $true) -and
+  [string](Get-PropertyValue -Payload $ResidentCandidatePayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'resident_supervision_not_persistent' -and
+  $ResidentCandidateBlockers -contains 'resident_runtime_candidate_not_persistent' -and
+  $ResidentCandidateBlockers -contains 'resident_supervision_not_persistent' -and
+  $ResidentCandidateBlockers -contains 'resident_host_process_not_supervised' -and
+  $ResidentCandidateBlockers -contains 'process_supervision_authority_not_granted' -and
+  $ResidentCandidateBlockers -contains 'service_control_authority_not_granted' -and
+  -not [bool](Get-PropertyValue -Payload $ResidentCandidatePayload -Name 'ready_for_resident_claim' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentCandidatePayload -Name 'resident_claim_allowed' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentCandidatePayload -Name 'resident_supervised_runtime' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentCandidatePayload -Name 'supervised' -Default $true)
+)
+$ResidentCandidateObserved = $FreshResidentCandidateObserved -or $ExistingResidentCandidateObserved
 $SideEffectsBounded = (
   [bool](Get-PropertyValue -Payload $SummonGovernance -Name 'diagnostic_only' -Default $false) -and
   [bool](Get-PropertyValue -Payload $HostGovernance -Name 'diagnostic_only' -Default $false) -and
@@ -462,7 +486,7 @@ $Checks = @(
   (New-Check -Id 'runtime_heartbeat_readback' -Status $(if ($RuntimeHeartbeatObserved) { 'heartbeat_observed' } else { 'missing' }) -Passed $RuntimeHeartbeatObserved -Evidence 'host supervision runtime heartbeat readback' -Reason 'The resident-host runtime boundary must preserve bounded host heartbeat evidence.'),
   (New-Check -Id 'runtime_boundary_blocked' -Status $(if ($RuntimeBoundaryBlocked) { 'blocked' } else { 'unexpected_ready' }) -Passed $RuntimeBoundaryBlocked -Evidence 'runtime blockers + host supervision proof blockers' -Reason 'The resident host runtime remains blocked by missing runtime implementation and unsupervised process state.'),
   (New-Check -Id 'process_supervision_handoff' -Status $(if ($ProcessSupervisionHandoffObserved) { 'next_blocker_identified' } else { 'missing_or_unexpected' }) -Passed $ProcessSupervisionHandoffObserved -Evidence 'host supervision proof next_smallest_truthful_gap' -Reason 'After consuming the runtime boundary, the next concrete blocker is process supervision.'),
-  (New-Check -Id 'resident_candidate_supervision' -Status $(if ($ResidentCandidateObserved) { 'resident_candidate_observed_not_persistent' } else { 'missing_or_unexpected' }) -Passed $ResidentCandidateObserved -Evidence 'scripts/lens-host-supervisor.ps1 -Mode SuperviseResidentOnce' -Reason 'The runtime boundary must prove that the resident-mode candidate can be bounded and supervised once, while still not persistent, resident-claimable, or service managed.'),
+  (New-Check -Id 'resident_candidate_supervision' -Status $(if ($ResidentCandidateObserved) { 'resident_candidate_observed_not_persistent' } else { 'missing_or_unexpected' }) -Passed $ResidentCandidateObserved -Evidence 'scripts/lens-host-supervisor.ps1 -Mode SuperviseResidentOnce' -Reason 'The runtime boundary must observe either a fresh bounded resident candidate or an already-running resident candidate, while still not persistent, resident-claimable, or service managed.'),
   (New-Check -Id 'side_effects_bounded' -Status $(if ($SideEffectsBounded) { 'diagnostic_bounded' } else { 'unexpected_authority' }) -Passed $SideEffectsBounded -Evidence 'summon resident-host governance + host supervision governance' -Reason 'The proof may observe one bounded diagnostic host run but must not grant product/API launch, execution, supervision, service, summon, memory, approval, or resident-claim authority.')
 )
 
@@ -537,6 +561,8 @@ $Payload = [ordered]@{
   resident_host_process_blocker = [string](Get-PropertyValue -Payload $HostSupervisionPayload -Name 'resident_host_process_blocker' -Default '')
   resident_runtime_candidate_observed = $ResidentCandidateObserved
   resident_runtime_candidate_supervised = [bool](Get-PropertyValue -Payload $ResidentCandidatePayload -Name 'resident_runtime_candidate_supervised' -Default $false)
+  resident_runtime_candidate_fresh_bounded_launch = $FreshResidentCandidateObserved
+  resident_runtime_candidate_existing_process_observed = $ExistingResidentCandidateObserved
   resident_runtime_candidate_next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $ResidentCandidatePayload -Name 'next_smallest_truthful_gap' -Default '')
   resident_runtime_persistence_blocker = 'resident_supervision_not_persistent'
   resident_runtime_ready = $false
@@ -566,6 +592,8 @@ $Payload = [ordered]@{
     resident_candidate_status = [string](Get-PropertyValue -Payload $ResidentCandidatePayload -Name 'status' -Default '')
     resident_candidate_next_gap = [string](Get-PropertyValue -Payload $ResidentCandidatePayload -Name 'next_smallest_truthful_gap' -Default '')
     resident_candidate_supervised = [bool](Get-PropertyValue -Payload $ResidentCandidatePayload -Name 'resident_runtime_candidate_supervised' -Default $false)
+    resident_candidate_fresh_bounded_launch = $FreshResidentCandidateObserved
+    resident_candidate_existing_process_observed = $ExistingResidentCandidateObserved
     process_supervision_status = [string](Get-PropertyValue -Payload $HostProof -Name 'process_supervision_status' -Default '')
     service_control_status = [string](Get-PropertyValue -Payload $HostProof -Name 'service_control_status' -Default '')
     host_ready_for_resident_claim = [bool](Get-PropertyValue -Payload $HostSupervisionPayload -Name 'ready_for_resident_claim' -Default $false)
@@ -585,7 +613,8 @@ $Payload = [ordered]@{
     wraps_resident_candidate_supervisor_proof = $true
     bounded_local_process_launch = $true
     bounded_process_launch = $true
-    bounded_resident_candidate_launch = $ResidentCandidateObserved
+    bounded_resident_candidate_launch = $FreshResidentCandidateObserved
+    existing_resident_candidate_observed = $ExistingResidentCandidateObserved
     child_proof_timeout_seconds = $ChildProofTimeoutSeconds
     temporary_runtime_state_write = $true
     product_execution_authority = $false

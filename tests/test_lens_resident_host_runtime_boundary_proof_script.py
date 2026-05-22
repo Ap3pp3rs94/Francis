@@ -55,6 +55,16 @@ def test_lens_resident_host_runtime_boundary_requires_prior_authority_readback()
     ) in script
 
 
+def test_lens_resident_host_runtime_boundary_accepts_existing_candidate_readback() -> None:
+    script = (_repo_root() / "scripts" / "lens-resident-host-runtime-boundary-proof.ps1").read_text(encoding="utf-8")
+
+    assert "$ExistingResidentCandidateObserved" in script
+    assert "resident_candidate_already_running_observed" in script
+    assert "resident_runtime_candidate_existing_process_observed" in script
+    assert "resident_runtime_candidate_fresh_bounded_launch" in script
+    assert "bounded_resident_candidate_launch = $FreshResidentCandidateObserved" in script
+
+
 def test_lens_resident_host_runtime_boundary_consumes_handoff_without_authority(tmp_path: Path) -> None:
     proc = _run_proof(
         "-Mode",
@@ -131,6 +141,8 @@ def test_lens_resident_host_runtime_boundary_consumes_handoff_without_authority(
     assert payload["resident_host_process_blocker"] == "resident_host_process_not_supervised"
     assert payload["resident_runtime_candidate_observed"] is True
     assert payload["resident_runtime_candidate_supervised"] is True
+    assert payload["resident_runtime_candidate_fresh_bounded_launch"] is True
+    assert payload["resident_runtime_candidate_existing_process_observed"] is False
     assert payload["resident_runtime_candidate_next_smallest_truthful_gap"] == "resident_supervision_not_persistent"
     assert payload["resident_runtime_persistence_blocker"] == "resident_supervision_not_persistent"
     assert payload["resident_runtime_ready"] is False
@@ -182,6 +194,8 @@ def test_lens_resident_host_runtime_boundary_consumes_handoff_without_authority(
     assert proof["resident_candidate_status"] == "supervised_session_completed"
     assert proof["resident_candidate_next_gap"] == "resident_supervision_not_persistent"
     assert proof["resident_candidate_supervised"] is True
+    assert proof["resident_candidate_fresh_bounded_launch"] is True
+    assert proof["resident_candidate_existing_process_observed"] is False
     assert proof["process_supervision_status"] == "enabled"
     assert proof["service_control_status"] == "blocked"
     assert proof["host_ready_for_resident_claim"] is False
@@ -195,6 +209,7 @@ def test_lens_resident_host_runtime_boundary_consumes_handoff_without_authority(
         "bounded_local_process_launch": True,
         "bounded_process_launch": True,
         "bounded_resident_candidate_launch": True,
+        "existing_resident_candidate_observed": False,
         "child_proof_timeout_seconds": 180,
         "temporary_runtime_state_write": True,
         "product_execution_authority": False,
