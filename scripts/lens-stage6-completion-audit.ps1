@@ -1017,7 +1017,8 @@ $PersistentSupervisionResidentClaimBoundaryObserved = (
   [string]$PersistentSupervisionResidentClaimBoundaryProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit'
 )
 $Stage6PrerequisiteBringupAppliedEnablementReceiptReviewPending = (
-  $Stage6PrerequisiteBringupPlanAppliedEnablementObserved
+  $Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and
+  -not $PersistentSupervisionResidentClaimBoundaryObserved
 )
 $PersistentSupervisionEnablementTransitionPlanProofSiblingChildProofCount = 3
 $PersistentSupervisionEnablementTransitionPlanProofTimeoutSeconds = (

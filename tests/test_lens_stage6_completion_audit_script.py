@@ -1070,7 +1070,10 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     assert "proof_script = $HelpfulNotNoisyProofScript" in script
     assert "next_smallest_truthful_gap = 'resident_surface_runtime_not_supervised'" in script
     assert "$Stage6PrerequisiteBringupAppliedEnablementReceiptReviewPending = (" in script
-    assert "$Stage6PrerequisiteBringupPlanAppliedEnablementObserved\n)" in script
+    assert (
+        "$Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and\n"
+        "  -not $PersistentSupervisionResidentClaimBoundaryObserved\n)" in script
+    )
     assert (
         "$SummonAnywhereRuntimeReadbackObserved -and\n  $Stage6PrerequisiteBringupAppliedEnablementReceiptReviewPending"
     ) in script
