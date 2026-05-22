@@ -37568,6 +37568,65 @@ stabilization:
   stage6_completion_audit_recommended_handoff_consumed=true;
   stage6_completion_audit_runtime_readback_required=false`
 
+### 2026-05-22 - Stage 6 opt-in completion audit resident-claim boundary handoff
+
+Roadmap area: Stage 6 / Lens MVP, governed resident-runtime and
+persistent-supervision audit handoff truthfulness.
+
+Material change:
+
+- The Stage 6 completion audit now recognizes the opt-in persistent-supervision
+  API execution proof's resident-claim boundary readback before falling back to
+  older resident-surface or resident-host process blockers.
+- This prevents a stale `resident_surface_runtime_not_supervised` or blank
+  `resident_host_process_not_supervised` handoff after the opt-in runtime chain
+  has already proved resident-runtime, tray, OS-binding, overlay,
+  bounded-summon, and persistent-supervision API execution readback.
+- The Stage 6 next-handoff proof now consumes that supplied completion-audit
+  JSON and recommends the resident-claim boundary proof directly instead of
+  asking the operator to rerun `-AllowLaunchOnHotkey`.
+- Stage 6 still does not close. The audit remains blocked, non-resident-claiming,
+  and non-memory-writing. The current concrete next gap is resident-claim
+  authority, not Stage 7 readiness.
+
+Latest validation for Stage 6 opt-in completion-audit boundary ordering:
+
+- `python -m pytest
+  tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed; 39 tests passed, 1 skipped`
+- `ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; Ruff reported a local .ruff_cache access-denied cache write
+  warning but no lint failures`
+- `ruff format --check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; already formatted`
+- `scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2
+  -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3
+  -ChildProofTimeoutSeconds 240 -AllowLaunchOnHotkey`
+  Result: `passed as blocked audit; status=blocked; audit_status=complete;
+  next_smallest_truthful_gap=persistent_supervision_resident_claim_authority_boundary;
+  recommended_handoff_source=persistent_supervision_execution_authority_handoff;
+  recommended_next_slice=review_persistent_supervision_resident_claim_boundary_without_runtime_start;
+  recommended_proof_script=scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status;
+  authority_required=resident_claim_authority; authority_granted=false;
+  child_proof_timeouts=[]; resident_runtime_api_execution_proof_readback=true;
+  persistent_supervision_api_execution_proof_readback=true;
+  resident_host_process_supervision_blocker_proof_readback=false`
+- `scripts\lens-stage6-next-handoff.ps1 -Mode Status -CompletionAuditJsonPath
+  .tmp\stage6-completion-audit-optin-after-resident-claim-branch.json`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=persistent_supervision_resident_claim_authority_boundary;
+  recommended_handoff_source=persistent_supervision_execution_authority_handoff;
+  recommended_next_slice=review_persistent_supervision_resident_claim_boundary_without_runtime_start;
+  recommended_proof_script=scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status;
+  authority_required=resident_claim_authority; authority_granted=false;
+  stage6_completion_audit_recommended_handoff_consumed=true;
+  stage6_completion_audit_runtime_readback_required=false;
+  stage6_completion_audit_persistent_supervision_resident_claim_boundary_handoff_observed=true;
+  recommended_next_operator_command=.\scripts\lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

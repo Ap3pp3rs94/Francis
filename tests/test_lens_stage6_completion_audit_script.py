@@ -795,6 +795,7 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     assert "$OverlayApiExecutionProofObserved = (" in script
     assert "$SummonApiBoundedExecutionProofObserved = (" in script
     assert "$PersistentSupervisionApiExecutionProofObserved = (" in script
+    assert "$PersistentSupervisionApiExecutionResidentClaimBoundaryObserved = (" in script
     assert "[bool]$SummonApiLaunchOnHotkeyProof.allow_launch_on_hotkey" in script
     assert "[bool]$SummonApiLaunchOnHotkeyProof.summon_anywhere" in script
     assert (
@@ -1089,6 +1090,17 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
         "persistent_supervision_api_execution_proof_readback = "
         "$PersistentSupervisionApiExecutionProofObserved" in script
     )
+    assert "$PersistentSupervisionApiExecutionProofBlockers -contains 'resident_claim_authority_not_granted'" in script
+    assert (
+        "[string]$PersistentSupervisionApiExecutionProofCheckStatuses"
+        "['execution_readiness_reaches_resident_claim_boundary'] -eq 'blocked'" in script
+    )
+    assert (
+        "$AllowLaunchOnHotkey -and\n  "
+        "$PersistentSupervisionApiExecutionResidentClaimBoundaryObserved\n) {\n  "
+        "'persistent_supervision_resident_claim_authority_boundary'" in script
+    )
+    assert "'persistent_supervision_resident_claim_authority_boundary'" in script
     assert "tray_presence_api_execution_proof = [ordered]@{" in script
     assert "os_binding_api_execution_proof = [ordered]@{" in script
     assert "recommended_handoff_source = [string]$ResidentRuntimeApiExecutionProof.recommended_handoff_source" in script

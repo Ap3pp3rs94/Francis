@@ -92,6 +92,10 @@ def test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback() -> N
     assert "'run_persistent_supervision_api_execution_proof_after_bounded_summon'" in script
     assert "'scripts/lens-persistent-supervision-api-execution-proof.ps1 -Mode Status'" in script
     assert "stage6_completion_audit_persistent_supervision_api_execution_handoff_observed" in script
+    assert "$Stage6CompletionAuditPersistentSupervisionResidentClaimBoundaryHandoffObserved = (" in script
+    assert "'persistent_supervision_execution_authority_handoff'" in script
+    assert "'review_persistent_supervision_resident_claim_boundary_without_runtime_start'" in script
+    assert "stage6_completion_audit_persistent_supervision_resident_claim_boundary_handoff_observed" in script
     assert "$Stage6CompletionAuditPrerequisiteBringupEnablementReceiptHandoffObserved = (" in script
     assert "'stage6_prerequisite_bringup_enablement_receipt_review'" in script
     assert "'run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt'" in script
@@ -777,6 +781,7 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority(tm
         "stage6_completion_audit_resident_surface_runtime_handoff_observed": False,
         "stage6_completion_audit_resident_runtime_tray_presence_handoff_observed": False,
         "stage6_completion_audit_persistent_supervision_api_execution_handoff_observed": False,
+        "stage6_completion_audit_persistent_supervision_resident_claim_boundary_handoff_observed": False,
         "stage6_completion_audit_enablement_receipt_review_handoff_observed": False,
         "stage6_completion_audit_recommended_handoff_consumed": False,
         "stage6_completion_audit_runtime_readback_required": False,
@@ -1461,6 +1466,90 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     )
     assert checks["stage6_completion_audit_runtime_authority_handoff"]["status"] == "runtime_readback_required"
     assert all(item["passed"] for item in payload["checks"])
+
+    resident_claim_audit_json = tmp_path / "stage6-completion-audit-resident-claim.json"
+    resident_claim_audit_json.write_text(
+        json.dumps(
+            {
+                "kind": "lens.stage6.completion_audit",
+                "ok": True,
+                "status": "blocked",
+                "audit_status": "complete",
+                "allow_launch_on_hotkey": True,
+                "next_smallest_truthful_gap": "persistent_supervision_resident_claim_authority_boundary",
+                "recommended_handoff_source": "persistent_supervision_execution_authority_handoff",
+                "recommended_next_slice": "review_persistent_supervision_resident_claim_boundary_without_runtime_start",
+                "recommended_proof_script": (
+                    "scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status"
+                ),
+                "authority_required": "resident_claim_authority",
+                "authority_granted": False,
+                "recommended_handoff": {
+                    "status": "blocked",
+                    "previous_next_smallest_truthful_gap": (
+                        "persistent_supervision_execution_authority_or_resident_claim_boundary"
+                    ),
+                    "next_smallest_truthful_gap": "persistent_supervision_resident_claim_authority_boundary",
+                    "next_step": "review_persistent_supervision_resident_claim_boundary_without_runtime_start",
+                    "proof_script": (
+                        "scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status"
+                    ),
+                    "route": "/lens/host/persistent-supervision/enablement/execution",
+                    "readiness_route": "/lens/host/persistent-supervision/enablement/execution/readiness",
+                    "authority_required": "resident_claim_authority",
+                    "authority_granted": False,
+                    "resident_claim_allowed": False,
+                    "read_only_contract": True,
+                    "diagnostic_only": True,
+                    "would_execute": False,
+                    "would_mutate": False,
+                    "blockers": [
+                        "persistent_supervision_required_prerequisites_missing",
+                        "resident_claim_authority_not_granted",
+                    ],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    resident_claim_proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-CompletionAuditJsonPath",
+        str(resident_claim_audit_json),
+        env=proof_env,
+    )
+
+    assert resident_claim_proc.returncode == 0, resident_claim_proc.stderr or resident_claim_proc.stdout
+    resident_claim_payload = json.loads(resident_claim_proc.stdout)
+    assert resident_claim_payload["recommended_handoff_source"] == "persistent_supervision_execution_authority_handoff"
+    assert (
+        resident_claim_payload["next_smallest_truthful_gap"]
+        == "persistent_supervision_resident_claim_authority_boundary"
+    )
+    assert resident_claim_payload["recommended_next_slice"] == (
+        "review_persistent_supervision_resident_claim_boundary_without_runtime_start"
+    )
+    assert resident_claim_payload["recommended_proof_script"] == (
+        "scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status"
+    )
+    assert resident_claim_payload["authority_required"] == "resident_claim_authority"
+    assert resident_claim_payload["authority_granted"] is False
+    assert resident_claim_payload["stage6_completion_audit_recommended_handoff_consumed"] is True
+    assert resident_claim_payload["stage6_completion_audit_runtime_readback_required"] is False
+    assert (
+        resident_claim_payload[
+            "stage6_completion_audit_persistent_supervision_resident_claim_boundary_handoff_observed"
+        ]
+        is True
+    )
+    assert resident_claim_payload["recommended_operator_handoff"]["source"] == (
+        "stage6_completion_audit_recommended_handoff"
+    )
+    assert resident_claim_payload["recommended_next_operator_command"]["command"] == (
+        ".\\scripts\\lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status"
+    )
 
     resident_surface_audit_json = tmp_path / "stage6-completion-audit-resident-surface.json"
     resident_surface_audit_json.write_text(

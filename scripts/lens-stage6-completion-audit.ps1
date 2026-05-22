@@ -2784,6 +2784,11 @@ $PersistentSupervisionApiExecutionProofObserved = (
   -not [bool]$PersistentSupervisionApiExecutionProofGovernance.memory_write -and
   -not [bool]$PersistentSupervisionApiExecutionProofGovernance.resident_claim_authority
 )
+$PersistentSupervisionApiExecutionResidentClaimBoundaryObserved = (
+  $PersistentSupervisionApiExecutionProofObserved -and
+  $PersistentSupervisionApiExecutionProofBlockers -contains 'resident_claim_authority_not_granted' -and
+  [string]$PersistentSupervisionApiExecutionProofCheckStatuses['execution_readiness_reaches_resident_claim_boundary'] -eq 'blocked'
+)
 $SummonAnywhereRuntimeReadbackObserved = [bool]$SummonApiLaunchOnHotkeyProofObserved
 $Stage6AcceptanceNextGap = if ($BlockedCriterionIds -contains 'summon_anywhere' -and -not $SummonAnywhereRuntimeReadbackObserved) {
   'summon_anywhere_blockers'
@@ -3168,6 +3173,12 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   -not $PersistentSupervisionApiExecutionProofObserved
 ) {
   'persistent_supervision_api_execution_readback'
+} elseif (
+  -not $ReadyToClose -and
+  $AllowLaunchOnHotkey -and
+  $PersistentSupervisionApiExecutionResidentClaimBoundaryObserved
+) {
+  'persistent_supervision_resident_claim_authority_boundary'
 } elseif (
   $Stage6CompletionReviewed -and
   -not $ReadyToClose -and
@@ -4325,7 +4336,7 @@ $Payload = [ordered]@{
   } elseif ($NextSmallestTruthfulGap -eq 'summon_authority_blocker_proof_readback') {
     'The audit must consume the summon authority blocker proof before treating the full summon-anywhere blocker chain, including the final authority family, as audited Stage 6 evidence.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_resident_claim_authority_boundary') {
-    'The audit now consumes the persistent-supervision execution authority proof: the bounded execution grant is readable and reaches the execution route, so the next bounded family proof is resident-claim/runtime readiness.'
+    'The audit now consumes the persistent-supervision execution authority and API execution proofs: the bounded execution grant is readable, the opt-in runtime chain reaches the execution route, and the next governed blocker is resident-claim/runtime readiness.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_enablement_execution_denial_boundary') {
     'The checkpoint must observe the persistent-supervision execution denial boundary before the completion audit can make an authority-gap read.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_authority_not_granted') {
