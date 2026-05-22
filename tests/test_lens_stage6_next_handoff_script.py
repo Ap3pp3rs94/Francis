@@ -776,6 +776,7 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority(tm
         "stage6_completion_audit_runtime_authority_handoff_observed": False,
         "stage6_completion_audit_resident_surface_runtime_handoff_observed": False,
         "stage6_completion_audit_resident_runtime_tray_presence_handoff_observed": False,
+        "stage6_completion_audit_persistent_supervision_api_execution_handoff_observed": False,
         "stage6_completion_audit_enablement_receipt_review_handoff_observed": False,
         "stage6_completion_audit_recommended_handoff_consumed": False,
         "stage6_completion_audit_runtime_readback_required": False,
