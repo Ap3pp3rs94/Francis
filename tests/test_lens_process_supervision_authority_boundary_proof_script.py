@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -19,7 +21,10 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
+def _run_proof(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+    process_env = os.environ.copy()
+    if env:
+        process_env.update(env)
     return subprocess.run(
         [
             _powershell(),
@@ -34,6 +39,7 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
         check=False,
         text=True,
         capture_output=True,
+        env=process_env,
     )
 
 
@@ -91,7 +97,150 @@ def _write_cached_resident_surface_proof(path: Path) -> None:
     )
 
 
-def test_lens_process_supervision_boundary_blocks_supervision_and_service_activation() -> None:
+def _write_cached_host_supervision_proof(path: Path) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "kind": "lens.host.supervision_readiness_proof",
+                "status": "proof_passed",
+                "ok": True,
+                "supervision_ready": False,
+                "ready_for_resident_claim": False,
+                "resident_claim_allowed": False,
+                "supervised": False,
+                "service_installed": False,
+                "service_managed": False,
+                "bounded_host_launch_observed": True,
+                "blockers": [
+                    "resident_host_process_not_supervised",
+                    "resident_supervision_disabled",
+                ],
+                "governance": {
+                    "diagnostic_only": True,
+                    "bounded_host_launch": True,
+                    "bounded_process_launch": True,
+                    "local_process_launch_authority": True,
+                    "process_supervision_authority": False,
+                    "process_restart_authority": False,
+                    "service_install_authority": False,
+                    "service_control_authority": False,
+                },
+                "proof": {
+                    "process_supervision_status": "enabled",
+                    "service_control_status": "blocked",
+                    "service_plan_status": "blocked",
+                    "service_plan_ready": False,
+                    "service_plan_would_install": False,
+                    "service_plan_would_start": False,
+                    "service_plan_blocked_by": [
+                        "installable_false",
+                        "service_install_authority_false",
+                        "service_control_authority_false",
+                    ],
+                    "service_status": "not_installed",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def _write_active_authority_receipts(data_root: Path) -> None:
+    now = int(time.time())
+    expires = now + 3600
+    resident_root = data_root / "lens" / "resident_runtime_authority_grants"
+    host_root = data_root / "lens" / "host_supervision_authority_grants"
+    resident_root.mkdir(parents=True, exist_ok=True)
+    host_root.mkdir(parents=True, exist_ok=True)
+
+    resident_receipt = {
+        "kind": "lens.resident_runtime.execution_authority_grant.grant.receipt",
+        "receipt_id": "lrag_test_active",
+        "id": "lrag_test_active",
+        "status": "authority_granted",
+        "approval_id": "resident-approval",
+        "actor": "codex.stage6",
+        "created_ts": now,
+        "expires_ts": expires,
+        "lease": {
+            "active": True,
+            "created_ts": now,
+            "expires_ts": expires,
+            "lease_seconds": 3600,
+        },
+        "authority_grant": {
+            "authority_granted": True,
+            "resident_runtime_execution_authority": True,
+        },
+        "grant": {
+            "authorities": {
+                "resident_runtime_execution_authority": True,
+            },
+        },
+        "governance": {
+            "resident_runtime_execution_authority": True,
+            "execution_authority": False,
+            "memory_write": False,
+            "mutation_authority_granted": False,
+        },
+    }
+    (resident_root / "lrag_test_active.json").write_text(json.dumps(resident_receipt), encoding="utf-8")
+
+    host_receipt = {
+        "kind": "lens.host.supervision_authority.grant.receipt",
+        "receipt_id": "lhsag_test_active",
+        "id": "lhsag_test_active",
+        "status": "authority_granted",
+        "approval_id": "host-approval",
+        "actor": "codex.stage6",
+        "created_ts": now,
+        "expires_ts": expires,
+        "lease": {
+            "active": True,
+            "created_ts": now,
+            "expires_ts": expires,
+            "lease_seconds": 3600,
+        },
+        "authority_boundary": {
+            "authority_granted": True,
+        },
+        "authorities": {
+            "process_supervision_authority": True,
+            "process_restart_authority": True,
+            "service_install_authority": True,
+            "service_control_authority": True,
+            "receipt_write_authority": True,
+            "resident_claim_authority": True,
+        },
+        "grant": {
+            "authorities": {
+                "process_supervision_authority": True,
+                "process_restart_authority": True,
+                "service_install_authority": True,
+                "service_control_authority": True,
+                "receipt_write_authority": True,
+                "resident_claim_authority": True,
+            },
+            "would_supervise_process": False,
+            "would_start_service": False,
+            "would_claim_resident": False,
+            "would_write_memory": False,
+        },
+        "governance": {
+            "process_supervision_authority": True,
+            "process_restart_authority": True,
+            "service_install_authority": True,
+            "service_control_authority": True,
+            "resident_claim_authority": True,
+            "memory_write": False,
+            "mutation_authority_granted": False,
+        },
+    }
+    (host_root / "lhsag_test_active.json").write_text(json.dumps(host_receipt), encoding="utf-8")
+
+
+def test_lens_process_supervision_boundary_blocks_supervision_and_service_activation(tmp_path: Path) -> None:
+    data_root = tmp_path / "data"
     proc = _run_proof(
         "-Mode",
         "Status",
@@ -105,6 +254,7 @@ def test_lens_process_supervision_boundary_blocks_supervision_and_service_activa
         "3",
         "-ResidentSurfaceForegroundRunSeconds",
         "3",
+        env={"FRANCIS_DATA_DIR": str(data_root)},
     )
 
     assert proc.returncode == 0, proc.stderr
@@ -122,6 +272,7 @@ def test_lens_process_supervision_boundary_blocks_supervision_and_service_activa
     child_proof_runs = {item["name"]: item for item in payload["child_proof_runs"]}
     assert set(child_proof_runs) == {
         "resident_surface_activation_boundary",
+        "resident_runtime_activation_plan",
         "resident_surface_foreground_runtime",
         "host_supervision",
     }
@@ -130,10 +281,18 @@ def test_lens_process_supervision_boundary_blocks_supervision_and_service_activa
         assert isinstance(run["duration_ms"], int)
         assert run["duration_ms"] >= 0
     assert child_proof_runs["resident_surface_activation_boundary"]["timeout_seconds"] == 60
+    assert child_proof_runs["resident_runtime_activation_plan"]["timeout_seconds"] == 60
     assert child_proof_runs["resident_surface_foreground_runtime"]["timeout_seconds"] == 360
     assert child_proof_runs["host_supervision"]["timeout_seconds"] == 360
     assert payload["authority_required"] == "process_supervision_and_service_control"
     assert payload["authority_granted"] is False
+    assert payload["resident_runtime_activation_plan_readback_observed"] is True
+    assert payload["resident_runtime_activation_plan_authority_observed"] is False
+    assert payload["active_resident_runtime_authority_grant_receipt_id"] == ""
+    assert payload["active_host_supervision_authority_grant_receipt_id"] == ""
+    assert payload["bounded_resident_candidate_ready"] is False
+    assert payload["activation_plan_would_launch_process"] is False
+    assert payload["activation_plan_would_supervise_process"] is False
     assert payload["resident_surface_foreground_runtime_proof_observed"] is True
     assert payload["resident_surface_runtime_supervision_handoff_observed"] is True
     assert payload["resident_surface_next_smallest_truthful_gap"] == "resident_surface_runtime_not_supervised"
@@ -203,6 +362,7 @@ def test_lens_process_supervision_boundary_blocks_supervision_and_service_activa
 
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["resident_surface_activation_boundary"]["status"] == "activation_boundary_observed"
+    assert checks["resident_runtime_activation_plan_readback"]["status"] == "readback_blocked"
     assert checks["resident_surface_foreground_runtime_proof"]["status"] == "foreground_runtime_observed"
     assert checks["resident_surface_runtime_supervision_handoff"]["status"] == "handoff_observed"
     assert checks["host_supervision_boundary"]["status"] == "supervision_blocked"
@@ -223,6 +383,14 @@ def test_lens_process_supervision_boundary_blocks_supervision_and_service_activa
         proof["activation_boundary_next_smallest_truthful_gap"]
         == "approve_resident_runtime_execution_authority_grant_receipt"
     )
+    assert proof["resident_runtime_activation_plan_status"] == "blocked"
+    assert proof["resident_runtime_activation_plan_readback_observed"] is True
+    assert proof["resident_runtime_activation_plan_authority_observed"] is False
+    assert proof["active_resident_runtime_authority_grant_receipt_id"] == ""
+    assert proof["active_host_supervision_authority_grant_receipt_id"] == ""
+    assert proof["bounded_resident_candidate_ready"] is False
+    assert proof["activation_plan_would_launch_process"] is False
+    assert proof["activation_plan_would_supervise_process"] is False
     assert proof["resident_surface_activation_boundary_observed"] is True
     assert proof["resident_overlay_boundary_observed"] is False
     assert proof["resident_surface_foreground_runtime_proof_status"] == "proof_passed"
@@ -262,6 +430,8 @@ def test_lens_process_supervision_boundary_blocks_supervision_and_service_activa
     assert governance["checkpoint_readback"] is False
     assert governance["resident_surface_activation_boundary_readback"] is True
     assert governance["resident_overlay_activation_boundary_readback"] is True
+    assert governance["resident_runtime_activation_plan_readback"] is True
+    assert governance["resident_runtime_activation_plan_authority_readback"] is False
     assert governance["cached_resident_surface_proof"] is False
     assert governance["cached_host_supervision_proof"] is False
     assert governance["live_http_readback"] is False
@@ -307,6 +477,7 @@ def test_lens_process_supervision_boundary_blocks_supervision_and_service_activa
 
 def test_lens_process_supervision_boundary_consumes_cached_resident_surface_proof(tmp_path: Path) -> None:
     cached_resident_surface = tmp_path / "resident-surface-proof.json"
+    data_root = tmp_path / "data"
     _write_cached_resident_surface_proof(cached_resident_surface)
 
     proc = _run_proof(
@@ -322,6 +493,7 @@ def test_lens_process_supervision_boundary_consumes_cached_resident_surface_proo
         "3",
         "-CachedResidentSurfaceProofPath",
         str(cached_resident_surface),
+        env={"FRANCIS_DATA_DIR": str(data_root)},
     )
 
     assert proc.returncode == 0, proc.stderr or proc.stdout
@@ -341,3 +513,94 @@ def test_lens_process_supervision_boundary_consumes_cached_resident_surface_proo
     assert checks["resident_surface_foreground_runtime_proof"]["status"] == "foreground_runtime_observed"
     assert checks["resident_surface_runtime_supervision_handoff"]["status"] == "handoff_observed"
     assert payload["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+
+
+def test_lens_process_supervision_boundary_consumes_active_authority_readback(tmp_path: Path) -> None:
+    data_root = tmp_path / "data"
+    cached_resident_surface = tmp_path / "resident-surface-proof.json"
+    cached_host_supervision = tmp_path / "host-supervision-proof.json"
+    _write_cached_resident_surface_proof(cached_resident_surface)
+    _write_cached_host_supervision_proof(cached_host_supervision)
+    _write_active_authority_receipts(data_root)
+
+    proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-StartupTimeoutSeconds",
+        "20",
+        "-ForegroundRunSeconds",
+        "2",
+        "-HostLaunchRunSeconds",
+        "3",
+        "-SupervisorRunSeconds",
+        "3",
+        "-CachedResidentSurfaceProofPath",
+        str(cached_resident_surface),
+        "-CachedHostSupervisionProofPath",
+        str(cached_host_supervision),
+        env={"FRANCIS_DATA_DIR": str(data_root)},
+    )
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "proof_passed"
+    assert payload["ok"] is True
+    assert payload["authority_required"] == "resident_runtime_execution_and_host_supervision_authority"
+    assert payload["authority_granted"] is True
+    assert payload["resident_runtime_activation_plan_readback_observed"] is True
+    assert payload["resident_runtime_activation_plan_authority_observed"] is True
+    assert payload["active_resident_runtime_authority_grant_receipt_id"] == "lrag_test_active"
+    assert payload["active_host_supervision_authority_grant_receipt_id"] == "lhsag_test_active"
+    assert payload["bounded_resident_candidate_ready"] is True
+    assert payload["activation_plan_would_launch_process"] is True
+    assert payload["activation_plan_would_supervise_process"] is True
+    assert payload["process_supervision_authority_granted"] is True
+    assert payload["process_restart_authority_granted"] is True
+    assert payload["service_install_authority_granted"] is False
+    assert payload["service_control_authority_granted"] is False
+    assert payload["process_supervision_boundary_observed"] is True
+    assert payload["service_activation_plan_observed"] is True
+    assert payload["process_supervision_ready"] is True
+    assert payload["supervision_ready"] is False
+    assert payload["resident_host_supervised"] is False
+    assert payload["resident_host_process"] is False
+    assert payload["would_supervise_process"] is False
+    assert payload["would_restart_process"] is False
+    assert payload["would_install_service"] is False
+    assert payload["would_start_service"] is False
+    assert payload["would_write_memory"] is False
+    assert "process_supervision_authority_not_granted" not in payload["blockers"]
+    assert "process_restart_authority_not_granted" not in payload["blockers"]
+    assert "service_install_authority_not_granted" in payload["blockers"]
+    assert "service_control_authority_not_granted" in payload["blockers"]
+    assert "resident_host_process_not_supervised" in payload["blockers"]
+
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["resident_runtime_activation_plan_readback"]["status"] == "authority_granted"
+    assert checks["process_supervision_denied"]["status"] == "authority_granted"
+    assert all(item["passed"] for item in payload["checks"])
+
+    proof = payload["proof"]
+    assert proof["resident_runtime_activation_plan_readback_observed"] is True
+    assert proof["resident_runtime_activation_plan_authority_observed"] is True
+    assert proof["active_resident_runtime_authority_grant_receipt_id"] == "lrag_test_active"
+    assert proof["active_host_supervision_authority_grant_receipt_id"] == "lhsag_test_active"
+    assert proof["activation_plan_would_supervise_process"] is True
+
+    governance = payload["governance"]
+    assert governance["resident_runtime_activation_plan_readback"] is True
+    assert governance["resident_runtime_activation_plan_authority_readback"] is True
+    assert governance["resident_runtime_execution_authority"] is True
+    assert governance["host_supervision_authority"] is True
+    assert governance["process_supervision_authority"] is True
+    assert governance["process_restart_authority"] is True
+    assert governance["execution_authority"] is False
+    assert governance["approval_decision_authority"] is False
+    assert governance["memory_write"] is False
+    assert governance["service_install_authority"] is False
+    assert governance["service_control_authority"] is False
+    assert governance["tray_registration_authority"] is False
+    assert governance["hotkey_registration_authority"] is False
+    assert governance["overlay_control_authority"] is False
+    assert governance["resident_claim_authority"] is False
+    assert governance["mutation_authority_granted"] is False

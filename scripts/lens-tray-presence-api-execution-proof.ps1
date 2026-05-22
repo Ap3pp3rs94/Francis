@@ -181,7 +181,8 @@ def _run() -> tuple[int, dict[str, Any]]:
     repo_root = Path(os.environ["FRANCIS_ROOT"]).resolve()
     data_root = Path(os.environ["FRANCIS_DATA_DIR"]).resolve()
     run_seconds = int(os.environ.get("FRANCIS_PROOF_RUN_SECONDS", "5"))
-    dependency_run_seconds = max(run_seconds, 20)
+    # Keep dependent runtimes alive long enough for slower Windows readbacks.
+    dependency_run_seconds = max(run_seconds, 60)
     data_root.mkdir(parents=True, exist_ok=True)
 
     actor = "test.system.write"
@@ -480,6 +481,7 @@ def _run() -> tuple[int, dict[str, Any]]:
             "recommended_proof_script": "scripts/lens-os-binding-api-execution-proof.ps1 -Mode Status",
             "recommended_handoff_source": "api_tray_presence_execution_global_hotkey_handoff",
             "recommended_handoff": recommended_handoff,
+            "dependency_run_seconds": dependency_run_seconds,
             "host_supervision_approval_id": host_approval_id,
             "resident_runtime_approval_id": runtime_approval_id,
             "tray_presence_approval_id": tray_approval_id,
@@ -511,6 +513,7 @@ def _run() -> tuple[int, dict[str, Any]]:
             "checks": checks,
             "blockers": blockers,
             "proof": {
+                "dependency_run_seconds": dependency_run_seconds,
                 "resident_start_status": str(resident_start.get("status") or ""),
                 "tray_start_status": str(tray_start.get("status") or ""),
                 "tray_runtime_status_after_start": str(tray_state_after_start.get("status") or ""),

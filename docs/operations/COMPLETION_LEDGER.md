@@ -37426,6 +37426,79 @@ review boundary:
   persistent_supervision_api_execution_proof_readback=true;
   summon_api_launch_on_hotkey_runtime_readback_observed=true`
 
+Stage 6 completion-audit API dependency lease stabilization on `2026-05-22`:
+
+- The process-supervision authority-boundary proof now reads the resident
+  runtime activation plan and active authority grants, so the audit can
+  distinguish the default denied process boundary from the bounded active
+  resident-runtime + host-supervision authority posture.
+- The direct resident/process boundary still does not claim service control,
+  service install, memory write, resident-claim authority, or completed
+  resident host supervision.
+- The persistent-supervision, OS-binding, tray, overlay, and summon API proof
+  scripts now keep dependent Lens runtimes alive for a minimum 60 seconds during
+  proof execution. This avoids stale post-start `/lens/status` readbacks when a
+  slower Windows runtime chain outlives a short 10-second proof request.
+- The tray, overlay, and summon proof payloads now expose the dependency lease
+  they used, and their tests assert the 60-second floor directly.
+- The fresh bounded completion audit with `-AllowLaunchOnHotkey` now consumes
+  the resident-runtime, tray, OS-binding, overlay, bounded-summon,
+  launch-on-hotkey summon, and persistent-supervision API execution proof chain
+  without child-proof timeouts. It remains truthfully blocked at
+  `next_smallest_truthful_gap=persistent_supervision_execution_boundary` with
+  `recommended_handoff_source=stage6_prerequisite_bringup_enablement_receipt_review`.
+- This does not close Stage 6, start Stage 7, grant resident-claim authority,
+  install or control services, write memory, capture anything, or turn the
+  default non-`AllowLaunchOnHotkey` completion audit into a mutating runtime
+  proof.
+
+Latest validation for Stage 6 completion-audit API dependency lease
+stabilization:
+
+- `python -m pytest
+  tests\test_lens_tray_presence_api_execution_proof_script.py::test_lens_tray_presence_api_execution_proof_uses_governed_routes
+  tests\test_lens_overlay_api_execution_proof_script.py::test_lens_overlay_api_execution_proof_uses_governed_routes
+  tests\test_lens_summon_api_execution_proof_script.py::test_lens_summon_api_execution_proof_uses_governed_routes
+  -q`
+  Result: `passed; 3 static governed-route checks`
+- `rg -n 'dependency_run_seconds = max\(run_seconds, 20\)' scripts tests`
+  Result: `passed; no remaining 20-second dependency leases`
+- `python -m pytest
+  tests\test_lens_tray_presence_api_execution_proof_script.py::test_lens_tray_presence_api_execution_proof_starts_and_stops_real_tray_runtime
+  tests\test_lens_overlay_api_execution_proof_script.py::test_lens_overlay_api_execution_proof_starts_and_stops_real_overlay_runtime
+  tests\test_lens_summon_api_execution_proof_script.py::test_lens_summon_api_execution_proof_executes_bounded_summon_handoff
+  -q`
+  Result: `passed; 3 live API execution proofs`
+- `scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2
+  -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3
+  -ChildProofTimeoutSeconds 240 -AllowLaunchOnHotkey`
+  Result: `passed as blocked audit; ok=true; status=blocked;
+  audit_status=complete; ready_to_close=false; transition_allowed=false;
+  child_proof_timeouts=[]; child_proof_runs=23; all child runs exit_code=0
+  and timed_out=false; next_smallest_truthful_gap=persistent_supervision_execution_boundary;
+  recommended_handoff_source=stage6_prerequisite_bringup_enablement_receipt_review;
+  recommended_next_slice=run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt;
+  summon_api_launch_on_hotkey_proof.status=proof_passed;
+  resident_runtime_api_execution_proof.status=proof_passed;
+  tray_presence_api_execution_proof.status=proof_passed;
+  os_binding_api_execution_proof.status=proof_passed;
+  overlay_api_execution_proof.status=proof_passed;
+  summon_api_bounded_execution_proof.status=proof_passed;
+  persistent_supervision_api_execution_proof.status=proof_passed`
+- `scripts\lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath
+  C:\Users\Ap3pp\AppData\Local\Temp\francis-stage6-completion-audit-20260522-101131.json`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=persistent_supervision_execution_boundary;
+  recommended_handoff_source=stage6_prerequisite_bringup_enablement_receipt_review;
+  recommended_next_slice=run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt;
+  recommended_proof_script=scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status;
+  authority_required=none_readback_only; authority_granted=false;
+  stage6_completion_audit_enablement_receipt_review_handoff_observed=true;
+  stage6_completion_audit_recommended_handoff_consumed=true;
+  stage6_completion_audit_runtime_readback_required=false`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

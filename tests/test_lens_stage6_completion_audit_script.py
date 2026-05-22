@@ -585,18 +585,22 @@ def test_lens_stage6_completion_audit_observes_resident_host_runtime_authority_g
 def test_lens_stage6_completion_audit_observes_process_supervision_boundary_authority_gates() -> None:
     script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
 
-    assert (
-        "[string]$ProcessSupervisionBoundary.authority_required -eq 'process_supervision_and_service_control'"
-    ) in script
-    assert "-not [bool]$ProcessSupervisionBoundary.authority_granted" in script
+    assert ("[string]$ProcessSupervisionBoundary.authority_required -in @(") in script
+    assert "'process_supervision_and_service_control'" in script
+    assert "'resident_runtime_execution_and_host_supervision_authority'" in script
     assert (
         "[string]$ProcessSupervisionBoundary.process_supervision_authority_required -eq 'process_supervision_authority'"
     ) in script
-    assert "-not [bool]$ProcessSupervisionBoundary.process_supervision_authority_granted" in script
     assert (
         "[string]$ProcessSupervisionBoundary.process_restart_authority_required -eq 'process_restart_authority'"
     ) in script
+    assert "-not [bool]$ProcessSupervisionBoundary.authority_granted" in script
+    assert "-not [bool]$ProcessSupervisionBoundary.process_supervision_authority_granted" in script
     assert "-not [bool]$ProcessSupervisionBoundary.process_restart_authority_granted" in script
+    assert "[bool]$ProcessSupervisionBoundary.authority_granted" in script
+    assert "[bool]$ProcessSupervisionBoundary.process_supervision_authority_granted" in script
+    assert "[bool]$ProcessSupervisionBoundary.process_restart_authority_granted" in script
+    assert "[bool]$ProcessSupervisionBoundary.resident_runtime_activation_plan_authority_observed" in script
     assert (
         "[string]$ProcessSupervisionBoundary.service_install_authority_required -eq 'service_install_authority'"
     ) in script
@@ -780,6 +784,10 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     assert "New-ChildProofRunSummary -Name 'overlay_api_execution'" in script
     assert "New-ChildProofRunSummary -Name 'summon_api_bounded_execution'" in script
     assert "New-ChildProofRunSummary -Name 'persistent_supervision_api_execution'" in script
+    assert (
+        "-ScriptPath $PersistentSupervisionApiExecutionProofScript `\n"
+        "    -ScriptArgs @('-Mode', 'Status', '-RunSeconds', '10')" in script
+    )
     assert "$SummonApiLaunchOnHotkeyProofObserved = (" in script
     assert "$ResidentRuntimeApiExecutionProofObserved = (" in script
     assert "$TrayPresenceApiExecutionProofObserved = (" in script
@@ -1062,13 +1070,7 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     assert "proof_script = $HelpfulNotNoisyProofScript" in script
     assert "next_smallest_truthful_gap = 'resident_surface_runtime_not_supervised'" in script
     assert "$Stage6PrerequisiteBringupAppliedEnablementReceiptReviewPending = (" in script
-    assert (
-        "$Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and\n"
-        "  -not (\n"
-        "    $PersistentSupervisionResidentClaimBoundaryObserved -and\n"
-        "    [string]$PersistentSupervisionResidentClaimBoundaryProof.next_smallest_truthful_gap "
-        "-eq 'stage6_lens_completion_audit'"
-    ) in script
+    assert "$Stage6PrerequisiteBringupPlanAppliedEnablementObserved\n)" in script
     assert (
         "$SummonAnywhereRuntimeReadbackObserved -and\n  $Stage6PrerequisiteBringupAppliedEnablementReceiptReviewPending"
     ) in script
@@ -2895,7 +2897,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert process_boundary["resident_host_supervised"] is False
     assert process_boundary["service_installed"] is False
     assert process_boundary["service_managed"] is False
-    assert process_boundary["process_supervision_ready"] is False
+    assert process_boundary["process_supervision_ready"] is process_boundary["authority_granted"]
     assert process_boundary["service_activation_ready"] is False
     assert process_boundary["would_supervise_process"] is False
     assert process_boundary["would_restart_process"] is False
@@ -2904,7 +2906,14 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert process_boundary["would_write_memory"] is False
     assert process_boundary["would_decide_approval"] is False
     assert "resident_host_process_not_supervised" in process_boundary["blockers"]
-    assert "process_supervision_authority_not_granted" in process_boundary["blockers"]
+    if process_boundary["process_supervision_authority_granted"]:
+        assert process_boundary["authority_granted"] is True
+        assert "process_supervision_authority_not_granted" not in process_boundary["blockers"]
+        assert "process_restart_authority_not_granted" not in process_boundary["blockers"]
+    else:
+        assert process_boundary["authority_granted"] is False
+        assert "process_supervision_authority_not_granted" in process_boundary["blockers"]
+        assert "process_restart_authority_not_granted" in process_boundary["blockers"]
     assert "scripts/lens-process-supervision-authority-boundary-proof.ps1 -Mode Status" in process_boundary["evidence"]
 
     runtime_boundary = payload["resident_host_runtime_boundary_proof"]

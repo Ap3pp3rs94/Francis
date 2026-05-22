@@ -433,6 +433,73 @@ print(json.dumps(lens_resident_surface_activation_boundary(limit=5)))
   }
 }
 
+function Invoke-ActivationPlan {
+  param([string]$PythonPath)
+
+  if ([string]::IsNullOrWhiteSpace($PythonPath)) {
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+      error = 'python_unavailable'
+      timed_out = $false
+      timeout_seconds = 60
+      duration_ms = 0
+    }
+  }
+
+  $Source = @'
+import json
+
+from francis.lens.activation import lens_resident_runtime_activation_plan
+
+print(json.dumps(lens_resident_runtime_activation_plan()))
+'@
+
+  $TempSourcePath = ''
+  $Timer = [System.Diagnostics.Stopwatch]::StartNew()
+  try {
+    $TempSourcePath = [System.IO.Path]::GetTempFileName()
+    Set-Content -LiteralPath $TempSourcePath -Value $Source -Encoding ASCII
+    $Output = & $PythonPath $TempSourcePath 2>&1
+    $ExitCode = $LASTEXITCODE
+  } catch {
+    $Timer.Stop()
+    return [ordered]@{
+      exit_code = 1
+      payload = $null
+      output = ''
+      error = [string]$_.Exception.Message
+      timed_out = $false
+      timeout_seconds = 60
+      duration_ms = [int]$Timer.ElapsedMilliseconds
+    }
+  } finally {
+    if (-not [string]::IsNullOrWhiteSpace($TempSourcePath) -and (Test-Path -LiteralPath $TempSourcePath -PathType Leaf)) {
+      Remove-Item -LiteralPath $TempSourcePath -ErrorAction SilentlyContinue
+    }
+  }
+  $Timer.Stop()
+
+  $Text = ($Output | ForEach-Object { [string]$_ }) -join "`n"
+  $Payload = $null
+  try {
+    $Payload = $Text | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    $Payload = $null
+  }
+
+  return [ordered]@{
+    exit_code = $ExitCode
+    payload = $Payload
+    output = $Text
+    error = ''
+    timed_out = $false
+    timeout_seconds = 60
+    duration_ms = [int]$Timer.ElapsedMilliseconds
+  }
+}
+
 function New-ChildProofRunSummary {
   param(
     [string]$Name,
@@ -491,6 +558,7 @@ $ActivationBoundaryDataRoot = [System.IO.Path]::GetFullPath(
 $EffectiveResidentSurfaceForegroundRunSeconds = 0
 
 $ActivationBoundaryResult = Invoke-ActivationBoundary -PythonPath $PythonPath -ProofDataRoot $ActivationBoundaryDataRoot
+$ActivationPlanResult = Invoke-ActivationPlan -PythonPath $PythonPath
 $CachedResidentSurfaceResult = Read-CachedJsonScriptResult -Path $CachedResidentSurfaceProofPath
 if ($null -ne $CachedResidentSurfaceResult) {
   $ResidentSurfaceResult = $CachedResidentSurfaceResult
@@ -513,16 +581,22 @@ if ($null -ne $CachedHostSupervisionResult) {
 }
 $ChildProofRuns = @(
   (New-ChildProofRunSummary -Name 'resident_surface_activation_boundary' -Result $ActivationBoundaryResult),
+  (New-ChildProofRunSummary -Name 'resident_runtime_activation_plan' -Result $ActivationPlanResult),
   (New-ChildProofRunSummary -Name 'resident_surface_foreground_runtime' -Result $ResidentSurfaceResult),
   (New-ChildProofRunSummary -Name 'host_supervision' -Result $HostSupervisionResult)
 )
 $ChildProofTimeouts = @($ChildProofRuns | Where-Object { [bool]$_['timed_out'] } | ForEach-Object { [string]$_['name'] })
 
 $ActivationBoundaryPayload = Get-PropertyValue -Payload $ActivationBoundaryResult -Name 'payload'
+$ActivationPlanPayload = Get-PropertyValue -Payload $ActivationPlanResult -Name 'payload'
 $ResidentSurfacePayload = Get-PropertyValue -Payload $ResidentSurfaceResult -Name 'payload'
 $HostSupervisionPayload = Get-PropertyValue -Payload $HostSupervisionResult -Name 'payload'
 $ActivationBoundaryGovernance = Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'governance'
 $ActivationBoundaryExecution = Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'execution'
+$ActivationPlanGovernance = Get-PropertyValue -Payload $ActivationPlanPayload -Name 'governance'
+$ActivationPlanPlan = Get-PropertyValue -Payload $ActivationPlanPayload -Name 'plan'
+$ActivationPlanSourceReadbacks = Get-PropertyValue -Payload $ActivationPlanPayload -Name 'source_readbacks'
+$ActivationPlanHostSupervisionAuthority = Get-PropertyValue -Payload $ActivationPlanSourceReadbacks -Name 'host_supervision_authority'
 $ResidentSurfaceRecommendedHandoff = Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'recommended_handoff'
 $ResidentSurfaceProof = Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'proof'
 $ResidentSurfaceBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'blockers' -Default @())
@@ -591,6 +665,42 @@ $ResidentSurfaceRuntimeSupervisionHandoffObserved = (
   -not [bool](Get-PropertyValue -Payload $ResidentSurfaceRecommendedHandoff -Name 'would_restart_process' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ResidentSurfaceRecommendedHandoff -Name 'would_claim_resident' -Default $true)
 )
+$ActivationPlanReadbackObserved = (
+  [int](Get-PropertyValue -Payload $ActivationPlanResult -Name 'exit_code' -Default -1) -eq 0 -and
+  [string](Get-PropertyValue -Payload $ActivationPlanPayload -Name 'kind' -Default '') -eq 'lens.resident_runtime.activation_plan' -and
+  [bool](Get-PropertyValue -Payload $ActivationPlanPayload -Name 'ok' -Default $false) -and
+  [string](Get-PropertyValue -Payload $ActivationPlanPayload -Name 'status' -Default '') -eq 'blocked' -and
+  [bool](Get-PropertyValue -Payload $ActivationPlanPayload -Name 'plan_available' -Default $false)
+)
+$ActivationPlanAuthorityObserved = (
+  $ActivationPlanReadbackObserved -and
+  [bool](Get-PropertyValue -Payload $ActivationPlanPayload -Name 'resident_runtime_execution_authority' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $ActivationPlanPayload -Name 'host_supervision_authority' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $ActivationPlanPayload -Name 'process_supervision_authority' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $ActivationPlanPayload -Name 'process_restart_authority' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $ActivationPlanPayload -Name 'bounded_resident_candidate_ready' -Default $false) -and
+  -not [string]::IsNullOrWhiteSpace([string](Get-PropertyValue -Payload $ActivationPlanPayload -Name 'active_authority_grant_receipt_id' -Default '')) -and
+  -not [string]::IsNullOrWhiteSpace([string](Get-PropertyValue -Payload $ActivationPlanHostSupervisionAuthority -Name 'active_grant_receipt_id' -Default '')) -and
+  [bool](Get-PropertyValue -Payload $ActivationPlanGovernance -Name 'read_only_contract' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $ActivationPlanGovernance -Name 'plan_readback_only' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationPlanGovernance -Name 'execution_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationPlanGovernance -Name 'approval_decision_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationPlanGovernance -Name 'memory_write' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationPlanGovernance -Name 'local_process_launch_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationPlanGovernance -Name 'service_install_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationPlanGovernance -Name 'service_control_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationPlanGovernance -Name 'tray_registration_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationPlanGovernance -Name 'hotkey_registration_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationPlanGovernance -Name 'overlay_control_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ActivationPlanGovernance -Name 'resident_claim_authority' -Default $true)
+)
+$ProcessSupervisionAuthorityGranted = $ActivationPlanAuthorityObserved -and [bool](Get-PropertyValue -Payload $ActivationPlanPayload -Name 'process_supervision_authority' -Default $false)
+$ProcessRestartAuthorityGranted = $ActivationPlanAuthorityObserved -and [bool](Get-PropertyValue -Payload $ActivationPlanPayload -Name 'process_restart_authority' -Default $false)
+$ActiveResidentRuntimeAuthorityGrantReceiptId = [string](Get-PropertyValue -Payload $ActivationPlanPayload -Name 'active_authority_grant_receipt_id' -Default '')
+$ActiveHostSupervisionAuthorityGrantReceiptId = [string](Get-PropertyValue -Payload $ActivationPlanHostSupervisionAuthority -Name 'active_grant_receipt_id' -Default '')
+$BoundedResidentCandidateReady = $ActivationPlanAuthorityObserved -and [bool](Get-PropertyValue -Payload $ActivationPlanPayload -Name 'bounded_resident_candidate_ready' -Default $false)
+$ActivationPlanWouldLaunchProcess = $ActivationPlanAuthorityObserved -and [bool](Get-PropertyValue -Payload $ActivationPlanPlan -Name 'would_launch_process' -Default $false)
+$ActivationPlanWouldSuperviseProcess = $ActivationPlanAuthorityObserved -and [bool](Get-PropertyValue -Payload $ActivationPlanPlan -Name 'would_supervise_process' -Default $false)
 $HostSupervisionObserved = (
   [int](Get-PropertyValue -Payload $HostSupervisionResult -Name 'exit_code' -Default -1) -eq 0 -and
   [string](Get-PropertyValue -Payload $HostSupervisionPayload -Name 'kind' -Default '') -eq 'lens.host.supervision_readiness_proof' -and
@@ -606,6 +716,7 @@ $ProcessSupervisionDenied = (
   -not [bool](Get-PropertyValue -Payload $HostSupervisionGovernance -Name 'process_supervision_authority' -Default $false) -and
   -not [bool](Get-PropertyValue -Payload $HostSupervisionGovernance -Name 'process_restart_authority' -Default $false)
 )
+$ProcessSupervisionAuthorityBoundaryObserved = $ActivationPlanAuthorityObserved -or $ProcessSupervisionDenied
 $ServiceActivationPlanBlocked = (
   $HostSupervisionObserved -and
   [string](Get-PropertyValue -Payload $HostSupervisionProof -Name 'service_plan_status' -Default '') -eq 'blocked' -and
@@ -639,31 +750,40 @@ $AuthorityBoundary = (
 
 $Checks = @(
   (New-Check -Id 'resident_surface_activation_boundary' -Status $(if ($ActivationBoundaryObserved) { 'activation_boundary_observed' } else { 'failed' }) -Passed $ActivationBoundaryObserved -Evidence 'lens_resident_surface_activation_boundary' -Reason 'The resident surface activation denial boundary must be observed without rerunning the full overlay/live-operator proof package.')
+  (New-Check -Id 'resident_runtime_activation_plan_readback' -Status $(if ($ActivationPlanAuthorityObserved) { 'authority_granted' } elseif ($ActivationPlanReadbackObserved) { 'readback_blocked' } else { 'failed' }) -Passed $ActivationPlanReadbackObserved -Evidence 'lens_resident_runtime_activation_plan' -Reason 'The process-supervision boundary proof must consume the current resident-runtime activation plan readback before deciding whether process supervision authority is still denied or has been granted.')
   (New-Check -Id 'resident_surface_foreground_runtime_proof' -Status $(if ($ResidentSurfaceForegroundRuntimeProofObserved) { 'foreground_runtime_observed' } else { 'failed' }) -Passed $ResidentSurfaceForegroundRuntimeProofObserved -Evidence 'scripts/lens-resident-surface-proof.ps1 -Mode Status' -Reason 'The process-supervision authority proof must consume the resident-surface foreground runtime proof before claiming this boundary is the current blocker.')
   (New-Check -Id 'resident_surface_runtime_supervision_handoff' -Status $(if ($ResidentSurfaceRuntimeSupervisionHandoffObserved) { 'handoff_observed' } else { 'missing_or_failed' }) -Passed $ResidentSurfaceRuntimeSupervisionHandoffObserved -Evidence 'resident_surface_runtime_supervision_handoff' -Reason 'The resident-surface proof must hand off to process supervision without granting execution, mutation, or resident-claim authority.')
   (New-Check -Id 'host_supervision_boundary' -Status $(if ($HostSupervisionObserved) { 'supervision_blocked' } else { 'failed' }) -Passed $HostSupervisionObserved -Evidence 'scripts/lens-host-supervision-proof.ps1 -Mode Status' -Reason 'The host supervision proof must remain observable and blocked.')
-  (New-Check -Id 'process_supervision_denied' -Status $(if ($ProcessSupervisionDenied) { 'blocked' } else { 'unexpected_authority' }) -Passed $ProcessSupervisionDenied -Evidence 'process_supervision_authority + process_restart_authority' -Reason 'Resident process supervision and restart authority remain denied.')
+  (New-Check -Id 'process_supervision_denied' -Status $(if ($ActivationPlanAuthorityObserved) { 'authority_granted' } elseif ($ProcessSupervisionDenied) { 'blocked' } else { 'unexpected_authority' }) -Passed $ProcessSupervisionAuthorityBoundaryObserved -Evidence 'process_supervision_authority + process_restart_authority' -Reason 'Resident process supervision and restart authority must be truthfully reported as denied or granted by active authority receipts without implying a supervised resident process exists.')
   (New-Check -Id 'service_activation_plan_blocked' -Status $(if ($ServiceActivationPlanBlocked) { 'blocked_no_service_activation' } else { 'unexpected_service_activation' }) -Passed $ServiceActivationPlanBlocked -Evidence 'service_plan' -Reason 'The service plan does not install, start, or manage a resident host service.')
-  (New-Check -Id 'authority_boundary' -Status $(if ($AuthorityBoundary) { 'diagnostic_bounded' } else { 'unexpected_authority' }) -Passed $AuthorityBoundary -Evidence 'activation_boundary.governance + host_supervision.governance' -Reason 'The proof chain must not grant execution, approval, memory, resident activation, process supervision, service, tray, hotkey, overlay, summon, or capture authority.')
+  (New-Check -Id 'authority_boundary' -Status $(if ($AuthorityBoundary) { 'diagnostic_bounded' } else { 'unexpected_authority' }) -Passed $AuthorityBoundary -Evidence 'activation_boundary.governance + host_supervision.governance' -Reason 'The proof chain must not execute, approve, write memory, activate services, register tray or hotkey bindings, control overlay windows, claim residency, or capture data.')
 )
 
 $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
-$AllBlockers = @(
-  (ConvertTo-StringArray -Value (Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'blockers' -Default @())) +
-  $ResidentSurfaceBlockers +
-  (ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostSupervisionPayload -Name 'blockers' -Default @())) +
-  @(
-    'process_supervision_authority_not_granted',
-    'process_restart_authority_not_granted',
-    'service_install_authority_not_granted',
-    'service_control_authority_not_granted',
-    'resident_host_process_not_supervised',
-    'resident_supervision_disabled'
-  ) | Sort-Object -Unique
+$AllBlockerCandidates = @()
+$AllBlockerCandidates += ConvertTo-StringArray -Value (Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'blockers' -Default @())
+$AllBlockerCandidates += ConvertTo-StringArray -Value (Get-PropertyValue -Payload $ActivationPlanPayload -Name 'blockers' -Default @())
+$AllBlockerCandidates += $ResidentSurfaceBlockers
+$AllBlockerCandidates += ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostSupervisionPayload -Name 'blockers' -Default @())
+if (-not $ActivationPlanAuthorityObserved) {
+  $AllBlockerCandidates += 'process_supervision_authority_not_granted'
+  $AllBlockerCandidates += 'process_restart_authority_not_granted'
+}
+$AllBlockerCandidates += @(
+  'service_install_authority_not_granted',
+  'service_control_authority_not_granted',
+  'resident_host_process_not_supervised',
+  'resident_supervision_disabled'
 )
+$AllBlockers = @($AllBlockerCandidates | Sort-Object -Unique)
 $AllBlockers = @($AllBlockers | Where-Object {
     $_ -ne 'operator_experience_proof_missing' -and $_ -ne 'live_operator_experience_proof_missing'
   })
+if ($ActivationPlanAuthorityObserved) {
+  $AllBlockers = @($AllBlockers | Where-Object {
+      $_ -ne 'process_supervision_authority_not_granted' -and $_ -ne 'process_restart_authority_not_granted'
+    })
+}
 
 $Payload = [ordered]@{
   ok = $ProofPassed
@@ -683,8 +803,15 @@ $Payload = [ordered]@{
   child_proof_runs = @($ChildProofRuns)
   cached_resident_surface_proof = [bool](Get-PropertyValue -Payload $ResidentSurfaceResult -Name 'cached' -Default $false)
   cached_host_supervision_proof = [bool](Get-PropertyValue -Payload $HostSupervisionResult -Name 'cached' -Default $false)
-  authority_required = 'process_supervision_and_service_control'
-  authority_granted = $false
+  authority_required = if ($ActivationPlanAuthorityObserved) { 'resident_runtime_execution_and_host_supervision_authority' } else { 'process_supervision_and_service_control' }
+  authority_granted = $ActivationPlanAuthorityObserved
+  resident_runtime_activation_plan_readback_observed = $ActivationPlanReadbackObserved
+  resident_runtime_activation_plan_authority_observed = $ActivationPlanAuthorityObserved
+  active_resident_runtime_authority_grant_receipt_id = $ActiveResidentRuntimeAuthorityGrantReceiptId
+  active_host_supervision_authority_grant_receipt_id = $ActiveHostSupervisionAuthorityGrantReceiptId
+  bounded_resident_candidate_ready = $BoundedResidentCandidateReady
+  activation_plan_would_launch_process = $ActivationPlanWouldLaunchProcess
+  activation_plan_would_supervise_process = $ActivationPlanWouldSuperviseProcess
   resident_surface_foreground_runtime_proof_observed = $ResidentSurfaceForegroundRuntimeProofObserved
   resident_surface_runtime_supervision_handoff_observed = $ResidentSurfaceRuntimeSupervisionHandoffObserved
   resident_surface_runtime_supervision_handoff = $ResidentSurfaceRecommendedHandoff
@@ -699,9 +826,9 @@ $Payload = [ordered]@{
   recommended_proof_script = [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'recommended_proof_script' -Default '')
   recommended_handoff = $ResidentSurfaceRecommendedHandoff
   process_supervision_authority_required = 'process_supervision_authority'
-  process_supervision_authority_granted = $false
+  process_supervision_authority_granted = $ProcessSupervisionAuthorityGranted
   process_restart_authority_required = 'process_restart_authority'
-  process_restart_authority_granted = $false
+  process_restart_authority_granted = $ProcessRestartAuthorityGranted
   service_install_authority_required = 'service_install_authority'
   service_install_authority_granted = $false
   service_control_authority_required = 'service_control_authority'
@@ -710,7 +837,7 @@ $Payload = [ordered]@{
   resident_surface_activation_boundary_observed = $ActivationBoundaryObserved
   resident_overlay_activation_boundary_observed = $ActivationBoundaryObserved
   host_supervision_boundary_observed = $HostSupervisionObserved
-  process_supervision_boundary_observed = $ProcessSupervisionDenied
+  process_supervision_boundary_observed = $ProcessSupervisionAuthorityBoundaryObserved
   service_activation_plan_observed = $ServiceActivationPlanBlocked
   bounded_local_process_launch_observed = [bool](Get-PropertyValue -Payload $HostSupervisionPayload -Name 'bounded_host_launch_observed' -Default $false)
   supervision_ready = $false
@@ -720,7 +847,7 @@ $Payload = [ordered]@{
   resident_host_supervised = $false
   service_installed = $false
   service_managed = $false
-  process_supervision_ready = $false
+  process_supervision_ready = $ActivationPlanAuthorityObserved
   service_activation_ready = $false
   tray_presence = $false
   global_hotkey_bound = $false
@@ -744,6 +871,14 @@ $Payload = [ordered]@{
     activation_boundary_status = [string](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'status' -Default '')
     activation_boundary_ok = [bool](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'ok' -Default $false)
     activation_boundary_next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'next_smallest_truthful_gap' -Default '')
+    resident_runtime_activation_plan_status = [string](Get-PropertyValue -Payload $ActivationPlanPayload -Name 'status' -Default '')
+    resident_runtime_activation_plan_readback_observed = $ActivationPlanReadbackObserved
+    resident_runtime_activation_plan_authority_observed = $ActivationPlanAuthorityObserved
+    active_resident_runtime_authority_grant_receipt_id = $ActiveResidentRuntimeAuthorityGrantReceiptId
+    active_host_supervision_authority_grant_receipt_id = $ActiveHostSupervisionAuthorityGrantReceiptId
+    bounded_resident_candidate_ready = $BoundedResidentCandidateReady
+    activation_plan_would_launch_process = $ActivationPlanWouldLaunchProcess
+    activation_plan_would_supervise_process = $ActivationPlanWouldSuperviseProcess
     resident_surface_activation_boundary_observed = $ActivationBoundaryObserved
     resident_overlay_boundary_observed = $false
     resident_surface_foreground_runtime_proof_status = [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'status' -Default '')
@@ -770,6 +905,8 @@ $Payload = [ordered]@{
     checkpoint_readback = $false
     resident_surface_activation_boundary_readback = $ActivationBoundaryObserved
     resident_overlay_activation_boundary_readback = $ActivationBoundaryObserved
+    resident_runtime_activation_plan_readback = $ActivationPlanReadbackObserved
+    resident_runtime_activation_plan_authority_readback = $ActivationPlanAuthorityObserved
     cached_resident_surface_proof = [bool](Get-PropertyValue -Payload $ResidentSurfaceResult -Name 'cached' -Default $false)
     cached_host_supervision_proof = [bool](Get-PropertyValue -Payload $HostSupervisionResult -Name 'cached' -Default $false)
     live_http_readback = $false
@@ -791,10 +928,13 @@ $Payload = [ordered]@{
     approval_decision_authority = $false
     memory_write = $false
     resident_overlay_activation_authority = $false
-    process_restart_authority = $false
-    process_supervision_authority = $false
+    resident_runtime_execution_authority = $ActivationPlanAuthorityObserved
+    host_supervision_authority = $ActivationPlanAuthorityObserved
+    process_restart_authority = $ProcessRestartAuthorityGranted
+    process_supervision_authority = $ProcessSupervisionAuthorityGranted
     service_install_authority = $false
     service_control_authority = $false
+    resident_claim_authority = $false
     overlay_control_authority = $false
     summon_authority = $false
     capture_authority = $false
@@ -809,7 +949,7 @@ $Payload = [ordered]@{
     denial_receipt_write_authority = $false
     mutation_authority_granted = $false
   }
-  message = 'Stage 6 process supervision authority remains a boundary: resident surface activation denial and host supervision proof are observable, but Francis does not supervise, restart, install, start, or manage a resident Lens host service.'
+  message = if ($ActivationPlanAuthorityObserved) { 'Stage 6 process supervision authority is granted by active resident-runtime and host-supervision readbacks, but Francis still has not supervised, restarted, installed, started, or managed a resident Lens host service.' } else { 'Stage 6 process supervision authority remains a boundary: resident surface activation denial and host supervision proof are observable, but Francis does not supervise, restart, install, start, or manage a resident Lens host service.' }
 }
 
 $Payload | ConvertTo-Json -Depth 10

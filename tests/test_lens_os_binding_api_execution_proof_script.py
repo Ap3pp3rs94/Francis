@@ -55,6 +55,7 @@ def test_lens_os_binding_api_execution_proof_uses_governed_routes() -> None:
     assert '"/lens/host/supervision/execute"' in script
     assert '"mode": "stop"' in script
     assert '"mode": "resident_stop"' in script
+    assert "dependency_run_seconds = max(run_seconds, 60)" in script
     assert '"overlay_control_authority": False' in script
     assert '"summon_authority": False' in script
     assert '"resident_claim_authority": False' in script
@@ -97,6 +98,7 @@ def test_lens_os_binding_api_execution_proof_starts_and_stops_real_hotkey_runtim
     assert payload["recommended_handoff"]["id"] == "overlay_window"
     assert payload["recommended_handoff"]["would_execute"] is False
     assert payload["recommended_handoff"]["would_mutate"] is False
+    assert payload["dependency_run_seconds"] == 60
 
     assert payload["host_supervision_authority_grant_receipt_id"]
     assert payload["resident_runtime_authority_grant_receipt_id"]
@@ -147,6 +149,7 @@ def test_lens_os_binding_api_execution_proof_starts_and_stops_real_hotkey_runtim
     assert payload["blockers"] == ["overlay_window_missing", "summon_binding_missing"]
 
     proof = payload["proof"]
+    assert proof["dependency_run_seconds"] == 60
     assert proof["resident_start_status"] == "resident_supervision_started"
     assert proof["tray_start_status"] == "tray_presence_started"
     assert proof["hotkey_start_status"] == "global_hotkey_bound"

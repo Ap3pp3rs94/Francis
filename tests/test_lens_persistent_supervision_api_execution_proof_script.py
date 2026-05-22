@@ -67,6 +67,7 @@ def test_lens_persistent_supervision_api_execution_proof_uses_governed_routes() 
         '"/lens/host/persistent-supervision/enablement/executions?limit=10&approval_id={execution_approval_id}"'
         in script
     )
+    assert "dependency_run_seconds = max(run_seconds, 60)" in script
     assert "FRANCIS_LENS_HOST_SERVICE_CONFIG_PATH" in script
     assert '"allow_launch": False' in script
     assert '"local_process_launch_authority": False' in script
@@ -110,6 +111,8 @@ def test_lens_persistent_supervision_api_execution_proof_executes_isolated_apply
     assert payload["recommended_proof_script"] == "scripts/lens-stage6-completion-audit.ps1 -Mode Status"
     assert payload["recommended_handoff_source"] == "api_persistent_supervision_execution_handoff"
     assert payload["live_service_config_unchanged"] is True
+    assert payload["dependency_run_seconds"] == 60
+    assert payload["resident_dependency_run_seconds"] == 60
     assert live_service_config_after == live_service_config_before
 
     assert payload["host_supervision_authority_grant_receipt_id"]
@@ -189,6 +192,8 @@ def test_lens_persistent_supervision_api_execution_proof_executes_isolated_apply
     assert all(item["passed"] for item in payload["checks"])
 
     proof = payload["proof"]
+    assert proof["dependency_run_seconds"] == 60
+    assert proof["resident_dependency_run_seconds"] == 60
     assert proof["resident_start_status"] == "resident_supervision_started"
     assert proof["tray_start_status"] == "tray_presence_started"
     assert proof["hotkey_start_status"] == "global_hotkey_bound"

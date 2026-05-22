@@ -52,6 +52,7 @@ def test_lens_tray_presence_api_execution_proof_uses_governed_routes() -> None:
     assert '"/lens/tray/executions?limit=10"' in script
     assert '"/lens/host/supervision/execute"' in script
     assert '"mode": "resident_stop"' in script
+    assert "dependency_run_seconds = max(run_seconds, 60)" in script
     assert '"hotkey_registration_authority": False' in script
     assert '"summon_authority": False' in script
     assert '"resident_claim_authority": False' in script
@@ -91,6 +92,7 @@ def test_lens_tray_presence_api_execution_proof_starts_and_stops_real_tray_runti
     assert payload["recommended_handoff"]["id"] == "global_hotkey_binding"
     assert payload["recommended_handoff"]["would_execute"] is False
     assert payload["recommended_handoff"]["would_mutate"] is False
+    assert payload["dependency_run_seconds"] == 60
 
     assert payload["host_supervision_authority_grant_receipt_id"]
     assert payload["resident_runtime_authority_grant_receipt_id"]
@@ -141,6 +143,7 @@ def test_lens_tray_presence_api_execution_proof_starts_and_stops_real_tray_runti
     ]
 
     proof = payload["proof"]
+    assert proof["dependency_run_seconds"] == 60
     assert proof["resident_start_status"] == "resident_supervision_started"
     assert proof["tray_start_status"] == "tray_presence_started"
     assert proof["tray_runtime_status_after_start"] == "tray_running"

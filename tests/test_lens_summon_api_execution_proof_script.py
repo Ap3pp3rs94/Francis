@@ -60,6 +60,7 @@ def test_lens_summon_api_execution_proof_uses_governed_routes() -> None:
     assert '"/lens/host/supervision/execute"' in script
     assert "$AllowLaunchOnHotkey" in script
     assert "FRANCIS_PROOF_ALLOW_LAUNCH_ON_HOTKEY" in script
+    assert "dependency_run_seconds = max(run_seconds, 60)" in script
     assert '"mode": "resident_stop"' in script
     assert '"allow_launch": allow_launch_on_hotkey' in script
     assert '"summon_approval_id"' in script
@@ -103,6 +104,8 @@ def test_lens_summon_api_execution_proof_executes_bounded_summon_handoff(
         payload["recommended_proof_script"]
         == "scripts/lens-persistent-supervision-api-execution-proof.ps1 -Mode Status"
     )
+    assert payload["dependency_run_seconds"] == 60
+    assert payload["resident_dependency_run_seconds"] == 60
 
     assert payload["host_supervision_authority_grant_receipt_id"]
     assert payload["resident_runtime_authority_grant_receipt_id"]
@@ -170,6 +173,8 @@ def test_lens_summon_api_execution_proof_executes_bounded_summon_handoff(
     assert all(item["passed"] for item in payload["checks"])
 
     proof = payload["proof"]
+    assert proof["dependency_run_seconds"] == 60
+    assert proof["resident_dependency_run_seconds"] == 60
     assert proof["resident_start_status"] == "resident_supervision_started"
     assert proof["tray_start_status"] == "tray_presence_started"
     assert proof["hotkey_start_status"] == "global_hotkey_bound"

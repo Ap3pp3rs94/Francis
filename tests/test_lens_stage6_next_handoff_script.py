@@ -87,6 +87,11 @@ def test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback() -> N
     assert "'prove_governed_tray_presence_api_execution_after_resident_supervision'" in script
     assert "'scripts/lens-tray-presence-api-execution-proof.ps1 -Mode Status'" in script
     assert "stage6_completion_audit_resident_runtime_tray_presence_handoff_observed" in script
+    assert "$Stage6CompletionAuditPersistentSupervisionApiExecutionHandoffObserved = (" in script
+    assert "'stage6_persistent_supervision_api_execution_readback_required'" in script
+    assert "'run_persistent_supervision_api_execution_proof_after_bounded_summon'" in script
+    assert "'scripts/lens-persistent-supervision-api-execution-proof.ps1 -Mode Status'" in script
+    assert "stage6_completion_audit_persistent_supervision_api_execution_handoff_observed" in script
     assert "$Stage6CompletionAuditPrerequisiteBringupEnablementReceiptHandoffObserved = (" in script
     assert "'stage6_prerequisite_bringup_enablement_receipt_review'" in script
     assert "'run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt'" in script
@@ -1821,6 +1826,131 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     }
     enablement_receipt_checks = {item["id"]: item for item in enablement_receipt_payload["checks"]}
     assert enablement_receipt_checks["stage6_completion_audit_runtime_authority_handoff"]["status"] == (
+        "completion_audit_recommended_handoff_consumed"
+    )
+
+    persistent_api_audit_json = tmp_path / "stage6-persistent-supervision-api-audit.json"
+    persistent_api_audit_json.write_text(
+        json.dumps(
+            {
+                "kind": "lens.stage6.completion_audit",
+                "ok": True,
+                "status": "blocked",
+                "audit_status": "complete",
+                "allow_launch_on_hotkey": True,
+                "next_smallest_truthful_gap": "persistent_supervision_api_execution_readback",
+                "recommended_handoff_source": "stage6_persistent_supervision_api_execution_readback_required",
+                "recommended_next_slice": "run_persistent_supervision_api_execution_proof_after_bounded_summon",
+                "recommended_proof_script": "scripts/lens-persistent-supervision-api-execution-proof.ps1 -Mode Status",
+                "authority_required": "persistent_supervision_execution_authority",
+                "authority_granted": False,
+                "recommended_handoff": {
+                    "status": "proof_readback_required",
+                    "previous_next_smallest_truthful_gap": "summon_anywhere_runtime_readback",
+                    "consumed_bounded_summon_api_execution_proof": True,
+                    "consumed_bounded_summon_next_smallest_truthful_gap": "summon_anywhere_runtime_readback",
+                    "next_smallest_truthful_gap": "persistent_supervision_api_execution_readback",
+                    "next_step": "run_persistent_supervision_api_execution_proof_after_bounded_summon",
+                    "proof_script": "scripts/lens-persistent-supervision-api-execution-proof.ps1 -Mode Status",
+                    "route": "/lens/host/persistent-supervision/enablement/execution/apply",
+                    "readiness_route": "/lens/host/persistent-supervision/enablement/execution/readiness",
+                    "executions_route": "/lens/host/persistent-supervision/enablement/executions",
+                    "acceptance_criterion": "summon_anywhere",
+                    "authority_required": "persistent_supervision_execution_authority",
+                    "authority_granted": False,
+                    "summon_runtime_ready": True,
+                    "bounded_handoff_ready": True,
+                    "local_open_ready": True,
+                    "opened": False,
+                    "no_launch": True,
+                    "persistent_supervision_api_execution_proof_observed": False,
+                    "read_only_contract": False,
+                    "diagnostic_only": True,
+                    "would_execute": True,
+                    "would_mutate": True,
+                    "would_write_service_config": True,
+                    "would_write_receipt": True,
+                    "would_start_service": False,
+                    "would_write_memory": False,
+                    "would_claim_resident": False,
+                    "blockers": [
+                        "persistent_supervision_required_prerequisites_missing",
+                        "resident_claim_authority_not_granted",
+                    ],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    persistent_api_proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-CompletionAuditJsonPath",
+        str(persistent_api_audit_json),
+        env=proof_env,
+    )
+
+    assert persistent_api_proc.returncode == 0, persistent_api_proc.stderr or persistent_api_proc.stdout
+    persistent_api_payload = json.loads(persistent_api_proc.stdout)
+    assert persistent_api_payload["recommended_handoff_source"] == (
+        "stage6_persistent_supervision_api_execution_readback_required"
+    )
+    assert persistent_api_payload["next_smallest_truthful_gap"] == "persistent_supervision_api_execution_readback"
+    assert persistent_api_payload["recommended_next_slice"] == (
+        "run_persistent_supervision_api_execution_proof_after_bounded_summon"
+    )
+    assert persistent_api_payload["recommended_proof_script"] == (
+        "scripts/lens-persistent-supervision-api-execution-proof.ps1 -Mode Status"
+    )
+    assert persistent_api_payload["authority_required"] == "persistent_supervision_execution_authority"
+    assert persistent_api_payload["authority_granted"] is False
+    assert persistent_api_payload["stage6_completion_audit_readback_observed"] is True
+    assert persistent_api_payload["stage6_completion_audit_recommended_handoff_consumed"] is True
+    assert (
+        persistent_api_payload["stage6_completion_audit_persistent_supervision_api_execution_handoff_observed"] is True
+    )
+    assert persistent_api_payload["stage6_completion_audit_runtime_readback_required"] is False
+    persistent_api_handoff = persistent_api_payload["recommended_handoff"]
+    assert persistent_api_handoff["status"] == "proof_readback_required"
+    assert persistent_api_handoff["would_execute"] is True
+    assert persistent_api_handoff["would_mutate"] is True
+    assert persistent_api_handoff["would_write_service_config"] is True
+    assert persistent_api_handoff["would_write_receipt"] is True
+    assert persistent_api_handoff["would_start_service"] is False
+    assert persistent_api_handoff["would_write_memory"] is False
+    assert persistent_api_handoff["would_claim_resident"] is False
+    assert persistent_api_payload["recommended_operator_handoff"]["source"] == (
+        "stage6_completion_audit_recommended_handoff"
+    )
+    assert persistent_api_payload["recommended_operator_handoff"]["read_only_contract"] is False
+    assert persistent_api_payload["recommended_operator_handoff"]["diagnostic_only"] is True
+    assert persistent_api_payload["recommended_operator_handoff"]["would_execute"] is True
+    assert persistent_api_payload["recommended_operator_handoff"]["would_mutate"] is True
+    assert persistent_api_payload["recommended_next_operator_action_requirement"] == (
+        "stage6_completion_audit_recommended_readback"
+    )
+    assert persistent_api_payload["recommended_next_operator_action"]["id"] == (
+        "run_persistent_supervision_api_execution_proof_after_bounded_summon"
+    )
+    assert persistent_api_payload["recommended_next_operator_action"]["script_would_execute"] is True
+    assert persistent_api_payload["recommended_next_operator_action"]["script_would_mutate"] is True
+    assert persistent_api_payload["recommended_next_operator_action"]["script_would_write_service_config"] is True
+    assert persistent_api_payload["recommended_next_operator_action"]["script_would_write_receipt"] is True
+    assert persistent_api_payload["recommended_next_operator_action"]["script_would_start_service"] is False
+    assert persistent_api_payload["recommended_next_operator_action"]["script_would_write_memory"] is False
+    assert persistent_api_payload["recommended_next_operator_action"]["script_would_claim_resident"] is False
+    assert persistent_api_payload["recommended_next_operator_command"] == {
+        "command": ".\\scripts\\lens-persistent-supervision-api-execution-proof.ps1 -Mode Status",
+        "mode": "Status",
+        "requires_confirmation": False,
+        "requires_explicit_operator_opt_in": True,
+        "requires_actor": False,
+        "requires_approval_id": False,
+        "requires_operator_approval_decision": False,
+    }
+    persistent_api_checks = {item["id"]: item for item in persistent_api_payload["checks"]}
+    assert persistent_api_checks["stage6_completion_audit_runtime_authority_handoff"]["status"] == (
         "completion_audit_recommended_handoff_consumed"
     )
 

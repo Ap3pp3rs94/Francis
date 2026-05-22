@@ -152,6 +152,19 @@ function New-Stage6CompletionAuditReadbackOperatorHandoff {
   if ($Command.StartsWith('scripts\')) {
     $Command = ".\$Command"
   }
+  $ScriptWouldExecute = [bool](Get-PropertyValue -Payload $RecommendedHandoff -Name 'would_execute' -Default $false)
+  $ScriptWouldMutate = [bool](Get-PropertyValue -Payload $RecommendedHandoff -Name 'would_mutate' -Default $false)
+  $ScriptWouldRequestAuthority = [bool](Get-PropertyValue -Payload $RecommendedHandoff -Name 'would_request_authority' -Default $false)
+  $ScriptWouldGrantAuthority = [bool](Get-PropertyValue -Payload $RecommendedHandoff -Name 'would_grant_authority' -Default $false)
+  $ScriptWouldDecideApproval = [bool](Get-PropertyValue -Payload $RecommendedHandoff -Name 'would_decide_approval' -Default $false)
+  $ScriptWouldWriteMemory = [bool](Get-PropertyValue -Payload $RecommendedHandoff -Name 'would_write_memory' -Default $false)
+  $ScriptWouldClaimResident = [bool](Get-PropertyValue -Payload $RecommendedHandoff -Name 'would_claim_resident' -Default $false)
+  $ScriptWouldStartService = [bool](Get-PropertyValue -Payload $RecommendedHandoff -Name 'would_start_service' -Default $false)
+  $ScriptWouldWriteServiceConfig = [bool](Get-PropertyValue -Payload $RecommendedHandoff -Name 'would_write_service_config' -Default $false)
+  $ScriptWouldWriteReceipt = [bool](Get-PropertyValue -Payload $RecommendedHandoff -Name 'would_write_receipt' -Default $false)
+  $RequiresExplicitOptIn = $ScriptWouldExecute -or $ScriptWouldMutate -or $ScriptWouldWriteServiceConfig -or $ScriptWouldWriteReceipt
+  $ReadOnlyContract = [bool](Get-PropertyValue -Payload $RecommendedHandoff -Name 'read_only_contract' -Default (-not $RequiresExplicitOptIn))
+  $DiagnosticOnly = [bool](Get-PropertyValue -Payload $RecommendedHandoff -Name 'diagnostic_only' -Default $true)
 
   return [ordered]@{
     source = 'stage6_completion_audit_recommended_handoff'
@@ -168,17 +181,22 @@ function New-Stage6CompletionAuditReadbackOperatorHandoff {
       authority_required = $AuthorityRequired
       authority_granted = $AuthorityGranted
       operator_supplied_values_required = $false
-      script_would_execute = $false
-      script_would_mutate = $false
-      script_would_request_authority = $false
-      script_would_grant_authority = $false
-      script_would_decide_approval = $false
+      script_would_execute = $ScriptWouldExecute
+      script_would_mutate = $ScriptWouldMutate
+      script_would_request_authority = $ScriptWouldRequestAuthority
+      script_would_grant_authority = $ScriptWouldGrantAuthority
+      script_would_decide_approval = $ScriptWouldDecideApproval
+      script_would_write_service_config = $ScriptWouldWriteServiceConfig
+      script_would_write_receipt = $ScriptWouldWriteReceipt
+      script_would_start_service = $ScriptWouldStartService
+      script_would_write_memory = $ScriptWouldWriteMemory
+      script_would_claim_resident = $ScriptWouldClaimResident
     }
     next_operator_command = [ordered]@{
       command = $Command
       mode = 'Status'
       requires_confirmation = $false
-      requires_explicit_operator_opt_in = $false
+      requires_explicit_operator_opt_in = $RequiresExplicitOptIn
       requires_actor = $false
       requires_approval_id = $false
       requires_operator_approval_decision = $false
@@ -190,13 +208,13 @@ function New-Stage6CompletionAuditReadbackOperatorHandoff {
       sequence_length = 1
       truthful = $true
     }
-    read_only_contract = $true
-    diagnostic_only = $true
+    read_only_contract = $ReadOnlyContract
+    diagnostic_only = $DiagnosticOnly
     approval_request_write_if_run = $false
     authority_grant_receipt_write_if_run = $false
     approval_decision_authority = $false
-    would_execute = $false
-    would_mutate = $false
+    would_execute = $ScriptWouldExecute
+    would_mutate = $ScriptWouldMutate
   }
 }
 
@@ -1051,6 +1069,33 @@ $Stage6CompletionAuditResidentRuntimeTrayPresenceHandoffObserved = (
   -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_write_memory' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_claim_resident' -Default $true)
 )
+$Stage6CompletionAuditPersistentSupervisionApiExecutionHandoffObserved = (
+  $Stage6CompletionAuditReadbackObserved -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_handoff_source' -Default '') -eq 'stage6_persistent_supervision_api_execution_readback_required' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'next_smallest_truthful_gap' -Default '') -eq 'persistent_supervision_api_execution_readback' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_next_slice' -Default '') -eq 'run_persistent_supervision_api_execution_proof_after_bounded_summon' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_proof_script' -Default '') -eq 'scripts/lens-persistent-supervision-api-execution-proof.ps1 -Mode Status' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'authority_required' -Default '') -eq 'persistent_supervision_execution_authority' -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'authority_granted' -Default $true) -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'status' -Default '') -eq 'proof_readback_required' -and
+  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'consumed_bounded_summon_api_execution_proof' -Default $false) -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'persistent_supervision_api_execution_readback' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'next_step' -Default '') -eq 'run_persistent_supervision_api_execution_proof_after_bounded_summon' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'proof_script' -Default '') -eq 'scripts/lens-persistent-supervision-api-execution-proof.ps1 -Mode Status' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'route' -Default '') -eq '/lens/host/persistent-supervision/enablement/execution/apply' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'readiness_route' -Default '') -eq '/lens/host/persistent-supervision/enablement/execution/readiness' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'authority_required' -Default '') -eq 'persistent_supervision_execution_authority' -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'authority_granted' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'read_only_contract' -Default $true) -and
+  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'diagnostic_only' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_execute' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_mutate' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_write_service_config' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_write_receipt' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_start_service' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_write_memory' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_claim_resident' -Default $true)
+)
 $Stage6CompletionAuditPrerequisiteBringupEnablementReceiptAction = Get-PropertyValue `
   -Payload $Stage6CompletionAuditRecommendedHandoff `
   -Name 'next_operator_action' `
@@ -1430,6 +1475,7 @@ $Stage6CompletionAuditRecommendedHandoffConsumed = (
   $Stage6CompletionAuditHelpfulNotNoisyRuntimeAuthorityHandoffObserved -or
   $Stage6CompletionAuditHelpfulNotNoisyResidentSurfaceRuntimeHandoffObserved -or
   $Stage6CompletionAuditResidentRuntimeTrayPresenceHandoffObserved -or
+  $Stage6CompletionAuditPersistentSupervisionApiExecutionHandoffObserved -or
   $Stage6CompletionAuditPrerequisiteBringupEnablementReceiptHandoffObserved
 )
 if ($Stage6CompletionAuditRecommendedHandoffConsumed) {
@@ -1531,8 +1577,20 @@ $RecommendedConcreteAuthorityRequired = [string](
 $RecommendedConcreteAuthorityGranted = [bool](
   Get-PropertyValue -Payload $RecommendedConcreteHandoff -Name 'authority_granted' -Default $AuthorityGranted
 )
+$RecommendedConcreteExecutionHandoffObserved = (
+  $Stage6CompletionAuditPersistentSupervisionApiExecutionHandoffObserved -and
+  -not [string]::IsNullOrWhiteSpace($RecommendedConcreteNextSlice) -and
+  -not [string]::IsNullOrWhiteSpace($RecommendedConcreteProofScript) -and
+  [bool](Get-PropertyValue -Payload $RecommendedConcreteHandoff -Name 'diagnostic_only' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $RecommendedConcreteHandoff -Name 'would_execute' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $RecommendedConcreteHandoff -Name 'would_mutate' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $RecommendedConcreteHandoff -Name 'would_start_service' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $RecommendedConcreteHandoff -Name 'would_write_memory' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $RecommendedConcreteHandoff -Name 'would_claim_resident' -Default $true)
+)
 $ConcreteHandoffObserved = (
   -not $Stage6CompletionAuditHandoffConsumedByClosureReadback -or
+  $RecommendedConcreteExecutionHandoffObserved -or
   (
     -not [string]::IsNullOrWhiteSpace($RecommendedConcreteNextSlice) -and
     -not [string]::IsNullOrWhiteSpace($RecommendedConcreteProofScript) -and
@@ -1745,6 +1803,7 @@ $Payload = [ordered]@{
   stage6_completion_audit_runtime_authority_handoff_observed = $Stage6CompletionAuditHelpfulNotNoisyRuntimeAuthorityHandoffObserved
   stage6_completion_audit_resident_surface_runtime_handoff_observed = $Stage6CompletionAuditHelpfulNotNoisyResidentSurfaceRuntimeHandoffObserved
   stage6_completion_audit_resident_runtime_tray_presence_handoff_observed = $Stage6CompletionAuditResidentRuntimeTrayPresenceHandoffObserved
+  stage6_completion_audit_persistent_supervision_api_execution_handoff_observed = $Stage6CompletionAuditPersistentSupervisionApiExecutionHandoffObserved
   stage6_completion_audit_enablement_receipt_review_handoff_observed = $Stage6CompletionAuditPrerequisiteBringupEnablementReceiptHandoffObserved
   stage6_completion_audit_recommended_handoff_consumed = $Stage6CompletionAuditRecommendedHandoffConsumed
   stage6_completion_audit_runtime_readback_required = $Stage6CompletionAuditRuntimeReadbackRequired
@@ -1846,6 +1905,7 @@ $Payload = [ordered]@{
     stage6_completion_audit_runtime_authority_handoff_observed = $Stage6CompletionAuditHelpfulNotNoisyRuntimeAuthorityHandoffObserved
     stage6_completion_audit_resident_surface_runtime_handoff_observed = $Stage6CompletionAuditHelpfulNotNoisyResidentSurfaceRuntimeHandoffObserved
     stage6_completion_audit_resident_runtime_tray_presence_handoff_observed = $Stage6CompletionAuditResidentRuntimeTrayPresenceHandoffObserved
+    stage6_completion_audit_persistent_supervision_api_execution_handoff_observed = $Stage6CompletionAuditPersistentSupervisionApiExecutionHandoffObserved
     stage6_completion_audit_enablement_receipt_review_handoff_observed = $Stage6CompletionAuditPrerequisiteBringupEnablementReceiptHandoffObserved
     stage6_completion_audit_recommended_handoff_consumed = $Stage6CompletionAuditRecommendedHandoffConsumed
     stage6_completion_audit_runtime_readback_required = $Stage6CompletionAuditRuntimeReadbackRequired

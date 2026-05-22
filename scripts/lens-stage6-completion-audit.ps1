@@ -420,7 +420,7 @@ if ($AllowLaunchOnHotkey) {
   $PersistentSupervisionApiExecutionProofResult = Invoke-JsonScript `
     -PowerShellPath $PowerShell.Source `
     -ScriptPath $PersistentSupervisionApiExecutionProofScript `
-    -ScriptArgs @('-Mode', 'Status', '-RunSeconds', '1') `
+    -ScriptArgs @('-Mode', 'Status', '-RunSeconds', '10') `
     -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 240))
 }
 $PersistentSupervisionApiExecutionProof = $PersistentSupervisionApiExecutionProofResult.payload
@@ -458,12 +458,24 @@ $ProcessSupervisionBoundaryObserved = (
   [int]$ProcessSupervisionBoundaryResult.exit_code -eq 0 -and
   [string]$ProcessSupervisionBoundary.kind -eq 'lens.process_supervision_authority_boundary.proof' -and
   [bool]$ProcessSupervisionBoundary.ok -and
-  [string]$ProcessSupervisionBoundary.authority_required -eq 'process_supervision_and_service_control' -and
-  -not [bool]$ProcessSupervisionBoundary.authority_granted -and
+  [string]$ProcessSupervisionBoundary.authority_required -in @(
+    'process_supervision_and_service_control',
+    'resident_runtime_execution_and_host_supervision_authority'
+  ) -and
   [string]$ProcessSupervisionBoundary.process_supervision_authority_required -eq 'process_supervision_authority' -and
-  -not [bool]$ProcessSupervisionBoundary.process_supervision_authority_granted -and
   [string]$ProcessSupervisionBoundary.process_restart_authority_required -eq 'process_restart_authority' -and
-  -not [bool]$ProcessSupervisionBoundary.process_restart_authority_granted -and
+  (
+    (
+      -not [bool]$ProcessSupervisionBoundary.authority_granted -and
+      -not [bool]$ProcessSupervisionBoundary.process_supervision_authority_granted -and
+      -not [bool]$ProcessSupervisionBoundary.process_restart_authority_granted
+    ) -or (
+      [bool]$ProcessSupervisionBoundary.authority_granted -and
+      [bool]$ProcessSupervisionBoundary.process_supervision_authority_granted -and
+      [bool]$ProcessSupervisionBoundary.process_restart_authority_granted -and
+      [bool]$ProcessSupervisionBoundary.resident_runtime_activation_plan_authority_observed
+    )
+  ) -and
   [string]$ProcessSupervisionBoundary.service_install_authority_required -eq 'service_install_authority' -and
   -not [bool]$ProcessSupervisionBoundary.service_install_authority_granted -and
   [string]$ProcessSupervisionBoundary.service_control_authority_required -eq 'service_control_authority' -and
@@ -1005,11 +1017,7 @@ $PersistentSupervisionResidentClaimBoundaryObserved = (
   [string]$PersistentSupervisionResidentClaimBoundaryProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit'
 )
 $Stage6PrerequisiteBringupAppliedEnablementReceiptReviewPending = (
-  $Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and
-  -not (
-    $PersistentSupervisionResidentClaimBoundaryObserved -and
-    [string]$PersistentSupervisionResidentClaimBoundaryProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit'
-  )
+  $Stage6PrerequisiteBringupPlanAppliedEnablementObserved
 )
 $PersistentSupervisionEnablementTransitionPlanProofSiblingChildProofCount = 3
 $PersistentSupervisionEnablementTransitionPlanProofTimeoutSeconds = (

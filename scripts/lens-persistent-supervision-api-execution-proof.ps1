@@ -248,7 +248,9 @@ def _run() -> tuple[int, dict[str, Any]]:
     data_root = Path(os.environ["FRANCIS_DATA_DIR"]).resolve()
     service_config_path = Path(os.environ["FRANCIS_LENS_HOST_SERVICE_CONFIG_PATH"]).resolve()
     run_seconds = int(os.environ.get("FRANCIS_PROOF_RUN_SECONDS", "5"))
-    dependency_run_seconds = max(run_seconds, 20)
+    # This proof validates a long governed route chain; keep prerequisite runtimes alive
+    # long enough for the post-apply status readback instead of racing their lease.
+    dependency_run_seconds = max(run_seconds, 60)
     resident_dependency_run_seconds = dependency_run_seconds
     data_root.mkdir(parents=True, exist_ok=True)
     live_service_config_before, temp_service_config_before = _write_temp_service_config(repo_root, service_config_path)
@@ -798,6 +800,8 @@ def _run() -> tuple[int, dict[str, Any]]:
             "recommended_handoff_source": "api_persistent_supervision_execution_handoff",
             "service_config_path": str(service_config_path),
             "live_service_config_unchanged": live_service_config_after == live_service_config_before,
+            "dependency_run_seconds": dependency_run_seconds,
+            "resident_dependency_run_seconds": resident_dependency_run_seconds,
             "host_supervision_approval_id": host_approval_id,
             "resident_runtime_approval_id": runtime_approval_id,
             "tray_presence_approval_id": tray_approval_id,
@@ -875,6 +879,8 @@ def _run() -> tuple[int, dict[str, Any]]:
             "blockers": _str_list(persistent_apply.get("blockers")),
             "checks": checks,
             "proof": {
+                "dependency_run_seconds": dependency_run_seconds,
+                "resident_dependency_run_seconds": resident_dependency_run_seconds,
                 "resident_start_status": str(resident_start.get("status") or ""),
                 "tray_start_status": str(tray_start.get("status") or ""),
                 "hotkey_start_status": str(hotkey_start.get("status") or ""),

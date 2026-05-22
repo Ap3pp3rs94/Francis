@@ -232,7 +232,8 @@ def _run() -> tuple[int, dict[str, Any]]:
     data_root = Path(os.environ["FRANCIS_DATA_DIR"]).resolve()
     run_seconds = int(os.environ.get("FRANCIS_PROOF_RUN_SECONDS", "5"))
     allow_launch_on_hotkey = os.environ.get("FRANCIS_PROOF_ALLOW_LAUNCH_ON_HOTKEY", "").lower() == "true"
-    dependency_run_seconds = max(run_seconds, 20)
+    # Keep dependent runtimes alive long enough for slower Windows readbacks.
+    dependency_run_seconds = max(run_seconds, 60)
     resident_dependency_run_seconds = dependency_run_seconds
     data_root.mkdir(parents=True, exist_ok=True)
 
@@ -700,6 +701,8 @@ def _run() -> tuple[int, dict[str, Any]]:
                 else "api_summon_to_persistent_supervision_execution_handoff"
             ),
             "allow_launch_on_hotkey": allow_launch_on_hotkey,
+            "dependency_run_seconds": dependency_run_seconds,
+            "resident_dependency_run_seconds": resident_dependency_run_seconds,
             "host_supervision_approval_id": host_approval_id,
             "resident_runtime_approval_id": runtime_approval_id,
             "tray_presence_approval_id": tray_approval_id,
@@ -770,6 +773,8 @@ def _run() -> tuple[int, dict[str, Any]]:
             "checks": checks,
             "proof": {
                 "allow_launch_on_hotkey": allow_launch_on_hotkey,
+                "dependency_run_seconds": dependency_run_seconds,
+                "resident_dependency_run_seconds": resident_dependency_run_seconds,
                 "resident_start_status": str(resident_start.get("status") or ""),
                 "tray_start_status": str(tray_start.get("status") or ""),
                 "hotkey_start_status": str(hotkey_start.get("status") or ""),
