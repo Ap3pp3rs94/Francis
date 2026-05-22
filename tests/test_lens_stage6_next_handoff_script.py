@@ -96,6 +96,10 @@ def test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback() -> N
     assert "'persistent_supervision_execution_authority_handoff'" in script
     assert "'review_persistent_supervision_resident_claim_boundary_without_runtime_start'" in script
     assert "stage6_completion_audit_persistent_supervision_resident_claim_boundary_handoff_observed" in script
+    assert "$Stage6CompletionAuditPrerequisiteBringupOperatorPlanHandoffObserved = (" in script
+    assert "'stage6_prerequisite_bringup_operator_plan'" in script
+    assert "'run_stage6_prerequisite_bringup_request_next_for_resident_host_process'" in script
+    assert "stage6_completion_audit_prerequisite_bringup_operator_plan_handoff_observed" in script
     assert "$Stage6CompletionAuditPrerequisiteBringupEnablementReceiptHandoffObserved = (" in script
     assert "'stage6_prerequisite_bringup_enablement_receipt_review'" in script
     assert "'run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt'" in script
@@ -782,6 +786,7 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority(tm
         "stage6_completion_audit_resident_runtime_tray_presence_handoff_observed": False,
         "stage6_completion_audit_persistent_supervision_api_execution_handoff_observed": False,
         "stage6_completion_audit_persistent_supervision_resident_claim_boundary_handoff_observed": False,
+        "stage6_completion_audit_prerequisite_bringup_operator_plan_handoff_observed": False,
         "stage6_completion_audit_enablement_receipt_review_handoff_observed": False,
         "stage6_completion_audit_recommended_handoff_consumed": False,
         "stage6_completion_audit_runtime_readback_required": False,
@@ -1769,6 +1774,156 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
         "requires_approval_id": False,
         "requires_operator_approval_decision": False,
     }
+
+    prerequisite_operator_plan_audit_json = tmp_path / "stage6-completion-audit-prereq-operator-plan.json"
+    prerequisite_operator_plan_audit_json.write_text(
+        json.dumps(
+            {
+                "kind": "lens.stage6.completion_audit",
+                "ok": True,
+                "status": "blocked",
+                "audit_status": "complete",
+                "allow_launch_on_hotkey": True,
+                "next_smallest_truthful_gap": "persistent_supervision_required_prerequisites_missing",
+                "recommended_handoff_source": "stage6_prerequisite_bringup_operator_plan",
+                "recommended_next_slice": "run_stage6_prerequisite_bringup_request_next_for_resident_host_process",
+                "recommended_proof_script": "scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status",
+                "authority_required": "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites",
+                "authority_granted": False,
+                "recommended_handoff": {
+                    "status": "blocked",
+                    "previous_next_smallest_truthful_gap": "resident_host_process_not_supervised",
+                    "consumed_process_supervision_next_smallest_truthful_gap": "stage6_lens_completion_audit",
+                    "next_smallest_truthful_gap": "persistent_supervision_required_prerequisites_missing",
+                    "next_step": "run_stage6_prerequisite_bringup_request_next_for_resident_host_process",
+                    "proof_script": "scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status",
+                    "route": "/lens/host/persistent-supervision",
+                    "readiness_route": "/lens/host/persistent-supervision/enablement",
+                    "operator_plan_script": "scripts/lens-stage6-prerequisite-bringup-plan.ps1",
+                    "next_operator_action_requirement": "persistent_supervision_enablement_receipt",
+                    "next_operator_action": {
+                        "id": "review_persistent_supervision_enablement_receipt",
+                        "route": "/lens/host/persistent-supervision/enablement/executions",
+                        "method": "GET",
+                        "mode": "readback",
+                        "script_would_execute": False,
+                        "script_would_mutate": False,
+                        "latest_receipt_id": "lpsee_test_applied",
+                    },
+                    "next_operator_command": {
+                        "command": ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status",
+                        "mode": "Status",
+                        "requires_confirmation": False,
+                        "requires_approval_id": False,
+                        "requires_operator_approval_decision": False,
+                    },
+                    "authority_required": "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites",
+                    "authority_granted": False,
+                    "first_missing_required_before_enable": "resident_host_process",
+                    "read_only_contract": True,
+                    "diagnostic_only": True,
+                    "would_execute": False,
+                    "would_mutate": False,
+                    "would_supervise_process": False,
+                    "would_restart_process": False,
+                    "would_install_service": False,
+                    "would_start_service": False,
+                    "would_write_memory": False,
+                    "would_decide_approval": False,
+                    "blockers": ["resident_host_process_not_supervised"],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    prerequisite_operator_plan_proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-CompletionAuditJsonPath",
+        str(prerequisite_operator_plan_audit_json),
+        env=proof_env,
+    )
+
+    assert prerequisite_operator_plan_proc.returncode == 0, (
+        prerequisite_operator_plan_proc.stderr or prerequisite_operator_plan_proc.stdout
+    )
+    prerequisite_operator_plan_payload = json.loads(prerequisite_operator_plan_proc.stdout)
+    assert (
+        prerequisite_operator_plan_payload["recommended_handoff_source"] == "stage6_prerequisite_bringup_operator_plan"
+    )
+    assert prerequisite_operator_plan_payload["next_smallest_truthful_gap"] == (
+        "persistent_supervision_required_prerequisites_missing"
+    )
+    assert prerequisite_operator_plan_payload["recommended_next_slice"] == (
+        "run_stage6_prerequisite_bringup_request_next_for_resident_host_process"
+    )
+    assert prerequisite_operator_plan_payload["recommended_proof_script"] == (
+        "scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status"
+    )
+    assert prerequisite_operator_plan_payload["authority_required"] == (
+        "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
+    )
+    assert prerequisite_operator_plan_payload["authority_granted"] is False
+    assert prerequisite_operator_plan_payload["stage6_completion_audit_readback_observed"] is True
+    assert (
+        prerequisite_operator_plan_payload[
+            "stage6_completion_audit_prerequisite_bringup_operator_plan_handoff_observed"
+        ]
+        is True
+    )
+    assert prerequisite_operator_plan_payload["stage6_completion_audit_recommended_handoff_consumed"] is True
+    assert prerequisite_operator_plan_payload["stage6_completion_audit_runtime_readback_required"] is False
+    prerequisite_operator_plan_handoff = prerequisite_operator_plan_payload["recommended_handoff"]
+    assert prerequisite_operator_plan_handoff["status"] == "blocked"
+    assert prerequisite_operator_plan_handoff["next_step"] == (
+        "run_stage6_prerequisite_bringup_request_next_for_resident_host_process"
+    )
+    assert prerequisite_operator_plan_handoff["proof_script"] == (
+        "scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status"
+    )
+    assert prerequisite_operator_plan_handoff["route"] == "/lens/host/persistent-supervision"
+    assert prerequisite_operator_plan_handoff["readiness_route"] == ("/lens/host/persistent-supervision/enablement")
+    assert prerequisite_operator_plan_handoff["authority_required"] == (
+        "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
+    )
+    assert prerequisite_operator_plan_handoff["authority_granted"] is False
+    assert prerequisite_operator_plan_handoff["first_missing_required_before_enable"] == "resident_host_process"
+    assert prerequisite_operator_plan_handoff["read_only_contract"] is True
+    assert prerequisite_operator_plan_handoff["diagnostic_only"] is True
+    assert prerequisite_operator_plan_handoff["would_execute"] is False
+    assert prerequisite_operator_plan_handoff["would_mutate"] is False
+    assert prerequisite_operator_plan_handoff["would_supervise_process"] is False
+    assert prerequisite_operator_plan_handoff["would_restart_process"] is False
+    assert prerequisite_operator_plan_handoff["would_install_service"] is False
+    assert prerequisite_operator_plan_handoff["would_start_service"] is False
+    assert prerequisite_operator_plan_handoff["would_write_memory"] is False
+    assert prerequisite_operator_plan_handoff["would_decide_approval"] is False
+    assert prerequisite_operator_plan_payload["recommended_operator_handoff"]["source"] == (
+        "stage6_completion_audit_recommended_handoff"
+    )
+    assert prerequisite_operator_plan_payload["recommended_next_operator_action_requirement"] == (
+        "stage6_completion_audit_recommended_readback"
+    )
+    assert prerequisite_operator_plan_payload["recommended_next_operator_action"]["id"] == (
+        "run_stage6_prerequisite_bringup_request_next_for_resident_host_process"
+    )
+    assert prerequisite_operator_plan_payload["recommended_next_operator_action"]["method"] == "LOCAL_SCRIPT"
+    assert prerequisite_operator_plan_payload["recommended_next_operator_action"]["script_would_execute"] is False
+    assert prerequisite_operator_plan_payload["recommended_next_operator_action"]["script_would_mutate"] is False
+    assert prerequisite_operator_plan_payload["recommended_next_operator_command"] == {
+        "command": ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status",
+        "mode": "Status",
+        "requires_confirmation": False,
+        "requires_explicit_operator_opt_in": False,
+        "requires_actor": False,
+        "requires_approval_id": False,
+        "requires_operator_approval_decision": False,
+    }
+    prerequisite_operator_plan_checks = {item["id"]: item for item in prerequisite_operator_plan_payload["checks"]}
+    assert prerequisite_operator_plan_checks["stage6_completion_audit_runtime_authority_handoff"]["status"] == (
+        "completion_audit_recommended_handoff_consumed"
+    )
 
     tray_audit_json = tmp_path / "stage6-completion-audit-tray-presence.json"
     tray_audit_json.write_text(

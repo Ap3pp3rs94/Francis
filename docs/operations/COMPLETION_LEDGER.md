@@ -37735,6 +37735,73 @@ Latest validation for launch-on-hotkey audit handoff truthfulness:
   recommended handoff fields; this entry is validated by script parsing,
   focused completion-audit assertions, and next-handoff JSON consumption tests.
 
+### 2026-05-22 - Stage 6 prerequisite bring-up audit handoff consumption
+
+Roadmap area: Stage 6 / Lens MVP, governed persistent-supervision
+prerequisite bring-up and operator handoff truthfulness.
+
+Material change:
+
+- The live opt-in Stage 6 completion-audit wrapper now advances beyond
+  launch-hotkey runtime readback and reports
+  `persistent_supervision_required_prerequisites_missing` with
+  `stage6_prerequisite_bringup_operator_plan`.
+- The Stage 6 next-handoff proof now consumes that supplied completion-audit
+  JSON handoff, preserves its governed prerequisite-bringup route, and stops
+  falling back to the stale `stage6_completion_audit_runtime_readback` rerun
+  instruction.
+- The consumed handoff remains read-only and diagnostic-only. It does not claim
+  resident status, supervise/restart a process, install/start a service, write
+  memory, decide approval, or move Stage 6 to closed.
+- Stage 6 still does not close. The current truthful gap is the required
+  resident host process, tray, hotkey, overlay, and summon prerequisite set
+  before persistent supervision can be treated as ready.
+
+Latest validation for prerequisite bring-up audit handoff consumption:
+
+- PowerShell AST parse of `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed`
+- `scripts\lens-summon-api-execution-proof.ps1 -Mode Status
+  -AllowLaunchOnHotkey`
+  Result: `passed; status=proof_passed; allow_launch_on_hotkey=true;
+  opened=true; summon_anywhere=true; os_level_summon=true;
+  summon_readiness_status_after_execute=ready_for_operator_review;
+  recommended_handoff_source=api_launch_on_hotkey_runtime_readback_handoff;
+  recommended_next_slice=run_stage6_completion_audit_after_launch_on_hotkey_runtime_readback`
+- `scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2
+  -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3
+  -ChildProofTimeoutSeconds 240 -AllowLaunchOnHotkey`
+  Result: `passed as blocked audit; status=blocked; audit_status=complete;
+  stage6_completion_reviewed=true;
+  next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing;
+  recommended_handoff_source=stage6_prerequisite_bringup_operator_plan;
+  recommended_next_slice=run_stage6_prerequisite_bringup_request_next_for_resident_host_process;
+  authority_required=resident_host_process_tray_hotkey_overlay_and_summon_prerequisites;
+  authority_granted=false; child_proof_timeouts=[]`
+- `scripts\lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath .tmp\stage6-completion-audit-optin-after-launch-hotkey-handoff.json`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing;
+  recommended_handoff_source=stage6_prerequisite_bringup_operator_plan;
+  recommended_next_slice=run_stage6_prerequisite_bringup_request_next_for_resident_host_process;
+  stage6_completion_audit_prerequisite_bringup_operator_plan_handoff_observed=true;
+  stage6_completion_audit_recommended_handoff_consumed=true;
+  stage6_completion_audit_runtime_readback_required=false`
+- `python -m pytest
+  tests\test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback
+  tests\test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_applied_bringup_review_state -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `ruff check tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `ruff format --check tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed after formatting the new regression block`
+- `git diff --check`
+  Result: `passed; Git reported expected LF-to-CRLF warning for
+  scripts\lens-stage6-next-handoff.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
