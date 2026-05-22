@@ -230,9 +230,12 @@ def test_lens_stage6_completion_audit_consumes_stage6_prerequisite_bringup_plan_
     assert "stage6_prerequisite_bringup_plan_applied_enablement_readback" in script
     assert "'resident_host_process_not_supervised'" in script
     assert "'resident_supervision_not_persistent'" in script
-    assert (
-        "[string]$Stage6PrerequisiteBringupPlanNextOperatorAction.id -eq 'request_resident_runtime_execution_authority'"
-    ) in script
+    assert "$Stage6PrerequisiteBringupPlanResidentHostActionObserved = (" in script
+    assert "'request_resident_runtime_execution_authority'" in script
+    assert "'grant_resident_runtime_execution_authority'" in script
+    assert "'execute_supervised_resident_host_start'" in script
+    assert "$Stage6PrerequisiteBringupPlanNextOperatorCommandMode -eq 'GrantNext'" in script
+    assert "$Stage6PrerequisiteBringupPlanNextOperatorCommandMode -eq 'ExecuteNext'" in script
     assert "stage6_prerequisite_bringup_plan_readback = $Stage6PrerequisiteBringupPlanObserved" in script
     assert "stage6_prerequisite_bringup_plan = [ordered]@{" in script
     assert "'scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status'" in script

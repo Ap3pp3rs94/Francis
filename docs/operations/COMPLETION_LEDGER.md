@@ -37879,6 +37879,83 @@ Latest validation for prerequisite handoff action alignment:
   and 3.13`; this confirms the preceding handoff-consumption commit, not this
   local alignment patch until it is pushed.
 
+### 2026-05-22 - Stage 6 prerequisite runtime-readiness handoff guard
+
+Roadmap area: Stage 6 / Lens MVP, governed persistent-supervision
+prerequisite bring-up and operator handoff truthfulness.
+
+Material change:
+
+- The Stage 6 prerequisite bring-up plan now treats an applied
+  persistent-supervision enablement receipt as stale when live ordered
+  prerequisites are still missing or not ready.
+- The live plan now reports the actual next governed resident-host boundary:
+  `grant_resident_runtime_execution_authority` with
+  `Mode GrantNext -Actor <actor> -ApprovalId <approval_id> -ConfirmGrant`.
+- The completion audit now accepts the resident-host prerequisite handoff at
+  request, grant, and execute steps, instead of only accepting the initial
+  `RequestNext` shape.
+- The next-handoff proof now consumes the corrected audit handoff when the
+  recommended slice has advanced to the resident-runtime `GrantNext` step.
+- Stage 6 still does not close. No grant was executed by this validation; the
+  no-confirm `GrantNext` check refused safely and wrote no receipt.
+
+Latest validation for prerequisite runtime-readiness handoff guard:
+
+- PowerShell AST parse of `scripts\lens-stage6-prerequisite-bringup-plan.ps1`,
+  `scripts\lens-stage6-completion-audit.ps1`, and
+  `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed`
+- `scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status`
+  Result: `status=blocked;
+  current_truthful_gap=persistent_supervision_required_prerequisites_missing;
+  next_operator_action_requirement=resident_host_process;
+  recommended_next_slice=run_stage6_prerequisite_bringup_grant_resident_runtime_execution_authority;
+  next_operator_action.id=grant_resident_runtime_execution_authority;
+  next_operator_command.mode=GrantNext;
+  next_operator_command.requires_confirmation=true;
+  next_operator_command.requires_approval_id=true;
+  next_operator_command.requires_operator_approval_decision=true`
+- `scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode GrantNext
+  -Actor codex.stage6 -ApprovalId a4b0f2b0-b32c-4f32-9b95-d4576be2f463`
+  Result: `refused_confirmation_required; authority_granted=false;
+  grant_result.receipt_written=false`
+- `scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2
+  -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3
+  -ChildProofTimeoutSeconds 240 -AllowLaunchOnHotkey`
+  Result: `passed as blocked audit; status=blocked; audit_status=complete;
+  stage6_completion_reviewed=true;
+  next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing;
+  recommended_handoff_source=stage6_prerequisite_bringup_operator_plan;
+  recommended_next_slice=run_stage6_prerequisite_bringup_grant_resident_runtime_execution_authority;
+  child_proof_timeouts=[]`
+- `scripts\lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath .tmp\stage6-completion-audit-after-bringup-plan-runtime-fix-serial-2.json`
+  Result: `passed; status=proof_passed;
+  recommended_next_slice=run_stage6_prerequisite_bringup_grant_resident_runtime_execution_authority;
+  stage6_completion_audit_prerequisite_bringup_operator_plan_handoff_observed=true;
+  stage6_completion_audit_recommended_handoff_consumed=true;
+  stage6_completion_audit_runtime_readback_required=false`
+- `python -m pytest
+  tests\test_lens_stage6_prerequisite_bringup_plan_script.py
+  tests\test_lens_stage6_completion_audit_script.py
+  tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed; one expected skip`
+- `ruff check
+  tests\test_lens_stage6_prerequisite_bringup_plan_script.py
+  tests\test_lens_stage6_completion_audit_script.py
+  tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `ruff format --check
+  tests\test_lens_stage6_prerequisite_bringup_plan_script.py
+  tests\test_lens_stage6_completion_audit_script.py
+  tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; already formatted`
+- `git diff --check`
+  Result: `passed; Git reported expected LF-to-CRLF warnings for the touched
+  PowerShell scripts`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

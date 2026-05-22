@@ -99,6 +99,9 @@ def test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback() -> N
     assert "$Stage6CompletionAuditPrerequisiteBringupOperatorPlanHandoffObserved = (" in script
     assert "'stage6_prerequisite_bringup_operator_plan'" in script
     assert "'run_stage6_prerequisite_bringup_request_next_for_resident_host_process'" in script
+    assert "'run_stage6_prerequisite_bringup_grant_resident_runtime_execution_authority'" in script
+    assert "'grant_resident_runtime_execution_authority'" in script
+    assert "'execute_supervised_resident_host_start'" in script
     assert "stage6_completion_audit_prerequisite_bringup_operator_plan_handoff_observed" in script
     assert "$Stage6CompletionAuditPrerequisiteBringupEnablementReceiptHandoffObserved = (" in script
     assert "'stage6_prerequisite_bringup_enablement_receipt_review'" in script
@@ -1303,8 +1306,6 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
             },
         },
     )
-
-    shutil.rmtree(data_root / "runtime", ignore_errors=True)
 
     proof_env = {
         "FRANCIS_DATA_DIR": str(data_root),

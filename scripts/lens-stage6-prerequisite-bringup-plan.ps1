@@ -1411,14 +1411,22 @@ def _run() -> tuple[int, dict[str, Any]]:
     ]
     enablement_sequence = _enablement_steps(raw_handoff)
     enablement_execution_receipts = _as_dict(resident_host.get("persistent_supervision_enablement_execution_receipts"))
-    enablement_execution_applied = _enablement_execution_applied(enablement_execution_receipts)
+    runtime_missing_steps = [
+        step for step in ordered_steps if step["id"] in missing or not bool(step["ready"])
+    ]
+    enablement_execution_applied = (
+        _enablement_execution_applied(enablement_execution_receipts)
+        and not runtime_missing_steps
+    )
     handoff = {} if enablement_execution_applied else raw_handoff
-    effective_missing = [] if enablement_execution_applied else missing
-    missing_steps = (
+    effective_missing = (
         []
         if enablement_execution_applied
-        else [step for step in ordered_steps if step["id"] in effective_missing or not bool(step["ready"])]
+        else missing
+        if missing
+        else [_safe_str(step.get("id")) for step in runtime_missing_steps]
     )
+    missing_steps = [] if enablement_execution_applied else runtime_missing_steps
     next_operator_action = (
         missing_steps[0]["next_operator_action"]
         if missing_steps
@@ -1638,9 +1646,12 @@ def _run() -> tuple[int, dict[str, Any]]:
         "required_before_enable": required,
         "missing_required_before_enable": effective_missing,
         "required_before_enable_ready": prerequisites_ready,
-        "first_missing_required_before_enable": ""
-        if enablement_execution_applied
-        else _safe_str(plan.get("first_missing_required_before_enable")),
+        "first_missing_required_before_enable": (
+            ""
+            if enablement_execution_applied
+            else _safe_str(plan.get("first_missing_required_before_enable"))
+            or (_safe_str(missing_steps[0].get("id")) if missing_steps else "")
+        ),
         "first_missing_requirement_handoff": handoff,
         "ordered_prerequisite_steps": ordered_steps,
         "persistent_supervision_enablement_steps": enablement_sequence,

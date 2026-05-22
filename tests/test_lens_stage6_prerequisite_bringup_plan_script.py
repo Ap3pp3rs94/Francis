@@ -406,6 +406,9 @@ def test_lens_stage6_prerequisite_bringup_plan_has_confirmed_request_and_grant_b
     assert "min(parsed, _MAX_STAGE6_PREREQUISITE_RUN_SECONDS)" in script
     assert "min(parsed, 60)" not in script
     assert "refused_confirmation_required" in script
+    assert "runtime_missing_steps = [" in script
+    assert "_enablement_execution_applied(enablement_execution_receipts)" in script
+    assert "and not runtime_missing_steps" in script
     assert "request_lens_resident_runtime_execution_authority" in script
     assert "grant_lens_resident_runtime_execution_authority" in script
     assert "execute_lens_resident_runtime_activation" in script
