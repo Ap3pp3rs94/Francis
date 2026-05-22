@@ -825,6 +825,11 @@ def _is_grant_action(action: dict[str, Any]) -> bool:
     return _safe_str(action.get("id")).startswith("grant_")
 
 
+def _is_execution_action(action: dict[str, Any]) -> bool:
+    action_id = _safe_str(action.get("id"))
+    return action_id.startswith("execute_") or action_id.startswith("apply_")
+
+
 def _grant_target_action(
     next_operator_action: dict[str, Any],
     approval_id: str,
@@ -855,6 +860,47 @@ def _grant_target_action(
         if _safe_str(candidate.get("approved_approval_id")).strip() != requested_approval_id:
             continue
         candidate["grant_target_source"] = "approved_approval_id_handoff"
+        candidate["selected_instead_of_next_operator_action_id"] = _safe_str(next_operator_action.get("id"))
+        return candidate
+
+    return dict(next_operator_action)
+
+
+def _execute_target_action(
+    next_operator_action: dict[str, Any],
+    approval_id: str,
+    ordered_steps: list[dict[str, Any]],
+    enablement_sequence: list[dict[str, Any]],
+    resident_host: dict[str, Any],
+) -> dict[str, Any]:
+    if _is_execution_action(next_operator_action):
+        action = dict(next_operator_action)
+        action["execute_target_source"] = "current_next_operator_action"
+        return action
+
+    requested_approval_id = _safe_str(approval_id).strip()
+    if not requested_approval_id:
+        return dict(next_operator_action)
+
+    candidates: list[dict[str, Any]] = []
+    for step in ordered_steps:
+        candidate = _as_dict(step.get("next_operator_action"))
+        if _is_execution_action(candidate):
+            candidates.append(dict(candidate))
+
+    enablement_candidate = _next_enablement_action(enablement_sequence, resident_host)
+    if _is_execution_action(enablement_candidate):
+        candidates.append(dict(enablement_candidate))
+
+    for candidate in candidates:
+        active_approval_id = _safe_str(candidate.get("active_approval_id")).strip()
+        approved_approval_id = _safe_str(candidate.get("approved_approval_id")).strip()
+        if active_approval_id == requested_approval_id:
+            candidate["execute_target_source"] = "active_approval_id_handoff"
+        elif approved_approval_id == requested_approval_id:
+            candidate["execute_target_source"] = "approved_approval_id_handoff"
+        else:
+            continue
         candidate["selected_instead_of_next_operator_action_id"] = _safe_str(next_operator_action.get("id"))
         return candidate
 
@@ -1500,6 +1546,17 @@ def _run() -> tuple[int, dict[str, Any]]:
         if mode == "grantnext"
         else {}
     )
+    execute_target_action = (
+        _execute_target_action(
+            next_operator_action,
+            approval_id,
+            ordered_steps,
+            enablement_sequence,
+            resident_host,
+        )
+        if mode == "executenext"
+        else {}
+    )
     if mode == "requestnext":
         if not confirm_request:
             request_result = {
@@ -1531,7 +1588,7 @@ def _run() -> tuple[int, dict[str, Any]]:
                 "reason": "confirm_execute_required",
             }
         else:
-            execute_result = _execute_next_action(next_operator_action, actor, approval_id, reason, run_seconds)
+            execute_result = _execute_next_action(execute_target_action, actor, approval_id, reason, run_seconds)
     ok = all(item["passed"] for item in checks)
     mode_result = (
         request_result
@@ -1605,6 +1662,7 @@ def _run() -> tuple[int, dict[str, Any]]:
             "truthful": command_availability_truthful,
         },
         "grant_target_action": grant_target_action,
+        "execute_target_action": execute_target_action,
         "request_result": request_result,
         "grant_result": grant_result,
         "execute_result": execute_result,

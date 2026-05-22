@@ -36547,6 +36547,55 @@ Latest validation for Stage 6 CI hardening:
   Result: `passed; branch state OK; Ruff check passed; Ruff format check
   passed; mypy passed with no issues in 501 source files; pytest reached 100%`
 
+Stage 6 prerequisite execution handoff targeting on `2026-05-21`:
+
+- `scripts/lens-stage6-prerequisite-bringup-plan.ps1` now mirrors the existing
+  exact-approval grant targeting for execution boundaries. When the current top
+  operator action is a readback-only handoff, `ExecuteNext` can select an
+  approved execution substep by the supplied active approval id and reports
+  `execute_target_action` with the target source and the readback action it
+  selected past.
+- This keeps the persistent-supervision receipt readback truthful while still
+  allowing the already-governed resident-host execution handoff to be exercised
+  with explicit `-ConfirmExecute`. The path remains bounded by actor scope,
+  active approval id, and confirmation.
+- Local Stage 6 receipts were advanced after the existing approved operator
+  requests: resident-runtime execution authority grant
+  `a4b0f2b0-b32c-4f32-9b95-d4576be2f463`, host-supervision authority grant
+  `636fd4db-e447-4afe-8c83-5ddccbeefa6f`, and a bounded supervised resident-host
+  execution receipt. The execution receipt did not grant resident-claim
+  authority and still reported the remaining tray, hotkey, overlay, summon, and
+  service-control blockers.
+- This does not close Stage 6, does not claim resident surface readiness, does
+  not install or control a service, does not grant memory write, and does not
+  start Stage 7.
+
+Latest validation for Stage 6 prerequisite execution handoff targeting:
+
+- `python -m ruff check tests\test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests\test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed; 1 file already formatted`
+- `python -m pytest
+  tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_config_only
+  -q`
+  Result: `passed`
+- `scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode ExecuteNext -Actor
+  test.system.write -ApprovalId a4b0f2b0-b32c-4f32-9b95-d4576be2f463
+  -RunSeconds 2` with `FRANCIS_API_ACTOR_SCOPES` set for `test.system.write`
+  Result: `refused_confirmation_required; execute_target_action.id=execute_supervised_resident_host_start;
+  execute_target_source=active_approval_id_handoff; would_execute=false`
+- `scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode ExecuteNext -Actor
+  test.system.write -ApprovalId a4b0f2b0-b32c-4f32-9b95-d4576be2f463
+  -RunSeconds 2 -ConfirmExecute` with `FRANCIS_API_ACTOR_SCOPES` set for
+  `test.system.write`
+  Result: `passed; status=resident_supervision_started; executed=true;
+  receipt_written=true; local_process_launch_authority=true;
+  process_supervision_authority=true; resident_claim_authority=false`
+- `scripts\lens-resident-surface-proof.ps1 -Mode Status`
+  Result: `passed as blocker proof; next_smallest_truthful_gap=resident_surface_runtime_not_supervised;
+  authority_required=process_supervision_authority; authority_granted=false`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

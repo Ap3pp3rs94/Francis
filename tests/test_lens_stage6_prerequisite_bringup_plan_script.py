@@ -2548,6 +2548,38 @@ def test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_con
     assert late_grant_result["governance"]["execution_authority"] is False
     assert late_grant_result["governance"]["resident_claim_authority"] is False
 
+    late_execute_dry_run = _run_plan(
+        "-Mode",
+        "ExecuteNext",
+        "-DataDir",
+        str(data_dir),
+        *_service_config_args(service_config_path),
+        "-Actor",
+        "test.system.write",
+        "-ApprovalId",
+        chain["resident_approval_id"],
+        "-Reason",
+        "test target supervised resident host start after enablement receipt review is current",
+        "-RunSeconds",
+        "2",
+    )
+    assert late_execute_dry_run.returncode == 1, late_execute_dry_run.stderr or late_execute_dry_run.stdout
+    late_execute_payload = json.loads(late_execute_dry_run.stdout)
+    assert late_execute_payload["status"] == "refused_confirmation_required"
+    assert late_execute_payload["next_operator_action"]["id"] == "review_persistent_supervision_enablement_receipt"
+    assert late_execute_payload["execute_target_action"]["id"] == "execute_supervised_resident_host_start"
+    assert late_execute_payload["execute_target_action"]["active_approval_id"] == chain["resident_approval_id"]
+    assert late_execute_payload["execute_target_action"]["execute_target_source"] == "active_approval_id_handoff"
+    assert late_execute_payload["execute_target_action"]["selected_instead_of_next_operator_action_id"] == (
+        "review_persistent_supervision_enablement_receipt"
+    )
+    assert late_execute_payload["execute_result"]["status"] == "refused_confirmation_required"
+    assert late_execute_payload["execute_result"]["executed"] is False
+    assert late_execute_payload["execute_result"]["receipt_written"] is False
+    assert late_execute_payload["governance"]["would_execute"] is False
+    assert late_execute_payload["governance"]["local_process_launch_authority"] is False
+    assert late_execute_payload["governance"]["resident_claim_authority"] is False
+
     shutil.rmtree(data_dir / "lens" / "pse_authority_grants", ignore_errors=True)
     shutil.rmtree(data_dir / "lens" / "pse_execution_authority_grants", ignore_errors=True)
     stale_grants_followup = _run_plan(
