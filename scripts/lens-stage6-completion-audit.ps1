@@ -262,6 +262,7 @@ $SummonAnywhereFamilyChainProofScript = Join-Path $PSScriptRoot 'lens-summon-any
 $SummonApiExecutionProofScript = Join-Path $PSScriptRoot 'lens-summon-api-execution-proof.ps1'
 $ResidentRuntimeApiExecutionProofScript = Join-Path $PSScriptRoot 'lens-resident-runtime-api-execution-proof.ps1'
 $TrayPresenceApiExecutionProofScript = Join-Path $PSScriptRoot 'lens-tray-presence-api-execution-proof.ps1'
+$OsBindingApiExecutionProofScript = Join-Path $PSScriptRoot 'lens-os-binding-api-execution-proof.ps1'
 
 if (-not (Test-Path -LiteralPath $CheckpointScript)) {
   throw "Stage 6 checkpoint script is missing: $CheckpointScript"
@@ -353,6 +354,23 @@ if ($AllowLaunchOnHotkey) {
     -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 240))
 }
 $TrayPresenceApiExecutionProof = $TrayPresenceApiExecutionProofResult.payload
+$OsBindingApiExecutionProofResult = [ordered]@{
+  exit_code = 0
+  payload = $null
+  output = ''
+  error = ''
+  timed_out = $false
+  timeout_seconds = 0
+  duration_ms = 0
+}
+if ($AllowLaunchOnHotkey) {
+  $OsBindingApiExecutionProofResult = Invoke-JsonScript `
+    -PowerShellPath $PowerShell.Source `
+    -ScriptPath $OsBindingApiExecutionProofScript `
+    -ScriptArgs @('-Mode', 'Status', '-RunSeconds', '1') `
+    -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 240))
+}
+$OsBindingApiExecutionProof = $OsBindingApiExecutionProofResult.payload
 $ResidentHostRuntimeBoundaryProofResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $ResidentHostRuntimeBoundaryProofScript -ScriptArgs @(
   '-Mode', 'Status',
   '-ForegroundRunSeconds', '2',
@@ -1036,6 +1054,7 @@ if ($AllowLaunchOnHotkey) {
   $ChildProofRuns += New-ChildProofRunSummary -Name 'summon_api_launch_on_hotkey' -Result $SummonApiLaunchOnHotkeyProofResult
   $ChildProofRuns += New-ChildProofRunSummary -Name 'resident_runtime_api_execution' -Result $ResidentRuntimeApiExecutionProofResult
   $ChildProofRuns += New-ChildProofRunSummary -Name 'tray_presence_api_execution' -Result $TrayPresenceApiExecutionProofResult
+  $ChildProofRuns += New-ChildProofRunSummary -Name 'os_binding_api_execution' -Result $OsBindingApiExecutionProofResult
 }
 $ChildProofTimeouts = [string[]]@(
   $ChildProofRuns | Where-Object { [bool]$_.timed_out } | ForEach-Object { [string]$_.name }
@@ -2327,6 +2346,80 @@ $TrayPresenceApiExecutionProofObserved = (
   -not [bool]$TrayPresenceApiExecutionProofGovernance.memory_write -and
   -not [bool]$TrayPresenceApiExecutionProofGovernance.resident_claim_authority
 )
+$OsBindingApiExecutionProofGovernance = $OsBindingApiExecutionProof.governance
+$OsBindingApiExecutionProofBlockers = ConvertTo-StringArray -Value $OsBindingApiExecutionProof.blockers
+$OsBindingApiExecutionProofRequiredBeforeEnable = ConvertTo-StringArray -Value (
+  $OsBindingApiExecutionProof.required_before_enable_after_hotkey
+)
+$OsBindingApiExecutionProofObserved = (
+  [bool]$AllowLaunchOnHotkey -and
+  [int]$OsBindingApiExecutionProofResult.exit_code -eq 0 -and
+  [bool]$OsBindingApiExecutionProof.ok -and
+  [string]$OsBindingApiExecutionProof.kind -eq 'lens.os_binding.api_execution.proof' -and
+  [string]$OsBindingApiExecutionProof.status -eq 'proof_passed' -and
+  [string]$OsBindingApiExecutionProof.previous_next_smallest_truthful_gap -eq 'os_level_command_palette_binding' -and
+  [string]$OsBindingApiExecutionProof.route_next_smallest_truthful_gap -eq 'summon_binding' -and
+  [string]$OsBindingApiExecutionProof.next_smallest_truthful_gap -eq 'summon_overlay_window_blocker_boundary' -and
+  [string]$OsBindingApiExecutionProof.recommended_handoff_source -eq 'api_os_binding_execution_overlay_window_handoff' -and
+  [string]$OsBindingApiExecutionProof.recommended_next_slice -eq 'prove_governed_overlay_window_api_execution_after_global_hotkey_binding' -and
+  [string]$OsBindingApiExecutionProof.recommended_proof_script -eq 'scripts/lens-overlay-api-execution-proof.ps1 -Mode Status' -and
+  [string]$OsBindingApiExecutionProof.recommended_handoff.id -eq 'overlay_window' -and
+  -not [bool]$OsBindingApiExecutionProof.recommended_handoff.would_execute -and
+  -not [bool]$OsBindingApiExecutionProof.recommended_handoff.would_mutate -and
+  [bool]$OsBindingApiExecutionProof.resident_runtime_execution_authority -and
+  [bool]$OsBindingApiExecutionProof.host_supervision_authority -and
+  [bool]$OsBindingApiExecutionProof.tray_presence_authority -and
+  [bool]$OsBindingApiExecutionProof.os_binding_authority -and
+  [bool]$OsBindingApiExecutionProof.execution_applied -and
+  [bool]$OsBindingApiExecutionProof.executed -and
+  [bool]$OsBindingApiExecutionProof.resident_host_process_started -and
+  [bool]$OsBindingApiExecutionProof.resident_supervised_runtime_started -and
+  [bool]$OsBindingApiExecutionProof.tray_presence_started -and
+  [bool]$OsBindingApiExecutionProof.tray_runtime_ready -and
+  [bool]$OsBindingApiExecutionProof.global_hotkey_bound -and
+  [bool]$OsBindingApiExecutionProof.hotkey_runtime_ready -and
+  [bool]$OsBindingApiExecutionProof.os_level_command_palette -and
+  [bool]$OsBindingApiExecutionProof.hotkey_stop_observed -and
+  [bool]$OsBindingApiExecutionProof.tray_presence_stop_observed -and
+  [bool]$OsBindingApiExecutionProof.resident_supervision_stop_observed -and
+  [bool]$OsBindingApiExecutionProof.hotkey_pid_file_present_after_start -and
+  -not [bool]$OsBindingApiExecutionProof.hotkey_pid_file_present_after_stop -and
+  -not [bool]$OsBindingApiExecutionProof.tray_pid_file_present_after_stop -and
+  -not [bool]$OsBindingApiExecutionProof.host_pid_file_present_after_stop -and
+  @($OsBindingApiExecutionProofRequiredBeforeEnable).Count -eq 2 -and
+  $OsBindingApiExecutionProofRequiredBeforeEnable -contains 'overlay_window' -and
+  $OsBindingApiExecutionProofRequiredBeforeEnable -contains 'summon_binding' -and
+  -not [bool]$OsBindingApiExecutionProof.overlay_window -and
+  -not [bool]$OsBindingApiExecutionProof.summon_anywhere -and
+  -not [bool]$OsBindingApiExecutionProof.service_managed -and
+  -not [bool]$OsBindingApiExecutionProof.resident_claim_allowed -and
+  $OsBindingApiExecutionProofBlockers -contains 'overlay_window_missing' -and
+  $OsBindingApiExecutionProofBlockers -contains 'summon_binding_missing' -and
+  [bool]$OsBindingApiExecutionProofGovernance.diagnostic_only -and
+  [bool]$OsBindingApiExecutionProofGovernance.api_route_proof -and
+  [bool]$OsBindingApiExecutionProofGovernance.api_execution_authority -and
+  [bool]$OsBindingApiExecutionProofGovernance.approval_request_write -and
+  [bool]$OsBindingApiExecutionProofGovernance.test_fixture_approval_decisions -and
+  [bool]$OsBindingApiExecutionProofGovernance.execution_authority -and
+  [bool]$OsBindingApiExecutionProofGovernance.temporary_runtime_state_write -and
+  [bool]$OsBindingApiExecutionProofGovernance.local_process_launch_authority -and
+  [bool]$OsBindingApiExecutionProofGovernance.process_supervision_authority -and
+  [bool]$OsBindingApiExecutionProofGovernance.tray_registration_authority -and
+  [bool]$OsBindingApiExecutionProofGovernance.tray_icon_authority -and
+  [bool]$OsBindingApiExecutionProofGovernance.hotkey_registration_authority -and
+  [bool]$OsBindingApiExecutionProofGovernance.mutation_authority_granted -and
+  -not [bool]$OsBindingApiExecutionProofGovernance.product_execution_authority -and
+  -not [bool]$OsBindingApiExecutionProofGovernance.approval_decision_authority -and
+  -not [bool]$OsBindingApiExecutionProofGovernance.process_restart_authority -and
+  -not [bool]$OsBindingApiExecutionProofGovernance.service_install_authority -and
+  -not [bool]$OsBindingApiExecutionProofGovernance.service_control_authority -and
+  -not [bool]$OsBindingApiExecutionProofGovernance.overlay_control_authority -and
+  -not [bool]$OsBindingApiExecutionProofGovernance.summon_authority -and
+  -not [bool]$OsBindingApiExecutionProofGovernance.capture_authority -and
+  -not [bool]$OsBindingApiExecutionProofGovernance.new_sensing_authority -and
+  -not [bool]$OsBindingApiExecutionProofGovernance.memory_write -and
+  -not [bool]$OsBindingApiExecutionProofGovernance.resident_claim_authority
+)
 $SummonAnywhereRuntimeReadbackObserved = [bool]$SummonApiLaunchOnHotkeyProofObserved
 $Stage6AcceptanceNextGap = if ($BlockedCriterionIds -contains 'summon_anywhere' -and -not $SummonAnywhereRuntimeReadbackObserved) {
   'summon_anywhere_blockers'
@@ -2360,7 +2453,8 @@ $Stage6CompletionEvidenceReviewed = (
   $SummonAnywhereFamilyChainProofObserved -and
   (-not [bool]$AllowLaunchOnHotkey -or $SummonApiLaunchOnHotkeyProofObserved) -and
   (-not [bool]$AllowLaunchOnHotkey -or $ResidentRuntimeApiExecutionProofObserved) -and
-  (-not [bool]$AllowLaunchOnHotkey -or $TrayPresenceApiExecutionProofObserved)
+  (-not [bool]$AllowLaunchOnHotkey -or $TrayPresenceApiExecutionProofObserved) -and
+  (-not [bool]$AllowLaunchOnHotkey -or $OsBindingApiExecutionProofObserved)
 )
 $Stage6CompletionReviewed = (
   $Stage6CompletionEvidenceReviewed -and
@@ -2658,16 +2752,29 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
 ) {
   'tray_presence_api_execution_readback'
 } elseif (
+  $AllowLaunchOnHotkey -and
+  $SummonApiLaunchOnHotkeyProofObserved -and
+  $ResidentRuntimeApiExecutionProofObserved -and
+  $TrayPresenceApiExecutionProofObserved -and
+  $SummonAnywhereBlockersProofObserved -and
+  $CheckpointSummonEnablementGateHandoffObserved -and
+  $SummonAuthorityBlockerProofObserved -and
+  $SummonAnywhereFamilyChainProofObserved -and
+  -not $OsBindingApiExecutionProofObserved
+) {
+  'os_binding_api_execution_readback'
+} elseif (
   $Stage6CompletionReviewed -and
   -not $ReadyToClose -and
   $AllowLaunchOnHotkey -and
   $SummonApiLaunchOnHotkeyProofObserved -and
   $ResidentRuntimeApiExecutionProofObserved -and
   $TrayPresenceApiExecutionProofObserved -and
+  $OsBindingApiExecutionProofObserved -and
   $ResidentSurfaceForegroundRuntimeProofObserved -and
   $Stage6AcceptanceNextGap -eq 'resident_surface_runtime_not_supervised'
 ) {
-  [string]$TrayPresenceApiExecutionProof.next_smallest_truthful_gap
+  [string]$OsBindingApiExecutionProof.next_smallest_truthful_gap
 } elseif (
   $PersistentSupervisionEnablementDenialObserved -and
   $PersistentSupervisionEnablementExecutionDenialObserved -and
@@ -3038,6 +3145,95 @@ if (
     would_write_memory = $false
     would_claim_resident = $false
     blockers = [string[]]@($TrayPresenceApiExecutionProofBlockers)
+  }
+  $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
+  $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
+  $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
+} elseif (
+  $NextSmallestTruthfulGap -eq 'os_binding_api_execution_readback'
+) {
+  $RecommendedHandoffSource = 'stage6_os_binding_api_execution_readback_required'
+  $RecommendedHandoff = [ordered]@{
+    status = 'proof_readback_required'
+    previous_next_smallest_truthful_gap = 'os_level_command_palette_binding'
+    consumed_tray_presence_api_next_smallest_truthful_gap = [string]$TrayPresenceApiExecutionProof.next_smallest_truthful_gap
+    next_smallest_truthful_gap = 'os_binding_api_execution_readback'
+    next_step = 'run_os_binding_api_execution_proof_after_tray_presence_readback'
+    proof_script = 'scripts/lens-os-binding-api-execution-proof.ps1 -Mode Status'
+    route = '/lens/os-binding/execute'
+    authority_route = '/lens/os-binding/authority'
+    request_route = '/lens/os-binding/authority/request'
+    readiness_route = '/lens/os-binding/execution/readiness'
+    authority_required = 'os_level_command_palette_binding_authority'
+    authority_granted = $false
+    summon_api_launch_on_hotkey_runtime_readback_observed = $SummonApiLaunchOnHotkeyProofObserved
+    resident_runtime_api_execution_proof_observed = $ResidentRuntimeApiExecutionProofObserved
+    tray_presence_api_execution_proof_observed = $TrayPresenceApiExecutionProofObserved
+    os_binding_api_execution_proof_observed = $OsBindingApiExecutionProofObserved
+    read_only_contract = $false
+    diagnostic_only = $true
+    would_execute = $true
+    would_mutate = $true
+    would_register_tray = $false
+    would_register_hotkey = $true
+    would_open_overlay = $false
+    would_write_memory = $false
+    would_claim_resident = $false
+    blockers = [string[]]@($OsBindingApiExecutionProofBlockers)
+  }
+  $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
+  $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
+  $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
+} elseif (
+  $NextSmallestTruthfulGap -eq 'summon_overlay_window_blocker_boundary' -and
+  $OsBindingApiExecutionProofObserved
+) {
+  $OsBindingApiExecutionProofRecommendedHandoff = $OsBindingApiExecutionProof.recommended_handoff
+  $RecommendedHandoffSource = [string]$OsBindingApiExecutionProof.recommended_handoff_source
+  $RecommendedHandoff = [ordered]@{
+    status = 'blocked'
+    previous_next_smallest_truthful_gap = 'os_level_command_palette_binding'
+    consumed_tray_presence_api_execution_proof = $TrayPresenceApiExecutionProofObserved
+    consumed_os_binding_api_execution_proof = $OsBindingApiExecutionProofObserved
+    consumed_os_binding_api_next_smallest_truthful_gap = [string]$OsBindingApiExecutionProof.next_smallest_truthful_gap
+    next_smallest_truthful_gap = [string]$OsBindingApiExecutionProof.next_smallest_truthful_gap
+    next_step = [string]$OsBindingApiExecutionProof.recommended_next_slice
+    proof_script = [string]$OsBindingApiExecutionProof.recommended_proof_script
+    route = [string]$OsBindingApiExecutionProofRecommendedHandoff.route
+    readiness_route = [string]$OsBindingApiExecutionProofRecommendedHandoff.readiness_route
+    acceptance_criterion = 'summon_anywhere'
+    authority_required = [string]$OsBindingApiExecutionProofRecommendedHandoff.authority_required
+    authority_granted = $false
+    recommended_handoff = $OsBindingApiExecutionProofRecommendedHandoff
+    resident_runtime_execution_authority = [bool]$OsBindingApiExecutionProof.resident_runtime_execution_authority
+    host_supervision_authority = [bool]$OsBindingApiExecutionProof.host_supervision_authority
+    tray_presence_authority = [bool]$OsBindingApiExecutionProof.tray_presence_authority
+    os_binding_authority = [bool]$OsBindingApiExecutionProof.os_binding_authority
+    resident_host_process_started = [bool]$OsBindingApiExecutionProof.resident_host_process_started
+    resident_supervised_runtime_started = [bool]$OsBindingApiExecutionProof.resident_supervised_runtime_started
+    tray_presence_started = [bool]$OsBindingApiExecutionProof.tray_presence_started
+    tray_runtime_ready = [bool]$OsBindingApiExecutionProof.tray_runtime_ready
+    global_hotkey_bound = [bool]$OsBindingApiExecutionProof.global_hotkey_bound
+    hotkey_runtime_ready = [bool]$OsBindingApiExecutionProof.hotkey_runtime_ready
+    os_level_command_palette = [bool]$OsBindingApiExecutionProof.os_level_command_palette
+    hotkey_stop_observed = [bool]$OsBindingApiExecutionProof.hotkey_stop_observed
+    tray_presence_stop_observed = [bool]$OsBindingApiExecutionProof.tray_presence_stop_observed
+    resident_supervision_stop_observed = [bool]$OsBindingApiExecutionProof.resident_supervision_stop_observed
+    required_before_enable_after_hotkey = [string[]]@($OsBindingApiExecutionProofRequiredBeforeEnable)
+    overlay_window = [bool]$OsBindingApiExecutionProof.overlay_window
+    summon_anywhere = [bool]$OsBindingApiExecutionProof.summon_anywhere
+    service_managed = [bool]$OsBindingApiExecutionProof.service_managed
+    resident_claim_allowed = [bool]$OsBindingApiExecutionProof.resident_claim_allowed
+    read_only_contract = [bool]$OsBindingApiExecutionProofRecommendedHandoff.read_only_contract
+    diagnostic_only = [bool]$OsBindingApiExecutionProofRecommendedHandoff.diagnostic_only
+    would_execute = [bool]$OsBindingApiExecutionProofRecommendedHandoff.would_execute
+    would_mutate = [bool]$OsBindingApiExecutionProofRecommendedHandoff.would_mutate
+    would_register_tray = $false
+    would_register_hotkey = $false
+    would_open_overlay = $false
+    would_write_memory = $false
+    would_claim_resident = $false
+    blockers = [string[]]@($OsBindingApiExecutionProofBlockers)
   }
   $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
   $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
@@ -3426,6 +3622,10 @@ $Payload = [ordered]@{
     'The completion audit consumed the opt-in resident-runtime API execution proof and now requires the governed tray-presence API execution proof before advancing to OS-level command palette and global-hotkey binding work.'
   } elseif ($NextSmallestTruthfulGap -eq 'os_level_command_palette_binding') {
     'The completion audit consumed the opt-in tray-presence API execution proof: a bounded supervised resident host and real tray presence started and stopped through governed API paths, while global hotkey, overlay, summon-anywhere, service management, memory writes, and resident claim remain false. The next truthful blocker is OS-level command palette/global-hotkey binding.'
+  } elseif ($NextSmallestTruthfulGap -eq 'os_binding_api_execution_readback') {
+    'The completion audit consumed the opt-in tray-presence API execution proof and now requires the governed OS-binding API execution proof before advancing to overlay-window execution work.'
+  } elseif ($NextSmallestTruthfulGap -eq 'summon_overlay_window_blocker_boundary') {
+    'The completion audit consumed the opt-in OS-binding API execution proof: a bounded supervised resident host, tray presence, and global hotkey binding started and stopped through governed API paths, while overlay, summon-anywhere, service management, memory writes, and resident claim remain false. The next truthful blocker is governed overlay-window execution.'
   } elseif ($NextSmallestTruthfulGap -eq 'summon_anywhere_family_chain_proof_readback') {
     'The audit must consume the summon-anywhere family-chain proof before treating the grouped resident-host, tray, overlay, hotkey, summon-binding, and authority blockers as one audited handoff.'
   } elseif ($NextSmallestTruthfulGap -eq 'summon_api_launch_on_hotkey_readback') {
@@ -3722,6 +3922,89 @@ $Payload = [ordered]@{
       memory_write = [bool]$TrayPresenceApiExecutionProofGovernance.memory_write
       resident_claim_authority = [bool]$TrayPresenceApiExecutionProofGovernance.resident_claim_authority
       mutation_authority_granted = [bool]$TrayPresenceApiExecutionProofGovernance.mutation_authority_granted
+    }
+  }
+  os_binding_api_execution_proof = [ordered]@{
+    status = if ($AllowLaunchOnHotkey) {
+      if ($OsBindingApiExecutionProofObserved) { [string]$OsBindingApiExecutionProof.status } else { 'missing_or_failed' }
+    } else {
+      'not_requested'
+    }
+    ok = $OsBindingApiExecutionProofObserved
+    exit_code = [int]$OsBindingApiExecutionProofResult.exit_code
+    timeout_seconds = [int]$OsBindingApiExecutionProofResult.timeout_seconds
+    timed_out = [bool]$OsBindingApiExecutionProofResult.timed_out
+    kind = [string]$OsBindingApiExecutionProof.kind
+    previous_next_smallest_truthful_gap = [string]$OsBindingApiExecutionProof.previous_next_smallest_truthful_gap
+    route_next_smallest_truthful_gap = [string]$OsBindingApiExecutionProof.route_next_smallest_truthful_gap
+    next_smallest_truthful_gap = [string]$OsBindingApiExecutionProof.next_smallest_truthful_gap
+    recommended_handoff_source = [string]$OsBindingApiExecutionProof.recommended_handoff_source
+    recommended_next_slice = [string]$OsBindingApiExecutionProof.recommended_next_slice
+    recommended_proof_script = [string]$OsBindingApiExecutionProof.recommended_proof_script
+    recommended_handoff = $OsBindingApiExecutionProof.recommended_handoff
+    host_supervision_approval_id = [string]$OsBindingApiExecutionProof.host_supervision_approval_id
+    resident_runtime_approval_id = [string]$OsBindingApiExecutionProof.resident_runtime_approval_id
+    tray_presence_approval_id = [string]$OsBindingApiExecutionProof.tray_presence_approval_id
+    os_binding_approval_id = [string]$OsBindingApiExecutionProof.os_binding_approval_id
+    host_supervision_authority_grant_receipt_id = [string]$OsBindingApiExecutionProof.host_supervision_authority_grant_receipt_id
+    resident_runtime_authority_grant_receipt_id = [string]$OsBindingApiExecutionProof.resident_runtime_authority_grant_receipt_id
+    tray_authority_grant_receipt_id = [string]$OsBindingApiExecutionProof.tray_authority_grant_receipt_id
+    os_binding_authority_grant_receipt_id = [string]$OsBindingApiExecutionProof.os_binding_authority_grant_receipt_id
+    resident_runtime_execution_authority = [bool]$OsBindingApiExecutionProof.resident_runtime_execution_authority
+    host_supervision_authority = [bool]$OsBindingApiExecutionProof.host_supervision_authority
+    tray_presence_authority = [bool]$OsBindingApiExecutionProof.tray_presence_authority
+    os_binding_authority = [bool]$OsBindingApiExecutionProof.os_binding_authority
+    execution_applied = [bool]$OsBindingApiExecutionProof.execution_applied
+    executed = [bool]$OsBindingApiExecutionProof.executed
+    resident_host_process_started = [bool]$OsBindingApiExecutionProof.resident_host_process_started
+    resident_supervised_runtime_started = [bool]$OsBindingApiExecutionProof.resident_supervised_runtime_started
+    tray_presence_started = [bool]$OsBindingApiExecutionProof.tray_presence_started
+    tray_runtime_ready = [bool]$OsBindingApiExecutionProof.tray_runtime_ready
+    global_hotkey_bound = [bool]$OsBindingApiExecutionProof.global_hotkey_bound
+    hotkey_runtime_ready = [bool]$OsBindingApiExecutionProof.hotkey_runtime_ready
+    os_level_command_palette = [bool]$OsBindingApiExecutionProof.os_level_command_palette
+    hotkey_stop_observed = [bool]$OsBindingApiExecutionProof.hotkey_stop_observed
+    tray_presence_stop_observed = [bool]$OsBindingApiExecutionProof.tray_presence_stop_observed
+    resident_supervision_stop_observed = [bool]$OsBindingApiExecutionProof.resident_supervision_stop_observed
+    hotkey_pid_file_present_after_start = [bool]$OsBindingApiExecutionProof.hotkey_pid_file_present_after_start
+    hotkey_pid_file_present_after_stop = [bool]$OsBindingApiExecutionProof.hotkey_pid_file_present_after_stop
+    tray_pid_file_present_after_stop = [bool]$OsBindingApiExecutionProof.tray_pid_file_present_after_stop
+    host_pid_file_present_after_stop = [bool]$OsBindingApiExecutionProof.host_pid_file_present_after_stop
+    required_before_enable_after_hotkey = [string[]]@($OsBindingApiExecutionProofRequiredBeforeEnable)
+    overlay_window = [bool]$OsBindingApiExecutionProof.overlay_window
+    summon_anywhere = [bool]$OsBindingApiExecutionProof.summon_anywhere
+    service_managed = [bool]$OsBindingApiExecutionProof.service_managed
+    resident_claim_allowed = [bool]$OsBindingApiExecutionProof.resident_claim_allowed
+    blockers = [string[]]@($OsBindingApiExecutionProofBlockers)
+    checks = @($OsBindingApiExecutionProof.checks)
+    proof = $OsBindingApiExecutionProof.proof
+    start_execution = $OsBindingApiExecutionProof.start_execution
+    stop_execution = $OsBindingApiExecutionProof.stop_execution
+    governance = [ordered]@{
+      diagnostic_only = [bool]$OsBindingApiExecutionProofGovernance.diagnostic_only
+      api_route_proof = [bool]$OsBindingApiExecutionProofGovernance.api_route_proof
+      api_execution_authority = [bool]$OsBindingApiExecutionProofGovernance.api_execution_authority
+      approval_request_write = [bool]$OsBindingApiExecutionProofGovernance.approval_request_write
+      test_fixture_approval_decisions = [bool]$OsBindingApiExecutionProofGovernance.test_fixture_approval_decisions
+      product_execution_authority = [bool]$OsBindingApiExecutionProofGovernance.product_execution_authority
+      approval_decision_authority = [bool]$OsBindingApiExecutionProofGovernance.approval_decision_authority
+      execution_authority = [bool]$OsBindingApiExecutionProofGovernance.execution_authority
+      temporary_runtime_state_write = [bool]$OsBindingApiExecutionProofGovernance.temporary_runtime_state_write
+      local_process_launch_authority = [bool]$OsBindingApiExecutionProofGovernance.local_process_launch_authority
+      process_supervision_authority = [bool]$OsBindingApiExecutionProofGovernance.process_supervision_authority
+      process_restart_authority = [bool]$OsBindingApiExecutionProofGovernance.process_restart_authority
+      service_install_authority = [bool]$OsBindingApiExecutionProofGovernance.service_install_authority
+      service_control_authority = [bool]$OsBindingApiExecutionProofGovernance.service_control_authority
+      tray_registration_authority = [bool]$OsBindingApiExecutionProofGovernance.tray_registration_authority
+      tray_icon_authority = [bool]$OsBindingApiExecutionProofGovernance.tray_icon_authority
+      hotkey_registration_authority = [bool]$OsBindingApiExecutionProofGovernance.hotkey_registration_authority
+      overlay_control_authority = [bool]$OsBindingApiExecutionProofGovernance.overlay_control_authority
+      summon_authority = [bool]$OsBindingApiExecutionProofGovernance.summon_authority
+      capture_authority = [bool]$OsBindingApiExecutionProofGovernance.capture_authority
+      new_sensing_authority = [bool]$OsBindingApiExecutionProofGovernance.new_sensing_authority
+      memory_write = [bool]$OsBindingApiExecutionProofGovernance.memory_write
+      resident_claim_authority = [bool]$OsBindingApiExecutionProofGovernance.resident_claim_authority
+      mutation_authority_granted = [bool]$OsBindingApiExecutionProofGovernance.mutation_authority_granted
     }
   }
   summary = [ordered]@{
@@ -5305,6 +5588,7 @@ $Payload = [ordered]@{
     summon_api_launch_on_hotkey_proof_readback = $SummonApiLaunchOnHotkeyProofObserved
     resident_runtime_api_execution_proof_readback = $ResidentRuntimeApiExecutionProofObserved
     tray_presence_api_execution_proof_readback = $TrayPresenceApiExecutionProofObserved
+    os_binding_api_execution_proof_readback = $OsBindingApiExecutionProofObserved
     stage6_completion_audit_handoff_consumed_by_closure_readback = $Stage6CompletionAuditHandoffConsumedByClosureReadback
     process_supervision_boundary_observed = [bool]$ProcessSupervisionBoundary.process_supervision_boundary_observed
     service_activation_plan_observed = [bool]$ProcessSupervisionBoundary.service_activation_plan_observed
