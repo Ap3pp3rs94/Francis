@@ -261,6 +261,7 @@ $SummonAuthorityBlockerProofScript = Join-Path $PSScriptRoot 'lens-summon-author
 $SummonAnywhereFamilyChainProofScript = Join-Path $PSScriptRoot 'lens-summon-anywhere-family-chain-proof.ps1'
 $SummonApiExecutionProofScript = Join-Path $PSScriptRoot 'lens-summon-api-execution-proof.ps1'
 $ResidentRuntimeApiExecutionProofScript = Join-Path $PSScriptRoot 'lens-resident-runtime-api-execution-proof.ps1'
+$TrayPresenceApiExecutionProofScript = Join-Path $PSScriptRoot 'lens-tray-presence-api-execution-proof.ps1'
 
 if (-not (Test-Path -LiteralPath $CheckpointScript)) {
   throw "Stage 6 checkpoint script is missing: $CheckpointScript"
@@ -335,6 +336,23 @@ if ($AllowLaunchOnHotkey) {
     -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 240))
 }
 $ResidentRuntimeApiExecutionProof = $ResidentRuntimeApiExecutionProofResult.payload
+$TrayPresenceApiExecutionProofResult = [ordered]@{
+  exit_code = 0
+  payload = $null
+  output = ''
+  error = ''
+  timed_out = $false
+  timeout_seconds = 0
+  duration_ms = 0
+}
+if ($AllowLaunchOnHotkey) {
+  $TrayPresenceApiExecutionProofResult = Invoke-JsonScript `
+    -PowerShellPath $PowerShell.Source `
+    -ScriptPath $TrayPresenceApiExecutionProofScript `
+    -ScriptArgs @('-Mode', 'Status', '-RunSeconds', '1') `
+    -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 240))
+}
+$TrayPresenceApiExecutionProof = $TrayPresenceApiExecutionProofResult.payload
 $ResidentHostRuntimeBoundaryProofResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $ResidentHostRuntimeBoundaryProofScript -ScriptArgs @(
   '-Mode', 'Status',
   '-ForegroundRunSeconds', '2',
@@ -1017,6 +1035,7 @@ $ChildProofRuns = @(
 if ($AllowLaunchOnHotkey) {
   $ChildProofRuns += New-ChildProofRunSummary -Name 'summon_api_launch_on_hotkey' -Result $SummonApiLaunchOnHotkeyProofResult
   $ChildProofRuns += New-ChildProofRunSummary -Name 'resident_runtime_api_execution' -Result $ResidentRuntimeApiExecutionProofResult
+  $ChildProofRuns += New-ChildProofRunSummary -Name 'tray_presence_api_execution' -Result $TrayPresenceApiExecutionProofResult
 }
 $ChildProofTimeouts = [string[]]@(
   $ChildProofRuns | Where-Object { [bool]$_.timed_out } | ForEach-Object { [string]$_.name }
@@ -2237,6 +2256,77 @@ $ResidentRuntimeApiExecutionProofObserved = (
   -not [bool]$ResidentRuntimeApiExecutionProofGovernance.memory_write -and
   -not [bool]$ResidentRuntimeApiExecutionProofGovernance.resident_claim_authority
 )
+$TrayPresenceApiExecutionProofGovernance = $TrayPresenceApiExecutionProof.governance
+$TrayPresenceApiExecutionProofBlockers = ConvertTo-StringArray -Value $TrayPresenceApiExecutionProof.blockers
+$TrayPresenceApiExecutionProofRequiredBeforeEnable = ConvertTo-StringArray -Value (
+  $TrayPresenceApiExecutionProof.required_before_enable_after_tray
+)
+$TrayPresenceApiExecutionProofObserved = (
+  [bool]$AllowLaunchOnHotkey -and
+  [int]$TrayPresenceApiExecutionProofResult.exit_code -eq 0 -and
+  [bool]$TrayPresenceApiExecutionProof.ok -and
+  [string]$TrayPresenceApiExecutionProof.kind -eq 'lens.tray_presence.api_execution.proof' -and
+  [string]$TrayPresenceApiExecutionProof.status -eq 'proof_passed' -and
+  [string]$TrayPresenceApiExecutionProof.previous_next_smallest_truthful_gap -eq 'summon_tray_presence_blocker_boundary' -and
+  [string]$TrayPresenceApiExecutionProof.next_smallest_truthful_gap -eq 'os_level_command_palette_binding' -and
+  [string]$TrayPresenceApiExecutionProof.recommended_handoff_source -eq 'api_tray_presence_execution_global_hotkey_handoff' -and
+  [string]$TrayPresenceApiExecutionProof.recommended_next_slice -eq 'prove_governed_os_binding_api_execution_after_tray_presence' -and
+  [string]$TrayPresenceApiExecutionProof.recommended_proof_script -eq 'scripts/lens-os-binding-api-execution-proof.ps1 -Mode Status' -and
+  [string]$TrayPresenceApiExecutionProof.recommended_handoff.id -eq 'global_hotkey_binding' -and
+  -not [bool]$TrayPresenceApiExecutionProof.recommended_handoff.would_execute -and
+  -not [bool]$TrayPresenceApiExecutionProof.recommended_handoff.would_mutate -and
+  [bool]$TrayPresenceApiExecutionProof.resident_runtime_execution_authority -and
+  [bool]$TrayPresenceApiExecutionProof.host_supervision_authority -and
+  [bool]$TrayPresenceApiExecutionProof.tray_presence_authority -and
+  [bool]$TrayPresenceApiExecutionProof.execution_applied -and
+  [bool]$TrayPresenceApiExecutionProof.executed -and
+  [bool]$TrayPresenceApiExecutionProof.resident_host_process_started -and
+  [bool]$TrayPresenceApiExecutionProof.resident_supervised_runtime_started -and
+  [bool]$TrayPresenceApiExecutionProof.tray_presence_started -and
+  [bool]$TrayPresenceApiExecutionProof.tray_runtime_ready -and
+  [bool]$TrayPresenceApiExecutionProof.tray_icon_visible -and
+  [bool]$TrayPresenceApiExecutionProof.tray_presence_stop_observed -and
+  [bool]$TrayPresenceApiExecutionProof.resident_supervision_stop_observed -and
+  [bool]$TrayPresenceApiExecutionProof.tray_pid_file_present_after_start -and
+  -not [bool]$TrayPresenceApiExecutionProof.tray_pid_file_present_after_stop -and
+  -not [bool]$TrayPresenceApiExecutionProof.host_pid_file_present_after_stop -and
+  @($TrayPresenceApiExecutionProofRequiredBeforeEnable).Count -eq 3 -and
+  $TrayPresenceApiExecutionProofRequiredBeforeEnable -contains 'global_hotkey_binding' -and
+  $TrayPresenceApiExecutionProofRequiredBeforeEnable -contains 'overlay_window' -and
+  $TrayPresenceApiExecutionProofRequiredBeforeEnable -contains 'summon_binding' -and
+  -not [bool]$TrayPresenceApiExecutionProof.global_hotkey -and
+  -not [bool]$TrayPresenceApiExecutionProof.overlay_window -and
+  -not [bool]$TrayPresenceApiExecutionProof.summon_anywhere -and
+  -not [bool]$TrayPresenceApiExecutionProof.service_managed -and
+  -not [bool]$TrayPresenceApiExecutionProof.resident_claim_allowed -and
+  $TrayPresenceApiExecutionProofBlockers -contains 'global_hotkey_binding_missing' -and
+  $TrayPresenceApiExecutionProofBlockers -contains 'overlay_window_missing' -and
+  $TrayPresenceApiExecutionProofBlockers -contains 'summon_binding_missing' -and
+  [bool]$TrayPresenceApiExecutionProofGovernance.diagnostic_only -and
+  [bool]$TrayPresenceApiExecutionProofGovernance.api_route_proof -and
+  [bool]$TrayPresenceApiExecutionProofGovernance.api_execution_authority -and
+  [bool]$TrayPresenceApiExecutionProofGovernance.approval_request_write -and
+  [bool]$TrayPresenceApiExecutionProofGovernance.test_fixture_approval_decisions -and
+  [bool]$TrayPresenceApiExecutionProofGovernance.execution_authority -and
+  [bool]$TrayPresenceApiExecutionProofGovernance.temporary_runtime_state_write -and
+  [bool]$TrayPresenceApiExecutionProofGovernance.local_process_launch_authority -and
+  [bool]$TrayPresenceApiExecutionProofGovernance.process_supervision_authority -and
+  [bool]$TrayPresenceApiExecutionProofGovernance.tray_registration_authority -and
+  [bool]$TrayPresenceApiExecutionProofGovernance.tray_icon_authority -and
+  [bool]$TrayPresenceApiExecutionProofGovernance.mutation_authority_granted -and
+  -not [bool]$TrayPresenceApiExecutionProofGovernance.product_execution_authority -and
+  -not [bool]$TrayPresenceApiExecutionProofGovernance.approval_decision_authority -and
+  -not [bool]$TrayPresenceApiExecutionProofGovernance.process_restart_authority -and
+  -not [bool]$TrayPresenceApiExecutionProofGovernance.service_install_authority -and
+  -not [bool]$TrayPresenceApiExecutionProofGovernance.service_control_authority -and
+  -not [bool]$TrayPresenceApiExecutionProofGovernance.hotkey_registration_authority -and
+  -not [bool]$TrayPresenceApiExecutionProofGovernance.overlay_control_authority -and
+  -not [bool]$TrayPresenceApiExecutionProofGovernance.summon_authority -and
+  -not [bool]$TrayPresenceApiExecutionProofGovernance.capture_authority -and
+  -not [bool]$TrayPresenceApiExecutionProofGovernance.new_sensing_authority -and
+  -not [bool]$TrayPresenceApiExecutionProofGovernance.memory_write -and
+  -not [bool]$TrayPresenceApiExecutionProofGovernance.resident_claim_authority
+)
 $SummonAnywhereRuntimeReadbackObserved = [bool]$SummonApiLaunchOnHotkeyProofObserved
 $Stage6AcceptanceNextGap = if ($BlockedCriterionIds -contains 'summon_anywhere' -and -not $SummonAnywhereRuntimeReadbackObserved) {
   'summon_anywhere_blockers'
@@ -2269,7 +2359,8 @@ $Stage6CompletionEvidenceReviewed = (
   $SummonAuthorityBlockerProofObserved -and
   $SummonAnywhereFamilyChainProofObserved -and
   (-not [bool]$AllowLaunchOnHotkey -or $SummonApiLaunchOnHotkeyProofObserved) -and
-  (-not [bool]$AllowLaunchOnHotkey -or $ResidentRuntimeApiExecutionProofObserved)
+  (-not [bool]$AllowLaunchOnHotkey -or $ResidentRuntimeApiExecutionProofObserved) -and
+  (-not [bool]$AllowLaunchOnHotkey -or $TrayPresenceApiExecutionProofObserved)
 )
 $Stage6CompletionReviewed = (
   $Stage6CompletionEvidenceReviewed -and
@@ -2556,15 +2647,27 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
 ) {
   'resident_runtime_api_execution_readback'
 } elseif (
+  $AllowLaunchOnHotkey -and
+  $SummonApiLaunchOnHotkeyProofObserved -and
+  $ResidentRuntimeApiExecutionProofObserved -and
+  $SummonAnywhereBlockersProofObserved -and
+  $CheckpointSummonEnablementGateHandoffObserved -and
+  $SummonAuthorityBlockerProofObserved -and
+  $SummonAnywhereFamilyChainProofObserved -and
+  -not $TrayPresenceApiExecutionProofObserved
+) {
+  'tray_presence_api_execution_readback'
+} elseif (
   $Stage6CompletionReviewed -and
   -not $ReadyToClose -and
   $AllowLaunchOnHotkey -and
   $SummonApiLaunchOnHotkeyProofObserved -and
   $ResidentRuntimeApiExecutionProofObserved -and
+  $TrayPresenceApiExecutionProofObserved -and
   $ResidentSurfaceForegroundRuntimeProofObserved -and
   $Stage6AcceptanceNextGap -eq 'resident_surface_runtime_not_supervised'
 ) {
-  [string]$ResidentRuntimeApiExecutionProof.next_smallest_truthful_gap
+  [string]$TrayPresenceApiExecutionProof.next_smallest_truthful_gap
 } elseif (
   $PersistentSupervisionEnablementDenialObserved -and
   $PersistentSupervisionEnablementExecutionDenialObserved -and
@@ -2807,6 +2910,41 @@ if (
   $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
   $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
 } elseif (
+  $NextSmallestTruthfulGap -eq 'tray_presence_api_execution_readback'
+) {
+  $RecommendedHandoffSource = 'stage6_tray_presence_api_execution_readback_required'
+  $RecommendedHandoff = [ordered]@{
+    status = 'proof_readback_required'
+    previous_next_smallest_truthful_gap = 'summon_tray_presence_blocker_boundary'
+    consumed_summon_api_next_smallest_truthful_gap = [string]$SummonApiLaunchOnHotkeyProof.next_smallest_truthful_gap
+    consumed_resident_runtime_api_next_smallest_truthful_gap = [string]$ResidentRuntimeApiExecutionProof.next_smallest_truthful_gap
+    next_smallest_truthful_gap = 'tray_presence_api_execution_readback'
+    next_step = 'run_tray_presence_api_execution_proof_after_resident_runtime_readback'
+    proof_script = 'scripts/lens-tray-presence-api-execution-proof.ps1 -Mode Status'
+    route = '/lens/tray/execute'
+    authority_route = '/lens/tray/authority'
+    request_route = '/lens/tray/authority/request'
+    readiness_route = '/lens/status'
+    authority_required = 'tray_registration_authority'
+    authority_granted = $false
+    summon_api_launch_on_hotkey_runtime_readback_observed = $SummonApiLaunchOnHotkeyProofObserved
+    resident_runtime_api_execution_proof_observed = $ResidentRuntimeApiExecutionProofObserved
+    tray_presence_api_execution_proof_observed = $TrayPresenceApiExecutionProofObserved
+    read_only_contract = $false
+    diagnostic_only = $true
+    would_execute = $true
+    would_mutate = $true
+    would_register_tray = $true
+    would_register_hotkey = $false
+    would_open_overlay = $false
+    would_write_memory = $false
+    would_claim_resident = $false
+    blockers = [string[]]@($TrayPresenceApiExecutionProofBlockers)
+  }
+  $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
+  $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
+  $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
+} elseif (
   $NextSmallestTruthfulGap -eq 'summon_tray_presence_blocker_boundary' -and
   $ResidentRuntimeApiExecutionProofObserved
 ) {
@@ -2849,6 +2987,57 @@ if (
     would_write_memory = $false
     would_claim_resident = $false
     blockers = [string[]]@($ResidentRuntimeApiExecutionProofBlockers)
+  }
+  $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
+  $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
+  $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
+} elseif (
+  $NextSmallestTruthfulGap -eq 'os_level_command_palette_binding' -and
+  $TrayPresenceApiExecutionProofObserved
+) {
+  $TrayPresenceApiExecutionProofRecommendedHandoff = $TrayPresenceApiExecutionProof.recommended_handoff
+  $RecommendedHandoffSource = [string]$TrayPresenceApiExecutionProof.recommended_handoff_source
+  $RecommendedHandoff = [ordered]@{
+    status = 'blocked'
+    previous_next_smallest_truthful_gap = 'summon_tray_presence_blocker_boundary'
+    consumed_resident_runtime_api_execution_proof = $ResidentRuntimeApiExecutionProofObserved
+    consumed_tray_presence_api_execution_proof = $TrayPresenceApiExecutionProofObserved
+    consumed_tray_presence_api_next_smallest_truthful_gap = [string]$TrayPresenceApiExecutionProof.next_smallest_truthful_gap
+    next_smallest_truthful_gap = [string]$TrayPresenceApiExecutionProof.next_smallest_truthful_gap
+    next_step = [string]$TrayPresenceApiExecutionProof.recommended_next_slice
+    proof_script = [string]$TrayPresenceApiExecutionProof.recommended_proof_script
+    route = [string]$TrayPresenceApiExecutionProofRecommendedHandoff.route
+    readiness_route = [string]$TrayPresenceApiExecutionProofRecommendedHandoff.readiness_route
+    acceptance_criterion = 'summon_anywhere'
+    authority_required = [string]$TrayPresenceApiExecutionProofRecommendedHandoff.authority_required
+    authority_granted = $false
+    recommended_handoff = $TrayPresenceApiExecutionProofRecommendedHandoff
+    resident_runtime_execution_authority = [bool]$TrayPresenceApiExecutionProof.resident_runtime_execution_authority
+    host_supervision_authority = [bool]$TrayPresenceApiExecutionProof.host_supervision_authority
+    tray_presence_authority = [bool]$TrayPresenceApiExecutionProof.tray_presence_authority
+    resident_host_process_started = [bool]$TrayPresenceApiExecutionProof.resident_host_process_started
+    resident_supervised_runtime_started = [bool]$TrayPresenceApiExecutionProof.resident_supervised_runtime_started
+    tray_presence_started = [bool]$TrayPresenceApiExecutionProof.tray_presence_started
+    tray_runtime_ready = [bool]$TrayPresenceApiExecutionProof.tray_runtime_ready
+    tray_icon_visible = [bool]$TrayPresenceApiExecutionProof.tray_icon_visible
+    tray_presence_stop_observed = [bool]$TrayPresenceApiExecutionProof.tray_presence_stop_observed
+    resident_supervision_stop_observed = [bool]$TrayPresenceApiExecutionProof.resident_supervision_stop_observed
+    required_before_enable_after_tray = [string[]]@($TrayPresenceApiExecutionProofRequiredBeforeEnable)
+    global_hotkey = [bool]$TrayPresenceApiExecutionProof.global_hotkey
+    overlay_window = [bool]$TrayPresenceApiExecutionProof.overlay_window
+    summon_anywhere = [bool]$TrayPresenceApiExecutionProof.summon_anywhere
+    service_managed = [bool]$TrayPresenceApiExecutionProof.service_managed
+    resident_claim_allowed = [bool]$TrayPresenceApiExecutionProof.resident_claim_allowed
+    read_only_contract = [bool]$TrayPresenceApiExecutionProofRecommendedHandoff.read_only_contract
+    diagnostic_only = [bool]$TrayPresenceApiExecutionProofRecommendedHandoff.diagnostic_only
+    would_execute = [bool]$TrayPresenceApiExecutionProofRecommendedHandoff.would_execute
+    would_mutate = [bool]$TrayPresenceApiExecutionProofRecommendedHandoff.would_mutate
+    would_register_tray = $false
+    would_register_hotkey = $false
+    would_open_overlay = $false
+    would_write_memory = $false
+    would_claim_resident = $false
+    blockers = [string[]]@($TrayPresenceApiExecutionProofBlockers)
   }
   $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
   $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
@@ -3233,6 +3422,10 @@ $Payload = [ordered]@{
     'The completion audit consumed the launch-on-hotkey summon readback and now requires the governed resident-runtime API execution proof before advancing past the resident-surface supervision boundary.'
   } elseif ($NextSmallestTruthfulGap -eq 'summon_tray_presence_blocker_boundary') {
     'The completion audit consumed the opt-in resident-runtime API execution proof: a bounded supervised resident host lease started and stopped through the governed API path, while tray presence, global hotkey, overlay, summon-anywhere, service management, memory writes, and resident claim remain false. The next truthful blocker is governed tray presence.'
+  } elseif ($NextSmallestTruthfulGap -eq 'tray_presence_api_execution_readback') {
+    'The completion audit consumed the opt-in resident-runtime API execution proof and now requires the governed tray-presence API execution proof before advancing to OS-level command palette and global-hotkey binding work.'
+  } elseif ($NextSmallestTruthfulGap -eq 'os_level_command_palette_binding') {
+    'The completion audit consumed the opt-in tray-presence API execution proof: a bounded supervised resident host and real tray presence started and stopped through governed API paths, while global hotkey, overlay, summon-anywhere, service management, memory writes, and resident claim remain false. The next truthful blocker is OS-level command palette/global-hotkey binding.'
   } elseif ($NextSmallestTruthfulGap -eq 'summon_anywhere_family_chain_proof_readback') {
     'The audit must consume the summon-anywhere family-chain proof before treating the grouped resident-host, tray, overlay, hotkey, summon-binding, and authority blockers as one audited handoff.'
   } elseif ($NextSmallestTruthfulGap -eq 'summon_api_launch_on_hotkey_readback') {
@@ -3453,6 +3646,82 @@ $Payload = [ordered]@{
       memory_write = [bool]$ResidentRuntimeApiExecutionProofGovernance.memory_write
       resident_claim_authority = [bool]$ResidentRuntimeApiExecutionProofGovernance.resident_claim_authority
       mutation_authority_granted = [bool]$ResidentRuntimeApiExecutionProofGovernance.mutation_authority_granted
+    }
+  }
+  tray_presence_api_execution_proof = [ordered]@{
+    status = if ($AllowLaunchOnHotkey) {
+      if ($TrayPresenceApiExecutionProofObserved) { [string]$TrayPresenceApiExecutionProof.status } else { 'missing_or_failed' }
+    } else {
+      'not_requested'
+    }
+    ok = $TrayPresenceApiExecutionProofObserved
+    exit_code = [int]$TrayPresenceApiExecutionProofResult.exit_code
+    timeout_seconds = [int]$TrayPresenceApiExecutionProofResult.timeout_seconds
+    timed_out = [bool]$TrayPresenceApiExecutionProofResult.timed_out
+    kind = [string]$TrayPresenceApiExecutionProof.kind
+    previous_next_smallest_truthful_gap = [string]$TrayPresenceApiExecutionProof.previous_next_smallest_truthful_gap
+    next_smallest_truthful_gap = [string]$TrayPresenceApiExecutionProof.next_smallest_truthful_gap
+    recommended_handoff_source = [string]$TrayPresenceApiExecutionProof.recommended_handoff_source
+    recommended_next_slice = [string]$TrayPresenceApiExecutionProof.recommended_next_slice
+    recommended_proof_script = [string]$TrayPresenceApiExecutionProof.recommended_proof_script
+    recommended_handoff = $TrayPresenceApiExecutionProof.recommended_handoff
+    host_supervision_approval_id = [string]$TrayPresenceApiExecutionProof.host_supervision_approval_id
+    resident_runtime_approval_id = [string]$TrayPresenceApiExecutionProof.resident_runtime_approval_id
+    tray_presence_approval_id = [string]$TrayPresenceApiExecutionProof.tray_presence_approval_id
+    host_supervision_authority_grant_receipt_id = [string]$TrayPresenceApiExecutionProof.host_supervision_authority_grant_receipt_id
+    resident_runtime_authority_grant_receipt_id = [string]$TrayPresenceApiExecutionProof.resident_runtime_authority_grant_receipt_id
+    tray_authority_grant_receipt_id = [string]$TrayPresenceApiExecutionProof.tray_authority_grant_receipt_id
+    resident_runtime_execution_authority = [bool]$TrayPresenceApiExecutionProof.resident_runtime_execution_authority
+    host_supervision_authority = [bool]$TrayPresenceApiExecutionProof.host_supervision_authority
+    tray_presence_authority = [bool]$TrayPresenceApiExecutionProof.tray_presence_authority
+    execution_applied = [bool]$TrayPresenceApiExecutionProof.execution_applied
+    executed = [bool]$TrayPresenceApiExecutionProof.executed
+    resident_host_process_started = [bool]$TrayPresenceApiExecutionProof.resident_host_process_started
+    resident_supervised_runtime_started = [bool]$TrayPresenceApiExecutionProof.resident_supervised_runtime_started
+    tray_presence_started = [bool]$TrayPresenceApiExecutionProof.tray_presence_started
+    tray_runtime_ready = [bool]$TrayPresenceApiExecutionProof.tray_runtime_ready
+    tray_icon_visible = [bool]$TrayPresenceApiExecutionProof.tray_icon_visible
+    tray_presence_stop_observed = [bool]$TrayPresenceApiExecutionProof.tray_presence_stop_observed
+    resident_supervision_stop_observed = [bool]$TrayPresenceApiExecutionProof.resident_supervision_stop_observed
+    tray_pid_file_present_after_start = [bool]$TrayPresenceApiExecutionProof.tray_pid_file_present_after_start
+    tray_pid_file_present_after_stop = [bool]$TrayPresenceApiExecutionProof.tray_pid_file_present_after_stop
+    host_pid_file_present_after_stop = [bool]$TrayPresenceApiExecutionProof.host_pid_file_present_after_stop
+    required_before_enable_after_tray = [string[]]@($TrayPresenceApiExecutionProofRequiredBeforeEnable)
+    global_hotkey = [bool]$TrayPresenceApiExecutionProof.global_hotkey
+    overlay_window = [bool]$TrayPresenceApiExecutionProof.overlay_window
+    summon_anywhere = [bool]$TrayPresenceApiExecutionProof.summon_anywhere
+    service_managed = [bool]$TrayPresenceApiExecutionProof.service_managed
+    resident_claim_allowed = [bool]$TrayPresenceApiExecutionProof.resident_claim_allowed
+    blockers = [string[]]@($TrayPresenceApiExecutionProofBlockers)
+    checks = @($TrayPresenceApiExecutionProof.checks)
+    proof = $TrayPresenceApiExecutionProof.proof
+    start_execution = $TrayPresenceApiExecutionProof.start_execution
+    stop_execution = $TrayPresenceApiExecutionProof.stop_execution
+    governance = [ordered]@{
+      diagnostic_only = [bool]$TrayPresenceApiExecutionProofGovernance.diagnostic_only
+      api_route_proof = [bool]$TrayPresenceApiExecutionProofGovernance.api_route_proof
+      api_execution_authority = [bool]$TrayPresenceApiExecutionProofGovernance.api_execution_authority
+      approval_request_write = [bool]$TrayPresenceApiExecutionProofGovernance.approval_request_write
+      test_fixture_approval_decisions = [bool]$TrayPresenceApiExecutionProofGovernance.test_fixture_approval_decisions
+      product_execution_authority = [bool]$TrayPresenceApiExecutionProofGovernance.product_execution_authority
+      approval_decision_authority = [bool]$TrayPresenceApiExecutionProofGovernance.approval_decision_authority
+      execution_authority = [bool]$TrayPresenceApiExecutionProofGovernance.execution_authority
+      temporary_runtime_state_write = [bool]$TrayPresenceApiExecutionProofGovernance.temporary_runtime_state_write
+      local_process_launch_authority = [bool]$TrayPresenceApiExecutionProofGovernance.local_process_launch_authority
+      process_supervision_authority = [bool]$TrayPresenceApiExecutionProofGovernance.process_supervision_authority
+      process_restart_authority = [bool]$TrayPresenceApiExecutionProofGovernance.process_restart_authority
+      service_install_authority = [bool]$TrayPresenceApiExecutionProofGovernance.service_install_authority
+      service_control_authority = [bool]$TrayPresenceApiExecutionProofGovernance.service_control_authority
+      tray_registration_authority = [bool]$TrayPresenceApiExecutionProofGovernance.tray_registration_authority
+      tray_icon_authority = [bool]$TrayPresenceApiExecutionProofGovernance.tray_icon_authority
+      hotkey_registration_authority = [bool]$TrayPresenceApiExecutionProofGovernance.hotkey_registration_authority
+      overlay_control_authority = [bool]$TrayPresenceApiExecutionProofGovernance.overlay_control_authority
+      summon_authority = [bool]$TrayPresenceApiExecutionProofGovernance.summon_authority
+      capture_authority = [bool]$TrayPresenceApiExecutionProofGovernance.capture_authority
+      new_sensing_authority = [bool]$TrayPresenceApiExecutionProofGovernance.new_sensing_authority
+      memory_write = [bool]$TrayPresenceApiExecutionProofGovernance.memory_write
+      resident_claim_authority = [bool]$TrayPresenceApiExecutionProofGovernance.resident_claim_authority
+      mutation_authority_granted = [bool]$TrayPresenceApiExecutionProofGovernance.mutation_authority_granted
     }
   }
   summary = [ordered]@{
@@ -5035,6 +5304,7 @@ $Payload = [ordered]@{
     summon_anywhere_family_chain_proof_readback = $SummonAnywhereFamilyChainProofObserved
     summon_api_launch_on_hotkey_proof_readback = $SummonApiLaunchOnHotkeyProofObserved
     resident_runtime_api_execution_proof_readback = $ResidentRuntimeApiExecutionProofObserved
+    tray_presence_api_execution_proof_readback = $TrayPresenceApiExecutionProofObserved
     stage6_completion_audit_handoff_consumed_by_closure_readback = $Stage6CompletionAuditHandoffConsumedByClosureReadback
     process_supervision_boundary_observed = [bool]$ProcessSupervisionBoundary.process_supervision_boundary_observed
     service_activation_plan_observed = [bool]$ProcessSupervisionBoundary.service_activation_plan_observed

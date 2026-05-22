@@ -762,13 +762,17 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     assert "lens-summon-api-execution-proof.ps1" in script
     assert "$ResidentRuntimeApiExecutionProofScript" in script
     assert "lens-resident-runtime-api-execution-proof.ps1" in script
+    assert "$TrayPresenceApiExecutionProofScript" in script
+    assert "lens-tray-presence-api-execution-proof.ps1" in script
     assert "if ($AllowLaunchOnHotkey) {" in script
     assert "'-RunSeconds', '10', '-AllowLaunchOnHotkey'" in script
     assert "'-RunSeconds', '1'" in script
     assert "New-ChildProofRunSummary -Name 'summon_api_launch_on_hotkey'" in script
     assert "New-ChildProofRunSummary -Name 'resident_runtime_api_execution'" in script
+    assert "New-ChildProofRunSummary -Name 'tray_presence_api_execution'" in script
     assert "$SummonApiLaunchOnHotkeyProofObserved = (" in script
     assert "$ResidentRuntimeApiExecutionProofObserved = (" in script
+    assert "$TrayPresenceApiExecutionProofObserved = (" in script
     assert "[bool]$SummonApiLaunchOnHotkeyProof.allow_launch_on_hotkey" in script
     assert "[bool]$SummonApiLaunchOnHotkeyProof.summon_anywhere" in script
     assert (
@@ -786,24 +790,60 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
         "[string]$ResidentRuntimeApiExecutionProof.recommended_next_slice "
         "-eq 'prove_governed_tray_presence_api_execution_after_resident_supervision'" in script
     )
+    assert (
+        "[string]$TrayPresenceApiExecutionProof.previous_next_smallest_truthful_gap "
+        "-eq 'summon_tray_presence_blocker_boundary'" in script
+    )
+    assert (
+        "[string]$TrayPresenceApiExecutionProof.next_smallest_truthful_gap "
+        "-eq 'os_level_command_palette_binding'" in script
+    )
+    assert (
+        "[string]$TrayPresenceApiExecutionProof.recommended_handoff_source "
+        "-eq 'api_tray_presence_execution_global_hotkey_handoff'" in script
+    )
+    assert (
+        "[string]$TrayPresenceApiExecutionProof.recommended_next_slice "
+        "-eq 'prove_governed_os_binding_api_execution_after_tray_presence'" in script
+    )
+    assert (
+        "[string]$TrayPresenceApiExecutionProof.recommended_proof_script "
+        "-eq 'scripts/lens-os-binding-api-execution-proof.ps1 -Mode Status'" in script
+    )
+    assert "[bool]$TrayPresenceApiExecutionProof.tray_presence_started" in script
+    assert "[bool]$TrayPresenceApiExecutionProof.tray_runtime_ready" in script
+    assert "[bool]$TrayPresenceApiExecutionProof.tray_icon_visible" in script
+    assert "[bool]$TrayPresenceApiExecutionProof.tray_presence_stop_observed" in script
+    assert "-not [bool]$TrayPresenceApiExecutionProof.global_hotkey" in script
+    assert "-not [bool]$TrayPresenceApiExecutionProof.overlay_window" in script
+    assert "-not [bool]$TrayPresenceApiExecutionProof.summon_anywhere" in script
+    assert "-not [bool]$TrayPresenceApiExecutionProofGovernance.hotkey_registration_authority" in script
     assert "$SummonAnywhereRuntimeReadbackObserved = [bool]$SummonApiLaunchOnHotkeyProofObserved" in script
     assert "$BlockedCriterionIds -contains 'summon_anywhere' -and -not $SummonAnywhereRuntimeReadbackObserved" in script
     assert "(-not [bool]$AllowLaunchOnHotkey -or $ResidentRuntimeApiExecutionProofObserved)" in script
+    assert "(-not [bool]$AllowLaunchOnHotkey -or $TrayPresenceApiExecutionProofObserved)" in script
     assert (
         "$BlockedCriterionIds -contains 'helpful_not_noisy' -and "
         "$Blockers -contains 'resident_surface_runtime_not_supervised'"
     ) in script
     assert "$NextSmallestTruthfulGap -eq 'persistent_supervision_execution_boundary'" in script
     assert "'resident_runtime_api_execution_readback'" in script
+    assert "'tray_presence_api_execution_readback'" in script
+    assert "$NextSmallestTruthfulGap -eq 'os_level_command_palette_binding'" in script
     assert "$NextSmallestTruthfulGap -eq 'summon_tray_presence_blocker_boundary'" in script
     assert "$RecommendedHandoffSource = 'stage6_prerequisite_bringup_enablement_receipt_review'" in script
     assert "$RecommendedHandoffSource = 'stage6_resident_runtime_api_execution_readback_required'" in script
+    assert "$RecommendedHandoffSource = 'stage6_tray_presence_api_execution_readback_required'" in script
     assert "$RecommendedHandoffSource = [string]$ResidentRuntimeApiExecutionProof.recommended_handoff_source" in script
+    assert "$RecommendedHandoffSource = [string]$TrayPresenceApiExecutionProof.recommended_handoff_source" in script
     assert "'stage6_helpful_not_noisy_runtime_authority_readiness_handoff'" in script
     assert "'stage6_helpful_not_noisy_resident_surface_runtime_handoff'" in script
     assert "'api_resident_runtime_execution_tray_presence_handoff'" in script
     assert "'prove_governed_tray_presence_api_execution_after_resident_supervision'" in script
     assert "'scripts/lens-tray-presence-api-execution-proof.ps1 -Mode Status'" in script
+    assert "'api_tray_presence_execution_global_hotkey_handoff'" in script
+    assert "'prove_governed_os_binding_api_execution_after_tray_presence'" in script
+    assert "'scripts/lens-os-binding-api-execution-proof.ps1 -Mode Status'" in script
     assert "$ResidentSurfaceForegroundRuntimeProofObserved = (" in script
     assert "$ResidentSurfaceForegroundRuntimeProofRecommendedHandoffSource" in script
     assert "$ResidentSurfaceForegroundRuntimeProofRecommendedNextSlice" in script
@@ -853,9 +893,13 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     assert "summon_api_launch_on_hotkey_runtime_readback_observed = $SummonApiLaunchOnHotkeyProofObserved" in script
     assert "summon_api_launch_on_hotkey_proof = [ordered]@{" in script
     assert "resident_runtime_api_execution_proof = [ordered]@{" in script
+    assert "tray_presence_api_execution_proof = [ordered]@{" in script
     assert "recommended_handoff_source = [string]$ResidentRuntimeApiExecutionProof.recommended_handoff_source" in script
+    assert "recommended_handoff_source = [string]$TrayPresenceApiExecutionProof.recommended_handoff_source" in script
     assert "resident_runtime_api_execution_proof_readback = $ResidentRuntimeApiExecutionProofObserved" in script
+    assert "tray_presence_api_execution_proof_readback = $TrayPresenceApiExecutionProofObserved" in script
     assert "scripts/lens-resident-runtime-api-execution-proof.ps1 -Mode Status" in script
+    assert "scripts/lens-tray-presence-api-execution-proof.ps1 -Mode Status" in script
     assert "launch_on_hotkey_runtime_readback_opt_in = [bool]$AllowLaunchOnHotkey" in script
     assert "read_only_contract = -not [bool]$AllowLaunchOnHotkey" in script
 
