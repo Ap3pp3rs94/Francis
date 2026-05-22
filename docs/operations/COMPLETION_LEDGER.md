@@ -36920,6 +36920,40 @@ proof consumption:
   resident_runtime_api_execution_proof_readback=true;
   child_proof_timeouts=[]`
 
+Stage 6 next-handoff tray-presence audit readback consumption on `2026-05-22`:
+
+- `scripts/lens-stage6-next-handoff.ps1` now recognizes a supplied Stage 6
+  completion-audit JSON payload whose recommended handoff source is
+  `api_resident_runtime_execution_tray_presence_handoff`.
+- When that readback is supplied through `-CompletionAuditJsonPath`, the
+  next-handoff proof consumes the audit result and recommends
+  `prove_governed_tray_presence_api_execution_after_resident_supervision` via
+  `scripts/lens-tray-presence-api-execution-proof.ps1 -Mode Status`, instead
+  of looping back to the launch-on-hotkey completion-audit readback.
+- The default no-JSON status path still stays read-only and still asks for the
+  explicit launch-on-hotkey completion-audit readback before consuming the
+  runtime proof result. This does not close Stage 6, start Stage 7, register tray
+  presence, grant hotkey/overlay/summon/service authority, write memory, or
+  claim resident runtime.
+
+Latest validation for Stage 6 next-handoff tray-presence audit readback
+consumption:
+
+- PowerShell parser check for `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed; parse_ok`
+- `python -m pytest
+  tests\test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback
+  tests\test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_applied_bringup_review_state
+  -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `.venv\Scripts\ruff.exe check tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; All checks passed`
+- `.venv\Scripts\ruff.exe format --check
+  tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 1 file already formatted`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

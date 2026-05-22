@@ -81,6 +81,12 @@ def test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback() -> N
     assert "Get-Content -LiteralPath $ResolvedCompletionAuditJsonPath -Raw | ConvertFrom-Json" in script
     assert "$Stage6CompletionAuditHelpfulNotNoisyResidentSurfaceRuntimeHandoffObserved = (" in script
     assert "'stage6_helpful_not_noisy_resident_surface_runtime_handoff'" in script
+    assert "$Stage6CompletionAuditResidentRuntimeTrayPresenceHandoffObserved = (" in script
+    assert "'api_resident_runtime_execution_tray_presence_handoff'" in script
+    assert "'summon_tray_presence_blocker_boundary'" in script
+    assert "'prove_governed_tray_presence_api_execution_after_resident_supervision'" in script
+    assert "'scripts/lens-tray-presence-api-execution-proof.ps1 -Mode Status'" in script
+    assert "stage6_completion_audit_resident_runtime_tray_presence_handoff_observed" in script
     assert "New-Stage6CompletionAuditReadbackOperatorHandoff" in script
     assert "$Stage6CompletionAuditRuntimeReadbackRequired = (" in script
     assert "'stage6_completion_audit_launch_on_hotkey_readback_required'" in script
@@ -760,6 +766,7 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority(tm
         "stage6_prerequisite_bringup_actor_scope_readback": True,
         "stage6_completion_audit_runtime_authority_handoff_observed": False,
         "stage6_completion_audit_resident_surface_runtime_handoff_observed": False,
+        "stage6_completion_audit_resident_runtime_tray_presence_handoff_observed": False,
         "stage6_completion_audit_recommended_handoff_consumed": False,
         "stage6_completion_audit_runtime_readback_required": False,
         "stage6_completion_audit_json_path_supplied": False,
@@ -1556,6 +1563,121 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     }
     resident_surface_checks = {item["id"]: item for item in resident_surface_payload["checks"]}
     assert resident_surface_checks["stage6_completion_audit_runtime_authority_handoff"]["status"] == (
+        "completion_audit_recommended_handoff_consumed"
+    )
+
+    tray_audit_json = tmp_path / "stage6-completion-audit-tray-presence.json"
+    tray_audit_json.write_text(
+        json.dumps(
+            {
+                "kind": "lens.stage6.completion_audit",
+                "ok": True,
+                "status": "blocked",
+                "audit_status": "complete",
+                "allow_launch_on_hotkey": True,
+                "next_smallest_truthful_gap": "summon_tray_presence_blocker_boundary",
+                "recommended_handoff_source": "api_resident_runtime_execution_tray_presence_handoff",
+                "recommended_next_slice": "prove_governed_tray_presence_api_execution_after_resident_supervision",
+                "recommended_proof_script": "scripts/lens-tray-presence-api-execution-proof.ps1 -Mode Status",
+                "authority_required": "tray_registration_authority",
+                "authority_granted": False,
+                "recommended_handoff": {
+                    "status": "blocked",
+                    "previous_next_smallest_truthful_gap": "resident_surface_runtime_not_supervised",
+                    "consumed_resident_surface_foreground_runtime_proof": True,
+                    "consumed_resident_runtime_api_execution_proof": True,
+                    "consumed_resident_runtime_api_next_smallest_truthful_gap": (
+                        "summon_tray_presence_blocker_boundary"
+                    ),
+                    "next_smallest_truthful_gap": "summon_tray_presence_blocker_boundary",
+                    "next_step": "prove_governed_tray_presence_api_execution_after_resident_supervision",
+                    "proof_script": "scripts/lens-tray-presence-api-execution-proof.ps1 -Mode Status",
+                    "route": "/lens/tray",
+                    "readiness_route": "/lens/tray/readiness",
+                    "acceptance_criterion": "summon_anywhere",
+                    "authority_required": "tray_registration_authority",
+                    "authority_granted": False,
+                    "resident_runtime_execution_authority": True,
+                    "host_supervision_authority": True,
+                    "resident_runtime_plan_ready": True,
+                    "resident_host_process_started": True,
+                    "resident_supervised_runtime_started": True,
+                    "resident_supervision_stop_observed": True,
+                    "tray_presence": False,
+                    "global_hotkey": False,
+                    "overlay_window": False,
+                    "summon_anywhere": False,
+                    "service_managed": False,
+                    "resident_claim_allowed": False,
+                    "read_only_contract": True,
+                    "diagnostic_only": True,
+                    "would_execute": False,
+                    "would_mutate": False,
+                    "would_register_tray": False,
+                    "would_register_hotkey": False,
+                    "would_open_overlay": False,
+                    "would_write_memory": False,
+                    "would_claim_resident": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    tray_proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-CompletionAuditJsonPath",
+        str(tray_audit_json),
+        env=proof_env,
+    )
+
+    assert tray_proc.returncode == 0, tray_proc.stderr or tray_proc.stdout
+    tray_payload = json.loads(tray_proc.stdout)
+    assert tray_payload["recommended_handoff_source"] == "api_resident_runtime_execution_tray_presence_handoff"
+    assert tray_payload["next_smallest_truthful_gap"] == "summon_tray_presence_blocker_boundary"
+    assert tray_payload["recommended_next_slice"] == (
+        "prove_governed_tray_presence_api_execution_after_resident_supervision"
+    )
+    assert tray_payload["recommended_proof_script"] == "scripts/lens-tray-presence-api-execution-proof.ps1 -Mode Status"
+    assert tray_payload["authority_required"] == "tray_registration_authority"
+    assert tray_payload["authority_granted"] is False
+    assert tray_payload["stage6_completion_audit_readback_observed"] is True
+    assert tray_payload["stage6_completion_audit_resident_runtime_tray_presence_handoff_observed"] is True
+    assert tray_payload["stage6_completion_audit_recommended_handoff_consumed"] is True
+    assert tray_payload["stage6_completion_audit_runtime_readback_required"] is False
+    tray_handoff = tray_payload["recommended_handoff"]
+    assert tray_handoff["next_step"] == "prove_governed_tray_presence_api_execution_after_resident_supervision"
+    assert tray_handoff["proof_script"] == "scripts/lens-tray-presence-api-execution-proof.ps1 -Mode Status"
+    assert tray_handoff["route"] == "/lens/tray"
+    assert tray_handoff["readiness_route"] == "/lens/tray/readiness"
+    assert tray_handoff["authority_required"] == "tray_registration_authority"
+    assert tray_handoff["authority_granted"] is False
+    assert tray_handoff["read_only_contract"] is True
+    assert tray_handoff["diagnostic_only"] is True
+    assert tray_handoff["would_execute"] is False
+    assert tray_handoff["would_mutate"] is False
+    assert tray_handoff["would_register_tray"] is False
+    assert tray_handoff["would_write_memory"] is False
+    assert tray_handoff["would_claim_resident"] is False
+    assert tray_payload["recommended_operator_handoff"]["source"] == "stage6_completion_audit_recommended_handoff"
+    assert tray_payload["recommended_next_operator_action_requirement"] == (
+        "stage6_completion_audit_recommended_readback"
+    )
+    assert tray_payload["recommended_next_operator_action"]["id"] == (
+        "prove_governed_tray_presence_api_execution_after_resident_supervision"
+    )
+    assert tray_payload["recommended_next_operator_command"] == {
+        "command": ".\\scripts\\lens-tray-presence-api-execution-proof.ps1 -Mode Status",
+        "mode": "Status",
+        "requires_confirmation": False,
+        "requires_explicit_operator_opt_in": False,
+        "requires_actor": False,
+        "requires_approval_id": False,
+        "requires_operator_approval_decision": False,
+    }
+    tray_checks = {item["id"]: item for item in tray_payload["checks"]}
+    assert tray_checks["stage6_completion_audit_runtime_authority_handoff"]["status"] == (
         "completion_audit_recommended_handoff_consumed"
     )
 
