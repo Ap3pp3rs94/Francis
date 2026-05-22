@@ -768,6 +768,8 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     assert "lens-os-binding-api-execution-proof.ps1" in script
     assert "$OverlayApiExecutionProofScript" in script
     assert "lens-overlay-api-execution-proof.ps1" in script
+    assert "$PersistentSupervisionApiExecutionProofScript" in script
+    assert "lens-persistent-supervision-api-execution-proof.ps1" in script
     assert "if ($AllowLaunchOnHotkey) {" in script
     assert "'-RunSeconds', '10', '-AllowLaunchOnHotkey'" in script
     assert "'-RunSeconds', '1'" in script
@@ -777,12 +779,14 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     assert "New-ChildProofRunSummary -Name 'os_binding_api_execution'" in script
     assert "New-ChildProofRunSummary -Name 'overlay_api_execution'" in script
     assert "New-ChildProofRunSummary -Name 'summon_api_bounded_execution'" in script
+    assert "New-ChildProofRunSummary -Name 'persistent_supervision_api_execution'" in script
     assert "$SummonApiLaunchOnHotkeyProofObserved = (" in script
     assert "$ResidentRuntimeApiExecutionProofObserved = (" in script
     assert "$TrayPresenceApiExecutionProofObserved = (" in script
     assert "$OsBindingApiExecutionProofObserved = (" in script
     assert "$OverlayApiExecutionProofObserved = (" in script
     assert "$SummonApiBoundedExecutionProofObserved = (" in script
+    assert "$PersistentSupervisionApiExecutionProofObserved = (" in script
     assert "[bool]$SummonApiLaunchOnHotkeyProof.allow_launch_on_hotkey" in script
     assert "[bool]$SummonApiLaunchOnHotkeyProof.summon_anywhere" in script
     assert (
@@ -921,6 +925,45 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     assert "-not [bool]$SummonApiBoundedExecutionProof.summon_anywhere" in script
     assert "-not [bool]$SummonApiBoundedExecutionProof.os_level_summon" in script
     assert "-not [bool]$SummonApiBoundedExecutionProofGovernance.summon_anywhere_authority" in script
+    assert (
+        "[string]$PersistentSupervisionApiExecutionProof.previous_next_smallest_truthful_gap "
+        "-eq 'persistent_supervision_execution_boundary'" in script
+    )
+    assert (
+        "[string]$PersistentSupervisionApiExecutionProof.route_next_smallest_truthful_gap "
+        "-eq 'persistent_supervision_execution_boundary'" in script
+    )
+    assert (
+        "[string]$PersistentSupervisionApiExecutionProof.next_smallest_truthful_gap "
+        "-eq 'stage6_lens_completion_audit'" in script
+    )
+    assert (
+        "[string]$PersistentSupervisionApiExecutionProof.recommended_handoff_source "
+        "-eq 'api_persistent_supervision_execution_handoff'" in script
+    )
+    assert (
+        "[string]$PersistentSupervisionApiExecutionProof.recommended_next_slice "
+        "-eq 'run_stage6_lens_completion_audit_after_persistent_supervision_api_execution'" in script
+    )
+    assert (
+        "[string]$PersistentSupervisionApiExecutionProof.recommended_proof_script "
+        "-eq 'scripts/lens-stage6-completion-audit.ps1 -Mode Status'" in script
+    )
+    assert "[bool]$PersistentSupervisionApiExecutionProof.live_service_config_unchanged" in script
+    assert "[bool]$PersistentSupervisionApiExecutionProof.persistent_supervision_execution_authority" in script
+    assert (
+        "[string]$PersistentSupervisionApiExecutionProof.persistent_supervision_apply_status "
+        "-eq 'service_config_updated'" in script
+    )
+    assert "[bool]$PersistentSupervisionApiExecutionProof.persistent_supervision_ready_after_apply" in script
+    assert "[bool]$PersistentSupervisionApiExecutionProof.service_config_updated" in script
+    assert "[bool]$PersistentSupervisionApiExecutionProof.receipt_written" in script
+    assert "-not [bool]$PersistentSupervisionApiExecutionProof.resident_claim_allowed" in script
+    assert "-not [bool]$PersistentSupervisionApiExecutionProof.service_managed" in script
+    assert "-not [bool]$PersistentSupervisionApiExecutionProof.summon_anywhere" in script
+    assert "-not [bool]$PersistentSupervisionApiExecutionProofGovernance.service_control_authority" in script
+    assert "-not [bool]$PersistentSupervisionApiExecutionProofGovernance.memory_write" in script
+    assert "-not [bool]$PersistentSupervisionApiExecutionProofGovernance.resident_claim_authority" in script
     assert "$SummonAnywhereRuntimeReadbackObserved = [bool]$SummonApiLaunchOnHotkeyProofObserved" in script
     assert "$BlockedCriterionIds -contains 'summon_anywhere' -and -not $SummonAnywhereRuntimeReadbackObserved" in script
     assert "(-not [bool]$AllowLaunchOnHotkey -or $ResidentRuntimeApiExecutionProofObserved)" in script
@@ -928,6 +971,7 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     assert "(-not [bool]$AllowLaunchOnHotkey -or $OsBindingApiExecutionProofObserved)" in script
     assert "(-not [bool]$AllowLaunchOnHotkey -or $OverlayApiExecutionProofObserved)" in script
     assert "(-not [bool]$AllowLaunchOnHotkey -or $SummonApiBoundedExecutionProofObserved)" in script
+    assert "(-not [bool]$AllowLaunchOnHotkey -or $PersistentSupervisionApiExecutionProofObserved)" in script
     assert (
         "$BlockedCriterionIds -contains 'helpful_not_noisy' -and "
         "$Blockers -contains 'resident_surface_runtime_not_supervised'"
@@ -938,6 +982,7 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     assert "'os_binding_api_execution_readback'" in script
     assert "'overlay_api_execution_readback'" in script
     assert "'summon_api_bounded_execution_readback'" in script
+    assert "'persistent_supervision_api_execution_readback'" in script
     assert "$NextSmallestTruthfulGap -eq 'os_level_command_palette_binding'" in script
     assert "$NextSmallestTruthfulGap -eq 'summon_overlay_window_blocker_boundary'" in script
     assert "$NextSmallestTruthfulGap -eq 'summon_binding_blocker_boundary'" in script
@@ -949,6 +994,7 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     assert "$RecommendedHandoffSource = 'stage6_os_binding_api_execution_readback_required'" in script
     assert "$RecommendedHandoffSource = 'stage6_overlay_api_execution_readback_required'" in script
     assert "$RecommendedHandoffSource = 'stage6_summon_api_bounded_execution_readback_required'" in script
+    assert "$RecommendedHandoffSource = 'stage6_persistent_supervision_api_execution_readback_required'" in script
     assert "$RecommendedHandoffSource = [string]$ResidentRuntimeApiExecutionProof.recommended_handoff_source" in script
     assert "$RecommendedHandoffSource = [string]$TrayPresenceApiExecutionProof.recommended_handoff_source" in script
     assert "$RecommendedHandoffSource = [string]$OsBindingApiExecutionProof.recommended_handoff_source" in script
@@ -971,6 +1017,9 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     assert "'api_summon_to_persistent_supervision_execution_handoff'" in script
     assert "'execute_persistent_supervision_api_enablement_after_bounded_summon_handoff'" in script
     assert "'scripts/lens-persistent-supervision-api-execution-proof.ps1 -Mode Status'" in script
+    assert "'api_persistent_supervision_execution_handoff'" in script
+    assert "'run_stage6_lens_completion_audit_after_persistent_supervision_api_execution'" in script
+    assert "'scripts/lens-stage6-completion-audit.ps1 -Mode Status'" in script
     assert "$ResidentSurfaceForegroundRuntimeProofObserved = (" in script
     assert "$ResidentSurfaceForegroundRuntimeProofRecommendedHandoffSource" in script
     assert "$ResidentSurfaceForegroundRuntimeProofRecommendedNextSlice" in script
@@ -1024,6 +1073,11 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     assert "overlay_api_execution_proof_readback = $OverlayApiExecutionProofObserved" in script
     assert "summon_api_bounded_execution_proof = [ordered]@{" in script
     assert "summon_api_bounded_execution_proof_readback = $SummonApiBoundedExecutionProofObserved" in script
+    assert "persistent_supervision_api_execution_proof = [ordered]@{" in script
+    assert (
+        "persistent_supervision_api_execution_proof_readback = "
+        "$PersistentSupervisionApiExecutionProofObserved" in script
+    )
     assert "tray_presence_api_execution_proof = [ordered]@{" in script
     assert "os_binding_api_execution_proof = [ordered]@{" in script
     assert "recommended_handoff_source = [string]$ResidentRuntimeApiExecutionProof.recommended_handoff_source" in script

@@ -255,6 +255,7 @@ $PersistentSupervisionEnablementAuthorityProofScript = Join-Path $PSScriptRoot '
 $PersistentSupervisionExecutionAuthorityProofScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-execution-authority-proof.ps1'
 $PersistentSupervisionResidentClaimBoundaryProofScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-resident-claim-boundary-proof.ps1'
 $PersistentSupervisionEnablementTransitionPlanProofScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-enablement-transition-plan-proof.ps1'
+$PersistentSupervisionApiExecutionProofScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-api-execution-proof.ps1'
 $Stage6PrerequisiteBringupPlanScript = Join-Path $PSScriptRoot 'lens-stage6-prerequisite-bringup-plan.ps1'
 $SummonAnywhereBlockersProofScript = Join-Path $PSScriptRoot 'lens-summon-anywhere-blockers-proof.ps1'
 $SummonAuthorityBlockerProofScript = Join-Path $PSScriptRoot 'lens-summon-authority-blocker-proof.ps1'
@@ -406,6 +407,23 @@ if ($AllowLaunchOnHotkey) {
     -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 240))
 }
 $SummonApiBoundedExecutionProof = $SummonApiBoundedExecutionProofResult.payload
+$PersistentSupervisionApiExecutionProofResult = [ordered]@{
+  exit_code = 0
+  payload = $null
+  output = ''
+  error = ''
+  timed_out = $false
+  timeout_seconds = 0
+  duration_ms = 0
+}
+if ($AllowLaunchOnHotkey) {
+  $PersistentSupervisionApiExecutionProofResult = Invoke-JsonScript `
+    -PowerShellPath $PowerShell.Source `
+    -ScriptPath $PersistentSupervisionApiExecutionProofScript `
+    -ScriptArgs @('-Mode', 'Status', '-RunSeconds', '1') `
+    -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 240))
+}
+$PersistentSupervisionApiExecutionProof = $PersistentSupervisionApiExecutionProofResult.payload
 $ResidentHostRuntimeBoundaryProofResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $ResidentHostRuntimeBoundaryProofScript -ScriptArgs @(
   '-Mode', 'Status',
   '-ForegroundRunSeconds', '2',
@@ -1092,6 +1110,7 @@ if ($AllowLaunchOnHotkey) {
   $ChildProofRuns += New-ChildProofRunSummary -Name 'os_binding_api_execution' -Result $OsBindingApiExecutionProofResult
   $ChildProofRuns += New-ChildProofRunSummary -Name 'overlay_api_execution' -Result $OverlayApiExecutionProofResult
   $ChildProofRuns += New-ChildProofRunSummary -Name 'summon_api_bounded_execution' -Result $SummonApiBoundedExecutionProofResult
+  $ChildProofRuns += New-ChildProofRunSummary -Name 'persistent_supervision_api_execution' -Result $PersistentSupervisionApiExecutionProofResult
 }
 $ChildProofTimeouts = [string[]]@(
   $ChildProofRuns | Where-Object { [bool]$_.timed_out } | ForEach-Object { [string]$_.name }
@@ -2628,6 +2647,127 @@ $SummonApiBoundedExecutionProofObserved = (
   -not [bool]$SummonApiBoundedExecutionProofGovernance.memory_write -and
   -not [bool]$SummonApiBoundedExecutionProofGovernance.resident_claim_authority
 )
+$PersistentSupervisionApiExecutionProofGovernance = $PersistentSupervisionApiExecutionProof.governance
+$PersistentSupervisionApiExecutionProofBlockers = ConvertTo-StringArray -Value $PersistentSupervisionApiExecutionProof.blockers
+$PersistentSupervisionApiExecutionProofRequiredBeforeEnable = ConvertTo-StringArray -Value (
+  $PersistentSupervisionApiExecutionProof.required_before_enable_after_summon
+)
+$PersistentSupervisionApiExecutionProofCheckStatuses = @{}
+foreach ($Check in @($PersistentSupervisionApiExecutionProof.checks)) {
+  if ($null -ne $Check -and -not [string]::IsNullOrWhiteSpace([string]$Check.id)) {
+    $PersistentSupervisionApiExecutionProofCheckStatuses[[string]$Check.id] = [string]$Check.status
+  }
+}
+$PersistentSupervisionApiExecutionProofObserved = (
+  [bool]$AllowLaunchOnHotkey -and
+  [int]$PersistentSupervisionApiExecutionProofResult.exit_code -eq 0 -and
+  [bool]$PersistentSupervisionApiExecutionProof.ok -and
+  [string]$PersistentSupervisionApiExecutionProof.kind -eq 'lens.host.persistent_supervision.api_execution.proof' -and
+  [string]$PersistentSupervisionApiExecutionProof.status -eq 'proof_passed' -and
+  [string]$PersistentSupervisionApiExecutionProof.previous_next_smallest_truthful_gap -eq 'persistent_supervision_execution_boundary' -and
+  [string]$PersistentSupervisionApiExecutionProof.route_next_smallest_truthful_gap -eq 'persistent_supervision_execution_boundary' -and
+  [string]$PersistentSupervisionApiExecutionProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
+  [string]$PersistentSupervisionApiExecutionProof.recommended_handoff_source -eq 'api_persistent_supervision_execution_handoff' -and
+  [string]$PersistentSupervisionApiExecutionProof.recommended_next_slice -eq 'run_stage6_lens_completion_audit_after_persistent_supervision_api_execution' -and
+  [string]$PersistentSupervisionApiExecutionProof.recommended_proof_script -eq 'scripts/lens-stage6-completion-audit.ps1 -Mode Status' -and
+  [bool]$PersistentSupervisionApiExecutionProof.live_service_config_unchanged -and
+  [bool]$PersistentSupervisionApiExecutionProof.resident_runtime_execution_authority -and
+  [bool]$PersistentSupervisionApiExecutionProof.host_supervision_authority -and
+  [bool]$PersistentSupervisionApiExecutionProof.tray_presence_authority -and
+  [bool]$PersistentSupervisionApiExecutionProof.os_binding_authority -and
+  [bool]$PersistentSupervisionApiExecutionProof.overlay_authority -and
+  [bool]$PersistentSupervisionApiExecutionProof.summon_authority -and
+  [bool]$PersistentSupervisionApiExecutionProof.persistent_supervision_enablement_authority -and
+  [bool]$PersistentSupervisionApiExecutionProof.service_config_write_authority -and
+  [bool]$PersistentSupervisionApiExecutionProof.persistent_supervision_execution_authority -and
+  [bool]$PersistentSupervisionApiExecutionProof.receipt_write_authority -and
+  [bool]$PersistentSupervisionApiExecutionProof.execution_applied -and
+  [bool]$PersistentSupervisionApiExecutionProof.executed -and
+  [bool]$PersistentSupervisionApiExecutionProof.resident_host_process_started -and
+  [bool]$PersistentSupervisionApiExecutionProof.resident_supervised_runtime_started -and
+  [bool]$PersistentSupervisionApiExecutionProof.tray_presence_started -and
+  [bool]$PersistentSupervisionApiExecutionProof.tray_runtime_ready -and
+  [bool]$PersistentSupervisionApiExecutionProof.global_hotkey_bound -and
+  [bool]$PersistentSupervisionApiExecutionProof.hotkey_runtime_ready -and
+  [bool]$PersistentSupervisionApiExecutionProof.overlay_window_started -and
+  [bool]$PersistentSupervisionApiExecutionProof.overlay_runtime_ready -and
+  [bool]$PersistentSupervisionApiExecutionProof.summon_binding_observed -and
+  [bool]$PersistentSupervisionApiExecutionProof.summon_runtime_ready -and
+  [bool]$PersistentSupervisionApiExecutionProof.bounded_handoff_ready -and
+  [bool]$PersistentSupervisionApiExecutionProof.local_open_ready -and
+  -not [bool]$PersistentSupervisionApiExecutionProof.opened -and
+  [bool]$PersistentSupervisionApiExecutionProof.no_launch -and
+  [bool]$PersistentSupervisionApiExecutionProof.summon_runtime_state_observed -and
+  @($PersistentSupervisionApiExecutionProofRequiredBeforeEnable).Count -eq 0 -and
+  [bool]$PersistentSupervisionApiExecutionProof.required_before_enable_ready_after_summon -and
+  [string]$PersistentSupervisionApiExecutionProof.persistent_supervision_apply_status -eq 'service_config_updated' -and
+  [bool]$PersistentSupervisionApiExecutionProof.persistent_supervision_ready_after_apply -and
+  [bool]$PersistentSupervisionApiExecutionProof.persistent_supervision_enablement_allowed -and
+  [bool]$PersistentSupervisionApiExecutionProof.service_config_updated -and
+  [bool]$PersistentSupervisionApiExecutionProof.receipt_written -and
+  -not [bool]$PersistentSupervisionApiExecutionProof.resident_claim_allowed -and
+  -not [bool]$PersistentSupervisionApiExecutionProof.service_managed -and
+  -not [bool]$PersistentSupervisionApiExecutionProof.summon_anywhere -and
+  -not [bool]$PersistentSupervisionApiExecutionProof.os_level_summon -and
+  [bool]$PersistentSupervisionApiExecutionProof.overlay_stop_observed -and
+  [bool]$PersistentSupervisionApiExecutionProof.hotkey_stop_observed -and
+  [bool]$PersistentSupervisionApiExecutionProof.tray_presence_stop_observed -and
+  [bool]$PersistentSupervisionApiExecutionProof.resident_supervision_stop_observed -and
+  -not [bool]$PersistentSupervisionApiExecutionProof.overlay_pid_file_present_after_stop -and
+  -not [bool]$PersistentSupervisionApiExecutionProof.hotkey_pid_file_present_after_stop -and
+  -not [bool]$PersistentSupervisionApiExecutionProof.tray_pid_file_present_after_stop -and
+  -not [bool]$PersistentSupervisionApiExecutionProof.host_pid_file_present_after_stop -and
+  $PersistentSupervisionApiExecutionProofBlockers -contains 'resident_claim_authority_not_granted' -and
+  [string]$PersistentSupervisionApiExecutionProofCheckStatuses['authority_chain_granted'] -eq 'authority_granted' -and
+  [string]$PersistentSupervisionApiExecutionProofCheckStatuses['resident_tray_hotkey_overlay_started_before_apply'] -eq 'ready' -and
+  [string]$PersistentSupervisionApiExecutionProofCheckStatuses['api_execute_observed_bounded_summon_handoff'] -eq 'summon_binding_observed' -and
+  [string]$PersistentSupervisionApiExecutionProofCheckStatuses['persistent_plan_consumed_required_runtime_prerequisites'] -eq 'required_before_enable_clear' -and
+  [string]$PersistentSupervisionApiExecutionProofCheckStatuses['execution_readiness_reaches_resident_claim_boundary'] -eq 'blocked' -and
+  [string]$PersistentSupervisionApiExecutionProofCheckStatuses['execution_denial_before_apply_preserved'] -eq 'denied_no_resident_claim_authority' -and
+  [string]$PersistentSupervisionApiExecutionProofCheckStatuses['api_apply_updated_isolated_service_config'] -eq 'service_config_updated' -and
+  [string]$PersistentSupervisionApiExecutionProofCheckStatuses['status_plan_consumed_persistent_supervision_enablement'] -eq 'persistent_supervision_execution_boundary' -and
+  [string]$PersistentSupervisionApiExecutionProofCheckStatuses['persistent_execution_receipt_readback'] -eq 'readback_ready' -and
+  [string]$PersistentSupervisionApiExecutionProofCheckStatuses['isolated_service_config_only'] -eq 'isolated_temp_config' -and
+  [string]$PersistentSupervisionApiExecutionProofCheckStatuses['api_stop_cleaned_real_overlay_window'] -eq 'overlay_window_stopped' -and
+  [string]$PersistentSupervisionApiExecutionProofCheckStatuses['api_stop_cleaned_real_global_hotkey'] -eq 'global_hotkey_binding_stopped' -and
+  [string]$PersistentSupervisionApiExecutionProofCheckStatuses['api_stop_cleaned_real_tray_presence'] -eq 'tray_presence_stopped' -and
+  [string]$PersistentSupervisionApiExecutionProofCheckStatuses['resident_supervision_stop_observed'] -eq 'resident_supervision_stopped' -and
+  [string]$PersistentSupervisionApiExecutionProofCheckStatuses['authority_boundaries_intact'] -eq 'bounded' -and
+  [bool]$PersistentSupervisionApiExecutionProofGovernance.diagnostic_only -and
+  [bool]$PersistentSupervisionApiExecutionProofGovernance.api_route_proof -and
+  [bool]$PersistentSupervisionApiExecutionProofGovernance.api_execution_authority -and
+  [bool]$PersistentSupervisionApiExecutionProofGovernance.approval_request_write -and
+  [bool]$PersistentSupervisionApiExecutionProofGovernance.test_fixture_approval_decisions -and
+  [bool]$PersistentSupervisionApiExecutionProofGovernance.temporary_runtime_state_write -and
+  [bool]$PersistentSupervisionApiExecutionProofGovernance.isolated_service_config_write -and
+  [bool]$PersistentSupervisionApiExecutionProofGovernance.service_config_write_authority -and
+  [bool]$PersistentSupervisionApiExecutionProofGovernance.service_config_mutation_authority -and
+  [bool]$PersistentSupervisionApiExecutionProofGovernance.persistent_supervision_enablement_authority -and
+  [bool]$PersistentSupervisionApiExecutionProofGovernance.persistent_supervision_execution_authority -and
+  [bool]$PersistentSupervisionApiExecutionProofGovernance.receipt_write_authority -and
+  [bool]$PersistentSupervisionApiExecutionProofGovernance.process_supervision_authority -and
+  [bool]$PersistentSupervisionApiExecutionProofGovernance.process_restart_authority -and
+  [bool]$PersistentSupervisionApiExecutionProofGovernance.tray_registration_authority -and
+  [bool]$PersistentSupervisionApiExecutionProofGovernance.tray_icon_authority -and
+  [bool]$PersistentSupervisionApiExecutionProofGovernance.hotkey_registration_authority -and
+  [bool]$PersistentSupervisionApiExecutionProofGovernance.overlay_control_authority -and
+  [bool]$PersistentSupervisionApiExecutionProofGovernance.window_management_authority -and
+  [bool]$PersistentSupervisionApiExecutionProofGovernance.bounded_local_open_handoff_authority -and
+  [bool]$PersistentSupervisionApiExecutionProofGovernance.summon_authority -and
+  [bool]$PersistentSupervisionApiExecutionProofGovernance.mutation_authority_granted -and
+  -not [bool]$PersistentSupervisionApiExecutionProofGovernance.approval_decision_authority -and
+  -not [bool]$PersistentSupervisionApiExecutionProofGovernance.product_execution_authority -and
+  -not [bool]$PersistentSupervisionApiExecutionProofGovernance.execution_authority -and
+  -not [bool]$PersistentSupervisionApiExecutionProofGovernance.local_process_launch_authority -and
+  -not [bool]$PersistentSupervisionApiExecutionProofGovernance.service_install_authority -and
+  -not [bool]$PersistentSupervisionApiExecutionProofGovernance.service_control_authority -and
+  -not [bool]$PersistentSupervisionApiExecutionProofGovernance.summon_anywhere_authority -and
+  -not [bool]$PersistentSupervisionApiExecutionProofGovernance.os_level_summon_authority -and
+  -not [bool]$PersistentSupervisionApiExecutionProofGovernance.capture_authority -and
+  -not [bool]$PersistentSupervisionApiExecutionProofGovernance.new_sensing_authority -and
+  -not [bool]$PersistentSupervisionApiExecutionProofGovernance.memory_write -and
+  -not [bool]$PersistentSupervisionApiExecutionProofGovernance.resident_claim_authority
+)
 $SummonAnywhereRuntimeReadbackObserved = [bool]$SummonApiLaunchOnHotkeyProofObserved
 $Stage6AcceptanceNextGap = if ($BlockedCriterionIds -contains 'summon_anywhere' -and -not $SummonAnywhereRuntimeReadbackObserved) {
   'summon_anywhere_blockers'
@@ -2664,7 +2804,8 @@ $Stage6CompletionEvidenceReviewed = (
   (-not [bool]$AllowLaunchOnHotkey -or $TrayPresenceApiExecutionProofObserved) -and
   (-not [bool]$AllowLaunchOnHotkey -or $OsBindingApiExecutionProofObserved) -and
   (-not [bool]$AllowLaunchOnHotkey -or $OverlayApiExecutionProofObserved) -and
-  (-not [bool]$AllowLaunchOnHotkey -or $SummonApiBoundedExecutionProofObserved)
+  (-not [bool]$AllowLaunchOnHotkey -or $SummonApiBoundedExecutionProofObserved) -and
+  (-not [bool]$AllowLaunchOnHotkey -or $PersistentSupervisionApiExecutionProofObserved)
 )
 $Stage6CompletionReviewed = (
   $Stage6CompletionEvidenceReviewed -and
@@ -3001,6 +3142,21 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
 ) {
   'summon_api_bounded_execution_readback'
 } elseif (
+  $AllowLaunchOnHotkey -and
+  $SummonApiLaunchOnHotkeyProofObserved -and
+  $ResidentRuntimeApiExecutionProofObserved -and
+  $TrayPresenceApiExecutionProofObserved -and
+  $OsBindingApiExecutionProofObserved -and
+  $OverlayApiExecutionProofObserved -and
+  $SummonApiBoundedExecutionProofObserved -and
+  $SummonAnywhereBlockersProofObserved -and
+  $CheckpointSummonEnablementGateHandoffObserved -and
+  $SummonAuthorityBlockerProofObserved -and
+  $SummonAnywhereFamilyChainProofObserved -and
+  -not $PersistentSupervisionApiExecutionProofObserved
+) {
+  'persistent_supervision_api_execution_readback'
+} elseif (
   $Stage6CompletionReviewed -and
   -not $ReadyToClose -and
   $AllowLaunchOnHotkey -and
@@ -3010,10 +3166,11 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $OsBindingApiExecutionProofObserved -and
   $OverlayApiExecutionProofObserved -and
   $SummonApiBoundedExecutionProofObserved -and
+  $PersistentSupervisionApiExecutionProofObserved -and
   $ResidentSurfaceForegroundRuntimeProofObserved -and
   $Stage6AcceptanceNextGap -eq 'resident_surface_runtime_not_supervised'
 ) {
-  [string]$SummonApiBoundedExecutionProof.next_smallest_truthful_gap
+  $Stage6AcceptanceNextGap
 } elseif (
   $PersistentSupervisionEnablementDenialObserved -and
   $PersistentSupervisionEnablementExecutionDenialObserved -and
@@ -3610,6 +3767,44 @@ if (
   $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
   $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
 } elseif (
+  $NextSmallestTruthfulGap -eq 'persistent_supervision_api_execution_readback'
+) {
+  $RecommendedHandoffSource = 'stage6_persistent_supervision_api_execution_readback_required'
+  $RecommendedHandoff = [ordered]@{
+    status = 'proof_readback_required'
+    previous_next_smallest_truthful_gap = 'summon_anywhere_runtime_readback'
+    consumed_bounded_summon_api_execution_proof = $SummonApiBoundedExecutionProofObserved
+    consumed_bounded_summon_next_smallest_truthful_gap = [string]$SummonApiBoundedExecutionProof.next_smallest_truthful_gap
+    next_smallest_truthful_gap = 'persistent_supervision_api_execution_readback'
+    next_step = 'run_persistent_supervision_api_execution_proof_after_bounded_summon'
+    proof_script = 'scripts/lens-persistent-supervision-api-execution-proof.ps1 -Mode Status'
+    route = '/lens/host/persistent-supervision/enablement/execution/apply'
+    readiness_route = '/lens/host/persistent-supervision/enablement/execution/readiness'
+    executions_route = '/lens/host/persistent-supervision/enablement/executions'
+    acceptance_criterion = 'summon_anywhere'
+    authority_required = 'persistent_supervision_execution_authority'
+    authority_granted = $false
+    summon_runtime_ready = [bool]$SummonApiBoundedExecutionProof.summon_runtime_ready
+    bounded_handoff_ready = [bool]$SummonApiBoundedExecutionProof.bounded_handoff_ready
+    local_open_ready = [bool]$SummonApiBoundedExecutionProof.local_open_ready
+    opened = [bool]$SummonApiBoundedExecutionProof.opened
+    no_launch = [bool]$SummonApiBoundedExecutionProof.no_launch
+    persistent_supervision_api_execution_proof_observed = $PersistentSupervisionApiExecutionProofObserved
+    read_only_contract = $false
+    diagnostic_only = $true
+    would_execute = $true
+    would_mutate = $true
+    would_write_service_config = $true
+    would_write_receipt = $true
+    would_start_service = $false
+    would_write_memory = $false
+    would_claim_resident = $false
+    blockers = [string[]]@($PersistentSupervisionApiExecutionProofBlockers)
+  }
+  $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
+  $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
+  $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
+} elseif (
   $NextSmallestTruthfulGap -eq 'summon_anywhere_runtime_readback' -and
   $SummonApiBoundedExecutionProofObserved
 ) {
@@ -4055,6 +4250,8 @@ $Payload = [ordered]@{
     'The completion audit consumed the opt-in overlay API execution proof and now requires the governed bounded summon API execution proof before advancing to persistent-supervision execution work.'
   } elseif ($NextSmallestTruthfulGap -eq 'summon_anywhere_runtime_readback') {
     'The completion audit consumed the opt-in bounded summon API execution proof: summon binding runtime readback is observed through governed API paths without OS-wide summon-anywhere, memory write, capture, service-control, product approval-decision, or resident-claim authority. The next truthful blocker is persistent-supervision API execution.'
+  } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_api_execution_readback') {
+    'The completion audit consumed the opt-in bounded summon API execution proof and now requires the governed persistent-supervision API execution proof before advancing back to the Stage 6 completion-audit closure blockers.'
   } elseif ($NextSmallestTruthfulGap -eq 'summon_anywhere_family_chain_proof_readback') {
     'The audit must consume the summon-anywhere family-chain proof before treating the grouped resident-host, tray, overlay, hotkey, summon-binding, and authority blockers as one audited handoff.'
   } elseif ($NextSmallestTruthfulGap -eq 'summon_api_launch_on_hotkey_readback') {
@@ -4633,6 +4830,119 @@ $Payload = [ordered]@{
       memory_write = [bool]$SummonApiBoundedExecutionProofGovernance.memory_write
       resident_claim_authority = [bool]$SummonApiBoundedExecutionProofGovernance.resident_claim_authority
       mutation_authority_granted = [bool]$SummonApiBoundedExecutionProofGovernance.mutation_authority_granted
+    }
+  }
+  persistent_supervision_api_execution_proof = [ordered]@{
+    status = if ($AllowLaunchOnHotkey) {
+      if ($PersistentSupervisionApiExecutionProofObserved) { [string]$PersistentSupervisionApiExecutionProof.status } else { 'missing_or_failed' }
+    } else {
+      'not_requested'
+    }
+    ok = $PersistentSupervisionApiExecutionProofObserved
+    exit_code = [int]$PersistentSupervisionApiExecutionProofResult.exit_code
+    timeout_seconds = [int]$PersistentSupervisionApiExecutionProofResult.timeout_seconds
+    timed_out = [bool]$PersistentSupervisionApiExecutionProofResult.timed_out
+    kind = [string]$PersistentSupervisionApiExecutionProof.kind
+    previous_next_smallest_truthful_gap = [string]$PersistentSupervisionApiExecutionProof.previous_next_smallest_truthful_gap
+    route_next_smallest_truthful_gap = [string]$PersistentSupervisionApiExecutionProof.route_next_smallest_truthful_gap
+    next_smallest_truthful_gap = [string]$PersistentSupervisionApiExecutionProof.next_smallest_truthful_gap
+    recommended_handoff_source = [string]$PersistentSupervisionApiExecutionProof.recommended_handoff_source
+    recommended_next_slice = [string]$PersistentSupervisionApiExecutionProof.recommended_next_slice
+    recommended_proof_script = [string]$PersistentSupervisionApiExecutionProof.recommended_proof_script
+    live_service_config_unchanged = [bool]$PersistentSupervisionApiExecutionProof.live_service_config_unchanged
+    host_supervision_authority_grant_receipt_id = [string]$PersistentSupervisionApiExecutionProof.host_supervision_authority_grant_receipt_id
+    resident_runtime_authority_grant_receipt_id = [string]$PersistentSupervisionApiExecutionProof.resident_runtime_authority_grant_receipt_id
+    tray_authority_grant_receipt_id = [string]$PersistentSupervisionApiExecutionProof.tray_authority_grant_receipt_id
+    os_binding_authority_grant_receipt_id = [string]$PersistentSupervisionApiExecutionProof.os_binding_authority_grant_receipt_id
+    overlay_authority_grant_receipt_id = [string]$PersistentSupervisionApiExecutionProof.overlay_authority_grant_receipt_id
+    summon_authority_grant_receipt_id = [string]$PersistentSupervisionApiExecutionProof.summon_authority_grant_receipt_id
+    persistent_supervision_enablement_authority_grant_receipt_id = [string]$PersistentSupervisionApiExecutionProof.persistent_supervision_enablement_authority_grant_receipt_id
+    persistent_supervision_execution_authority_grant_receipt_id = [string]$PersistentSupervisionApiExecutionProof.persistent_supervision_execution_authority_grant_receipt_id
+    resident_runtime_execution_authority = [bool]$PersistentSupervisionApiExecutionProof.resident_runtime_execution_authority
+    host_supervision_authority = [bool]$PersistentSupervisionApiExecutionProof.host_supervision_authority
+    tray_presence_authority = [bool]$PersistentSupervisionApiExecutionProof.tray_presence_authority
+    os_binding_authority = [bool]$PersistentSupervisionApiExecutionProof.os_binding_authority
+    overlay_authority = [bool]$PersistentSupervisionApiExecutionProof.overlay_authority
+    summon_authority = [bool]$PersistentSupervisionApiExecutionProof.summon_authority
+    persistent_supervision_enablement_authority = [bool]$PersistentSupervisionApiExecutionProof.persistent_supervision_enablement_authority
+    service_config_write_authority = [bool]$PersistentSupervisionApiExecutionProof.service_config_write_authority
+    persistent_supervision_execution_authority = [bool]$PersistentSupervisionApiExecutionProof.persistent_supervision_execution_authority
+    receipt_write_authority = [bool]$PersistentSupervisionApiExecutionProof.receipt_write_authority
+    execution_applied = [bool]$PersistentSupervisionApiExecutionProof.execution_applied
+    executed = [bool]$PersistentSupervisionApiExecutionProof.executed
+    resident_host_process_started = [bool]$PersistentSupervisionApiExecutionProof.resident_host_process_started
+    resident_supervised_runtime_started = [bool]$PersistentSupervisionApiExecutionProof.resident_supervised_runtime_started
+    tray_presence_started = [bool]$PersistentSupervisionApiExecutionProof.tray_presence_started
+    tray_runtime_ready = [bool]$PersistentSupervisionApiExecutionProof.tray_runtime_ready
+    global_hotkey_bound = [bool]$PersistentSupervisionApiExecutionProof.global_hotkey_bound
+    hotkey_runtime_ready = [bool]$PersistentSupervisionApiExecutionProof.hotkey_runtime_ready
+    overlay_window_started = [bool]$PersistentSupervisionApiExecutionProof.overlay_window_started
+    overlay_runtime_ready = [bool]$PersistentSupervisionApiExecutionProof.overlay_runtime_ready
+    summon_binding_observed = [bool]$PersistentSupervisionApiExecutionProof.summon_binding_observed
+    summon_runtime_ready = [bool]$PersistentSupervisionApiExecutionProof.summon_runtime_ready
+    bounded_handoff_ready = [bool]$PersistentSupervisionApiExecutionProof.bounded_handoff_ready
+    local_open_ready = [bool]$PersistentSupervisionApiExecutionProof.local_open_ready
+    opened = [bool]$PersistentSupervisionApiExecutionProof.opened
+    no_launch = [bool]$PersistentSupervisionApiExecutionProof.no_launch
+    summon_runtime_state_observed = [bool]$PersistentSupervisionApiExecutionProof.summon_runtime_state_observed
+    required_before_enable_after_summon = [string[]]@($PersistentSupervisionApiExecutionProofRequiredBeforeEnable)
+    required_before_enable_ready_after_summon = [bool]$PersistentSupervisionApiExecutionProof.required_before_enable_ready_after_summon
+    persistent_supervision_apply_status = [string]$PersistentSupervisionApiExecutionProof.persistent_supervision_apply_status
+    persistent_supervision_ready_after_apply = [bool]$PersistentSupervisionApiExecutionProof.persistent_supervision_ready_after_apply
+    persistent_supervision_enablement_allowed = [bool]$PersistentSupervisionApiExecutionProof.persistent_supervision_enablement_allowed
+    service_config_updated = [bool]$PersistentSupervisionApiExecutionProof.service_config_updated
+    receipt_written = [bool]$PersistentSupervisionApiExecutionProof.receipt_written
+    resident_claim_allowed = [bool]$PersistentSupervisionApiExecutionProof.resident_claim_allowed
+    service_managed = [bool]$PersistentSupervisionApiExecutionProof.service_managed
+    summon_anywhere = [bool]$PersistentSupervisionApiExecutionProof.summon_anywhere
+    os_level_summon = [bool]$PersistentSupervisionApiExecutionProof.os_level_summon
+    overlay_stop_observed = [bool]$PersistentSupervisionApiExecutionProof.overlay_stop_observed
+    hotkey_stop_observed = [bool]$PersistentSupervisionApiExecutionProof.hotkey_stop_observed
+    tray_presence_stop_observed = [bool]$PersistentSupervisionApiExecutionProof.tray_presence_stop_observed
+    resident_supervision_stop_observed = [bool]$PersistentSupervisionApiExecutionProof.resident_supervision_stop_observed
+    overlay_pid_file_present_after_stop = [bool]$PersistentSupervisionApiExecutionProof.overlay_pid_file_present_after_stop
+    hotkey_pid_file_present_after_stop = [bool]$PersistentSupervisionApiExecutionProof.hotkey_pid_file_present_after_stop
+    tray_pid_file_present_after_stop = [bool]$PersistentSupervisionApiExecutionProof.tray_pid_file_present_after_stop
+    host_pid_file_present_after_stop = [bool]$PersistentSupervisionApiExecutionProof.host_pid_file_present_after_stop
+    blockers = [string[]]@($PersistentSupervisionApiExecutionProofBlockers)
+    checks = @($PersistentSupervisionApiExecutionProof.checks)
+    proof = $PersistentSupervisionApiExecutionProof.proof
+    handoff = $PersistentSupervisionApiExecutionProof.handoff
+    governance = [ordered]@{
+      diagnostic_only = [bool]$PersistentSupervisionApiExecutionProofGovernance.diagnostic_only
+      api_route_proof = [bool]$PersistentSupervisionApiExecutionProofGovernance.api_route_proof
+      api_execution_authority = [bool]$PersistentSupervisionApiExecutionProofGovernance.api_execution_authority
+      approval_request_write = [bool]$PersistentSupervisionApiExecutionProofGovernance.approval_request_write
+      test_fixture_approval_decisions = [bool]$PersistentSupervisionApiExecutionProofGovernance.test_fixture_approval_decisions
+      approval_decision_authority = [bool]$PersistentSupervisionApiExecutionProofGovernance.approval_decision_authority
+      product_execution_authority = [bool]$PersistentSupervisionApiExecutionProofGovernance.product_execution_authority
+      execution_authority = [bool]$PersistentSupervisionApiExecutionProofGovernance.execution_authority
+      temporary_runtime_state_write = [bool]$PersistentSupervisionApiExecutionProofGovernance.temporary_runtime_state_write
+      isolated_service_config_write = [bool]$PersistentSupervisionApiExecutionProofGovernance.isolated_service_config_write
+      service_config_write_authority = [bool]$PersistentSupervisionApiExecutionProofGovernance.service_config_write_authority
+      service_config_mutation_authority = [bool]$PersistentSupervisionApiExecutionProofGovernance.service_config_mutation_authority
+      persistent_supervision_enablement_authority = [bool]$PersistentSupervisionApiExecutionProofGovernance.persistent_supervision_enablement_authority
+      persistent_supervision_execution_authority = [bool]$PersistentSupervisionApiExecutionProofGovernance.persistent_supervision_execution_authority
+      receipt_write_authority = [bool]$PersistentSupervisionApiExecutionProofGovernance.receipt_write_authority
+      local_process_launch_authority = [bool]$PersistentSupervisionApiExecutionProofGovernance.local_process_launch_authority
+      process_supervision_authority = [bool]$PersistentSupervisionApiExecutionProofGovernance.process_supervision_authority
+      process_restart_authority = [bool]$PersistentSupervisionApiExecutionProofGovernance.process_restart_authority
+      service_install_authority = [bool]$PersistentSupervisionApiExecutionProofGovernance.service_install_authority
+      service_control_authority = [bool]$PersistentSupervisionApiExecutionProofGovernance.service_control_authority
+      tray_registration_authority = [bool]$PersistentSupervisionApiExecutionProofGovernance.tray_registration_authority
+      tray_icon_authority = [bool]$PersistentSupervisionApiExecutionProofGovernance.tray_icon_authority
+      hotkey_registration_authority = [bool]$PersistentSupervisionApiExecutionProofGovernance.hotkey_registration_authority
+      overlay_control_authority = [bool]$PersistentSupervisionApiExecutionProofGovernance.overlay_control_authority
+      window_management_authority = [bool]$PersistentSupervisionApiExecutionProofGovernance.window_management_authority
+      bounded_local_open_handoff_authority = [bool]$PersistentSupervisionApiExecutionProofGovernance.bounded_local_open_handoff_authority
+      summon_authority = [bool]$PersistentSupervisionApiExecutionProofGovernance.summon_authority
+      summon_anywhere_authority = [bool]$PersistentSupervisionApiExecutionProofGovernance.summon_anywhere_authority
+      os_level_summon_authority = [bool]$PersistentSupervisionApiExecutionProofGovernance.os_level_summon_authority
+      capture_authority = [bool]$PersistentSupervisionApiExecutionProofGovernance.capture_authority
+      new_sensing_authority = [bool]$PersistentSupervisionApiExecutionProofGovernance.new_sensing_authority
+      memory_write = [bool]$PersistentSupervisionApiExecutionProofGovernance.memory_write
+      resident_claim_authority = [bool]$PersistentSupervisionApiExecutionProofGovernance.resident_claim_authority
+      mutation_authority_granted = [bool]$PersistentSupervisionApiExecutionProofGovernance.mutation_authority_granted
     }
   }
   summary = [ordered]@{
@@ -6106,6 +6416,7 @@ $Payload = [ordered]@{
     'scripts/lens-persistent-supervision-execution-authority-proof.ps1 -Mode Status',
     'scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status',
     'scripts/lens-persistent-supervision-enablement-transition-plan-proof.ps1 -Mode Status',
+    'scripts/lens-persistent-supervision-api-execution-proof.ps1 -Mode Status',
     'scripts/lens-command-palette-os-binding-proof.ps1 -Mode Status -StatusPath <checkpoint-lens-status>',
     'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status',
     'scripts/lens-summon-authority-blocker-proof.ps1 -Mode Status',
@@ -6219,6 +6530,7 @@ $Payload = [ordered]@{
     os_binding_api_execution_proof_readback = $OsBindingApiExecutionProofObserved
     overlay_api_execution_proof_readback = $OverlayApiExecutionProofObserved
     summon_api_bounded_execution_proof_readback = $SummonApiBoundedExecutionProofObserved
+    persistent_supervision_api_execution_proof_readback = $PersistentSupervisionApiExecutionProofObserved
     stage6_completion_audit_handoff_consumed_by_closure_readback = $Stage6CompletionAuditHandoffConsumedByClosureReadback
     process_supervision_boundary_observed = [bool]$ProcessSupervisionBoundary.process_supervision_boundary_observed
     service_activation_plan_observed = [bool]$ProcessSupervisionBoundary.service_activation_plan_observed

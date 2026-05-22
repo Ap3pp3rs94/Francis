@@ -37181,6 +37181,83 @@ proof consumption:
   resident_runtime_api_execution_proof_readback=true;
   summon_api_launch_on_hotkey_proof_readback=true; child_proof_timeouts=null`
 
+Stage 6 completion-audit persistent-supervision API execution proof consumption
+on `2026-05-22`:
+
+- `scripts/lens-stage6-completion-audit.ps1` now consumes the existing governed
+  `scripts/lens-persistent-supervision-api-execution-proof.ps1` readback when
+  the completion audit is explicitly run with `-AllowLaunchOnHotkey`.
+- The proof is strict and opt-in: the audit only advances past the
+  `summon_anywhere_runtime_readback` handoff when the persistent-supervision API
+  proof consumes the bounded summon handoff, updates only an isolated service
+  config, writes/readbacks the execution receipt, and confirms the live service
+  config is unchanged.
+- The consumed proof must keep `opened=false`, `no_launch=true`,
+  `summon_anywhere=false`, `os_level_summon=false`, `service_managed=false`,
+  `resident_claim_allowed=false`, and must deny approval-decision,
+  product-execution, local process launch, service-install, service-control,
+  OS-level summon, summon-anywhere, capture, new sensing, memory write, and
+  resident-claim authority.
+- With that proof consumed, the fresh bounded completion audit now reports
+  `next_smallest_truthful_gap=resident_surface_runtime_not_supervised`,
+  `recommended_handoff_source=stage6_helpful_not_noisy_runtime_authority_readiness_handoff`,
+  and
+  `recommended_next_slice=create_or_select_exact_approved_resident_runtime_execution_authority_request`.
+- This does not close Stage 6, start Stage 7, enable service control, write
+  memory, capture anything, grant resident-claim authority, or turn the default
+  audit into a mutating runtime proof. The default non-`AllowLaunchOnHotkey`
+  audit remains read-only.
+
+Latest validation for Stage 6 completion-audit persistent-supervision API
+execution proof consumption:
+
+- PowerShell parser check for `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed; parse_ok`
+- `python -m pytest
+  tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_readback
+  -q`
+  Result: `passed`
+- `python -m pytest
+  tests\test_lens_persistent_supervision_api_execution_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed; 39 passed, 1 skipped`
+- `.venv\Scripts\ruff.exe check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; All checks passed`
+- `.venv\Scripts\ruff.exe format --check
+  tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 1 file already formatted`
+- `scripts\lens-persistent-supervision-api-execution-proof.ps1 -Mode Status
+  -RunSeconds 1`
+  Result: `passed; ok=true; status=proof_passed;
+  kind=lens.host.persistent_supervision.api_execution.proof;
+  next_smallest_truthful_gap=stage6_lens_completion_audit;
+  recommended_handoff_source=api_persistent_supervision_execution_handoff;
+  persistent_supervision_apply_status=service_config_updated;
+  persistent_supervision_ready_after_apply=true;
+  persistent_supervision_enablement_allowed=true;
+  service_config_updated=true; receipt_written=true;
+  live_service_config_unchanged=true;
+  blockers=[resident_claim_authority_not_granted]`
+- `scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2
+  -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3
+  -ChildProofTimeoutSeconds 120 -AllowLaunchOnHotkey`
+  Result: `passed as blocked audit; ok=true; status=blocked;
+  audit_status=complete; ready_to_close=false; transition_allowed=false;
+  next_smallest_truthful_gap=resident_surface_runtime_not_supervised;
+  recommended_handoff_source=stage6_helpful_not_noisy_runtime_authority_readiness_handoff;
+  recommended_next_slice=create_or_select_exact_approved_resident_runtime_execution_authority_request;
+  recommended_proof_script=scripts/lens-stage6-checkpoint.ps1 -Mode Status;
+  authority_required=operator_approval; authority_granted=false;
+  persistent_supervision_api_execution_proof_readback=true;
+  summon_api_bounded_execution_proof_readback=true;
+  overlay_api_execution_proof_readback=true;
+  os_binding_api_execution_proof_readback=true;
+  tray_presence_api_execution_proof_readback=true;
+  resident_runtime_api_execution_proof_readback=true;
+  summon_api_launch_on_hotkey_proof_readback=true; child_proof_timeouts=null`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
