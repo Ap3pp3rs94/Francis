@@ -3065,11 +3065,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $Stage6CompletionReviewed -and
   -not $ReadyToClose -and
   $SummonAnywhereRuntimeReadbackObserved -and
-  $Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and
-  -not (
-    $PersistentSupervisionResidentClaimBoundaryObserved -and
-    [string]$PersistentSupervisionResidentClaimBoundaryProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit'
-  )
+  $Stage6PrerequisiteBringupPlanAppliedEnablementObserved
 ) {
   [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap
 } elseif (

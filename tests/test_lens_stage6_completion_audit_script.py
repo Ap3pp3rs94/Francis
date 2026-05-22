@@ -1062,10 +1062,17 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     assert "proof_script = $HelpfulNotNoisyProofScript" in script
     assert "next_smallest_truthful_gap = 'resident_surface_runtime_not_supervised'" in script
     assert (
-        "$PersistentSupervisionResidentClaimBoundaryObserved -and\n"
+        "$Stage6PrerequisiteBringupPlanAppliedEnablementObserved\n"
+        ") {\n"
+        "  [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap"
+    ) in script
+    assert (
+        "$Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and\n"
+        "  -not (\n"
+        "    $PersistentSupervisionResidentClaimBoundaryObserved -and\n"
         "    [string]$PersistentSupervisionResidentClaimBoundaryProof.next_smallest_truthful_gap "
         "-eq 'stage6_lens_completion_audit'"
-    ) in script
+    ) not in script
     assert "summon_api_launch_on_hotkey_runtime_readback_observed = $SummonApiLaunchOnHotkeyProofObserved" in script
     assert "summon_api_launch_on_hotkey_proof = [ordered]@{" in script
     assert "resident_runtime_api_execution_proof = [ordered]@{" in script

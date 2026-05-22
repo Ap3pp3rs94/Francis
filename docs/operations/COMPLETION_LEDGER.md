@@ -37258,6 +37258,65 @@ execution proof consumption:
   resident_runtime_api_execution_proof_readback=true;
   summon_api_launch_on_hotkey_proof_readback=true; child_proof_timeouts=null`
 
+Stage 6 completion-audit enablement receipt handoff correction on
+`2026-05-22`:
+
+- `scripts/lens-stage6-completion-audit.ps1` now lets the applied Stage 6
+  prerequisite-bringup enablement receipt carry the next current truthful gap
+  after the opt-in bounded runtime proof chain has been consumed.
+- This replaces the stale post-proof fallback where the audit returned
+  `resident_surface_runtime_not_supervised` even though the same audit had
+  already observed `resident_runtime_api_execution_proof_readback=true` and
+  `persistent_supervision_api_execution_proof_readback=true`.
+- The fresh bounded audit now reports
+  `next_smallest_truthful_gap=persistent_supervision_execution_boundary`,
+  `recommended_handoff_source=stage6_prerequisite_bringup_enablement_receipt_review`,
+  and
+  `recommended_next_slice=run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt`.
+- The audit remains blocked and does not close Stage 6, start Stage 7, grant new
+  authority, start service control, claim resident runtime, write memory, or turn
+  the default non-`AllowLaunchOnHotkey` audit into a mutating runtime proof.
+
+Latest validation for Stage 6 completion-audit enablement receipt handoff
+correction:
+
+- PowerShell AST parser check for
+  `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed; PowerShell AST parse OK`
+- `python -m pytest
+  tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_readback
+  -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed; 39 passed, 1 skipped`
+- `python -m pytest
+  tests\test_lens_resident_runtime_api_execution_proof_script.py
+  tests\test_lens_persistent_supervision_api_execution_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check
+  tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 1 file already formatted`
+- `git diff --check`
+  Result: `passed; only expected PowerShell LF-to-CRLF working-copy warning`
+- `scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2
+  -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3
+  -ChildProofTimeoutSeconds 120 -AllowLaunchOnHotkey`
+  Result: `passed as blocked audit; ok=true; status=blocked;
+  audit_status=complete; ready_to_close=false; transition_allowed=false;
+  next_smallest_truthful_gap=persistent_supervision_execution_boundary;
+  recommended_handoff_source=stage6_prerequisite_bringup_enablement_receipt_review;
+  recommended_next_slice=run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt;
+  recommended_proof_script=scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status;
+  authority_required=none_readback_only; authority_granted=false;
+  latest_receipt_id=lpsee_1779121165_4c3308821220;
+  resident_runtime_api_execution_proof_readback=true;
+  persistent_supervision_api_execution_proof_readback=true`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
