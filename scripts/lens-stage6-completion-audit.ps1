@@ -1004,6 +1004,13 @@ $PersistentSupervisionResidentClaimBoundaryObserved = (
   $PersistentSupervisionResidentClaimBoundaryBlockers -contains 'resident_claim_authority_not_granted' -and
   [string]$PersistentSupervisionResidentClaimBoundaryProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit'
 )
+$Stage6PrerequisiteBringupAppliedEnablementReceiptReviewPending = (
+  $Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and
+  -not (
+    $PersistentSupervisionResidentClaimBoundaryObserved -and
+    [string]$PersistentSupervisionResidentClaimBoundaryProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit'
+  )
+)
 $PersistentSupervisionEnablementTransitionPlanProofSiblingChildProofCount = 3
 $PersistentSupervisionEnablementTransitionPlanProofTimeoutSeconds = (
   ($ChildProofTimeoutSeconds * $PersistentSupervisionEnablementTransitionPlanProofSiblingChildProofCount)
@@ -3065,7 +3072,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $Stage6CompletionReviewed -and
   -not $ReadyToClose -and
   $SummonAnywhereRuntimeReadbackObserved -and
-  $Stage6PrerequisiteBringupPlanAppliedEnablementObserved
+  $Stage6PrerequisiteBringupAppliedEnablementReceiptReviewPending
 ) {
   [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap
 } elseif (
@@ -3340,7 +3347,7 @@ if (
 } elseif (
   $NextSmallestTruthfulGap -eq 'persistent_supervision_execution_boundary' -and
   $SummonAnywhereRuntimeReadbackObserved -and
-  $Stage6PrerequisiteBringupPlanAppliedEnablementObserved
+  $Stage6PrerequisiteBringupAppliedEnablementReceiptReviewPending
 ) {
   $RecommendedHandoffSource = 'stage6_prerequisite_bringup_enablement_receipt_review'
   $RecommendedHandoff = [ordered]@{

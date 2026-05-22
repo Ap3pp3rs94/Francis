@@ -37372,6 +37372,60 @@ consumption:
   recommended_next_operator_command.command=.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status;
   check_status=completion_audit_recommended_handoff_consumed`
 
+Stage 6 completion-audit consumed enablement receipt review boundary on
+`2026-05-22`:
+
+- `scripts/lens-stage6-completion-audit.ps1` now distinguishes a pending
+  applied enablement receipt review from one already consumed through the
+  persistent-supervision resident-claim boundary readback.
+- When the opt-in runtime audit observes
+  `stage6_prerequisite_bringup_plan_applied_enablement_readback=true` and
+  `persistent_supervision_resident_claim_boundary_proof_readback=true`, it no
+  longer reports
+  `recommended_handoff_source=stage6_prerequisite_bringup_enablement_receipt_review`
+  again.
+- The fresh opt-in audit now advances to the next Stage 6 blocker after the
+  consumed persistent-supervision boundary:
+  `next_smallest_truthful_gap=resident_surface_runtime_not_supervised` and
+  `recommended_handoff_source=stage6_helpful_not_noisy_runtime_authority_readiness_handoff`.
+- This does not close Stage 6, start Stage 7, grant operator approval, claim
+  resident runtime, write memory, or mutate service/shell state. It only
+  prevents an already-consumed receipt review from masking the next truthful
+  Stage 6 handoff.
+
+Latest validation for Stage 6 completion-audit consumed enablement receipt
+review boundary:
+
+- PowerShell AST parser check for
+  `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed; PowerShell AST parse OK`
+- `python -m pytest
+  tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_readback
+  -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed; 39 passed, 1 skipped`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check
+  tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 1 file already formatted`
+- `scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2
+  -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3
+  -ChildProofTimeoutSeconds 120 -AllowLaunchOnHotkey`
+  Result: `passed as blocked audit; ok=true; status=blocked;
+  audit_status=complete; ready_to_close=false; transition_allowed=false;
+  next_smallest_truthful_gap=resident_surface_runtime_not_supervised;
+  recommended_handoff_source=stage6_helpful_not_noisy_runtime_authority_readiness_handoff;
+  recommended_next_slice=create_or_select_exact_approved_resident_runtime_execution_authority_request;
+  recommended_proof_script=scripts/lens-stage6-checkpoint.ps1 -Mode Status;
+  authority_required=operator_approval; authority_granted=false;
+  persistent_supervision_resident_claim_boundary_proof_readback=true;
+  stage6_prerequisite_bringup_plan_applied_enablement_readback=true;
+  persistent_supervision_api_execution_proof_readback=true;
+  summon_api_launch_on_hotkey_runtime_readback_observed=true`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
