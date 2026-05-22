@@ -37317,6 +37317,61 @@ correction:
   resident_runtime_api_execution_proof_readback=true;
   persistent_supervision_api_execution_proof_readback=true`
 
+Stage 6 next-handoff enablement receipt handoff consumption on `2026-05-22`:
+
+- `scripts/lens-stage6-next-handoff.ps1` now recognizes the completion-audit
+  handoff source
+  `stage6_prerequisite_bringup_enablement_receipt_review` as a consumed
+  read-only Stage 6 completion-audit handoff.
+- This closes the stale next-handoff fallback where a supplied opt-in
+  completion-audit JSON with
+  `next_smallest_truthful_gap=persistent_supervision_execution_boundary` was
+  still routed back to
+  `stage6_completion_audit_launch_on_hotkey_readback_required`.
+- The next-handoff readback now preserves the audit's receipt-review posture,
+  including
+  `recommended_next_slice=run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt`,
+  `recommended_proof_script=scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status`,
+  `authority_required=none_readback_only`, and the latest receipt id.
+- This remains a diagnostic/read-only handoff. It does not close Stage 6,
+  start Stage 7, grant authority, execute the prerequisite bringup plan, claim
+  the resident runtime, write memory, or mutate service/shell state.
+
+Latest validation for Stage 6 next-handoff enablement receipt handoff
+consumption:
+
+- PowerShell AST parser check for
+  `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed; PowerShell AST parse OK`
+- `python -m pytest
+  tests\test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback
+  tests\test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_applied_bringup_review_state
+  -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check
+  tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 1 file already formatted`
+- `scripts\lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath
+  data\test_runs\stage6-next-handoff\completion-audit-after-audit-handoff-fix-20260522-053958.json`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=persistent_supervision_execution_boundary;
+  recommended_handoff_source=stage6_prerequisite_bringup_enablement_receipt_review;
+  recommended_next_slice=run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt;
+  recommended_proof_script=scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status;
+  authority_required=none_readback_only; authority_granted=false;
+  stage6_completion_audit_readback_observed=true;
+  stage6_completion_audit_enablement_receipt_review_handoff_observed=true;
+  stage6_completion_audit_recommended_handoff_consumed=true;
+  stage6_completion_audit_runtime_readback_required=false;
+  recommended_operator_handoff.source=stage6_completion_audit_recommended_handoff;
+  recommended_next_operator_command.command=.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status;
+  check_status=completion_audit_recommended_handoff_consumed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
