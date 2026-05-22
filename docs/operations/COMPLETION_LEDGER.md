@@ -37802,6 +37802,83 @@ Latest validation for prerequisite bring-up audit handoff consumption:
   Result: `passed; Git reported expected LF-to-CRLF warning for
   scripts\lens-stage6-next-handoff.ps1`
 
+### 2026-05-22 - Stage 6 prerequisite handoff action alignment
+
+Roadmap area: Stage 6 / Lens MVP, governed persistent-supervision
+prerequisite bring-up and operator handoff truthfulness.
+
+Material change:
+
+- The Stage 6 completion audit now normalizes the nested operator action for a
+  prerequisite-missing handoff from the actual first missing prerequisite
+  readback instead of reusing a stale local bring-up-plan next action.
+- When runtime proof says `resident_host_process` is still the first missing
+  prerequisite, the recommended handoff now consistently carries
+  `next_operator_action_requirement=resident_host_process`,
+  `request_resident_runtime_execution_authority`, and
+  `Mode RequestNext -Actor <actor> -ConfirmRequest`.
+- The Stage 6 next-handoff proof now refuses to consume the
+  `stage6_prerequisite_bringup_operator_plan` audit handoff unless the nested
+  action, command mode, confirmation requirement, and resident-runtime
+  authority route match that resident-host-process request.
+- Stage 6 still does not close. This fixes a mixed operator signal where the
+  top-level handoff pointed at resident-host prerequisite request, while the
+  nested action could still point at an already-applied persistent-supervision
+  enablement receipt review from local data.
+
+Latest validation for prerequisite handoff action alignment:
+
+- PowerShell AST parse of `scripts\lens-stage6-completion-audit.ps1` and
+  `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed`
+- `scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2
+  -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3
+  -ChildProofTimeoutSeconds 240 -AllowLaunchOnHotkey`
+  Result: `passed as blocked audit; status=blocked; audit_status=complete;
+  stage6_completion_reviewed=true;
+  next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing;
+  recommended_handoff_source=stage6_prerequisite_bringup_operator_plan;
+  recommended_next_slice=run_stage6_prerequisite_bringup_request_next_for_resident_host_process;
+  recommended_handoff.next_operator_action_requirement=resident_host_process;
+  recommended_handoff.next_operator_action.id=request_resident_runtime_execution_authority;
+  recommended_handoff.next_operator_command.mode=RequestNext;
+  recommended_handoff.next_operator_command.requires_confirmation=true;
+  child_proof_timeouts=[]`
+- `scripts\lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath .tmp\stage6-completion-audit-after-mixed-handoff-fix.json`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing;
+  recommended_handoff_source=stage6_prerequisite_bringup_operator_plan;
+  stage6_completion_audit_prerequisite_bringup_operator_plan_handoff_observed=true;
+  stage6_completion_audit_recommended_handoff_consumed=true;
+  stage6_completion_audit_runtime_readback_required=false`
+- `python -m pytest
+  tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_consumes_stage6_prerequisite_bringup_plan_readback
+  tests\test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback
+  tests\test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_applied_bringup_review_state -q`
+  Result: `passed`
+- `python -m pytest
+  tests\test_lens_stage6_completion_audit_script.py
+  tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed; one expected skip`
+- `ruff check
+  tests\test_lens_stage6_completion_audit_script.py
+  tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `ruff format --check
+  tests\test_lens_stage6_completion_audit_script.py
+  tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; already formatted`
+- `git diff --check`
+  Result: `passed; Git reported expected LF-to-CRLF warnings for
+  scripts\lens-stage6-completion-audit.ps1` and
+  `scripts\lens-stage6-next-handoff.ps1`
+- GitHub Actions `ci` run `26305323987` for prior pushed commit `c5e86e47`
+  Result: `passed across ubuntu-latest/windows-2025-vs2026 on Python 3.12
+  and 3.13`; this confirms the preceding handoff-consumption commit, not this
+  local alignment patch until it is pushed.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

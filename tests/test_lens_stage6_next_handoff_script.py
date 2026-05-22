@@ -1800,20 +1800,26 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
                     "route": "/lens/host/persistent-supervision",
                     "readiness_route": "/lens/host/persistent-supervision/enablement",
                     "operator_plan_script": "scripts/lens-stage6-prerequisite-bringup-plan.ps1",
-                    "next_operator_action_requirement": "persistent_supervision_enablement_receipt",
+                    "next_operator_action_requirement": "resident_host_process",
                     "next_operator_action": {
-                        "id": "review_persistent_supervision_enablement_receipt",
-                        "route": "/lens/host/persistent-supervision/enablement/executions",
-                        "method": "GET",
-                        "mode": "readback",
+                        "id": "request_resident_runtime_execution_authority",
+                        "route": "/lens/resident-runtime/authority-grant/request",
+                        "method": "POST",
+                        "approval_action": "lens.resident_runtime.execution_authority",
+                        "requires": ["actor with system.write scope"],
+                        "mode": "",
+                        "live_effect": "approval request receipt only",
+                        "operator_supplied_values_required": True,
                         "script_would_execute": False,
                         "script_would_mutate": False,
-                        "latest_receipt_id": "lpsee_test_applied",
                     },
                     "next_operator_command": {
-                        "command": ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status",
-                        "mode": "Status",
-                        "requires_confirmation": False,
+                        "command": (
+                            ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 "
+                            "-Mode RequestNext -Actor <actor> -ConfirmRequest"
+                        ),
+                        "mode": "RequestNext",
+                        "requires_confirmation": True,
                         "requires_approval_id": False,
                         "requires_operator_approval_decision": False,
                     },
@@ -1889,6 +1895,22 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     )
     assert prerequisite_operator_plan_handoff["authority_granted"] is False
     assert prerequisite_operator_plan_handoff["first_missing_required_before_enable"] == "resident_host_process"
+    assert prerequisite_operator_plan_handoff["next_operator_action_requirement"] == "resident_host_process"
+    assert prerequisite_operator_plan_handoff["next_operator_action"]["id"] == (
+        "request_resident_runtime_execution_authority"
+    )
+    assert prerequisite_operator_plan_handoff["next_operator_action"]["route"] == (
+        "/lens/resident-runtime/authority-grant/request"
+    )
+    assert prerequisite_operator_plan_handoff["next_operator_action"]["method"] == "POST"
+    assert prerequisite_operator_plan_handoff["next_operator_action"]["approval_action"] == (
+        "lens.resident_runtime.execution_authority"
+    )
+    assert prerequisite_operator_plan_handoff["next_operator_action"]["operator_supplied_values_required"] is True
+    assert prerequisite_operator_plan_handoff["next_operator_command"]["mode"] == "RequestNext"
+    assert prerequisite_operator_plan_handoff["next_operator_command"]["requires_confirmation"] is True
+    assert prerequisite_operator_plan_handoff["next_operator_command"]["requires_approval_id"] is False
+    assert prerequisite_operator_plan_handoff["next_operator_command"]["requires_operator_approval_decision"] is False
     assert prerequisite_operator_plan_handoff["read_only_contract"] is True
     assert prerequisite_operator_plan_handoff["diagnostic_only"] is True
     assert prerequisite_operator_plan_handoff["would_execute"] is False

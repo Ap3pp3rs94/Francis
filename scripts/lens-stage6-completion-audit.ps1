@@ -3277,6 +3277,41 @@ if (
   }
   $Stage6PrerequisiteBringupPlanRecommendedAuthorityRequired = $Stage6PrerequisiteBringupPlanNextOperatorAuthority
 }
+$Stage6PrerequisiteBringupMissingRequirementActionRequirement = [string]$Stage6PrerequisiteBringupPlan.next_operator_action_requirement
+$Stage6PrerequisiteBringupMissingRequirementAction = $Stage6PrerequisiteBringupPlanNextOperatorAction
+$Stage6PrerequisiteBringupMissingRequirementCommand = $Stage6PrerequisiteBringupPlanNextOperatorCommand
+$Stage6PrerequisiteBringupMissingRequirementCommandAvailability = $Stage6PrerequisiteBringupPlanCommandAvailability
+if ($PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable -eq 'resident_host_process') {
+  $Stage6PrerequisiteBringupMissingRequirementActionRequirement = 'resident_host_process'
+  $Stage6PrerequisiteBringupMissingRequirementAction = [ordered]@{
+    id = 'request_resident_runtime_execution_authority'
+    route = [string]$PersistentSupervisionPrerequisitesFirstMissingRequirementHandoff.request_route
+    method = 'POST'
+    approval_action = 'lens.resident_runtime.execution_authority'
+    requires = [string[]]@('actor with system.write scope')
+    mode = ''
+    live_effect = 'approval request receipt only'
+    operator_supplied_values_required = $true
+    script_would_execute = $false
+    script_would_mutate = $false
+  }
+  if ([string]::IsNullOrWhiteSpace([string]$Stage6PrerequisiteBringupMissingRequirementAction.route)) {
+    $Stage6PrerequisiteBringupMissingRequirementAction['route'] = '/lens/resident-runtime/authority-grant/request'
+  }
+  $Stage6PrerequisiteBringupMissingRequirementCommand = [ordered]@{
+    command = '.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode RequestNext -Actor <actor> -ConfirmRequest'
+    mode = 'RequestNext'
+    requires_confirmation = $true
+    requires_approval_id = $false
+    requires_operator_approval_decision = $false
+  }
+  $Stage6PrerequisiteBringupMissingRequirementCommandAvailability = [ordered]@{
+    available_now_count = 1
+    preview_only_count = 4
+    sequence_length = 5
+    truthful = $true
+  }
+}
 $Stage6CompletionAuditHandoffConsumedByClosureReadback = (
   $NextSmallestTruthfulGap -eq 'summon_anywhere_blockers' -and
   $Stage6CompletionReviewed -and
@@ -4166,10 +4201,10 @@ if (
     route = '/lens/host/persistent-supervision'
     readiness_route = '/lens/host/persistent-supervision/enablement'
     operator_plan_script = 'scripts/lens-stage6-prerequisite-bringup-plan.ps1'
-    next_operator_action_requirement = [string]$Stage6PrerequisiteBringupPlan.next_operator_action_requirement
-    next_operator_action = $Stage6PrerequisiteBringupPlanNextOperatorAction
-    next_operator_command = $Stage6PrerequisiteBringupPlanNextOperatorCommand
-    operator_sequence_command_availability = $Stage6PrerequisiteBringupPlanCommandAvailability
+    next_operator_action_requirement = $Stage6PrerequisiteBringupMissingRequirementActionRequirement
+    next_operator_action = $Stage6PrerequisiteBringupMissingRequirementAction
+    next_operator_command = $Stage6PrerequisiteBringupMissingRequirementCommand
+    operator_sequence_command_availability = $Stage6PrerequisiteBringupMissingRequirementCommandAvailability
     process_supervision_route = [string]$ResidentHostProcessSupervisionBlockerProof.recommended_handoff.route
     process_supervision_readiness_route = [string]$ResidentHostProcessSupervisionBlockerProof.recommended_handoff.readiness_route
     authority_required = 'resident_host_process_tray_hotkey_overlay_and_summon_prerequisites'

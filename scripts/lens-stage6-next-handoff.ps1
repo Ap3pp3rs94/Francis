@@ -1155,6 +1155,10 @@ $Stage6CompletionAuditPrerequisiteBringupOperatorPlanAction = Get-PropertyValue 
   -Payload $Stage6CompletionAuditRecommendedHandoff `
   -Name 'next_operator_action' `
   -Default ([ordered]@{})
+$Stage6CompletionAuditPrerequisiteBringupOperatorPlanCommand = Get-PropertyValue `
+  -Payload $Stage6CompletionAuditRecommendedHandoff `
+  -Name 'next_operator_command' `
+  -Default ([ordered]@{})
 $Stage6CompletionAuditPrerequisiteBringupOperatorPlanHandoffObserved = (
   $Stage6CompletionAuditReadbackObserved -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_handoff_source' -Default '') -eq 'stage6_prerequisite_bringup_operator_plan' -and
@@ -1172,12 +1176,18 @@ $Stage6CompletionAuditPrerequisiteBringupOperatorPlanHandoffObserved = (
   [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'authority_required' -Default '') -eq 'resident_host_process_tray_hotkey_overlay_and_summon_prerequisites' -and
   -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'authority_granted' -Default $true) -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'first_missing_required_before_enable' -Default '') -eq 'resident_host_process' -and
-  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'next_operator_action_requirement' -Default '') -eq 'persistent_supervision_enablement_receipt' -and
-  [string](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanAction -Name 'id' -Default '') -eq 'review_persistent_supervision_enablement_receipt' -and
-  [string](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanAction -Name 'route' -Default '') -eq '/lens/host/persistent-supervision/enablement/executions' -and
-  [string](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanAction -Name 'mode' -Default '') -eq 'readback' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'next_operator_action_requirement' -Default '') -eq 'resident_host_process' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanAction -Name 'id' -Default '') -eq 'request_resident_runtime_execution_authority' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanAction -Name 'route' -Default '') -eq '/lens/resident-runtime/authority-grant/request' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanAction -Name 'method' -Default '') -eq 'POST' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanAction -Name 'approval_action' -Default '') -eq 'lens.resident_runtime.execution_authority' -and
+  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanAction -Name 'operator_supplied_values_required' -Default $false) -and
   -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanAction -Name 'script_would_execute' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanAction -Name 'script_would_mutate' -Default $true) -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanCommand -Name 'mode' -Default '') -eq 'RequestNext' -and
+  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanCommand -Name 'requires_confirmation' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanCommand -Name 'requires_approval_id' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanCommand -Name 'requires_operator_approval_decision' -Default $true) -and
   [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'read_only_contract' -Default $false) -and
   [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'diagnostic_only' -Default $false) -and
   -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_execute' -Default $true) -and

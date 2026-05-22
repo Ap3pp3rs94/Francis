@@ -238,6 +238,10 @@ def test_lens_stage6_completion_audit_consumes_stage6_prerequisite_bringup_plan_
     assert "'scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status'" in script
     assert "$Stage6PrerequisiteBringupPlanRecommendedNextSlice" in script
     assert "$Stage6PrerequisiteBringupPlanRecommendedAuthorityRequired" in script
+    assert "$Stage6PrerequisiteBringupMissingRequirementActionRequirement" in script
+    assert "$Stage6PrerequisiteBringupMissingRequirementAction" in script
+    assert "$Stage6PrerequisiteBringupMissingRequirementCommand" in script
+    assert "$PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable -eq 'resident_host_process'" in script
     assert (
         "$Stage6CompletionReviewed = (\n"
         "  $Stage6CompletionEvidenceReviewed -and\n"
