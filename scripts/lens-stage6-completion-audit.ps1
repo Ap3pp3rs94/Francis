@@ -260,6 +260,7 @@ $SummonAnywhereBlockersProofScript = Join-Path $PSScriptRoot 'lens-summon-anywhe
 $SummonAuthorityBlockerProofScript = Join-Path $PSScriptRoot 'lens-summon-authority-blocker-proof.ps1'
 $SummonAnywhereFamilyChainProofScript = Join-Path $PSScriptRoot 'lens-summon-anywhere-family-chain-proof.ps1'
 $SummonApiExecutionProofScript = Join-Path $PSScriptRoot 'lens-summon-api-execution-proof.ps1'
+$ResidentRuntimeApiExecutionProofScript = Join-Path $PSScriptRoot 'lens-resident-runtime-api-execution-proof.ps1'
 
 if (-not (Test-Path -LiteralPath $CheckpointScript)) {
   throw "Stage 6 checkpoint script is missing: $CheckpointScript"
@@ -317,6 +318,23 @@ if ($AllowLaunchOnHotkey) {
     -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 120))
 }
 $SummonApiLaunchOnHotkeyProof = $SummonApiLaunchOnHotkeyProofResult.payload
+$ResidentRuntimeApiExecutionProofResult = [ordered]@{
+  exit_code = 0
+  payload = $null
+  output = ''
+  error = ''
+  timed_out = $false
+  timeout_seconds = 0
+  duration_ms = 0
+}
+if ($AllowLaunchOnHotkey) {
+  $ResidentRuntimeApiExecutionProofResult = Invoke-JsonScript `
+    -PowerShellPath $PowerShell.Source `
+    -ScriptPath $ResidentRuntimeApiExecutionProofScript `
+    -ScriptArgs @('-Mode', 'Status', '-RunSeconds', '1') `
+    -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 240))
+}
+$ResidentRuntimeApiExecutionProof = $ResidentRuntimeApiExecutionProofResult.payload
 $ResidentHostRuntimeBoundaryProofResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $ResidentHostRuntimeBoundaryProofScript -ScriptArgs @(
   '-Mode', 'Status',
   '-ForegroundRunSeconds', '2',
@@ -998,6 +1016,7 @@ $ChildProofRuns = @(
 )
 if ($AllowLaunchOnHotkey) {
   $ChildProofRuns += New-ChildProofRunSummary -Name 'summon_api_launch_on_hotkey' -Result $SummonApiLaunchOnHotkeyProofResult
+  $ChildProofRuns += New-ChildProofRunSummary -Name 'resident_runtime_api_execution' -Result $ResidentRuntimeApiExecutionProofResult
 }
 $ChildProofTimeouts = [string[]]@(
   $ChildProofRuns | Where-Object { [bool]$_.timed_out } | ForEach-Object { [string]$_.name }
@@ -2166,6 +2185,58 @@ $SummonApiLaunchOnHotkeyProofObserved = (
   -not [bool]$SummonApiLaunchOnHotkeyProofGovernance.memory_write -and
   -not [bool]$SummonApiLaunchOnHotkeyProofGovernance.resident_claim_authority
 )
+$ResidentRuntimeApiExecutionProofGovernance = $ResidentRuntimeApiExecutionProof.governance
+$ResidentRuntimeApiExecutionProofBlockers = ConvertTo-StringArray -Value $ResidentRuntimeApiExecutionProof.blockers
+$ResidentRuntimeApiExecutionProofObserved = (
+  [bool]$AllowLaunchOnHotkey -and
+  [int]$ResidentRuntimeApiExecutionProofResult.exit_code -eq 0 -and
+  [bool]$ResidentRuntimeApiExecutionProof.ok -and
+  [string]$ResidentRuntimeApiExecutionProof.kind -eq 'lens.resident_runtime.api_execution.proof' -and
+  [string]$ResidentRuntimeApiExecutionProof.status -eq 'proof_passed' -and
+  [bool]$ResidentRuntimeApiExecutionProof.executed -and
+  [bool]$ResidentRuntimeApiExecutionProof.resident_host_process_started -and
+  [bool]$ResidentRuntimeApiExecutionProof.resident_supervised_runtime_started -and
+  [bool]$ResidentRuntimeApiExecutionProof.resident_supervision_stop_observed -and
+  -not [bool]$ResidentRuntimeApiExecutionProof.resident_host_process_after_stop -and
+  -not [bool]$ResidentRuntimeApiExecutionProof.resident_supervised_runtime_after_stop -and
+  -not [bool]$ResidentRuntimeApiExecutionProof.tray_presence -and
+  -not [bool]$ResidentRuntimeApiExecutionProof.global_hotkey -and
+  -not [bool]$ResidentRuntimeApiExecutionProof.overlay_window -and
+  -not [bool]$ResidentRuntimeApiExecutionProof.summon_anywhere -and
+  -not [bool]$ResidentRuntimeApiExecutionProof.service_managed -and
+  -not [bool]$ResidentRuntimeApiExecutionProof.resident_claim_allowed -and
+  [string]$ResidentRuntimeApiExecutionProof.next_smallest_truthful_gap -eq 'summon_tray_presence_blocker_boundary' -and
+  [string]$ResidentRuntimeApiExecutionProof.recommended_handoff_source -eq 'api_resident_runtime_execution_tray_presence_handoff' -and
+  [string]$ResidentRuntimeApiExecutionProof.recommended_next_slice -eq 'prove_governed_tray_presence_api_execution_after_resident_supervision' -and
+  [string]$ResidentRuntimeApiExecutionProof.recommended_proof_script -eq 'scripts/lens-tray-presence-api-execution-proof.ps1 -Mode Status' -and
+  $ResidentRuntimeApiExecutionProofBlockers -contains 'tray_host_missing' -and
+  $ResidentRuntimeApiExecutionProofBlockers -contains 'global_hotkey_binding_missing' -and
+  $ResidentRuntimeApiExecutionProofBlockers -contains 'overlay_window_missing' -and
+  $ResidentRuntimeApiExecutionProofBlockers -contains 'summon_binding_missing' -and
+  [bool]$ResidentRuntimeApiExecutionProofGovernance.diagnostic_only -and
+  [bool]$ResidentRuntimeApiExecutionProofGovernance.api_route_proof -and
+  [bool]$ResidentRuntimeApiExecutionProofGovernance.api_execution_authority -and
+  [bool]$ResidentRuntimeApiExecutionProofGovernance.approval_request_write -and
+  [bool]$ResidentRuntimeApiExecutionProofGovernance.test_fixture_approval_decisions -and
+  [bool]$ResidentRuntimeApiExecutionProofGovernance.execution_authority -and
+  [bool]$ResidentRuntimeApiExecutionProofGovernance.temporary_runtime_state_write -and
+  [bool]$ResidentRuntimeApiExecutionProofGovernance.local_process_launch_authority -and
+  [bool]$ResidentRuntimeApiExecutionProofGovernance.process_supervision_authority -and
+  [bool]$ResidentRuntimeApiExecutionProofGovernance.mutation_authority_granted -and
+  -not [bool]$ResidentRuntimeApiExecutionProofGovernance.product_execution_authority -and
+  -not [bool]$ResidentRuntimeApiExecutionProofGovernance.approval_decision_authority -and
+  -not [bool]$ResidentRuntimeApiExecutionProofGovernance.process_restart_authority -and
+  -not [bool]$ResidentRuntimeApiExecutionProofGovernance.service_install_authority -and
+  -not [bool]$ResidentRuntimeApiExecutionProofGovernance.service_control_authority -and
+  -not [bool]$ResidentRuntimeApiExecutionProofGovernance.tray_registration_authority -and
+  -not [bool]$ResidentRuntimeApiExecutionProofGovernance.hotkey_registration_authority -and
+  -not [bool]$ResidentRuntimeApiExecutionProofGovernance.overlay_control_authority -and
+  -not [bool]$ResidentRuntimeApiExecutionProofGovernance.summon_authority -and
+  -not [bool]$ResidentRuntimeApiExecutionProofGovernance.capture_authority -and
+  -not [bool]$ResidentRuntimeApiExecutionProofGovernance.new_sensing_authority -and
+  -not [bool]$ResidentRuntimeApiExecutionProofGovernance.memory_write -and
+  -not [bool]$ResidentRuntimeApiExecutionProofGovernance.resident_claim_authority
+)
 $SummonAnywhereRuntimeReadbackObserved = [bool]$SummonApiLaunchOnHotkeyProofObserved
 $Stage6AcceptanceNextGap = if ($BlockedCriterionIds -contains 'summon_anywhere' -and -not $SummonAnywhereRuntimeReadbackObserved) {
   'summon_anywhere_blockers'
@@ -2197,7 +2268,8 @@ $Stage6CompletionEvidenceReviewed = (
   $CheckpointSummonEnablementGateHandoffObserved -and
   $SummonAuthorityBlockerProofObserved -and
   $SummonAnywhereFamilyChainProofObserved -and
-  (-not [bool]$AllowLaunchOnHotkey -or $SummonApiLaunchOnHotkeyProofObserved)
+  (-not [bool]$AllowLaunchOnHotkey -or $SummonApiLaunchOnHotkeyProofObserved) -and
+  (-not [bool]$AllowLaunchOnHotkey -or $ResidentRuntimeApiExecutionProofObserved)
 )
 $Stage6CompletionReviewed = (
   $Stage6CompletionEvidenceReviewed -and
@@ -2474,6 +2546,26 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
 ) {
   'summon_api_launch_on_hotkey_readback'
 } elseif (
+  $AllowLaunchOnHotkey -and
+  $SummonApiLaunchOnHotkeyProofObserved -and
+  $SummonAnywhereBlockersProofObserved -and
+  $CheckpointSummonEnablementGateHandoffObserved -and
+  $SummonAuthorityBlockerProofObserved -and
+  $SummonAnywhereFamilyChainProofObserved -and
+  -not $ResidentRuntimeApiExecutionProofObserved
+) {
+  'resident_runtime_api_execution_readback'
+} elseif (
+  $Stage6CompletionReviewed -and
+  -not $ReadyToClose -and
+  $AllowLaunchOnHotkey -and
+  $SummonApiLaunchOnHotkeyProofObserved -and
+  $ResidentRuntimeApiExecutionProofObserved -and
+  $ResidentSurfaceForegroundRuntimeProofObserved -and
+  $Stage6AcceptanceNextGap -eq 'resident_surface_runtime_not_supervised'
+) {
+  [string]$ResidentRuntimeApiExecutionProof.next_smallest_truthful_gap
+} elseif (
   $PersistentSupervisionEnablementDenialObserved -and
   $PersistentSupervisionEnablementExecutionDenialObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved
@@ -2679,6 +2771,84 @@ if (
     summon_anywhere = [bool]$SummonApiLaunchOnHotkeyProof.summon_anywhere
     os_level_summon = [bool]$SummonApiLaunchOnHotkeyProof.os_level_summon
     blockers = [string[]]@($Blockers)
+  }
+  $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
+  $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
+  $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
+} elseif (
+  $NextSmallestTruthfulGap -eq 'resident_runtime_api_execution_readback'
+) {
+  $RecommendedHandoffSource = 'stage6_resident_runtime_api_execution_readback_required'
+  $RecommendedHandoff = [ordered]@{
+    status = 'proof_readback_required'
+    previous_next_smallest_truthful_gap = 'resident_surface_runtime_not_supervised'
+    consumed_summon_api_next_smallest_truthful_gap = [string]$SummonApiLaunchOnHotkeyProof.next_smallest_truthful_gap
+    next_smallest_truthful_gap = 'resident_runtime_api_execution_readback'
+    next_step = 'run_resident_runtime_api_execution_proof_after_launch_on_hotkey_readback'
+    proof_script = 'scripts/lens-resident-runtime-api-execution-proof.ps1 -Mode Status'
+    route = '/lens/resident-runtime/execute'
+    readiness_route = '/lens/resident-runtime/authority-grant/readiness'
+    authority_required = 'resident_runtime_execution_authority'
+    authority_granted = $false
+    summon_api_launch_on_hotkey_runtime_readback_observed = $SummonApiLaunchOnHotkeyProofObserved
+    resident_runtime_api_execution_proof_observed = $ResidentRuntimeApiExecutionProofObserved
+    read_only_contract = $false
+    diagnostic_only = $true
+    would_execute = $true
+    would_mutate = $true
+    would_register_tray = $false
+    would_register_hotkey = $false
+    would_open_overlay = $false
+    would_write_memory = $false
+    would_claim_resident = $false
+    blockers = [string[]]@($ResidentRuntimeApiExecutionProofBlockers)
+  }
+  $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
+  $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
+  $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
+} elseif (
+  $NextSmallestTruthfulGap -eq 'summon_tray_presence_blocker_boundary' -and
+  $ResidentRuntimeApiExecutionProofObserved
+) {
+  $ResidentRuntimeApiExecutionProofRecommendedHandoff = $ResidentRuntimeApiExecutionProof.recommended_handoff
+  $RecommendedHandoffSource = [string]$ResidentRuntimeApiExecutionProof.recommended_handoff_source
+  $RecommendedHandoff = [ordered]@{
+    status = 'blocked'
+    previous_next_smallest_truthful_gap = 'resident_surface_runtime_not_supervised'
+    consumed_resident_surface_foreground_runtime_proof = $ResidentSurfaceForegroundRuntimeProofObserved
+    consumed_resident_runtime_api_execution_proof = $ResidentRuntimeApiExecutionProofObserved
+    consumed_resident_runtime_api_next_smallest_truthful_gap = [string]$ResidentRuntimeApiExecutionProof.next_smallest_truthful_gap
+    next_smallest_truthful_gap = [string]$ResidentRuntimeApiExecutionProof.next_smallest_truthful_gap
+    next_step = [string]$ResidentRuntimeApiExecutionProof.recommended_next_slice
+    proof_script = [string]$ResidentRuntimeApiExecutionProof.recommended_proof_script
+    route = [string]$ResidentRuntimeApiExecutionProofRecommendedHandoff.route
+    readiness_route = [string]$ResidentRuntimeApiExecutionProofRecommendedHandoff.readiness_route
+    acceptance_criterion = 'summon_anywhere'
+    authority_required = [string]$ResidentRuntimeApiExecutionProofRecommendedHandoff.authority_required
+    authority_granted = $false
+    recommended_handoff = $ResidentRuntimeApiExecutionProofRecommendedHandoff
+    resident_runtime_execution_authority = [bool]$ResidentRuntimeApiExecutionProof.resident_runtime_execution_authority
+    host_supervision_authority = [bool]$ResidentRuntimeApiExecutionProof.host_supervision_authority
+    resident_runtime_plan_ready = [bool]$ResidentRuntimeApiExecutionProof.resident_runtime_plan_ready
+    resident_host_process_started = [bool]$ResidentRuntimeApiExecutionProof.resident_host_process_started
+    resident_supervised_runtime_started = [bool]$ResidentRuntimeApiExecutionProof.resident_supervised_runtime_started
+    resident_supervision_stop_observed = [bool]$ResidentRuntimeApiExecutionProof.resident_supervision_stop_observed
+    tray_presence = [bool]$ResidentRuntimeApiExecutionProof.tray_presence
+    global_hotkey = [bool]$ResidentRuntimeApiExecutionProof.global_hotkey
+    overlay_window = [bool]$ResidentRuntimeApiExecutionProof.overlay_window
+    summon_anywhere = [bool]$ResidentRuntimeApiExecutionProof.summon_anywhere
+    service_managed = [bool]$ResidentRuntimeApiExecutionProof.service_managed
+    resident_claim_allowed = [bool]$ResidentRuntimeApiExecutionProof.resident_claim_allowed
+    read_only_contract = [bool]$ResidentRuntimeApiExecutionProofRecommendedHandoff.read_only_contract
+    diagnostic_only = [bool]$ResidentRuntimeApiExecutionProofRecommendedHandoff.diagnostic_only
+    would_execute = [bool]$ResidentRuntimeApiExecutionProofRecommendedHandoff.would_execute
+    would_mutate = [bool]$ResidentRuntimeApiExecutionProofRecommendedHandoff.would_mutate
+    would_register_tray = $false
+    would_register_hotkey = $false
+    would_open_overlay = $false
+    would_write_memory = $false
+    would_claim_resident = $false
+    blockers = [string[]]@($ResidentRuntimeApiExecutionProofBlockers)
   }
   $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
   $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
@@ -3059,6 +3229,10 @@ $Payload = [ordered]@{
     'The completion audit has consumed the final resident-runtime and persistent-supervision authority-family proofs, and the first resident-host runtime boundary is now read back as consumed. Stage 6 still cannot close because summon-anywhere is blocked by process supervision plus grouped tray, overlay, global hotkey, summon binding, and authority behavior.'
   } elseif ($NextSmallestTruthfulGap -eq 'persistent_supervision_execution_boundary') {
     'The completion audit consumed an explicit launch-on-hotkey summon execution readback: summon-anywhere is observed through the governed API proof, but Stage 6 still cannot close because the persistent-supervision enablement receipt must be reviewed before resident-claim and persistent runtime closure can be trusted. The launch readback is opt-in, bounded, and does not grant memory, capture, service-control, product execution, approval-decision, or resident-claim authority.'
+  } elseif ($NextSmallestTruthfulGap -eq 'resident_runtime_api_execution_readback') {
+    'The completion audit consumed the launch-on-hotkey summon readback and now requires the governed resident-runtime API execution proof before advancing past the resident-surface supervision boundary.'
+  } elseif ($NextSmallestTruthfulGap -eq 'summon_tray_presence_blocker_boundary') {
+    'The completion audit consumed the opt-in resident-runtime API execution proof: a bounded supervised resident host lease started and stopped through the governed API path, while tray presence, global hotkey, overlay, summon-anywhere, service management, memory writes, and resident claim remain false. The next truthful blocker is governed tray presence.'
   } elseif ($NextSmallestTruthfulGap -eq 'summon_anywhere_family_chain_proof_readback') {
     'The audit must consume the summon-anywhere family-chain proof before treating the grouped resident-host, tray, overlay, hotkey, summon-binding, and authority blockers as one audited handoff.'
   } elseif ($NextSmallestTruthfulGap -eq 'summon_api_launch_on_hotkey_readback') {
@@ -3216,6 +3390,69 @@ $Payload = [ordered]@{
       memory_write = [bool]$SummonApiLaunchOnHotkeyProofGovernance.memory_write
       resident_claim_authority = [bool]$SummonApiLaunchOnHotkeyProofGovernance.resident_claim_authority
       mutation_authority_granted = [bool]$SummonApiLaunchOnHotkeyProofGovernance.mutation_authority_granted
+    }
+  }
+  resident_runtime_api_execution_proof = [ordered]@{
+    status = if ($AllowLaunchOnHotkey) {
+      if ($ResidentRuntimeApiExecutionProofObserved) { [string]$ResidentRuntimeApiExecutionProof.status } else { 'missing_or_failed' }
+    } else {
+      'not_requested'
+    }
+    ok = $ResidentRuntimeApiExecutionProofObserved
+    exit_code = [int]$ResidentRuntimeApiExecutionProofResult.exit_code
+    timeout_seconds = [int]$ResidentRuntimeApiExecutionProofResult.timeout_seconds
+    timed_out = [bool]$ResidentRuntimeApiExecutionProofResult.timed_out
+    kind = [string]$ResidentRuntimeApiExecutionProof.kind
+    next_smallest_truthful_gap = [string]$ResidentRuntimeApiExecutionProof.next_smallest_truthful_gap
+    recommended_handoff_source = [string]$ResidentRuntimeApiExecutionProof.recommended_handoff_source
+    recommended_next_slice = [string]$ResidentRuntimeApiExecutionProof.recommended_next_slice
+    recommended_proof_script = [string]$ResidentRuntimeApiExecutionProof.recommended_proof_script
+    recommended_handoff = $ResidentRuntimeApiExecutionProof.recommended_handoff
+    host_supervision_approval_id = [string]$ResidentRuntimeApiExecutionProof.host_supervision_approval_id
+    resident_runtime_approval_id = [string]$ResidentRuntimeApiExecutionProof.resident_runtime_approval_id
+    host_supervision_authority_grant_receipt_id = [string]$ResidentRuntimeApiExecutionProof.host_supervision_authority_grant_receipt_id
+    resident_runtime_authority_grant_receipt_id = [string]$ResidentRuntimeApiExecutionProof.resident_runtime_authority_grant_receipt_id
+    resident_runtime_execution_authority = [bool]$ResidentRuntimeApiExecutionProof.resident_runtime_execution_authority
+    host_supervision_authority = [bool]$ResidentRuntimeApiExecutionProof.host_supervision_authority
+    resident_runtime_plan_ready = [bool]$ResidentRuntimeApiExecutionProof.resident_runtime_plan_ready
+    executed = [bool]$ResidentRuntimeApiExecutionProof.executed
+    resident_host_process_started = [bool]$ResidentRuntimeApiExecutionProof.resident_host_process_started
+    resident_supervised_runtime_started = [bool]$ResidentRuntimeApiExecutionProof.resident_supervised_runtime_started
+    resident_supervision_stop_observed = [bool]$ResidentRuntimeApiExecutionProof.resident_supervision_stop_observed
+    resident_host_process_after_stop = [bool]$ResidentRuntimeApiExecutionProof.resident_host_process_after_stop
+    resident_supervised_runtime_after_stop = [bool]$ResidentRuntimeApiExecutionProof.resident_supervised_runtime_after_stop
+    tray_presence = [bool]$ResidentRuntimeApiExecutionProof.tray_presence
+    global_hotkey = [bool]$ResidentRuntimeApiExecutionProof.global_hotkey
+    overlay_window = [bool]$ResidentRuntimeApiExecutionProof.overlay_window
+    summon_anywhere = [bool]$ResidentRuntimeApiExecutionProof.summon_anywhere
+    service_managed = [bool]$ResidentRuntimeApiExecutionProof.service_managed
+    resident_claim_allowed = [bool]$ResidentRuntimeApiExecutionProof.resident_claim_allowed
+    blockers = [string[]]@($ResidentRuntimeApiExecutionProofBlockers)
+    checks = @($ResidentRuntimeApiExecutionProof.checks)
+    governance = [ordered]@{
+      diagnostic_only = [bool]$ResidentRuntimeApiExecutionProofGovernance.diagnostic_only
+      api_route_proof = [bool]$ResidentRuntimeApiExecutionProofGovernance.api_route_proof
+      api_execution_authority = [bool]$ResidentRuntimeApiExecutionProofGovernance.api_execution_authority
+      approval_request_write = [bool]$ResidentRuntimeApiExecutionProofGovernance.approval_request_write
+      test_fixture_approval_decisions = [bool]$ResidentRuntimeApiExecutionProofGovernance.test_fixture_approval_decisions
+      product_execution_authority = [bool]$ResidentRuntimeApiExecutionProofGovernance.product_execution_authority
+      approval_decision_authority = [bool]$ResidentRuntimeApiExecutionProofGovernance.approval_decision_authority
+      execution_authority = [bool]$ResidentRuntimeApiExecutionProofGovernance.execution_authority
+      temporary_runtime_state_write = [bool]$ResidentRuntimeApiExecutionProofGovernance.temporary_runtime_state_write
+      local_process_launch_authority = [bool]$ResidentRuntimeApiExecutionProofGovernance.local_process_launch_authority
+      process_supervision_authority = [bool]$ResidentRuntimeApiExecutionProofGovernance.process_supervision_authority
+      process_restart_authority = [bool]$ResidentRuntimeApiExecutionProofGovernance.process_restart_authority
+      service_install_authority = [bool]$ResidentRuntimeApiExecutionProofGovernance.service_install_authority
+      service_control_authority = [bool]$ResidentRuntimeApiExecutionProofGovernance.service_control_authority
+      tray_registration_authority = [bool]$ResidentRuntimeApiExecutionProofGovernance.tray_registration_authority
+      hotkey_registration_authority = [bool]$ResidentRuntimeApiExecutionProofGovernance.hotkey_registration_authority
+      overlay_control_authority = [bool]$ResidentRuntimeApiExecutionProofGovernance.overlay_control_authority
+      summon_authority = [bool]$ResidentRuntimeApiExecutionProofGovernance.summon_authority
+      capture_authority = [bool]$ResidentRuntimeApiExecutionProofGovernance.capture_authority
+      new_sensing_authority = [bool]$ResidentRuntimeApiExecutionProofGovernance.new_sensing_authority
+      memory_write = [bool]$ResidentRuntimeApiExecutionProofGovernance.memory_write
+      resident_claim_authority = [bool]$ResidentRuntimeApiExecutionProofGovernance.resident_claim_authority
+      mutation_authority_granted = [bool]$ResidentRuntimeApiExecutionProofGovernance.mutation_authority_granted
     }
   }
   summary = [ordered]@{
@@ -4674,6 +4911,7 @@ $Payload = [ordered]@{
     'docs/operations/COMPLETION_LEDGER.md',
     'scripts/lens-stage6-checkpoint.ps1 -Mode Status',
     'scripts/lens-resident-surface-proof.ps1 -Mode Status',
+    'scripts/lens-resident-runtime-api-execution-proof.ps1 -Mode Status',
     'scripts/lens-command-palette.ps1 -Mode Status -StatusPath <checkpoint-lens-status>',
     'scripts/lens-resident-runtime-boundary-proof.ps1 -Mode Status',
     'scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status',
@@ -4796,6 +5034,7 @@ $Payload = [ordered]@{
     summon_authority_blocker_proof_readback = $SummonAuthorityBlockerProofObserved
     summon_anywhere_family_chain_proof_readback = $SummonAnywhereFamilyChainProofObserved
     summon_api_launch_on_hotkey_proof_readback = $SummonApiLaunchOnHotkeyProofObserved
+    resident_runtime_api_execution_proof_readback = $ResidentRuntimeApiExecutionProofObserved
     stage6_completion_audit_handoff_consumed_by_closure_readback = $Stage6CompletionAuditHandoffConsumedByClosureReadback
     process_supervision_boundary_observed = [bool]$ProcessSupervisionBoundary.process_supervision_boundary_observed
     service_activation_plan_observed = [bool]$ProcessSupervisionBoundary.service_activation_plan_observed

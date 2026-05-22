@@ -36863,6 +36863,63 @@ fallback correction:
   stage6_completion_audit_concrete_handoff_observed=true;
   child_proof_timeouts=[]`
 
+Stage 6 completion-audit resident-runtime API execution proof consumption on
+`2026-05-22`:
+
+- `scripts/lens-stage6-completion-audit.ps1` now consumes the existing governed
+  `scripts/lens-resident-runtime-api-execution-proof.ps1` readback when the
+  completion audit is explicitly run with `-AllowLaunchOnHotkey`.
+- The proof is strict and opt-in: the audit only advances past
+  `resident_surface_runtime_not_supervised` when the resident-runtime API proof
+  reports a bounded supervised resident host lease started and stopped through
+  the governed API path, while tray presence, global hotkey, overlay window,
+  summon-anywhere, service management, memory writes, and resident-claim posture
+  remain false.
+- With that proof consumed, the fresh bounded completion audit now reports
+  `next_smallest_truthful_gap=summon_tray_presence_blocker_boundary`,
+  `recommended_handoff_source=api_resident_runtime_execution_tray_presence_handoff`,
+  and
+  `recommended_next_slice=prove_governed_tray_presence_api_execution_after_resident_supervision`.
+- This does not close Stage 6, start Stage 7, grant resident-claim authority,
+  write memory, register tray or hotkeys, open overlays, install/control
+  services, or turn the default audit into a mutating runtime proof. The default
+  non-`AllowLaunchOnHotkey` audit remains read-only.
+
+Latest validation for Stage 6 completion-audit resident-runtime API execution
+proof consumption:
+
+- PowerShell parser check for `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed; parse_ok`
+- `python -m pytest
+  tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_readback
+  -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_resident_runtime_api_execution_proof_script.py
+  -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed; 39 passed, 1 skipped`
+- `.venv\Scripts\ruff.exe check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; All checks passed`
+- `.venv\Scripts\ruff.exe format --check
+  tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 1 file already formatted`
+- `git diff --check`
+  Result: `passed; only expected PowerShell LF-to-CRLF working-copy warning`
+- `scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2
+  -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3
+  -ChildProofTimeoutSeconds 120 -AllowLaunchOnHotkey`
+  Result: `passed as blocked audit; ok=true; status=blocked;
+  audit_status=complete; ready_to_close=false; transition_allowed=false;
+  next_smallest_truthful_gap=summon_tray_presence_blocker_boundary;
+  recommended_handoff_source=api_resident_runtime_execution_tray_presence_handoff;
+  recommended_next_slice=prove_governed_tray_presence_api_execution_after_resident_supervision;
+  recommended_proof_script=scripts/lens-tray-presence-api-execution-proof.ps1 -Mode Status;
+  authority_required=tray_registration_authority; authority_granted=false;
+  resident_runtime_api_execution_proof_readback=true;
+  child_proof_timeouts=[]`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
