@@ -11947,6 +11947,33 @@ def test_lens_host_supervision_authority_grant_requires_approved_request_before_
     assert readiness_body["grant_receipt_count"] == 1
     assert readiness_body["active_grant_receipt_id"] == receipt["receipt_id"]
 
+    readiness_without_approval_id = client.get("/lens/host/supervision/authority/readiness?limit=10")
+    assert readiness_without_approval_id.status_code == 200
+    readiness_without_approval_id_body = readiness_without_approval_id.json()
+    assert readiness_without_approval_id_body["approval_id"] == ""
+    assert readiness_without_approval_id_body["active_grant_receipt_id"] == receipt["receipt_id"]
+    assert readiness_without_approval_id_body["authority_ready"] is True
+    unfiltered_requirements = {item["id"]: item for item in readiness_without_approval_id_body["requirements"]}
+    assert unfiltered_requirements["exact_supervision_authority_approval"]["ready"] is True
+    assert unfiltered_requirements["actor_scope"]["ready"] is True
+    assert unfiltered_requirements["host_supervision_authority_grant_receipts"]["ready"] is True
+    assert unfiltered_requirements["process_supervision_authority"]["ready"] is True
+    assert unfiltered_requirements["process_restart_authority"]["ready"] is True
+    assert unfiltered_requirements["service_install_authority"]["ready"] is True
+    assert unfiltered_requirements["service_control_authority"]["ready"] is True
+    assert unfiltered_requirements["resident_claim_authority"]["ready"] is True
+    assert "exact_supervision_authority_approval" not in readiness_without_approval_id_body["blocked_requirements"]
+    assert "actor_scope" not in readiness_without_approval_id_body["blocked_requirements"]
+    assert "process_supervision_authority" not in readiness_without_approval_id_body["blocked_requirements"]
+    assert "process_supervision_authority_not_granted" not in readiness_without_approval_id_body["blockers"]
+    assert "process_restart_authority_not_granted" not in readiness_without_approval_id_body["blockers"]
+    assert "service_install_authority_not_granted" not in readiness_without_approval_id_body["blockers"]
+    assert "service_control_authority_not_granted" not in readiness_without_approval_id_body["blockers"]
+    assert "receipt_write_authority_not_granted" not in readiness_without_approval_id_body["blockers"]
+    assert "resident_claim_authority_not_granted" not in readiness_without_approval_id_body["blockers"]
+    assert "approval_id_required" not in readiness_without_approval_id_body["blockers"]
+    assert "system_write_scope_not_ready" not in readiness_without_approval_id_body["blockers"]
+
     persistent_plan = client.get("/lens/host/persistent-supervision")
     assert persistent_plan.status_code == 200
     persistent_body = persistent_plan.json()

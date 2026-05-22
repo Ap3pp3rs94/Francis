@@ -36748,6 +36748,12 @@ Stage 6 resident-runtime authority grant receipt consumption on `2026-05-22`:
   the caller does not pass an `approval_id`, exposes `active_grant_receipt_id`,
   and no longer reports the exact approval/request requirement as blocked once
   an active grant receipt exists.
+- `lens_host_supervision_authority_readiness_audit` received the same
+  active-grant readback hardening for the next host/process supervision grant:
+  an active grant receipt now satisfies the exact approval and actor-scope
+  readbacks without requiring a repeated `approval_id` query. This was validated
+  in isolated API tests only; no live host-supervision grant was created from
+  the old proof/test approvals in default data.
 - A fresh readiness readback after the grant reports
   `active_grant_receipt_id=lrag_1779427735_7ca2e3b153f3`,
   `resident_runtime_execution_authority=true`,
@@ -36771,6 +36777,9 @@ consumption:
 - `.venv\Scripts\python.exe -m pytest tests\test_api_lens.py -k
   "host_activation_readback_tracks_decision_without_execution"`
   Result: `passed; 1 passed, 50 deselected`
+- `.venv\Scripts\python.exe -m pytest tests\test_api_lens.py -k
+  "host_supervision_authority_grant_requires_approved_request_before_grant_receipt or host_activation_readback_tracks_decision_without_execution"`
+  Result: `passed; 2 passed, 49 deselected`
 - `.venv\Scripts\python.exe -m pytest
   tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_preserves_resident_runtime_authority_child_readback
   tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_projects_recommended_authority_grant_state`

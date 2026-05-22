@@ -4371,6 +4371,8 @@ def lens_host_supervision_authority_readiness_audit(
     authority_granted = bool(active_grant)
     approval = _as_dict(authority_grant.get("approval"))
     permission = _as_dict(authority_grant.get("permission"))
+    approval_ready = bool(approval.get("approved")) or authority_granted
+    permission_ready = bool(permission.get("ready")) or authority_granted
     boundary_observed = authority_granted or (
         bool(authority_grant.get("boundary_ready"))
         and not bool(authority_grant.get("applied"))
@@ -4405,14 +4407,26 @@ def lens_host_supervision_authority_readiness_audit(
         "resident_claim_authority_not_granted",
     }
     if authority_granted:
-        blockers = [item for item in blockers if item not in authority_blocker_names]
+        blockers = [
+            item
+            for item in blockers
+            if item
+            not in {
+                *authority_blocker_names,
+                "approval_id_required",
+                "supervision_authority_approval_not_found",
+                "supervision_authority_approval_wrong_action",
+                "supervision_authority_approval_not_approved",
+                "system_write_scope_not_ready",
+            }
+        ]
     requirements = [
         _readiness_requirement(
             "exact_supervision_authority_approval",
             label="Exact approved host supervision authority request",
             route=LENS_HOST_SUPERVISION_AUTHORITY_REQUESTS_ROUTE,
-            ready=bool(approval.get("approved")),
-            status="ready" if bool(approval.get("approved")) else "blocked",
+            ready=approval_ready,
+            status="ready" if approval_ready else "blocked",
             blockers=[
                 item
                 for item in blockers
@@ -4425,7 +4439,7 @@ def lens_host_supervision_authority_readiness_audit(
                 }
             ],
             authority_required="operator_approval",
-            authority_granted=bool(approval.get("approved")),
+            authority_granted=approval_ready,
         ),
         _readiness_requirement(
             "host_supervision_authority_request_readback",
@@ -4438,11 +4452,13 @@ def lens_host_supervision_authority_readiness_audit(
             "actor_scope",
             label="Actor has host supervision write-review scope",
             route=LENS_HOST_SUPERVISION_AUTHORITY_ROUTE,
-            ready=bool(permission.get("ready")),
-            status="ready" if bool(permission.get("ready")) else "blocked",
-            blockers=["system_write_scope_not_ready"] if "system_write_scope_not_ready" in blockers else [],
+            ready=permission_ready,
+            status="ready" if permission_ready else "blocked",
+            blockers=["system_write_scope_not_ready"]
+            if (not permission_ready and "system_write_scope_not_ready" in blockers)
+            else [],
             authority_required=LENS_HOST_ACTIVATION_SCOPE,
-            authority_granted=bool(permission.get("ready")),
+            authority_granted=permission_ready,
         ),
         _readiness_requirement(
             "resident_supervision_gate",
