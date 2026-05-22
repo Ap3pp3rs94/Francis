@@ -37062,6 +37062,62 @@ consumption:
   tray_presence_api_execution_proof_readback=true;
   resident_runtime_api_execution_proof_readback=true`
 
+Stage 6 completion-audit overlay API execution proof consumption on
+`2026-05-22`:
+
+- `scripts/lens-stage6-completion-audit.ps1` now consumes the existing governed
+  `scripts/lens-overlay-api-execution-proof.ps1` readback when the completion
+  audit is explicitly run with `-AllowLaunchOnHotkey`.
+- The proof is strict and opt-in: the audit only advances past
+  `summon_overlay_window_blocker_boundary` when the overlay API proof reports a
+  bounded supervised resident host, tray presence, global hotkey binding, and
+  overlay window started and stopped through governed API paths, while
+  summon-anywhere, service management, memory writes, and resident-claim posture
+  remain false.
+- With that proof consumed, the fresh bounded completion audit now reports
+  `next_smallest_truthful_gap=summon_binding_blocker_boundary`,
+  `recommended_handoff_source=api_overlay_execution_summon_binding_handoff`,
+  and
+  `recommended_next_slice=prove_governed_summon_api_execution_after_overlay_window`.
+- This does not close Stage 6, start Stage 7, grant OS-wide summon-anywhere,
+  service, memory, capture, approval-decision, or resident-claim authority, or
+  turn the default audit into a mutating runtime proof. The default non-
+  `AllowLaunchOnHotkey` audit remains read-only.
+
+Latest validation for Stage 6 completion-audit overlay API execution proof
+consumption:
+
+- PowerShell parser check for `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed; parse_ok`
+- `python -m pytest
+  tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_readback
+  -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_overlay_api_execution_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed; 39 passed, 1 skipped`
+- `.venv\Scripts\ruff.exe check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; All checks passed`
+- `.venv\Scripts\ruff.exe format --check
+  tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 1 file already formatted`
+- `scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2
+  -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3
+  -ChildProofTimeoutSeconds 120 -AllowLaunchOnHotkey`
+  Result: `passed as blocked audit; ok=true; status=blocked;
+  audit_status=complete; ready_to_close=false; transition_allowed=false;
+  next_smallest_truthful_gap=summon_binding_blocker_boundary;
+  recommended_handoff_source=api_overlay_execution_summon_binding_handoff;
+  recommended_next_slice=prove_governed_summon_api_execution_after_overlay_window;
+  recommended_proof_script=scripts/lens-summon-api-execution-proof.ps1 -Mode Status;
+  authority_granted=false; overlay_api_execution_proof_readback=true;
+  os_binding_api_execution_proof_readback=true;
+  tray_presence_api_execution_proof_readback=true;
+  resident_runtime_api_execution_proof_readback=true;
+  summon_api_launch_on_hotkey_proof_readback=true; child_proof_timeouts=null`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
