@@ -36731,6 +36731,72 @@ consumption:
   next_smallest_truthful_gap=resident_surface_runtime_not_supervised;
   recommended_next_slice=create_or_select_exact_approved_resident_runtime_execution_authority_request`
 
+Stage 6 resident-runtime authority grant receipt consumption on `2026-05-22`:
+
+- The already-approved resident-runtime execution authority request
+  `a4b0f2b0-b32c-4f32-9b95-d4576be2f463` was converted into active grant
+  receipt `lrag_1779427735_7ca2e3b153f3` through the governed bring-up path:
+  `scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode GrantNext -Actor
+  codex.stage6 -ApprovalId a4b0f2b0-b32c-4f32-9b95-d4576be2f463
+  -ConfirmGrant`.
+- The grant receipt grants resident-runtime execution authority for the next
+  activation-boundary review only. It does not launch, supervise, restart,
+  install or control services, register tray or hotkeys, open overlay windows,
+  write memory, decide approvals, or claim a resident runtime.
+- `lens_resident_runtime_authority_grant_readiness_audit` now consumes an
+  already-active resident-runtime execution authority grant receipt even when
+  the caller does not pass an `approval_id`, exposes `active_grant_receipt_id`,
+  and no longer reports the exact approval/request requirement as blocked once
+  an active grant receipt exists.
+- A fresh readiness readback after the grant reports
+  `active_grant_receipt_id=lrag_1779427735_7ca2e3b153f3`,
+  `resident_runtime_execution_authority=true`,
+  `first_blocked_requirement=resident_supervision_gate`, and
+  `next_smallest_truthful_gap=resolve_resident_host_supervision_gate_blockers_before_runtime_authority_use`.
+- Stage 6 is still blocked. The current completion audit does not close Stage 6
+  or allow Stage 7 transition; it now points at
+  `resident_surface_runtime_not_supervised` /
+  `resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim`
+  instead of re-requesting resident-runtime authority selection.
+
+Latest validation for Stage 6 resident-runtime authority grant receipt
+consumption:
+
+- `.venv\Scripts\ruff.exe format --check src\francis\lens\activation.py
+  tests\test_api_lens.py`
+  Result: `passed; 2 files already formatted`
+- `.venv\Scripts\ruff.exe check src\francis\lens\activation.py
+  tests\test_api_lens.py`
+  Result: `passed; All checks passed`
+- `.venv\Scripts\python.exe -m pytest tests\test_api_lens.py -k
+  "host_activation_readback_tracks_decision_without_execution"`
+  Result: `passed; 1 passed, 50 deselected`
+- `.venv\Scripts\python.exe -m pytest
+  tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_preserves_resident_runtime_authority_child_readback
+  tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_projects_recommended_authority_grant_state`
+  Result: `passed; 2 passed`
+- `scripts\lens-summon-anywhere-family-chain-proof.ps1 -Mode Status
+  -ChildProofTimeoutSeconds 240`
+  Result: `passed; status=proof_passed; ok=true;
+  next_smallest_truthful_gap=stage6_lens_completion_audit;
+  all_summon_blocker_families_consumed=true; handoff_aligned=true;
+  side_effects_denied=true`
+- `scripts\lens-stage6-checkpoint.ps1 -Mode Status`
+  Result: `passed as blocked checkpoint; ok=true; status=blocked;
+  ready_to_close=false;
+  next_smallest_truthful_gap=supervised_resident_host_runtime_authority_boundary`
+- `scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status`
+  Result: `passed as read-only plan; status=persistent_supervision_enablement_applied;
+  ready_to_close=false; current_truthful_gap=persistent_supervision_execution_boundary;
+  next_operator_action_requirement=persistent_supervision_enablement_receipt`
+- `scripts\lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey
+  -ChildProofTimeoutSeconds 120`
+  Result: `passed as blocked audit; ok=true; status=blocked;
+  audit_status=complete; ready_to_close=false; transition_allowed=false;
+  next_smallest_truthful_gap=resident_surface_runtime_not_supervised;
+  recommended_next_slice=resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim;
+  recommended_proof_script=scripts/lens-resident-surface-proof.ps1 -Mode Status`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

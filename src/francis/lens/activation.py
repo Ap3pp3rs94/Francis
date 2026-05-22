@@ -4017,6 +4017,9 @@ def lens_resident_runtime_authority_grant_readiness_audit(
     approval = _as_dict(runtime_authority_grant.get("approval"))
     permission = _as_dict(runtime_authority_grant.get("permission"))
     posture = _as_dict(runtime_authority_grant.get("operator_posture"))
+    active_grant_receipt_id = _safe_str(active_grant.get("receipt_id")).strip()
+    approval_ready = bool(approval.get("approved")) or authority_granted
+    permission_ready = bool(permission.get("ready")) or authority_granted
     grant_boundary_observed = authority_granted or (
         bool(runtime_authority_grant.get("boundary_ready")) and not bool(runtime_authority_grant.get("executed"))
     )
@@ -4046,13 +4049,29 @@ def lens_resident_runtime_authority_grant_readiness_audit(
             *_str_list(overlay_gate.get("blockers")),
         ]
     )
+    if authority_granted:
+        blockers = _dedupe_strs(
+            [
+                item
+                for item in blockers
+                if item
+                not in {
+                    "approval_id_required",
+                    "resident_runtime_execution_authority_approval_not_found",
+                    "resident_runtime_execution_authority_approval_wrong_action",
+                    "resident_runtime_execution_authority_approval_not_approved",
+                    "resident_runtime_execution_authority_not_granted",
+                    "system_write_scope_not_ready",
+                }
+            ]
+        )
     requirements = [
         _readiness_requirement(
             "exact_resident_runtime_execution_authority_approval",
             label="Exact approved resident runtime execution authority request",
             route=LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_REQUESTS_ROUTE,
-            ready=bool(approval.get("approved")),
-            status="ready" if bool(approval.get("approved")) else "blocked",
+            ready=approval_ready,
+            status="ready" if approval_ready else "blocked",
             blockers=[
                 item
                 for item in blockers
@@ -4065,17 +4084,19 @@ def lens_resident_runtime_authority_grant_readiness_audit(
                 }
             ],
             authority_required="operator_approval",
-            authority_granted=bool(approval.get("approved")),
+            authority_granted=approval_ready,
         ),
         _readiness_requirement(
             "actor_scope",
             label="Actor has resident runtime write-review scope",
             route=LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_ROUTE,
-            ready=bool(permission.get("ready")),
-            status="ready" if bool(permission.get("ready")) else "blocked",
-            blockers=["system_write_scope_not_ready"] if "system_write_scope_not_ready" in blockers else [],
+            ready=permission_ready,
+            status="ready" if permission_ready else "blocked",
+            blockers=["system_write_scope_not_ready"]
+            if (not permission_ready and "system_write_scope_not_ready" in blockers)
+            else [],
             authority_required=LENS_HOST_ACTIVATION_SCOPE,
-            authority_granted=bool(permission.get("ready")),
+            authority_granted=permission_ready,
         ),
         _readiness_requirement(
             "operator_posture",
@@ -4255,6 +4276,7 @@ def lens_resident_runtime_authority_grant_readiness_audit(
         "denial_receipt_readback_ready": denial_receipt_readback_ready,
         "grant_receipt_readback_ready": grant_receipt_readback_ready,
         "receipt_count": int(grant_receipts.get("total") or 0),
+        "active_grant_receipt_id": active_grant_receipt_id,
         "latest_receipt_id": _safe_str(_as_dict(grant_receipts.get("latest")).get("receipt_id")).strip(),
         "denial_receipt_count": int(denial_receipts.get("total") or 0),
         "latest_denial_receipt_id": _safe_str(_as_dict(denial_receipts.get("latest")).get("receipt_id")).strip(),

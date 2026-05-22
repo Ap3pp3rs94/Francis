@@ -12528,6 +12528,47 @@ def test_lens_host_activation_readback_tracks_decision_without_execution(monkeyp
     assert authority_grant_readiness_body["governance"]["resident_claim_authority"] is False
     assert authority_grant_readiness_body["governance"]["memory_write"] is False
 
+    authority_grant_readiness_without_approval_id = client.get(
+        "/lens/resident-runtime/authority-grant/readiness?limit=10"
+    )
+    assert authority_grant_readiness_without_approval_id.status_code == 200
+    authority_grant_readiness_without_approval_id_body = authority_grant_readiness_without_approval_id.json()
+    assert authority_grant_readiness_without_approval_id_body["approval_id"] == ""
+    assert (
+        authority_grant_readiness_without_approval_id_body["active_grant_receipt_id"]
+        == authority_grant_receipt["receipt_id"]
+    )
+    assert authority_grant_readiness_without_approval_id_body["authority_granted"] is True
+    assert authority_grant_readiness_without_approval_id_body["resident_runtime_execution_authority"] is True
+    assert (
+        authority_grant_readiness_without_approval_id_body["first_blocked_requirement"] == "resident_supervision_gate"
+    )
+    assert (
+        authority_grant_readiness_without_approval_id_body["next_smallest_truthful_gap"]
+        == "resolve_resident_host_supervision_gate_blockers_before_runtime_authority_use"
+    )
+    unfiltered_requirements = {
+        item["id"]: item for item in authority_grant_readiness_without_approval_id_body["requirements"]
+    }
+    assert unfiltered_requirements["exact_resident_runtime_execution_authority_approval"]["ready"] is True
+    assert unfiltered_requirements["actor_scope"]["ready"] is True
+    assert unfiltered_requirements["resident_runtime_execution_authority"]["ready"] is True
+    assert (
+        "exact_resident_runtime_execution_authority_approval"
+        not in authority_grant_readiness_without_approval_id_body["blocked_requirements"]
+    )
+    assert "actor_scope" not in authority_grant_readiness_without_approval_id_body["blocked_requirements"]
+    assert (
+        "resident_runtime_execution_authority"
+        not in authority_grant_readiness_without_approval_id_body["blocked_requirements"]
+    )
+    assert "approval_id_required" not in authority_grant_readiness_without_approval_id_body["blockers"]
+    assert "system_write_scope_not_ready" not in authority_grant_readiness_without_approval_id_body["blockers"]
+    assert (
+        "resident_runtime_execution_authority_not_granted"
+        not in authority_grant_readiness_without_approval_id_body["blockers"]
+    )
+
     resident_runtime_plan = client.get(f"/lens/resident-runtime/plan?approval_id={approval_id}&actor=test.system.write")
     assert resident_runtime_plan.status_code == 200
     resident_runtime_plan_body = resident_runtime_plan.json()
