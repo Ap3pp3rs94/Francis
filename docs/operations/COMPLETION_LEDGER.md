@@ -37627,6 +37627,69 @@ Latest validation for Stage 6 opt-in completion-audit boundary ordering:
 - `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q`
   Result: `passed`
 
+### 2026-05-22 - Stage 6 resident-claim boundary proof consumption ordering
+
+Roadmap area: Stage 6 / Lens MVP, governed resident-runtime and
+persistent-supervision audit handoff truthfulness.
+
+Material change:
+
+- The Stage 6 completion audit now distinguishes an unconsumed
+  persistent-supervision API execution resident-claim boundary from an already
+  consumed resident-claim boundary proof.
+- When the opt-in API execution proof reaches resident-claim boundary and the
+  resident-claim boundary proof has already passed with a prerequisite-missing
+  runtime-progress handoff, the audit advances to
+  `persistent_supervision_required_prerequisites_missing` instead of repeating
+  `persistent_supervision_resident_claim_authority_boundary`.
+- The unconsumed path still recommends the resident-claim boundary proof. This
+  preserves the no-fake-residency posture: no resident claim, no memory write,
+  no service start, and no process supervision occur in this slice.
+- Stage 6 still does not close. The latest live opt-in completion-audit wrapper
+  run stopped earlier at `summon_api_launch_on_hotkey_readback`, so this entry
+  is branch-order and proof-chain validation, not a claim that the full live
+  opt-in chain now reaches the consumed resident-claim branch every run.
+
+Latest validation for resident-claim boundary proof consumption ordering:
+
+- PowerShell AST parse of `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed; 39 tests passed, 1 skipped`
+- `ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `ruff format --check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; already formatted`
+- `git diff --check`
+  Result: `passed; Git reported expected LF-to-CRLF warning for
+  scripts\lens-stage6-completion-audit.ps1`
+- `scripts\lens-persistent-supervision-resident-claim-boundary-proof.ps1
+  -Mode Status`
+  Result: `passed; status=proof_passed;
+  persistent_supervision_resident_claim_boundary_observed=true;
+  runtime_progress_handoff_observed=true;
+  next_smallest_truthful_gap=stage6_lens_completion_audit;
+  runtime_progress_handoff.current_truthful_gap=persistent_supervision_required_prerequisites_missing;
+  resident_claim_authority=false; resident_claim_allowed=false;
+  would_write_memory=false; would_claim_resident=false;
+  would_start_service=false; would_supervise_process=false`
+- `scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status`
+  Result: `passed; status=persistent_supervision_enablement_applied;
+  current_truthful_gap=persistent_supervision_execution_boundary;
+  next_operator_action_requirement=persistent_supervision_enablement_receipt;
+  recommended_next_slice=run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt;
+  authority_required=none_readback_only; authority_granted=false;
+  would_execute=false; would_mutate=false`
+- `scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2
+  -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3
+  -ChildProofTimeoutSeconds 240 -AllowLaunchOnHotkey`
+  Result: `passed as blocked audit; status=blocked; audit_status=complete;
+  next_smallest_truthful_gap=summon_api_launch_on_hotkey_readback;
+  child_proof_timeouts=[]; summon_api_launch_on_hotkey exit_code=1;
+  summon_readiness_status_after_execute=blocked;
+  resident-claim branch not exercised in this run`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -3176,7 +3176,17 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
 } elseif (
   -not $ReadyToClose -and
   $AllowLaunchOnHotkey -and
-  $PersistentSupervisionApiExecutionResidentClaimBoundaryObserved
+  $PersistentSupervisionApiExecutionResidentClaimBoundaryObserved -and
+  $PersistentSupervisionResidentClaimBoundaryObserved -and
+  $PersistentSupervisionResidentClaimBoundaryBlockers -contains 'persistent_supervision_required_prerequisites_missing' -and
+  [string]$PersistentSupervisionResidentClaimBoundaryProof.runtime_progress_handoff.current_truthful_gap -eq 'persistent_supervision_required_prerequisites_missing'
+) {
+  'persistent_supervision_required_prerequisites_missing'
+} elseif (
+  -not $ReadyToClose -and
+  $AllowLaunchOnHotkey -and
+  $PersistentSupervisionApiExecutionResidentClaimBoundaryObserved -and
+  -not $PersistentSupervisionResidentClaimBoundaryObserved
 ) {
   'persistent_supervision_resident_claim_authority_boundary'
 } elseif (
