@@ -21,6 +21,8 @@ param(
   [ValidateRange(30, 600)]
   [int]$ChildProofTimeoutSeconds = 360,
 
+  [string]$CachedResidentSurfaceProofPath = '',
+
   [string]$CachedHostSupervisionProofPath = ''
 )
 
@@ -481,6 +483,7 @@ function Get-CriterionById {
 
 $PowerShellPath = Get-PowerShellPath
 $PythonPath = Get-PythonPath
+$ResidentSurfaceProofPath = Join-Path $PSScriptRoot 'lens-resident-surface-proof.ps1'
 $HostSupervisionProofPath = Join-Path $PSScriptRoot 'lens-host-supervision-proof.ps1'
 $ActivationBoundaryDataRoot = [System.IO.Path]::GetFullPath(
   (Join-Path ([System.IO.Path]::GetTempPath()) ("francis-lens-process-supervision-activation-boundary\" + [guid]::NewGuid().ToString('N') + "\data"))
@@ -488,6 +491,16 @@ $ActivationBoundaryDataRoot = [System.IO.Path]::GetFullPath(
 $EffectiveResidentSurfaceForegroundRunSeconds = 0
 
 $ActivationBoundaryResult = Invoke-ActivationBoundary -PythonPath $PythonPath -ProofDataRoot $ActivationBoundaryDataRoot
+$CachedResidentSurfaceResult = Read-CachedJsonScriptResult -Path $CachedResidentSurfaceProofPath
+if ($null -ne $CachedResidentSurfaceResult) {
+  $ResidentSurfaceResult = $CachedResidentSurfaceResult
+} else {
+  $ResidentSurfaceResult = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ResidentSurfaceProofPath -ScriptArgs @(
+    '-Mode', 'Status',
+    '-ForegroundRunSeconds', [string]$ResidentSurfaceForegroundRunSeconds
+  ) -ExpectedKind 'lens.resident_surface.readiness_proof'
+  $EffectiveResidentSurfaceForegroundRunSeconds = $ResidentSurfaceForegroundRunSeconds
+}
 $CachedHostSupervisionResult = Read-CachedJsonScriptResult -Path $CachedHostSupervisionProofPath
 if ($null -ne $CachedHostSupervisionResult) {
   $HostSupervisionResult = $CachedHostSupervisionResult
@@ -500,14 +513,20 @@ if ($null -ne $CachedHostSupervisionResult) {
 }
 $ChildProofRuns = @(
   (New-ChildProofRunSummary -Name 'resident_surface_activation_boundary' -Result $ActivationBoundaryResult),
+  (New-ChildProofRunSummary -Name 'resident_surface_foreground_runtime' -Result $ResidentSurfaceResult),
   (New-ChildProofRunSummary -Name 'host_supervision' -Result $HostSupervisionResult)
 )
 $ChildProofTimeouts = @($ChildProofRuns | Where-Object { [bool]$_['timed_out'] } | ForEach-Object { [string]$_['name'] })
 
 $ActivationBoundaryPayload = Get-PropertyValue -Payload $ActivationBoundaryResult -Name 'payload'
+$ResidentSurfacePayload = Get-PropertyValue -Payload $ResidentSurfaceResult -Name 'payload'
 $HostSupervisionPayload = Get-PropertyValue -Payload $HostSupervisionResult -Name 'payload'
 $ActivationBoundaryGovernance = Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'governance'
 $ActivationBoundaryExecution = Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'execution'
+$ResidentSurfaceRecommendedHandoff = Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'recommended_handoff'
+$ResidentSurfaceProof = Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'proof'
+$ResidentSurfaceBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'blockers' -Default @())
+$ResidentSurfaceForegroundRuntimeBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $ResidentSurfaceProof -Name 'resident_surface_foreground_runtime_blockers' -Default @())
 $HostSupervisionGovernance = Get-PropertyValue -Payload $HostSupervisionPayload -Name 'governance'
 $HostSupervisionProof = Get-PropertyValue -Payload $HostSupervisionPayload -Name 'proof'
 $ServicePlanBlockedBy = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostSupervisionProof -Name 'service_plan_blocked_by' -Default @())
@@ -528,6 +547,49 @@ $ActivationBoundaryObserved = (
   -not [bool](Get-PropertyValue -Payload $ActivationBoundaryExecution -Name 'would_open_overlay' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ActivationBoundaryExecution -Name 'would_write_memory' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ActivationBoundaryExecution -Name 'would_decide_approval' -Default $true)
+)
+$ResidentSurfaceForegroundRuntimeProofObserved = (
+  [int](Get-PropertyValue -Payload $ResidentSurfaceResult -Name 'exit_code' -Default -1) -eq 0 -and
+  [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'kind' -Default '') -eq 'lens.resident_surface.readiness_proof' -and
+  [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'status' -Default '') -eq 'proof_passed' -and
+  [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'resident_surface_content_readback' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'resident_surface_foreground_runtime_readback' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'resident_surface_foreground_runtime_observed' -Default $false) -and
+  [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'resident_surface_runtime_status' -Default '') -eq 'foreground_runtime_observed' -and
+  [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'foreground_host_process_observed' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'foreground_host_runtime_completed' -Default $false) -and
+  $ResidentSurfaceForegroundRuntimeBlockers -contains 'resident_surface_runtime_not_supervised' -and
+  $ResidentSurfaceForegroundRuntimeBlockers -contains 'resident_surface_not_resident' -and
+  -not ($ResidentSurfaceForegroundRuntimeBlockers -contains 'resident_surface_runtime_missing') -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'resident_surface_ready' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'resident_claim_allowed' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'resident_host_process' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'execution_authority' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'approval_decision_authority' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'memory_write' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'process_supervision_authority' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'service_control_authority' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'resident_claim_authority' -Default $false)
+)
+$ResidentSurfaceRuntimeSupervisionHandoffObserved = (
+  $ResidentSurfaceForegroundRuntimeProofObserved -and
+  [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'recommended_handoff_source' -Default '') -eq 'resident_surface_runtime_supervision_handoff' -and
+  [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'recommended_next_slice' -Default '') -eq 'resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim' -and
+  [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'recommended_proof_script' -Default '') -eq 'scripts/lens-resident-surface-proof.ps1 -Mode Status' -and
+  [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'authority_required' -Default '') -eq 'process_supervision_authority' -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'authority_granted' -Default $true) -and
+  [string](Get-PropertyValue -Payload $ResidentSurfaceRecommendedHandoff -Name 'id' -Default '') -eq 'resident_surface_runtime_supervision' -and
+  [string](Get-PropertyValue -Payload $ResidentSurfaceRecommendedHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'resident_surface_runtime_not_supervised' -and
+  [string](Get-PropertyValue -Payload $ResidentSurfaceRecommendedHandoff -Name 'readiness_route' -Default '') -eq '/lens/resident-runtime/authority-grant/readiness' -and
+  [string](Get-PropertyValue -Payload $ResidentSurfaceRecommendedHandoff -Name 'authority_required' -Default '') -eq 'process_supervision_authority' -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfaceRecommendedHandoff -Name 'authority_granted' -Default $true) -and
+  [bool](Get-PropertyValue -Payload $ResidentSurfaceRecommendedHandoff -Name 'read_only_contract' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $ResidentSurfaceRecommendedHandoff -Name 'diagnostic_only' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfaceRecommendedHandoff -Name 'would_execute' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfaceRecommendedHandoff -Name 'would_mutate' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfaceRecommendedHandoff -Name 'would_supervise_process' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfaceRecommendedHandoff -Name 'would_restart_process' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfaceRecommendedHandoff -Name 'would_claim_resident' -Default $true)
 )
 $HostSupervisionObserved = (
   [int](Get-PropertyValue -Payload $HostSupervisionResult -Name 'exit_code' -Default -1) -eq 0 -and
@@ -557,6 +619,7 @@ $ServiceActivationPlanBlocked = (
 )
 $AuthorityBoundary = (
   $ActivationBoundaryObserved -and
+  $ResidentSurfaceRuntimeSupervisionHandoffObserved -and
   $HostSupervisionObserved -and
   [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'boundary_only' -Default $false) -and
   [bool](Get-PropertyValue -Payload $ActivationBoundaryGovernance -Name 'read_only_contract' -Default $false) -and
@@ -576,6 +639,8 @@ $AuthorityBoundary = (
 
 $Checks = @(
   (New-Check -Id 'resident_surface_activation_boundary' -Status $(if ($ActivationBoundaryObserved) { 'activation_boundary_observed' } else { 'failed' }) -Passed $ActivationBoundaryObserved -Evidence 'lens_resident_surface_activation_boundary' -Reason 'The resident surface activation denial boundary must be observed without rerunning the full overlay/live-operator proof package.')
+  (New-Check -Id 'resident_surface_foreground_runtime_proof' -Status $(if ($ResidentSurfaceForegroundRuntimeProofObserved) { 'foreground_runtime_observed' } else { 'failed' }) -Passed $ResidentSurfaceForegroundRuntimeProofObserved -Evidence 'scripts/lens-resident-surface-proof.ps1 -Mode Status' -Reason 'The process-supervision authority proof must consume the resident-surface foreground runtime proof before claiming this boundary is the current blocker.')
+  (New-Check -Id 'resident_surface_runtime_supervision_handoff' -Status $(if ($ResidentSurfaceRuntimeSupervisionHandoffObserved) { 'handoff_observed' } else { 'missing_or_failed' }) -Passed $ResidentSurfaceRuntimeSupervisionHandoffObserved -Evidence 'resident_surface_runtime_supervision_handoff' -Reason 'The resident-surface proof must hand off to process supervision without granting execution, mutation, or resident-claim authority.')
   (New-Check -Id 'host_supervision_boundary' -Status $(if ($HostSupervisionObserved) { 'supervision_blocked' } else { 'failed' }) -Passed $HostSupervisionObserved -Evidence 'scripts/lens-host-supervision-proof.ps1 -Mode Status' -Reason 'The host supervision proof must remain observable and blocked.')
   (New-Check -Id 'process_supervision_denied' -Status $(if ($ProcessSupervisionDenied) { 'blocked' } else { 'unexpected_authority' }) -Passed $ProcessSupervisionDenied -Evidence 'process_supervision_authority + process_restart_authority' -Reason 'Resident process supervision and restart authority remain denied.')
   (New-Check -Id 'service_activation_plan_blocked' -Status $(if ($ServiceActivationPlanBlocked) { 'blocked_no_service_activation' } else { 'unexpected_service_activation' }) -Passed $ServiceActivationPlanBlocked -Evidence 'service_plan' -Reason 'The service plan does not install, start, or manage a resident host service.')
@@ -585,6 +650,7 @@ $Checks = @(
 $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
 $AllBlockers = @(
   (ConvertTo-StringArray -Value (Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'blockers' -Default @())) +
+  $ResidentSurfaceBlockers +
   (ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostSupervisionPayload -Name 'blockers' -Default @())) +
   @(
     'process_supervision_authority_not_granted',
@@ -615,9 +681,23 @@ $Payload = [ordered]@{
   child_proof_timeout_seconds = $ChildProofTimeoutSeconds
   child_proof_timeouts = [string[]]@($ChildProofTimeouts)
   child_proof_runs = @($ChildProofRuns)
+  cached_resident_surface_proof = [bool](Get-PropertyValue -Payload $ResidentSurfaceResult -Name 'cached' -Default $false)
   cached_host_supervision_proof = [bool](Get-PropertyValue -Payload $HostSupervisionResult -Name 'cached' -Default $false)
   authority_required = 'process_supervision_and_service_control'
   authority_granted = $false
+  resident_surface_foreground_runtime_proof_observed = $ResidentSurfaceForegroundRuntimeProofObserved
+  resident_surface_runtime_supervision_handoff_observed = $ResidentSurfaceRuntimeSupervisionHandoffObserved
+  resident_surface_runtime_supervision_handoff = $ResidentSurfaceRecommendedHandoff
+  resident_surface_next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'next_smallest_truthful_gap' -Default '')
+  resident_surface_authority_required = [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'authority_required' -Default '')
+  resident_surface_authority_granted = [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'authority_granted' -Default $false)
+  resident_surface_recommended_handoff_source = [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'recommended_handoff_source' -Default '')
+  resident_surface_recommended_next_slice = [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'recommended_next_slice' -Default '')
+  resident_surface_recommended_proof_script = [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'recommended_proof_script' -Default '')
+  recommended_handoff_source = [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'recommended_handoff_source' -Default '')
+  recommended_next_slice = [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'recommended_next_slice' -Default '')
+  recommended_proof_script = [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'recommended_proof_script' -Default '')
+  recommended_handoff = $ResidentSurfaceRecommendedHandoff
   process_supervision_authority_required = 'process_supervision_authority'
   process_supervision_authority_granted = $false
   process_restart_authority_required = 'process_restart_authority'
@@ -666,6 +746,12 @@ $Payload = [ordered]@{
     activation_boundary_next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $ActivationBoundaryPayload -Name 'next_smallest_truthful_gap' -Default '')
     resident_surface_activation_boundary_observed = $ActivationBoundaryObserved
     resident_overlay_boundary_observed = $false
+    resident_surface_foreground_runtime_proof_status = [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'status' -Default '')
+    resident_surface_foreground_runtime_proof_observed = $ResidentSurfaceForegroundRuntimeProofObserved
+    resident_surface_runtime_supervision_handoff_observed = $ResidentSurfaceRuntimeSupervisionHandoffObserved
+    resident_surface_next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'next_smallest_truthful_gap' -Default '')
+    resident_surface_authority_required = [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'authority_required' -Default '')
+    resident_surface_runtime_status = [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'resident_surface_runtime_status' -Default '')
     host_supervision_status = [string](Get-PropertyValue -Payload $HostSupervisionPayload -Name 'status' -Default '')
     host_supervision_ready = [bool](Get-PropertyValue -Payload $HostSupervisionPayload -Name 'supervision_ready' -Default $false)
     host_ready_for_resident_claim = [bool](Get-PropertyValue -Payload $HostSupervisionPayload -Name 'ready_for_resident_claim' -Default $false)
@@ -684,6 +770,7 @@ $Payload = [ordered]@{
     checkpoint_readback = $false
     resident_surface_activation_boundary_readback = $ActivationBoundaryObserved
     resident_overlay_activation_boundary_readback = $ActivationBoundaryObserved
+    cached_resident_surface_proof = [bool](Get-PropertyValue -Payload $ResidentSurfaceResult -Name 'cached' -Default $false)
     cached_host_supervision_proof = [bool](Get-PropertyValue -Payload $HostSupervisionResult -Name 'cached' -Default $false)
     live_http_readback = $false
     temporary_api_process = $false
@@ -692,6 +779,8 @@ $Payload = [ordered]@{
     bounded_supervisor_observation = $HostSupervisionObserved
     resident_surface_activation_boundary_observed = $ActivationBoundaryObserved
     resident_overlay_activation_boundary_observed = $ActivationBoundaryObserved
+    resident_surface_foreground_runtime_readback = $ResidentSurfaceForegroundRuntimeProofObserved
+    resident_surface_runtime_supervision_handoff_readback = $ResidentSurfaceRuntimeSupervisionHandoffObserved
     resident_host_supervision_authority_denial_boundary_observed = $false
     resident_host_supervision_authority_denial_receipt_readback_observed = $false
     resident_host_supervision_authority_grant_receipt_readback_observed = $false

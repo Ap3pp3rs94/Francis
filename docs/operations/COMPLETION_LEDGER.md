@@ -36596,6 +36596,62 @@ Latest validation for Stage 6 prerequisite execution handoff targeting:
   Result: `passed as blocker proof; next_smallest_truthful_gap=resident_surface_runtime_not_supervised;
   authority_required=process_supervision_authority; authority_granted=false`
 
+Stage 6 process-supervision boundary now consumes resident-surface runtime
+handoff evidence on `2026-05-21`:
+
+- `scripts/lens-process-supervision-authority-boundary-proof.ps1` now consumes
+  the foreground resident-surface proof before reporting the process-supervision
+  authority boundary. It supports `-CachedResidentSurfaceProofPath` for reused
+  audit readback and otherwise invokes
+  `scripts/lens-resident-surface-proof.ps1 -Mode Status`.
+- The process-supervision boundary payload now carries the consumed
+  resident-surface foreground runtime proof, the concrete
+  `resident_surface_runtime_supervision_handoff`, the resident-surface
+  `process_supervision_authority` requirement, and explicit diagnostic-only /
+  non-mutating handoff flags. The parent process-supervision proof still returns
+  to `stage6_lens_completion_audit` after the boundary is consumed.
+- This is proof/readback alignment only. It does not grant process-supervision
+  authority, restart authority, service install/control authority, resident-claim
+  authority, memory write, approval-decision authority, or Stage 7 transition
+  authority.
+- A fresh completion audit with launch-on-hotkey readback still reports Stage 6
+  blocked: `ready_to_close=false`, `transition_allowed=false`, and
+  `next_smallest_truthful_gap=resident_host_process_supervision_handoff`.
+
+Latest validation for Stage 6 process-supervision boundary resident-surface
+handoff consumption:
+
+- PowerShell parser check for
+  `scripts\lens-process-supervision-authority-boundary-proof.ps1`
+  Result: `passed; parser_ok`
+- `python -m ruff check
+  tests\test_lens_process_supervision_authority_boundary_proof_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check
+  tests\test_lens_process_supervision_authority_boundary_proof_script.py`
+  Result: `passed; 1 file already formatted`
+- `python -m pytest
+  tests\test_lens_process_supervision_authority_boundary_proof_script.py -q`
+  Result: `passed; 2 passed`
+- `python -m pytest
+  tests\test_lens_resident_host_process_supervision_blocker_proof_script.py -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_summon_resident_host_blocker_proof_script.py
+  -q`
+  Result: `passed; 2 passed`
+- `python -m pytest
+  tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_observes_process_supervision_boundary_authority_gates
+  -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  scripts\lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey`
+  Result: `passed as blocked audit; ok=true; status=blocked;
+  audit_status=complete; ready_to_close=false; transition_allowed=false;
+  next_smallest_truthful_gap=resident_host_process_supervision_handoff;
+  process_supervision_authority_boundary_proof.status=proof_passed;
+  resident_surface_runtime_supervision_handoff_observed=true;
+  child_proof_timeouts=[]`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
