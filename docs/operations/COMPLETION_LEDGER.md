@@ -37690,6 +37690,51 @@ Latest validation for resident-claim boundary proof consumption ordering:
   summon_readiness_status_after_execute=blocked;
   resident-claim branch not exercised in this run`
 
+### 2026-05-22 - Stage 6 launch-on-hotkey audit handoff truthfulness
+
+Roadmap area: Stage 6 / Lens MVP, governed summon-anywhere runtime readback and
+operator handoff truthfulness.
+
+Material change:
+
+- The Stage 6 completion audit now emits a concrete recommended handoff when
+  the opt-in wrapper stops at `summon_api_launch_on_hotkey_readback`.
+- The handoff points at
+  `scripts/lens-summon-api-execution-proof.ps1 -Mode Status -AllowLaunchOnHotkey`,
+  names `launch_on_hotkey_runtime_readback_opt_in`, carries the summon
+  readiness blockers, and remains explicit about the side effects:
+  diagnostic-only, would execute/mutate as an opt-in proof, but no memory write
+  and no resident claim.
+- The Stage 6 next-handoff proof now consumes a supplied completion-audit JSON
+  for that handoff and marks it as a recommended audit handoff instead of
+  returning blank operator guidance.
+- Stage 6 still does not close. This fixes operator handoff truthfulness for an
+  already observed blocked path; it does not grant summon-anywhere authority or
+  make Stage 7 ready.
+
+Latest validation for launch-on-hotkey audit handoff truthfulness:
+
+- PowerShell AST parse of `scripts\lens-stage6-completion-audit.ps1` and
+  `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed`
+- `python -m pytest
+  tests\test_lens_stage6_completion_audit_script.py
+  tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `ruff check
+  tests\test_lens_stage6_completion_audit_script.py
+  tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `ruff format --check
+  tests\test_lens_stage6_completion_audit_script.py
+  tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; already formatted`
+- Full live completion-audit wrapper was not rerun for this entry after the
+  handoff patch. The live evidence immediately before the patch showed
+  `next_smallest_truthful_gap=summon_api_launch_on_hotkey_readback` with blank
+  recommended handoff fields; this entry is validated by script parsing,
+  focused completion-audit assertions, and next-handoff JSON consumption tests.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

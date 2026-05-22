@@ -1053,6 +1053,29 @@ $Stage6CompletionAuditHelpfulNotNoisyResidentSurfaceRuntimeHandoffObserved = (
     )
   )
 )
+$Stage6CompletionAuditSummonApiLaunchOnHotkeyReadbackHandoffObserved = (
+  $Stage6CompletionAuditReadbackObserved -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_handoff_source' -Default '') -eq 'stage6_summon_api_launch_on_hotkey_readback_required' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'next_smallest_truthful_gap' -Default '') -eq 'summon_api_launch_on_hotkey_readback' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_next_slice' -Default '') -eq 'run_summon_api_launch_on_hotkey_proof_for_runtime_readback' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_proof_script' -Default '') -eq 'scripts/lens-summon-api-execution-proof.ps1 -Mode Status -AllowLaunchOnHotkey' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'authority_required' -Default '') -eq 'launch_on_hotkey_runtime_readback_opt_in' -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'authority_granted' -Default $true) -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'status' -Default '') -eq 'proof_readback_required' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'summon_api_launch_on_hotkey_readback' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'next_step' -Default '') -eq 'run_summon_api_launch_on_hotkey_proof_for_runtime_readback' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'proof_script' -Default '') -eq 'scripts/lens-summon-api-execution-proof.ps1 -Mode Status -AllowLaunchOnHotkey' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'route' -Default '') -eq '/lens/summon/execute' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'readiness_route' -Default '') -eq '/lens/summon/readiness' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'authority_required' -Default '') -eq 'launch_on_hotkey_runtime_readback_opt_in' -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'authority_granted' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'read_only_contract' -Default $true) -and
+  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'diagnostic_only' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_execute' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_mutate' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_write_memory' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_claim_resident' -Default $true)
+)
 $Stage6CompletionAuditResidentRuntimeTrayPresenceHandoffObserved = (
   $Stage6CompletionAuditReadbackObserved -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_handoff_source' -Default '') -eq 'api_resident_runtime_execution_tray_presence_handoff' -and
@@ -1506,6 +1529,7 @@ $Stage6CompletionAuditHandoffConsumedByClosureReadback = (
 $Stage6CompletionAuditRecommendedHandoffConsumed = (
   $Stage6CompletionAuditHelpfulNotNoisyRuntimeAuthorityHandoffObserved -or
   $Stage6CompletionAuditHelpfulNotNoisyResidentSurfaceRuntimeHandoffObserved -or
+  $Stage6CompletionAuditSummonApiLaunchOnHotkeyReadbackHandoffObserved -or
   $Stage6CompletionAuditResidentRuntimeTrayPresenceHandoffObserved -or
   $Stage6CompletionAuditPersistentSupervisionApiExecutionHandoffObserved -or
   $Stage6CompletionAuditPersistentSupervisionResidentClaimBoundaryHandoffObserved -or
@@ -1621,9 +1645,20 @@ $RecommendedConcreteExecutionHandoffObserved = (
   -not [bool](Get-PropertyValue -Payload $RecommendedConcreteHandoff -Name 'would_write_memory' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $RecommendedConcreteHandoff -Name 'would_claim_resident' -Default $true)
 )
+$RecommendedConcreteSummonLaunchReadbackHandoffObserved = (
+  $Stage6CompletionAuditSummonApiLaunchOnHotkeyReadbackHandoffObserved -and
+  -not [string]::IsNullOrWhiteSpace($RecommendedConcreteNextSlice) -and
+  -not [string]::IsNullOrWhiteSpace($RecommendedConcreteProofScript) -and
+  [bool](Get-PropertyValue -Payload $RecommendedConcreteHandoff -Name 'diagnostic_only' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $RecommendedConcreteHandoff -Name 'would_execute' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $RecommendedConcreteHandoff -Name 'would_mutate' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $RecommendedConcreteHandoff -Name 'would_write_memory' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $RecommendedConcreteHandoff -Name 'would_claim_resident' -Default $true)
+)
 $ConcreteHandoffObserved = (
   -not $Stage6CompletionAuditHandoffConsumedByClosureReadback -or
   $RecommendedConcreteExecutionHandoffObserved -or
+  $RecommendedConcreteSummonLaunchReadbackHandoffObserved -or
   (
     -not [string]::IsNullOrWhiteSpace($RecommendedConcreteNextSlice) -and
     -not [string]::IsNullOrWhiteSpace($RecommendedConcreteProofScript) -and
@@ -1836,6 +1871,7 @@ $Payload = [ordered]@{
   stage6_completion_audit_readback_observed = $Stage6CompletionAuditReadbackObserved
   stage6_completion_audit_runtime_authority_handoff_observed = $Stage6CompletionAuditHelpfulNotNoisyRuntimeAuthorityHandoffObserved
   stage6_completion_audit_resident_surface_runtime_handoff_observed = $Stage6CompletionAuditHelpfulNotNoisyResidentSurfaceRuntimeHandoffObserved
+  stage6_completion_audit_summon_api_launch_on_hotkey_readback_handoff_observed = $Stage6CompletionAuditSummonApiLaunchOnHotkeyReadbackHandoffObserved
   stage6_completion_audit_resident_runtime_tray_presence_handoff_observed = $Stage6CompletionAuditResidentRuntimeTrayPresenceHandoffObserved
   stage6_completion_audit_persistent_supervision_api_execution_handoff_observed = $Stage6CompletionAuditPersistentSupervisionApiExecutionHandoffObserved
   stage6_completion_audit_persistent_supervision_resident_claim_boundary_handoff_observed = $Stage6CompletionAuditPersistentSupervisionResidentClaimBoundaryHandoffObserved

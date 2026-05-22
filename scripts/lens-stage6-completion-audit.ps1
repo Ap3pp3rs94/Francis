@@ -3415,6 +3415,42 @@ if (
   $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
   $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
 } elseif (
+  $NextSmallestTruthfulGap -eq 'summon_api_launch_on_hotkey_readback'
+) {
+  $RecommendedHandoffSource = 'stage6_summon_api_launch_on_hotkey_readback_required'
+  $RecommendedHandoff = [ordered]@{
+    status = 'proof_readback_required'
+    previous_next_smallest_truthful_gap = [string]$SummonApiLaunchOnHotkeyProof.previous_next_smallest_truthful_gap
+    consumed_summon_api_next_smallest_truthful_gap = [string]$SummonApiLaunchOnHotkeyProof.next_smallest_truthful_gap
+    next_smallest_truthful_gap = 'summon_api_launch_on_hotkey_readback'
+    next_step = 'run_summon_api_launch_on_hotkey_proof_for_runtime_readback'
+    proof_script = 'scripts/lens-summon-api-execution-proof.ps1 -Mode Status -AllowLaunchOnHotkey'
+    route = '/lens/summon/execute'
+    readiness_route = '/lens/summon/readiness'
+    authority_required = 'launch_on_hotkey_runtime_readback_opt_in'
+    authority_granted = $false
+    summon_api_launch_on_hotkey_runtime_readback_observed = $SummonApiLaunchOnHotkeyProofObserved
+    allow_launch_on_hotkey = [bool]$SummonApiLaunchOnHotkeyProof.allow_launch_on_hotkey
+    opened = [bool]$SummonApiLaunchOnHotkeyProof.opened
+    no_launch = [bool]$SummonApiLaunchOnHotkeyProof.no_launch
+    summon_anywhere = [bool]$SummonApiLaunchOnHotkeyProof.summon_anywhere
+    os_level_summon = [bool]$SummonApiLaunchOnHotkeyProof.os_level_summon
+    summon_readiness_status_after_execute = [string]$SummonApiLaunchOnHotkeyProof.summon_readiness_status_after_execute
+    read_only_contract = $false
+    diagnostic_only = $true
+    would_execute = $true
+    would_mutate = $true
+    would_register_tray = $false
+    would_register_hotkey = $false
+    would_open_overlay = $false
+    would_write_memory = $false
+    would_claim_resident = $false
+    blockers = [string[]]@($SummonApiLaunchOnHotkeyProofReadinessBlockersAfterExecute)
+  }
+  $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
+  $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
+  $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
+} elseif (
   $NextSmallestTruthfulGap -eq 'resident_runtime_api_execution_readback'
 ) {
   $RecommendedHandoffSource = 'stage6_resident_runtime_api_execution_readback_required'

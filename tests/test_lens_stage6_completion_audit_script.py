@@ -1046,6 +1046,17 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     assert "'api_persistent_supervision_execution_handoff'" in script
     assert "'run_stage6_lens_completion_audit_after_persistent_supervision_api_execution'" in script
     assert "'scripts/lens-stage6-completion-audit.ps1 -Mode Status'" in script
+    assert "$RecommendedHandoffSource = 'stage6_summon_api_launch_on_hotkey_readback_required'" in script
+    assert "next_step = 'run_summon_api_launch_on_hotkey_proof_for_runtime_readback'" in script
+    assert "proof_script = 'scripts/lens-summon-api-execution-proof.ps1 -Mode Status -AllowLaunchOnHotkey'" in script
+    assert "route = '/lens/summon/execute'" in script
+    assert "readiness_route = '/lens/summon/readiness'" in script
+    assert "authority_required = 'launch_on_hotkey_runtime_readback_opt_in'" in script
+    assert (
+        "summon_readiness_status_after_execute = [string]$SummonApiLaunchOnHotkeyProof.summon_readiness_status_after_execute"
+        in script
+    )
+    assert "blockers = [string[]]@($SummonApiLaunchOnHotkeyProofReadinessBlockersAfterExecute)" in script
     assert "$ResidentSurfaceForegroundRuntimeProofObserved = (" in script
     assert "$ResidentSurfaceForegroundRuntimeProofRecommendedHandoffSource" in script
     assert "$ResidentSurfaceForegroundRuntimeProofRecommendedNextSlice" in script

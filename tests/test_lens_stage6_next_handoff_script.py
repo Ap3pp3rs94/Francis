@@ -1666,6 +1666,110 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
         "completion_audit_recommended_handoff_consumed"
     )
 
+    summon_launch_audit_json = tmp_path / "stage6-completion-audit-summon-launch-readback.json"
+    summon_launch_audit_json.write_text(
+        json.dumps(
+            {
+                "kind": "lens.stage6.completion_audit",
+                "ok": True,
+                "status": "blocked",
+                "audit_status": "complete",
+                "allow_launch_on_hotkey": True,
+                "next_smallest_truthful_gap": "summon_api_launch_on_hotkey_readback",
+                "recommended_handoff_source": "stage6_summon_api_launch_on_hotkey_readback_required",
+                "recommended_next_slice": "run_summon_api_launch_on_hotkey_proof_for_runtime_readback",
+                "recommended_proof_script": (
+                    "scripts/lens-summon-api-execution-proof.ps1 -Mode Status -AllowLaunchOnHotkey"
+                ),
+                "authority_required": "launch_on_hotkey_runtime_readback_opt_in",
+                "authority_granted": False,
+                "recommended_handoff": {
+                    "status": "proof_readback_required",
+                    "previous_next_smallest_truthful_gap": "summon_binding_blocker_boundary",
+                    "consumed_summon_api_next_smallest_truthful_gap": "os_level_command_palette_binding",
+                    "next_smallest_truthful_gap": "summon_api_launch_on_hotkey_readback",
+                    "next_step": "run_summon_api_launch_on_hotkey_proof_for_runtime_readback",
+                    "proof_script": ("scripts/lens-summon-api-execution-proof.ps1 -Mode Status -AllowLaunchOnHotkey"),
+                    "route": "/lens/summon/execute",
+                    "readiness_route": "/lens/summon/readiness",
+                    "authority_required": "launch_on_hotkey_runtime_readback_opt_in",
+                    "authority_granted": False,
+                    "summon_api_launch_on_hotkey_runtime_readback_observed": False,
+                    "allow_launch_on_hotkey": True,
+                    "opened": True,
+                    "no_launch": False,
+                    "summon_anywhere": False,
+                    "os_level_summon": False,
+                    "summon_readiness_status_after_execute": "blocked",
+                    "read_only_contract": False,
+                    "diagnostic_only": True,
+                    "would_execute": True,
+                    "would_mutate": True,
+                    "would_register_tray": False,
+                    "would_register_hotkey": False,
+                    "would_open_overlay": False,
+                    "would_write_memory": False,
+                    "would_claim_resident": False,
+                    "blockers": ["summon_anywhere_runtime_readback"],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    summon_launch_proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-CompletionAuditJsonPath",
+        str(summon_launch_audit_json),
+        env=proof_env,
+    )
+
+    assert summon_launch_proc.returncode == 0, summon_launch_proc.stderr or summon_launch_proc.stdout
+    summon_launch_payload = json.loads(summon_launch_proc.stdout)
+    assert summon_launch_payload["recommended_handoff_source"] == (
+        "stage6_summon_api_launch_on_hotkey_readback_required"
+    )
+    assert summon_launch_payload["next_smallest_truthful_gap"] == "summon_api_launch_on_hotkey_readback"
+    assert summon_launch_payload["recommended_next_slice"] == (
+        "run_summon_api_launch_on_hotkey_proof_for_runtime_readback"
+    )
+    assert summon_launch_payload["recommended_proof_script"] == (
+        "scripts/lens-summon-api-execution-proof.ps1 -Mode Status -AllowLaunchOnHotkey"
+    )
+    assert summon_launch_payload["authority_required"] == "launch_on_hotkey_runtime_readback_opt_in"
+    assert summon_launch_payload["authority_granted"] is False
+    assert summon_launch_payload["stage6_completion_audit_readback_observed"] is True
+    assert (
+        summon_launch_payload["stage6_completion_audit_summon_api_launch_on_hotkey_readback_handoff_observed"] is True
+    )
+    assert summon_launch_payload["stage6_completion_audit_recommended_handoff_consumed"] is True
+    assert summon_launch_payload["stage6_completion_audit_runtime_readback_required"] is False
+    summon_launch_handoff = summon_launch_payload["recommended_handoff"]
+    assert summon_launch_handoff["next_step"] == "run_summon_api_launch_on_hotkey_proof_for_runtime_readback"
+    assert summon_launch_handoff["proof_script"] == (
+        "scripts/lens-summon-api-execution-proof.ps1 -Mode Status -AllowLaunchOnHotkey"
+    )
+    assert summon_launch_handoff["route"] == "/lens/summon/execute"
+    assert summon_launch_handoff["readiness_route"] == "/lens/summon/readiness"
+    assert summon_launch_handoff["authority_required"] == "launch_on_hotkey_runtime_readback_opt_in"
+    assert summon_launch_handoff["authority_granted"] is False
+    assert summon_launch_handoff["read_only_contract"] is False
+    assert summon_launch_handoff["diagnostic_only"] is True
+    assert summon_launch_handoff["would_execute"] is True
+    assert summon_launch_handoff["would_mutate"] is True
+    assert summon_launch_handoff["would_write_memory"] is False
+    assert summon_launch_handoff["would_claim_resident"] is False
+    assert summon_launch_payload["recommended_next_operator_command"] == {
+        "command": ".\\scripts\\lens-summon-api-execution-proof.ps1 -Mode Status -AllowLaunchOnHotkey",
+        "mode": "Status",
+        "requires_confirmation": False,
+        "requires_explicit_operator_opt_in": True,
+        "requires_actor": False,
+        "requires_approval_id": False,
+        "requires_operator_approval_decision": False,
+    }
+
     tray_audit_json = tmp_path / "stage6-completion-audit-tray-presence.json"
     tray_audit_json.write_text(
         json.dumps(
