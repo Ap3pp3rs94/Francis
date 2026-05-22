@@ -2498,10 +2498,15 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   'persistent_supervision_authority_not_granted'
 } elseif (
   $HostSupervisorOwnedSessionObserved -and
+  -not $ResidentSupervisionPersistenceBoundaryProofObserved -and
   $HostSupervisorOwnedSessionBlockers -contains 'resident_supervision_not_persistent'
 ) {
   'resident_supervision_not_persistent'
-} elseif ($ProcessSupervisionBoundaryObserved -and $ProcessSupervisionBoundaryBlockers -contains 'resident_host_process_not_supervised') {
+} elseif (
+  $ProcessSupervisionBoundaryObserved -and
+  -not $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $ProcessSupervisionBoundaryBlockers -contains 'resident_host_process_not_supervised'
+) {
   'resident_host_process_not_supervised'
 } elseif ($BlockedCriterionIds -contains 'helpful_not_noisy' -and $Blockers -contains 'resident_surface_runtime_not_supervised') {
   'resident_surface_runtime_not_supervised'

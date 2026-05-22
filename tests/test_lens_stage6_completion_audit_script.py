@@ -118,6 +118,23 @@ def test_lens_stage6_completion_audit_projects_recommended_authority_grant_state
     assert script.index(authority_grant_projection) < script.index("authority_granted = $RecommendedAuthorityGranted")
 
 
+def test_lens_stage6_completion_audit_does_not_reopen_persistent_supervision_candidate_gap() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+    raw_candidate_branch = (
+        "$HostSupervisorOwnedSessionObserved -and\n"
+        "  -not $ResidentSupervisionPersistenceBoundaryProofObserved -and\n"
+        "  $HostSupervisorOwnedSessionBlockers -contains 'resident_supervision_not_persistent'"
+    )
+    process_boundary_branch = (
+        "$ProcessSupervisionBoundaryObserved -and\n"
+        "  -not $ResidentHostProcessSupervisionBlockerProofObserved -and\n"
+        "  $ProcessSupervisionBoundaryBlockers -contains 'resident_host_process_not_supervised'"
+    )
+
+    assert raw_candidate_branch in script
+    assert process_boundary_branch in script
+
+
 def test_lens_stage6_completion_audit_outer_timeout_covers_serial_child_budget() -> None:
     expected_minimum = sum(_expected_audit_child_proof_timeouts(_AUDIT_CHILD_PROOF_TIMEOUT_SECONDS).values())
 

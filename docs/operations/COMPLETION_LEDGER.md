@@ -36806,6 +36806,63 @@ consumption:
   recommended_next_slice=resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim;
   recommended_proof_script=scripts/lens-resident-surface-proof.ps1 -Mode Status`
 
+Stage 6 host-supervision authority grant and stale fallback correction on
+`2026-05-22`:
+
+- A fresh live host-supervision authority request was created through the
+  governed API path for actor `codex.stage6`, approved by `codex.approver`, and
+  converted into grant receipt `lhsag_1779431003_39f0146df600`.
+  Request/approval id: `ee65ec16-9102-4011-94f5-f57b2d244e91`.
+- The grant receipt is authority readback only for the host/process supervision
+  boundary. It did not launch, restart, supervise, install or control services,
+  register tray or hotkeys, open overlay windows, write memory, decide unrelated
+  approvals, claim a resident runtime, close Stage 6, or start Stage 7.
+- `scripts/lens-stage6-completion-audit.ps1` no longer falls back to raw
+  `resident_supervision_not_persistent` or `resident_host_process_not_supervised`
+  blockers after their resident-supervision persistence and resident-host
+  process-supervision proof layers have already been consumed. The audit now
+  preserves the consumed proof chain before selecting the next Stage 6 handoff.
+- A fresh bounded completion audit with launch-on-hotkey readback still reports
+  Stage 6 blocked: `ready_to_close=false`, `transition_allowed=false`, and
+  `next_smallest_truthful_gap=resident_surface_runtime_not_supervised`.
+  The recommended handoff is
+  `stage6_helpful_not_noisy_runtime_authority_readiness_handoff` via
+  `scripts/lens-stage6-checkpoint.ps1 -Mode Status`.
+- GitHub Actions run `26271408689` for commit `f1fba1be` completed green on
+  Ubuntu 3.12, Ubuntu 3.13, Windows 3.12, and Windows 3.13.
+
+Latest validation for Stage 6 host-supervision authority grant and stale
+fallback correction:
+
+- PowerShell parser check for `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed; parse_ok`
+- `.venv\Scripts\python.exe -m pytest
+  tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_does_not_reopen_persistent_supervision_candidate_gap
+  -q`
+  Result: `passed`
+- `.venv\Scripts\python.exe -m pytest
+  tests\test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed; 39 passed, 1 skipped`
+- `.venv\Scripts\ruff.exe check
+  tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; All checks passed`
+- `.venv\Scripts\ruff.exe format --check
+  tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 1 file already formatted`
+- `scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2
+  -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3
+  -ChildProofTimeoutSeconds 120 -AllowLaunchOnHotkey`
+  Result: `passed as blocked audit; ok=true; status=blocked;
+  audit_status=complete; ready_to_close=false; transition_allowed=false;
+  next_smallest_truthful_gap=resident_surface_runtime_not_supervised;
+  recommended_handoff_source=stage6_helpful_not_noisy_runtime_authority_readiness_handoff;
+  recommended_next_slice=create_or_select_exact_approved_resident_runtime_execution_authority_request;
+  recommended_proof_script=scripts/lens-stage6-checkpoint.ps1 -Mode Status;
+  resident_supervision_persistence_boundary_proof_observed=true;
+  stage6_completion_audit_concrete_handoff_observed=true;
+  child_proof_timeouts=[]`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
