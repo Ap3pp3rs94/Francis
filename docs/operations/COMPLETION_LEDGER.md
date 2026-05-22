@@ -37372,6 +37372,75 @@ consumption:
   recommended_next_operator_command.command=.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status;
   check_status=completion_audit_recommended_handoff_consumed`
 
+Stage 6 resident-runtime grant receipt readback command truthfulness on
+`2026-05-22`:
+
+- `scripts/lens-stage6-next-handoff.ps1` no longer recommends a plain
+  `scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status` command
+  after the supplied completion-audit JSON has advanced to an already-active
+  resident-runtime execution authority grant receipt.
+- In that active-grant branch, the recommended command and read-only status
+  command now rerun
+  `scripts\lens-stage6-next-handoff.ps1 -Mode Status -CompletionAuditJsonPath
+  <audit.json>`, which reads back the same resident-runtime grant receipt action
+  the handoff names.
+- This preserves the plain bring-up plan `Status` priority on
+  `review_persistent_supervision_enablement_receipt`; it does not globally
+  reorder prerequisite bring-up status, grant authority, decide approval,
+  execute runtime work, claim resident state, close Stage 6, or start Stage 7.
+- A fresh resident-runtime execution authority grant receipt was refreshed for
+  the existing approved approval
+  `a4b0f2b0-b32c-4f32-9b95-d4576be2f463` as
+  `lrag_1779466459_658b28ba3eaa`. The receipt grants only the bounded
+  resident-runtime execution authority lease for the next review boundary:
+  `execution_authority=false`, `resident_claim_authority=false`,
+  `memory_write=false`, `would_execute=false`, and `would_mutate=false`.
+- After the refreshed receipt, the full opt-in completion audit now advances
+  past the runtime-authority selection/review handoff to the sharper resident
+  surface supervision blocker:
+  `recommended_handoff_source=stage6_helpful_not_noisy_resident_surface_runtime_handoff`,
+  `recommended_next_slice=resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim`,
+  `recommended_proof_script=scripts/lens-resident-surface-proof.ps1 -Mode Status`,
+  `authority_required=process_supervision_authority`, and
+  `authority_granted=false`.
+
+Latest validation for Stage 6 resident-runtime grant receipt readback command
+truthfulness:
+
+- PowerShell AST parser check for `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed; next_handoff_parse_ok`
+- `python -m pytest
+  tests\test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_applied_bringup_review_state
+  -q`
+  Result: `passed`
+- `python -m pytest tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; All checks passed`
+- `python -m ruff format --check tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 1 file already formatted`
+- `scripts\lens-stage6-next-handoff.ps1 -Mode Status -CompletionAuditJsonPath
+  C:\Users\Ap3pp\AppData\Local\Temp\francis-stage6-completion-audit-20260522-105248.json`
+  Result: `passed; status=proof_passed; ok=true;
+  recommended_next_slice=review_resident_runtime_execution_authority_grant_receipt;
+  recommended_next_operator_action.id=review_resident_runtime_execution_authority_grant_receipt;
+  latest_receipt_id=lrag_1779466459_658b28ba3eaa;
+  recommended_next_operator_command=.\scripts\lens-stage6-next-handoff.ps1 -Mode Status -CompletionAuditJsonPath
+  'C:\Users\Ap3pp\AppData\Local\Temp\francis-stage6-completion-audit-20260522-105248.json';
+  would_execute=false; would_mutate=false`
+- `scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2
+  -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3
+  -ChildProofTimeoutSeconds 240 -AllowLaunchOnHotkey`
+  Result: `passed as blocked audit; ok=true; status=blocked;
+  audit_status=complete; ready_to_close=false; transition_allowed=false;
+  child_proof_timeouts=[]; child_proof_runs=23; all child runs exit_code=0
+  and timed_out=false; next_smallest_truthful_gap=resident_surface_runtime_not_supervised;
+  recommended_handoff_source=stage6_helpful_not_noisy_resident_surface_runtime_handoff;
+  recommended_next_slice=resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim;
+  recommended_proof_script=scripts/lens-resident-surface-proof.ps1 -Mode Status;
+  authority_required=process_supervision_authority; authority_granted=false`
+
 Stage 6 completion-audit consumed enablement receipt review boundary on
 `2026-05-22`:
 

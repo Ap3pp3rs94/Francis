@@ -2164,8 +2164,11 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
         "review_resident_runtime_execution_authority_grant_receipt"
     )
     assert active_grant_payload["recommended_next_operator_action"]["latest_receipt_id"] == active_grant_receipt_id
+    active_grant_readback_command = (
+        f".\\scripts\\lens-stage6-next-handoff.ps1 -Mode Status -CompletionAuditJsonPath '{audit_json.resolve()}'"
+    )
     assert active_grant_payload["recommended_next_operator_command"] == {
-        "command": ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status",
+        "command": active_grant_readback_command,
         "mode": "Status",
         "requires_confirmation": False,
         "requires_explicit_operator_opt_in": False,
@@ -2173,4 +2176,7 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
         "requires_approval_id": False,
         "requires_operator_approval_decision": False,
     }
+    assert active_grant_payload["recommended_operator_handoff"]["read_only_status_command"] == (
+        active_grant_readback_command
+    )
     assert active_grant_payload["recommended_operator_handoff"]["authority_grant_receipt_write_if_run"] is False

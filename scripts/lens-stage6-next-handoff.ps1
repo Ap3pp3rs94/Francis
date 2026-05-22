@@ -300,8 +300,16 @@ function New-ResidentRuntimeAuthorityRequestOperatorHandoff {
     [object]$ResidentRuntimeAuthorityRequests,
 
     [AllowNull()]
-    [object]$ResidentRuntimeAuthorityGrants
+    [object]$ResidentRuntimeAuthorityGrants,
+
+    [string]$CompletionAuditJsonPath = ''
   )
+
+  $ReceiptReviewReadbackCommand = '.\scripts\lens-stage6-next-handoff.ps1 -Mode Status'
+  if (-not [string]::IsNullOrWhiteSpace($CompletionAuditJsonPath)) {
+    $EscapedCompletionAuditJsonPath = $CompletionAuditJsonPath.Replace("'", "''")
+    $ReceiptReviewReadbackCommand = ".\scripts\lens-stage6-next-handoff.ps1 -Mode Status -CompletionAuditJsonPath '$EscapedCompletionAuditJsonPath'"
+  }
 
   $FirstBlockedRequirementHandoff = Get-PropertyValue `
     -Payload $SourceHandoff `
@@ -349,7 +357,7 @@ function New-ResidentRuntimeAuthorityRequestOperatorHandoff {
         script_would_decide_approval = $false
       }
       next_operator_command = [ordered]@{
-        command = '.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status'
+        command = $ReceiptReviewReadbackCommand
         mode = 'Status'
         requires_confirmation = $false
         requires_explicit_operator_opt_in = $false
@@ -357,7 +365,7 @@ function New-ResidentRuntimeAuthorityRequestOperatorHandoff {
         requires_approval_id = $false
         requires_operator_approval_decision = $false
       }
-      read_only_status_command = '.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status'
+      read_only_status_command = $ReceiptReviewReadbackCommand
       operator_sequence_command_availability = [ordered]@{
         available_now_count = 1
         preview_only_count = 0
@@ -959,6 +967,7 @@ $Stage6CompletionAuditResult = [ordered]@{
 }
 $Stage6CompletionAudit = [ordered]@{}
 $Stage6CompletionAuditRecommendedHandoff = [ordered]@{}
+$ResolvedCompletionAuditJsonPath = ''
 if (-not [string]::IsNullOrWhiteSpace($CompletionAuditJsonPath)) {
   if (-not (Test-Path -LiteralPath $CompletionAuditJsonPath -PathType Leaf)) {
     throw "Completion audit JSON readback is missing: $CompletionAuditJsonPath"
@@ -1625,7 +1634,8 @@ if ($Stage6CompletionAuditRuntimeReadbackRequired) {
   $RecommendedOperatorHandoff = New-ResidentRuntimeAuthorityRequestOperatorHandoff `
     -SourceHandoff $RecommendedHandoff `
     -ResidentRuntimeAuthorityRequests $ResidentRuntimeAuthorityRequests `
-    -ResidentRuntimeAuthorityGrants $ResidentRuntimeAuthorityGrants
+    -ResidentRuntimeAuthorityGrants $ResidentRuntimeAuthorityGrants `
+    -CompletionAuditJsonPath $ResolvedCompletionAuditJsonPath
 } elseif ($Stage6CompletionAuditRecommendedHandoffConsumed) {
   $RecommendedOperatorHandoff = New-Stage6CompletionAuditReadbackOperatorHandoff `
     -RecommendedHandoff $RecommendedHandoff `
