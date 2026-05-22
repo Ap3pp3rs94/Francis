@@ -389,6 +389,23 @@ if ($AllowLaunchOnHotkey) {
     -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 240))
 }
 $OverlayApiExecutionProof = $OverlayApiExecutionProofResult.payload
+$SummonApiBoundedExecutionProofResult = [ordered]@{
+  exit_code = 0
+  payload = $null
+  output = ''
+  error = ''
+  timed_out = $false
+  timeout_seconds = 0
+  duration_ms = 0
+}
+if ($AllowLaunchOnHotkey) {
+  $SummonApiBoundedExecutionProofResult = Invoke-JsonScript `
+    -PowerShellPath $PowerShell.Source `
+    -ScriptPath $SummonApiExecutionProofScript `
+    -ScriptArgs @('-Mode', 'Status', '-RunSeconds', '1') `
+    -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 240))
+}
+$SummonApiBoundedExecutionProof = $SummonApiBoundedExecutionProofResult.payload
 $ResidentHostRuntimeBoundaryProofResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $ResidentHostRuntimeBoundaryProofScript -ScriptArgs @(
   '-Mode', 'Status',
   '-ForegroundRunSeconds', '2',
@@ -1074,6 +1091,7 @@ if ($AllowLaunchOnHotkey) {
   $ChildProofRuns += New-ChildProofRunSummary -Name 'tray_presence_api_execution' -Result $TrayPresenceApiExecutionProofResult
   $ChildProofRuns += New-ChildProofRunSummary -Name 'os_binding_api_execution' -Result $OsBindingApiExecutionProofResult
   $ChildProofRuns += New-ChildProofRunSummary -Name 'overlay_api_execution' -Result $OverlayApiExecutionProofResult
+  $ChildProofRuns += New-ChildProofRunSummary -Name 'summon_api_bounded_execution' -Result $SummonApiBoundedExecutionProofResult
 }
 $ChildProofTimeouts = [string[]]@(
   $ChildProofRuns | Where-Object { [bool]$_.timed_out } | ForEach-Object { [string]$_.name }
@@ -2518,6 +2536,98 @@ $OverlayApiExecutionProofObserved = (
   -not [bool]$OverlayApiExecutionProofGovernance.memory_write -and
   -not [bool]$OverlayApiExecutionProofGovernance.resident_claim_authority
 )
+$SummonApiBoundedExecutionProofGovernance = $SummonApiBoundedExecutionProof.governance
+$SummonApiBoundedExecutionProofBlockers = ConvertTo-StringArray -Value $SummonApiBoundedExecutionProof.blockers
+$SummonApiBoundedExecutionProofReadinessBlockers = ConvertTo-StringArray -Value (
+  $SummonApiBoundedExecutionProof.summon_readiness_blockers_after_execute
+)
+$SummonApiBoundedExecutionProofRequiredBeforeEnable = ConvertTo-StringArray -Value (
+  $SummonApiBoundedExecutionProof.required_before_enable_after_summon
+)
+$SummonApiBoundedExecutionProofObserved = (
+  [bool]$AllowLaunchOnHotkey -and
+  [int]$SummonApiBoundedExecutionProofResult.exit_code -eq 0 -and
+  [bool]$SummonApiBoundedExecutionProof.ok -and
+  [string]$SummonApiBoundedExecutionProof.kind -eq 'lens.summon.api_execution.proof' -and
+  [string]$SummonApiBoundedExecutionProof.status -eq 'proof_passed' -and
+  -not [bool]$SummonApiBoundedExecutionProof.allow_launch_on_hotkey -and
+  [string]$SummonApiBoundedExecutionProof.previous_next_smallest_truthful_gap -eq 'summon_binding_blocker_boundary' -and
+  [string]$SummonApiBoundedExecutionProof.route_next_smallest_truthful_gap -eq 'summon_anywhere_runtime_readback' -and
+  [string]$SummonApiBoundedExecutionProof.next_smallest_truthful_gap -eq 'summon_anywhere_runtime_readback' -and
+  [string]$SummonApiBoundedExecutionProof.recommended_handoff_source -eq 'api_summon_to_persistent_supervision_execution_handoff' -and
+  [string]$SummonApiBoundedExecutionProof.recommended_next_slice -eq 'execute_persistent_supervision_api_enablement_after_bounded_summon_handoff' -and
+  [string]$SummonApiBoundedExecutionProof.recommended_proof_script -eq 'scripts/lens-persistent-supervision-api-execution-proof.ps1 -Mode Status' -and
+  [bool]$SummonApiBoundedExecutionProof.resident_runtime_execution_authority -and
+  [bool]$SummonApiBoundedExecutionProof.host_supervision_authority -and
+  [bool]$SummonApiBoundedExecutionProof.tray_presence_authority -and
+  [bool]$SummonApiBoundedExecutionProof.os_binding_authority -and
+  [bool]$SummonApiBoundedExecutionProof.overlay_authority -and
+  [bool]$SummonApiBoundedExecutionProof.summon_authority -and
+  [bool]$SummonApiBoundedExecutionProof.execution_applied -and
+  [bool]$SummonApiBoundedExecutionProof.executed -and
+  [bool]$SummonApiBoundedExecutionProof.resident_host_process_started -and
+  [bool]$SummonApiBoundedExecutionProof.resident_supervised_runtime_started -and
+  [bool]$SummonApiBoundedExecutionProof.tray_presence_started -and
+  [bool]$SummonApiBoundedExecutionProof.tray_runtime_ready -and
+  [bool]$SummonApiBoundedExecutionProof.global_hotkey_bound -and
+  [bool]$SummonApiBoundedExecutionProof.hotkey_runtime_ready -and
+  [bool]$SummonApiBoundedExecutionProof.overlay_window_started -and
+  [bool]$SummonApiBoundedExecutionProof.overlay_runtime_ready -and
+  [bool]$SummonApiBoundedExecutionProof.summon_binding_observed -and
+  [bool]$SummonApiBoundedExecutionProof.summon_runtime_ready -and
+  [bool]$SummonApiBoundedExecutionProof.bounded_handoff_ready -and
+  [bool]$SummonApiBoundedExecutionProof.local_open_ready -and
+  -not [bool]$SummonApiBoundedExecutionProof.opened -and
+  [bool]$SummonApiBoundedExecutionProof.no_launch -and
+  [bool]$SummonApiBoundedExecutionProof.receipt_written -and
+  [bool]$SummonApiBoundedExecutionProof.summon_runtime_state_observed -and
+  [bool]$SummonApiBoundedExecutionProof.summon_config_override_present -and
+  [bool]$SummonApiBoundedExecutionProof.overlay_stop_observed -and
+  [bool]$SummonApiBoundedExecutionProof.hotkey_stop_observed -and
+  [bool]$SummonApiBoundedExecutionProof.tray_presence_stop_observed -and
+  [bool]$SummonApiBoundedExecutionProof.resident_supervision_stop_observed -and
+  -not [bool]$SummonApiBoundedExecutionProof.overlay_pid_file_present_after_stop -and
+  -not [bool]$SummonApiBoundedExecutionProof.hotkey_pid_file_present_after_stop -and
+  -not [bool]$SummonApiBoundedExecutionProof.tray_pid_file_present_after_stop -and
+  -not [bool]$SummonApiBoundedExecutionProof.host_pid_file_present_after_stop -and
+  @($SummonApiBoundedExecutionProofRequiredBeforeEnable).Count -eq 0 -and
+  [bool]$SummonApiBoundedExecutionProof.required_before_enable_ready_after_summon -and
+  [bool]$SummonApiBoundedExecutionProof.summon_readiness_summon_runtime_ready -and
+  $SummonApiBoundedExecutionProofReadinessBlockers -contains 'summon_anywhere_runtime_readback' -and
+  @($SummonApiBoundedExecutionProofBlockers).Count -eq 0 -and
+  -not [bool]$SummonApiBoundedExecutionProof.summon_anywhere -and
+  -not [bool]$SummonApiBoundedExecutionProof.os_level_summon -and
+  -not [bool]$SummonApiBoundedExecutionProof.service_managed -and
+  -not [bool]$SummonApiBoundedExecutionProof.resident_claim_allowed -and
+  [bool]$SummonApiBoundedExecutionProofGovernance.diagnostic_only -and
+  [bool]$SummonApiBoundedExecutionProofGovernance.api_route_proof -and
+  [bool]$SummonApiBoundedExecutionProofGovernance.api_execution_authority -and
+  [bool]$SummonApiBoundedExecutionProofGovernance.approval_request_write -and
+  [bool]$SummonApiBoundedExecutionProofGovernance.test_fixture_approval_decisions -and
+  [bool]$SummonApiBoundedExecutionProofGovernance.execution_authority -and
+  [bool]$SummonApiBoundedExecutionProofGovernance.temporary_runtime_state_write -and
+  [bool]$SummonApiBoundedExecutionProofGovernance.process_supervision_authority -and
+  [bool]$SummonApiBoundedExecutionProofGovernance.tray_registration_authority -and
+  [bool]$SummonApiBoundedExecutionProofGovernance.tray_icon_authority -and
+  [bool]$SummonApiBoundedExecutionProofGovernance.hotkey_registration_authority -and
+  [bool]$SummonApiBoundedExecutionProofGovernance.overlay_control_authority -and
+  [bool]$SummonApiBoundedExecutionProofGovernance.window_management_authority -and
+  [bool]$SummonApiBoundedExecutionProofGovernance.bounded_local_open_handoff_authority -and
+  [bool]$SummonApiBoundedExecutionProofGovernance.summon_authority -and
+  [bool]$SummonApiBoundedExecutionProofGovernance.mutation_authority_granted -and
+  -not [bool]$SummonApiBoundedExecutionProofGovernance.product_execution_authority -and
+  -not [bool]$SummonApiBoundedExecutionProofGovernance.approval_decision_authority -and
+  -not [bool]$SummonApiBoundedExecutionProofGovernance.local_process_launch_authority -and
+  -not [bool]$SummonApiBoundedExecutionProofGovernance.process_restart_authority -and
+  -not [bool]$SummonApiBoundedExecutionProofGovernance.service_install_authority -and
+  -not [bool]$SummonApiBoundedExecutionProofGovernance.service_control_authority -and
+  -not [bool]$SummonApiBoundedExecutionProofGovernance.summon_anywhere_authority -and
+  -not [bool]$SummonApiBoundedExecutionProofGovernance.os_level_summon_authority -and
+  -not [bool]$SummonApiBoundedExecutionProofGovernance.capture_authority -and
+  -not [bool]$SummonApiBoundedExecutionProofGovernance.new_sensing_authority -and
+  -not [bool]$SummonApiBoundedExecutionProofGovernance.memory_write -and
+  -not [bool]$SummonApiBoundedExecutionProofGovernance.resident_claim_authority
+)
 $SummonAnywhereRuntimeReadbackObserved = [bool]$SummonApiLaunchOnHotkeyProofObserved
 $Stage6AcceptanceNextGap = if ($BlockedCriterionIds -contains 'summon_anywhere' -and -not $SummonAnywhereRuntimeReadbackObserved) {
   'summon_anywhere_blockers'
@@ -2553,7 +2663,8 @@ $Stage6CompletionEvidenceReviewed = (
   (-not [bool]$AllowLaunchOnHotkey -or $ResidentRuntimeApiExecutionProofObserved) -and
   (-not [bool]$AllowLaunchOnHotkey -or $TrayPresenceApiExecutionProofObserved) -and
   (-not [bool]$AllowLaunchOnHotkey -or $OsBindingApiExecutionProofObserved) -and
-  (-not [bool]$AllowLaunchOnHotkey -or $OverlayApiExecutionProofObserved)
+  (-not [bool]$AllowLaunchOnHotkey -or $OverlayApiExecutionProofObserved) -and
+  (-not [bool]$AllowLaunchOnHotkey -or $SummonApiBoundedExecutionProofObserved)
 )
 $Stage6CompletionReviewed = (
   $Stage6CompletionEvidenceReviewed -and
@@ -2876,6 +2987,20 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
 ) {
   'overlay_api_execution_readback'
 } elseif (
+  $AllowLaunchOnHotkey -and
+  $SummonApiLaunchOnHotkeyProofObserved -and
+  $ResidentRuntimeApiExecutionProofObserved -and
+  $TrayPresenceApiExecutionProofObserved -and
+  $OsBindingApiExecutionProofObserved -and
+  $OverlayApiExecutionProofObserved -and
+  $SummonAnywhereBlockersProofObserved -and
+  $CheckpointSummonEnablementGateHandoffObserved -and
+  $SummonAuthorityBlockerProofObserved -and
+  $SummonAnywhereFamilyChainProofObserved -and
+  -not $SummonApiBoundedExecutionProofObserved
+) {
+  'summon_api_bounded_execution_readback'
+} elseif (
   $Stage6CompletionReviewed -and
   -not $ReadyToClose -and
   $AllowLaunchOnHotkey -and
@@ -2884,10 +3009,11 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $TrayPresenceApiExecutionProofObserved -and
   $OsBindingApiExecutionProofObserved -and
   $OverlayApiExecutionProofObserved -and
+  $SummonApiBoundedExecutionProofObserved -and
   $ResidentSurfaceForegroundRuntimeProofObserved -and
   $Stage6AcceptanceNextGap -eq 'resident_surface_runtime_not_supervised'
 ) {
-  [string]$OverlayApiExecutionProof.next_smallest_truthful_gap
+  [string]$SummonApiBoundedExecutionProof.next_smallest_truthful_gap
 } elseif (
   $PersistentSupervisionEnablementDenialObserved -and
   $PersistentSupervisionEnablementExecutionDenialObserved -and
@@ -3446,6 +3572,94 @@ if (
   $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
   $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
 } elseif (
+  $NextSmallestTruthfulGap -eq 'summon_api_bounded_execution_readback'
+) {
+  $RecommendedHandoffSource = 'stage6_summon_api_bounded_execution_readback_required'
+  $RecommendedHandoff = [ordered]@{
+    status = 'proof_readback_required'
+    previous_next_smallest_truthful_gap = 'summon_binding_blocker_boundary'
+    consumed_overlay_api_next_smallest_truthful_gap = [string]$OverlayApiExecutionProof.next_smallest_truthful_gap
+    next_smallest_truthful_gap = 'summon_api_bounded_execution_readback'
+    next_step = 'run_summon_api_execution_proof_after_overlay_readback'
+    proof_script = 'scripts/lens-summon-api-execution-proof.ps1 -Mode Status'
+    route = '/lens/summon/execute'
+    authority_route = '/lens/summon/authority'
+    request_route = '/lens/summon/authority/request'
+    readiness_route = '/lens/summon/readiness'
+    authority_required = 'summon_hotkey_overlay_and_process_authority'
+    authority_granted = $false
+    summon_api_launch_on_hotkey_runtime_readback_observed = $SummonApiLaunchOnHotkeyProofObserved
+    resident_runtime_api_execution_proof_observed = $ResidentRuntimeApiExecutionProofObserved
+    tray_presence_api_execution_proof_observed = $TrayPresenceApiExecutionProofObserved
+    os_binding_api_execution_proof_observed = $OsBindingApiExecutionProofObserved
+    overlay_api_execution_proof_observed = $OverlayApiExecutionProofObserved
+    summon_api_bounded_execution_proof_observed = $SummonApiBoundedExecutionProofObserved
+    read_only_contract = $false
+    diagnostic_only = $true
+    would_execute = $true
+    would_mutate = $true
+    would_register_tray = $false
+    would_register_hotkey = $false
+    would_open_overlay = $false
+    would_open_local_handoff = $true
+    would_write_memory = $false
+    would_claim_resident = $false
+    blockers = [string[]]@($SummonApiBoundedExecutionProofBlockers)
+  }
+  $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
+  $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
+  $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
+} elseif (
+  $NextSmallestTruthfulGap -eq 'summon_anywhere_runtime_readback' -and
+  $SummonApiBoundedExecutionProofObserved
+) {
+  $RecommendedHandoffSource = [string]$SummonApiBoundedExecutionProof.recommended_handoff_source
+  $RecommendedHandoff = [ordered]@{
+    status = 'blocked'
+    previous_next_smallest_truthful_gap = 'summon_binding_blocker_boundary'
+    consumed_overlay_api_execution_proof = $OverlayApiExecutionProofObserved
+    consumed_summon_api_bounded_execution_proof = $SummonApiBoundedExecutionProofObserved
+    consumed_summon_api_bounded_next_smallest_truthful_gap = [string]$SummonApiBoundedExecutionProof.next_smallest_truthful_gap
+    next_smallest_truthful_gap = [string]$SummonApiBoundedExecutionProof.next_smallest_truthful_gap
+    next_step = [string]$SummonApiBoundedExecutionProof.recommended_next_slice
+    proof_script = [string]$SummonApiBoundedExecutionProof.recommended_proof_script
+    route = '/lens/host/persistent-supervision/enablement/execution/apply'
+    readiness_route = '/lens/host/persistent-supervision/enablement/execution/readiness'
+    acceptance_criterion = 'summon_anywhere'
+    authority_required = 'persistent_supervision_execution_authority'
+    authority_granted = $false
+    resident_runtime_execution_authority = [bool]$SummonApiBoundedExecutionProof.resident_runtime_execution_authority
+    host_supervision_authority = [bool]$SummonApiBoundedExecutionProof.host_supervision_authority
+    tray_presence_authority = [bool]$SummonApiBoundedExecutionProof.tray_presence_authority
+    os_binding_authority = [bool]$SummonApiBoundedExecutionProof.os_binding_authority
+    overlay_authority = [bool]$SummonApiBoundedExecutionProof.overlay_authority
+    summon_authority = [bool]$SummonApiBoundedExecutionProof.summon_authority
+    summon_binding_observed = [bool]$SummonApiBoundedExecutionProof.summon_binding_observed
+    summon_runtime_ready = [bool]$SummonApiBoundedExecutionProof.summon_runtime_ready
+    bounded_handoff_ready = [bool]$SummonApiBoundedExecutionProof.bounded_handoff_ready
+    local_open_ready = [bool]$SummonApiBoundedExecutionProof.local_open_ready
+    opened = [bool]$SummonApiBoundedExecutionProof.opened
+    no_launch = [bool]$SummonApiBoundedExecutionProof.no_launch
+    receipt_written = [bool]$SummonApiBoundedExecutionProof.receipt_written
+    required_before_enable_after_summon = [string[]]@($SummonApiBoundedExecutionProofRequiredBeforeEnable)
+    required_before_enable_ready_after_summon = [bool]$SummonApiBoundedExecutionProof.required_before_enable_ready_after_summon
+    summon_readiness_blockers_after_execute = [string[]]@($SummonApiBoundedExecutionProofReadinessBlockers)
+    summon_anywhere = [bool]$SummonApiBoundedExecutionProof.summon_anywhere
+    os_level_summon = [bool]$SummonApiBoundedExecutionProof.os_level_summon
+    service_managed = [bool]$SummonApiBoundedExecutionProof.service_managed
+    resident_claim_allowed = [bool]$SummonApiBoundedExecutionProof.resident_claim_allowed
+    read_only_contract = $false
+    diagnostic_only = $true
+    would_execute = $true
+    would_mutate = $true
+    would_write_memory = $false
+    would_claim_resident = $false
+    blockers = [string[]]@($SummonApiBoundedExecutionProofReadinessBlockers)
+  }
+  $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
+  $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
+  $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
+} elseif (
   $NextSmallestTruthfulGap -eq 'resident_surface_runtime_not_supervised' -and
   $BlockedCriterionIds -contains 'helpful_not_noisy'
 ) {
@@ -3837,6 +4051,10 @@ $Payload = [ordered]@{
     'The completion audit consumed the opt-in OS-binding API execution proof and now requires the governed overlay API execution proof before advancing to summon-binding execution work.'
   } elseif ($NextSmallestTruthfulGap -eq 'summon_binding_blocker_boundary') {
     'The completion audit consumed the opt-in overlay API execution proof: a bounded supervised resident host, tray presence, global hotkey binding, and overlay window started and stopped through governed API paths, while summon-anywhere, service management, memory writes, and resident claim remain false. The next truthful blocker is governed summon-binding execution.'
+  } elseif ($NextSmallestTruthfulGap -eq 'summon_api_bounded_execution_readback') {
+    'The completion audit consumed the opt-in overlay API execution proof and now requires the governed bounded summon API execution proof before advancing to persistent-supervision execution work.'
+  } elseif ($NextSmallestTruthfulGap -eq 'summon_anywhere_runtime_readback') {
+    'The completion audit consumed the opt-in bounded summon API execution proof: summon binding runtime readback is observed through governed API paths without OS-wide summon-anywhere, memory write, capture, service-control, product approval-decision, or resident-claim authority. The next truthful blocker is persistent-supervision API execution.'
   } elseif ($NextSmallestTruthfulGap -eq 'summon_anywhere_family_chain_proof_readback') {
     'The audit must consume the summon-anywhere family-chain proof before treating the grouped resident-host, tray, overlay, hotkey, summon-binding, and authority blockers as one audited handoff.'
   } elseif ($NextSmallestTruthfulGap -eq 'summon_api_launch_on_hotkey_readback') {
@@ -4307,6 +4525,114 @@ $Payload = [ordered]@{
       memory_write = [bool]$OverlayApiExecutionProofGovernance.memory_write
       resident_claim_authority = [bool]$OverlayApiExecutionProofGovernance.resident_claim_authority
       mutation_authority_granted = [bool]$OverlayApiExecutionProofGovernance.mutation_authority_granted
+    }
+  }
+  summon_api_bounded_execution_proof = [ordered]@{
+    status = if ($AllowLaunchOnHotkey) {
+      if ($SummonApiBoundedExecutionProofObserved) { [string]$SummonApiBoundedExecutionProof.status } else { 'missing_or_failed' }
+    } else {
+      'not_requested'
+    }
+    ok = $SummonApiBoundedExecutionProofObserved
+    exit_code = [int]$SummonApiBoundedExecutionProofResult.exit_code
+    timeout_seconds = [int]$SummonApiBoundedExecutionProofResult.timeout_seconds
+    timed_out = [bool]$SummonApiBoundedExecutionProofResult.timed_out
+    kind = [string]$SummonApiBoundedExecutionProof.kind
+    allow_launch_on_hotkey = [bool]$SummonApiBoundedExecutionProof.allow_launch_on_hotkey
+    previous_next_smallest_truthful_gap = [string]$SummonApiBoundedExecutionProof.previous_next_smallest_truthful_gap
+    route_next_smallest_truthful_gap = [string]$SummonApiBoundedExecutionProof.route_next_smallest_truthful_gap
+    persistent_plan_next_smallest_truthful_gap = [string]$SummonApiBoundedExecutionProof.persistent_plan_next_smallest_truthful_gap
+    next_smallest_truthful_gap = [string]$SummonApiBoundedExecutionProof.next_smallest_truthful_gap
+    recommended_handoff_source = [string]$SummonApiBoundedExecutionProof.recommended_handoff_source
+    recommended_next_slice = [string]$SummonApiBoundedExecutionProof.recommended_next_slice
+    recommended_proof_script = [string]$SummonApiBoundedExecutionProof.recommended_proof_script
+    host_supervision_approval_id = [string]$SummonApiBoundedExecutionProof.host_supervision_approval_id
+    resident_runtime_approval_id = [string]$SummonApiBoundedExecutionProof.resident_runtime_approval_id
+    tray_presence_approval_id = [string]$SummonApiBoundedExecutionProof.tray_presence_approval_id
+    os_binding_approval_id = [string]$SummonApiBoundedExecutionProof.os_binding_approval_id
+    overlay_approval_id = [string]$SummonApiBoundedExecutionProof.overlay_approval_id
+    summon_approval_id = [string]$SummonApiBoundedExecutionProof.summon_approval_id
+    host_supervision_authority_grant_receipt_id = [string]$SummonApiBoundedExecutionProof.host_supervision_authority_grant_receipt_id
+    resident_runtime_authority_grant_receipt_id = [string]$SummonApiBoundedExecutionProof.resident_runtime_authority_grant_receipt_id
+    tray_authority_grant_receipt_id = [string]$SummonApiBoundedExecutionProof.tray_authority_grant_receipt_id
+    os_binding_authority_grant_receipt_id = [string]$SummonApiBoundedExecutionProof.os_binding_authority_grant_receipt_id
+    overlay_authority_grant_receipt_id = [string]$SummonApiBoundedExecutionProof.overlay_authority_grant_receipt_id
+    summon_authority_grant_receipt_id = [string]$SummonApiBoundedExecutionProof.summon_authority_grant_receipt_id
+    resident_runtime_execution_authority = [bool]$SummonApiBoundedExecutionProof.resident_runtime_execution_authority
+    host_supervision_authority = [bool]$SummonApiBoundedExecutionProof.host_supervision_authority
+    tray_presence_authority = [bool]$SummonApiBoundedExecutionProof.tray_presence_authority
+    os_binding_authority = [bool]$SummonApiBoundedExecutionProof.os_binding_authority
+    overlay_authority = [bool]$SummonApiBoundedExecutionProof.overlay_authority
+    summon_authority = [bool]$SummonApiBoundedExecutionProof.summon_authority
+    execution_applied = [bool]$SummonApiBoundedExecutionProof.execution_applied
+    executed = [bool]$SummonApiBoundedExecutionProof.executed
+    resident_host_process_started = [bool]$SummonApiBoundedExecutionProof.resident_host_process_started
+    resident_supervised_runtime_started = [bool]$SummonApiBoundedExecutionProof.resident_supervised_runtime_started
+    tray_presence_started = [bool]$SummonApiBoundedExecutionProof.tray_presence_started
+    tray_runtime_ready = [bool]$SummonApiBoundedExecutionProof.tray_runtime_ready
+    global_hotkey_bound = [bool]$SummonApiBoundedExecutionProof.global_hotkey_bound
+    hotkey_runtime_ready = [bool]$SummonApiBoundedExecutionProof.hotkey_runtime_ready
+    overlay_window_started = [bool]$SummonApiBoundedExecutionProof.overlay_window_started
+    overlay_runtime_ready = [bool]$SummonApiBoundedExecutionProof.overlay_runtime_ready
+    summon_binding_observed = [bool]$SummonApiBoundedExecutionProof.summon_binding_observed
+    summon_runtime_ready = [bool]$SummonApiBoundedExecutionProof.summon_runtime_ready
+    bounded_handoff_ready = [bool]$SummonApiBoundedExecutionProof.bounded_handoff_ready
+    local_open_ready = [bool]$SummonApiBoundedExecutionProof.local_open_ready
+    opened = [bool]$SummonApiBoundedExecutionProof.opened
+    no_launch = [bool]$SummonApiBoundedExecutionProof.no_launch
+    receipt_written = [bool]$SummonApiBoundedExecutionProof.receipt_written
+    summon_runtime_state_observed = [bool]$SummonApiBoundedExecutionProof.summon_runtime_state_observed
+    summon_config_override_present = [bool]$SummonApiBoundedExecutionProof.summon_config_override_present
+    overlay_stop_observed = [bool]$SummonApiBoundedExecutionProof.overlay_stop_observed
+    hotkey_stop_observed = [bool]$SummonApiBoundedExecutionProof.hotkey_stop_observed
+    tray_presence_stop_observed = [bool]$SummonApiBoundedExecutionProof.tray_presence_stop_observed
+    resident_supervision_stop_observed = [bool]$SummonApiBoundedExecutionProof.resident_supervision_stop_observed
+    overlay_pid_file_present_after_stop = [bool]$SummonApiBoundedExecutionProof.overlay_pid_file_present_after_stop
+    hotkey_pid_file_present_after_stop = [bool]$SummonApiBoundedExecutionProof.hotkey_pid_file_present_after_stop
+    tray_pid_file_present_after_stop = [bool]$SummonApiBoundedExecutionProof.tray_pid_file_present_after_stop
+    host_pid_file_present_after_stop = [bool]$SummonApiBoundedExecutionProof.host_pid_file_present_after_stop
+    required_before_enable_after_summon = [string[]]@($SummonApiBoundedExecutionProofRequiredBeforeEnable)
+    required_before_enable_ready_after_summon = [bool]$SummonApiBoundedExecutionProof.required_before_enable_ready_after_summon
+    summon_readiness_status_after_execute = [string]$SummonApiBoundedExecutionProof.summon_readiness_status_after_execute
+    summon_readiness_summon_runtime_ready = [bool]$SummonApiBoundedExecutionProof.summon_readiness_summon_runtime_ready
+    summon_readiness_blockers_after_execute = [string[]]@($SummonApiBoundedExecutionProofReadinessBlockers)
+    summon_anywhere = [bool]$SummonApiBoundedExecutionProof.summon_anywhere
+    os_level_summon = [bool]$SummonApiBoundedExecutionProof.os_level_summon
+    service_managed = [bool]$SummonApiBoundedExecutionProof.service_managed
+    resident_claim_allowed = [bool]$SummonApiBoundedExecutionProof.resident_claim_allowed
+    blockers = [string[]]@($SummonApiBoundedExecutionProofBlockers)
+    checks = @($SummonApiBoundedExecutionProof.checks)
+    proof = $SummonApiBoundedExecutionProof.proof
+    start_execution = $SummonApiBoundedExecutionProof.start_execution
+    governance = [ordered]@{
+      diagnostic_only = [bool]$SummonApiBoundedExecutionProofGovernance.diagnostic_only
+      api_route_proof = [bool]$SummonApiBoundedExecutionProofGovernance.api_route_proof
+      api_execution_authority = [bool]$SummonApiBoundedExecutionProofGovernance.api_execution_authority
+      approval_request_write = [bool]$SummonApiBoundedExecutionProofGovernance.approval_request_write
+      test_fixture_approval_decisions = [bool]$SummonApiBoundedExecutionProofGovernance.test_fixture_approval_decisions
+      product_execution_authority = [bool]$SummonApiBoundedExecutionProofGovernance.product_execution_authority
+      approval_decision_authority = [bool]$SummonApiBoundedExecutionProofGovernance.approval_decision_authority
+      execution_authority = [bool]$SummonApiBoundedExecutionProofGovernance.execution_authority
+      temporary_runtime_state_write = [bool]$SummonApiBoundedExecutionProofGovernance.temporary_runtime_state_write
+      local_process_launch_authority = [bool]$SummonApiBoundedExecutionProofGovernance.local_process_launch_authority
+      process_supervision_authority = [bool]$SummonApiBoundedExecutionProofGovernance.process_supervision_authority
+      process_restart_authority = [bool]$SummonApiBoundedExecutionProofGovernance.process_restart_authority
+      service_install_authority = [bool]$SummonApiBoundedExecutionProofGovernance.service_install_authority
+      service_control_authority = [bool]$SummonApiBoundedExecutionProofGovernance.service_control_authority
+      tray_registration_authority = [bool]$SummonApiBoundedExecutionProofGovernance.tray_registration_authority
+      tray_icon_authority = [bool]$SummonApiBoundedExecutionProofGovernance.tray_icon_authority
+      hotkey_registration_authority = [bool]$SummonApiBoundedExecutionProofGovernance.hotkey_registration_authority
+      overlay_control_authority = [bool]$SummonApiBoundedExecutionProofGovernance.overlay_control_authority
+      window_management_authority = [bool]$SummonApiBoundedExecutionProofGovernance.window_management_authority
+      bounded_local_open_handoff_authority = [bool]$SummonApiBoundedExecutionProofGovernance.bounded_local_open_handoff_authority
+      summon_authority = [bool]$SummonApiBoundedExecutionProofGovernance.summon_authority
+      summon_anywhere_authority = [bool]$SummonApiBoundedExecutionProofGovernance.summon_anywhere_authority
+      os_level_summon_authority = [bool]$SummonApiBoundedExecutionProofGovernance.os_level_summon_authority
+      capture_authority = [bool]$SummonApiBoundedExecutionProofGovernance.capture_authority
+      new_sensing_authority = [bool]$SummonApiBoundedExecutionProofGovernance.new_sensing_authority
+      memory_write = [bool]$SummonApiBoundedExecutionProofGovernance.memory_write
+      resident_claim_authority = [bool]$SummonApiBoundedExecutionProofGovernance.resident_claim_authority
+      mutation_authority_granted = [bool]$SummonApiBoundedExecutionProofGovernance.mutation_authority_granted
     }
   }
   summary = [ordered]@{
@@ -5892,6 +6218,7 @@ $Payload = [ordered]@{
     tray_presence_api_execution_proof_readback = $TrayPresenceApiExecutionProofObserved
     os_binding_api_execution_proof_readback = $OsBindingApiExecutionProofObserved
     overlay_api_execution_proof_readback = $OverlayApiExecutionProofObserved
+    summon_api_bounded_execution_proof_readback = $SummonApiBoundedExecutionProofObserved
     stage6_completion_audit_handoff_consumed_by_closure_readback = $Stage6CompletionAuditHandoffConsumedByClosureReadback
     process_supervision_boundary_observed = [bool]$ProcessSupervisionBoundary.process_supervision_boundary_observed
     service_activation_plan_observed = [bool]$ProcessSupervisionBoundary.service_activation_plan_observed

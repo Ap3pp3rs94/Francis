@@ -776,11 +776,13 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     assert "New-ChildProofRunSummary -Name 'tray_presence_api_execution'" in script
     assert "New-ChildProofRunSummary -Name 'os_binding_api_execution'" in script
     assert "New-ChildProofRunSummary -Name 'overlay_api_execution'" in script
+    assert "New-ChildProofRunSummary -Name 'summon_api_bounded_execution'" in script
     assert "$SummonApiLaunchOnHotkeyProofObserved = (" in script
     assert "$ResidentRuntimeApiExecutionProofObserved = (" in script
     assert "$TrayPresenceApiExecutionProofObserved = (" in script
     assert "$OsBindingApiExecutionProofObserved = (" in script
     assert "$OverlayApiExecutionProofObserved = (" in script
+    assert "$SummonApiBoundedExecutionProofObserved = (" in script
     assert "[bool]$SummonApiLaunchOnHotkeyProof.allow_launch_on_hotkey" in script
     assert "[bool]$SummonApiLaunchOnHotkeyProof.summon_anywhere" in script
     assert (
@@ -886,12 +888,46 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     assert "[bool]$OverlayApiExecutionProof.overlay_stop_observed" in script
     assert "-not [bool]$OverlayApiExecutionProof.summon_anywhere" in script
     assert "-not [bool]$OverlayApiExecutionProofGovernance.summon_authority" in script
+    assert (
+        "[string]$SummonApiBoundedExecutionProof.previous_next_smallest_truthful_gap "
+        "-eq 'summon_binding_blocker_boundary'" in script
+    )
+    assert (
+        "[string]$SummonApiBoundedExecutionProof.route_next_smallest_truthful_gap "
+        "-eq 'summon_anywhere_runtime_readback'" in script
+    )
+    assert (
+        "[string]$SummonApiBoundedExecutionProof.next_smallest_truthful_gap "
+        "-eq 'summon_anywhere_runtime_readback'" in script
+    )
+    assert (
+        "[string]$SummonApiBoundedExecutionProof.recommended_handoff_source "
+        "-eq 'api_summon_to_persistent_supervision_execution_handoff'" in script
+    )
+    assert (
+        "[string]$SummonApiBoundedExecutionProof.recommended_next_slice "
+        "-eq 'execute_persistent_supervision_api_enablement_after_bounded_summon_handoff'" in script
+    )
+    assert (
+        "[string]$SummonApiBoundedExecutionProof.recommended_proof_script "
+        "-eq 'scripts/lens-persistent-supervision-api-execution-proof.ps1 -Mode Status'" in script
+    )
+    assert "[bool]$SummonApiBoundedExecutionProof.summon_binding_observed" in script
+    assert "[bool]$SummonApiBoundedExecutionProof.summon_runtime_ready" in script
+    assert "[bool]$SummonApiBoundedExecutionProof.bounded_handoff_ready" in script
+    assert "[bool]$SummonApiBoundedExecutionProof.local_open_ready" in script
+    assert "-not [bool]$SummonApiBoundedExecutionProof.opened" in script
+    assert "[bool]$SummonApiBoundedExecutionProof.no_launch" in script
+    assert "-not [bool]$SummonApiBoundedExecutionProof.summon_anywhere" in script
+    assert "-not [bool]$SummonApiBoundedExecutionProof.os_level_summon" in script
+    assert "-not [bool]$SummonApiBoundedExecutionProofGovernance.summon_anywhere_authority" in script
     assert "$SummonAnywhereRuntimeReadbackObserved = [bool]$SummonApiLaunchOnHotkeyProofObserved" in script
     assert "$BlockedCriterionIds -contains 'summon_anywhere' -and -not $SummonAnywhereRuntimeReadbackObserved" in script
     assert "(-not [bool]$AllowLaunchOnHotkey -or $ResidentRuntimeApiExecutionProofObserved)" in script
     assert "(-not [bool]$AllowLaunchOnHotkey -or $TrayPresenceApiExecutionProofObserved)" in script
     assert "(-not [bool]$AllowLaunchOnHotkey -or $OsBindingApiExecutionProofObserved)" in script
     assert "(-not [bool]$AllowLaunchOnHotkey -or $OverlayApiExecutionProofObserved)" in script
+    assert "(-not [bool]$AllowLaunchOnHotkey -or $SummonApiBoundedExecutionProofObserved)" in script
     assert (
         "$BlockedCriterionIds -contains 'helpful_not_noisy' -and "
         "$Blockers -contains 'resident_surface_runtime_not_supervised'"
@@ -901,19 +937,23 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     assert "'tray_presence_api_execution_readback'" in script
     assert "'os_binding_api_execution_readback'" in script
     assert "'overlay_api_execution_readback'" in script
+    assert "'summon_api_bounded_execution_readback'" in script
     assert "$NextSmallestTruthfulGap -eq 'os_level_command_palette_binding'" in script
     assert "$NextSmallestTruthfulGap -eq 'summon_overlay_window_blocker_boundary'" in script
     assert "$NextSmallestTruthfulGap -eq 'summon_binding_blocker_boundary'" in script
+    assert "$NextSmallestTruthfulGap -eq 'summon_anywhere_runtime_readback'" in script
     assert "$NextSmallestTruthfulGap -eq 'summon_tray_presence_blocker_boundary'" in script
     assert "$RecommendedHandoffSource = 'stage6_prerequisite_bringup_enablement_receipt_review'" in script
     assert "$RecommendedHandoffSource = 'stage6_resident_runtime_api_execution_readback_required'" in script
     assert "$RecommendedHandoffSource = 'stage6_tray_presence_api_execution_readback_required'" in script
     assert "$RecommendedHandoffSource = 'stage6_os_binding_api_execution_readback_required'" in script
     assert "$RecommendedHandoffSource = 'stage6_overlay_api_execution_readback_required'" in script
+    assert "$RecommendedHandoffSource = 'stage6_summon_api_bounded_execution_readback_required'" in script
     assert "$RecommendedHandoffSource = [string]$ResidentRuntimeApiExecutionProof.recommended_handoff_source" in script
     assert "$RecommendedHandoffSource = [string]$TrayPresenceApiExecutionProof.recommended_handoff_source" in script
     assert "$RecommendedHandoffSource = [string]$OsBindingApiExecutionProof.recommended_handoff_source" in script
     assert "$RecommendedHandoffSource = [string]$OverlayApiExecutionProof.recommended_handoff_source" in script
+    assert "$RecommendedHandoffSource = [string]$SummonApiBoundedExecutionProof.recommended_handoff_source" in script
     assert "'stage6_helpful_not_noisy_runtime_authority_readiness_handoff'" in script
     assert "'stage6_helpful_not_noisy_resident_surface_runtime_handoff'" in script
     assert "'api_resident_runtime_execution_tray_presence_handoff'" in script
@@ -928,6 +968,9 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     assert "'api_overlay_execution_summon_binding_handoff'" in script
     assert "'prove_governed_summon_api_execution_after_overlay_window'" in script
     assert "'scripts/lens-summon-api-execution-proof.ps1 -Mode Status'" in script
+    assert "'api_summon_to_persistent_supervision_execution_handoff'" in script
+    assert "'execute_persistent_supervision_api_enablement_after_bounded_summon_handoff'" in script
+    assert "'scripts/lens-persistent-supervision-api-execution-proof.ps1 -Mode Status'" in script
     assert "$ResidentSurfaceForegroundRuntimeProofObserved = (" in script
     assert "$ResidentSurfaceForegroundRuntimeProofRecommendedHandoffSource" in script
     assert "$ResidentSurfaceForegroundRuntimeProofRecommendedNextSlice" in script
@@ -979,6 +1022,8 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     assert "resident_runtime_api_execution_proof = [ordered]@{" in script
     assert "overlay_api_execution_proof = [ordered]@{" in script
     assert "overlay_api_execution_proof_readback = $OverlayApiExecutionProofObserved" in script
+    assert "summon_api_bounded_execution_proof = [ordered]@{" in script
+    assert "summon_api_bounded_execution_proof_readback = $SummonApiBoundedExecutionProofObserved" in script
     assert "tray_presence_api_execution_proof = [ordered]@{" in script
     assert "os_binding_api_execution_proof = [ordered]@{" in script
     assert "recommended_handoff_source = [string]$ResidentRuntimeApiExecutionProof.recommended_handoff_source" in script
