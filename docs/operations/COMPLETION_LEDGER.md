@@ -37942,15 +37942,21 @@ Latest validation for prerequisite runtime-readiness handoff guard:
   tests\test_lens_stage6_completion_audit_script.py
   tests\test_lens_stage6_next_handoff_script.py -q`
   Result: `passed; one expected skip`
+- `python -m pytest
+  tests\test_lens_persistent_supervision_current_gap_proof_script.py -q`
+  Result: `passed; confirms downstream current-gap proof treats a stale
+  applied enablement receipt as subordinate to live missing prerequisites`
 - `ruff check
   tests\test_lens_stage6_prerequisite_bringup_plan_script.py
   tests\test_lens_stage6_completion_audit_script.py
-  tests\test_lens_stage6_next_handoff_script.py`
+  tests\test_lens_stage6_next_handoff_script.py
+  tests\test_lens_persistent_supervision_current_gap_proof_script.py`
   Result: `passed`
 - `ruff format --check
   tests\test_lens_stage6_prerequisite_bringup_plan_script.py
   tests\test_lens_stage6_completion_audit_script.py
-  tests\test_lens_stage6_next_handoff_script.py`
+  tests\test_lens_stage6_next_handoff_script.py
+  tests\test_lens_persistent_supervision_current_gap_proof_script.py`
   Result: `passed; already formatted`
 - `git diff --check`
   Result: `passed; Git reported expected LF-to-CRLF warnings for the touched

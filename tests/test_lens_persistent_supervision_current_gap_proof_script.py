@@ -209,7 +209,7 @@ def test_persistent_supervision_current_gap_proof_consumes_authority_chain_witho
     }
 
 
-def test_persistent_supervision_current_gap_consumes_applied_receipt_resident_claim_boundary(
+def test_persistent_supervision_current_gap_treats_applied_receipt_as_stale_when_prerequisites_missing(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -322,42 +322,55 @@ def test_persistent_supervision_current_gap_consumes_applied_receipt_resident_cl
     assert payload["kind"] == "lens.host.persistent_supervision_current_gap.proof"
     assert payload["status"] == "proof_passed"
     assert payload["ok"] is True
-    assert payload["stage6_applied_enablement_handoff_observed"] is True
-    assert payload["persistent_supervision_resident_claim_boundary_handoff_observed"] is True
-    assert payload["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
-    assert payload["recommended_handoff_source"] == "persistent_supervision_resident_claim_boundary_handoff"
+    assert payload["stage6_applied_enablement_handoff_observed"] is False
+    assert payload["persistent_supervision_resident_claim_boundary_handoff_observed"] is False
+    assert payload["persistent_supervision_current_gap_observed"] is True
+    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
+    assert payload["recommended_handoff_source"] == "persistent_supervision_required_prerequisites_handoff"
     assert (
-        payload["recommended_next_slice"] == "run_stage6_lens_completion_audit_after_resident_claim_boundary_readback"
+        payload["recommended_next_slice"] == "resolve_persistent_supervision_required_prerequisites_before_enablement"
     )
-    assert payload["recommended_proof_script"] == "scripts/lens-stage6-completion-audit.ps1 -Mode Status"
-    assert payload["recommended_route"] == "/lens/host/persistent-supervision/enablement/execution"
-    assert payload["recommended_readiness_route"] == "/lens/host/persistent-supervision/enablement/execution/readiness"
-    assert payload["authority_required"] == "none_new_stage6_completion_audit"
+    assert (
+        payload["recommended_proof_script"]
+        == "scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status"
+    )
+    assert payload["recommended_route"] == "/lens/host/persistent-supervision"
+    assert payload["recommended_readiness_route"] == "/lens/host/persistent-supervision/enablement"
+    assert payload["authority_required"] == "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
     assert payload["authority_granted"] is False
+    assert payload["missing_required_before_enable"] == [
+        "resident_host_process",
+        "tray_presence",
+        "global_hotkey_binding",
+        "overlay_window",
+        "summon_binding",
+    ]
+    assert payload["first_missing_required_before_enable"] == "resident_host_process"
 
     handoff = payload["handoff"]
-    assert handoff["status"] == "persistent_supervision_resident_claim_boundary_consumed"
-    assert handoff["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
-    assert handoff["next_step"] == "run_stage6_lens_completion_audit_after_resident_claim_boundary_readback"
-    assert handoff["proof_script"] == "scripts/lens-stage6-completion-audit.ps1 -Mode Status"
-    assert handoff["authority_required"] == "none_new_stage6_completion_audit"
+    assert handoff["status"] == "blocked"
+    assert handoff["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
+    assert handoff["next_step"] == "resolve_persistent_supervision_required_prerequisites_before_enablement"
+    assert handoff["proof_script"] == "scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status"
+    assert handoff["authority_required"] == "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
     assert handoff["authority_granted"] is False
+    assert handoff["first_missing_required_before_enable"] == "resident_host_process"
+    assert handoff["first_missing_requirement_handoff"]["id"] == "resident_host_process"
     assert handoff["read_only_contract"] is True
     assert handoff["diagnostic_only"] is True
     assert handoff["would_execute"] is False
     assert handoff["would_mutate"] is False
-    assert handoff["applied_enablement_receipt_handoff"]["latest_receipt_id"] == "lpsee_test_applied"
-    assert handoff["resident_claim_boundary_handoff"]["status"] == "audit_needed"
 
     authority_chain = payload["authority_chain"]
     assert authority_chain["resident_claim_boundary_consumed"] is True
-    assert authority_chain["resident_claim_boundary_handoff_consumed_after_applied_receipt"] is True
+    assert authority_chain["resident_claim_boundary_handoff_consumed_after_applied_receipt"] is False
     assert authority_chain["next_audit_gap_after_authority_chain"] == "stage6_lens_completion_audit"
     assert payload["stage6_completion_audit_required"] is True
     assert payload["stage6_completion_audit_not_run"] is True
 
     checks = {item["id"]: item for item in payload["checks"]}
-    assert checks["resident_claim_boundary_handoff"]["status"] == "stage6_completion_audit_handoff_ready"
-    assert checks["current_gap"]["status"] == "stage6_lens_completion_audit"
+    assert checks["resident_claim_boundary_handoff"]["status"] == "not_applicable"
+    assert checks["current_gap"]["status"] == "persistent_supervision_required_prerequisites_missing"
+    assert checks["first_missing_requirement_handoff"]["status"] == "resident_host_process_handoff_ready"
     assert checks["product_side_effects_denied"]["status"] == "product_read_only"
     assert all(item["passed"] for item in payload["checks"])
