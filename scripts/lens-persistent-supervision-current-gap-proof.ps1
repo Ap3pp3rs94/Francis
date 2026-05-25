@@ -377,7 +377,9 @@ $ResidentClaimHandoffObserved = (
   -not [bool](Get-PropertyValue -Payload $ResidentClaimHandoff -Name 'would_mutate' -Default $true)
 )
 $AuthorityChainConsumed = $EnablementObserved -and $ExecutionObserved -and $ResidentClaimObserved
+$PlanKeepsPrerequisiteGap = $PlanObserved -and @($PlanMissingBeforeEnable).Count -gt 0
 $AppliedReceiptHandoffObserved = (
+  -not $PlanKeepsPrerequisiteGap -and
   [int](Get-PropertyValue -Payload $Stage6NextHandoffResult -Name 'exit_code' -Default 1) -eq 0 -and
   [string](Get-PropertyValue -Payload $Stage6NextHandoff -Name 'kind' -Default '') -eq 'lens.stage6.next_handoff.proof' -and
   [bool](Get-PropertyValue -Payload $Stage6NextHandoff -Name 'ok' -Default $false) -and
