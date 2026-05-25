@@ -3306,6 +3306,12 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
 ) {
   'persistent_supervision_enablement_transition_plan_proof_readback'
 } elseif (
+  -not $ReadyToClose -and
+  $AllowLaunchOnHotkey -and
+  $PersistentSupervisionApiExecutionResidentClaimBoundaryObserved
+) {
+  'persistent_supervision_resident_claim_authority_boundary'
+} elseif (
   $Stage6CompletionReviewed -and
   -not $ReadyToClose -and
   $BlockedCriterionIds -contains 'summon_anywhere' -and
@@ -3445,22 +3451,6 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   -not $PersistentSupervisionApiExecutionProofObserved
 ) {
   'persistent_supervision_api_execution_readback'
-} elseif (
-  -not $ReadyToClose -and
-  $AllowLaunchOnHotkey -and
-  $PersistentSupervisionApiExecutionResidentClaimBoundaryObserved -and
-  $PersistentSupervisionResidentClaimBoundaryObserved -and
-  $PersistentSupervisionResidentClaimBoundaryBlockers -contains 'persistent_supervision_required_prerequisites_missing' -and
-  [string]$PersistentSupervisionResidentClaimBoundaryProof.runtime_progress_handoff.current_truthful_gap -eq 'persistent_supervision_required_prerequisites_missing'
-) {
-  'persistent_supervision_required_prerequisites_missing'
-} elseif (
-  -not $ReadyToClose -and
-  $AllowLaunchOnHotkey -and
-  $PersistentSupervisionApiExecutionResidentClaimBoundaryObserved -and
-  -not $PersistentSupervisionResidentClaimBoundaryObserved
-) {
-  'persistent_supervision_resident_claim_authority_boundary'
 } elseif (
   $Stage6CompletionReviewed -and
   -not $ReadyToClose -and
@@ -4400,6 +4390,48 @@ if (
     would_execute = $false
     would_mutate = $false
     blockers = [string[]]@($PersistentSupervisionEnablementDenialBlockers + $PersistentSupervisionEnablementExecutionDenialBlockers | Select-Object -Unique)
+  }
+  $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
+  $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
+  $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
+} elseif (
+  $NextSmallestTruthfulGap -eq 'persistent_supervision_resident_claim_authority_boundary' -and
+  $PersistentSupervisionApiExecutionResidentClaimBoundaryObserved
+) {
+  $RecommendedHandoffSource = 'stage6_persistent_supervision_api_execution_resident_claim_boundary'
+  $RecommendedHandoff = [ordered]@{
+    status = 'blocked'
+    previous_next_smallest_truthful_gap = [string]$PersistentSupervisionApiExecutionProof.next_smallest_truthful_gap
+    consumed_persistent_supervision_api_execution_proof = $PersistentSupervisionApiExecutionProofObserved
+    consumed_persistent_supervision_api_execution_next_smallest_truthful_gap = [string]$PersistentSupervisionApiExecutionProof.next_smallest_truthful_gap
+    next_smallest_truthful_gap = 'persistent_supervision_resident_claim_authority_boundary'
+    next_step = 'resolve_resident_claim_authority_before_persistent_supervision_resident_claim'
+    proof_script = 'scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status'
+    route = '/lens/host/persistent-supervision/enablement/execution'
+    readiness_route = '/lens/host/persistent-supervision/enablement/execution/readiness'
+    executions_route = '/lens/host/persistent-supervision/enablement/executions'
+    acceptance_criterion = 'system_resident_presence'
+    authority_required = 'resident_claim_authority'
+    authority_granted = $false
+    required_before_enable_after_summon = [string[]]@($PersistentSupervisionApiExecutionProofRequiredBeforeEnable)
+    required_before_enable_ready_after_summon = [bool]$PersistentSupervisionApiExecutionProof.required_before_enable_ready_after_summon
+    persistent_supervision_apply_status = [string]$PersistentSupervisionApiExecutionProof.persistent_supervision_apply_status
+    persistent_supervision_ready_after_apply = [bool]$PersistentSupervisionApiExecutionProof.persistent_supervision_ready_after_apply
+    persistent_supervision_enablement_allowed = [bool]$PersistentSupervisionApiExecutionProof.persistent_supervision_enablement_allowed
+    service_config_updated = [bool]$PersistentSupervisionApiExecutionProof.service_config_updated
+    receipt_written = [bool]$PersistentSupervisionApiExecutionProof.receipt_written
+    resident_claim_allowed = [bool]$PersistentSupervisionApiExecutionProof.resident_claim_allowed
+    service_managed = [bool]$PersistentSupervisionApiExecutionProof.service_managed
+    summon_anywhere = [bool]$PersistentSupervisionApiExecutionProof.summon_anywhere
+    os_level_summon = [bool]$PersistentSupervisionApiExecutionProof.os_level_summon
+    read_only_contract = $true
+    diagnostic_only = $true
+    would_execute = $false
+    would_mutate = $false
+    would_claim_resident = $false
+    would_write_memory = $false
+    would_decide_approval = $false
+    blockers = [string[]]@($PersistentSupervisionApiExecutionProofBlockers)
   }
   $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
   $RecommendedProofScript = [string]$RecommendedHandoff.proof_script

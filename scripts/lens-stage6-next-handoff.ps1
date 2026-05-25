@@ -1128,17 +1128,29 @@ $Stage6CompletionAuditPersistentSupervisionApiExecutionHandoffObserved = (
   -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_write_memory' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_claim_resident' -Default $true)
 )
+$Stage6CompletionAuditPersistentSupervisionResidentClaimBoundaryHandoffSource = [string](
+  Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_handoff_source' -Default ''
+)
+$Stage6CompletionAuditPersistentSupervisionResidentClaimBoundaryNextSlice = [string](
+  Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_next_slice' -Default ''
+)
 $Stage6CompletionAuditPersistentSupervisionResidentClaimBoundaryHandoffObserved = (
   $Stage6CompletionAuditReadbackObserved -and
-  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_handoff_source' -Default '') -eq 'persistent_supervision_execution_authority_handoff' -and
+  @(
+    'persistent_supervision_execution_authority_handoff'
+    'stage6_persistent_supervision_api_execution_resident_claim_boundary'
+  ) -contains $Stage6CompletionAuditPersistentSupervisionResidentClaimBoundaryHandoffSource -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'next_smallest_truthful_gap' -Default '') -eq 'persistent_supervision_resident_claim_authority_boundary' -and
-  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_next_slice' -Default '') -eq 'review_persistent_supervision_resident_claim_boundary_without_runtime_start' -and
+  @(
+    'review_persistent_supervision_resident_claim_boundary_without_runtime_start'
+    'resolve_resident_claim_authority_before_persistent_supervision_resident_claim'
+  ) -contains $Stage6CompletionAuditPersistentSupervisionResidentClaimBoundaryNextSlice -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_proof_script' -Default '') -eq 'scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status' -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'authority_required' -Default '') -eq 'resident_claim_authority' -and
   -not [bool](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'authority_granted' -Default $true) -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'status' -Default '') -eq 'blocked' -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'persistent_supervision_resident_claim_authority_boundary' -and
-  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'next_step' -Default '') -eq 'review_persistent_supervision_resident_claim_boundary_without_runtime_start' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'next_step' -Default '') -eq $Stage6CompletionAuditPersistentSupervisionResidentClaimBoundaryNextSlice -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'proof_script' -Default '') -eq 'scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status' -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'route' -Default '') -eq '/lens/host/persistent-supervision/enablement/execution' -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'readiness_route' -Default '') -eq '/lens/host/persistent-supervision/enablement/execution/readiness' -and

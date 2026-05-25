@@ -38057,6 +38057,72 @@ Latest validation for Stage 6 host manifest surface binding truthfulness:
   .\src\francis\lens\host_manifest.py .\tests\test_api_lens.py`
   Result: `passed; already formatted`
 
+### 2026-05-25 - Stage 6 completion-audit resident-claim handoff precedence
+
+Roadmap area: Stage 6 / Lens MVP, completion-audit handoff truthfulness and
+governed persistent-supervision authority boundaries.
+
+Material change:
+
+- `scripts\lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey`
+  now lets explicit runtime API execution proof advance to
+  `persistent_supervision_resident_claim_authority_boundary` before older
+  synthetic prerequisite guards can pull the audit back to
+  `persistent_supervision_required_prerequisites_missing`.
+- `scripts\lens-stage6-next-handoff.ps1 -Mode Status -CompletionAuditJsonPath`
+  now consumes the completion-audit
+  `stage6_persistent_supervision_api_execution_resident_claim_boundary`
+  handoff and routes the operator to
+  `scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status`
+  instead of asking to rerun the launch-on-hotkey completion audit.
+- Stage 6 still does not close. The next truthful gap is
+  `persistent_supervision_resident_claim_authority_boundary`; this does not
+  grant resident-claim, service-control, memory-write, approval-decision, or
+  unrestricted execution authority, and does not start Stage 7.
+
+Latest validation for Stage 6 completion-audit resident-claim handoff
+precedence:
+
+- PowerShell AST parse of `scripts\lens-stage6-completion-audit.ps1` and
+  `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed`
+- `.venv\Scripts\python.exe -m pytest
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_readback -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey`
+  Result: `exit_code=0; elapsed_seconds=765.9; status=blocked; ok=true;
+  audit_status=complete; ready_to_close=false;
+  next_smallest_truthful_gap=persistent_supervision_resident_claim_authority_boundary;
+  recommended_next_slice=resolve_resident_claim_authority_before_persistent_supervision_resident_claim;
+  recommended_handoff_source=stage6_persistent_supervision_api_execution_resident_claim_boundary;
+  authority_required=resident_claim_authority; child_proof_timeouts=[]`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath .tmp\stage6-completion-audit-allow-launch-on-hotkey-selector-fix.json`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=persistent_supervision_resident_claim_authority_boundary;
+  recommended_next_slice=resolve_resident_claim_authority_before_persistent_supervision_resident_claim;
+  recommended_handoff_source=stage6_persistent_supervision_api_execution_resident_claim_boundary;
+  stage6_completion_audit_readback_observed=true;
+  stage6_completion_audit_recommended_handoff_consumed=true;
+  stage6_completion_audit_runtime_readback_required=false`
+- `.venv\Scripts\python.exe -m pytest
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_applied_bringup_review_state -q`
+  Result: `passed`
+- `.venv\Scripts\ruff.exe check
+  .\tests\test_lens_stage6_next_handoff_script.py
+  .\tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `.venv\Scripts\ruff.exe format --check
+  .\tests\test_lens_stage6_next_handoff_script.py
+  .\tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; already formatted`
+- `git diff --check`
+  Result: `passed; Git reported expected LF-to-CRLF warnings for the touched
+  PowerShell scripts`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

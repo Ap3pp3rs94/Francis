@@ -1233,24 +1233,45 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
         "[string]$PersistentSupervisionApiExecutionProofCheckStatuses"
         "['execution_readiness_reaches_resident_claim_boundary'] -eq 'blocked'" in script
     )
-    consumed_resident_claim_branch = (
-        "$PersistentSupervisionApiExecutionResidentClaimBoundaryObserved -and\n"
-        "  $PersistentSupervisionResidentClaimBoundaryObserved -and\n"
-        "  $PersistentSupervisionResidentClaimBoundaryBlockers -contains "
-        "'persistent_supervision_required_prerequisites_missing' -and\n"
-        "  [string]$PersistentSupervisionResidentClaimBoundaryProof.runtime_progress_handoff."
-        "current_truthful_gap -eq 'persistent_supervision_required_prerequisites_missing'\n) {\n"
-        "  'persistent_supervision_required_prerequisites_missing'"
-    )
-    unconsumed_resident_claim_branch = (
-        "$PersistentSupervisionApiExecutionResidentClaimBoundaryObserved -and\n"
-        "  -not $PersistentSupervisionResidentClaimBoundaryObserved\n) {\n"
+    runtime_resident_claim_branch = (
+        "-not $ReadyToClose -and\n"
+        "  $AllowLaunchOnHotkey -and\n"
+        "  $PersistentSupervisionApiExecutionResidentClaimBoundaryObserved\n) {\n"
         "  'persistent_supervision_resident_claim_authority_boundary'"
     )
-    assert consumed_resident_claim_branch in script
-    assert unconsumed_resident_claim_branch in script
-    assert script.index(consumed_resident_claim_branch) < script.index(unconsumed_resident_claim_branch)
+    stale_prerequisite_branch = (
+        "$Stage6CompletionReviewed -and\n"
+        "  -not $ReadyToClose -and\n"
+        "  $BlockedCriterionIds -contains 'summon_anywhere' -and\n"
+        "  $ResidentHostProcessSupervisionEvidenceObserved -and\n"
+        "  $HostSupervisionAuthorityReadinessHandoffObserved -and\n"
+        "  $HostSupervisionAuthorityRequestProofObserved -and\n"
+        "  $PersistentSupervisionPrerequisitesProofObserved -and\n"
+        "  $PersistentSupervisionServiceInstallPlanProofObserved -and\n"
+        "  $PersistentSupervisionEnablementAuthorityProofObserved -and\n"
+        "  $PersistentSupervisionExecutionAuthorityProofObserved -and\n"
+        "  $PersistentSupervisionResidentClaimBoundaryObserved -and\n"
+        "  $PersistentSupervisionEnablementTransitionPlanProofObserved -and\n"
+        "  -not $Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and\n"
+        "  [string]$PersistentSupervisionPrerequisitesProof.next_smallest_truthful_gap "
+        "-eq 'persistent_supervision_required_prerequisites_missing'\n) {\n"
+        "  'persistent_supervision_required_prerequisites_missing'"
+    )
+    assert runtime_resident_claim_branch in script
+    assert stale_prerequisite_branch in script
+    gap_selector = script[script.index("$NextSmallestTruthfulGap = if ($ReadyToClose)") :]
+    assert gap_selector.index(runtime_resident_claim_branch) < gap_selector.index(stale_prerequisite_branch)
     assert "'persistent_supervision_resident_claim_authority_boundary'" in script
+    assert "$RecommendedHandoffSource = 'stage6_persistent_supervision_api_execution_resident_claim_boundary'" in script
+    assert "next_step = 'resolve_resident_claim_authority_before_persistent_supervision_resident_claim'" in script
+    assert (
+        "proof_script = 'scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status'" in script
+    )
+    assert "authority_required = 'resident_claim_authority'" in script
+    assert (
+        "required_before_enable_ready_after_summon = [bool]$PersistentSupervisionApiExecutionProof.required_before_enable_ready_after_summon"
+        in script
+    )
     assert "tray_presence_api_execution_proof = [ordered]@{" in script
     assert "os_binding_api_execution_proof = [ordered]@{" in script
     assert "recommended_handoff_source = [string]$ResidentRuntimeApiExecutionProof.recommended_handoff_source" in script
