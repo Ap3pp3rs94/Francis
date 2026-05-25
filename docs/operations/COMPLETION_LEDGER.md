@@ -38362,6 +38362,67 @@ consumption:
   Result: `passed; Git reported the expected LF-to-CRLF warning for the touched
   PowerShell script`
 
+### 2026-05-25 - Stage 6 restabilized prerequisite audit handoff proof
+
+Roadmap area: Stage 6 / Lens MVP, governed prerequisite bring-up,
+completion-audit runtime readback, and next-handoff truthfulness.
+
+Material change:
+
+- Restabilized the governed Stage 6 prerequisite sequence through the live
+  resident host, tray, global-hotkey, overlay-authority, and overlay-execution
+  leases until the readback reached
+  `persistent_supervision_enablement_applied`.
+- Re-ran the full Stage 6 completion audit with launch-on-hotkey runtime
+  readback while that live posture was valid. The audit completed without child
+  proof timeouts and preserved the broad Stage 6 blocker
+  `summon_anywhere_blockers`.
+- Fed the resulting audit JSON into `scripts/lens-stage6-next-handoff.ps1`.
+  The supplied-audit handoff was consumed and the next handoff stayed on the
+  read-only persistent-supervision enablement receipt review instead of
+  looping back to runtime audit readback.
+- Stage 6 still does not close and Stage 7 does not start. This evidence does
+  not grant authority, claim resident state, write memory, or assert
+  summon-anywhere readiness.
+
+Latest validation for Stage 6 restabilized prerequisite audit handoff proof:
+
+- Bounded prerequisite stabilization loop using
+  `scripts/lens-stage6-prerequisite-bringup-plan.ps1`
+  Result: `resident_host_process -> tray_presence -> global_hotkey_binding ->
+  overlay_window grant -> overlay_window execute ->
+  persistent_supervision_enablement_applied; current_truthful_gap=
+  persistent_supervision_execution_boundary; next_action=
+  review_persistent_supervision_enablement_receipt`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -AllowLaunchOnHotkey`
+  Result: `exit_code=0; status=blocked; audit_status=complete;
+  ready_to_close=false; child_proof_timeouts=[];
+  next_smallest_truthful_gap=summon_anywhere_blockers;
+  recommended_handoff_source=stage6_prerequisite_bringup_operator_plan;
+  recommended_next_slice=run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt;
+  authority_required=none_readback_only; process_supervision_boundary_exit=1`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath
+  .tmp\stage6-completion-audit-after-restabilized-live-prereqs.json`
+  Result: `status=proof_passed; ready_to_close=false;
+  next_smallest_truthful_gap=summon_anywhere_blockers;
+  recommended_handoff_source=stage6_prerequisite_bringup_operator_plan;
+  recommended_next_slice=run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt;
+  stage6_completion_audit_enablement_receipt_review_handoff_observed=true;
+  stage6_completion_audit_recommended_handoff_consumed=true;
+  stage6_completion_audit_runtime_readback_required=false`
+- Runtime cleanup after live proof:
+  `scripts\lens-overlay-window.ps1 -Mode Stop`,
+  `scripts\lens-hotkey-binding.ps1 -Mode Stop`,
+  `scripts\lens-tray-presence.ps1 -Mode Stop`, and
+  `scripts\lens-host-supervisor.ps1 -Mode StopResident`
+  Result: `overlay_stopped; hotkey_stopped; tray_stopped;
+  resident_supervision_stopped; subsequent process scan only matched the scan
+  command itself`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
