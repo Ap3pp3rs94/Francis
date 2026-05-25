@@ -9479,6 +9479,22 @@ def test_lens_status_promotes_coordinated_surface_runtime_before_summon_binding(
     assert persistent_plan["governance"]["execution_authority"] is False
     assert persistent_plan["governance"]["resident_claim_authority"] is False
 
+    manifest = client.get("/lens/host/manifest")
+    assert manifest.status_code == 200
+    manifest_body = manifest.json()
+    required_bindings = {item["id"]: item for item in manifest_body["required_bindings"]}
+    assert required_bindings["tray_presence"]["status"] == "observed"
+    assert required_bindings["global_hotkey"]["status"] == "observed"
+    assert required_bindings["overlay_window"]["status"] == "observed"
+    assert required_bindings["summon_binding"]["status"] == "missing"
+    assert "tray_host_missing" not in manifest_body["blockers"]
+    assert "global_hotkey_binding_missing" not in manifest_body["blockers"]
+    assert "overlay_window_missing" not in manifest_body["blockers"]
+    assert "summon_binding_missing" in manifest_body["blockers"]
+    assert manifest_body["governance"]["execution_authority"] is False
+    assert manifest_body["governance"]["service_control_authority"] is False
+    assert manifest_body["governance"]["mutation_authority_granted"] is False
+
 
 def test_lens_status_surfaces_pending_approval_without_decision_authority(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"

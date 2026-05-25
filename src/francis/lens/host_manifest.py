@@ -3184,11 +3184,11 @@ def lens_host_launch_manifest() -> dict[str, Any]:
             },
             {
                 "id": "tray_presence",
-                "status": "missing",
+                "status": "observed" if bool(tray_runtime_readback.get("ready")) else "missing",
             },
             {
                 "id": "global_hotkey",
-                "status": "missing",
+                "status": "observed" if bool(hotkey_runtime_readback.get("ready")) else "missing",
             },
             {
                 "id": "overlay_window",

@@ -38025,6 +38025,38 @@ Latest validation for Stage 6 first-missing prerequisite handoff advancement:
   Result: `passed across ubuntu-latest/windows-2025-vs2026 on Python 3.12
   and 3.13`
 
+### 2026-05-25 - Stage 6 host manifest surface binding truthfulness
+
+Roadmap area: Stage 6 / Lens MVP, operator-surface truthfulness for the host
+manifest and persistent-supervision prerequisite readbacks.
+
+Material change:
+
+- `/lens/host/manifest` now reports the `tray_presence` and `global_hotkey`
+  required bindings as `observed` when their live runtime readbacks are ready,
+  matching the same readiness source already used for host blockers and
+  persistent-supervision dependency readbacks.
+- This removes a false `missing` signal after tray and hotkey runtime proof is
+  present. It does not grant tray registration, hotkey registration, summon,
+  overlay, service-control, execution, resident-claim, or mutation authority.
+- Stage 6 still does not close. The coordinated-surface proof still leaves
+  `summon_binding` as the remaining missing surface binding, and this change
+  does not start Stage 7.
+
+Latest validation for Stage 6 host manifest surface binding truthfulness:
+
+- `.venv\Scripts\python.exe -m pytest
+  tests/test_api_lens.py::test_lens_status_promotes_coordinated_surface_runtime_before_summon_binding -q`
+  Result: `passed`
+- `.venv\Scripts\python.exe -m pytest tests/test_lens_tray_runtime_readback.py -q`
+  Result: `passed`
+- `.venv\Scripts\ruff.exe check
+  .\src\francis\lens\host_manifest.py .\tests\test_api_lens.py`
+  Result: `passed`
+- `.venv\Scripts\ruff.exe format --check
+  .\src\francis\lens\host_manifest.py .\tests\test_api_lens.py`
+  Result: `passed; already formatted`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
