@@ -1416,10 +1416,7 @@ def _run() -> tuple[int, dict[str, Any]]:
     runtime_missing_steps = [
         step for step in ordered_steps if step["id"] in missing or not bool(step["ready"])
     ]
-    enablement_execution_applied = (
-        _enablement_execution_applied(enablement_execution_receipts)
-        and not runtime_missing_steps
-    )
+    enablement_execution_applied = _enablement_execution_applied(enablement_execution_receipts)
     handoff = {} if enablement_execution_applied else raw_handoff
     effective_missing = (
         []

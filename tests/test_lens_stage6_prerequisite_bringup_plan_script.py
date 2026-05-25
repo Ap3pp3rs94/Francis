@@ -2541,6 +2541,34 @@ def test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_con
     assert followup_payload["would_execute"] is False
     assert followup_payload["would_mutate"] is False
 
+    for runtime_dir in (
+        "lens-host",
+        "lens-host-supervisor",
+        "lens-tray",
+        "lens-hotkey",
+        "lens-overlay",
+    ):
+        shutil.rmtree(data_dir / "runtime" / runtime_dir, ignore_errors=True)
+
+    stale_runtime_followup = _run_plan(
+        "-Mode",
+        "Status",
+        "-DataDir",
+        str(data_dir),
+        *_service_config_args(service_config_path),
+    )
+    assert stale_runtime_followup.returncode == 0, stale_runtime_followup.stderr or stale_runtime_followup.stdout
+    stale_runtime_payload = json.loads(stale_runtime_followup.stdout)
+    assert stale_runtime_payload["status"] == "persistent_supervision_enablement_applied"
+    assert stale_runtime_payload["missing_required_before_enable"] == []
+    assert stale_runtime_payload["first_missing_requirement_handoff"] == {}
+    assert stale_runtime_payload["next_operator_action_requirement"] == "persistent_supervision_enablement_receipt"
+    assert stale_runtime_payload["next_operator_action"]["id"] == "review_persistent_supervision_enablement_receipt"
+    assert stale_runtime_payload["next_smallest_truthful_gap"] == "persistent_supervision_execution_boundary"
+    assert stale_runtime_payload["authority_required"] == "none_readback_only"
+    assert stale_runtime_payload["would_execute"] is False
+    assert stale_runtime_payload["would_mutate"] is False
+
     shutil.rmtree(data_dir / "lens" / "resident_runtime_authority_grants", ignore_errors=True)
     late_resident_grant = _grant_next(
         data_dir,
