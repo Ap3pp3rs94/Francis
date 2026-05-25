@@ -38302,6 +38302,66 @@ advancement:
   Result: `overlay_stopped; hotkey_stopped; tray_stopped;
   resident_supervision_stopped; no Lens pid files remained under data\runtime`
 
+### 2026-05-25 - Stage 6 completion-audit receipt-review handoff consumption
+
+Roadmap area: Stage 6 / Lens MVP, completion-audit and next-handoff
+truthfulness after governed prerequisite bring-up.
+
+Material change:
+
+- `scripts\lens-stage6-next-handoff.ps1 -Mode Status -CompletionAuditJsonPath`
+  now consumes a supplied completion-audit readback when the audit keeps the
+  broad `stage6_prerequisite_bringup_operator_plan` source but its concrete
+  handoff is already the applied persistent-supervision enablement receipt
+  review.
+- The next-handoff proof no longer loops the operator back to
+  `run_stage6_completion_audit_with_launch_on_hotkey_runtime_readback` after
+  that audit JSON is supplied. It preserves the broad
+  `summon_anywhere_blockers` closure gap while routing the concrete next slice
+  to
+  `run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt`.
+- Stage 6 still does not close and Stage 7 does not start. This change does not
+  grant authority, execute runtime actions, write memory, claim residency, or
+  mutate Lens runtime state.
+
+Latest validation for Stage 6 completion-audit receipt-review handoff
+consumption:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -AllowLaunchOnHotkey`
+  Result: `exit_code=0; status=blocked; audit_status=complete;
+  ready_to_close=false; child_proof_timeouts=[];
+  next_smallest_truthful_gap=summon_anywhere_blockers;
+  recommended_handoff_source=stage6_prerequisite_bringup_operator_plan;
+  recommended_next_slice=run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt;
+  authority_required=none_readback_only`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath
+  .tmp\stage6-completion-audit-after-stable-live-prereqs.json`
+  Result: `status=proof_passed; ready_to_close=false;
+  next_smallest_truthful_gap=summon_anywhere_blockers;
+  recommended_handoff_source=stage6_prerequisite_bringup_operator_plan;
+  recommended_next_slice=run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt;
+  stage6_completion_audit_enablement_receipt_review_handoff_observed=true;
+  stage6_completion_audit_recommended_handoff_consumed=true;
+  stage6_completion_audit_runtime_readback_required=false`
+- PowerShell AST parse of `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed`
+- `python -m pytest
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_applied_bringup_review_state
+  -q`
+  Result: `passed`
+- `python -m ruff check tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed; already formatted`
+- `git diff --check`
+  Result: `passed; Git reported the expected LF-to-CRLF warning for the touched
+  PowerShell script`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

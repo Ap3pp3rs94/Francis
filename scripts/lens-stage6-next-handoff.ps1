@@ -1396,22 +1396,55 @@ $Stage6CompletionAuditPrerequisiteBringupEnablementReceiptAction = Get-PropertyV
   -Payload $Stage6CompletionAuditRecommendedHandoff `
   -Name 'next_operator_action' `
   -Default ([ordered]@{})
+$Stage6CompletionAuditPrerequisiteBringupEnablementReceiptSource = [string](
+  Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_handoff_source' -Default ''
+)
+$Stage6CompletionAuditPrerequisiteBringupEnablementReceiptGap = [string](
+  Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'next_smallest_truthful_gap' -Default ''
+)
+$Stage6CompletionAuditPrerequisiteBringupEnablementReceiptHandoffStatus = [string](
+  Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'status' -Default ''
+)
+$Stage6CompletionAuditPrerequisiteBringupEnablementReceiptHandoffGap = [string](
+  Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'next_smallest_truthful_gap' -Default ''
+)
+$Stage6CompletionAuditPrerequisiteBringupEnablementReceiptId = [string](
+  Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'latest_receipt_id' -Default ''
+)
+if ([string]::IsNullOrWhiteSpace($Stage6CompletionAuditPrerequisiteBringupEnablementReceiptId)) {
+  $Stage6CompletionAuditPrerequisiteBringupEnablementReceiptId = [string](
+    Get-PropertyValue `
+      -Payload $Stage6CompletionAuditPrerequisiteBringupEnablementReceiptAction `
+      -Name 'latest_receipt_id' `
+      -Default ''
+  )
+}
+$Stage6CompletionAuditPrerequisiteBringupEnablementReceiptSourceObserved = (
+  (
+    $Stage6CompletionAuditPrerequisiteBringupEnablementReceiptSource -eq 'stage6_prerequisite_bringup_enablement_receipt_review' -and
+    $Stage6CompletionAuditPrerequisiteBringupEnablementReceiptGap -eq 'persistent_supervision_execution_boundary' -and
+    $Stage6CompletionAuditPrerequisiteBringupEnablementReceiptHandoffStatus -eq 'receipt_review_ready'
+  ) -or
+  (
+    $Stage6CompletionAuditPrerequisiteBringupEnablementReceiptSource -eq 'stage6_prerequisite_bringup_operator_plan' -and
+    $Stage6CompletionAuditPrerequisiteBringupEnablementReceiptGap -eq 'summon_anywhere_blockers' -and
+    $Stage6CompletionAuditPrerequisiteBringupEnablementReceiptHandoffStatus -eq 'blocked'
+  )
+)
 $Stage6CompletionAuditPrerequisiteBringupEnablementReceiptHandoffObserved = (
   $Stage6CompletionAuditReadbackObserved -and
-  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_handoff_source' -Default '') -eq 'stage6_prerequisite_bringup_enablement_receipt_review' -and
-  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'next_smallest_truthful_gap' -Default '') -eq 'persistent_supervision_execution_boundary' -and
+  $Stage6CompletionAuditPrerequisiteBringupEnablementReceiptSourceObserved -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_next_slice' -Default '') -eq 'run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt' -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_proof_script' -Default '') -eq 'scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status' -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'authority_required' -Default '') -eq 'none_readback_only' -and
   -not [bool](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'authority_granted' -Default $true) -and
-  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'status' -Default '') -eq 'receipt_review_ready' -and
-  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'persistent_supervision_execution_boundary' -and
+  $Stage6CompletionAuditPrerequisiteBringupEnablementReceiptHandoffGap -eq 'persistent_supervision_execution_boundary' -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'next_step' -Default '') -eq 'run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt' -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'proof_script' -Default '') -eq 'scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status' -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'route' -Default '') -eq '/lens/host/persistent-supervision/enablement/executions' -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'authority_required' -Default '') -eq 'none_readback_only' -and
   -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'authority_granted' -Default $true) -and
-  -not [string]::IsNullOrWhiteSpace([string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'latest_receipt_id' -Default '')) -and
+  -not [string]::IsNullOrWhiteSpace($Stage6CompletionAuditPrerequisiteBringupEnablementReceiptId) -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupEnablementReceiptAction -Name 'id' -Default '') -eq 'review_persistent_supervision_enablement_receipt' -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupEnablementReceiptAction -Name 'route' -Default '') -eq '/lens/host/persistent-supervision/enablement/executions' -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupEnablementReceiptAction -Name 'mode' -Default '') -eq 'readback' -and
