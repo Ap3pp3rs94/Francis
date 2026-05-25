@@ -714,7 +714,10 @@ def test_lens_stage6_completion_audit_observes_process_supervision_boundary_auth
 def test_lens_stage6_completion_audit_observes_resident_host_process_supervision_handoff_authority_gate() -> None:
     script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
 
-    assert "$SummonResidentHostBlockerProofScript = Join-Path $PSScriptRoot 'lens-summon-resident-host-blocker-proof.ps1'" in script
+    assert (
+        "$SummonResidentHostBlockerProofScript = Join-Path $PSScriptRoot 'lens-summon-resident-host-blocker-proof.ps1'"
+        in script
+    )
     assert "$SummonResidentHostBlockerProofDataDir = Join-Path $RepoRoot (" in script
     assert "'data/test_runs/lens-stage6-completion-audit/summon-resident-host-blocker-'" in script
     assert "$SummonResidentHostBlockerProofResult = Invoke-JsonScript" in script
@@ -725,10 +728,16 @@ def test_lens_stage6_completion_audit_observes_resident_host_process_supervision
         "[string]$SummonResidentHostBlockerProof.recommended_handoff_source -eq "
         "'resident_host_process_supervision_handoff.recommended_handoff'"
     ) in script
-    assert "[string]$SummonResidentHostBlockerProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit'" in script
+    assert (
+        "[string]$SummonResidentHostBlockerProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit'"
+        in script
+    )
     assert "[string]$SummonResidentHostBlockerProof.authority_required -eq 'none_new_stage6_completion_audit'" in script
     assert "-not [bool]$SummonResidentHostBlockerProof.authority_granted" in script
-    assert "[bool]$SummonResidentHostBlockerProofGovernance.wraps_resident_host_process_supervision_blocker_proof" in script
+    assert (
+        "[bool]$SummonResidentHostBlockerProofGovernance.wraps_resident_host_process_supervision_blocker_proof"
+        in script
+    )
     assert "-not [bool]$SummonResidentHostBlockerProofGovernance.process_supervision_authority" in script
     assert "summon_resident_host_blocker_proof_readback = $SummonResidentHostBlockerProofObserved" in script
     assert (
@@ -843,7 +852,10 @@ def test_lens_stage6_completion_audit_prefers_closure_handoff_after_resident_cla
     assert "next_step = $Stage6PrerequisiteBringupMissingRequirementRecommendedNextSlice" in script
     assert "proof_script = 'scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status'" in script
     assert "summon_resident_host_blocker_bridge = $SummonResidentHostBlockerProof.recommended_handoff" in script
-    assert "summon_resident_host_blocker_bridge_source = [string]$SummonResidentHostBlockerProof.recommended_handoff_source" in script
+    assert (
+        "summon_resident_host_blocker_bridge_source = [string]$SummonResidentHostBlockerProof.recommended_handoff_source"
+        in script
+    )
     assert "$RecommendedConcreteHandoffSource = $RecommendedHandoffSource" in script
     assert "$RecommendedConcreteHandoffSource = 'persistent_supervision_resident_claim_boundary_handoff'" in script
     assert "$RecommendedConcreteHandoff = $PersistentSupervisionResidentClaimBoundaryProof.handoff" in script
