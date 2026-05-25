@@ -38123,6 +38123,79 @@ precedence:
   Result: `passed; Git reported expected LF-to-CRLF warnings for the touched
   PowerShell scripts`
 
+### 2026-05-25 - Stage 6 prerequisite-plan completion-audit handoff
+
+Roadmap area: Stage 6 / Lens MVP, completion-audit handoff truthfulness for
+system-resident prerequisite bring-up.
+
+Material change:
+
+- `scripts\lens-stage6-completion-audit.ps1 -Mode Status` now consumes the
+  full Stage 6 prerequisite bring-up operator plan for resident host, tray,
+  global hotkey, overlay, and summon binding prerequisites instead of only the
+  older resident-host and tray cases.
+- The completion audit now pairs each current first-missing prerequisite with
+  its valid truthful gap before accepting the handoff. The validated current
+  readback is `overlay_window` paired with
+  `summon_overlay_window_blocker_boundary`.
+- The completion-audit handoff no longer fills the operator-plan payload from
+  stale resident-host proof fields when resident-host is not the current
+  blocker. It routes the operator to
+  `run_stage6_prerequisite_bringup_grant_overlay_window_authority` with exact
+  `lens.overlay.window_authority`, while preserving `authority_granted=false`,
+  `would_execute=false`, and `would_mutate=false`.
+- `scripts\lens-stage6-next-handoff.ps1 -Mode Status -CompletionAuditJsonPath`
+  now consumes that overlay-window operator-plan audit readback instead of
+  only accepting resident-host prerequisite actions.
+- Stage 6 still does not close. This does not grant overlay authority, execute
+  the grant, mutate files, write memory, claim resident status, or start Stage
+  7.
+
+Latest validation for Stage 6 prerequisite-plan completion-audit handoff:
+
+- PowerShell AST parse of `scripts\lens-stage6-completion-audit.ps1` and
+  `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed`
+- `.venv\Scripts\python.exe -m pytest
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_consumes_stage6_prerequisite_bringup_plan_readback
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_readback
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback -q`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-completion-audit.ps1 -Mode Status`
+  Result: `exit_code=0; elapsed_seconds=441.1; status=blocked; ok=true;
+  audit_status=complete; ready_to_close=false;
+  next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing;
+  recommended_next_slice=run_stage6_prerequisite_bringup_grant_overlay_window_authority;
+  recommended_handoff_source=stage6_prerequisite_bringup_operator_plan;
+  authority_required=lens.overlay.window_authority; authority_granted=false;
+  current_first_missing_requirement=overlay_window;
+  current_first_missing_truthful_gap=summon_overlay_window_blocker_boundary;
+  handoff_first_missing_truthful_gap_paired=true; handoff_would_execute=false;
+  handoff_would_mutate=false; child_proof_timeouts=[]`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath .tmp\stage6-completion-audit-after-prereq-plan-tightened.json`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing;
+  recommended_next_slice=run_stage6_prerequisite_bringup_grant_overlay_window_authority;
+  recommended_handoff_source=stage6_prerequisite_bringup_operator_plan;
+  authority_required=lens.overlay.window_authority; authority_granted=false;
+  stage6_completion_audit_prerequisite_bringup_operator_plan_handoff_observed=true;
+  stage6_completion_audit_recommended_handoff_consumed=true;
+  stage6_completion_audit_runtime_readback_required=false`
+- `.venv\Scripts\ruff.exe check
+  .\tests\test_lens_stage6_completion_audit_script.py
+  .\tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `.venv\Scripts\ruff.exe format --check
+  .\tests\test_lens_stage6_completion_audit_script.py
+  .\tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; already formatted`
+- `git diff --check`
+  Result: `passed; Git reported expected LF-to-CRLF warnings for the touched
+  PowerShell scripts`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

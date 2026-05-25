@@ -107,10 +107,12 @@ def test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback() -> N
     assert "stage6_completion_audit_persistent_supervision_first_missing_requirement_handoff_observed" in script
     assert "$Stage6CompletionAuditPrerequisiteBringupOperatorPlanHandoffObserved = (" in script
     assert "'stage6_prerequisite_bringup_operator_plan'" in script
-    assert "'run_stage6_prerequisite_bringup_request_next_for_resident_host_process'" in script
-    assert "'run_stage6_prerequisite_bringup_grant_resident_runtime_execution_authority'" in script
     assert "'grant_resident_runtime_execution_authority'" in script
     assert "'execute_supervised_resident_host_start'" in script
+    assert "$Stage6CompletionAuditPrerequisiteBringupOperatorPlanNextSliceObserved = (" in script
+    assert "$Stage6CompletionAuditPrerequisiteBringupOperatorPlanSurfaceGrantActionObserved = (" in script
+    assert "$Stage6CompletionAuditPrerequisiteBringupOperatorPlanAuthorityObserved = (" in script
+    assert "run_stage6_prerequisite_bringup_$Stage6CompletionAuditPrerequisiteBringupOperatorPlanActionId" in script
     assert "stage6_completion_audit_prerequisite_bringup_operator_plan_handoff_observed" in script
     assert "$Stage6CompletionAuditPrerequisiteBringupEnablementReceiptHandoffObserved = (" in script
     assert "'stage6_prerequisite_bringup_enablement_receipt_review'" in script
@@ -2043,6 +2045,142 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     prerequisite_operator_plan_checks = {item["id"]: item for item in prerequisite_operator_plan_payload["checks"]}
     assert prerequisite_operator_plan_checks["stage6_completion_audit_runtime_authority_handoff"]["status"] == (
         "completion_audit_recommended_handoff_consumed"
+    )
+
+    overlay_operator_plan_audit_json = tmp_path / "stage6-completion-audit-overlay-operator-plan.json"
+    overlay_operator_plan_audit_json.write_text(
+        json.dumps(
+            {
+                "kind": "lens.stage6.completion_audit",
+                "ok": True,
+                "status": "blocked",
+                "audit_status": "complete",
+                "allow_launch_on_hotkey": False,
+                "next_smallest_truthful_gap": "persistent_supervision_required_prerequisites_missing",
+                "recommended_handoff_source": "stage6_prerequisite_bringup_operator_plan",
+                "recommended_next_slice": "run_stage6_prerequisite_bringup_grant_overlay_window_authority",
+                "recommended_proof_script": "scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status",
+                "authority_required": "lens.overlay.window_authority",
+                "authority_granted": False,
+                "recommended_handoff": {
+                    "status": "blocked",
+                    "previous_next_smallest_truthful_gap": ("persistent_supervision_required_prerequisites_missing"),
+                    "consumed_stage6_prerequisite_bringup_status": "blocked",
+                    "consumed_stage6_prerequisite_bringup_current_truthful_gap": (
+                        "persistent_supervision_required_prerequisites_missing"
+                    ),
+                    "consumed_stage6_prerequisite_bringup_current_truthful_gap_basis": (
+                        "missing_required_before_enable"
+                    ),
+                    "next_smallest_truthful_gap": "persistent_supervision_required_prerequisites_missing",
+                    "next_step": "run_stage6_prerequisite_bringup_grant_overlay_window_authority",
+                    "proof_script": "scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status",
+                    "route": "/lens/host/persistent-supervision",
+                    "readiness_route": "/lens/host/persistent-supervision/enablement",
+                    "operator_plan_script": "scripts/lens-stage6-prerequisite-bringup-plan.ps1",
+                    "next_operator_action_requirement": "overlay_window",
+                    "next_operator_action": {
+                        "id": "grant_overlay_window_authority",
+                        "route": "/lens/overlay/authority",
+                        "method": "POST",
+                        "approval_action": "lens.overlay.window_authority",
+                        "requires": ["exact approved lens.overlay.window_authority approval_id"],
+                        "mode": "",
+                        "live_effect": "authority grant receipt",
+                        "operator_supplied_values_required": True,
+                        "script_would_execute": False,
+                        "script_would_mutate": False,
+                        "approved_approval_id": "83f36f9a-0e8a-42c7-a28f-21b3cbe67a7f",
+                    },
+                    "next_operator_command": {
+                        "command": (
+                            ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 "
+                            "-Mode GrantNext -Actor <actor> "
+                            "-ApprovalId 83f36f9a-0e8a-42c7-a28f-21b3cbe67a7f -ConfirmGrant"
+                        ),
+                        "mode": "GrantNext",
+                        "requires_confirmation": True,
+                        "requires_approval_id": True,
+                        "requires_operator_approval_decision": True,
+                    },
+                    "operator_sequence_command_availability": {
+                        "available_now_count": 1,
+                        "preview_only_count": 0,
+                        "sequence_length": 1,
+                        "truthful": True,
+                    },
+                    "authority_required": "lens.overlay.window_authority",
+                    "prerequisite_authority_scope": "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites",
+                    "authority_granted": False,
+                    "first_missing_required_before_enable": "overlay_window",
+                    "first_missing_truthful_gap": "summon_overlay_window_blocker_boundary",
+                    "first_missing_truthful_gap_expected": ["summon_overlay_window_blocker_boundary"],
+                    "first_missing_truthful_gap_paired": True,
+                    "first_missing_requirement_handoff": {
+                        "id": "grant_overlay_window_authority",
+                        "route": "/lens/overlay/authority",
+                        "method": "POST",
+                        "approval_action": "lens.overlay.window_authority",
+                        "operator_supplied_values_required": True,
+                        "script_would_execute": False,
+                        "script_would_mutate": False,
+                    },
+                    "read_only_contract": True,
+                    "diagnostic_only": True,
+                    "would_execute": False,
+                    "would_mutate": False,
+                    "would_request_authority": False,
+                    "would_grant_authority": False,
+                    "would_supervise_process": False,
+                    "would_restart_process": False,
+                    "would_install_service": False,
+                    "would_start_service": False,
+                    "would_write_memory": False,
+                    "would_decide_approval": False,
+                    "blockers": [
+                        "persistent_supervision_required_prerequisites_missing",
+                        "summon_overlay_window_blocker_boundary",
+                    ],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    overlay_operator_plan_proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-CompletionAuditJsonPath",
+        str(overlay_operator_plan_audit_json),
+        env=proof_env,
+    )
+
+    assert overlay_operator_plan_proc.returncode == 0, (
+        overlay_operator_plan_proc.stderr or overlay_operator_plan_proc.stdout
+    )
+    overlay_operator_plan_payload = json.loads(overlay_operator_plan_proc.stdout)
+    assert overlay_operator_plan_payload["recommended_handoff_source"] == "stage6_prerequisite_bringup_operator_plan"
+    assert overlay_operator_plan_payload["recommended_next_slice"] == (
+        "run_stage6_prerequisite_bringup_grant_overlay_window_authority"
+    )
+    assert overlay_operator_plan_payload["authority_required"] == "lens.overlay.window_authority"
+    assert (
+        overlay_operator_plan_payload["stage6_completion_audit_prerequisite_bringup_operator_plan_handoff_observed"]
+        is True
+    )
+    assert overlay_operator_plan_payload["stage6_completion_audit_recommended_handoff_consumed"] is True
+    overlay_operator_plan_handoff = overlay_operator_plan_payload["recommended_handoff"]
+    assert overlay_operator_plan_handoff["authority_required"] == "lens.overlay.window_authority"
+    assert overlay_operator_plan_handoff["next_operator_action_requirement"] == "overlay_window"
+    assert overlay_operator_plan_handoff["first_missing_required_before_enable"] == "overlay_window"
+    assert overlay_operator_plan_handoff["next_operator_action"]["id"] == "grant_overlay_window_authority"
+    assert overlay_operator_plan_handoff["next_operator_command"]["mode"] == "GrantNext"
+    assert overlay_operator_plan_handoff["authority_granted"] is False
+    assert overlay_operator_plan_handoff["read_only_contract"] is True
+    assert overlay_operator_plan_handoff["would_execute"] is False
+    assert overlay_operator_plan_handoff["would_mutate"] is False
+    assert overlay_operator_plan_payload["recommended_next_operator_action"]["id"] == (
+        "run_stage6_prerequisite_bringup_grant_overlay_window_authority"
     )
 
     tray_audit_json = tmp_path / "stage6-completion-audit-tray-presence.json"

@@ -1222,6 +1222,70 @@ $Stage6CompletionAuditPrerequisiteBringupOperatorPlanActionId = [string](
 $Stage6CompletionAuditPrerequisiteBringupOperatorPlanCommandMode = [string](
   Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanCommand -Name 'mode' -Default ''
 )
+$Stage6CompletionAuditPrerequisiteBringupOperatorPlanRequirement = [string](
+  Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'next_operator_action_requirement' -Default ''
+)
+$Stage6CompletionAuditPrerequisiteBringupOperatorPlanFirstMissingRequirement = [string](
+  Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'first_missing_required_before_enable' -Default ''
+)
+$Stage6CompletionAuditPrerequisiteBringupOperatorPlanAllowedRequirements = @(
+  'resident_host_process',
+  'tray_presence',
+  'global_hotkey_binding',
+  'overlay_window',
+  'summon_binding'
+)
+$Stage6CompletionAuditPrerequisiteBringupOperatorPlanRecommendedNextSlice = [string](
+  Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_next_slice' -Default ''
+)
+$Stage6CompletionAuditPrerequisiteBringupOperatorPlanHandoffNextStep = [string](
+  Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'next_step' -Default ''
+)
+$Stage6CompletionAuditPrerequisiteBringupOperatorPlanExpectedNextSlices = [string[]]@()
+if (-not [string]::IsNullOrWhiteSpace($Stage6CompletionAuditPrerequisiteBringupOperatorPlanActionId)) {
+  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanExpectedNextSlices += "run_stage6_prerequisite_bringup_$Stage6CompletionAuditPrerequisiteBringupOperatorPlanActionId"
+}
+if (-not [string]::IsNullOrWhiteSpace($Stage6CompletionAuditPrerequisiteBringupOperatorPlanRequirement)) {
+  if ($Stage6CompletionAuditPrerequisiteBringupOperatorPlanCommandMode -eq 'RequestNext') {
+    $Stage6CompletionAuditPrerequisiteBringupOperatorPlanExpectedNextSlices += "run_stage6_prerequisite_bringup_request_next_for_$Stage6CompletionAuditPrerequisiteBringupOperatorPlanRequirement"
+  } elseif ($Stage6CompletionAuditPrerequisiteBringupOperatorPlanCommandMode -eq 'GrantNext') {
+    $Stage6CompletionAuditPrerequisiteBringupOperatorPlanExpectedNextSlices += "run_stage6_prerequisite_bringup_grant_next_for_$Stage6CompletionAuditPrerequisiteBringupOperatorPlanRequirement"
+  } elseif ($Stage6CompletionAuditPrerequisiteBringupOperatorPlanCommandMode -eq 'ExecuteNext') {
+    $Stage6CompletionAuditPrerequisiteBringupOperatorPlanExpectedNextSlices += "run_stage6_prerequisite_bringup_execute_next_for_$Stage6CompletionAuditPrerequisiteBringupOperatorPlanRequirement"
+  } elseif ($Stage6CompletionAuditPrerequisiteBringupOperatorPlanActionId.StartsWith('await_')) {
+    $Stage6CompletionAuditPrerequisiteBringupOperatorPlanExpectedNextSlices += "run_stage6_prerequisite_bringup_approval_wait_for_$Stage6CompletionAuditPrerequisiteBringupOperatorPlanRequirement"
+  }
+}
+$Stage6CompletionAuditPrerequisiteBringupOperatorPlanExpectedNextSlices = [string[]]@(
+  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanExpectedNextSlices | Sort-Object -Unique
+)
+$Stage6CompletionAuditPrerequisiteBringupOperatorPlanNextSliceObserved = (
+  @($Stage6CompletionAuditPrerequisiteBringupOperatorPlanExpectedNextSlices).Count -gt 0 -and
+  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanExpectedNextSlices -contains $Stage6CompletionAuditPrerequisiteBringupOperatorPlanRecommendedNextSlice -and
+  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanExpectedNextSlices -contains $Stage6CompletionAuditPrerequisiteBringupOperatorPlanHandoffNextStep
+)
+$Stage6CompletionAuditPrerequisiteBringupOperatorPlanExpectedAuthorityRequired = [string](
+  Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanAction -Name 'approval_action' -Default ''
+)
+if ([string]::IsNullOrWhiteSpace($Stage6CompletionAuditPrerequisiteBringupOperatorPlanExpectedAuthorityRequired)) {
+  if (
+    [bool](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanCommand -Name 'requires_confirmation' -Default $false) -or
+    [bool](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanCommand -Name 'requires_approval_id' -Default $false) -or
+    [bool](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanAction -Name 'operator_supplied_values_required' -Default $false)
+  ) {
+    $Stage6CompletionAuditPrerequisiteBringupOperatorPlanExpectedAuthorityRequired = 'operator_supplied_authority'
+  } else {
+    $Stage6CompletionAuditPrerequisiteBringupOperatorPlanExpectedAuthorityRequired = 'none_readback_only'
+  }
+}
+$Stage6CompletionAuditPrerequisiteBringupOperatorPlanAllowedAuthorityRequired = [string[]]@(
+  'resident_host_process_tray_hotkey_overlay_and_summon_prerequisites',
+  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanExpectedAuthorityRequired
+) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Sort-Object -Unique
+$Stage6CompletionAuditPrerequisiteBringupOperatorPlanAuthorityObserved = (
+  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanAllowedAuthorityRequired -contains [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'authority_required' -Default '') -and
+  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanAllowedAuthorityRequired -contains [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'authority_required' -Default '')
+)
 $Stage6CompletionAuditPrerequisiteBringupOperatorPlanResidentHostActionObserved = (
   (
     @(
@@ -1251,37 +1315,68 @@ $Stage6CompletionAuditPrerequisiteBringupOperatorPlanResidentHostActionObserved 
     -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanCommand -Name 'requires_operator_approval_decision' -Default $true)
   )
 )
+$Stage6CompletionAuditPrerequisiteBringupOperatorPlanSurfaceRequirements = @(
+  'tray_presence',
+  'global_hotkey_binding',
+  'overlay_window',
+  'summon_binding'
+)
+$Stage6CompletionAuditPrerequisiteBringupOperatorPlanSurfaceRequestActionObserved = (
+  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanSurfaceRequirements -contains $Stage6CompletionAuditPrerequisiteBringupOperatorPlanRequirement -and
+  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanActionId -eq "request_$Stage6CompletionAuditPrerequisiteBringupOperatorPlanRequirement`_authority" -and
+  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanCommandMode -eq 'RequestNext' -and
+  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanCommand -Name 'requires_confirmation' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanCommand -Name 'requires_approval_id' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanCommand -Name 'requires_operator_approval_decision' -Default $true)
+)
+$Stage6CompletionAuditPrerequisiteBringupOperatorPlanSurfaceGrantActionObserved = (
+  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanSurfaceRequirements -contains $Stage6CompletionAuditPrerequisiteBringupOperatorPlanRequirement -and
+  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanActionId -eq "grant_$Stage6CompletionAuditPrerequisiteBringupOperatorPlanRequirement`_authority" -and
+  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanCommandMode -eq 'GrantNext' -and
+  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanCommand -Name 'requires_confirmation' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanCommand -Name 'requires_approval_id' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanCommand -Name 'requires_operator_approval_decision' -Default $false)
+)
+$Stage6CompletionAuditPrerequisiteBringupOperatorPlanSurfaceExecuteActionObserved = (
+  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanSurfaceRequirements -contains $Stage6CompletionAuditPrerequisiteBringupOperatorPlanRequirement -and
+  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanActionId -eq "execute_$Stage6CompletionAuditPrerequisiteBringupOperatorPlanRequirement" -and
+  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanCommandMode -eq 'ExecuteNext' -and
+  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanCommand -Name 'requires_confirmation' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanCommand -Name 'requires_approval_id' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanCommand -Name 'requires_operator_approval_decision' -Default $true)
+)
+$Stage6CompletionAuditPrerequisiteBringupOperatorPlanSurfaceAwaitActionObserved = (
+  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanSurfaceRequirements -contains $Stage6CompletionAuditPrerequisiteBringupOperatorPlanRequirement -and
+  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanActionId -eq "await_$Stage6CompletionAuditPrerequisiteBringupOperatorPlanRequirement`_authority_approval" -and
+  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanCommandMode -eq 'Status' -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanCommand -Name 'requires_confirmation' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanCommand -Name 'requires_approval_id' -Default $true) -and
+  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanCommand -Name 'requires_operator_approval_decision' -Default $false)
+)
+$Stage6CompletionAuditPrerequisiteBringupOperatorPlanActionObserved = (
+  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanResidentHostActionObserved -or
+  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanSurfaceRequestActionObserved -or
+  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanSurfaceGrantActionObserved -or
+  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanSurfaceExecuteActionObserved -or
+  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanSurfaceAwaitActionObserved
+)
 $Stage6CompletionAuditPrerequisiteBringupOperatorPlanHandoffObserved = (
   $Stage6CompletionAuditReadbackObserved -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_handoff_source' -Default '') -eq 'stage6_prerequisite_bringup_operator_plan' -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'next_smallest_truthful_gap' -Default '') -eq 'persistent_supervision_required_prerequisites_missing' -and
-  @(
-    'run_stage6_prerequisite_bringup_request_next_for_resident_host_process',
-    'run_stage6_prerequisite_bringup_grant_resident_runtime_execution_authority',
-    'run_stage6_prerequisite_bringup_request_host_supervision_authority',
-    'run_stage6_prerequisite_bringup_grant_host_supervision_authority',
-    'run_stage6_prerequisite_bringup_execute_supervised_resident_host_start'
-  ) -contains [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_next_slice' -Default '') -and
+  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanNextSliceObserved -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_proof_script' -Default '') -eq 'scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status' -and
-  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'authority_required' -Default '') -eq 'resident_host_process_tray_hotkey_overlay_and_summon_prerequisites' -and
+  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanAuthorityObserved -and
   -not [bool](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'authority_granted' -Default $true) -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'status' -Default '') -eq 'blocked' -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'persistent_supervision_required_prerequisites_missing' -and
-  @(
-    'run_stage6_prerequisite_bringup_request_next_for_resident_host_process',
-    'run_stage6_prerequisite_bringup_grant_resident_runtime_execution_authority',
-    'run_stage6_prerequisite_bringup_request_host_supervision_authority',
-    'run_stage6_prerequisite_bringup_grant_host_supervision_authority',
-    'run_stage6_prerequisite_bringup_execute_supervised_resident_host_start'
-  ) -contains [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'next_step' -Default '') -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'proof_script' -Default '') -eq 'scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status' -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'route' -Default '') -eq '/lens/host/persistent-supervision' -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'readiness_route' -Default '') -eq '/lens/host/persistent-supervision/enablement' -and
-  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'authority_required' -Default '') -eq 'resident_host_process_tray_hotkey_overlay_and_summon_prerequisites' -and
   -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'authority_granted' -Default $true) -and
-  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'first_missing_required_before_enable' -Default '') -eq 'resident_host_process' -and
-  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'next_operator_action_requirement' -Default '') -eq 'resident_host_process' -and
-  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanResidentHostActionObserved -and
+  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanAllowedRequirements -contains $Stage6CompletionAuditPrerequisiteBringupOperatorPlanFirstMissingRequirement -and
+  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanRequirement -eq $Stage6CompletionAuditPrerequisiteBringupOperatorPlanFirstMissingRequirement -and
+  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanActionObserved -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanAction -Name 'method' -Default '') -eq 'POST' -and
   [bool](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanAction -Name 'operator_supplied_values_required' -Default $false) -and
   -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanAction -Name 'script_would_execute' -Default $true) -and

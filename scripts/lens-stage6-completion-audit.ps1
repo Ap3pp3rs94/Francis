@@ -890,12 +890,18 @@ $Stage6PrerequisiteBringupPlanNextOperatorActionId = [string]$Stage6Prerequisite
 $Stage6PrerequisiteBringupPlanNextOperatorCommandMode = [string]$Stage6PrerequisiteBringupPlanNextOperatorCommand.mode
 $Stage6PrerequisiteBringupPlanAllowedFirstMissingRequirements = @(
   'resident_host_process',
-  'tray_presence'
+  'tray_presence',
+  'global_hotkey_binding',
+  'overlay_window',
+  'summon_binding'
 )
 $Stage6PrerequisiteBringupPlanAllowedFirstMissingTruthfulGaps = @(
   'resident_host_process_not_supervised',
   'resident_supervision_not_persistent',
-  'summon_tray_presence_blocker_boundary'
+  'summon_tray_presence_blocker_boundary',
+  'os_level_command_palette_binding',
+  'summon_overlay_window_blocker_boundary',
+  'summon_anywhere_blockers'
 )
 $Stage6PrerequisiteBringupPlanAllowedMissingPrerequisites = @(
   'resident_host_process',
@@ -975,9 +981,75 @@ $Stage6PrerequisiteBringupPlanTrayPresenceActionObserved = (
   -not [bool]$Stage6PrerequisiteBringupPlanNextOperatorCommand.requires_approval_id -and
   -not [bool]$Stage6PrerequisiteBringupPlanNextOperatorCommand.requires_operator_approval_decision
 )
+$Stage6PrerequisiteBringupPlanSurfaceRequirements = @(
+  'tray_presence',
+  'global_hotkey_binding',
+  'overlay_window',
+  'summon_binding'
+)
+$Stage6PrerequisiteBringupPlanCurrentFirstMissingRequirement = [string]$Stage6PrerequisiteBringupPlan.current_first_missing_requirement
+$Stage6PrerequisiteBringupPlanTruthfulGapsByFirstMissingRequirement = [ordered]@{
+  resident_host_process = [string[]]@(
+    'resident_host_process_not_supervised',
+    'resident_supervision_not_persistent'
+  )
+  tray_presence = [string[]]@('summon_tray_presence_blocker_boundary')
+  global_hotkey_binding = [string[]]@('os_level_command_palette_binding')
+  overlay_window = [string[]]@('summon_overlay_window_blocker_boundary')
+  summon_binding = [string[]]@('summon_anywhere_blockers')
+}
+$Stage6PrerequisiteBringupPlanExpectedTruthfulGapsForFirstMissingRequirement = [string[]]@()
+if ($Stage6PrerequisiteBringupPlanTruthfulGapsByFirstMissingRequirement.Contains($Stage6PrerequisiteBringupPlanCurrentFirstMissingRequirement)) {
+  $Stage6PrerequisiteBringupPlanExpectedTruthfulGapsForFirstMissingRequirement = [string[]]@(
+    $Stage6PrerequisiteBringupPlanTruthfulGapsByFirstMissingRequirement[$Stage6PrerequisiteBringupPlanCurrentFirstMissingRequirement]
+  )
+}
+$Stage6PrerequisiteBringupPlanFirstMissingTruthfulGapPaired = (
+  @($Stage6PrerequisiteBringupPlanExpectedTruthfulGapsForFirstMissingRequirement).Count -gt 0 -and
+  $Stage6PrerequisiteBringupPlanExpectedTruthfulGapsForFirstMissingRequirement -contains [string]$Stage6PrerequisiteBringupPlan.current_first_missing_truthful_gap
+)
+$Stage6PrerequisiteBringupPlanSurfaceRequestActionObserved = (
+  $Stage6PrerequisiteBringupPlanSurfaceRequirements -contains $Stage6PrerequisiteBringupPlanCurrentFirstMissingRequirement -and
+  $Stage6PrerequisiteBringupPlanNextOperatorActionId -eq "request_$($Stage6PrerequisiteBringupPlanCurrentFirstMissingRequirement)_authority" -and
+  $Stage6PrerequisiteBringupPlanNextOperatorCommandMode -eq 'RequestNext' -and
+  [bool]$Stage6PrerequisiteBringupPlanNextOperatorCommand.requires_confirmation -and
+  -not [bool]$Stage6PrerequisiteBringupPlanNextOperatorCommand.requires_approval_id -and
+  -not [bool]$Stage6PrerequisiteBringupPlanNextOperatorCommand.requires_operator_approval_decision
+)
+$Stage6PrerequisiteBringupPlanSurfaceGrantActionObserved = (
+  $Stage6PrerequisiteBringupPlanSurfaceRequirements -contains $Stage6PrerequisiteBringupPlanCurrentFirstMissingRequirement -and
+  $Stage6PrerequisiteBringupPlanNextOperatorActionId -eq "grant_$($Stage6PrerequisiteBringupPlanCurrentFirstMissingRequirement)_authority" -and
+  $Stage6PrerequisiteBringupPlanNextOperatorCommandMode -eq 'GrantNext' -and
+  [bool]$Stage6PrerequisiteBringupPlanNextOperatorCommand.requires_confirmation -and
+  [bool]$Stage6PrerequisiteBringupPlanNextOperatorCommand.requires_approval_id -and
+  [bool]$Stage6PrerequisiteBringupPlanNextOperatorCommand.requires_operator_approval_decision
+)
+$Stage6PrerequisiteBringupPlanSurfaceExecuteActionObserved = (
+  $Stage6PrerequisiteBringupPlanSurfaceRequirements -contains $Stage6PrerequisiteBringupPlanCurrentFirstMissingRequirement -and
+  $Stage6PrerequisiteBringupPlanNextOperatorActionId -eq "execute_$($Stage6PrerequisiteBringupPlanCurrentFirstMissingRequirement)" -and
+  $Stage6PrerequisiteBringupPlanNextOperatorCommandMode -eq 'ExecuteNext' -and
+  [bool]$Stage6PrerequisiteBringupPlanNextOperatorCommand.requires_confirmation -and
+  [bool]$Stage6PrerequisiteBringupPlanNextOperatorCommand.requires_approval_id -and
+  -not [bool]$Stage6PrerequisiteBringupPlanNextOperatorCommand.requires_operator_approval_decision
+)
+$Stage6PrerequisiteBringupPlanSurfaceAwaitActionObserved = (
+  $Stage6PrerequisiteBringupPlanSurfaceRequirements -contains $Stage6PrerequisiteBringupPlanCurrentFirstMissingRequirement -and
+  $Stage6PrerequisiteBringupPlanNextOperatorActionId -eq "await_$($Stage6PrerequisiteBringupPlanCurrentFirstMissingRequirement)_authority_approval" -and
+  $Stage6PrerequisiteBringupPlanNextOperatorCommandMode -eq 'Status' -and
+  -not [bool]$Stage6PrerequisiteBringupPlanNextOperatorCommand.requires_confirmation -and
+  -not [bool]$Stage6PrerequisiteBringupPlanNextOperatorCommand.requires_approval_id -and
+  [bool]$Stage6PrerequisiteBringupPlanNextOperatorCommand.requires_operator_approval_decision
+)
+$Stage6PrerequisiteBringupPlanSurfaceActionObserved = (
+  $Stage6PrerequisiteBringupPlanSurfaceRequestActionObserved -or
+  $Stage6PrerequisiteBringupPlanSurfaceGrantActionObserved -or
+  $Stage6PrerequisiteBringupPlanSurfaceExecuteActionObserved -or
+  $Stage6PrerequisiteBringupPlanSurfaceAwaitActionObserved
+)
 $Stage6PrerequisiteBringupPlanFirstMissingActionObserved = (
   $Stage6PrerequisiteBringupPlanResidentHostActionObserved -or
-  $Stage6PrerequisiteBringupPlanTrayPresenceActionObserved
+  $Stage6PrerequisiteBringupPlanTrayPresenceActionObserved -or
+  $Stage6PrerequisiteBringupPlanSurfaceActionObserved
 )
 $Stage6PrerequisiteBringupPlanMissingPrerequisitesObserved = (
   [string]$Stage6PrerequisiteBringupPlan.status -eq 'blocked' -and
@@ -985,6 +1057,7 @@ $Stage6PrerequisiteBringupPlanMissingPrerequisitesObserved = (
   [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap_basis -eq 'missing_required_before_enable' -and
   $Stage6PrerequisiteBringupPlanAllowedFirstMissingRequirements -contains [string]$Stage6PrerequisiteBringupPlan.current_first_missing_requirement -and
   $Stage6PrerequisiteBringupPlanAllowedFirstMissingTruthfulGaps -contains [string]$Stage6PrerequisiteBringupPlan.current_first_missing_truthful_gap -and
+  $Stage6PrerequisiteBringupPlanFirstMissingTruthfulGapPaired -and
   -not [bool]$Stage6PrerequisiteBringupPlan.required_before_enable_ready -and
   [string]$Stage6PrerequisiteBringupPlan.next_operator_action_requirement -eq [string]$Stage6PrerequisiteBringupPlan.current_first_missing_requirement -and
   $Stage6PrerequisiteBringupPlanFirstMissingActionObserved -and
@@ -4533,15 +4606,16 @@ if (
   $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
 } elseif (
   $NextSmallestTruthfulGap -eq 'persistent_supervision_required_prerequisites_missing' -and
-  $ResidentHostProcessSupervisionBlockerProofObserved -and
   $PersistentSupervisionPrerequisitesProofObserved -and
   $Stage6PrerequisiteBringupPlanObserved
 ) {
   $RecommendedHandoffSource = 'stage6_prerequisite_bringup_operator_plan'
   $RecommendedHandoff = [ordered]@{
     status = 'blocked'
-    previous_next_smallest_truthful_gap = [string]$ResidentHostProcessSupervisionBlockerProof.previous_next_smallest_truthful_gap
-    consumed_process_supervision_next_smallest_truthful_gap = [string]$ResidentHostProcessSupervisionBlockerProof.next_smallest_truthful_gap
+    previous_next_smallest_truthful_gap = [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap
+    consumed_stage6_prerequisite_bringup_status = [string]$Stage6PrerequisiteBringupPlan.status
+    consumed_stage6_prerequisite_bringup_current_truthful_gap = [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap
+    consumed_stage6_prerequisite_bringup_current_truthful_gap_basis = [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap_basis
     next_smallest_truthful_gap = 'persistent_supervision_required_prerequisites_missing'
     next_step = $Stage6PrerequisiteBringupMissingRequirementRecommendedNextSlice
     proof_script = 'scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status'
@@ -4552,33 +4626,30 @@ if (
     next_operator_action = $Stage6PrerequisiteBringupMissingRequirementAction
     next_operator_command = $Stage6PrerequisiteBringupMissingRequirementCommand
     operator_sequence_command_availability = $Stage6PrerequisiteBringupMissingRequirementCommandAvailability
-    process_supervision_route = [string]$ResidentHostProcessSupervisionBlockerProof.recommended_handoff.route
-    process_supervision_readiness_route = [string]$ResidentHostProcessSupervisionBlockerProof.recommended_handoff.readiness_route
-    authority_required = 'resident_host_process_tray_hotkey_overlay_and_summon_prerequisites'
+    authority_required = $Stage6PrerequisiteBringupPlanRecommendedAuthorityRequired
+    prerequisite_authority_scope = 'resident_host_process_tray_hotkey_overlay_and_summon_prerequisites'
     authority_granted = $false
-    process_supervision_boundary_observed = [bool]$ResidentHostProcessSupervisionBlockerProof.process_supervision_boundary_observed
-    process_supervision_handoff_consumed = [bool]$ResidentHostProcessSupervisionBlockerProof.handoff_consumed
-    resident_host_process_state = [string]$ResidentHostProcessSupervisionBlockerProof.resident_host_process_state
-    resident_host_process_blocker = [string]$ResidentHostProcessSupervisionBlockerProof.resident_host_process_blocker
-    process_supervision_ready = [bool]$ResidentHostProcessSupervisionBlockerProof.process_supervision_ready
-    service_activation_ready = [bool]$ResidentHostProcessSupervisionBlockerProof.service_activation_ready
-    supervision_ready = [bool]$ResidentHostProcessSupervisionBlockerProof.supervision_ready
-    resident_host_supervised = [bool]$ResidentHostProcessSupervisionBlockerProof.resident_host_supervised
-    service_installed = [bool]$ResidentHostProcessSupervisionBlockerProof.service_installed
-    service_managed = [bool]$ResidentHostProcessSupervisionBlockerProof.service_managed
-    first_missing_required_before_enable = $PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable
-    first_missing_requirement_handoff = $PersistentSupervisionPrerequisitesFirstMissingRequirementHandoff
+    first_missing_required_before_enable = $Stage6PrerequisiteBringupPlanCurrentFirstMissingRequirement
+    first_missing_truthful_gap = [string]$Stage6PrerequisiteBringupPlan.current_first_missing_truthful_gap
+    first_missing_truthful_gap_expected = [string[]]@($Stage6PrerequisiteBringupPlanExpectedTruthfulGapsForFirstMissingRequirement)
+    first_missing_truthful_gap_paired = [bool]$Stage6PrerequisiteBringupPlanFirstMissingTruthfulGapPaired
+    first_missing_requirement_handoff = $Stage6PrerequisiteBringupMissingRequirementAction
     read_only_contract = $true
     diagnostic_only = $true
     would_execute = $false
     would_mutate = $false
-    would_supervise_process = [bool]$ResidentHostProcessSupervisionBlockerProof.would_supervise_process
-    would_restart_process = [bool]$ResidentHostProcessSupervisionBlockerProof.would_restart_process
-    would_install_service = [bool]$ResidentHostProcessSupervisionBlockerProof.would_install_service
-    would_start_service = [bool]$ResidentHostProcessSupervisionBlockerProof.would_start_service
-    would_write_memory = [bool]$ResidentHostProcessSupervisionBlockerProof.would_write_memory
-    would_decide_approval = [bool]$ResidentHostProcessSupervisionBlockerProof.would_decide_approval
-    blockers = [string[]]@($ResidentHostProcessSupervisionBlockerProofBlockers)
+    would_request_authority = [bool]$Stage6PrerequisiteBringupPlanGovernance.would_request_authority
+    would_grant_authority = [bool]$Stage6PrerequisiteBringupPlanGovernance.would_grant_authority
+    would_supervise_process = $false
+    would_restart_process = $false
+    would_install_service = $false
+    would_start_service = $false
+    would_write_memory = $false
+    would_decide_approval = $false
+    blockers = [string[]]@(@(
+        [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap
+        [string]$Stage6PrerequisiteBringupPlan.current_first_missing_truthful_gap
+      ) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Sort-Object -Unique)
   }
   $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
   $RecommendedProofScript = [string]$RecommendedHandoff.proof_script

@@ -261,7 +261,12 @@ def test_lens_stage6_completion_audit_consumes_stage6_prerequisite_bringup_plan_
     ) in script
     assert "$Stage6PrerequisiteBringupPlanAllowedFirstMissingRequirements = @(" in script
     assert "$Stage6PrerequisiteBringupPlanAllowedFirstMissingTruthfulGaps" in script
+    assert "$Stage6PrerequisiteBringupPlanTruthfulGapsByFirstMissingRequirement = [ordered]@{" in script
+    assert "$Stage6PrerequisiteBringupPlanFirstMissingTruthfulGapPaired = (" in script
     assert "'summon_tray_presence_blocker_boundary'" in script
+    assert "'os_level_command_palette_binding'" in script
+    assert "'summon_overlay_window_blocker_boundary'" in script
+    assert "'summon_anywhere_blockers'" in script
     assert "$Stage6PrerequisiteBringupPlanAllowedMissingPrerequisites = @(" in script
     assert "$Stage6PrerequisiteBringupPlanMissingPrerequisitesObserved = (" in script
     assert (
@@ -274,6 +279,11 @@ def test_lens_stage6_completion_audit_consumes_stage6_prerequisite_bringup_plan_
     ) in script
     assert "$Stage6PrerequisiteBringupPlanTrayPresenceActionObserved = (" in script
     assert "'request_tray_presence_authority'" in script
+    assert "$Stage6PrerequisiteBringupPlanSurfaceActionObserved = (" in script
+    assert "request_$($Stage6PrerequisiteBringupPlanCurrentFirstMissingRequirement)_authority" in script
+    assert "grant_$($Stage6PrerequisiteBringupPlanCurrentFirstMissingRequirement)_authority" in script
+    assert "execute_$($Stage6PrerequisiteBringupPlanCurrentFirstMissingRequirement)" in script
+    assert "await_$($Stage6PrerequisiteBringupPlanCurrentFirstMissingRequirement)_authority_approval" in script
     assert (
         "$Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable "
         "-contains [string]$Stage6PrerequisiteBringupPlan.current_first_missing_requirement"
@@ -306,6 +316,22 @@ def test_lens_stage6_completion_audit_consumes_stage6_prerequisite_bringup_plan_
     assert "'scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status'" in script
     assert "$Stage6PrerequisiteBringupPlanRecommendedNextSlice" in script
     assert "$Stage6PrerequisiteBringupPlanRecommendedAuthorityRequired" in script
+    assert (
+        "first_missing_required_before_enable = $Stage6PrerequisiteBringupPlanCurrentFirstMissingRequirement" in script
+    )
+    assert (
+        "first_missing_truthful_gap_paired = [bool]$Stage6PrerequisiteBringupPlanFirstMissingTruthfulGapPaired"
+        in script
+    )
+    assert "first_missing_requirement_handoff = $Stage6PrerequisiteBringupMissingRequirementAction" in script
+    assert "authority_required = $Stage6PrerequisiteBringupPlanRecommendedAuthorityRequired" in script
+    assert (
+        "prerequisite_authority_scope = 'resident_host_process_tray_hotkey_overlay_and_summon_prerequisites'" in script
+    )
+    assert (
+        "process_supervision_route = [string]$ResidentHostProcessSupervisionBlockerProof.recommended_handoff.route"
+        not in script
+    )
     assert "$Stage6PrerequisiteBringupMissingRequirementActionRequirement" in script
     assert "$Stage6PrerequisiteBringupMissingRequirementAction" in script
     assert "$Stage6PrerequisiteBringupMissingRequirementCommand" in script
@@ -1368,7 +1394,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert payload["recommended_handoff_source"] == "stage6_prerequisite_bringup_operator_plan"
     assert payload["recommended_next_slice"] == "run_stage6_prerequisite_bringup_request_next_for_resident_host_process"
     assert payload["recommended_proof_script"] == "scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status"
-    assert payload["authority_required"] == "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
+    assert payload["authority_required"] == "lens.resident_runtime.execution_authority"
     assert payload["authority_granted"] is False
     assert payload["persistent_supervision_first_missing_required_before_enable"] == "resident_host_process"
     first_missing_handoff = payload["persistent_supervision_first_missing_requirement_handoff"]
@@ -1391,21 +1417,25 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert recommended_handoff["operator_sequence_command_availability"]["truthful"] is True
     assert recommended_handoff["route"] == "/lens/host/persistent-supervision"
     assert recommended_handoff["readiness_route"] == "/lens/host/persistent-supervision/enablement"
+    assert recommended_handoff["authority_required"] == "lens.resident_runtime.execution_authority"
     assert (
-        recommended_handoff["authority_required"]
+        recommended_handoff["prerequisite_authority_scope"]
         == "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
     )
     assert recommended_handoff["authority_granted"] is False
-    assert recommended_handoff["process_supervision_boundary_observed"] is True
-    assert recommended_handoff["process_supervision_handoff_consumed"] is True
-    assert recommended_handoff["process_supervision_ready"] is False
-    assert recommended_handoff["service_activation_ready"] is False
-    assert recommended_handoff["supervision_ready"] is False
-    assert recommended_handoff["resident_host_supervised"] is False
-    assert recommended_handoff["service_installed"] is False
-    assert recommended_handoff["service_managed"] is False
+    assert recommended_handoff["consumed_stage6_prerequisite_bringup_status"] == "blocked"
+    assert (
+        recommended_handoff["consumed_stage6_prerequisite_bringup_current_truthful_gap"]
+        == "persistent_supervision_required_prerequisites_missing"
+    )
     assert recommended_handoff["first_missing_required_before_enable"] == "resident_host_process"
-    assert recommended_handoff["first_missing_requirement_handoff"] == first_missing_handoff
+    assert recommended_handoff["first_missing_truthful_gap"] == "resident_host_process_not_supervised"
+    assert recommended_handoff["first_missing_truthful_gap_expected"] == [
+        "resident_host_process_not_supervised",
+        "resident_supervision_not_persistent",
+    ]
+    assert recommended_handoff["first_missing_truthful_gap_paired"] is True
+    assert recommended_handoff["first_missing_requirement_handoff"] == recommended_handoff["next_operator_action"]
     assert recommended_handoff["read_only_contract"] is True
     assert recommended_handoff["diagnostic_only"] is True
     assert recommended_handoff["would_execute"] is False
