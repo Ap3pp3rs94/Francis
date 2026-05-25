@@ -2969,11 +2969,32 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     assert consumed_payload["recommended_next_operator_action"]["script_would_request_authority"] is True
     assert consumed_payload["recommended_next_operator_action"]["script_would_grant_authority"] is False
     assert consumed_payload["recommended_next_operator_action"]["script_would_decide_approval"] is False
+    resident_runtime_request_command = (
+        "$body = @{ actor = '<actor>'; reason = '<reason>' } | ConvertTo-Json -Compress; "
+        "Invoke-RestMethod -Method Post -Uri "
+        "'http://127.0.0.1:8000/lens/resident-runtime/authority-grant/request' "
+        "-ContentType 'application/json' -Body $body"
+    )
+    assert consumed_payload["recommended_next_operator_action"]["approval_request_command"] == {
+        "command": resident_runtime_request_command,
+        "route": "/lens/resident-runtime/authority-grant/request",
+        "method": "POST",
+        "api_base_url": "http://127.0.0.1:8000",
+        "payload_shape": {
+            "actor": "<actor>",
+            "reason": "<reason>",
+        },
+        "required_scope": "system.write",
+        "requires_running_api": True,
+        "requires_operator_actor": True,
+        "would_request_approval_if_run": True,
+        "status_readback_would_request_approval": False,
+    }
     assert consumed_payload["recommended_next_operator_command"] == {
-        "command": (
-            ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 -Mode RequestNext -Actor <actor> -ConfirmRequest"
-        ),
-        "mode": "RequestNext",
+        "command": resident_runtime_request_command,
+        "mode": "ApiRequest",
+        "route": "/lens/resident-runtime/authority-grant/request",
+        "method": "POST",
         "requires_confirmation": True,
         "requires_explicit_operator_opt_in": True,
         "requires_actor": True,
@@ -3018,31 +3039,69 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     approved_payload = json.loads(approved_proc.stdout)
     assert approved_payload["stage6_completion_audit_recommended_handoff_consumed"] is True
     assert approved_payload["recommended_operator_handoff"]["source"] == "resident_runtime_authority_readiness_handoff"
-    assert approved_payload["recommended_next_operator_action_requirement"] == (
-        "resident_runtime_execution_authority_grant_receipt"
+    assert approved_payload["recommended_operator_handoff"]["status"] == "approved_authority_request_selected"
+    assert approved_payload["recommended_next_slice"] == (
+        "create_or_select_exact_approved_resident_runtime_execution_authority_request"
     )
-    assert approved_payload["recommended_next_operator_action"]["id"] == ("grant_resident_runtime_execution_authority")
-    assert approved_payload["recommended_next_operator_action"]["route"] == "/lens/resident-runtime/authority-grant"
+    assert approved_payload["recommended_next_operator_action_requirement"] == (
+        "exact_resident_runtime_execution_authority_approval"
+    )
+    assert approved_payload["recommended_next_operator_action"]["id"] == (
+        "select_exact_approved_resident_runtime_execution_authority_request"
+    )
+    assert approved_payload["recommended_next_operator_action"]["route"] == (
+        "/lens/resident-runtime/authority-grant/requests"
+    )
+    assert approved_payload["recommended_next_operator_action"]["method"] == "GET"
     assert approved_payload["recommended_next_operator_action"]["approved_approval_id"] == approved_approval_id
     assert approved_payload["recommended_next_operator_action"]["script_would_request_authority"] is False
-    assert approved_payload["recommended_next_operator_action"]["script_would_grant_authority"] is True
+    assert approved_payload["recommended_next_operator_action"]["script_would_grant_authority"] is False
     assert approved_payload["recommended_next_operator_action"]["script_would_decide_approval"] is False
-    assert approved_payload["recommended_next_operator_command"] == {
-        "command": (
-            ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 "
-            f"-Mode GrantNext -Actor <actor> -ApprovalId {approved_approval_id} -ConfirmGrant"
-        ),
-        "mode": "GrantNext",
-        "requires_confirmation": True,
-        "requires_explicit_operator_opt_in": True,
-        "requires_actor": True,
+    resident_runtime_grant_command = (
+        f"$body = @{{ approval_id = '{approved_approval_id}'; actor = '<actor>'; "
+        "reason = '<reason>'; lease_seconds = 3600 } | ConvertTo-Json -Compress; "
+        "Invoke-RestMethod -Method Post -Uri "
+        "'http://127.0.0.1:8000/lens/resident-runtime/authority-grant' "
+        "-ContentType 'application/json' -Body $body"
+    )
+    assert approved_payload["recommended_next_operator_action"]["follow_up_authority_grant_command"] == {
+        "command": resident_runtime_grant_command,
+        "route": "/lens/resident-runtime/authority-grant",
+        "method": "POST",
+        "api_base_url": "http://127.0.0.1:8000",
+        "payload_shape": {
+            "approval_id": approved_approval_id,
+            "actor": "<actor>",
+            "reason": "<reason>",
+            "lease_seconds": 3600,
+        },
+        "required_scope": "system.write",
+        "requires_running_api": True,
+        "requires_operator_actor": True,
         "requires_approval_id": True,
+        "would_grant_authority_if_run": True,
+        "status_readback_would_grant_authority": False,
+        "preview_only": True,
+        "availability_reason": "approved_request_selected_but_authority_grant_is_separate_operator_step",
+    }
+    approved_readback_command = (
+        f".\\scripts\\lens-stage6-next-handoff.ps1 -Mode Status -CompletionAuditJsonPath '{audit_json.resolve()}'"
+    )
+    assert approved_payload["recommended_next_operator_command"] == {
+        "command": approved_readback_command,
+        "mode": "Status",
+        "route": "/lens/resident-runtime/authority-grant/requests",
+        "method": "GET",
+        "requires_confirmation": False,
+        "requires_explicit_operator_opt_in": False,
+        "requires_actor": False,
+        "requires_approval_id": False,
         "requires_operator_approval_decision": False,
     }
-    assert approved_payload["recommended_next_operator_actor_scope_readiness"]["required_scope"] == "system.write"
-    assert approved_payload["recommended_next_operator_actor_scope_readiness"]["operator_must_supply_actor"] is True
+    assert approved_payload["recommended_next_operator_actor_scope_readiness"]["required_scope"] == ""
+    assert approved_payload["recommended_next_operator_actor_scope_readiness"]["operator_must_supply_actor"] is False
     assert approved_payload["recommended_operator_handoff"]["approval_request_write_if_run"] is False
-    assert approved_payload["recommended_operator_handoff"]["authority_grant_receipt_write_if_run"] is True
+    assert approved_payload["recommended_operator_handoff"]["authority_grant_receipt_write_if_run"] is False
     assert approved_payload["recommended_operator_handoff"]["approval_decision_authority"] is False
     approved_checks = {item["id"]: item for item in approved_payload["checks"]}
     assert approved_checks["stage6_completion_audit_runtime_authority_handoff"]["status"] == (

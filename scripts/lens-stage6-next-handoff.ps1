@@ -334,6 +334,20 @@ function New-ResidentRuntimeAuthorityRequestOperatorHandoff {
   $ApprovedApprovalId = Get-ApprovalReadbackLatestApprovedId -Readback $ResidentRuntimeAuthorityRequests
   $PendingApprovalId = Get-ApprovalReadbackLatestPendingId -Readback $ResidentRuntimeAuthorityRequests
   $ActiveGrantReceiptId = Get-AuthorityGrantActiveReceiptId -Readback $ResidentRuntimeAuthorityGrants
+  $ApiBaseUrl = 'http://127.0.0.1:8000'
+  $GrantRoute = '/lens/resident-runtime/authority-grant'
+  $RequestCommand = (
+    "`$body = @{ actor = '<actor>'; reason = '<reason>' } | ConvertTo-Json -Compress; " +
+    "Invoke-RestMethod -Method Post -Uri '$ApiBaseUrl$RequestRoute' -ContentType 'application/json' -Body `$body"
+  )
+  $DecisionCommand = (
+    "`$body = @{ id = '$PendingApprovalId'; action = 'approve'; comment = '<comment>'; actor = '<actor>' } | ConvertTo-Json -Compress; " +
+    "Invoke-RestMethod -Method Post -Uri '$ApiBaseUrl/approvals/decision' -ContentType 'application/json' -Body `$body"
+  )
+  $GrantCommand = (
+    "`$body = @{ approval_id = '$ApprovedApprovalId'; actor = '<actor>'; reason = '<reason>'; lease_seconds = 3600 } | ConvertTo-Json -Compress; " +
+    "Invoke-RestMethod -Method Post -Uri '$ApiBaseUrl$GrantRoute' -ContentType 'application/json' -Body `$body"
+  )
 
   if (-not [string]::IsNullOrWhiteSpace($ActiveGrantReceiptId)) {
     return [ordered]@{
@@ -385,46 +399,68 @@ function New-ResidentRuntimeAuthorityRequestOperatorHandoff {
   if (-not [string]::IsNullOrWhiteSpace($ApprovedApprovalId)) {
     return [ordered]@{
       source = 'resident_runtime_authority_readiness_handoff'
-      status = 'operator_action_available'
-      next_operator_action_requirement = 'resident_runtime_execution_authority_grant_receipt'
+      status = 'approved_authority_request_selected'
+      next_operator_action_requirement = 'exact_resident_runtime_execution_authority_approval'
       next_operator_action = [ordered]@{
-        id = 'grant_resident_runtime_execution_authority'
-        route = '/lens/resident-runtime/authority-grant'
+        id = 'select_exact_approved_resident_runtime_execution_authority_request'
+        route = $RequestsRoute
         requests_route = $RequestsRoute
         readiness_route = $ReadinessRoute
-        method = 'POST'
+        method = 'GET'
         approval_action = $ApprovalAction
         approved_approval_id = $ApprovedApprovalId
-        requires = [string[]]@('exact approved resident runtime authority approval_id', 'system.write actor scope', 'explicit -ConfirmGrant operator execution')
-        mode = 'authority_grant'
-        live_effect = 'writes the resident-runtime execution authority grant receipt only'
-        operator_supplied_values_required = $true
+        requires = [string[]]@('exact approved resident runtime authority approval_id')
+        mode = 'approval_readback'
+        live_effect = 'selects the approved resident-runtime authority request; no authority grant receipt is written'
+        operator_supplied_values_required = $false
         script_would_execute = $false
         script_would_mutate = $false
         script_would_request_authority = $false
-        script_would_grant_authority = $true
+        script_would_grant_authority = $false
         script_would_decide_approval = $false
+        follow_up_authority_grant_command = [ordered]@{
+          command = $GrantCommand
+          route = $GrantRoute
+          method = 'POST'
+          api_base_url = $ApiBaseUrl
+          payload_shape = [ordered]@{
+            approval_id = $ApprovedApprovalId
+            actor = '<actor>'
+            reason = '<reason>'
+            lease_seconds = 3600
+          }
+          required_scope = 'system.write'
+          requires_running_api = $true
+          requires_operator_actor = $true
+          requires_approval_id = $true
+          would_grant_authority_if_run = $true
+          status_readback_would_grant_authority = $false
+          preview_only = $true
+          availability_reason = 'approved_request_selected_but_authority_grant_is_separate_operator_step'
+        }
       }
       next_operator_command = [ordered]@{
-        command = ".\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode GrantNext -Actor <actor> -ApprovalId $ApprovedApprovalId -ConfirmGrant"
-        mode = 'GrantNext'
-        requires_confirmation = $true
-        requires_explicit_operator_opt_in = $true
-        requires_actor = $true
-        requires_approval_id = $true
+        command = $ReceiptReviewReadbackCommand
+        mode = 'Status'
+        route = $RequestsRoute
+        method = 'GET'
+        requires_confirmation = $false
+        requires_explicit_operator_opt_in = $false
+        requires_actor = $false
+        requires_approval_id = $false
         requires_operator_approval_decision = $false
       }
-      read_only_status_command = '.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status'
+      read_only_status_command = $ReceiptReviewReadbackCommand
       next_operator_actor_scope_readiness = [ordered]@{
-        ready = $false
-        reason = 'actor_not_supplied'
+        ready = $true
+        reason = 'not_required'
         actor_present = $false
-        scope_required = $true
-        required_scope = 'system.write'
-        action_id = 'grant_resident_runtime_execution_authority'
-        route = '/lens/resident-runtime/authority-grant'
-        method = 'POST'
-        operator_must_supply_actor = $true
+        scope_required = $false
+        required_scope = ''
+        action_id = 'select_exact_approved_resident_runtime_execution_authority_request'
+        route = $RequestsRoute
+        method = 'GET'
+        operator_must_supply_actor = $false
         env_var = 'FRANCIS_API_ACTOR_SCOPES'
         json_shape = [ordered]@{ '<actor>' = [string[]]@('system.write') }
         powershell_example = '$env:FRANCIS_API_ACTOR_SCOPES = ''{"<actor>":["system.write"]}'''
@@ -438,7 +474,7 @@ function New-ResidentRuntimeAuthorityRequestOperatorHandoff {
       read_only_contract = $true
       diagnostic_only = $true
       approval_request_write_if_run = $false
-      authority_grant_receipt_write_if_run = $true
+      authority_grant_receipt_write_if_run = $false
       approval_decision_authority = $false
       would_execute = $false
       would_mutate = $false
@@ -466,17 +502,57 @@ function New-ResidentRuntimeAuthorityRequestOperatorHandoff {
         script_would_request_authority = $false
         script_would_grant_authority = $false
         script_would_decide_approval = $false
+        approval_decision_command = [ordered]@{
+          command = $DecisionCommand
+          route = '/approvals/decision'
+          method = 'POST'
+          api_base_url = $ApiBaseUrl
+          payload_shape = [ordered]@{
+            id = $PendingApprovalId
+            action = 'approve'
+            comment = '<comment>'
+            actor = '<actor>'
+          }
+          required_scope = 'approvals.decide'
+          requires_running_api = $true
+          requires_operator_actor = $true
+          requires_local_caller_unless_remote_enabled = $true
+          remote_enable_env_var = 'FRANCIS_APPROVALS_ALLOW_REMOTE_DECISIONS'
+          would_decide_approval_if_run = $true
+          status_readback_would_decide_approval = $false
+        }
       }
       next_operator_command = [ordered]@{
-        command = '.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status'
+        command = $ReceiptReviewReadbackCommand
         mode = 'Status'
+        route = $RequestsRoute
+        method = 'GET'
         requires_confirmation = $false
         requires_explicit_operator_opt_in = $false
         requires_actor = $false
         requires_approval_id = $false
         requires_operator_approval_decision = $true
+        approval_decision_command = [ordered]@{
+          command = $DecisionCommand
+          route = '/approvals/decision'
+          method = 'POST'
+          api_base_url = $ApiBaseUrl
+          payload_shape = [ordered]@{
+            id = $PendingApprovalId
+            action = 'approve'
+            comment = '<comment>'
+            actor = '<actor>'
+          }
+          required_scope = 'approvals.decide'
+          requires_running_api = $true
+          requires_operator_actor = $true
+          requires_local_caller_unless_remote_enabled = $true
+          remote_enable_env_var = 'FRANCIS_APPROVALS_ALLOW_REMOTE_DECISIONS'
+          would_decide_approval_if_run = $true
+          status_readback_would_decide_approval = $false
+        }
       }
-      read_only_status_command = '.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status'
+      read_only_status_command = $ReceiptReviewReadbackCommand
       operator_sequence_command_availability = [ordered]@{
         available_now_count = 1
         preview_only_count = 0
@@ -513,17 +589,34 @@ function New-ResidentRuntimeAuthorityRequestOperatorHandoff {
       script_would_request_authority = $true
       script_would_grant_authority = $false
       script_would_decide_approval = $false
+      approval_request_command = [ordered]@{
+        command = $RequestCommand
+        route = $RequestRoute
+        method = 'POST'
+        api_base_url = $ApiBaseUrl
+        payload_shape = [ordered]@{
+          actor = '<actor>'
+          reason = '<reason>'
+        }
+        required_scope = 'system.write'
+        requires_running_api = $true
+        requires_operator_actor = $true
+        would_request_approval_if_run = $true
+        status_readback_would_request_approval = $false
+      }
     }
     next_operator_command = [ordered]@{
-      command = '.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode RequestNext -Actor <actor> -ConfirmRequest'
-      mode = 'RequestNext'
+      command = $RequestCommand
+      mode = 'ApiRequest'
+      route = $RequestRoute
+      method = 'POST'
       requires_confirmation = $true
       requires_explicit_operator_opt_in = $true
       requires_actor = $true
       requires_approval_id = $false
       requires_operator_approval_decision = $false
     }
-    read_only_status_command = '.\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status'
+    read_only_status_command = $ReceiptReviewReadbackCommand
     next_operator_actor_scope_readiness = [ordered]@{
       ready = $false
       reason = 'actor_not_supplied'

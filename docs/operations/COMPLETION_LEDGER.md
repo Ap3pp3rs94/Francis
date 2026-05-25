@@ -38423,6 +38423,65 @@ Latest validation for Stage 6 restabilized prerequisite audit handoff proof:
   resident_supervision_stopped; subsequent process scan only matched the scan
   command itself`
 
+### 2026-05-25 - Stage 6 resident-runtime authority request selection handoff
+
+Roadmap area: Stage 6 / Lens MVP, governed runtime authority visibility and
+operator handoff truthfulness.
+
+Material change:
+
+- The Stage 6 next-handoff proof now surfaces direct resident-runtime authority
+  request/readback commands when a launch-on-hotkey completion audit points at
+  `create_or_select_exact_approved_resident_runtime_execution_authority_request`.
+- When an approved resident-runtime execution authority request already exists,
+  the handoff now reports
+  `select_exact_approved_resident_runtime_execution_authority_request` as a
+  read-only `GET` selection/readback. It no longer collapses that state into a
+  grant recommendation.
+- The authority grant command remains visible only as a preview/follow-up
+  command, with `authority_grant_receipt_write_if_run=false` on the selected
+  approved-request handoff. Request, approval decision, and grant remain
+  separate operator-governed steps.
+- Stage 6 still does not close and Stage 7 does not start. This change does not
+  request approval, decide approval, grant authority, execute runtime actions,
+  write memory, claim residency, or mutate Lens runtime state.
+
+Latest validation for Stage 6 resident-runtime authority request selection
+handoff:
+
+- PowerShell AST parse of `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed`
+- `python -m pytest tests/test_lens_stage6_next_handoff_script.py -q
+  --tb=short`
+  Result: `passed`
+- `python -m pytest
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_applied_bringup_review_state
+  -q --tb=short`
+  Result: `passed`
+- `python -m ruff check tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed; already formatted`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath
+  .tmp\stage6-completion-audit-launch-on-hotkey-readback.json`
+  Result: `status=proof_passed; ready_to_close=false;
+  next_smallest_truthful_gap=resident_surface_runtime_not_supervised;
+  recommended_handoff_source=stage6_helpful_not_noisy_runtime_authority_readiness_handoff;
+  recommended_next_slice=create_or_select_exact_approved_resident_runtime_execution_authority_request;
+  recommended_operator_handoff.status=approved_authority_request_selected;
+  recommended_next_operator_action.id=select_exact_approved_resident_runtime_execution_authority_request;
+  recommended_next_operator_action.method=GET;
+  approval_request_write_if_run=false;
+  authority_grant_receipt_write_if_run=false;
+  stage6_completion_audit_recommended_handoff_consumed=true;
+  stage6_completion_audit_runtime_readback_required=false`
+- `git diff --check`
+  Result: `passed; Git reported the expected LF-to-CRLF warning for the touched
+  PowerShell script`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
