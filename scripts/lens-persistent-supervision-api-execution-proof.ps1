@@ -272,6 +272,7 @@ def _run() -> tuple[int, dict[str, Any]]:
     summon_approval_id = ""
     enablement_approval_id = ""
     execution_approval_id = ""
+    resident_claim_approval_id = ""
     overlay_stop: dict[str, Any] = {}
     hotkey_stop: dict[str, Any] = {}
     tray_stop: dict[str, Any] = {}
@@ -367,6 +368,22 @@ def _run() -> tuple[int, dict[str, Any]]:
             grant_reason="grant bounded persistent supervision execution authority for isolated temp service config",
         )
         execution_receipt = _as_dict(execution_grant.get("receipt"))
+
+        (
+            resident_claim_approval_id,
+            resident_claim_request,
+            resident_claim_decision,
+            resident_claim_grant,
+        ) = _request_approve_grant(
+            client,
+            request_route="/lens/host/persistent-supervision/resident-claim/authority/request",
+            grant_route="/lens/host/persistent-supervision/resident-claim/authority",
+            actor=actor,
+            request_reason="operator wants persistent supervision resident-claim authority for API proof",
+            approve_comment="approve only persistent supervision resident-claim authority for isolated API proof",
+            grant_reason="grant bounded persistent supervision resident-claim authority without claiming resident state",
+        )
+        resident_claim_receipt = _as_dict(resident_claim_grant.get("receipt"))
 
         resident_start = _post(
             client,
@@ -510,6 +527,7 @@ def _run() -> tuple[int, dict[str, Any]]:
         hotkey_governance = _as_dict(hotkey_start.get("governance"))
         overlay_governance = _as_dict(overlay_start.get("governance"))
         summon_governance = _as_dict(summon_execute.get("governance"))
+        resident_claim_governance = _as_dict(resident_claim_grant.get("governance"))
         apply_governance = _as_dict(persistent_apply.get("governance"))
         dependencies_ready_after_summon = (
             persistent_plan_after_summon.get("required_before_enable_ready") is True
@@ -547,18 +565,21 @@ def _run() -> tuple[int, dict[str, Any]]:
             and persistent_readiness_before_apply.get("service_config_write_authority") is True
             and persistent_readiness_before_apply.get("persistent_supervision_execution_authority") is True
             and persistent_readiness_before_apply.get("receipt_write_authority") is True
-            and persistent_readiness_before_apply.get("resident_claim_allowed") is False
+            and persistent_readiness_before_apply.get("resident_claim_authority") is True
+            and persistent_readiness_before_apply.get("resident_claim_allowed") is True
             and "resident_claim_authority_not_granted"
-            in _str_list(persistent_readiness_before_apply.get("blockers"))
+            not in _str_list(persistent_readiness_before_apply.get("blockers"))
         )
         denial_before_apply_observed = (
-            persistent_denial_before_apply.get("status") == "denied_no_resident_claim_authority"
+            persistent_denial_before_apply.get("status") == "ready_for_persistent_supervision_execution"
             and persistent_denial_before_apply.get("authority_granted") is True
             and persistent_denial_before_apply.get("applied") is False
             and persistent_denial_before_apply.get("executed") is False
             and persistent_denial_before_apply.get("service_config_updated") is False
+            and persistent_denial_before_apply.get("resident_claim_authority") is True
+            and persistent_denial_before_apply.get("resident_claim_allowed") is True
             and "resident_claim_authority_not_granted"
-            in _str_list(persistent_denial_before_apply.get("blockers"))
+            not in _str_list(persistent_denial_before_apply.get("blockers"))
         )
         service_config_changed_fields = _str_list(_as_dict(persistent_apply.get("service_config")).get("changed_fields"))
         apply_observed = (
@@ -569,7 +590,8 @@ def _run() -> tuple[int, dict[str, Any]]:
             and persistent_apply.get("service_config_updated") is True
             and persistent_apply.get("persistent_supervision_enablement_allowed") is True
             and persistent_apply.get("persistent_supervision_ready") is True
-            and persistent_apply.get("resident_claim_allowed") is False
+            and persistent_apply.get("resident_claim_authority") is True
+            and persistent_apply.get("resident_claim_allowed") is True
             and persistent_apply.get("receipt_written") is True
             and _as_dict(persistent_apply.get("service_config")).get("path") == str(service_config_path)
             and "process_supervision_enabled" in service_config_changed_fields
@@ -588,7 +610,8 @@ def _run() -> tuple[int, dict[str, Any]]:
             and _as_dict(persistent_executions_after_apply.get("latest")).get("approval_id") == execution_approval_id
             and persistent_executions_after_apply.get("service_config_updated") is True
             and persistent_executions_after_apply.get("persistent_supervision_enablement_allowed") is True
-            and persistent_executions_after_apply.get("resident_claim_allowed") is False
+            and persistent_executions_after_apply.get("resident_claim_authority") is True
+            and persistent_executions_after_apply.get("resident_claim_allowed") is True
         )
         isolated_config_observed = (
             temp_service_config_before.get("process_supervision_enabled") is False
@@ -634,6 +657,8 @@ def _run() -> tuple[int, dict[str, Any]]:
             and summon_governance.get("os_level_summon_authority") is False
             and summon_governance.get("local_process_launch_authority") is False
             and summon_governance.get("memory_write") is False
+            and resident_claim_governance.get("resident_claim_authority") is True
+            and resident_claim_governance.get("memory_write") is False
             and apply_governance.get("service_config_write_authority") is True
             and apply_governance.get("persistent_supervision_execution_authority") is True
             and apply_governance.get("service_config_mutation_authority") is True
@@ -641,7 +666,7 @@ def _run() -> tuple[int, dict[str, Any]]:
             and apply_governance.get("service_control_authority") is False
             and apply_governance.get("local_process_launch_authority") is False
             and apply_governance.get("memory_write") is False
-            and apply_governance.get("resident_claim_authority") is False
+            and apply_governance.get("resident_claim_authority") is True
             and apply_governance.get("approval_decision_authority") is False
         )
         checks = [
@@ -657,6 +682,7 @@ def _run() -> tuple[int, dict[str, Any]]:
                     and summon_grant.get("authority_granted") is True
                     and enablement_grant.get("authority_granted") is True
                     and execution_grant.get("authority_granted") is True
+                    and resident_claim_grant.get("authority_granted") is True
                 )
                 else "blocked",
                 host_grant.get("authority_granted") is True
@@ -667,6 +693,7 @@ def _run() -> tuple[int, dict[str, Any]]:
                 and summon_grant.get("authority_granted") is True
                 and enablement_grant.get("authority_granted") is True
                 and execution_grant.get("authority_granted") is True
+                and resident_claim_grant.get("authority_granted") is True
                 and bool(execution_receipt.get("receipt_id")),
                 "/lens/*/authority + /lens/host/persistent-supervision/enablement/execution/authority",
                 "The proof must carry exact authority receipts through the persistent-supervision execution route.",
@@ -709,14 +736,14 @@ def _run() -> tuple[int, dict[str, Any]]:
                 str(persistent_readiness_before_apply.get("status") or ""),
                 execution_readiness_observed,
                 "/lens/host/persistent-supervision/enablement/execution/readiness",
-                "Execution readiness must see execution authority and narrow the remaining boundary to resident claim.",
+                "Execution readiness must consume the separate resident-claim authority grant before apply.",
             ),
             _check(
-                "execution_denial_before_apply_preserved",
+                "execution_boundary_before_apply_preserved",
                 str(persistent_denial_before_apply.get("status") or ""),
                 denial_before_apply_observed,
                 "/lens/host/persistent-supervision/enablement/execution",
-                "The non-apply route must remain a denial/readback boundary even after execution authority is granted.",
+                "The non-apply route must remain a readback boundary and must not mutate even after resident-claim authority is granted.",
             ),
             _check(
                 "api_apply_updated_isolated_service_config",
@@ -779,7 +806,7 @@ def _run() -> tuple[int, dict[str, Any]]:
                 "bounded" if authority_boundaries_intact else "leaked",
                 authority_boundaries_intact,
                 "response.governance",
-                "The proof may write isolated service-config and runtime receipts but must not gain launch, service control, memory, approval-decision, or resident-claim authority.",
+                "The proof may write isolated service-config and runtime receipts with resident-claim authority, but must not gain launch, service control, memory, approval-decision, or resident-state claim authority.",
             ),
         ]
         proof_passed = all(item["passed"] for item in checks)
@@ -813,6 +840,7 @@ def _run() -> tuple[int, dict[str, Any]]:
             "summon_approval_id": summon_approval_id,
             "persistent_supervision_enablement_approval_id": enablement_approval_id,
             "persistent_supervision_execution_approval_id": execution_approval_id,
+            "persistent_supervision_resident_claim_approval_id": resident_claim_approval_id,
             "host_supervision_authority_grant_receipt_id": str(host_receipt.get("receipt_id") or ""),
             "resident_runtime_authority_grant_receipt_id": str(runtime_receipt.get("receipt_id") or ""),
             "tray_authority_grant_receipt_id": str(tray_receipt.get("receipt_id") or ""),
@@ -825,6 +853,9 @@ def _run() -> tuple[int, dict[str, Any]]:
             "persistent_supervision_execution_authority_grant_receipt_id": str(
                 execution_receipt.get("receipt_id") or ""
             ),
+            "persistent_supervision_resident_claim_authority_grant_receipt_id": str(
+                resident_claim_receipt.get("receipt_id") or ""
+            ),
             "resident_runtime_execution_authority": runtime_grant.get("authority_granted") is True,
             "host_supervision_authority": host_grant.get("authority_granted") is True,
             "tray_presence_authority": tray_grant.get("authority_granted") is True,
@@ -835,6 +866,9 @@ def _run() -> tuple[int, dict[str, Any]]:
             "service_config_write_authority": execution_grant.get("service_config_write_authority") is True,
             "persistent_supervision_execution_authority": (
                 execution_grant.get("persistent_supervision_execution_authority") is True
+            ),
+            "persistent_supervision_resident_claim_authority": (
+                resident_claim_grant.get("resident_claim_authority") is True
             ),
             "receipt_write_authority": execution_grant.get("receipt_write_authority") is True,
             "execution_applied": persistent_apply.get("applied") is True,
@@ -867,7 +901,7 @@ def _run() -> tuple[int, dict[str, Any]]:
             ),
             "service_config_updated": persistent_apply.get("service_config_updated") is True,
             "receipt_written": persistent_apply.get("receipt_written") is True,
-            "resident_claim_allowed": False,
+            "resident_claim_allowed": persistent_apply.get("resident_claim_allowed") is True,
             "service_managed": False,
             "summon_anywhere": False,
             "os_level_summon": False,
@@ -903,6 +937,8 @@ def _run() -> tuple[int, dict[str, Any]]:
                 ),
                 "persistent_apply_status": str(persistent_apply.get("status") or ""),
                 "persistent_apply_receipt_id": str(_as_dict(persistent_apply.get("receipt")).get("receipt_id") or ""),
+                "resident_claim_grant_status": str(resident_claim_grant.get("status") or ""),
+                "resident_claim_grant_receipt_id": str(resident_claim_receipt.get("receipt_id") or ""),
                 "persistent_executions_readback_status": str(
                     persistent_executions_after_apply.get("status") or ""
                 ),
@@ -952,6 +988,7 @@ def _run() -> tuple[int, dict[str, Any]]:
                 "service_config_mutation_authority": True,
                 "persistent_supervision_enablement_authority": True,
                 "persistent_supervision_execution_authority": True,
+                "resident_claim_authority": True,
                 "receipt_write_authority": True,
                 "local_process_launch_authority": False,
                 "process_supervision_authority": True,
@@ -970,13 +1007,12 @@ def _run() -> tuple[int, dict[str, Any]]:
                 "capture_authority": False,
                 "new_sensing_authority": False,
                 "memory_write": False,
-                "resident_claim_authority": False,
                 "mutation_authority_granted": True,
             },
             "notes": (
                 "This proof executes persistent-supervision enablement only against an isolated service config. "
                 "It does not claim Stage 6 closure, service install/control, local process launch, memory write, "
-                "approval-decision authority, OS-level summon-anywhere readiness, or resident-claim authority."
+                "approval-decision authority, OS-level summon-anywhere readiness, or resident state."
             ),
         }
         return (0 if proof_passed else 1), payload

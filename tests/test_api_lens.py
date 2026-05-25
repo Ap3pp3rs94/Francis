@@ -7227,11 +7227,18 @@ def test_lens_persistent_supervision_enablement_execution_request_requires_enabl
     assert granted_requirements["receipt_write_authority"]["ready"] is True
     assert granted_requirements["resident_claim_authority"]["ready"] is False
     assert granted_readiness_body["first_blocked_requirement"] == "resident_claim_authority"
-    assert granted_readiness_body["first_blocked_requirement_handoff"]["execution_apply_route"] == (
+    granted_resident_handoff = granted_readiness_body["first_blocked_requirement_handoff"]
+    assert granted_resident_handoff["resident_claim_authority_request_route"] == (
+        "/lens/host/persistent-supervision/resident-claim/authority/request"
+    )
+    assert granted_resident_handoff["resident_claim_authority_grant_route"] == (
+        "/lens/host/persistent-supervision/resident-claim/authority"
+    )
+    assert granted_resident_handoff["execution_apply_route"] == (
         "/lens/host/persistent-supervision/enablement/execution/apply"
     )
     assert granted_readiness_body["next_smallest_truthful_gap"] == (
-        "review_resident_claim_boundary_before_persistent_supervision_claim"
+        "grant_persistent_supervision_resident_claim_authority_before_claim"
     )
 
     granted_denial = client.post(
@@ -7486,6 +7493,313 @@ def test_lens_persistent_supervision_enablement_execution_request_requires_enabl
     )
     assert grant_command["execution_authority"] is False
     assert grant_command["approval_decision_authority"] is False
+    assert not (data_root / "runtime" / "lens-host-supervisor" / "status.json").exists()
+    assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
+    assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()
+
+
+def test_lens_persistent_supervision_resident_claim_authority_is_separate_from_execution_grant(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    def request_approve_grant(
+        *,
+        request_route: str,
+        grant_route: str,
+        request_reason: str,
+        grant_reason: str,
+    ) -> tuple[str, dict[str, Any], str]:
+        requested = client.post(
+            request_route,
+            json={"actor": "test.system.write", "reason": request_reason},
+        )
+        assert requested.status_code == 200
+        requested_body = requested.json()
+        approval_id = str(requested_body["approval_id"])
+        assert approval_id
+
+        decided = client.post(
+            "/approvals/decision",
+            json={
+                "id": approval_id,
+                "action": "approve",
+                "actor": "test.approvals.decision",
+                "comment": f"approve only {request_reason}",
+            },
+        )
+        assert decided.status_code == 200
+        assert decided.json()["status"] == "approved"
+
+        granted = client.post(
+            grant_route,
+            json={
+                "approval_id": approval_id,
+                "actor": "test.system.write",
+                "reason": grant_reason,
+                "lease_seconds": 600,
+            },
+        )
+        assert granted.status_code == 200
+        granted_body = granted.json()
+        assert granted_body["status"] == "authority_granted"
+        receipt_id = str(granted_body["receipt"]["receipt_id"])
+        assert receipt_id
+        return approval_id, granted_body, receipt_id
+
+    _, _, _ = request_approve_grant(
+        request_route="/lens/host/supervision/authority/request",
+        grant_route="/lens/host/supervision/authority",
+        request_reason="host supervision authority before resident-claim authority proof",
+        grant_reason="grant host supervision authority before resident-claim authority proof",
+    )
+    _, _, enablement_receipt_id = request_approve_grant(
+        request_route="/lens/host/persistent-supervision/enablement/authority/request",
+        grant_route="/lens/host/persistent-supervision/enablement/authority",
+        request_reason="persistent supervision enablement authority before resident-claim authority proof",
+        grant_reason="grant persistent supervision enablement authority before resident-claim authority proof",
+    )
+    execution_approval_id, execution_grant_body, execution_receipt_id = request_approve_grant(
+        request_route="/lens/host/persistent-supervision/enablement/execution/request",
+        grant_route="/lens/host/persistent-supervision/enablement/execution/authority",
+        request_reason="persistent supervision execution authority before resident-claim authority proof",
+        grant_reason="grant persistent supervision execution authority before resident-claim authority proof",
+    )
+    assert execution_grant_body["resident_claim_allowed"] is False
+    assert execution_grant_body["governance"]["resident_claim_authority"] is False
+
+    denied_request = client.post(
+        "/lens/host/persistent-supervision/resident-claim/authority/request",
+        json={
+            "actor": "test.lens.no_scope",
+            "reason": "try resident-claim authority request without system write",
+        },
+    )
+    assert denied_request.status_code == 200
+    denied_body = denied_request.json()
+    assert denied_body["ok"] is False
+    assert denied_body["status"] == "denied"
+    assert denied_body["approval_requested"] is False
+    assert denied_body["resident_claim_authority"] is False
+    assert denied_body["governance"]["required_scope"] == "system.write"
+    assert denied_body["governance"]["resident_claim_authority"] is False
+
+    resident_claim_request = client.post(
+        "/lens/host/persistent-supervision/resident-claim/authority/request",
+        json={
+            "actor": "test.system.write",
+            "reason": "operator wants resident-claim authority reviewed separately",
+        },
+    )
+    assert resident_claim_request.status_code == 200
+    request_body = resident_claim_request.json()
+    assert request_body["ok"] is True
+    assert request_body["status"] == "approval_requested"
+    assert request_body["approval_requested"] is True
+    assert request_body["action"] == "lens.host.persistent_supervision_resident_claim_authority"
+    assert request_body["active_execution_authority_grant_receipt_id"] == execution_receipt_id
+    assert request_body["resident_claim_authority"] is False
+    assert request_body["resident_claim_allowed"] is False
+    resident_claim_approval_id = str(request_body["approval_id"])
+    assert resident_claim_approval_id
+    request_payload = request_body["persistent_supervision_resident_claim_authority"]
+    assert request_payload["request_kind"] == "lens.host.persistent_supervision_resident_claim_authority.request"
+    assert request_payload["active_execution_authority_grant_receipt_id"] == execution_receipt_id
+    assert request_payload["grant_route"] == "/lens/host/persistent-supervision/resident-claim/authority"
+    assert request_payload["grants_route"] == "/lens/host/persistent-supervision/resident-claim/authority/grants"
+    assert request_payload["governance"]["resident_claim_authority"] is False
+
+    pending_readback = client.get("/lens/host/persistent-supervision/resident-claim/authority/requests?limit=10")
+    assert pending_readback.status_code == 200
+    pending_readback_body = pending_readback.json()
+    assert pending_readback_body["kind"] == (
+        "lens.host.persistent_supervision_resident_claim_authority.request_readback"
+    )
+    assert pending_readback_body["pending_count"] == 1
+    assert pending_readback_body["authority_granted"] is False
+    assert pending_readback_body["resident_claim_allowed"] is False
+
+    pending_readiness = client.get(
+        "/lens/host/persistent-supervision/resident-claim/authority/readiness"
+        f"?limit=10&approval_id={resident_claim_approval_id}&actor=test.system.write"
+    )
+    assert pending_readiness.status_code == 200
+    pending_readiness_body = pending_readiness.json()
+    assert pending_readiness_body["kind"] == (
+        "lens.host.persistent_supervision_resident_claim_authority.readiness_audit"
+    )
+    assert pending_readiness_body["status"] == "blocked"
+    assert pending_readiness_body["approval_ready"] is False
+    assert pending_readiness_body["execution_authority_granted"] is True
+    assert pending_readiness_body["active_execution_authority_grant_receipt_id"] == execution_receipt_id
+    assert (
+        "persistent_supervision_resident_claim_authority_approval_not_approved" in (pending_readiness_body["blockers"])
+    )
+    assert "resident_claim_authority_not_granted" in pending_readiness_body["blockers"]
+
+    decided = client.post(
+        "/approvals/decision",
+        json={
+            "id": resident_claim_approval_id,
+            "action": "approve",
+            "actor": "test.approvals.decision",
+            "comment": "approve only resident-claim authority for persistent supervision",
+        },
+    )
+    assert decided.status_code == 200
+    assert decided.json()["status"] == "approved"
+
+    resident_claim_grant = client.post(
+        "/lens/host/persistent-supervision/resident-claim/authority",
+        json={
+            "approval_id": resident_claim_approval_id,
+            "actor": "test.system.write",
+            "reason": "grant resident-claim authority without claiming resident state",
+            "lease_seconds": 600,
+        },
+    )
+    assert resident_claim_grant.status_code == 200
+    resident_claim_grant_body = resident_claim_grant.json()
+    assert resident_claim_grant_body["kind"] == "lens.host.persistent_supervision_resident_claim_authority.grant"
+    assert resident_claim_grant_body["status"] == "authority_granted"
+    assert resident_claim_grant_body["authority_granted"] is True
+    assert resident_claim_grant_body["resident_claim_authority"] is True
+    assert resident_claim_grant_body["resident_claim_allowed"] is True
+    assert resident_claim_grant_body["execution_authority"]["receipt_id"] == execution_receipt_id
+    assert resident_claim_grant_body["service_config_updated"] is False
+    assert resident_claim_grant_body["grant"]["would_claim_resident"] is False
+    assert resident_claim_grant_body["grant"]["would_write_memory"] is False
+    assert resident_claim_grant_body["governance"]["resident_claim_authority"] is True
+    assert resident_claim_grant_body["governance"]["memory_write"] is False
+    resident_claim_receipt = resident_claim_grant_body["receipt"]
+    resident_claim_receipt_id = resident_claim_receipt["receipt_id"]
+    assert resident_claim_receipt["kind"] == ("lens.host.persistent_supervision_resident_claim_authority.grant.receipt")
+    assert resident_claim_receipt["approval_id"] == resident_claim_approval_id
+    assert resident_claim_receipt["execution_authority"]["receipt_id"] == execution_receipt_id
+    assert resident_claim_receipt["authorities"]["resident_claim_authority"] is True
+    assert resident_claim_receipt["governance"]["resident_claim_authority"] is True
+    assert resident_claim_receipt["governance"]["memory_write"] is False
+
+    grant_readback = client.get(
+        "/lens/host/persistent-supervision/resident-claim/authority/grants"
+        f"?limit=10&approval_id={resident_claim_approval_id}"
+    )
+    assert grant_readback.status_code == 200
+    grant_readback_body = grant_readback.json()
+    assert grant_readback_body["kind"] == ("lens.host.persistent_supervision_resident_claim_authority.grant_receipts")
+    assert grant_readback_body["total"] == 1
+    assert grant_readback_body["active_latest"]["receipt_id"] == resident_claim_receipt_id
+    assert grant_readback_body["resident_claim_authority"] is True
+    assert grant_readback_body["resident_claim_allowed"] is True
+
+    granted_readiness = client.get(
+        "/lens/host/persistent-supervision/resident-claim/authority/readiness"
+        f"?limit=10&approval_id={resident_claim_approval_id}&actor=test.system.write"
+    )
+    assert granted_readiness.status_code == 200
+    granted_readiness_body = granted_readiness.json()
+    assert granted_readiness_body["status"] == "ready"
+    assert granted_readiness_body["ready"] is True
+    assert granted_readiness_body["approval_ready"] is True
+    assert granted_readiness_body["resident_claim_authority"] is True
+    assert granted_readiness_body["resident_claim_allowed"] is True
+    assert granted_readiness_body["active_resident_claim_authority_grant_receipt_id"] == resident_claim_receipt_id
+    assert "resident_claim_authority_not_granted" not in granted_readiness_body["blockers"]
+    granted_requirements = {item["id"]: item for item in granted_readiness_body["requirements"]}
+    assert granted_requirements["resident_claim_authority"]["ready"] is True
+
+    execution_readiness = client.get(
+        "/lens/host/persistent-supervision/enablement/execution/readiness"
+        f"?limit=10&approval_id={execution_approval_id}&actor=test.system.write"
+    )
+    assert execution_readiness.status_code == 200
+    execution_readiness_body = execution_readiness.json()
+    assert execution_readiness_body["resident_claim_authority"] is True
+    assert execution_readiness_body["resident_claim_allowed"] is True
+    assert execution_readiness_body["active_resident_claim_authority_grant_receipt_id"] == (resident_claim_receipt_id)
+    assert "resident_claim_authority_not_granted" not in execution_readiness_body["blockers"]
+    execution_requirements = {item["id"]: item for item in execution_readiness_body["requirements"]}
+    assert execution_requirements["resident_claim_authority"]["ready"] is True
+
+    execution_boundary = client.post(
+        "/lens/host/persistent-supervision/enablement/execution",
+        json={
+            "approval_id": execution_approval_id,
+            "actor": "test.system.write",
+            "reason": "prove execution boundary consumes separate resident-claim authority",
+        },
+    )
+    assert execution_boundary.status_code == 200
+    execution_boundary_body = execution_boundary.json()
+    assert execution_boundary_body["resident_claim_authority"] is True
+    assert execution_boundary_body["resident_claim_allowed"] is True
+    assert execution_boundary_body["active_resident_claim_authority_grant_receipt_id"] == (resident_claim_receipt_id)
+    assert "resident_claim_authority_not_granted" not in execution_boundary_body["blockers"]
+    assert execution_boundary_body["denial"]["would_claim_resident"] is False
+
+    execution = client.post(
+        "/lens/host/persistent-supervision/enablement/execution/apply",
+        json={
+            "approval_id": execution_approval_id,
+            "actor": "test.system.write",
+            "reason": "apply persistent supervision after separate resident-claim authority grant",
+        },
+    )
+    assert execution.status_code == 200
+    execution_body = execution.json()
+    assert execution_body["kind"] == "lens.host.persistent_supervision_enablement_execution.execution"
+    assert execution_body["resident_claim_authority"] is True
+    assert execution_body["resident_claim_allowed"] is True
+    assert execution_body["resident_claim_authority_grant"]["receipt_id"] == resident_claim_receipt_id
+    assert "resident_claim_authority_not_granted" not in execution_body["blockers"]
+    assert execution_body["governance"]["resident_claim_authority"] is True
+    assert execution_body["governance"]["memory_write"] is False
+    execution_receipt = execution_body["receipt"]
+    assert execution_receipt["result"]["resident_claim_allowed"] is True
+    assert execution_receipt["governance"]["resident_claim_authority"] is True
+    assert execution_receipt["governance"]["memory_write"] is False
+
+    status = client.get("/lens/status?limit=10")
+    assert status.status_code == 200
+    status_body = status.json()
+    resident_host = status_body["resident_host"]
+    assert resident_host["persistent_supervision_resident_claim_authority_request_route"] == (
+        "/lens/host/persistent-supervision/resident-claim/authority/request"
+    )
+    assert (
+        resident_host["persistent_supervision_resident_claim_authority_grants"]["active_latest"]["receipt_id"]
+        == resident_claim_receipt_id
+    )
+    command = next(
+        item
+        for item in status_body["command_palette"]["commands"]
+        if item["id"] == "lens.host.persistent_supervision_resident_claim_authority.request"
+    )
+    assert command["route"] == "/lens/host/persistent-supervision/resident-claim/authority/request"
+    grant_command = next(
+        item
+        for item in status_body["command_palette"]["commands"]
+        if item["id"] == "lens.host.persistent_supervision_resident_claim_authority.grant"
+    )
+    assert grant_command["route"] == "/lens/host/persistent-supervision/resident-claim/authority"
     assert not (data_root / "runtime" / "lens-host-supervisor" / "status.json").exists()
     assert not (data_root / "runtime" / "lens-host" / "status.json").exists()
     assert not (data_root / "runtime" / "lens-host" / "lens-host.pid").exists()

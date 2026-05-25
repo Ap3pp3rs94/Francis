@@ -15,6 +15,7 @@ from francis.lens.activation import (
     grant_lens_resident_runtime_execution_authority,
     grant_lens_host_persistent_supervision_enablement_execution_authority,
     grant_lens_host_persistent_supervision_enablement_authority,
+    grant_lens_host_persistent_supervision_resident_claim_authority,
     lens_host_activation_denial_receipts,
     lens_host_activation_authority_grant_receipts,
     lens_host_activation_execution_preflight,
@@ -26,6 +27,10 @@ from francis.lens.activation import (
     lens_host_persistent_supervision_enablement_execution_readiness_audit,
     lens_host_persistent_supervision_enablement_execution_request_contract,
     lens_host_persistent_supervision_enablement_execution_request_readback,
+    lens_host_persistent_supervision_resident_claim_authority_grant_receipts,
+    lens_host_persistent_supervision_resident_claim_authority_readiness_audit,
+    lens_host_persistent_supervision_resident_claim_authority_request_contract,
+    lens_host_persistent_supervision_resident_claim_authority_request_readback,
     lens_host_persistent_supervision_enablement_authority_readiness_audit,
     lens_host_persistent_supervision_enablement_authority_grant_receipts,
     lens_host_persistent_supervision_enablement_authority_request_contract,
@@ -382,6 +387,21 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
     persistent_supervision_enablement_execution_authority_grants = (
         lens_host_persistent_supervision_enablement_execution_authority_grant_receipts(limit=limit)
     )
+    persistent_supervision_resident_claim_authority_request = (
+        lens_host_persistent_supervision_resident_claim_authority_request_contract()
+    )
+    persistent_supervision_resident_claim_authority_requests = (
+        lens_host_persistent_supervision_resident_claim_authority_request_readback(limit=limit)
+    )
+    persistent_supervision_resident_claim_authority_grant = (
+        grant_lens_host_persistent_supervision_resident_claim_authority()
+    )
+    persistent_supervision_resident_claim_authority_grants = (
+        lens_host_persistent_supervision_resident_claim_authority_grant_receipts(limit=limit)
+    )
+    persistent_supervision_resident_claim_authority_readiness = (
+        lens_host_persistent_supervision_resident_claim_authority_readiness_audit(limit=limit)
+    )
     supervision_authority_preflight = lens_host_supervision_authority_preflight(manifest=launch_manifest)
     supervision_authority_request = lens_host_supervision_authority_request_contract()
     supervision_authority_requests = lens_host_supervision_authority_request_readback(limit=limit)
@@ -653,6 +673,36 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         ).strip(),
         "persistent_supervision_enablement_execution_authority_grants": (
             persistent_supervision_enablement_execution_authority_grants
+        ),
+        "persistent_supervision_resident_claim_authority_request_route": _safe_str(
+            persistent_supervision_resident_claim_authority_request.get("route")
+        ).strip(),
+        "persistent_supervision_resident_claim_authority_request": (
+            persistent_supervision_resident_claim_authority_request
+        ),
+        "persistent_supervision_resident_claim_authority_requests_route": _safe_str(
+            persistent_supervision_resident_claim_authority_requests.get("route")
+        ).strip(),
+        "persistent_supervision_resident_claim_authority_requests": (
+            persistent_supervision_resident_claim_authority_requests
+        ),
+        "persistent_supervision_resident_claim_authority_grant_route": _safe_str(
+            persistent_supervision_resident_claim_authority_grant.get("route")
+        ).strip(),
+        "persistent_supervision_resident_claim_authority_grant": (
+            persistent_supervision_resident_claim_authority_grant
+        ),
+        "persistent_supervision_resident_claim_authority_grants_route": _safe_str(
+            persistent_supervision_resident_claim_authority_grants.get("route")
+        ).strip(),
+        "persistent_supervision_resident_claim_authority_grants": (
+            persistent_supervision_resident_claim_authority_grants
+        ),
+        "persistent_supervision_resident_claim_authority_readiness_route": _safe_str(
+            persistent_supervision_resident_claim_authority_readiness.get("route")
+        ).strip(),
+        "persistent_supervision_resident_claim_authority_readiness": (
+            persistent_supervision_resident_claim_authority_readiness
         ),
         "supervision_authority_request_route": _safe_str(supervision_authority_request.get("route")).strip(),
         "supervision_authority_request": supervision_authority_request,
@@ -1096,6 +1146,35 @@ def _command_palette_surface(*, approvals: dict[str, Any]) -> dict[str, Any]:
                 "writes authority receipt only"
             ),
             receipt_kind="lens.host.persistent_supervision_enablement_execution_authority.grant.receipt",
+        ),
+        _palette_command(
+            "lens.host.persistent_supervision_resident_claim_authority.request",
+            "Request Persistent Supervision Resident Claim",
+            "Create an approval request for persistent supervision resident-claim authority without claiming resident state.",
+            "Control",
+            route="/lens/host/persistent-supervision/resident-claim/authority/request",
+            method="POST",
+            action="request_lens_host_persistent_supervision_resident_claim_authority",
+            keywords="lens host persistent supervision resident claim authority approval request",
+            mutates=True,
+            write_guard="system.write approval request; requires execution authority; no resident claim",
+            receipt_kind="lens.host.persistent_supervision_resident_claim_authority.request",
+        ),
+        _palette_command(
+            "lens.host.persistent_supervision_resident_claim_authority.grant",
+            "Grant Persistent Supervision Resident Claim",
+            "Lease resident-claim authority from an approved request without writing memory or claiming resident state.",
+            "Control",
+            route="/lens/host/persistent-supervision/resident-claim/authority",
+            method="POST",
+            action="grant_lens_host_persistent_supervision_resident_claim_authority",
+            keywords="lens host persistent supervision resident claim authority grant receipt",
+            mutates=True,
+            write_guard=(
+                "system.write plus exact approved resident-claim authority request and active execution grant; "
+                "writes authority receipt only"
+            ),
+            receipt_kind="lens.host.persistent_supervision_resident_claim_authority.grant.receipt",
         ),
     ]
     group_counts: dict[str, int] = {}

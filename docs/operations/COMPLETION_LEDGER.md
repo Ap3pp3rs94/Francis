@@ -38196,6 +38196,112 @@ Latest validation for Stage 6 prerequisite-plan completion-audit handoff:
   Result: `passed; Git reported expected LF-to-CRLF warnings for the touched
   PowerShell scripts`
 
+### 2026-05-25 - Stage 6 resident-claim authority and overlay prerequisite advancement
+
+Roadmap area: Stage 6 / Lens MVP, governed resident-claim authority boundaries
+and system-resident prerequisite bring-up.
+
+Material change:
+
+- Persistent-supervision resident-claim authority is now a separate governed API
+  surface instead of being hidden inside the persistent-supervision execution
+  authority grant. The new request, readback, readiness, grant, and grant
+  receipt routes let execution readiness consume an active resident-claim
+  authority receipt while preserving `would_claim_resident=false` and
+  `memory_write=false`.
+- `/lens/status` now exposes the resident-claim authority request/grant/readiness
+  surfaces and command-palette entries so the operator can see the authority
+  boundary before apply.
+- The persistent-supervision API execution proof now grants resident-claim
+  authority in its isolated fixture before apply, verifies
+  `resident_claim_allowed=true`, and verifies that the apply path still mutates
+  only the isolated service config and receipts, not resident state or memory.
+- The Stage 6 completion audit now consumes the resident-claim authority proof
+  and no longer routes the concrete next slice back to
+  `persistent_supervision_resident_claim_authority_boundary` after that proof is
+  present.
+- Live local Stage 6 bring-up also advanced: the bounded overlay authority grant
+  receipt and overlay execution receipt are present, and
+  `scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status -Actor
+  codex.stage6` now reports `status=persistent_supervision_enablement_applied`,
+  `missing_required_before_enable=[]`, and
+  `required_before_enable_ready=true`.
+- Stage 6 still does not close and Stage 7 does not start. The latest completion
+  audit remains blocked at `summon_anywhere_blockers`; the current prerequisite
+  plan readback has advanced to receipt/persistent-supervision execution-boundary
+  review, not a resident claim.
+
+Latest validation for Stage 6 resident-claim authority and overlay prerequisite
+advancement:
+
+- `python -m pytest tests/test_api_lens.py -k
+  "persistent_supervision_enablement_execution or
+  persistent_supervision_resident_claim_authority" -q`
+  Result: `passed`
+- `python -m pytest tests/test_api_lens.py -q`
+  Result: `passed`
+- `python -m ruff check src/francis/lens/activation.py
+  src/francis/api/routes/lens.py src/francis/lens/__init__.py
+  src/francis/lens/status.py tests/test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/lens/activation.py
+  src/francis/api/routes/lens.py src/francis/lens/__init__.py
+  src/francis/lens/status.py tests/test_api_lens.py`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-persistent-supervision-api-execution-proof.ps1 -Mode Status
+  -RunSeconds 10 -DataDir
+  .tmp\persistent-supervision-api-proof-after-resident-claim`
+  Result: `exit_code=0; status=proof_passed;
+  resident_claim_allowed=true; blockers=[]; live_service_config_unchanged=true`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -AllowLaunchOnHotkey`
+  Result: `exit_code=0; status=blocked; audit_status=complete;
+  ready_to_close=false; child_proof_timeouts=[];
+  next_smallest_truthful_gap=summon_anywhere_blockers;
+  recommended_next_slice=run_stage6_prerequisite_bringup_grant_overlay_window_authority;
+  authority_required=lens.overlay.window_authority`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath
+  .tmp\stage6-completion-audit-after-api-proof-resident-claim-consumed.json`
+  Result: `status=proof_passed;
+  stage_next_smallest_truthful_gap=summon_anywhere_blockers;
+  recommended_next_slice=run_stage6_prerequisite_bringup_grant_next_for_overlay_window`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode GrantNext -Actor
+  codex.stage6 -ApprovalId 83f36f9a-0e8a-42c7-a28f-21b3cbe67a7f
+  -ConfirmGrant`
+  Result: `exit_code=0; status=authority_granted;
+  receipt_id=lowag_1779729425_4a8d42543a53; would_execute=false;
+  would_mutate=false`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode ExecuteNext -Actor
+  codex.stage6 -ApprovalId 83f36f9a-0e8a-42c7-a28f-21b3cbe67a7f
+  -RunSeconds 180 -ConfirmExecute`
+  Result: `exit_code=0; status=overlay_window_started;
+  receipt_id=lowe_1779729481_9e732d5aaa63; overlay_runtime_ready=true;
+  resident_claim_allowed=false`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status -Actor
+  codex.stage6`
+  Result: `exit_code=0; status=persistent_supervision_enablement_applied;
+  missing_required_before_enable=[]; required_before_enable_ready=true;
+  current_truthful_gap=persistent_supervision_execution_boundary`
+- `python -m pytest tests/test_api_lens.py
+  tests/test_lens_persistent_supervision_api_execution_proof_script.py
+  tests/test_lens_stage6_completion_audit_script.py
+  tests/test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed; one expected skip`
+- Runtime cleanup after live proof:
+  `scripts\lens-overlay-window.ps1 -Mode Stop`,
+  `scripts\lens-hotkey-binding.ps1 -Mode Stop`,
+  `scripts\lens-tray-presence.ps1 -Mode Stop`, and
+  `scripts\lens-host-supervisor.ps1 -Mode StopResident`
+  Result: `overlay_stopped; hotkey_stopped; tray_stopped;
+  resident_supervision_stopped; no Lens pid files remained under data\runtime`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

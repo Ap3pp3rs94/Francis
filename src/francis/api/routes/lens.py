@@ -22,6 +22,7 @@ from francis.lens import (
     grant_lens_overlay_authority,
     grant_lens_summon_authority,
     grant_lens_host_activation_authority,
+    grant_lens_host_persistent_supervision_resident_claim_authority,
     grant_lens_resident_runtime_execution_authority,
     grant_lens_host_persistent_supervision_enablement_execution_authority,
     grant_lens_host_persistent_supervision_enablement_authority,
@@ -38,6 +39,9 @@ from francis.lens import (
     lens_host_persistent_supervision_enablement_execution_receipts,
     lens_host_persistent_supervision_enablement_execution_readiness_audit,
     lens_host_persistent_supervision_enablement_execution_request_readback,
+    lens_host_persistent_supervision_resident_claim_authority_grant_receipts,
+    lens_host_persistent_supervision_resident_claim_authority_readiness_audit,
+    lens_host_persistent_supervision_resident_claim_authority_request_readback,
     lens_host_persistent_supervision_enablement_authority_readiness_audit,
     lens_host_persistent_supervision_enablement_authority_grant_receipts,
     lens_host_persistent_supervision_enablement_authority_request_readback,
@@ -92,6 +96,7 @@ from francis.lens import (
     lens_tray_presence_execution_receipts,
     request_lens_host_activation,
     request_lens_host_persistent_supervision_enablement_execution_authority,
+    request_lens_host_persistent_supervision_resident_claim_authority,
     request_lens_host_persistent_supervision_enablement_authority,
     request_lens_host_supervision_authority,
     request_lens_os_binding_authority,
@@ -201,6 +206,18 @@ class LensHostPersistentSupervisionEnablementExecutionAuthorityGrantIn(BaseModel
     actor: str | None = None
     approval_id: str = ""
     reason: str = "attempt Lens persistent supervision execution authority grant"
+    lease_seconds: int = Field(default=3600, ge=60, le=86400)
+
+
+class LensHostPersistentSupervisionResidentClaimAuthorityRequestIn(BaseModel):
+    actor: str | None = None
+    reason: str = "request Lens persistent supervision resident-claim authority review"
+
+
+class LensHostPersistentSupervisionResidentClaimAuthorityGrantIn(BaseModel):
+    actor: str | None = None
+    approval_id: str = ""
+    reason: str = "attempt Lens persistent supervision resident-claim authority grant"
     lease_seconds: int = Field(default=3600, ge=60, le=86400)
 
 
@@ -956,6 +973,70 @@ def host_persistent_supervision_enablement_execution_request(
     payload: LensHostPersistentSupervisionEnablementExecutionRequestIn,
 ) -> dict[str, Any]:
     return request_lens_host_persistent_supervision_enablement_execution_authority(
+        actor=payload.actor,
+        reason=payload.reason,
+        route=request.url.path,
+        method=request.method,
+    )
+
+
+@router.get("/host/persistent-supervision/resident-claim/authority/grants")
+def host_persistent_supervision_resident_claim_authority_grants(
+    limit: int = Query(5, ge=1, le=50),
+    approval_id: str = "",
+    status: str = "",
+    active_only: bool = False,
+) -> dict[str, Any]:
+    return lens_host_persistent_supervision_resident_claim_authority_grant_receipts(
+        limit=limit,
+        approval_id=approval_id,
+        status=status,
+        active_only=active_only,
+    )
+
+
+@router.post("/host/persistent-supervision/resident-claim/authority")
+def host_persistent_supervision_resident_claim_authority_grant(
+    request: Request,
+    payload: LensHostPersistentSupervisionResidentClaimAuthorityGrantIn,
+) -> dict[str, Any]:
+    return grant_lens_host_persistent_supervision_resident_claim_authority(
+        approval_id=payload.approval_id,
+        actor=payload.actor,
+        reason=payload.reason,
+        route=request.url.path,
+        method=request.method,
+        record_receipt=True,
+        lease_seconds=payload.lease_seconds,
+    )
+
+
+@router.get("/host/persistent-supervision/resident-claim/authority/requests")
+def host_persistent_supervision_resident_claim_authority_requests(
+    limit: int = Query(5, ge=1, le=50),
+) -> dict[str, Any]:
+    return lens_host_persistent_supervision_resident_claim_authority_request_readback(limit=limit)
+
+
+@router.get("/host/persistent-supervision/resident-claim/authority/readiness")
+def host_persistent_supervision_resident_claim_authority_readiness(
+    limit: int = Query(5, ge=1, le=50),
+    approval_id: str = "",
+    actor: str = "",
+) -> dict[str, Any]:
+    return lens_host_persistent_supervision_resident_claim_authority_readiness_audit(
+        approval_id=approval_id,
+        actor=actor,
+        limit=limit,
+    )
+
+
+@router.post("/host/persistent-supervision/resident-claim/authority/request")
+def host_persistent_supervision_resident_claim_authority_request(
+    request: Request,
+    payload: LensHostPersistentSupervisionResidentClaimAuthorityRequestIn,
+) -> dict[str, Any]:
+    return request_lens_host_persistent_supervision_resident_claim_authority(
         actor=payload.actor,
         reason=payload.reason,
         route=request.url.path,

@@ -1120,12 +1120,13 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     assert "[bool]$PersistentSupervisionApiExecutionProof.persistent_supervision_ready_after_apply" in script
     assert "[bool]$PersistentSupervisionApiExecutionProof.service_config_updated" in script
     assert "[bool]$PersistentSupervisionApiExecutionProof.receipt_written" in script
-    assert "-not [bool]$PersistentSupervisionApiExecutionProof.resident_claim_allowed" in script
+    assert "[bool]$PersistentSupervisionApiExecutionProof.persistent_supervision_resident_claim_authority" in script
+    assert "[bool]$PersistentSupervisionApiExecutionProof.resident_claim_allowed" in script
     assert "-not [bool]$PersistentSupervisionApiExecutionProof.service_managed" in script
     assert "-not [bool]$PersistentSupervisionApiExecutionProof.summon_anywhere" in script
     assert "-not [bool]$PersistentSupervisionApiExecutionProofGovernance.service_control_authority" in script
     assert "-not [bool]$PersistentSupervisionApiExecutionProofGovernance.memory_write" in script
-    assert "-not [bool]$PersistentSupervisionApiExecutionProofGovernance.resident_claim_authority" in script
+    assert "[bool]$PersistentSupervisionApiExecutionProofGovernance.resident_claim_authority" in script
     assert "$SummonAnywhereRuntimeReadbackObserved = [bool]$SummonApiLaunchOnHotkeyProofObserved" in script
     assert "$BlockedCriterionIds -contains 'summon_anywhere' -and -not $SummonAnywhereRuntimeReadbackObserved" in script
     assert "(-not [bool]$AllowLaunchOnHotkey -or $ResidentRuntimeApiExecutionProofObserved)" in script
@@ -1254,10 +1255,17 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
         "persistent_supervision_api_execution_proof_readback = "
         "$PersistentSupervisionApiExecutionProofObserved" in script
     )
-    assert "$PersistentSupervisionApiExecutionProofBlockers -contains 'resident_claim_authority_not_granted'" in script
+    assert (
+        "-not ($PersistentSupervisionApiExecutionProofBlockers -contains "
+        "'resident_claim_authority_not_granted')" in script
+    )
     assert (
         "[string]$PersistentSupervisionApiExecutionProofCheckStatuses"
-        "['execution_readiness_reaches_resident_claim_boundary'] -eq 'blocked'" in script
+        "['execution_readiness_reaches_resident_claim_boundary'] -eq 'ready'" in script
+    )
+    assert (
+        "[string]$PersistentSupervisionApiExecutionProofCheckStatuses"
+        "['execution_boundary_before_apply_preserved'] -eq 'ready_for_persistent_supervision_execution'" in script
     )
     runtime_resident_claim_branch = (
         "-not $ReadyToClose -and\n"

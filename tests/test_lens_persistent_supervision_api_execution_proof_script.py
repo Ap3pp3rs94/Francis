@@ -65,6 +65,8 @@ def test_lens_persistent_supervision_api_execution_proof_uses_governed_routes() 
     assert '"/lens/host/persistent-supervision/enablement/authority"' in script
     assert '"/lens/host/persistent-supervision/enablement/execution/request"' in script
     assert '"/lens/host/persistent-supervision/enablement/execution/authority"' in script
+    assert '"/lens/host/persistent-supervision/resident-claim/authority/request"' in script
+    assert '"/lens/host/persistent-supervision/resident-claim/authority"' in script
     assert '"/lens/host/persistent-supervision/enablement/execution/readiness"' in script
     assert '"/lens/host/persistent-supervision/enablement/execution"' in script
     assert '"/lens/host/persistent-supervision/enablement/execution/apply"' in script
@@ -80,7 +82,7 @@ def test_lens_persistent_supervision_api_execution_proof_uses_governed_routes() 
     assert '"local_process_launch_authority": False' in script
     assert '"service_control_authority": False' in script
     assert '"memory_write": False' in script
-    assert '"resident_claim_authority": False' in script
+    assert '"resident_claim_authority": True' in script
 
 
 def test_lens_persistent_supervision_api_execution_proof_executes_isolated_apply(
@@ -131,6 +133,7 @@ def test_lens_persistent_supervision_api_execution_proof_executes_isolated_apply
     assert payload["summon_authority_grant_receipt_id"]
     assert payload["persistent_supervision_enablement_authority_grant_receipt_id"]
     assert payload["persistent_supervision_execution_authority_grant_receipt_id"]
+    assert payload["persistent_supervision_resident_claim_authority_grant_receipt_id"]
     assert payload["resident_runtime_execution_authority"] is True
     assert payload["host_supervision_authority"] is True
     assert payload["tray_presence_authority"] is True
@@ -140,6 +143,7 @@ def test_lens_persistent_supervision_api_execution_proof_executes_isolated_apply
     assert payload["persistent_supervision_enablement_authority"] is True
     assert payload["service_config_write_authority"] is True
     assert payload["persistent_supervision_execution_authority"] is True
+    assert payload["persistent_supervision_resident_claim_authority"] is True
     assert payload["receipt_write_authority"] is True
     assert payload["execution_applied"] is True
     assert payload["executed"] is True
@@ -165,7 +169,7 @@ def test_lens_persistent_supervision_api_execution_proof_executes_isolated_apply
     assert payload["persistent_supervision_enablement_allowed"] is True
     assert payload["service_config_updated"] is True
     assert payload["receipt_written"] is True
-    assert payload["resident_claim_allowed"] is False
+    assert payload["resident_claim_allowed"] is True
     assert payload["service_managed"] is False
     assert payload["summon_anywhere"] is False
     assert payload["os_level_summon"] is False
@@ -177,15 +181,15 @@ def test_lens_persistent_supervision_api_execution_proof_executes_isolated_apply
     assert payload["hotkey_pid_file_present_after_stop"] is False
     assert payload["tray_pid_file_present_after_stop"] is False
     assert payload["host_pid_file_present_after_stop"] is False
-    assert "resident_claim_authority_not_granted" in payload["blockers"]
+    assert "resident_claim_authority_not_granted" not in payload["blockers"]
 
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["authority_chain_granted"]["status"] == "authority_granted"
     assert checks["resident_tray_hotkey_overlay_started_before_apply"]["status"] == "ready"
     assert checks["api_execute_observed_bounded_summon_handoff"]["status"] == "summon_binding_observed"
     assert checks["persistent_plan_consumed_required_runtime_prerequisites"]["status"] == "required_before_enable_clear"
-    assert checks["execution_readiness_reaches_resident_claim_boundary"]["status"] == "blocked"
-    assert checks["execution_denial_before_apply_preserved"]["status"] == "denied_no_resident_claim_authority"
+    assert checks["execution_readiness_reaches_resident_claim_boundary"]["status"] == "ready"
+    assert checks["execution_boundary_before_apply_preserved"]["status"] == "ready_for_persistent_supervision_execution"
     assert checks["api_apply_updated_isolated_service_config"]["status"] == "service_config_updated"
     assert checks["status_plan_consumed_persistent_supervision_enablement"]["status"] == (
         "persistent_supervision_execution_boundary"
@@ -209,8 +213,12 @@ def test_lens_persistent_supervision_api_execution_proof_executes_isolated_apply
     assert proof["overlay_start_status"] == "overlay_window_started"
     assert proof["summon_execute_status"] == "summon_binding_observed"
     assert proof["summon_runtime_state_status"] == "summon_binding_observed"
+    assert proof["persistent_readiness_before_apply_status"] == "ready"
+    assert proof["persistent_denial_before_apply_status"] == "ready_for_persistent_supervision_execution"
     assert proof["persistent_apply_status"] == "service_config_updated"
     assert proof["persistent_apply_receipt_id"]
+    assert proof["resident_claim_grant_status"] == "authority_granted"
+    assert proof["resident_claim_grant_receipt_id"]
     assert proof["persistent_executions_readback_status"] == "readback_ready"
     assert proof["persistent_plan_after_apply_status"] == "ready_for_operator_review"
     assert proof["persistent_plan_after_apply_next_gap"] == "persistent_supervision_execution_boundary"
@@ -252,6 +260,7 @@ def test_lens_persistent_supervision_api_execution_proof_executes_isolated_apply
         "service_config_mutation_authority": True,
         "persistent_supervision_enablement_authority": True,
         "persistent_supervision_execution_authority": True,
+        "resident_claim_authority": True,
         "receipt_write_authority": True,
         "local_process_launch_authority": False,
         "process_supervision_authority": True,
@@ -270,7 +279,6 @@ def test_lens_persistent_supervision_api_execution_proof_executes_isolated_apply
         "capture_authority": False,
         "new_sensing_authority": False,
         "memory_write": False,
-        "resident_claim_authority": False,
         "mutation_authority_granted": True,
     }
 

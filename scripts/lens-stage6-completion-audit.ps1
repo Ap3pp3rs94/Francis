@@ -3039,6 +3039,7 @@ $PersistentSupervisionApiExecutionProofObserved = (
   [bool]$PersistentSupervisionApiExecutionProof.persistent_supervision_enablement_authority -and
   [bool]$PersistentSupervisionApiExecutionProof.service_config_write_authority -and
   [bool]$PersistentSupervisionApiExecutionProof.persistent_supervision_execution_authority -and
+  [bool]$PersistentSupervisionApiExecutionProof.persistent_supervision_resident_claim_authority -and
   [bool]$PersistentSupervisionApiExecutionProof.receipt_write_authority -and
   [bool]$PersistentSupervisionApiExecutionProof.execution_applied -and
   [bool]$PersistentSupervisionApiExecutionProof.executed -and
@@ -3064,7 +3065,7 @@ $PersistentSupervisionApiExecutionProofObserved = (
   [bool]$PersistentSupervisionApiExecutionProof.persistent_supervision_enablement_allowed -and
   [bool]$PersistentSupervisionApiExecutionProof.service_config_updated -and
   [bool]$PersistentSupervisionApiExecutionProof.receipt_written -and
-  -not [bool]$PersistentSupervisionApiExecutionProof.resident_claim_allowed -and
+  [bool]$PersistentSupervisionApiExecutionProof.resident_claim_allowed -and
   -not [bool]$PersistentSupervisionApiExecutionProof.service_managed -and
   -not [bool]$PersistentSupervisionApiExecutionProof.summon_anywhere -and
   -not [bool]$PersistentSupervisionApiExecutionProof.os_level_summon -and
@@ -3076,13 +3077,13 @@ $PersistentSupervisionApiExecutionProofObserved = (
   -not [bool]$PersistentSupervisionApiExecutionProof.hotkey_pid_file_present_after_stop -and
   -not [bool]$PersistentSupervisionApiExecutionProof.tray_pid_file_present_after_stop -and
   -not [bool]$PersistentSupervisionApiExecutionProof.host_pid_file_present_after_stop -and
-  $PersistentSupervisionApiExecutionProofBlockers -contains 'resident_claim_authority_not_granted' -and
+  -not ($PersistentSupervisionApiExecutionProofBlockers -contains 'resident_claim_authority_not_granted') -and
   [string]$PersistentSupervisionApiExecutionProofCheckStatuses['authority_chain_granted'] -eq 'authority_granted' -and
   [string]$PersistentSupervisionApiExecutionProofCheckStatuses['resident_tray_hotkey_overlay_started_before_apply'] -eq 'ready' -and
   [string]$PersistentSupervisionApiExecutionProofCheckStatuses['api_execute_observed_bounded_summon_handoff'] -eq 'summon_binding_observed' -and
   [string]$PersistentSupervisionApiExecutionProofCheckStatuses['persistent_plan_consumed_required_runtime_prerequisites'] -eq 'required_before_enable_clear' -and
-  [string]$PersistentSupervisionApiExecutionProofCheckStatuses['execution_readiness_reaches_resident_claim_boundary'] -eq 'blocked' -and
-  [string]$PersistentSupervisionApiExecutionProofCheckStatuses['execution_denial_before_apply_preserved'] -eq 'denied_no_resident_claim_authority' -and
+  [string]$PersistentSupervisionApiExecutionProofCheckStatuses['execution_readiness_reaches_resident_claim_boundary'] -eq 'ready' -and
+  [string]$PersistentSupervisionApiExecutionProofCheckStatuses['execution_boundary_before_apply_preserved'] -eq 'ready_for_persistent_supervision_execution' -and
   [string]$PersistentSupervisionApiExecutionProofCheckStatuses['api_apply_updated_isolated_service_config'] -eq 'service_config_updated' -and
   [string]$PersistentSupervisionApiExecutionProofCheckStatuses['status_plan_consumed_persistent_supervision_enablement'] -eq 'persistent_supervision_execution_boundary' -and
   [string]$PersistentSupervisionApiExecutionProofCheckStatuses['persistent_execution_receipt_readback'] -eq 'readback_ready' -and
@@ -3103,6 +3104,7 @@ $PersistentSupervisionApiExecutionProofObserved = (
   [bool]$PersistentSupervisionApiExecutionProofGovernance.service_config_mutation_authority -and
   [bool]$PersistentSupervisionApiExecutionProofGovernance.persistent_supervision_enablement_authority -and
   [bool]$PersistentSupervisionApiExecutionProofGovernance.persistent_supervision_execution_authority -and
+  [bool]$PersistentSupervisionApiExecutionProofGovernance.resident_claim_authority -and
   [bool]$PersistentSupervisionApiExecutionProofGovernance.receipt_write_authority -and
   [bool]$PersistentSupervisionApiExecutionProofGovernance.process_supervision_authority -and
   [bool]$PersistentSupervisionApiExecutionProofGovernance.process_restart_authority -and
@@ -3124,8 +3126,7 @@ $PersistentSupervisionApiExecutionProofObserved = (
   -not [bool]$PersistentSupervisionApiExecutionProofGovernance.os_level_summon_authority -and
   -not [bool]$PersistentSupervisionApiExecutionProofGovernance.capture_authority -and
   -not [bool]$PersistentSupervisionApiExecutionProofGovernance.new_sensing_authority -and
-  -not [bool]$PersistentSupervisionApiExecutionProofGovernance.memory_write -and
-  -not [bool]$PersistentSupervisionApiExecutionProofGovernance.resident_claim_authority
+  -not [bool]$PersistentSupervisionApiExecutionProofGovernance.memory_write
 )
 $PersistentSupervisionApiExecutionResidentClaimBoundaryObserved = (
   $PersistentSupervisionApiExecutionProofObserved -and
