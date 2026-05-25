@@ -11721,7 +11721,29 @@ def test_lens_resident_runtime_execute_starts_supervised_resident_host_lease(
     assert status_execution_receipts_criterion["resident_claim_authority"] is False
     next_handoff = status_body["stage6_readiness"]["next_handoff"]
     assert next_handoff["next_smallest_truthful_gap"] == "summon_tray_presence_blocker_boundary"
+    assert next_handoff["recommended_first_missing_handoff_source"] == (
+        "persistent_supervision_first_missing_requirement_handoff"
+    )
+    assert next_handoff["recommended_first_missing_next_slice"] == (
+        "resolve_tray_presence_before_persistent_supervision_enablement"
+    )
+    assert next_handoff["recommended_first_missing_proof_script"] == (
+        "scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status"
+    )
+    assert next_handoff["persistent_supervision_missing_required_before_enable"] == [
+        "tray_presence",
+        "global_hotkey_binding",
+        "overlay_window",
+        "summon_binding",
+    ]
     assert next_handoff["persistent_supervision_first_missing_required_before_enable"] == "tray_presence"
+    first_missing_handoff = next_handoff["persistent_supervision_first_missing_requirement_handoff"]
+    assert first_missing_handoff["id"] == "tray_presence"
+    assert first_missing_handoff["next_smallest_truthful_gap"] == "summon_tray_presence_blocker_boundary"
+    assert first_missing_handoff["read_only_contract"] is True
+    assert first_missing_handoff["diagnostic_only"] is True
+    assert first_missing_handoff["would_execute"] is False
+    assert first_missing_handoff["would_mutate"] is False
 
 
 def test_lens_host_supervision_authority_request_requires_system_write_without_grant(

@@ -1739,6 +1739,14 @@ def test_lens_stage6_prerequisite_bringup_execute_next_runs_only_current_bounded
     assert followup_payload["next_operator_action_requirement"] == "tray_presence"
     assert followup_payload["current_first_missing_requirement"] == "tray_presence"
     assert followup_payload["current_first_missing_truthful_gap"] == "summon_tray_presence_blocker_boundary"
+    assert followup_payload["first_missing_required_before_enable"] == "tray_presence"
+    assert "resident_host_process" not in followup_payload["missing_required_before_enable"]
+    ordered_steps = {item["id"]: item for item in followup_payload["ordered_prerequisite_steps"]}
+    assert ordered_steps["resident_host_process"]["ready"] is True
+    assert ordered_steps["resident_host_process"]["status"] == "ready"
+    assert ordered_steps["resident_host_process"]["blocker"] == ""
+    assert ordered_steps["tray_presence"]["ready"] is False
+    assert ordered_steps["tray_presence"]["next_operator_action"]["id"] == "request_tray_presence_authority"
     assert followup_payload["next_operator_action"]["id"] == "request_tray_presence_authority"
     assert followup_payload["next_operator_action"]["route"] == "/lens/tray/authority/request"
     assert followup_payload["next_operator_command"] == {
