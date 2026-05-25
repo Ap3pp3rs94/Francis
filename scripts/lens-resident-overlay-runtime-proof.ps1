@@ -302,14 +302,14 @@ $SupervisorProof = Get-PropertyValue -Payload $SupervisorPayload -Name 'proof'
 $ResidentSurfaceGovernance = Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'governance'
 $SupervisorGovernance = Get-PropertyValue -Payload $SupervisorPayload -Name 'governance'
 
-$ResidentSurfaceBlocked = (
+$ResidentSurfaceReadbackReady = (
   [int](Get-PropertyValue -Payload $ResidentSurfaceResult -Name 'exit_code' -Default -1) -eq 0 -and
   [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'kind' -Default '') -eq 'lens.resident_surface.readiness_proof' -and
   [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'status' -Default '') -eq 'proof_passed' -and
-  -not [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'resident_surface_ready' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'ready_for_lens_resident_claim' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'resident_claim_allowed' -Default $true)
 )
+$ResidentSurfaceReady = [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'resident_surface_ready' -Default $false)
 $SupervisorObserved = (
   [int](Get-PropertyValue -Payload $SupervisorResult -Name 'exit_code' -Default -1) -eq 0 -and
   [string](Get-PropertyValue -Payload $SupervisorPayload -Name 'kind' -Default '') -eq 'lens.host.supervisor_observation_proof' -and
@@ -320,18 +320,18 @@ $SupervisorObserved = (
   -not [bool](Get-PropertyValue -Payload $SupervisorPayload -Name 'ready_for_resident_claim' -Default $true)
 )
 $OverlayBoundary = (
-  $ResidentSurfaceBlocked -and
+  $ResidentSurfaceReadbackReady -and
   -not [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'overlay_window' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ResidentSurfaceProof -Name 'overlay_window_enabled' -Default $true)
 )
 $TrayBoundary = (
-  $ResidentSurfaceBlocked -and
+  $ResidentSurfaceReadbackReady -and
   -not [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'tray_presence' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ResidentSurfaceProof -Name 'tray_host_enabled' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ResidentSurfaceProof -Name 'tray_icon_enabled' -Default $true)
 )
 $SummonBoundary = (
-  $ResidentSurfaceBlocked -and
+  $ResidentSurfaceReadbackReady -and
   -not [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'summon_anywhere' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ResidentSurfaceProof -Name 'summon_binding_enabled' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ResidentSurfaceProof -Name 'hotkey_registration_enabled' -Default $true)
@@ -356,7 +356,7 @@ $AuthorityBoundary = (
   -not [bool](Get-PropertyValue -Payload $SupervisorGovernance -Name 'memory_write' -Default $true)
 )
 $ResidentRuntimeClaimBlocked = (
-  $ResidentSurfaceBlocked -and
+  $ResidentSurfaceReadbackReady -and
   $SupervisorObserved -and
   $OverlayBoundary -and
   $TrayBoundary -and
@@ -365,7 +365,7 @@ $ResidentRuntimeClaimBlocked = (
 )
 
 $Checks = @(
-  (New-Check -Id 'resident_surface_boundary' -Status $(if ($ResidentSurfaceBlocked) { 'surface_blocked_readback_ready' } else { 'failed' }) -Passed $ResidentSurfaceBlocked -Evidence 'scripts/lens-resident-surface-proof.ps1 -Mode Status' -Reason 'Resident surface readiness must remain observable and blocked.')
+  (New-Check -Id 'resident_surface_boundary' -Status $(if ($ResidentSurfaceReadbackReady) { $(if ($ResidentSurfaceReady) { 'surface_runtime_readback_ready_without_resident_claim' } else { 'surface_blocked_readback_ready' }) } else { 'failed' }) -Passed $ResidentSurfaceReadbackReady -Evidence 'scripts/lens-resident-surface-proof.ps1 -Mode Status' -Reason 'Resident surface readback must remain observable without granting resident claim.')
   (New-Check -Id 'bounded_supervisor_observation' -Status $(if ($SupervisorObserved) { 'bounded_supervisor_observed' } else { 'failed' }) -Passed $SupervisorObserved -Evidence 'scripts/lens-host-supervisor-observation-proof.ps1 -Mode Status' -Reason 'The runtime proof must observe one bounded foreground host lifecycle.')
   (New-Check -Id 'overlay_window_boundary' -Status $(if ($OverlayBoundary) { 'blocked_disabled' } else { 'unexpected_overlay' }) -Passed $OverlayBoundary -Evidence 'scripts/lens-overlay-preflight.ps1 -Mode Status' -Reason 'Overlay window remains disabled and unavailable.')
   (New-Check -Id 'tray_presence_boundary' -Status $(if ($TrayBoundary) { 'blocked_disabled' } else { 'unexpected_tray' }) -Passed $TrayBoundary -Evidence 'scripts/lens-tray-preflight.ps1 -Mode Status' -Reason 'Tray presence remains disabled and unavailable.')

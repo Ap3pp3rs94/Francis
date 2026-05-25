@@ -861,9 +861,21 @@ def _summon_config_override_path() -> Path:
     return data_dir() / "runtime" / "lens-summon" / "summon-action-override.json"
 
 
+def _hotkey_binding_config_override() -> dict[str, Any]:
+    path = data_dir() / "runtime" / "lens-hotkey" / "os-binding-summon-override.json"
+    payload = _read_json(path) if path.is_file() else None
+    return payload or {}
+
+
 def _write_summon_config_override() -> Path:
     source = repo_root() / "config" / "runtime" / "lens" / "summon.json"
     config = _read_json(source) or {}
+    hotkey_override = _hotkey_binding_config_override()
+    if hotkey_override:
+        for key in ("global_hotkey", "binding_scope"):
+            value = _safe_str(hotkey_override.get(key)).strip()
+            if value:
+                config[key] = value
     config.update(
         {
             "enabled": True,

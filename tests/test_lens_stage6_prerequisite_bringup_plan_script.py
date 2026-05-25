@@ -12,6 +12,7 @@ from typing import Any, Iterator
 import pytest
 
 _LIVE_STAGE6_PREREQUISITE_RUN_SECONDS = "180"
+_PROOF_GLOBAL_HOTKEY = "Ctrl+Alt+Shift+F18"
 _STAGE6_RUNTIME_PROCESSES = (
     "lens-hotkey-binding.ps1",
     "lens-overlay-window.ps1",
@@ -43,6 +44,8 @@ def _repo_root() -> Path:
 
 
 def _run_plan(*args: str) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    env["FRANCIS_PROOF_GLOBAL_HOTKEY"] = _PROOF_GLOBAL_HOTKEY
     return subprocess.run(
         [
             _powershell(),
@@ -54,6 +57,7 @@ def _run_plan(*args: str) -> subprocess.CompletedProcess[str]:
             *args,
         ],
         cwd=_repo_root(),
+        env=env,
         check=False,
         text=True,
         capture_output=True,
@@ -403,7 +407,8 @@ def test_lens_stage6_prerequisite_bringup_plan_has_confirmed_request_and_grant_b
     assert "[string]$ApprovalId" in script
     assert "[int]$RunSeconds" in script
     assert "_MAX_STAGE6_PREREQUISITE_RUN_SECONDS = 15 * 60" in script
-    assert "min(parsed, _MAX_STAGE6_PREREQUISITE_RUN_SECONDS)" in script
+    assert "max(0, min(parsed, _MAX_STAGE6_PREREQUISITE_RUN_SECONDS))" in script
+    assert "max(1, min(parsed, _MAX_STAGE6_PREREQUISITE_RUN_SECONDS))" not in script
     assert "min(parsed, 60)" not in script
     assert "refused_confirmation_required" in script
     assert "runtime_missing_steps = [" in script
@@ -1028,6 +1033,7 @@ def _restart_hotkey_lease(
         record_receipt=True,
         mode="bind",
         run_seconds=int(_LIVE_STAGE6_PREREQUISITE_RUN_SECONDS),
+        global_hotkey=_PROOF_GLOBAL_HOTKEY,
     )
     assert result["ok"] is True, json.dumps(result, indent=2)
     assert result["status"] == "global_hotkey_bound", json.dumps(result, indent=2)

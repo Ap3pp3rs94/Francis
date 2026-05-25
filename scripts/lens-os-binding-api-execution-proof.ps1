@@ -197,6 +197,7 @@ def _run() -> tuple[int, dict[str, Any]]:
     repo_root = Path(os.environ["FRANCIS_ROOT"]).resolve()
     data_root = Path(os.environ["FRANCIS_DATA_DIR"]).resolve()
     run_seconds = int(os.environ.get("FRANCIS_PROOF_RUN_SECONDS", "5"))
+    proof_global_hotkey = os.environ.get("FRANCIS_PROOF_GLOBAL_HOTKEY", "Ctrl+Alt+Shift+F12").strip()
     # The proof validates resident, tray, and hotkey readbacks after several API
     # calls; keep prerequisites alive long enough for the post-hotkey plan readback.
     dependency_run_seconds = max(run_seconds, 60)
@@ -355,6 +356,7 @@ def _run() -> tuple[int, dict[str, Any]]:
                 "reason": "prove governed API path starts the real global hotkey binding runtime",
                 "mode": "bind",
                 "run_seconds": dependency_run_seconds,
+                "global_hotkey": proof_global_hotkey,
             },
         )
         os_binding_executions_after_start = _get(client, "/lens/os-binding/executions?limit=10")
@@ -583,6 +585,7 @@ def _run() -> tuple[int, dict[str, Any]]:
             "stage": "Stage 6 / Lens MVP",
             "stage_state": "active",
             "acceptance_criterion": "summon_anywhere",
+            "global_hotkey": proof_global_hotkey,
             "previous_next_smallest_truthful_gap": "os_level_command_palette_binding",
             "route_next_smallest_truthful_gap": route_next_gap,
             "next_smallest_truthful_gap": next_gap,
@@ -628,6 +631,7 @@ def _run() -> tuple[int, dict[str, Any]]:
             "blockers": blockers,
             "proof": {
                 "dependency_run_seconds": dependency_run_seconds,
+                "global_hotkey": proof_global_hotkey,
                 "resident_start_status": str(resident_start.get("status") or ""),
                 "tray_start_status": str(tray_start.get("status") or ""),
                 "hotkey_start_status": str(hotkey_start.get("status") or ""),
@@ -649,6 +653,7 @@ def _run() -> tuple[int, dict[str, Any]]:
             "start_execution": {
                 "status": hotkey_start.get("status"),
                 "next_smallest_truthful_gap": hotkey_start.get("next_smallest_truthful_gap"),
+                "global_hotkey": proof_global_hotkey,
                 "global_hotkey_binding": hotkey_start.get("global_hotkey_binding"),
                 "hotkey_runtime_ready": hotkey_start.get("hotkey_runtime_ready"),
                 "os_level_command_palette": hotkey_start.get("os_level_command_palette"),

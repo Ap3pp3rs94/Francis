@@ -76,7 +76,10 @@ def test_lens_resident_overlay_runtime_proof_observes_boundary_without_authority
     )
 
     checks = {item["id"]: item for item in payload["checks"]}
-    assert checks["resident_surface_boundary"]["status"] == "surface_blocked_readback_ready"
+    assert checks["resident_surface_boundary"]["status"] in {
+        "surface_blocked_readback_ready",
+        "surface_runtime_readback_ready_without_resident_claim",
+    }
     assert checks["bounded_supervisor_observation"]["status"] == "bounded_supervisor_observed"
     assert checks["overlay_window_boundary"]["status"] == "blocked_disabled"
     assert checks["tray_presence_boundary"]["status"] == "blocked_disabled"

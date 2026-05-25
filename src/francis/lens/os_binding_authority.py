@@ -1102,22 +1102,24 @@ def _parse_json_process_stdout(stdout: str) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
-def _write_hotkey_binding_config_override(*, allow_launch: bool = False) -> Path:
+def _write_hotkey_binding_config_override(*, allow_launch: bool = False, global_hotkey: str = "") -> Path:
     source_path = repo_root() / "config" / "runtime" / "lens" / "summon.json"
     payload = _read_json(source_path) or {}
-    payload.update(
-        {
-            "enabled": True,
-            "binding_enabled": True,
-            "register_hotkey": True,
-            "startup_register": False,
-            "blocked_reason": "",
-            "summon_authority": allow_launch,
-            "hotkey_registration_authority": True,
-            "overlay_control_authority": allow_launch,
-            "local_process_launch_authority": True,
-        }
-    )
+    override: dict[str, Any] = {
+        "enabled": True,
+        "binding_enabled": True,
+        "register_hotkey": True,
+        "startup_register": False,
+        "blocked_reason": "",
+        "summon_authority": allow_launch,
+        "hotkey_registration_authority": True,
+        "overlay_control_authority": allow_launch,
+        "local_process_launch_authority": True,
+    }
+    safe_global_hotkey = _safe_str(global_hotkey).strip()
+    if safe_global_hotkey:
+        override["global_hotkey"] = safe_global_hotkey
+    payload.update(override)
     override_path = data_dir() / "runtime" / "lens-hotkey" / "os-binding-summon-override.json"
     _atomic_write_json(override_path, payload)
     return override_path
@@ -1128,6 +1130,7 @@ def _run_lens_os_binding_hotkey_action(
     mode: str,
     run_seconds: int,
     allow_launch: bool = False,
+    global_hotkey: str = "",
 ) -> dict[str, Any]:
     script_mode = "Stop" if mode == "stop" else "Start"
     root = repo_root()
@@ -1168,7 +1171,10 @@ def _run_lens_os_binding_hotkey_action(
     if not allow_launch:
         command.append("-NoLaunch")
     if script_mode == "Start":
-        override_path = _write_hotkey_binding_config_override(allow_launch=allow_launch)
+        override_path = _write_hotkey_binding_config_override(
+            allow_launch=allow_launch,
+            global_hotkey=global_hotkey,
+        )
         command.extend(["-StartupTimeoutSeconds", "30", "-ConfigOverridePath", str(override_path)])
     env = dict(os.environ)
     env.setdefault("FRANCIS_ROOT", str(root))
@@ -1296,6 +1302,7 @@ def _execution_receipt(execution: dict[str, Any]) -> dict[str, Any]:
                 "mode": _safe_str(execution.get("mode")).strip(),
                 "allow_launch": bool(execution.get("allow_launch")),
                 "global_hotkey_binding": bool(execution.get("global_hotkey_binding")),
+                "global_hotkey": _safe_str(execution.get("global_hotkey")).strip(),
                 "hotkey_runtime_ready": bool(execution.get("hotkey_runtime_ready")),
                 "hotkey_runtime_pid": int(hotkey_runtime.get("pid") or 0),
                 "launch_on_hotkey": bool(hotkey_runtime.get("launch_on_hotkey")),
@@ -1558,6 +1565,7 @@ def execute_lens_os_binding(
     mode: Any = "bind",
     run_seconds: Any = _DEFAULT_RUN_SECONDS,
     allow_launch: bool = False,
+    global_hotkey: Any = "",
 ) -> dict[str, Any]:
     safe_route = _safe_str(route).strip() or LENS_OS_BINDING_EXECUTE_ROUTE
     safe_method = _safe_str(method).strip() or "POST"
@@ -1567,6 +1575,7 @@ def execute_lens_os_binding(
     safe_mode = _execution_mode(mode)
     safe_run_seconds = _safe_run_seconds(run_seconds)
     safe_allow_launch = bool(allow_launch) and safe_mode == "bind"
+    safe_global_hotkey = _safe_str(global_hotkey).strip()
     permission = _permission(actor, route=safe_route, method=safe_method)
     permission_payload = {
         "ready": permission.allowed,
@@ -1723,11 +1732,19 @@ def execute_lens_os_binding(
             },
         }
 
-    runner = _run_lens_os_binding_hotkey_action(
-        mode=safe_mode,
-        run_seconds=safe_run_seconds,
-        allow_launch=safe_allow_launch,
-    )
+    if safe_global_hotkey:
+        runner = _run_lens_os_binding_hotkey_action(
+            mode=safe_mode,
+            run_seconds=safe_run_seconds,
+            allow_launch=safe_allow_launch,
+            global_hotkey=safe_global_hotkey,
+        )
+    else:
+        runner = _run_lens_os_binding_hotkey_action(
+            mode=safe_mode,
+            run_seconds=safe_run_seconds,
+            allow_launch=safe_allow_launch,
+        )
     runner_ok = bool(runner.get("ok"))
     runner_status = _safe_str(runner.get("status")).strip()
     authority_readback = lens_os_binding_authority_request_readback(limit=5)
@@ -1757,6 +1774,8 @@ def execute_lens_os_binding(
         "run_seconds": safe_run_seconds,
         "allow_launch": safe_allow_launch,
         "requested_allow_launch": bool(allow_launch),
+        "global_hotkey": safe_global_hotkey or _safe_str(hotkey_runtime.get("global_hotkey")).strip(),
+        "requested_global_hotkey": safe_global_hotkey,
         "authority_route": LENS_OS_BINDING_AUTHORITY_ROUTE,
         "authority_grants_route": LENS_OS_BINDING_AUTHORITY_GRANTS_ROUTE,
         "executions_route": LENS_OS_BINDING_EXECUTIONS_ROUTE,

@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+_PROOF_GLOBAL_HOTKEY = "Ctrl+Alt+Shift+F16"
+
 
 def _powershell() -> str:
     exe = shutil.which("powershell") or shutil.which("pwsh")
@@ -22,6 +24,8 @@ def _repo_root() -> Path:
 
 
 def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    env["FRANCIS_PROOF_GLOBAL_HOTKEY"] = _PROOF_GLOBAL_HOTKEY
     return subprocess.run(
         [
             _powershell(),
@@ -33,6 +37,7 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
             *args,
         ],
         cwd=_repo_root(),
+        env=env,
         check=False,
         text=True,
         capture_output=True,
@@ -55,6 +60,8 @@ def test_lens_os_binding_api_execution_proof_uses_governed_routes() -> None:
     assert '"/lens/host/supervision/execute"' in script
     assert '"mode": "stop"' in script
     assert '"mode": "resident_stop"' in script
+    assert 'proof_global_hotkey = os.environ.get("FRANCIS_PROOF_GLOBAL_HOTKEY", "Ctrl+Alt+Shift+F12").strip()' in script
+    assert '"global_hotkey": proof_global_hotkey' in script
     assert "dependency_run_seconds = max(run_seconds, 60)" in script
     assert '"overlay_control_authority": False' in script
     assert '"summon_authority": False' in script
@@ -87,6 +94,7 @@ def test_lens_os_binding_api_execution_proof_starts_and_stops_real_hotkey_runtim
     assert payload["stage"] == "Stage 6 / Lens MVP"
     assert payload["stage_state"] == "active"
     assert payload["acceptance_criterion"] == "summon_anywhere"
+    assert payload["global_hotkey"] == _PROOF_GLOBAL_HOTKEY
     assert payload["previous_next_smallest_truthful_gap"] == "os_level_command_palette_binding"
     assert payload["route_next_smallest_truthful_gap"] == "summon_binding"
     assert payload["next_smallest_truthful_gap"] == "summon_overlay_window_blocker_boundary"
@@ -150,6 +158,7 @@ def test_lens_os_binding_api_execution_proof_starts_and_stops_real_hotkey_runtim
 
     proof = payload["proof"]
     assert proof["dependency_run_seconds"] == 60
+    assert proof["global_hotkey"] == _PROOF_GLOBAL_HOTKEY
     assert proof["resident_start_status"] == "resident_supervision_started"
     assert proof["tray_start_status"] == "tray_presence_started"
     assert proof["hotkey_start_status"] == "global_hotkey_bound"
@@ -166,6 +175,7 @@ def test_lens_os_binding_api_execution_proof_starts_and_stops_real_hotkey_runtim
     assert payload["start_execution"] == {
         "status": "global_hotkey_bound",
         "next_smallest_truthful_gap": "summon_binding",
+        "global_hotkey": _PROOF_GLOBAL_HOTKEY,
         "global_hotkey_binding": True,
         "hotkey_runtime_ready": True,
         "os_level_command_palette": True,

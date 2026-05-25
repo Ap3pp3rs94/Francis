@@ -232,6 +232,7 @@ def _run() -> tuple[int, dict[str, Any]]:
     data_root = Path(os.environ["FRANCIS_DATA_DIR"]).resolve()
     run_seconds = int(os.environ.get("FRANCIS_PROOF_RUN_SECONDS", "5"))
     allow_launch_on_hotkey = os.environ.get("FRANCIS_PROOF_ALLOW_LAUNCH_ON_HOTKEY", "").lower() == "true"
+    proof_global_hotkey = os.environ.get("FRANCIS_PROOF_GLOBAL_HOTKEY", "Ctrl+Alt+Shift+F12").strip()
     # Keep dependent runtimes alive long enough for slower Windows readbacks.
     dependency_run_seconds = max(run_seconds, 60)
     resident_dependency_run_seconds = dependency_run_seconds
@@ -363,6 +364,7 @@ def _run() -> tuple[int, dict[str, Any]]:
             "mode": "bind",
             "run_seconds": dependency_run_seconds,
             "allow_launch": allow_launch_on_hotkey,
+            "global_hotkey": proof_global_hotkey,
         }
         if allow_launch_on_hotkey:
             hotkey_execute_payload["summon_approval_id"] = summon_approval_id
@@ -701,6 +703,7 @@ def _run() -> tuple[int, dict[str, Any]]:
                 else "api_summon_to_persistent_supervision_execution_handoff"
             ),
             "allow_launch_on_hotkey": allow_launch_on_hotkey,
+            "global_hotkey": proof_global_hotkey,
             "dependency_run_seconds": dependency_run_seconds,
             "resident_dependency_run_seconds": resident_dependency_run_seconds,
             "host_supervision_approval_id": host_approval_id,
@@ -773,6 +776,7 @@ def _run() -> tuple[int, dict[str, Any]]:
             "checks": checks,
             "proof": {
                 "allow_launch_on_hotkey": allow_launch_on_hotkey,
+                "global_hotkey": proof_global_hotkey,
                 "dependency_run_seconds": dependency_run_seconds,
                 "resident_dependency_run_seconds": resident_dependency_run_seconds,
                 "resident_start_status": str(resident_start.get("status") or ""),

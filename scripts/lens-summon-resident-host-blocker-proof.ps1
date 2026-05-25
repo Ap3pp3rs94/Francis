@@ -283,6 +283,18 @@ $SummonFirstFamilyObserved = (
   $SummonResidentHostBlockers -contains 'local_process_launch_authority_not_granted' -and
   [string](Get-PropertyValue -Payload $SummonPayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'summon_anywhere_blockers'
 )
+$SummonAuthorityReadbackStatus = [string](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'status' -Default '')
+$SummonAuthorityGranted = [bool](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'authority_granted' -Default $false)
+$SummonAuthorityBindingAuthority = [bool](
+  Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'os_level_command_palette_binding_authority' -Default $false
+)
+$SummonAuthorityReadbackAuthorityPostureObserved = (
+  $SummonAuthorityReadbackStatus -in @('none', 'approval_requested', 'approved_no_authority', 'authority_granted') -and
+  (
+    ($SummonAuthorityGranted -and $SummonAuthorityBindingAuthority) -or
+    (-not $SummonAuthorityGranted -and -not $SummonAuthorityBindingAuthority)
+  )
+)
 $SummonAuthorityReadbackObserved = (
   [bool](Get-PropertyValue -Payload $SummonPayload -Name 'os_binding_authority_request_readback_observed' -Default $false) -and
   [bool](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'ok' -Default $false) -and
@@ -292,8 +304,7 @@ $SummonAuthorityReadbackObserved = (
   [string](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'readiness_route' -Default '') -eq '/lens/os-binding/readiness' -and
   [string](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'plan_route' -Default '') -eq '/lens/os-binding/plan' -and
   [bool](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'stage6_criterion_readback_ready' -Default $false) -and
-  -not [bool](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'authority_granted' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'os_level_command_palette_binding_authority' -Default $true) -and
+  $SummonAuthorityReadbackAuthorityPostureObserved -and
   -not [bool](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'os_level_command_palette' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'summon_anywhere' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'opens_palette' -Default $true) -and

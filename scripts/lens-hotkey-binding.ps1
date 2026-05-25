@@ -226,6 +226,103 @@ function Get-HotkeyStartBlockers {
   return [string[]]@($Blockers.ToArray())
 }
 
+function Resolve-HotkeyKeyCode {
+  param([string]$KeyName)
+
+  $Key = ([string]$KeyName).Trim().ToUpperInvariant()
+  if ($Key.Length -eq 1) {
+    $CodePoint = [int][char]$Key[0]
+    if (($CodePoint -ge [int][char]'A' -and $CodePoint -le [int][char]'Z') -or ($CodePoint -ge [int][char]'0' -and $CodePoint -le [int][char]'9')) {
+      return [ordered]@{ ok = $true; value = [uint32]$CodePoint }
+    }
+  }
+  if ($Key -match '^F([1-9]|1[0-9]|2[0-4])$') {
+    $Number = [int]$Matches[1]
+    return [ordered]@{ ok = $true; value = [uint32](0x70 + $Number - 1) }
+  }
+
+  $NamedKeys = @{
+    SPACE = 0x20
+    ENTER = 0x0D
+    RETURN = 0x0D
+    ESC = 0x1B
+    ESCAPE = 0x1B
+    TAB = 0x09
+    BACKSPACE = 0x08
+    DELETE = 0x2E
+    DEL = 0x2E
+    INSERT = 0x2D
+    INS = 0x2D
+    HOME = 0x24
+    END = 0x23
+    PAGEUP = 0x21
+    PGUP = 0x21
+    PAGEDOWN = 0x22
+    PGDN = 0x22
+    LEFT = 0x25
+    UP = 0x26
+    RIGHT = 0x27
+    DOWN = 0x28
+  }
+  if ($NamedKeys.ContainsKey($Key)) {
+    return [ordered]@{ ok = $true; value = [uint32]$NamedKeys[$Key] }
+  }
+
+  return [ordered]@{ ok = $false; value = [uint32]0 }
+}
+
+function Resolve-HotkeyRegistration {
+  param([string]$GlobalHotkey)
+
+  $Text = ([string]$GlobalHotkey).Trim()
+  if ([string]::IsNullOrWhiteSpace($Text)) {
+    return [ordered]@{ ok = $false; modifiers = [uint32]0; virtual_key = [uint32]0; error = 'global_hotkey_not_declared' }
+  }
+
+  $Modifiers = [uint32]0
+  $KeyCode = [uint32]0
+  $Parts = [string[]]@($Text -split '\+' | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+  foreach ($Part in $Parts) {
+    switch -Regex ($Part.ToUpperInvariant()) {
+      '^(CTRL|CONTROL)$' {
+        $Modifiers = $Modifiers -bor [uint32]0x0002
+        continue
+      }
+      '^ALT$' {
+        $Modifiers = $Modifiers -bor [uint32]0x0001
+        continue
+      }
+      '^SHIFT$' {
+        $Modifiers = $Modifiers -bor [uint32]0x0004
+        continue
+      }
+      '^(WIN|WINDOWS|META)$' {
+        $Modifiers = $Modifiers -bor [uint32]0x0008
+        continue
+      }
+      default {
+        if ($KeyCode -ne 0) {
+          return [ordered]@{ ok = $false; modifiers = $Modifiers; virtual_key = $KeyCode; error = 'global_hotkey_multiple_keys' }
+        }
+        $ResolvedKey = Resolve-HotkeyKeyCode -KeyName $Part
+        if (-not [bool]$ResolvedKey.ok) {
+          return [ordered]@{ ok = $false; modifiers = $Modifiers; virtual_key = [uint32]0; error = 'global_hotkey_key_unsupported' }
+        }
+        $KeyCode = [uint32]$ResolvedKey.value
+      }
+    }
+  }
+
+  if ($Modifiers -eq 0) {
+    return [ordered]@{ ok = $false; modifiers = $Modifiers; virtual_key = $KeyCode; error = 'global_hotkey_modifier_required' }
+  }
+  if ($KeyCode -eq 0) {
+    return [ordered]@{ ok = $false; modifiers = $Modifiers; virtual_key = $KeyCode; error = 'global_hotkey_key_required' }
+  }
+
+  return [ordered]@{ ok = $true; modifiers = $Modifiers; virtual_key = $KeyCode; error = '' }
+}
+
 function Write-HotkeyState {
   param(
     [string]$Root,
@@ -285,6 +382,7 @@ function Get-HotkeyRuntimeReadback {
   $StatusKind = Get-StringProperty -Payload $Status -Name 'kind' -Default ''
   $StatusValue = Get-StringProperty -Payload $Status -Name 'status' -Default ''
   $StatusPid = Get-IntegerProperty -Payload $Status -Name 'pid' -Default 0
+  $StatusMessage = Get-StringProperty -Payload $Status -Name 'message' -Default ''
   $RuntimeStateExists = Test-Path -LiteralPath $StatusPath -PathType Leaf
   $PidPresent = Test-Path -LiteralPath $PidPath -PathType Leaf
   $RuntimePid = 0
@@ -336,6 +434,7 @@ function Get-HotkeyRuntimeReadback {
     runtime_status = $StatusValue
     runtime_status_kind = $StatusKind
     runtime_status_pid = $StatusPid
+    runtime_status_message = $StatusMessage
     runtime_status_pid_matches_pid_file = ($StatusPid -gt 0 -and $StatusPid -eq $RuntimePid)
     global_hotkey = $Config.global_hotkey
     binding_scope = $Config.binding_scope
@@ -464,17 +563,29 @@ if ($Mode -eq 'Run') {
   $RuntimeRoot = Join-Path $DataRoot 'runtime\lens-hotkey'
   New-Item -ItemType Directory -Force -Path $RuntimeRoot | Out-Null
   $Window = $null
+  $MainForm = $null
   $Timer = $null
   $Registered = $false
   $PressCount = 0
   $Failed = $false
   try {
     if (-not $RunningOnWindows) {
+      $Failed = $true
       Write-HotkeyState -Root $DataRoot -Status 'unsupported' -HotkeyBound $false -Message 'Windows global hotkey binding requires Windows.'
       exit 3
     }
     Add-HotkeyTypes
+    Add-Type -AssemblyName System.Drawing
     [System.Windows.Forms.Application]::EnableVisualStyles()
+    $MainForm = New-Object System.Windows.Forms.Form
+    $MainForm.Text = 'Francis Lens Hotkey Binding'
+    $MainForm.ShowInTaskbar = $false
+    $MainForm.WindowState = [System.Windows.Forms.FormWindowState]::Minimized
+    $MainForm.Opacity = 0
+    $MainForm.Size = New-Object System.Drawing.Size(0, 0)
+    $MainForm.Add_Shown({
+        $MainForm.Hide()
+      })
     $Window = New-Object FrancisLensHotkeyWindow
     $CreateParams = New-Object System.Windows.Forms.CreateParams
     $Window.CreateHandle($CreateParams)
@@ -498,8 +609,15 @@ if ($Mode -eq 'Run') {
           Start-Process -FilePath 'powershell' -ArgumentList $SummonArguments -WindowStyle Hidden
         }
       })
-    $Registered = [FrancisLensHotkeyNative]::RegisterHotKey($Window.Handle, 1, 0x0003, 0x20)
+    $HotkeyRegistration = Resolve-HotkeyRegistration -GlobalHotkey ([string]$ConfigForAction.global_hotkey)
+    if (-not [bool]$HotkeyRegistration.ok) {
+      $Failed = $true
+      Write-HotkeyState -Root $DataRoot -Status 'failed' -HotkeyBound $false -Message "Invalid global hotkey '$($ConfigForAction.global_hotkey)': $($HotkeyRegistration.error)."
+      exit 1
+    }
+    $Registered = [FrancisLensHotkeyNative]::RegisterHotKey($Window.Handle, 1, [uint32]$HotkeyRegistration.modifiers, [uint32]$HotkeyRegistration.virtual_key)
     if (-not $Registered) {
+      $Failed = $true
       $ErrorCode = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
       Write-HotkeyState -Root $DataRoot -Status 'failed' -HotkeyBound $false -Message "RegisterHotKey failed with Win32 error $ErrorCode."
       exit 1
@@ -510,11 +628,11 @@ if ($Mode -eq 'Run') {
       $Timer.Interval = [Math]::Max(1000, $RunSeconds * 1000)
       $Timer.Add_Tick({
           $Timer.Stop()
-          [System.Windows.Forms.Application]::ExitThread()
+          $MainForm.Close()
         })
       $Timer.Start()
     }
-    [System.Windows.Forms.Application]::Run()
+    [System.Windows.Forms.Application]::Run($MainForm)
   } catch {
     $Failed = $true
     Write-HotkeyState -Root $DataRoot -Status 'failed' -HotkeyBound $false -Message ([string]$_.Exception.Message)
@@ -528,6 +646,9 @@ if ($Mode -eq 'Run') {
     }
     if ($null -ne $Timer) {
       $Timer.Dispose()
+    }
+    if ($null -ne $MainForm) {
+      $MainForm.Dispose()
     }
     if (-not $Failed) {
       Write-HotkeyState -Root $DataRoot -Status 'hotkey_stopped' -HotkeyBound $false -Message 'Francis Lens global hotkey binding stopped.' -LaunchOnHotkey $false -PressCount $PressCount
@@ -603,6 +724,31 @@ do {
   if ([bool]$Readback.ready) {
     New-StatusPayload -Root $DataRoot -ModeName $ModeName -StatusOverride 'started' | ConvertTo-Json -Depth 8
     exit 0
+  }
+  if ([string]$Readback.runtime_status -eq 'failed' -or [string]$Readback.runtime_status -eq 'unsupported') {
+    $StartedProcessStopped = $false
+    if ($null -ne $StartedProcess) {
+      try {
+        $StartedProcess.Refresh()
+        if (-not $StartedProcess.HasExited) {
+          Stop-Process -Id $StartedProcess.Id -Force -ErrorAction Stop
+          $StartedProcessStopped = $true
+        }
+      } catch {
+        $StartedProcessStopped = $false
+      }
+    }
+    $Payload = New-StatusPayload -Root $DataRoot -ModeName $ModeName -StatusOverride 'start_failed'
+    $Payload.ok = $false
+    $Payload.error = if ([string]$Readback.runtime_status -eq 'unsupported') { 'lens_hotkey_binding_unsupported' } else { 'lens_hotkey_binding_start_failed' }
+    $Payload.started_process_id = if ($null -ne $StartedProcess) { [int]$StartedProcess.Id } else { 0 }
+    $Payload.started_process_stopped = $StartedProcessStopped
+    $Payload.child_runtime_status = [string]$Readback.runtime_status
+    $Payload.child_runtime_status_pid = [int]$Readback.runtime_status_pid
+    $Payload.child_runtime_status_message = [string]$Readback.runtime_status_message
+    $Payload.message = if ([string]$Readback.runtime_status_message) { [string]$Readback.runtime_status_message } else { 'Lens global hotkey binding child reported a terminal startup failure.' }
+    $Payload | ConvertTo-Json -Depth 8
+    exit 1
   }
 } while ([DateTimeOffset]::UtcNow -lt $Deadline)
 

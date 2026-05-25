@@ -22,14 +22,28 @@ def _runtime_file_exists(relative_path: str) -> bool:
         return False
 
 
-def _json_dict_from_path(path: Path) -> dict[str, Any]:
-    try:
-        if not path.is_file():
+def _json_dict_from_path(
+    path: Path,
+    *,
+    transient_retries: int = 0,
+    transient_delay_seconds: float = 0.05,
+) -> dict[str, Any]:
+    attempts = max(1, transient_retries + 1)
+    for attempt in range(attempts):
+        try:
+            if not path.is_file():
+                if attempt < attempts - 1:
+                    time.sleep(transient_delay_seconds)
+                    continue
+                return {}
+            payload = json.loads(path.read_text(encoding="utf-8-sig"))
+        except (OSError, json.JSONDecodeError):
+            if attempt < attempts - 1:
+                time.sleep(transient_delay_seconds)
+                continue
             return {}
-        payload = json.loads(path.read_text(encoding="utf-8-sig"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    return payload if isinstance(payload, dict) else {}
+        return payload if isinstance(payload, dict) else {}
+    return {}
 
 
 def _runtime_json_dict(relative_path: str) -> dict[str, Any]:
@@ -260,10 +274,13 @@ def _process_alive_readback(pid: int) -> tuple[bool, str]:
 def _lens_host_process_readback() -> dict[str, Any]:
     state_file = data_dir() / "runtime" / "lens-host" / "status.json"
     pid_file = data_dir() / "runtime" / "lens-host" / "lens-host.pid"
-    state_exists = _path_exists(state_file)
     pid_present = _path_exists(pid_file)
     pid = _pid_from_file(pid_file) if pid_present else 0
-    state_payload = _json_dict_from_path(state_file) if state_exists else {}
+    state_payload = _json_dict_from_path(
+        state_file,
+        transient_retries=4 if pid_present or state_file.parent.exists() else 0,
+    )
+    state_exists = bool(state_payload) or _path_exists(state_file)
     state_kind = str(state_payload.get("kind") or "")
     state_status = str(state_payload.get("status") or "")
     state_pid = _safe_pid(state_payload.get("pid"))
@@ -323,7 +340,7 @@ def _lens_tray_runtime_readback() -> dict[str, Any]:
     state_exists = _path_exists(state_file)
     pid_present = _path_exists(pid_file)
     pid = _pid_from_file(pid_file) if pid_present else 0
-    state_payload = _json_dict_from_path(state_file) if state_exists else {}
+    state_payload = _json_dict_from_path(state_file, transient_retries=4) if state_exists else {}
     state_kind = str(state_payload.get("kind") or "")
     state_status = str(state_payload.get("status") or "")
     state_pid = _safe_pid(state_payload.get("pid"))
@@ -381,7 +398,10 @@ def _lens_tray_runtime_readback() -> dict[str, Any]:
 
 
 def _lens_hotkey_runtime_readback() -> dict[str, Any]:
-    config = _runtime_json_dict("config/runtime/lens/summon.json")
+    override_file = data_dir() / "runtime" / "lens-hotkey" / "os-binding-summon-override.json"
+    override_config = _json_dict_from_path(override_file) if _path_exists(override_file) else {}
+    config = override_config or _runtime_json_dict("config/runtime/lens/summon.json")
+    config_source = "runtime_override" if override_config else "canonical_config"
     expected_global_hotkey = str(config.get("global_hotkey") or "")
     expected_binding_scope = str(config.get("binding_scope") or "global")
     state_file = data_dir() / "runtime" / "lens-hotkey" / "status.json"
@@ -431,6 +451,8 @@ def _lens_hotkey_runtime_readback() -> dict[str, Any]:
         "ready": hotkey_bound,
         "status": "running" if hotkey_bound else "missing",
         "runtime_state_path": "data/runtime/lens-hotkey/status.json",
+        "config_source": config_source,
+        "config_override_path": "data/runtime/lens-hotkey/os-binding-summon-override.json" if override_config else "",
         "state_exists": state_exists,
         "state_kind": state_kind,
         "state_status": state_status,
@@ -533,7 +555,14 @@ def _lens_overlay_runtime_readback() -> dict[str, Any]:
 
 
 def _lens_summon_runtime_readback() -> dict[str, Any]:
-    config = _runtime_json_dict("config/runtime/lens/summon.json")
+    override_file = data_dir() / "runtime" / "lens-summon" / "summon-action-override.json"
+    hotkey_override_file = data_dir() / "runtime" / "lens-hotkey" / "os-binding-summon-override.json"
+    override_config = _json_dict_from_path(override_file) if _path_exists(override_file) else {}
+    if not override_config and _path_exists(hotkey_override_file):
+        override_config = _json_dict_from_path(hotkey_override_file)
+        override_file = hotkey_override_file
+    config = override_config or _runtime_json_dict("config/runtime/lens/summon.json")
+    config_source = "runtime_override" if override_config else "canonical_config"
     expected_global_hotkey = str(config.get("global_hotkey") or "")
     expected_binding_scope = str(config.get("binding_scope") or "global")
     state_file = data_dir() / "runtime" / "lens-summon" / "status.json"
@@ -561,6 +590,14 @@ def _lens_summon_runtime_readback() -> dict[str, Any]:
         "ready": state_claims_bounded_handoff,
         "status": "observed" if state_claims_bounded_handoff else "missing",
         "runtime_state_path": "data/runtime/lens-summon/status.json",
+        "config_source": config_source,
+        "config_override_path": (
+            "data/runtime/lens-summon/summon-action-override.json"
+            if override_config and override_file.name == "summon-action-override.json"
+            else "data/runtime/lens-hotkey/os-binding-summon-override.json"
+            if override_config
+            else ""
+        ),
         "state_exists": state_exists,
         "state_kind": state_kind,
         "state_status": state_status,
@@ -1755,13 +1792,32 @@ def _age_seconds(value: Any) -> int | None:
 
 def _lens_host_supervisor_readback() -> dict[str, Any]:
     state_file = data_dir() / "runtime" / "lens-host-supervisor" / "status.json"
-    state_exists = _path_exists(state_file)
-    state_payload = _json_dict_from_path(state_file) if state_exists else {}
+    state_payload = _json_dict_from_path(
+        state_file,
+        transient_retries=4 if state_file.parent.exists() else 0,
+    )
+    state_exists = bool(state_payload) or _path_exists(state_file)
     state_status = str(state_payload.get("status") or "")
     mode = str(state_payload.get("mode") or "")
     host_mode = str(state_payload.get("host_mode") or "")
+    supervisor_pid = _safe_pid(state_payload.get("supervisor_pid"))
     observed_pid = _safe_pid(state_payload.get("observed_pid"))
     observed_state = str(state_payload.get("observed_state") or "")
+    supervisor_process_alive, supervisor_process_alive_check = (
+        _process_alive_readback(supervisor_pid) if supervisor_pid > 0 else (False, "not_attempted_no_supervisor_pid")
+    )
+    host_process_readback = _lens_host_process_readback()
+    host_process_pid = _safe_pid(host_process_readback.get("pid"))
+    observed_pid_matches_host_process = observed_pid > 0 and observed_pid == host_process_pid
+    if observed_pid_matches_host_process:
+        observed_process_alive = bool(host_process_readback.get("process_alive"))
+        observed_process_alive_check = str(host_process_readback.get("process_alive_check") or "")
+    elif observed_pid <= 0:
+        observed_process_alive = False
+        observed_process_alive_check = "not_attempted_no_observed_pid"
+    else:
+        observed_process_alive = False
+        observed_process_alive_check = "not_attempted_observed_pid_mismatch"
     bounded_supervisor_observed = state_status in {
         "observing",
         "observation_completed",
@@ -1789,11 +1845,20 @@ def _lens_host_supervisor_readback() -> dict[str, Any]:
     resident_supervised_runtime = (
         state_status == "resident_supervising"
         and host_mode == "resident"
+        and supervisor_pid > 0
+        and supervisor_process_alive
         and bool(state_payload.get("resident_supervised_runtime"))
+        and observed_state == "resident_running"
+        and observed_pid_matches_host_process
+        and observed_process_alive
         and fresh_readback
     )
     if resident_supervised_runtime:
         blocked_reason = ""
+    elif state_status == "resident_supervising" and not supervisor_process_alive:
+        blocked_reason = "resident_host_supervisor_process_missing"
+    elif state_status == "resident_supervising" and not observed_process_alive:
+        blocked_reason = "resident_host_process_not_observed"
     elif resident_runtime_candidate_supervised:
         blocked_reason = "resident_runtime_candidate_not_persistent"
     elif supervised_session_completed:
@@ -1812,8 +1877,14 @@ def _lens_host_supervisor_readback() -> dict[str, Any]:
         "state_status": state_status,
         "mode": mode,
         "host_mode": host_mode,
+        "supervisor_pid": supervisor_pid,
+        "supervisor_process_alive": supervisor_process_alive,
+        "supervisor_process_alive_check": supervisor_process_alive_check,
         "observed_pid": observed_pid,
         "observed_state": observed_state,
+        "observed_process_alive": observed_process_alive,
+        "observed_process_alive_check": observed_process_alive_check,
+        "observed_pid_matches_host_process": observed_pid_matches_host_process,
         "updated_at": updated_at,
         "state_age_seconds": state_age_seconds,
         "freshness_window_seconds": SUPERVISOR_READBACK_FRESH_SECONDS,

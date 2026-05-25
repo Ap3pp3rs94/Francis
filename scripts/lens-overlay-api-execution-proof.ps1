@@ -239,6 +239,7 @@ def _run() -> tuple[int, dict[str, Any]]:
     repo_root = Path(os.environ["FRANCIS_ROOT"]).resolve()
     data_root = Path(os.environ["FRANCIS_DATA_DIR"]).resolve()
     run_seconds = int(os.environ.get("FRANCIS_PROOF_RUN_SECONDS", "5"))
+    proof_global_hotkey = os.environ.get("FRANCIS_PROOF_GLOBAL_HOTKEY", "Ctrl+Alt+Shift+F12").strip()
     # Keep dependent runtimes alive long enough for slower Windows readbacks.
     dependency_run_seconds = max(run_seconds, 60)
     data_root.mkdir(parents=True, exist_ok=True)
@@ -336,6 +337,7 @@ def _run() -> tuple[int, dict[str, Any]]:
                 "reason": "prove governed API path starts hotkey before overlay",
                 "mode": "bind",
                 "run_seconds": dependency_run_seconds,
+                "global_hotkey": proof_global_hotkey,
             },
         )
 
@@ -587,6 +589,7 @@ def _run() -> tuple[int, dict[str, Any]]:
             "stage": "Stage 6 / Lens MVP",
             "stage_state": "active",
             "acceptance_criterion": "summon_anywhere",
+            "global_hotkey": proof_global_hotkey,
             "previous_next_smallest_truthful_gap": "summon_overlay_window_blocker_boundary",
             "route_next_smallest_truthful_gap": route_next_gap,
             "next_smallest_truthful_gap": next_gap,
@@ -639,6 +642,7 @@ def _run() -> tuple[int, dict[str, Any]]:
             "checks": checks,
             "proof": {
                 "dependency_run_seconds": dependency_run_seconds,
+                "global_hotkey": proof_global_hotkey,
                 "resident_start_status": str(resident_start.get("status") or ""),
                 "tray_start_status": str(tray_start.get("status") or ""),
                 "hotkey_start_status": str(hotkey_start.get("status") or ""),

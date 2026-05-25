@@ -46,17 +46,21 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
     assert payload["kind"] == "lens.resident_surface.readiness_proof"
     assert payload["status"] == "proof_passed"
     assert payload["ok"] is True
-    assert payload["resident_surface_ready"] is False
+    resident_runtime_readback = payload["resident_surface_resident_runtime_readback"]
+    assert payload["resident_surface_ready"] is resident_runtime_readback
     assert payload["resident_surface_content_readback"] is True
+    assert isinstance(payload["resident_surface_resident_runtime_observed"], bool)
     assert payload["resident_surface_foreground_runtime_readback"] is True
     assert payload["resident_surface_foreground_runtime_observed"] is True
     assert payload["resident_surface_content_contract_ready"] is True
     assert payload["resident_surface_contract_status"] == "readback_ready"
-    assert payload["resident_surface_runtime_status"] == "foreground_runtime_observed"
+    assert payload["resident_surface_runtime_status"] == (
+        "resident_runtime_observed" if resident_runtime_readback else "foreground_runtime_observed"
+    )
     assert payload["resident_surface_route"] == "/lens/resident-surface"
     assert payload["ready_for_lens_resident_claim"] is False
     assert payload["resident_claim_allowed"] is False
-    assert payload["resident_host_process"] is False
+    assert payload["resident_host_process"] is resident_runtime_readback
     assert payload["foreground_host_process_observed"] is True
     assert payload["foreground_host_runtime_completed"] is True
     assert payload["tray_presence"] is False
@@ -68,14 +72,21 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
     assert payload["operator_experience_proof"] is True
     assert payload["live_operator_experience_proof"] is True
     assert payload["live_operator_experience_ready"] is False
-    assert payload["next_smallest_truthful_gap"] == "resident_surface_runtime_not_supervised"
+    assert payload["next_smallest_truthful_gap"] == (
+        "resident_surface_operator_experience_proof"
+        if resident_runtime_readback
+        else "resident_surface_runtime_not_supervised"
+    )
     assert payload["recommended_handoff_source"] == "resident_surface_runtime_supervision_handoff"
-    assert (
-        payload["recommended_next_slice"]
-        == "resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim"
+    assert payload["recommended_next_slice"] == (
+        "prove_resident_surface_operator_experience_before_helpful_not_noisy_claim"
+        if resident_runtime_readback
+        else "resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim"
     )
     assert payload["recommended_proof_script"] == "scripts/lens-resident-surface-proof.ps1 -Mode Status"
-    assert payload["authority_required"] == "process_supervision_authority"
+    assert payload["authority_required"] == (
+        "operator_experience_proof" if resident_runtime_readback else "process_supervision_authority"
+    )
     assert payload["authority_granted"] is False
     assert payload["resident_runtime_authority_grant_readiness_route"] == (
         "/lens/resident-runtime/authority-grant/readiness"
@@ -84,16 +95,30 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
 
     recommended_handoff = payload["recommended_handoff"]
     assert recommended_handoff["id"] == "resident_surface_runtime_supervision"
-    assert recommended_handoff["next_smallest_truthful_gap"] == "resident_surface_runtime_not_supervised"
+    assert recommended_handoff["next_smallest_truthful_gap"] == (
+        "resident_surface_operator_experience_proof"
+        if resident_runtime_readback
+        else "resident_surface_runtime_not_supervised"
+    )
     assert recommended_handoff["next_step"] == (
-        "resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim"
+        "prove_resident_surface_operator_experience_before_helpful_not_noisy_claim"
+        if resident_runtime_readback
+        else "resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim"
     )
     assert recommended_handoff["proof_script"] == "scripts/lens-resident-surface-proof.ps1 -Mode Status"
     assert recommended_handoff["route"] == "/lens/resident-surface"
     assert recommended_handoff["readiness_route"] == "/lens/resident-runtime/authority-grant/readiness"
-    assert recommended_handoff["blocker"] == "resident_surface_runtime_not_supervised"
-    assert recommended_handoff["requirement_state"] == "foreground_observed_not_supervised"
-    assert recommended_handoff["authority_required"] == "process_supervision_authority"
+    assert recommended_handoff["blocker"] == (
+        "resident_surface_operator_experience_proof"
+        if resident_runtime_readback
+        else "resident_surface_runtime_not_supervised"
+    )
+    assert recommended_handoff["requirement_state"] == (
+        "resident_runtime_observed" if resident_runtime_readback else "foreground_observed_not_supervised"
+    )
+    assert recommended_handoff["authority_required"] == (
+        "operator_experience_proof" if resident_runtime_readback else "process_supervision_authority"
+    )
     assert recommended_handoff["authority_granted"] is False
     assert recommended_handoff["read_only_contract"] is True
     assert recommended_handoff["diagnostic_only"] is True
@@ -105,7 +130,9 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
 
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["resident_surface_content_readback"]["status"] == "readback_ready"
-    assert checks["resident_surface_foreground_runtime_readback"]["status"] == "foreground_runtime_observed"
+    assert checks["resident_surface_runtime_readback"]["status"] == (
+        "resident_runtime_observed" if resident_runtime_readback else "foreground_runtime_observed"
+    )
     assert checks["host_lifecycle_boundary"]["status"] == "blocked_readback_ready"
     assert checks["supervision_proof_available"]["status"] == "available"
     assert checks["live_operator_experience_proof"]["status"] == "proof_passed"
@@ -122,7 +149,12 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
     assert proof["resident_surface_route"] == "/lens/resident-surface"
     assert proof["resident_surface_activation_route"] == "/lens/resident-surface/activation"
     assert proof["resident_surface_content_contract_ready"] is True
-    assert "resident_surface_runtime_missing" in proof["resident_surface_readback_blockers"]
+    if resident_runtime_readback:
+        assert proof["resident_surface_resident_runtime_status"] == "resident_runtime_observed"
+        assert proof["resident_surface_resident_runtime_observed"] is True
+        assert proof["resident_surface_resident_runtime_blockers"] in ({}, [])
+    else:
+        assert "resident_surface_runtime_missing" in proof["resident_surface_readback_blockers"]
     assert "resident_surface_missing" not in proof["resident_surface_readback_blockers"]
     assert proof["resident_surface_foreground_runtime_status"] == "foreground_runtime_observed"
     assert proof["resident_surface_foreground_runtime_observed"] is True
@@ -159,8 +191,12 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
     assert "global_hotkey_binding_disabled" in proof["summon_blockers"]
 
     assert "resident_surface_runtime_missing" not in payload["blockers"]
-    assert "resident_surface_runtime_not_supervised" in payload["blockers"]
-    assert "resident_surface_not_resident" in payload["blockers"]
+    if resident_runtime_readback:
+        assert "resident_surface_runtime_not_supervised" not in payload["blockers"]
+        assert "resident_surface_not_resident" not in payload["blockers"]
+    else:
+        assert "resident_surface_runtime_not_supervised" in payload["blockers"]
+        assert "resident_surface_not_resident" in payload["blockers"]
     assert "resident_surface_missing" not in payload["blockers"]
     assert "tray_presence_missing" in payload["blockers"]
     assert "overlay_window_missing" in payload["blockers"]

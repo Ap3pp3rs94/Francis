@@ -261,6 +261,9 @@ $RunningOnWindows = [System.Environment]::OSVersion.Platform -eq [System.Platfor
 if ($Mode -eq 'Run') {
   $RuntimeRoot = Join-Path $DataRoot 'runtime\lens-tray'
   New-Item -ItemType Directory -Force -Path $RuntimeRoot | Out-Null
+  $NotifyIcon = $null
+  $Timer = $null
+  $MainForm = $null
   try {
     if (-not $RunningOnWindows) {
       Write-TrayState -Root $DataRoot -Status 'unsupported' -TrayIconVisible $false -Message 'Windows tray presence requires Windows.'
@@ -269,22 +272,30 @@ if ($Mode -eq 'Run') {
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -AssemblyName System.Drawing
     [System.Windows.Forms.Application]::EnableVisualStyles()
+    $MainForm = New-Object System.Windows.Forms.Form
+    $MainForm.Text = 'Francis Lens Tray Presence'
+    $MainForm.ShowInTaskbar = $false
+    $MainForm.WindowState = [System.Windows.Forms.FormWindowState]::Minimized
+    $MainForm.Opacity = 0
+    $MainForm.Size = New-Object System.Drawing.Size(0, 0)
+    $MainForm.Add_Shown({
+        $MainForm.Hide()
+      })
     $NotifyIcon = New-Object System.Windows.Forms.NotifyIcon
     $NotifyIcon.Text = 'Francis Lens'
     $NotifyIcon.Icon = [System.Drawing.SystemIcons]::Application
     $NotifyIcon.Visible = $true
     Write-TrayState -Root $DataRoot -Status 'tray_running' -TrayIconVisible $true -Message 'Francis Lens tray presence is running.'
-    $Timer = $null
     if ($RunSeconds -gt 0) {
       $Timer = New-Object System.Windows.Forms.Timer
       $Timer.Interval = [Math]::Max(1000, $RunSeconds * 1000)
       $Timer.Add_Tick({
           $Timer.Stop()
-          [System.Windows.Forms.Application]::ExitThread()
+          $MainForm.Close()
         })
       $Timer.Start()
     }
-    [System.Windows.Forms.Application]::Run()
+    [System.Windows.Forms.Application]::Run($MainForm)
   } catch {
     Write-TrayState -Root $DataRoot -Status 'failed' -TrayIconVisible $false -Message ([string]$_.Exception.Message)
     exit 1
@@ -295,6 +306,9 @@ if ($Mode -eq 'Run') {
     }
     if ($null -ne $Timer) {
       $Timer.Dispose()
+    }
+    if ($null -ne $MainForm) {
+      $MainForm.Dispose()
     }
     Write-TrayState -Root $DataRoot -Status 'tray_stopped' -TrayIconVisible $false -Message 'Francis Lens tray presence stopped.'
     $PidPath = Join-Path $DataRoot 'runtime\lens-tray\lens-tray.pid'

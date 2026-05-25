@@ -81,7 +81,9 @@ function Invoke-JsonScript {
 
     [string[]]$ScriptArgs = @(),
 
-    [int]$TimeoutSeconds = $ChildProofTimeoutSeconds
+    [int]$TimeoutSeconds = $ChildProofTimeoutSeconds,
+
+    [hashtable]$EnvironmentVariables = @{}
   )
 
   if ([string]::IsNullOrWhiteSpace($PowerShellPath) -or -not (Test-Path -LiteralPath $ScriptPath -PathType Leaf)) {
@@ -113,6 +115,11 @@ function Invoke-JsonScript {
   $StartInfo.WorkingDirectory = $RepoRoot
   $StartInfo.UseShellExecute = $false
   $StartInfo.CreateNoWindow = $true
+  foreach ($Name in @($EnvironmentVariables.Keys)) {
+    if (-not [string]::IsNullOrWhiteSpace([string]$Name)) {
+      $StartInfo.EnvironmentVariables[[string]$Name] = [string]$EnvironmentVariables[$Name]
+    }
+  }
   $ScriptName = [IO.Path]::GetFileNameWithoutExtension($ScriptPath)
   $ProofCaptureRoot = Join-Path $RepoRoot 'data/test_runs/lens-stage6-completion-audit'
   New-Item -ItemType Directory -Path $ProofCaptureRoot -Force | Out-Null
@@ -274,6 +281,13 @@ $PowerShell = (Get-Command pwsh -ErrorAction SilentlyContinue)
 if ($null -eq $PowerShell) {
   $PowerShell = Get-Command powershell -ErrorAction Stop
 }
+$Stage6ApiExecutionProofHotkeys = @{
+  summon_api_launch_on_hotkey = 'Ctrl+Alt+Shift+F17'
+  os_binding_api_execution = 'Ctrl+Alt+Shift+F16'
+  overlay_api_execution = 'Ctrl+Alt+Shift+F15'
+  summon_api_bounded_execution = 'Ctrl+Alt+Shift+F14'
+  persistent_supervision_api_execution = 'Ctrl+Alt+Shift+F13'
+}
 $ChildStartupTimeoutSeconds = [Math]::Max($StartupTimeoutSeconds, 30)
 $ChildHostLaunchRunSeconds = [Math]::Max($HostLaunchRunSeconds, 5)
 
@@ -287,6 +301,18 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $Checkpoint = ($CheckpointJson | Out-String | ConvertFrom-Json)
+$EarlyHostSupervisorReadback = $Checkpoint.host_supervisor_readback
+$EarlyFreshResidentSupervisedRuntimeReadbackObserved = (
+  [bool]$EarlyHostSupervisorReadback.fresh_readback -and
+  [bool]$EarlyHostSupervisorReadback.resident_supervised_runtime -and
+  [int]$EarlyHostSupervisorReadback.supervisor_pid -gt 0 -and
+  [bool]$EarlyHostSupervisorReadback.supervisor_process_alive -and
+  [int]$EarlyHostSupervisorReadback.observed_pid -gt 0 -and
+  [bool]$EarlyHostSupervisorReadback.observed_process_alive -and
+  [bool]$EarlyHostSupervisorReadback.observed_pid_matches_host_process -and
+  [string]$EarlyHostSupervisorReadback.state_status -eq 'resident_supervising' -and
+  [string]$EarlyHostSupervisorReadback.observed_state -eq 'resident_running'
+)
 $SummonAnywhereBlockersProofResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonAnywhereBlockersProofScript -ScriptArgs @(
   '-Mode', 'Status'
 )
@@ -319,7 +345,8 @@ if ($AllowLaunchOnHotkey) {
     -PowerShellPath $PowerShell.Source `
     -ScriptPath $SummonApiExecutionProofScript `
     -ScriptArgs @('-Mode', 'Status', '-RunSeconds', '10', '-AllowLaunchOnHotkey') `
-    -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 120))
+    -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 120)) `
+    -EnvironmentVariables @{ FRANCIS_PROOF_GLOBAL_HOTKEY = $Stage6ApiExecutionProofHotkeys.summon_api_launch_on_hotkey }
 }
 $SummonApiLaunchOnHotkeyProof = $SummonApiLaunchOnHotkeyProofResult.payload
 $ResidentRuntimeApiExecutionProofResult = [ordered]@{
@@ -370,7 +397,8 @@ if ($AllowLaunchOnHotkey) {
     -PowerShellPath $PowerShell.Source `
     -ScriptPath $OsBindingApiExecutionProofScript `
     -ScriptArgs @('-Mode', 'Status', '-RunSeconds', '1') `
-    -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 240))
+    -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 240)) `
+    -EnvironmentVariables @{ FRANCIS_PROOF_GLOBAL_HOTKEY = $Stage6ApiExecutionProofHotkeys.os_binding_api_execution }
 }
 $OsBindingApiExecutionProof = $OsBindingApiExecutionProofResult.payload
 $OverlayApiExecutionProofResult = [ordered]@{
@@ -387,7 +415,8 @@ if ($AllowLaunchOnHotkey) {
     -PowerShellPath $PowerShell.Source `
     -ScriptPath $OverlayApiExecutionProofScript `
     -ScriptArgs @('-Mode', 'Status', '-RunSeconds', '1') `
-    -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 240))
+    -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 240)) `
+    -EnvironmentVariables @{ FRANCIS_PROOF_GLOBAL_HOTKEY = $Stage6ApiExecutionProofHotkeys.overlay_api_execution }
 }
 $OverlayApiExecutionProof = $OverlayApiExecutionProofResult.payload
 $SummonApiBoundedExecutionProofResult = [ordered]@{
@@ -404,7 +433,8 @@ if ($AllowLaunchOnHotkey) {
     -PowerShellPath $PowerShell.Source `
     -ScriptPath $SummonApiExecutionProofScript `
     -ScriptArgs @('-Mode', 'Status', '-RunSeconds', '1') `
-    -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 240))
+    -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 240)) `
+    -EnvironmentVariables @{ FRANCIS_PROOF_GLOBAL_HOTKEY = $Stage6ApiExecutionProofHotkeys.summon_api_bounded_execution }
 }
 $SummonApiBoundedExecutionProof = $SummonApiBoundedExecutionProofResult.payload
 $PersistentSupervisionApiExecutionProofResult = [ordered]@{
@@ -421,7 +451,10 @@ if ($AllowLaunchOnHotkey) {
     -PowerShellPath $PowerShell.Source `
     -ScriptPath $PersistentSupervisionApiExecutionProofScript `
     -ScriptArgs @('-Mode', 'Status', '-RunSeconds', '10') `
-    -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 240))
+    -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 240)) `
+    -EnvironmentVariables @{
+      FRANCIS_PROOF_GLOBAL_HOTKEY = $Stage6ApiExecutionProofHotkeys.persistent_supervision_api_execution
+    }
 }
 $PersistentSupervisionApiExecutionProof = $PersistentSupervisionApiExecutionProofResult.payload
 $ResidentHostRuntimeBoundaryProofResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $ResidentHostRuntimeBoundaryProofScript -ScriptArgs @(
@@ -483,14 +516,58 @@ $ProcessSupervisionBoundaryObserved = (
   [bool]$ProcessSupervisionBoundary.process_supervision_boundary_observed -and
   [bool]$ProcessSupervisionBoundary.service_activation_plan_observed
 )
-$ResidentHostProcessSupervisionBlockerProofResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $ResidentHostProcessSupervisionBlockerProofScript -ScriptArgs @(
-  '-Mode', 'Status',
-  '-StartupTimeoutSeconds', [string]$ChildStartupTimeoutSeconds,
-  '-ForegroundRunSeconds', '2',
-  '-HostLaunchRunSeconds', [string]$ChildHostLaunchRunSeconds,
-  '-SupervisorRunSeconds', [string]$SupervisorRunSeconds,
-  '-ChildProofTimeoutSeconds', [string]$ChildProofTimeoutSeconds
-)
+$ResidentHostProcessSupervisionBlockerProofSkippedForFreshRuntime = $EarlyFreshResidentSupervisedRuntimeReadbackObserved
+$ResidentHostProcessSupervisionBlockerProofResult = [ordered]@{
+  exit_code = 0
+  payload = [ordered]@{
+    kind = 'lens.resident_host.process_supervision_blocker.proof'
+    ok = $true
+    status = 'skipped_fresh_supervised_runtime_readback'
+    evidence = @('data/runtime/lens-host-supervisor/status.json', 'scripts/lens-stage6-checkpoint.ps1 -Mode Status')
+    previous_next_smallest_truthful_gap = 'resident_host_process_not_supervised'
+    next_smallest_truthful_gap = 'stage6_lens_completion_audit'
+    resident_host_process_handoff_observed = $false
+    process_supervision_boundary_observed = $false
+    handoff_consumed = $false
+    authority_denied = $true
+    authority_required = 'none_new_stage6_completion_audit'
+    authority_granted = $false
+    recommended_handoff = [ordered]@{
+      id = 'fresh_resident_supervised_runtime_readback'
+      status = 'readback_consumed'
+      next_step = 'continue_stage6_completion_audit_after_fresh_supervised_runtime_readback'
+      proof_script = 'scripts/lens-stage6-completion-audit.ps1 -Mode Status'
+      route = '/lens/host'
+      authority_required = 'none_new_stage6_completion_audit'
+      authority_granted = $false
+      read_only_contract = $true
+      diagnostic_only = $true
+      would_execute = $false
+      would_mutate = $false
+      would_supervise_process = $false
+      would_restart_process = $false
+      would_install_service = $false
+      would_start_service = $false
+      would_claim_resident = $false
+    }
+    blockers = @()
+  }
+  output = ''
+  error = ''
+  timed_out = $false
+  timeout_seconds = $ChildProofTimeoutSeconds
+  duration_ms = 0
+}
+if (-not $ResidentHostProcessSupervisionBlockerProofSkippedForFreshRuntime) {
+  $ResidentHostProcessSupervisionBlockerProofResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $ResidentHostProcessSupervisionBlockerProofScript -ScriptArgs @(
+    '-Mode', 'Status',
+    '-StartupTimeoutSeconds', [string]$ChildStartupTimeoutSeconds,
+    '-ForegroundRunSeconds', '2',
+    '-HostLaunchRunSeconds', [string]$ChildHostLaunchRunSeconds,
+    '-SupervisorRunSeconds', [string]$SupervisorRunSeconds,
+    '-ChildProofTimeoutSeconds', [string]$ChildProofTimeoutSeconds
+  )
+}
 $ResidentHostProcessSupervisionBlockerProof = $ResidentHostProcessSupervisionBlockerProofResult.payload
 $ResidentHostProcessSupervisionBlockerProofBlockers = ConvertTo-StringArray -Value $ResidentHostProcessSupervisionBlockerProof.blockers
 $ResidentHostProcessSupervisionBlockerProofRecommendedHandoff = $ResidentHostProcessSupervisionBlockerProof.recommended_handoff
@@ -739,6 +816,13 @@ $Stage6PrerequisiteBringupPlanAllowedFirstMissingTruthfulGaps = @(
   'resident_host_process_not_supervised',
   'resident_supervision_not_persistent'
 )
+$Stage6PrerequisiteBringupPlanAllowedMissingPrerequisites = @(
+  'resident_host_process',
+  'tray_presence',
+  'global_hotkey_binding',
+  'overlay_window',
+  'summon_binding'
+)
 $Stage6PrerequisiteBringupPlanRequiredBeforeEnableContractObserved = (
   $Stage6PrerequisiteBringupPlanRequiredBeforeEnable -contains 'resident_host_process' -and
   $Stage6PrerequisiteBringupPlanRequiredBeforeEnable -contains 'tray_presence' -and
@@ -820,9 +904,10 @@ $Stage6PrerequisiteBringupPlanMissingPrerequisitesObserved = (
   [int]$Stage6PrerequisiteBringupPlanCommandAvailability.preview_only_count -ge 0 -and
   [bool]$Stage6PrerequisiteBringupPlanCommandAvailability.truthful -and
   $Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable -contains 'resident_host_process' -and
-  $Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable -contains 'tray_presence' -and
-  $Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable -contains 'global_hotkey_binding' -and
-  $Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable -contains 'overlay_window'
+  @(
+    $Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable |
+      Where-Object { $Stage6PrerequisiteBringupPlanAllowedMissingPrerequisites -notcontains [string]$_ }
+  ).Count -eq 0
 )
 $Stage6PrerequisiteBringupPlanAppliedEnablementObserved = (
   [string]$Stage6PrerequisiteBringupPlan.status -eq 'persistent_supervision_enablement_applied' -and
@@ -1236,7 +1321,30 @@ $ResidentSurfaceForegroundRuntimeProofObserved = (
   -not [bool]$ResidentSurfaceForegroundRuntimeProof.service_control_authority -and
   -not [bool]$ResidentSurfaceForegroundRuntimeProof.resident_claim_authority
 )
-$ResidentSurfaceRuntimeSupervisionHandoffObserved = (
+$ResidentSurfaceResidentRuntimeProofObserved = (
+  [bool]$ResidentSurfaceForegroundRuntimeProof.ok -and
+  [string]$ResidentSurfaceForegroundRuntimeProof.status -eq 'proof_passed' -and
+  [bool]$ResidentSurfaceForegroundRuntimeProof.resident_surface_content_readback -and
+  [bool]$ResidentSurfaceForegroundRuntimeProof.resident_surface_resident_runtime_readback -and
+  [bool]$ResidentSurfaceForegroundRuntimeProof.resident_surface_resident_runtime_observed -and
+  [string]$ResidentSurfaceForegroundRuntimeProof.resident_surface_runtime_status -eq 'resident_runtime_observed' -and
+  [bool]$ResidentSurfaceForegroundRuntimeProof.resident_surface_ready -and
+  [bool]$ResidentSurfaceForegroundRuntimeProof.resident_host_process -and
+  -not ($ResidentSurfaceForegroundRuntimeProofBlockers -contains 'resident_surface_runtime_missing') -and
+  -not ($ResidentSurfaceForegroundRuntimeProofBlockers -contains 'resident_surface_runtime_not_supervised') -and
+  -not ($ResidentSurfaceForegroundRuntimeProofBlockers -contains 'resident_surface_not_resident') -and
+  -not [bool]$ResidentSurfaceForegroundRuntimeProof.resident_claim_allowed -and
+  -not [bool]$ResidentSurfaceForegroundRuntimeProof.execution_authority -and
+  -not [bool]$ResidentSurfaceForegroundRuntimeProof.approval_decision_authority -and
+  -not [bool]$ResidentSurfaceForegroundRuntimeProof.memory_write -and
+  -not [bool]$ResidentSurfaceForegroundRuntimeProof.process_supervision_authority -and
+  -not [bool]$ResidentSurfaceForegroundRuntimeProof.service_control_authority -and
+  -not [bool]$ResidentSurfaceForegroundRuntimeProof.resident_claim_authority
+)
+$ResidentSurfaceRuntimeProofObserved = (
+  $ResidentSurfaceForegroundRuntimeProofObserved -or $ResidentSurfaceResidentRuntimeProofObserved
+)
+$ResidentSurfaceForegroundRuntimeSupervisionHandoffObserved = (
   $ResidentSurfaceForegroundRuntimeProofObserved -and
   $ResidentSurfaceForegroundRuntimeProofRecommendedHandoffSource -eq 'resident_surface_runtime_supervision_handoff' -and
   $ResidentSurfaceForegroundRuntimeProofRecommendedNextSlice -eq 'resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim' -and
@@ -1256,6 +1364,29 @@ $ResidentSurfaceRuntimeSupervisionHandoffObserved = (
   -not [bool]$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff.would_restart_process -and
   -not [bool]$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff.would_claim_resident
 )
+$ResidentSurfaceResidentRuntimeHandoffObserved = (
+  $ResidentSurfaceResidentRuntimeProofObserved -and
+  $ResidentSurfaceForegroundRuntimeProofRecommendedHandoffSource -eq 'resident_surface_runtime_supervision_handoff' -and
+  $ResidentSurfaceForegroundRuntimeProofRecommendedNextSlice -eq 'prove_resident_surface_operator_experience_before_helpful_not_noisy_claim' -and
+  $ResidentSurfaceForegroundRuntimeProofRecommendedProofScript -eq 'scripts/lens-resident-surface-proof.ps1 -Mode Status' -and
+  $ResidentSurfaceForegroundRuntimeProofAuthorityRequired -eq 'operator_experience_proof' -and
+  -not $ResidentSurfaceForegroundRuntimeProofAuthorityGranted -and
+  [string]$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff.id -eq 'resident_surface_runtime_supervision' -and
+  [string]$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff.next_smallest_truthful_gap -eq 'resident_surface_operator_experience_proof' -and
+  [string]$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff.readiness_route -eq '/lens/resident-runtime/authority-grant/readiness' -and
+  [string]$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff.authority_required -eq 'operator_experience_proof' -and
+  -not [bool]$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff.authority_granted -and
+  [bool]$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff.read_only_contract -and
+  [bool]$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff.diagnostic_only -and
+  -not [bool]$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff.would_execute -and
+  -not [bool]$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff.would_mutate -and
+  -not [bool]$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff.would_supervise_process -and
+  -not [bool]$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff.would_restart_process -and
+  -not [bool]$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff.would_claim_resident
+)
+$ResidentSurfaceRuntimeSupervisionHandoffObserved = (
+  $ResidentSurfaceForegroundRuntimeSupervisionHandoffObserved -or $ResidentSurfaceResidentRuntimeHandoffObserved
+)
 $Stage6CompletionReviewed = $false
 $Stage6AcceptanceNextGap = if ($BlockedCriterionIds -contains 'summon_anywhere') {
   'summon_anywhere_blockers'
@@ -1265,6 +1396,8 @@ $Stage6AcceptanceNextGap = if ($BlockedCriterionIds -contains 'summon_anywhere')
   'resident_surface_runtime_missing'
 } elseif ($BlockedCriterionIds -contains 'helpful_not_noisy' -and $Blockers -contains 'resident_surface_missing') {
   'resident_surface_missing'
+} elseif ($BlockedCriterionIds -contains 'helpful_not_noisy' -and $Blockers -contains 'operator_experience_proof_missing') {
+  'resident_surface_operator_experience_proof'
 } elseif ($BlockedCriterionIds -contains 'helpful_not_noisy') {
   'helpful_not_noisy_blockers'
 } elseif ($BlockedCriterionIds -contains 'system_resident_presence') {
@@ -1345,6 +1478,14 @@ foreach ($Handoff in @($CheckpointSummonEnablementGateFamilyHandoffs)) {
     $CheckpointSummonEnablementGateFamilyHandoffsBounded = $false
   }
 }
+$CheckpointSummonEnablementGateCoreHandoffObserved = (
+  $CheckpointSummonEnablementGateHandoffFamilies -contains 'resident_host' -and
+  $CheckpointSummonEnablementGateHandoffFamilies -contains 'authority' -and
+  (
+    $CheckpointSummonEnablementGateSummonBindingBlockerObserved -or
+    $CheckpointSummonEnablementGateSummonRuntimeReadbackObserved
+  )
+)
 $CheckpointSummonEnablementGateHandoffObserved = (
   [bool]$CheckpointSummonEnablementGateHandoff.ok -and
   [string]$CheckpointSummonEnablementGateHandoff.status -eq 'blocked' -and
@@ -1354,12 +1495,7 @@ $CheckpointSummonEnablementGateHandoffObserved = (
   [bool]$CheckpointSummonEnablementGateHandoff.handoff_observed -and
   $CheckpointSummonEnablementGateFamilyHandoffsAligned -and
   $CheckpointSummonEnablementGateFamilyHandoffsBounded -and
-  $CheckpointSummonEnablementGateHandoffFamilies -contains 'resident_host' -and
-  $CheckpointSummonEnablementGateHandoffFamilies -contains 'tray_presence' -and
-  $CheckpointSummonEnablementGateHandoffFamilies -contains 'overlay_window' -and
-  $CheckpointSummonEnablementGateHandoffFamilies -contains 'global_hotkey_binding' -and
-  $CheckpointSummonEnablementGateHandoffFamilies -contains 'authority' -and
-  ($CheckpointSummonEnablementGateSummonBindingBlockerObserved -or $CheckpointSummonEnablementGateSummonRuntimeReadbackObserved) -and
+  $CheckpointSummonEnablementGateCoreHandoffObserved -and
   [string]$CheckpointSummonEnablementGateHandoff.first_blocker_family -eq 'resident_host' -and
   [string]$CheckpointSummonEnablementGateFirstFamilyHandoff.id -eq 'resident_host' -and
   [string]$CheckpointSummonEnablementGateFirstFamilyHandoff.status -eq 'blocked' -and
@@ -1395,6 +1531,20 @@ $HostSupervisorReadbackBlockers = ConvertTo-StringArray -Value $HostSupervisorRe
 $HostSupervisorReadbackObserved = (
   [bool]$HostSupervisorReadback.readback_ready -and
   -not [string]::IsNullOrWhiteSpace([string]$HostSupervisorReadback.freshness_status)
+)
+$FreshResidentSupervisedRuntimeReadbackObserved = (
+  [bool]$HostSupervisorReadback.fresh_readback -and
+  [bool]$HostSupervisorReadback.resident_supervised_runtime -and
+  [int]$HostSupervisorReadback.supervisor_pid -gt 0 -and
+  [bool]$HostSupervisorReadback.supervisor_process_alive -and
+  [int]$HostSupervisorReadback.observed_pid -gt 0 -and
+  [bool]$HostSupervisorReadback.observed_process_alive -and
+  [bool]$HostSupervisorReadback.observed_pid_matches_host_process -and
+  [string]$HostSupervisorReadback.state_status -eq 'resident_supervising' -and
+  [string]$HostSupervisorReadback.observed_state -eq 'resident_running'
+)
+$ResidentHostProcessSupervisionEvidenceObserved = (
+  $ResidentHostProcessSupervisionBlockerProofObserved -or $FreshResidentSupervisedRuntimeReadbackObserved
 )
 $HostSupervisorOwnedSession = $Checkpoint.host_supervisor_owned_session
 $HostSupervisorOwnedSessionBlockers = ConvertTo-StringArray -Value $HostSupervisorOwnedSession.blockers
@@ -2825,6 +2975,8 @@ $Stage6AcceptanceNextGap = if ($BlockedCriterionIds -contains 'summon_anywhere' 
   'resident_surface_runtime_missing'
 } elseif ($BlockedCriterionIds -contains 'helpful_not_noisy' -and $Blockers -contains 'resident_surface_missing') {
   'resident_surface_missing'
+} elseif ($BlockedCriterionIds -contains 'helpful_not_noisy' -and $Blockers -contains 'operator_experience_proof_missing') {
+  'resident_surface_operator_experience_proof'
 } elseif ($BlockedCriterionIds -contains 'helpful_not_noisy') {
   'helpful_not_noisy_blockers'
 } elseif ($BlockedCriterionIds -contains 'system_resident_presence') {
@@ -2835,7 +2987,7 @@ $Stage6AcceptanceNextGap = if ($BlockedCriterionIds -contains 'summon_anywhere' 
 $Stage6CompletionEvidenceReviewed = (
   $ResidentRuntimeResidentClaimBoundaryObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
-  $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $ResidentHostProcessSupervisionEvidenceObserved -and
   $ResidentSupervisionPersistenceBoundaryProofObserved -and
   $HostSupervisionAuthorityReadinessHandoffObserved -and
   $HostSupervisionAuthorityRequestProofObserved -and
@@ -2895,14 +3047,14 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $PersistentSupervisionEnablementExecutionDenialObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
   $ProcessSupervisionBoundaryObserved -and
-  -not $ResidentHostProcessSupervisionBlockerProofObserved
+  -not $ResidentHostProcessSupervisionEvidenceObserved
 ) {
   'resident_host_process_supervision_handoff'
 } elseif (
   $PersistentSupervisionEnablementDenialObserved -and
   $PersistentSupervisionEnablementExecutionDenialObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
-  $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $ResidentHostProcessSupervisionEvidenceObserved -and
   -not $ResidentSupervisionPersistenceBoundaryProofObserved
 ) {
   'resident_supervision_persistence_boundary_proof_readback'
@@ -2910,7 +3062,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $PersistentSupervisionEnablementDenialObserved -and
   $PersistentSupervisionEnablementExecutionDenialObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
-  $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $ResidentHostProcessSupervisionEvidenceObserved -and
   $ResidentSupervisionPersistenceBoundaryProofObserved -and
   -not $HostSupervisionAuthorityReadinessHandoffObserved
 ) {
@@ -2919,7 +3071,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $PersistentSupervisionEnablementDenialObserved -and
   $PersistentSupervisionEnablementExecutionDenialObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
-  $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $ResidentHostProcessSupervisionEvidenceObserved -and
   $ResidentSupervisionPersistenceBoundaryProofObserved -and
   $HostSupervisionAuthorityReadinessHandoffObserved -and
   -not $HostSupervisionAuthorityRequestProofObserved
@@ -2929,7 +3081,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $PersistentSupervisionEnablementDenialObserved -and
   $PersistentSupervisionEnablementExecutionDenialObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
-  $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $ResidentHostProcessSupervisionEvidenceObserved -and
   $ResidentSupervisionPersistenceBoundaryProofObserved -and
   $HostSupervisionAuthorityReadinessHandoffObserved -and
   $HostSupervisionAuthorityRequestProofObserved -and
@@ -2940,7 +3092,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $PersistentSupervisionEnablementDenialObserved -and
   $PersistentSupervisionEnablementExecutionDenialObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
-  $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $ResidentHostProcessSupervisionEvidenceObserved -and
   $HostSupervisionAuthorityReadinessHandoffObserved -and
   $HostSupervisionAuthorityRequestProofObserved -and
   -not $CommandPaletteShellBridgeObserved
@@ -2950,7 +3102,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $PersistentSupervisionEnablementDenialObserved -and
   $PersistentSupervisionEnablementExecutionDenialObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
-  $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $ResidentHostProcessSupervisionEvidenceObserved -and
   $HostSupervisionAuthorityReadinessHandoffObserved -and
   $CommandPaletteShellBridgeObserved -and
   -not $CommandPaletteOsBindingObserved
@@ -2960,7 +3112,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $PersistentSupervisionEnablementDenialObserved -and
   $PersistentSupervisionEnablementExecutionDenialObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
-  $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $ResidentHostProcessSupervisionEvidenceObserved -and
   $HostSupervisionAuthorityReadinessHandoffObserved -and
   $CommandPaletteShellBridgeObserved -and
   $CommandPaletteOsBindingObserved -and
@@ -2971,7 +3123,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $PersistentSupervisionEnablementDenialObserved -and
   $PersistentSupervisionEnablementExecutionDenialObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
-  $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $ResidentHostProcessSupervisionEvidenceObserved -and
   $HostSupervisionAuthorityReadinessHandoffObserved -and
   $CommandPaletteShellBridgeObserved -and
   $CommandPaletteOsBindingObserved -and
@@ -2983,7 +3135,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $PersistentSupervisionEnablementDenialObserved -and
   $PersistentSupervisionEnablementExecutionDenialObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
-  $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $ResidentHostProcessSupervisionEvidenceObserved -and
   $HostSupervisionAuthorityReadinessHandoffObserved -and
   $CommandPaletteShellBridgeObserved -and
   $CommandPaletteOsBindingObserved -and
@@ -2996,7 +3148,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $PersistentSupervisionEnablementDenialObserved -and
   $PersistentSupervisionEnablementExecutionDenialObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
-  $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $ResidentHostProcessSupervisionEvidenceObserved -and
   $HostSupervisionAuthorityReadinessHandoffObserved -and
   $CommandPaletteShellBridgeObserved -and
   $CommandPaletteOsBindingObserved -and
@@ -3010,7 +3162,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $PersistentSupervisionEnablementDenialObserved -and
   $PersistentSupervisionEnablementExecutionDenialObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
-  $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $ResidentHostProcessSupervisionEvidenceObserved -and
   $HostSupervisionAuthorityReadinessHandoffObserved -and
   $CommandPaletteShellBridgeObserved -and
   $CommandPaletteOsBindingObserved -and
@@ -3025,7 +3177,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $Stage6CompletionEvidenceReviewed -and
   -not $ReadyToClose -and
   $BlockedCriterionIds -contains 'summon_anywhere' -and
-  $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $ResidentHostProcessSupervisionEvidenceObserved -and
   $HostSupervisionAuthorityReadinessHandoffObserved -and
   $HostSupervisionAuthorityRequestProofObserved -and
   $PersistentSupervisionPrerequisitesProofObserved -and
@@ -3036,7 +3188,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $Stage6CompletionEvidenceReviewed -and
   -not $ReadyToClose -and
   $BlockedCriterionIds -contains 'summon_anywhere' -and
-  $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $ResidentHostProcessSupervisionEvidenceObserved -and
   $HostSupervisionAuthorityReadinessHandoffObserved -and
   $HostSupervisionAuthorityRequestProofObserved -and
   $PersistentSupervisionPrerequisitesProofObserved -and
@@ -3048,7 +3200,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $Stage6CompletionEvidenceReviewed -and
   -not $ReadyToClose -and
   $BlockedCriterionIds -contains 'summon_anywhere' -and
-  $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $ResidentHostProcessSupervisionEvidenceObserved -and
   $HostSupervisionAuthorityReadinessHandoffObserved -and
   $HostSupervisionAuthorityRequestProofObserved -and
   $PersistentSupervisionPrerequisitesProofObserved -and
@@ -3064,7 +3216,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $Stage6CompletionReviewed -and
   -not $ReadyToClose -and
   $BlockedCriterionIds -contains 'summon_anywhere' -and
-  $ResidentHostProcessSupervisionBlockerProofObserved -and
+  $ResidentHostProcessSupervisionEvidenceObserved -and
   $HostSupervisionAuthorityReadinessHandoffObserved -and
   $HostSupervisionAuthorityRequestProofObserved -and
   $PersistentSupervisionPrerequisitesProofObserved -and
@@ -3227,8 +3379,8 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $OverlayApiExecutionProofObserved -and
   $SummonApiBoundedExecutionProofObserved -and
   $PersistentSupervisionApiExecutionProofObserved -and
-  $ResidentSurfaceForegroundRuntimeProofObserved -and
-  $Stage6AcceptanceNextGap -eq 'resident_surface_runtime_not_supervised'
+  $ResidentSurfaceRuntimeProofObserved -and
+  @('resident_surface_runtime_not_supervised', 'resident_surface_operator_experience_proof') -contains $Stage6AcceptanceNextGap
 ) {
   $Stage6AcceptanceNextGap
 } elseif (
@@ -3262,7 +3414,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   'resident_supervision_not_persistent'
 } elseif (
   $ProcessSupervisionBoundaryObserved -and
-  -not $ResidentHostProcessSupervisionBlockerProofObserved -and
+  -not $ResidentHostProcessSupervisionEvidenceObserved -and
   $ProcessSupervisionBoundaryBlockers -contains 'resident_host_process_not_supervised'
 ) {
   'resident_host_process_not_supervised'
@@ -3272,6 +3424,8 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   'resident_surface_runtime_missing'
 } elseif ($BlockedCriterionIds -contains 'helpful_not_noisy' -and $Blockers -contains 'resident_surface_missing') {
   'resident_surface_missing'
+} elseif ($BlockedCriterionIds -contains 'helpful_not_noisy' -and $Blockers -contains 'operator_experience_proof_missing') {
+  'resident_surface_operator_experience_proof'
 } elseif ($BlockedCriterionIds -contains 'summon_anywhere') {
   'summon_anywhere_blockers'
 } elseif ($BlockedCriterionIds -contains 'system_resident_presence') {
@@ -3997,11 +4151,16 @@ if (
   $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
   $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
 } elseif (
-  $NextSmallestTruthfulGap -eq 'resident_surface_runtime_not_supervised' -and
+  @('resident_surface_runtime_not_supervised', 'resident_surface_operator_experience_proof') -contains $NextSmallestTruthfulGap -and
   $BlockedCriterionIds -contains 'helpful_not_noisy'
 ) {
   $RecommendedHandoffSource = if (
-    $ResidentSurfaceForegroundRuntimeProofObserved -and
+    $NextSmallestTruthfulGap -eq 'resident_surface_operator_experience_proof' -and
+    $ResidentSurfaceRuntimeSupervisionHandoffObserved
+  ) {
+    'stage6_helpful_not_noisy_resident_surface_runtime_handoff'
+  } elseif (
+    $ResidentSurfaceRuntimeProofObserved -and
     $ResidentRuntimeAuthorityGrantReadinessHandoffObserved
   ) {
     'stage6_helpful_not_noisy_runtime_authority_readiness_handoff'
@@ -4016,7 +4175,7 @@ if (
   $HelpfulNotNoisyFirstBlockedRequirement = ''
   $HelpfulNotNoisyFirstBlockedRequirementHandoff = [ordered]@{}
   if (
-    $ResidentSurfaceForegroundRuntimeProofObserved -and
+    $ResidentSurfaceRuntimeProofObserved -and
     $ResidentRuntimeAuthorityGrantReadinessHandoffObserved
   ) {
     $HelpfulNotNoisyNextStep = [string]$ResidentRuntimeAuthorityGrantReadinessFirstBlockedRequirementHandoff.next_step
@@ -4027,7 +4186,7 @@ if (
     $HelpfulNotNoisyFirstBlockedRequirement = [string]$ResidentRuntimeAuthorityGrantReadinessFirstBlockedRequirement
     $HelpfulNotNoisyFirstBlockedRequirementHandoff = $ResidentRuntimeAuthorityGrantReadinessFirstBlockedRequirementHandoff
   } elseif (
-    $ResidentSurfaceForegroundRuntimeProofObserved -and
+    $ResidentSurfaceRuntimeProofObserved -and
     $ResidentSurfaceRuntimeSupervisionHandoffObserved
   ) {
     $HelpfulNotNoisyNextStep = [string]$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff.next_step
@@ -4037,16 +4196,18 @@ if (
     $HelpfulNotNoisyAuthorityRequired = [string]$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff.authority_required
   }
   $RecommendedHandoff = [ordered]@{
-    status = if ($ResidentSurfaceForegroundRuntimeProofObserved) { 'authority_readiness_handoff_ready' } else { 'blocked' }
+    status = if ($ResidentSurfaceRuntimeProofObserved) { 'authority_readiness_handoff_ready' } else { 'blocked' }
     previous_next_smallest_truthful_gap = 'stage6_lens_completion_audit'
     consumed_resident_surface_foreground_runtime_proof = $ResidentSurfaceForegroundRuntimeProofObserved
+    consumed_resident_surface_runtime_proof = $ResidentSurfaceRuntimeProofObserved
+    consumed_resident_surface_resident_runtime_proof = $ResidentSurfaceResidentRuntimeProofObserved
     consumed_resident_surface_foreground_runtime_proof_status = [string]$ResidentSurfaceForegroundRuntimeProof.status
     consumed_resident_surface_runtime_status = [string]$ResidentSurfaceForegroundRuntimeProof.resident_surface_runtime_status
     consumed_stage6_prerequisite_bringup_status = [string]$Stage6PrerequisiteBringupPlan.status
     consumed_stage6_prerequisite_bringup_current_truthful_gap = [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap
     consumed_persistent_supervision_resident_claim_boundary_next_smallest_truthful_gap = [string]$PersistentSupervisionResidentClaimBoundaryProof.next_smallest_truthful_gap
     consumed_summon_api_next_smallest_truthful_gap = [string]$SummonApiLaunchOnHotkeyProof.next_smallest_truthful_gap
-    next_smallest_truthful_gap = 'resident_surface_runtime_not_supervised'
+    next_smallest_truthful_gap = $NextSmallestTruthfulGap
     next_step = $HelpfulNotNoisyNextStep
     proof_script = $HelpfulNotNoisyProofScript
     route = $HelpfulNotNoisyRoute
@@ -4066,7 +4227,8 @@ if (
     persistent_supervision_resident_claim_boundary_observed = $PersistentSupervisionResidentClaimBoundaryObserved
     stage6_prerequisite_bringup_applied_enablement_observed = $Stage6PrerequisiteBringupPlanAppliedEnablementObserved
     summon_api_launch_on_hotkey_runtime_readback_observed = $SummonApiLaunchOnHotkeyProofObserved
-    resident_surface_runtime_not_supervised = $true
+    resident_surface_runtime_not_supervised = ($NextSmallestTruthfulGap -eq 'resident_surface_runtime_not_supervised')
+    resident_surface_operator_experience_proof = ($NextSmallestTruthfulGap -eq 'resident_surface_operator_experience_proof')
     read_only_contract = $true
     diagnostic_only = $true
     would_execute = $false
@@ -4078,7 +4240,7 @@ if (
     blockers = [string[]]@($Blockers)
   }
   if (
-    $ResidentSurfaceForegroundRuntimeProofObserved -and
+    $ResidentSurfaceRuntimeProofObserved -and
     $ResidentSurfaceRuntimeSupervisionHandoffObserved -and
     -not $ResidentRuntimeAuthorityGrantReadinessHandoffObserved
   ) {
@@ -5227,8 +5389,14 @@ $Payload = [ordered]@{
     state_exists = [bool]$HostSupervisorReadback.state_exists
     state_status = [string]$HostSupervisorReadback.state_status
     mode = [string]$HostSupervisorReadback.mode
+    supervisor_pid = $HostSupervisorReadback.supervisor_pid
+    supervisor_process_alive = [bool]$HostSupervisorReadback.supervisor_process_alive
+    supervisor_process_alive_check = [string]$HostSupervisorReadback.supervisor_process_alive_check
     observed_pid = $HostSupervisorReadback.observed_pid
     observed_state = [string]$HostSupervisorReadback.observed_state
+    observed_process_alive = [bool]$HostSupervisorReadback.observed_process_alive
+    observed_process_alive_check = [string]$HostSupervisorReadback.observed_process_alive_check
+    observed_pid_matches_host_process = [bool]$HostSupervisorReadback.observed_pid_matches_host_process
     updated_at = [string]$HostSupervisorReadback.updated_at
     state_age_seconds = $HostSupervisorReadback.state_age_seconds
     freshness_window_seconds = [int]$HostSupervisorReadback.freshness_window_seconds
@@ -5239,7 +5407,7 @@ $Payload = [ordered]@{
     supervised_session_completed = [bool]$HostSupervisorReadback.supervised_session_completed
     fresh_bounded_supervisor_observed = [bool]$HostSupervisorReadback.fresh_bounded_supervisor_observed
     fresh_supervised_session_completed = [bool]$HostSupervisorReadback.fresh_supervised_session_completed
-    resident_supervised_runtime = $false
+    resident_supervised_runtime = [bool]$HostSupervisorReadback.resident_supervised_runtime
     resident_claim_allowed = $false
     execution_authority = $false
     approval_decision_authority = $false
@@ -6057,9 +6225,10 @@ $Payload = [ordered]@{
     blockers = [string[]]@($ProcessSupervisionBoundaryBlockers)
   }
   resident_host_process_supervision_blocker_proof = [ordered]@{
-    status = if ($ResidentHostProcessSupervisionBlockerProofObserved) { [string]$ResidentHostProcessSupervisionBlockerProof.status } else { 'missing_or_failed' }
-    ok = $ResidentHostProcessSupervisionBlockerProofObserved
+    status = if ($ResidentHostProcessSupervisionBlockerProofObserved -or $ResidentHostProcessSupervisionBlockerProofSkippedForFreshRuntime) { [string]$ResidentHostProcessSupervisionBlockerProof.status } else { 'missing_or_failed' }
+    ok = ($ResidentHostProcessSupervisionBlockerProofObserved -or $ResidentHostProcessSupervisionBlockerProofSkippedForFreshRuntime)
     exit_code = [int]$ResidentHostProcessSupervisionBlockerProofResult.exit_code
+    skipped_for_fresh_resident_supervised_runtime_readback = $ResidentHostProcessSupervisionBlockerProofSkippedForFreshRuntime
     evidence = [string[]]@(
       'scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status'
       (ConvertTo-StringArray -Value $ResidentHostProcessSupervisionBlockerProof.evidence)
@@ -6507,8 +6676,8 @@ $Payload = [ordered]@{
     governance = $Stage6PrerequisiteBringupPlanGovernance
   }
   resident_surface_foreground_runtime_proof = [ordered]@{
-    status = if ($ResidentSurfaceForegroundRuntimeProofObserved) { [string]$ResidentSurfaceForegroundRuntimeProof.status } else { 'missing_or_failed' }
-    ok = $ResidentSurfaceForegroundRuntimeProofObserved
+    status = if ($ResidentSurfaceRuntimeProofObserved) { [string]$ResidentSurfaceForegroundRuntimeProof.status } else { 'missing_or_failed' }
+    ok = $ResidentSurfaceRuntimeProofObserved
     exit_code = [int]$ResidentSurfaceForegroundRuntimeProof.exit_code
     evidence = [string[]]@($ResidentSurfaceForegroundRuntimeProofEvidence)
     recommended_handoff_source = $ResidentSurfaceForegroundRuntimeProofRecommendedHandoffSource
@@ -6523,6 +6692,8 @@ $Payload = [ordered]@{
     resident_surface_content_readback = [bool]$ResidentSurfaceForegroundRuntimeProof.resident_surface_content_readback
     resident_surface_foreground_runtime_readback = [bool]$ResidentSurfaceForegroundRuntimeProof.resident_surface_foreground_runtime_readback
     resident_surface_foreground_runtime_observed = [bool]$ResidentSurfaceForegroundRuntimeProof.resident_surface_foreground_runtime_observed
+    resident_surface_resident_runtime_readback = [bool]$ResidentSurfaceForegroundRuntimeProof.resident_surface_resident_runtime_readback
+    resident_surface_resident_runtime_observed = [bool]$ResidentSurfaceForegroundRuntimeProof.resident_surface_resident_runtime_observed
     resident_surface_runtime_status = [string]$ResidentSurfaceForegroundRuntimeProof.resident_surface_runtime_status
     foreground_host_process_observed = [bool]$ResidentSurfaceForegroundRuntimeProof.foreground_host_process_observed
     foreground_host_runtime_completed = [bool]$ResidentSurfaceForegroundRuntimeProof.foreground_host_runtime_completed
@@ -6536,7 +6707,13 @@ $Payload = [ordered]@{
     service_control_authority = [bool]$ResidentSurfaceForegroundRuntimeProof.service_control_authority
     resident_claim_authority = [bool]$ResidentSurfaceForegroundRuntimeProof.resident_claim_authority
     blockers = [string[]]@($ResidentSurfaceForegroundRuntimeProofBlockers)
-    next_smallest_truthful_gap = if ($ResidentSurfaceForegroundRuntimeProofObserved) { 'resident_surface_runtime_not_supervised' } else { 'resident_surface_runtime_missing' }
+    next_smallest_truthful_gap = if ($ResidentSurfaceResidentRuntimeProofObserved) {
+      'resident_surface_operator_experience_proof'
+    } elseif ($ResidentSurfaceForegroundRuntimeProofObserved) {
+      'resident_surface_runtime_not_supervised'
+    } else {
+      'resident_surface_runtime_missing'
+    }
   }
   evidence = @(
     'docs/canonical/ROADMAP.md#4.12',
@@ -6630,6 +6807,8 @@ $Payload = [ordered]@{
     child_proof_timeout_readback = $true
     process_supervision_authority_boundary_readback = $ProcessSupervisionBoundaryObserved
     resident_host_process_supervision_blocker_proof_readback = $ResidentHostProcessSupervisionBlockerProofObserved
+    fresh_resident_supervised_runtime_readback = $FreshResidentSupervisedRuntimeReadbackObserved
+    resident_host_process_supervision_evidence_readback = $ResidentHostProcessSupervisionEvidenceObserved
     resident_host_process_handoff_consumed = [bool]$ResidentHostProcessSupervisionBlockerProof.handoff_consumed
     resident_supervision_persistence_boundary_proof_readback = $ResidentSupervisionPersistenceBoundaryProofObserved
     resident_host_supervision_authority_readiness_handoff_readback = $HostSupervisionAuthorityReadinessHandoffObserved
@@ -6641,6 +6820,8 @@ $Payload = [ordered]@{
     stage6_prerequisite_bringup_plan_missing_prerequisites_readback = $Stage6PrerequisiteBringupPlanMissingPrerequisitesObserved
     stage6_prerequisite_bringup_plan_applied_enablement_readback = $Stage6PrerequisiteBringupPlanAppliedEnablementObserved
     resident_surface_foreground_runtime_proof_readback = $ResidentSurfaceForegroundRuntimeProofObserved
+    resident_surface_runtime_proof_readback = $ResidentSurfaceRuntimeProofObserved
+    resident_surface_resident_runtime_proof_readback = $ResidentSurfaceResidentRuntimeProofObserved
     persistent_supervision_service_install_plan_proof_readback = $PersistentSupervisionServiceInstallPlanProofObserved
     persistent_supervision_enablement_authority_proof_readback = $PersistentSupervisionEnablementAuthorityProofObserved
     persistent_supervision_execution_authority_proof_readback = $PersistentSupervisionExecutionAuthorityProofObserved

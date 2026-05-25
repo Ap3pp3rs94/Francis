@@ -53,6 +53,29 @@ def _wait_for_runtime_status(path: Path, status: str, timeout_seconds: int = 15)
     raise AssertionError(f"Timed out waiting for {status}; latest={latest!r}")
 
 
+def _wait_for_supervisor_heartbeat(
+    path: Path,
+    *,
+    initial_updated_at: str,
+    initial_heartbeat_count: int,
+    timeout_seconds: int = 8,
+) -> dict[str, object]:
+    deadline = time.monotonic() + timeout_seconds
+    latest: dict[str, object] = {}
+    while time.monotonic() < deadline:
+        if path.is_file():
+            latest = json.loads(path.read_text(encoding="utf-8-sig"))
+            heartbeat_count = int(latest.get("heartbeat_count") or 0)
+            if (
+                latest.get("status") == "resident_supervising"
+                and latest.get("updated_at") != initial_updated_at
+                and heartbeat_count > initial_heartbeat_count
+            ):
+                return latest
+        time.sleep(0.1)
+    raise AssertionError(f"Timed out waiting for supervisor heartbeat; latest={latest!r}")
+
+
 def test_lens_host_supervisor_status_is_observation_only(tmp_path: Path) -> None:
     data_dir = tmp_path / "data"
     proc = _run_script(
@@ -140,6 +163,21 @@ def test_lens_host_supervisor_status_is_observation_only(tmp_path: Path) -> None
         "tray_registration_authority": False,
         "mutation_authority_granted": False,
     }
+
+
+def test_lens_host_supervisor_explicit_stop_tracks_observed_host_pid() -> None:
+    script = (_repo_root() / "scripts" / "lens-host-supervisor.ps1").read_text(encoding="utf-8")
+
+    assert "while (Test-ProcessAlive -ProcessId $RunningPid)" in script
+    assert "while (-not $Process.HasExited)" not in script
+
+
+def test_lens_host_supervisor_runtime_state_write_retries_atomic_move() -> None:
+    script = (_repo_root() / "scripts" / "lens-host-supervisor.ps1").read_text(encoding="utf-8")
+
+    assert "for ($Attempt = 0; $Attempt -lt 20 -and -not $Moved; $Attempt += 1)" in script
+    assert "Move-Item -LiteralPath $TempPath -Destination $Path -Force -ErrorAction Stop" in script
+    assert "Start-Sleep -Milliseconds 50" in script
 
 
 def test_lens_host_supervisor_observes_existing_bounded_host_without_restart(tmp_path: Path) -> None:
@@ -639,6 +677,25 @@ def test_lens_host_supervisor_starts_and_stops_live_resident_lease(tmp_path: Pat
         assert supervisor_state["resident_supervised_runtime"] is True
         assert supervisor_state["resident_claim_allowed"] is False
         assert supervisor_state["lease_mode"] == "explicit_stop"
+        assert supervisor_state["heartbeat_interval_ms"] == 500
+        assert supervisor_state["heartbeat_count"] >= 0
+        assert supervisor_state["last_heartbeat_at"] == supervisor_state["updated_at"]
+
+        supervisor_heartbeat = _wait_for_supervisor_heartbeat(
+            data_dir / "runtime" / "lens-host-supervisor" / "status.json",
+            initial_updated_at=str(supervisor_state["updated_at"]),
+            initial_heartbeat_count=int(supervisor_state["heartbeat_count"]),
+        )
+        assert supervisor_heartbeat["status"] == "resident_supervising"
+        assert supervisor_heartbeat["host_mode"] == "resident"
+        assert supervisor_heartbeat["supervisor_pid"] == payload["supervisor_pid"]
+        assert supervisor_heartbeat["supervisor_process_alive"] is True
+        assert supervisor_heartbeat["observed_pid"] == supervisor_state["observed_pid"]
+        assert supervisor_heartbeat["resident_supervised_runtime"] is True
+        assert supervisor_heartbeat["resident_claim_allowed"] is False
+        assert supervisor_heartbeat["lease_mode"] == "explicit_stop"
+        assert supervisor_heartbeat["supervision_started_at"] == supervisor_state["supervision_started_at"]
+        assert supervisor_heartbeat["last_heartbeat_at"] == supervisor_heartbeat["updated_at"]
 
         governance = payload["governance"]
         assert governance["product_execution_authority"] is False

@@ -4526,15 +4526,26 @@ def _resident_surface_readback_from_status(status: dict[str, Any]) -> dict[str, 
     hud_runtime = _as_dict(hud.get("runtime"))
     resident_surface_runtime = _resident_surface_runtime_from_host(resident_host)
     foreground_runtime_observed = bool(resident_surface_runtime.get("foreground_runtime_observed"))
-    next_smallest_truthful_gap = (
-        "resident_surface_runtime_not_supervised" if foreground_runtime_observed else "resident_surface_runtime_missing"
-    )
-    recommended_next_slice = (
-        "resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim"
-        if foreground_runtime_observed
-        else "prove_resident_surface_foreground_runtime_before_helpful_not_noisy_claim"
-    )
-    authority_required = "process_supervision_authority" if foreground_runtime_observed else "none_readback_first"
+    resident_runtime_observed = bool(resident_surface_runtime.get("resident_runtime_observed"))
+    resident_surface_ready = bool(resident_surface_runtime.get("resident_surface_ready"))
+    if resident_surface_ready:
+        next_smallest_truthful_gap = (
+            _safe_str(resident_surface_activation.get("next_smallest_truthful_gap")).strip()
+            or "resident_surface_operator_experience_proof"
+        )
+        recommended_next_slice = "prove_resident_surface_operator_experience_before_helpful_not_noisy_claim"
+        authority_required = "operator_experience_proof"
+        requirement_state = "resident_runtime_observed"
+    elif foreground_runtime_observed:
+        next_smallest_truthful_gap = "resident_surface_runtime_not_supervised"
+        recommended_next_slice = "resolve_resident_surface_runtime_supervision_before_helpful_not_noisy_claim"
+        authority_required = "process_supervision_authority"
+        requirement_state = "foreground_observed_not_supervised"
+    else:
+        next_smallest_truthful_gap = "resident_surface_runtime_missing"
+        recommended_next_slice = "prove_resident_surface_foreground_runtime_before_helpful_not_noisy_claim"
+        authority_required = "none_readback_first"
+        requirement_state = "runtime_missing"
     recommended_handoff = {
         "id": "resident_surface_runtime_supervision",
         "status": "blocked",
@@ -4548,7 +4559,7 @@ def _resident_surface_readback_from_status(status: dict[str, Any]) -> dict[str, 
         "host_route": "/lens/host",
         "acceptance_criterion": "helpful_not_noisy",
         "blocker": next_smallest_truthful_gap,
-        "requirement_state": "foreground_observed_not_supervised" if foreground_runtime_observed else "runtime_missing",
+        "requirement_state": requirement_state,
         "authority_required": authority_required,
         "authority_granted": False,
         "resident_runtime_authority_grant_readiness_route": "/lens/resident-runtime/authority-grant/readiness",
@@ -4584,7 +4595,19 @@ def _resident_surface_readback_from_status(status: dict[str, Any]) -> dict[str, 
             blocker_id = _safe_str(blocker).strip()
             if blocker_id and blocker_id not in blockers:
                 blockers.append(blocker_id)
-    if foreground_runtime_observed:
+    if resident_surface_ready:
+        blockers = [
+            blocker
+            for blocker in blockers
+            if blocker
+            not in {
+                "resident_surface_runtime_missing",
+                "resident_surface_runtime_not_supervised",
+                "resident_surface_not_resident",
+                "resident_host_process_not_supervised",
+            }
+        ]
+    elif foreground_runtime_observed:
         blockers = [blocker for blocker in blockers if blocker != "resident_surface_runtime_missing"]
     elif "resident_surface_runtime_missing" not in blockers:
         blockers.insert(0, "resident_surface_runtime_missing")
@@ -4656,7 +4679,8 @@ def _resident_surface_readback_from_status(status: dict[str, Any]) -> dict[str, 
         "hud_route": "/lens/hud",
         "content_contract_ready": True,
         "foreground_runtime_observed": foreground_runtime_observed,
-        "resident_surface_ready": False,
+        "resident_runtime_observed": resident_runtime_observed,
+        "resident_surface_ready": resident_surface_ready,
         "resident_claim_allowed": False,
         "resident_overlay_runtime": bool(hud_runtime.get("resident_overlay")),
         "resident_host": bool(resident_host.get("resident")),
@@ -4697,7 +4721,7 @@ def _resident_surface_readback_from_status(status: dict[str, Any]) -> dict[str, 
             "authority_grant_route": "/lens/resident-runtime/authority-grant",
             "plan_route": "/lens/resident-runtime/plan",
             "execute_route": "/lens/resident-runtime/execute",
-            "ready": False,
+            "ready": resident_surface_ready,
         },
         "resident_surface_runtime": resident_surface_runtime,
         "enablement_gates": {
@@ -4719,7 +4743,11 @@ def _resident_surface_readback_from_status(status: dict[str, Any]) -> dict[str, 
         "resident_runtime_authority_grant_readiness_route": "/lens/resident-runtime/authority-grant/readiness",
         "resident_runtime_authority_grant_handoff_observed": bool(resident_runtime_authority_grant_handoff),
         "resident_runtime_authority_grant_handoff": resident_runtime_authority_grant_handoff,
-        "message": "Resident surface content is readable from backend truth, but no resident runtime or OS surface is active.",
+        "message": (
+            "Resident surface content is backed by a supervised resident runtime; operator experience proof remains required."
+            if resident_surface_ready
+            else "Resident surface content is readable from backend truth, but no resident runtime or OS surface is active."
+        ),
         "governance": {
             "gate": "lens_resident_surface_readback",
             "read_only_contract": True,
@@ -4749,15 +4777,28 @@ def _resident_surface_runtime_from_host(resident_host: dict[str, Any]) -> dict[s
     supervisor_status = _safe_str(supervisor_readback.get("status")).strip()
     supervisor_freshness_status = _safe_str(supervisor_readback.get("freshness_status")).strip() or "missing"
     foreground_observed = process_alive and state_status == "foreground_running"
+    resident_supervised_runtime = (
+        process_alive
+        and state_status == "resident_running"
+        and bool(supervisor_readback.get("resident_supervised_runtime"))
+    )
     blockers = (
         ["resident_surface_runtime_not_supervised", "resident_surface_not_resident"]
         if foreground_observed
+        else []
+        if resident_supervised_runtime
         else ["resident_surface_runtime_missing"]
     )
     return {
         "ok": True,
         "kind": "lens.resident_surface.runtime_readback",
-        "status": "foreground_runtime_observed" if foreground_observed else "missing",
+        "status": (
+            "resident_runtime_observed"
+            if resident_supervised_runtime
+            else "foreground_runtime_observed"
+            if foreground_observed
+            else "missing"
+        ),
         "readback_ready": True,
         "source": "lens_host_process_readback",
         "host_route": "/lens/host",
@@ -4772,8 +4813,9 @@ def _resident_surface_runtime_from_host(resident_host: dict[str, Any]) -> dict[s
         "process_alive": process_alive,
         "process_alive_check": _safe_str(process_readback.get("process_alive_check")).strip(),
         "foreground_runtime_observed": foreground_observed,
+        "resident_runtime_observed": resident_supervised_runtime,
         "foreground_session_supported": bool(foreground_session.get("supported")),
-        "foreground_session_only": foreground_observed,
+        "foreground_session_only": foreground_observed and not resident_supervised_runtime,
         "supervisor_readback_status": supervisor_status,
         "supervisor_freshness_status": supervisor_freshness_status,
         "supervisor_state_age_seconds": supervisor_readback.get("state_age_seconds"),
@@ -4787,14 +4829,16 @@ def _resident_surface_runtime_from_host(resident_host: dict[str, Any]) -> dict[s
         "fresh_resident_runtime_candidate_supervised": bool(
             supervisor_readback.get("fresh_resident_runtime_candidate_supervised")
         ),
-        "resident_supervised_runtime": False,
-        "runtime_ready": False,
-        "resident_surface_ready": False,
+        "resident_supervised_runtime": resident_supervised_runtime,
+        "runtime_ready": resident_supervised_runtime,
+        "resident_surface_ready": resident_supervised_runtime,
         "resident_claim_allowed": False,
         "resident_overlay_runtime": False,
         "blockers": blockers,
         "message": (
-            "A bounded foreground Lens host process is observable but not resident or supervised."
+            "A supervised resident Lens host runtime is observed; resident claim remains governed."
+            if resident_supervised_runtime
+            else "A bounded foreground Lens host process is observable but not resident or supervised."
             if foreground_observed
             else "No Lens foreground or resident surface runtime is currently observed."
         ),

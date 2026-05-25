@@ -225,6 +225,7 @@ class LensOsBindingExecuteIn(BaseModel):
     mode: str = Field(default="bind")
     run_seconds: int = Field(default=300, ge=0, le=3600)
     allow_launch: bool = False
+    global_hotkey: str = ""
 
 
 class LensSummonAuthorityRequestIn(BaseModel):
@@ -402,6 +403,7 @@ def os_binding_execute(
         mode=payload.mode,
         run_seconds=payload.run_seconds,
         allow_launch=payload.allow_launch,
+        global_hotkey=payload.global_hotkey,
     )
 
 

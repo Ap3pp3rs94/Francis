@@ -293,7 +293,10 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert isinstance(host_supervisor_readback["fresh_readback"], bool)
     assert isinstance(host_supervisor_readback["fresh_bounded_supervisor_observed"], bool)
     assert isinstance(host_supervisor_readback["fresh_supervised_session_completed"], bool)
-    assert host_supervisor_readback["resident_supervised_runtime"] is False
+    assert isinstance(host_supervisor_readback["supervisor_process_alive"], bool)
+    assert isinstance(host_supervisor_readback["observed_process_alive"], bool)
+    assert isinstance(host_supervisor_readback["observed_pid_matches_host_process"], bool)
+    assert isinstance(host_supervisor_readback["resident_supervised_runtime"], bool)
     assert host_supervisor_readback["resident_claim_allowed"] is False
     assert host_supervisor_readback["execution_authority"] is False
     assert host_supervisor_readback["approval_decision_authority"] is False
@@ -1603,6 +1606,8 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
         "resident_overlay_boundary_observed": True,
         "resident_overlay_activation_boundary_observed": True,
         "resident_surface_foreground_runtime_proof_observed": True,
+        "resident_surface_runtime_proof_observed": True,
+        "resident_surface_resident_runtime_proof_observed": False,
         "resident_runtime_authority_boundary_observed": True,
         "resident_runtime_authority_grant_preflight_observed": True,
         "resident_runtime_execution_policy_contract_observed": True,

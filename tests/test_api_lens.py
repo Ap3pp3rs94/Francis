@@ -508,6 +508,7 @@ def _write_lens_host_supervisor_state(
     data_root: Path,
     *,
     observed_pid: int,
+    supervisor_pid: int | None = None,
     status: str = "supervised_session_completed",
     mode: str = "supervise_once",
     host_mode: str = "",
@@ -521,6 +522,7 @@ def _write_lens_host_supervisor_state(
     runtime_root = data_root / "runtime" / "lens-host-supervisor"
     runtime_root.mkdir(parents=True, exist_ok=True)
     observed_at = updated_at or datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    supervisor_pid_value = observed_pid if supervisor_pid is None else supervisor_pid
     (runtime_root / "status.json").write_text(
         json.dumps(
             {
@@ -528,6 +530,8 @@ def _write_lens_host_supervisor_state(
                 "status": status,
                 "mode": mode,
                 "host_mode": host_mode,
+                "supervisor_pid": supervisor_pid_value,
+                "supervisor_process_alive": bool(supervisor_pid_value),
                 "observed_pid": observed_pid,
                 "observed_state": observed_state,
                 "restarted_process": False,
@@ -2597,8 +2601,14 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "state_status": "",
         "mode": "",
         "host_mode": "",
+        "supervisor_pid": 0,
+        "supervisor_process_alive": False,
+        "supervisor_process_alive_check": "not_attempted_no_supervisor_pid",
         "observed_pid": 0,
         "observed_state": "",
+        "observed_process_alive": False,
+        "observed_process_alive_check": "not_attempted_no_observed_pid",
+        "observed_pid_matches_host_process": False,
         "updated_at": "",
         "state_age_seconds": None,
         "freshness_window_seconds": 900,
@@ -9096,6 +9106,7 @@ def test_lens_status_promotes_live_supervised_resident_host_before_tray(monkeypa
     _write_lens_host_supervisor_state(
         data_root,
         observed_pid=6789,
+        supervisor_pid=24680,
         status="resident_supervising",
         mode="supervise_resident",
         host_mode="resident",
@@ -9116,7 +9127,7 @@ def test_lens_status_promotes_live_supervised_resident_host_before_tray(monkeypa
 
     fixed_now = datetime(2026, 5, 1, 0, 0, 5, tzinfo=UTC).timestamp()
     monkeypatch.setattr(host_manifest_module.time, "time", lambda: fixed_now)
-    monkeypatch.setattr(host_manifest_module, "_process_alive_readback", lambda pid: (pid == 6789, "test"))
+    monkeypatch.setattr(host_manifest_module, "_process_alive_readback", lambda pid: (pid in {6789, 24680}, "test"))
 
     client = TestClient(create_app())
     response = client.get("/lens/status?limit=1")
@@ -9127,6 +9138,10 @@ def test_lens_status_promotes_live_supervised_resident_host_before_tray(monkeypa
     supervisor_readback = resident_host["supervisor_readback"]
     assert supervisor_readback["status"] == "resident_supervising"
     assert supervisor_readback["freshness_status"] == "fresh"
+    assert supervisor_readback["supervisor_pid"] == 24680
+    assert supervisor_readback["supervisor_process_alive"] is True
+    assert supervisor_readback["observed_process_alive"] is True
+    assert supervisor_readback["observed_pid_matches_host_process"] is True
     assert supervisor_readback["resident_supervised_runtime"] is True
     assert supervisor_readback["process_supervision_authority"] is True
     assert supervisor_readback["service_control_authority"] is False
@@ -9156,6 +9171,23 @@ def test_lens_status_promotes_live_supervised_resident_host_before_tray(monkeypa
     assert "resident_host_process_not_supervised" not in supervision_gate["blockers"]
     assert "resident_host_process_missing" not in supervision_gate["blockers"]
 
+    resident_surface = body["resident_surface"]
+    resident_surface_runtime = resident_surface["resident_surface_runtime"]
+    assert resident_surface["resident_surface_ready"] is True
+    assert resident_surface["resident_runtime_observed"] is True
+    assert resident_surface["next_smallest_truthful_gap"] == "resident_surface_operator_experience_proof"
+    assert resident_surface_runtime["status"] == "resident_runtime_observed"
+    assert resident_surface_runtime["resident_runtime_observed"] is True
+    assert resident_surface_runtime["resident_supervised_runtime"] is True
+    assert resident_surface_runtime["runtime_ready"] is True
+    assert resident_surface_runtime["blockers"] == []
+    assert "resident_surface_runtime_missing" not in resident_surface["blockers"]
+    assert "resident_surface_runtime_not_supervised" not in resident_surface["blockers"]
+    assert body["resident_surface_activation"]["resident_surface_ready"] is True
+    assert body["resident_surface_activation"]["next_smallest_truthful_gap"] == (
+        "resident_surface_operator_experience_proof"
+    )
+
     tray_dependency = plan_dependencies["tray_presence"]
     assert tray_dependency["ready"] is False
     assert tray_dependency["blocker"] == "tray_host_missing"
@@ -9168,6 +9200,88 @@ def test_lens_status_promotes_live_supervised_resident_host_before_tray(monkeypa
     assert handoff["would_mutate"] is False
     assert persistent_plan["governance"]["execution_authority"] is False
     assert persistent_plan["governance"]["resident_claim_authority"] is False
+
+
+def test_lens_status_rejects_fresh_supervised_runtime_with_dead_supervisor_pid(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    _write_dev_environment(repo_root)
+    _write_lens_host_status_runner(repo_root)
+    _write_service_manager(repo_root)
+    _write_lens_preflight_scripts(repo_root)
+    _write_lens_runtime_configs(repo_root)
+    _write_lens_host_service_config(repo_root)
+    service_config_path = repo_root / "config" / "runtime" / "services" / "lens-host.json"
+    service_config = json.loads(service_config_path.read_text(encoding="utf-8"))
+    service_config["process_supervision_enabled"] = True
+    service_config["persistent_supervision_enabled"] = True
+    service_config["supervision_blocked_reason"] = "resident_supervision_prerequisites_pending"
+    service_config["blocked_reason"] = "lens_host_persistent_supervision_prerequisites_pending"
+    service_config_path.write_text(json.dumps(service_config, indent=2), encoding="utf-8")
+    _write_lens_host_runtime_state(
+        data_root,
+        pid=6789,
+        status="resident_running",
+        mode="resident",
+    )
+    _write_lens_host_supervisor_state(
+        data_root,
+        observed_pid=6789,
+        supervisor_pid=24680,
+        status="resident_supervising",
+        mode="supervise_resident",
+        host_mode="resident",
+        observed_state="resident_running",
+        updated_at="2026-05-01T00:00:00Z",
+        resident_supervised_runtime=True,
+        process_supervision_authority=True,
+    )
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_RUN_MODE", "api")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.lens import host_manifest as host_manifest_module
+
+    fixed_now = datetime(2026, 5, 1, 0, 0, 5, tzinfo=UTC).timestamp()
+    monkeypatch.setattr(host_manifest_module.time, "time", lambda: fixed_now)
+    monkeypatch.setattr(host_manifest_module, "_process_alive_readback", lambda pid: (False, "test_dead_pid"))
+
+    client = TestClient(create_app())
+    response = client.get("/lens/status?limit=1")
+
+    assert response.status_code == 200
+    body = response.json()
+    resident_host = body["resident_host"]
+    supervisor_readback = resident_host["supervisor_readback"]
+    assert supervisor_readback["status"] == "resident_supervising"
+    assert supervisor_readback["freshness_status"] == "fresh"
+    assert supervisor_readback["supervisor_pid"] == 24680
+    assert supervisor_readback["supervisor_process_alive"] is False
+    assert supervisor_readback["supervisor_process_alive_check"] == "test_dead_pid"
+    assert supervisor_readback["observed_process_alive"] is False
+    assert supervisor_readback["observed_pid_matches_host_process"] is True
+    assert supervisor_readback["resident_supervised_runtime"] is False
+    assert supervisor_readback["process_supervision_authority"] is False
+    assert supervisor_readback["blocked_reason"] == "resident_host_supervisor_process_missing"
+    assert resident_host["process_readback"]["process_alive"] is False
+    assert resident_host["resident_supervised_runtime"] is False
+
+    persistent_plan = resident_host["persistent_supervision_plan"]
+    assert persistent_plan["missing_required_before_enable"][0] == "resident_host_process"
+    plan_dependencies = {item["id"]: item for item in persistent_plan["enablement_dependency_readback"]}
+    resident_process_dependency = plan_dependencies["resident_host_process"]
+    assert resident_process_dependency["ready"] is False
+    assert resident_process_dependency["resident_supervised_runtime"] is False
+
+    supervision_gate = resident_host["supervision_gate"]
+    assert supervision_gate["resident_supervised_runtime"] is False
+    assert supervision_gate["resident_host_supervised"] is False
+    assert supervision_gate["resident_host_process_blocker"] == "resident_host_process_missing"
+    assert "resident_host_process_missing" in supervision_gate["blockers"]
 
 
 def test_lens_status_promotes_live_tray_runtime_before_hotkey(monkeypatch, tmp_path: Path) -> None:

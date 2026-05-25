@@ -53,7 +53,19 @@ function Write-JsonFile {
   $TempPath = Join-Path $Parent ('.' + $FileName + '.' + [guid]::NewGuid().ToString('N') + '.tmp')
   try {
     $Payload | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $TempPath -Encoding UTF8
-    Move-Item -LiteralPath $TempPath -Destination $Path -Force
+    $Moved = $false
+    for ($Attempt = 0; $Attempt -lt 20 -and -not $Moved; $Attempt += 1) {
+      try {
+        Remove-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+        Move-Item -LiteralPath $TempPath -Destination $Path -Force -ErrorAction Stop
+        $Moved = $true
+      } catch {
+        if ($Attempt -ge 19) {
+          throw
+        }
+        Start-Sleep -Milliseconds 50
+      }
+    }
   } finally {
     Remove-Item -LiteralPath $TempPath -Force -ErrorAction SilentlyContinue
   }
@@ -181,6 +193,49 @@ function Write-HostStoppedState {
       }
     })
   Remove-Item -LiteralPath $PidPath -Force -ErrorAction SilentlyContinue
+}
+
+function Write-ResidentSupervisorRunningState {
+  param(
+    [string]$SupervisorStatePath,
+    [int]$ObservedPid,
+    [string]$LeaseMode,
+    [string]$SupervisionStartedAt,
+    [int]$HeartbeatCount,
+    [object]$Governance
+  )
+
+  $ObservedAt = (Get-Date).ToUniversalTime().ToString('o')
+  $StartedAt = $SupervisionStartedAt
+  if ([string]::IsNullOrWhiteSpace($StartedAt)) {
+    $StartedAt = $ObservedAt
+  }
+  Write-JsonFile -Path $SupervisorStatePath -Payload ([ordered]@{
+      kind = 'lens.host.supervisor_state'
+      status = 'resident_supervising'
+      mode = 'supervise_resident'
+      host_mode = 'resident'
+      supervisor_pid = $PID
+      supervisor_process_alive = $true
+      observed_pid = $ObservedPid
+      observed_state = 'resident_running'
+      restarted_process = $false
+      managed_service = $false
+      resident_supervised_runtime = $true
+      resident_claim_allowed = $false
+      lease_mode = $LeaseMode
+      stop_command = 'scripts/lens-host-supervisor.ps1 -Mode StopResident'
+      supervision_started_at = $StartedAt
+      process_supervision_authority = $true
+      process_restart_authority = $false
+      service_control_authority = $false
+      heartbeat_interval_ms = 500
+      heartbeat_count = $HeartbeatCount
+      last_heartbeat_at = $ObservedAt
+      updated_at = $ObservedAt
+      governance = $Governance
+    })
+  return $ObservedAt
 }
 
 function Get-PidValue {
@@ -935,37 +990,30 @@ if ($Mode -eq 'SuperviseResident') {
     $RunningPid -gt 0
   )
 
+  $SupervisionStartedAt = ''
+  $SupervisorHeartbeatCount = 0
   if ($RunningObserved) {
-    $ObservedAt = (Get-Date).ToUniversalTime().ToString('o')
-    Write-JsonFile -Path $SupervisorStatePath -Payload ([ordered]@{
-        kind = 'lens.host.supervisor_state'
-        status = 'resident_supervising'
-        mode = 'supervise_resident'
-        host_mode = 'resident'
-        supervisor_pid = $PID
-        supervisor_process_alive = $true
-        observed_pid = $RunningPid
-        observed_state = 'resident_running'
-        restarted_process = $false
-        managed_service = $false
-        resident_supervised_runtime = $true
-        resident_claim_allowed = $false
-        lease_mode = if ($RunSeconds -eq 0) { 'explicit_stop' } else { 'bounded_probe' }
-        stop_command = 'scripts/lens-host-supervisor.ps1 -Mode StopResident'
-        supervision_started_at = $ObservedAt
-        process_supervision_authority = $true
-        process_restart_authority = $false
-        service_control_authority = $false
-        updated_at = $ObservedAt
-        governance = $Payload.governance
-      })
+    $SupervisionStartedAt = Write-ResidentSupervisorRunningState `
+      -SupervisorStatePath $SupervisorStatePath `
+      -ObservedPid $RunningPid `
+      -LeaseMode $(if ($RunSeconds -eq 0) { 'explicit_stop' } else { 'bounded_probe' }) `
+      -SupervisionStartedAt '' `
+      -HeartbeatCount $SupervisorHeartbeatCount `
+      -Governance $Payload.governance
   }
 
   if ($RunSeconds -eq 0) {
-    $Process = Get-PropertyValue -Payload $StartedProcess -Name 'process'
-    if ($null -ne $Process) {
-      while (-not $Process.HasExited) {
+    if ($RunningObserved) {
+      while (Test-ProcessAlive -ProcessId $RunningPid) {
         Start-Sleep -Milliseconds 500
+        $SupervisorHeartbeatCount += 1
+        [void](Write-ResidentSupervisorRunningState `
+            -SupervisorStatePath $SupervisorStatePath `
+            -ObservedPid $RunningPid `
+            -LeaseMode 'explicit_stop' `
+            -SupervisionStartedAt $SupervisionStartedAt `
+            -HeartbeatCount $SupervisorHeartbeatCount `
+            -Governance $Payload.governance)
       }
     }
   }

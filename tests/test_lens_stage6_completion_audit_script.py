@@ -109,6 +109,23 @@ def test_lens_stage6_completion_audit_child_capture_does_not_set_invalid_encodin
     assert "StandardErrorEncoding" not in script
 
 
+def test_lens_stage6_completion_audit_uses_distinct_api_proof_hotkeys() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    assert "[hashtable]$EnvironmentVariables = @{}" in script
+    assert "$StartInfo.EnvironmentVariables[[string]$Name] = [string]$EnvironmentVariables[$Name]" in script
+    assert "$Stage6ApiExecutionProofHotkeys = @{" in script
+    assert "summon_api_launch_on_hotkey = 'Ctrl+Alt+Shift+F17'" in script
+    assert "os_binding_api_execution = 'Ctrl+Alt+Shift+F16'" in script
+    assert "overlay_api_execution = 'Ctrl+Alt+Shift+F15'" in script
+    assert "summon_api_bounded_execution = 'Ctrl+Alt+Shift+F14'" in script
+    assert "persistent_supervision_api_execution = 'Ctrl+Alt+Shift+F13'" in script
+    assert "FRANCIS_PROOF_GLOBAL_HOTKEY = $Stage6ApiExecutionProofHotkeys.overlay_api_execution" in script
+    assert (
+        "FRANCIS_PROOF_GLOBAL_HOTKEY = $Stage6ApiExecutionProofHotkeys.persistent_supervision_api_execution" in script
+    )
+
+
 def test_lens_stage6_completion_audit_projects_recommended_authority_grant_state() -> None:
     script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
     authority_grant_projection = "$RecommendedAuthorityGranted = [bool]$RecommendedHandoff.authority_granted"
@@ -127,12 +144,29 @@ def test_lens_stage6_completion_audit_does_not_reopen_persistent_supervision_can
     )
     process_boundary_branch = (
         "$ProcessSupervisionBoundaryObserved -and\n"
-        "  -not $ResidentHostProcessSupervisionBlockerProofObserved -and\n"
+        "  -not $ResidentHostProcessSupervisionEvidenceObserved -and\n"
         "  $ProcessSupervisionBoundaryBlockers -contains 'resident_host_process_not_supervised'"
     )
 
     assert raw_candidate_branch in script
     assert process_boundary_branch in script
+
+
+def test_lens_stage6_completion_audit_accepts_fresh_supervised_runtime_after_bringup() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    assert "$FreshResidentSupervisedRuntimeReadbackObserved = (" in script
+    assert "[bool]$HostSupervisorReadback.resident_supervised_runtime" in script
+    assert "[int]$HostSupervisorReadback.supervisor_pid -gt 0" in script
+    assert "[bool]$HostSupervisorReadback.supervisor_process_alive" in script
+    assert "[int]$HostSupervisorReadback.observed_pid -gt 0" in script
+    assert "[bool]$HostSupervisorReadback.observed_process_alive" in script
+    assert "[bool]$HostSupervisorReadback.observed_pid_matches_host_process" in script
+    assert "$ResidentHostProcessSupervisionEvidenceObserved = (" in script
+    assert "$ResidentHostProcessSupervisionBlockerProofObserved -or" in script
+    assert "$FreshResidentSupervisedRuntimeReadbackObserved" in script
+    assert "$ResidentHostProcessSupervisionEvidenceObserved -and" in script
+    assert "resident_supervised_runtime = [bool]$HostSupervisorReadback.resident_supervised_runtime" in script
 
 
 def test_lens_stage6_completion_audit_outer_timeout_covers_serial_child_budget() -> None:
@@ -221,7 +255,15 @@ def test_lens_stage6_completion_audit_consumes_stage6_prerequisite_bringup_plan_
         "-eq 'persistent_supervision_required_prerequisites_missing'"
     ) in script
     assert "$Stage6PrerequisiteBringupPlanAllowedFirstMissingTruthfulGaps" in script
+    assert "$Stage6PrerequisiteBringupPlanAllowedMissingPrerequisites = @(" in script
     assert "$Stage6PrerequisiteBringupPlanMissingPrerequisitesObserved = (" in script
+    assert "$Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable -contains 'resident_host_process' -and" in script
+    assert "$Stage6PrerequisiteBringupPlanAllowedMissingPrerequisites -notcontains [string]$_" in script
+    assert "$Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable -contains 'tray_presence' -and" not in script
+    assert (
+        "$Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable -contains 'global_hotkey_binding' -and" not in script
+    )
+    assert "$Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable -contains 'overlay_window'" not in script
     assert "$Stage6PrerequisiteBringupPlanAppliedEnablementObserved = (" in script
     assert ("[string]$Stage6PrerequisiteBringupPlan.status -eq 'persistent_supervision_enablement_applied'") in script
     assert (
@@ -311,10 +353,11 @@ def test_lens_stage6_completion_audit_accepts_checkpoint_summon_runtime_readback
     assert "$CheckpointSummonEnablementGateSummonRuntimeReadbackObserved = (" in script
     assert "$CheckpointSummonEnablementGateHandoffBlockers -contains 'summon_anywhere_runtime_readback'" in script
     assert "@($CheckpointSummonEnablementGateAuthorityBlockers).Count -gt 0" in script
-    assert (
-        "($CheckpointSummonEnablementGateSummonBindingBlockerObserved -or "
-        "$CheckpointSummonEnablementGateSummonRuntimeReadbackObserved)"
-    ) in script
+    assert "$CheckpointSummonEnablementGateCoreHandoffObserved = (" in script
+    assert "$CheckpointSummonEnablementGateSummonBindingBlockerObserved -or" in script
+    assert "$CheckpointSummonEnablementGateSummonRuntimeReadbackObserved" in script
+    assert "$CheckpointSummonEnablementGateCoreHandoffObserved -and" in script
+    assert "$CheckpointSummonEnablementGateHandoffFamilies -contains 'global_hotkey_binding' -and" not in script
 
 
 def test_lens_stage6_completion_audit_preserves_checkpoint_enablement_execution_denial_authority_readback() -> None:

@@ -160,6 +160,7 @@ def _write_lens_host_supervisor_state(
                 "status": "resident_supervising",
                 "mode": "resident_start",
                 "host_mode": "resident",
+                "supervisor_pid": pid,
                 "observed_pid": pid,
                 "observed_state": "resident_running",
                 "restarted_process": False,

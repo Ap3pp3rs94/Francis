@@ -1214,7 +1214,7 @@ def _safe_run_seconds(value: str) -> int:
         parsed = int(float(value or "2"))
     except (TypeError, ValueError):
         return 2
-    return max(1, min(parsed, _MAX_STAGE6_PREREQUISITE_RUN_SECONDS))
+    return max(0, min(parsed, _MAX_STAGE6_PREREQUISITE_RUN_SECONDS))
 
 
 def _execute_next_action(
@@ -1290,6 +1290,7 @@ def _execute_next_action(
             run_seconds=safe_seconds,
         )
     elif action_id == "execute_global_hotkey_binding":
+        proof_global_hotkey = os.environ.get("FRANCIS_PROOF_GLOBAL_HOTKEY", "").strip()
         result = execute_lens_os_binding(
             approval_id=approval_id,
             actor=actor,
@@ -1299,6 +1300,7 @@ def _execute_next_action(
             record_receipt=True,
             mode=_safe_str(action.get("mode")) or "bind",
             run_seconds=safe_seconds,
+            global_hotkey=proof_global_hotkey,
         )
     elif action_id == "execute_overlay_window":
         result = execute_lens_overlay_window(

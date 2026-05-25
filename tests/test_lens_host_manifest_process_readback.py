@@ -4,7 +4,7 @@ import json
 import os
 from pathlib import Path
 
-from francis.lens.host_manifest import lens_host_launch_manifest
+from francis.lens.host_manifest import _json_dict_from_path, lens_host_launch_manifest
 
 
 def _write_host_state(
@@ -52,6 +52,30 @@ def test_lens_host_manifest_rejects_live_pid_with_mismatched_runtime_state(
     assert process["process_alive_check"] == "not_attempted_runtime_state_pid_mismatch"
     assert process["blocked_reason"] == "resident_host_process_missing"
     assert body["blocker_groups"]["process_readback"] == ["resident_host_process_missing"]
+
+
+def test_lens_host_manifest_retries_transient_missing_runtime_json(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    payload_path = tmp_path / "status.json"
+    payload_path.write_text(json.dumps({"kind": "lens.host.runtime_state"}), encoding="utf-8")
+    path_type = type(payload_path)
+    original_is_file = path_type.is_file
+    calls = {"count": 0}
+
+    def flaky_is_file(self: Path) -> bool:
+        if self == payload_path:
+            calls["count"] += 1
+            return calls["count"] > 1
+        return original_is_file(self)
+
+    monkeypatch.setattr(path_type, "is_file", flaky_is_file)
+
+    assert _json_dict_from_path(payload_path, transient_retries=1, transient_delay_seconds=0) == {
+        "kind": "lens.host.runtime_state"
+    }
+    assert calls["count"] == 2
 
 
 def test_lens_host_manifest_observes_matching_running_runtime_state(

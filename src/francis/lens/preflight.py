@@ -165,7 +165,12 @@ def _tray_runtime_readback() -> dict[str, Any]:
     }
 
 
-def _hotkey_runtime_readback(*, global_hotkey: str, binding_scope: str) -> dict[str, Any]:
+def _hotkey_runtime_readback(
+    *,
+    global_hotkey: str,
+    binding_scope: str,
+    config_source: str = "canonical_config",
+) -> dict[str, Any]:
     runtime_root = data_dir() / "runtime" / "lens-hotkey"
     state_file = runtime_root / "status.json"
     pid_file = runtime_root / "lens-hotkey.pid"
@@ -216,6 +221,10 @@ def _hotkey_runtime_readback(*, global_hotkey: str, binding_scope: str) -> dict[
         "pid_present": pid_present,
         "status_path": "data/runtime/lens-hotkey/status.json",
         "pid_path": "data/runtime/lens-hotkey/lens-hotkey.pid",
+        "config_source": config_source,
+        "config_override_path": "data/runtime/lens-hotkey/os-binding-summon-override.json"
+        if config_source == "runtime_override"
+        else "",
         "runtime_state_exists": state_exists,
         "runtime_status": state_status,
         "runtime_status_kind": state_kind,
@@ -232,6 +241,11 @@ def _hotkey_runtime_readback(*, global_hotkey: str, binding_scope: str) -> dict[
         "requirement_state": requirement_state,
         "blocker": "" if ready else "global_hotkey_binding_runtime_missing",
     }
+
+
+def _hotkey_runtime_override_config() -> dict[str, Any]:
+    path = data_dir() / "runtime" / "lens-hotkey" / "os-binding-summon-override.json"
+    return _json_dict_from_path(path) if _path_exists(path) else {}
 
 
 def _overlay_runtime_readback(*, overlay_name: str, overlay_scope: str) -> dict[str, Any]:
@@ -588,33 +602,41 @@ def _host_preflight(host_manifest: dict[str, Any]) -> dict[str, Any]:
 def _summon_preflight() -> dict[str, Any]:
     config_path = "config/runtime/lens/summon.json"
     payload, exists, error = _read_config(config_path)
-    summon_name = _safe_str(payload.get("summon_name"), "Francis Lens Summon")
-    global_hotkey = _safe_str(payload.get("global_hotkey"))
-    binding_scope = _safe_str(payload.get("binding_scope"), "global")
-    palette_route = _safe_str(payload.get("palette_route"), "/lens/status")
-    host_preflight = _safe_str(payload.get("host_preflight"), "scripts/lens-host-preflight.ps1")
-    host_status_runner = _safe_str(payload.get("host_status_runner"), "scripts/lens-host.ps1")
-    summon_runner = _safe_str(payload.get("summon_runner"), "scripts/lens-summon.ps1")
+    hotkey_override = _hotkey_runtime_override_config()
+    effective_payload = {**payload, **hotkey_override} if hotkey_override else payload
+    summon_name = _safe_str(effective_payload.get("summon_name"), "Francis Lens Summon")
+    global_hotkey = _safe_str(effective_payload.get("global_hotkey"))
+    binding_scope = _safe_str(effective_payload.get("binding_scope"), "global")
+    palette_route = _safe_str(effective_payload.get("palette_route"), "/lens/status")
+    host_preflight = _safe_str(effective_payload.get("host_preflight"), "scripts/lens-host-preflight.ps1")
+    host_status_runner = _safe_str(effective_payload.get("host_status_runner"), "scripts/lens-host.ps1")
+    summon_runner = _safe_str(effective_payload.get("summon_runner"), "scripts/lens-summon.ps1")
     local_palette_launcher = _safe_str(
-        payload.get("local_palette_launcher"),
+        effective_payload.get("local_palette_launcher"),
         "scripts/lens-command-palette.ps1 -Mode LocalOpen",
     )
-    blocked_reason = _safe_str(payload.get("blocked_reason"), "lens_summon_binding_disabled_pending_authority")
-    enabled = _bool(payload.get("enabled"))
-    binding_enabled = _bool(payload.get("binding_enabled"))
-    register_hotkey = _bool(payload.get("register_hotkey"))
-    startup_register = _bool(payload.get("startup_register"))
-    overlay_required = _bool(payload.get("overlay_required"), True)
-    tray_required = _bool(payload.get("tray_required"), True)
-    summon_authority = _bool(payload.get("summon_authority"))
-    hotkey_registration_authority = _bool(payload.get("hotkey_registration_authority"))
-    overlay_control_authority = _bool(payload.get("overlay_control_authority"))
-    local_process_launch_authority = _bool(payload.get("local_process_launch_authority"))
-    required_before_enable = _string_list(payload.get("required_before_enable"))
+    blocked_reason = _safe_str(
+        effective_payload.get("blocked_reason"), "lens_summon_binding_disabled_pending_authority"
+    )
+    enabled = _bool(effective_payload.get("enabled"))
+    binding_enabled = _bool(effective_payload.get("binding_enabled"))
+    register_hotkey = _bool(effective_payload.get("register_hotkey"))
+    startup_register = _bool(effective_payload.get("startup_register"))
+    overlay_required = _bool(effective_payload.get("overlay_required"), True)
+    tray_required = _bool(effective_payload.get("tray_required"), True)
+    summon_authority = _bool(effective_payload.get("summon_authority"))
+    hotkey_registration_authority = _bool(effective_payload.get("hotkey_registration_authority"))
+    overlay_control_authority = _bool(effective_payload.get("overlay_control_authority"))
+    local_process_launch_authority = _bool(effective_payload.get("local_process_launch_authority"))
+    required_before_enable = _string_list(effective_payload.get("required_before_enable"))
     host_preflight_exists = _runtime_file_exists(host_preflight)
     host_status_runner_exists = _runtime_file_exists(host_status_runner)
     summon_runner_exists = _runtime_file_exists(summon_runner)
-    hotkey_runtime = _hotkey_runtime_readback(global_hotkey=global_hotkey, binding_scope=binding_scope)
+    hotkey_runtime = _hotkey_runtime_readback(
+        global_hotkey=global_hotkey,
+        binding_scope=binding_scope,
+        config_source="runtime_override" if hotkey_override else "canonical_config",
+    )
     hotkey_runtime_ready = bool(hotkey_runtime.get("ready"))
     blockers: list[str] = []
     if blocked_reason:

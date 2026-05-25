@@ -273,6 +273,53 @@ def test_lens_os_binding_hotkey_runner_can_enable_launch_on_hotkey_when_explicit
     assert override["local_process_launch_authority"] is True
 
 
+def test_lens_os_binding_hotkey_runner_writes_requested_global_hotkey_override(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from francis.lens import os_binding_authority as module
+
+    repo_root = tmp_path / "repo"
+    data_root = repo_root / "data"
+    script_root = repo_root / "scripts"
+    script_root.mkdir(parents=True)
+    (script_root / "lens-hotkey-binding.ps1").write_text("# test hotkey runner\n", encoding="utf-8")
+    _write_lens_summon_config(repo_root)
+    monkeypatch.setattr(module, "repo_root", lambda: repo_root)
+    monkeypatch.setattr(module, "data_dir", lambda: data_root)
+    monkeypatch.setattr(module.shutil, "which", lambda name: "powershell.exe")
+    captured: dict[str, object] = {}
+
+    def fake_run(
+        command: list[str],
+        **kwargs: object,
+    ) -> subprocess.CompletedProcess[str]:
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=json.dumps({"ok": True, "status": "started", "blockers": []}),
+            stderr="",
+        )
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+    result = module._run_lens_os_binding_hotkey_action(
+        mode="bind",
+        run_seconds=180,
+        global_hotkey="Ctrl+Alt+Shift+F12",
+    )
+
+    assert result["ok"] is True
+    command = captured["command"]
+    assert isinstance(command, list)
+    override_index = command.index("-ConfigOverridePath")
+    override_path = Path(command[override_index + 1])
+    override = json.loads(override_path.read_text(encoding="utf-8"))
+    assert override["global_hotkey"] == "Ctrl+Alt+Shift+F12"
+
+
 def test_lens_os_binding_authority_grant_requires_approved_request(monkeypatch, tmp_path: Path) -> None:
     client, data_root = _client(monkeypatch, tmp_path)
 
@@ -556,6 +603,107 @@ def test_lens_os_binding_execution_readiness_carries_live_hotkey_runtime_without
     assert body["governance"]["execution_authority"] is False
     assert body["governance"]["hotkey_registration_authority"] is False
     assert body["governance"]["summon_authority"] is False
+
+
+def test_lens_os_binding_execution_readiness_accepts_runtime_hotkey_override(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    client, data_root = _client(monkeypatch, tmp_path)
+    _write_lens_summon_config(data_root.parent)
+    runtime_root = data_root / "runtime" / "lens-hotkey"
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    (runtime_root / "os-binding-summon-override.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.summon.config",
+                "global_hotkey": "Ctrl+Alt+Shift+F12",
+                "binding_scope": "global",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (runtime_root / "lens-hotkey.pid").write_text(str(os.getpid()), encoding="ascii")
+    (runtime_root / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.hotkey.runtime_state",
+                "status": "hotkey_bound",
+                "pid": os.getpid(),
+                "global_hotkey": "Ctrl+Alt+Shift+F12",
+                "binding_scope": "global",
+                "hotkey_bound": True,
+                "launch_on_hotkey": True,
+                "summon_runner": "scripts/lens-summon.ps1",
+                "press_count": 0,
+                "updated_at": "2026-05-24T00:00:00Z",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    response = client.get("/lens/os-binding/execution/readiness?actor=test.system.write")
+
+    assert response.status_code == 200
+    body = response.json()
+    requirements = {item["id"]: item for item in body["requirements"]}
+    hotkey_requirement = requirements["global_hotkey_binding"]
+    readback = hotkey_requirement["hotkey_runtime_readback"]
+    assert hotkey_requirement["runtime_ready"] is True
+    assert readback["config_source"] == "runtime_override"
+    assert readback["global_hotkey"] == "Ctrl+Alt+Shift+F12"
+    assert readback["expected_global_hotkey"] == "Ctrl+Alt+Shift+F12"
+    assert readback["blocker"] == ""
+    assert "global_hotkey_binding" not in body["blocked_execution_prerequisites"]
+
+
+def test_lens_host_launch_manifest_accepts_summon_runtime_override(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    client, data_root = _client(monkeypatch, tmp_path)
+    _write_lens_summon_config(data_root.parent)
+    runtime_root = data_root / "runtime" / "lens-summon"
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    (runtime_root / "summon-action-override.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.summon.config",
+                "global_hotkey": "Ctrl+Alt+Shift+F12",
+                "binding_scope": "global",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (runtime_root / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.summon.runtime_state",
+                "status": "summon_binding_observed",
+                "global_hotkey": "Ctrl+Alt+Shift+F12",
+                "binding_scope": "global",
+                "bounded_handoff_ready": True,
+                "local_open_ready": True,
+                "opened": True,
+                "no_launch": False,
+                "summon_anywhere": True,
+                "os_level_summon": True,
+                "updated_at": "2026-05-24T00:00:00Z",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    response = client.get("/lens/status?limit=10")
+
+    assert response.status_code == 200
+    body = response.json()
+    readback = body["resident_host"]["launch_manifest"]["summon_runtime_readback"]
+    assert readback["ready"] is True
+    assert readback["config_source"] == "runtime_override"
+    assert readback["global_hotkey"] == "Ctrl+Alt+Shift+F12"
+    assert readback["expected_global_hotkey"] == "Ctrl+Alt+Shift+F12"
+    assert readback["blocker"] == ""
 
 
 def test_lens_os_binding_execution_readiness_carries_live_overlay_runtime_without_authority(

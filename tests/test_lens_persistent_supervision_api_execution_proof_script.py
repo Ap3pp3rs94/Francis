@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+_PROOF_GLOBAL_HOTKEY = "Ctrl+Alt+Shift+F13"
+
 
 def _powershell() -> str:
     exe = shutil.which("powershell") or shutil.which("pwsh")
@@ -22,6 +24,8 @@ def _repo_root() -> Path:
 
 
 def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    env["FRANCIS_PROOF_GLOBAL_HOTKEY"] = _PROOF_GLOBAL_HOTKEY
     return subprocess.run(
         [
             _powershell(),
@@ -33,6 +37,7 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
             *args,
         ],
         cwd=_repo_root(),
+        env=env,
         check=False,
         text=True,
         capture_output=True,
@@ -68,6 +73,8 @@ def test_lens_persistent_supervision_api_execution_proof_uses_governed_routes() 
         in script
     )
     assert "dependency_run_seconds = max(run_seconds, 60)" in script
+    assert 'proof_global_hotkey = os.environ.get("FRANCIS_PROOF_GLOBAL_HOTKEY", "Ctrl+Alt+Shift+F12").strip()' in script
+    assert '"global_hotkey": proof_global_hotkey' in script
     assert "FRANCIS_LENS_HOST_SERVICE_CONFIG_PATH" in script
     assert '"allow_launch": False' in script
     assert '"local_process_launch_authority": False' in script
@@ -105,6 +112,7 @@ def test_lens_persistent_supervision_api_execution_proof_executes_isolated_apply
     assert payload["stage"] == "Stage 6 / Lens MVP"
     assert payload["stage_state"] == "active"
     assert payload["acceptance_criterion"] == "persistent_supervision_enablement"
+    assert payload["global_hotkey"] == _PROOF_GLOBAL_HOTKEY
     assert payload["previous_next_smallest_truthful_gap"] == "persistent_supervision_execution_boundary"
     assert payload["route_next_smallest_truthful_gap"] == "persistent_supervision_execution_boundary"
     assert payload["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
@@ -194,6 +202,7 @@ def test_lens_persistent_supervision_api_execution_proof_executes_isolated_apply
     proof = payload["proof"]
     assert proof["dependency_run_seconds"] == 60
     assert proof["resident_dependency_run_seconds"] == 60
+    assert proof["global_hotkey"] == _PROOF_GLOBAL_HOTKEY
     assert proof["resident_start_status"] == "resident_supervision_started"
     assert proof["tray_start_status"] == "tray_presence_started"
     assert proof["hotkey_start_status"] == "global_hotkey_bound"

@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+_PROOF_GLOBAL_HOTKEY = "Ctrl+Alt+Shift+F14"
+
 
 def _powershell() -> str:
     exe = shutil.which("powershell") or shutil.which("pwsh")
@@ -22,6 +24,8 @@ def _repo_root() -> Path:
 
 
 def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    env["FRANCIS_PROOF_GLOBAL_HOTKEY"] = _PROOF_GLOBAL_HOTKEY
     return subprocess.run(
         [
             _powershell(),
@@ -33,6 +37,7 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
             *args,
         ],
         cwd=_repo_root(),
+        env=env,
         check=False,
         text=True,
         capture_output=True,
@@ -69,6 +74,8 @@ def test_lens_summon_api_execution_proof_uses_governed_routes() -> None:
     assert 'hotkey_execute_payload["overlay_approval_id"] = overlay_approval_id' in script
     assert '"summon_anywhere_authority": False' in script
     assert '"resident_claim_authority": False' in script
+    assert 'proof_global_hotkey = os.environ.get("FRANCIS_PROOF_GLOBAL_HOTKEY", "Ctrl+Alt+Shift+F12").strip()' in script
+    assert '"global_hotkey": proof_global_hotkey' in script
 
 
 def test_lens_summon_api_execution_proof_executes_bounded_summon_handoff(
@@ -106,6 +113,7 @@ def test_lens_summon_api_execution_proof_executes_bounded_summon_handoff(
     )
     assert payload["dependency_run_seconds"] == 60
     assert payload["resident_dependency_run_seconds"] == 60
+    assert payload["global_hotkey"] == _PROOF_GLOBAL_HOTKEY
 
     assert payload["host_supervision_authority_grant_receipt_id"]
     assert payload["resident_runtime_authority_grant_receipt_id"]
@@ -175,6 +183,7 @@ def test_lens_summon_api_execution_proof_executes_bounded_summon_handoff(
     proof = payload["proof"]
     assert proof["dependency_run_seconds"] == 60
     assert proof["resident_dependency_run_seconds"] == 60
+    assert proof["global_hotkey"] == _PROOF_GLOBAL_HOTKEY
     assert proof["resident_start_status"] == "resident_supervision_started"
     assert proof["tray_start_status"] == "tray_presence_started"
     assert proof["hotkey_start_status"] == "global_hotkey_bound"

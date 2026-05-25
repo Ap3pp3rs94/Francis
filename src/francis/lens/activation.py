@@ -5414,8 +5414,16 @@ def _resident_runtime_preflight_status(blockers: list[str]) -> tuple[str, str]:
 
 def _resident_surface_runtime_blockers_from_manifest(manifest: dict[str, Any]) -> list[str]:
     process_readback = _as_dict(manifest.get("process_readback"))
+    supervisor_readback = _as_dict(manifest.get("supervisor_readback"))
     process_alive = bool(process_readback.get("process_alive"))
     state_status = _safe_str(process_readback.get("state_status")).strip()
+    resident_supervised_runtime = (
+        process_alive
+        and state_status == "resident_running"
+        and bool(supervisor_readback.get("resident_supervised_runtime"))
+    )
+    if resident_supervised_runtime:
+        return []
     if process_alive and state_status == "foreground_running":
         return ["resident_surface_runtime_not_supervised", "resident_surface_not_resident"]
     return ["resident_surface_runtime_missing"]
@@ -9842,6 +9850,9 @@ def lens_resident_surface_activation_boundary(
         record_receipt=False,
     )
     preflight = lens_preflight()
+    manifest = lens_host_launch_manifest()
+    surface_runtime_blockers = _resident_surface_runtime_blockers_from_manifest(manifest)
+    resident_surface_runtime_ready = not surface_runtime_blockers
     surfaces = _as_dict(preflight.get("surfaces"))
     host_surface = _as_dict(surfaces.get("host"))
     summon_surface = _as_dict(surfaces.get("summon"))
@@ -9861,9 +9872,11 @@ def lens_resident_surface_activation_boundary(
             *_str_list(runtime_plan.get("blockers")),
             *_str_list(runtime_denial.get("blockers")),
             *_str_list(execution_denial.get("blockers")),
-            *_resident_surface_runtime_blockers_from_manifest(lens_host_launch_manifest()),
+            *surface_runtime_blockers,
         ]
     )
+    if resident_surface_runtime_ready:
+        next_gap = "resident_surface_operator_experience_proof"
     components = [
         _surface_component(
             "host_activation_preflight",
@@ -9975,7 +9988,7 @@ def lens_resident_surface_activation_boundary(
         "actor": _redact_free_text(actor),
         "boundary_ready": True,
         "activation_ready": False,
-        "resident_surface_ready": False,
+        "resident_surface_ready": resident_surface_runtime_ready,
         "ready_for_lens_resident_claim": False,
         "resident_claim_allowed": False,
         "execution_ready": False,

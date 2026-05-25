@@ -84,3 +84,15 @@ def test_lens_tray_presence_status_reports_live_runtime_readback(tmp_path: Path)
     assert payload["tray_runtime"]["tray_icon_visible"] is True
     assert payload["tray_runtime"]["requirement_state"] == "running"
     assert payload["tray_runtime"]["blocker"] == ""
+
+
+def test_lens_tray_presence_run_uses_hidden_message_loop_form() -> None:
+    script = (_repo_root() / "scripts" / "lens-tray-presence.ps1").read_text(encoding="utf-8")
+
+    assert "New-Object System.Windows.Forms.Form" in script
+    assert "$MainForm.ShowInTaskbar = $false" in script
+    assert "$MainForm.Add_Shown({" in script
+    assert "$MainForm.Hide()" in script
+    assert "$MainForm.Close()" in script
+    assert "[System.Windows.Forms.Application]::Run($MainForm)" in script
+    assert "$MainForm.Dispose()" in script

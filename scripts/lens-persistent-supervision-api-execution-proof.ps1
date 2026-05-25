@@ -248,6 +248,7 @@ def _run() -> tuple[int, dict[str, Any]]:
     data_root = Path(os.environ["FRANCIS_DATA_DIR"]).resolve()
     service_config_path = Path(os.environ["FRANCIS_LENS_HOST_SERVICE_CONFIG_PATH"]).resolve()
     run_seconds = int(os.environ.get("FRANCIS_PROOF_RUN_SECONDS", "5"))
+    proof_global_hotkey = os.environ.get("FRANCIS_PROOF_GLOBAL_HOTKEY", "Ctrl+Alt+Shift+F12").strip()
     # This proof validates a long governed route chain; keep prerequisite runtimes alive
     # long enough for the post-apply status readback instead of racing their lease.
     dependency_run_seconds = max(run_seconds, 60)
@@ -397,6 +398,7 @@ def _run() -> tuple[int, dict[str, Any]]:
                 "reason": "prove governed API path starts hotkey before persistent supervision",
                 "mode": "bind",
                 "run_seconds": dependency_run_seconds,
+                "global_hotkey": proof_global_hotkey,
             },
         )
         overlay_start = _post(
@@ -792,6 +794,7 @@ def _run() -> tuple[int, dict[str, Any]]:
             "stage": "Stage 6 / Lens MVP",
             "stage_state": "active",
             "acceptance_criterion": "persistent_supervision_enablement",
+            "global_hotkey": proof_global_hotkey,
             "previous_next_smallest_truthful_gap": "persistent_supervision_execution_boundary",
             "route_next_smallest_truthful_gap": route_next_gap,
             "next_smallest_truthful_gap": "stage6_lens_completion_audit",
@@ -881,6 +884,7 @@ def _run() -> tuple[int, dict[str, Any]]:
             "proof": {
                 "dependency_run_seconds": dependency_run_seconds,
                 "resident_dependency_run_seconds": resident_dependency_run_seconds,
+                "global_hotkey": proof_global_hotkey,
                 "resident_start_status": str(resident_start.get("status") or ""),
                 "tray_start_status": str(tray_start.get("status") or ""),
                 "hotkey_start_status": str(hotkey_start.get("status") or ""),

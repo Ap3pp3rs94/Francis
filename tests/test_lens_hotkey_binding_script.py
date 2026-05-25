@@ -28,6 +28,41 @@ def test_lens_hotkey_binding_start_timeout_stops_started_child_process() -> None
     assert "started_process_stopped" in source
 
 
+def test_lens_hotkey_binding_start_reports_terminal_child_failure() -> None:
+    source = (_repo_root() / "scripts" / "lens-hotkey-binding.ps1").read_text(encoding="utf-8")
+
+    assert "[string]$Readback.runtime_status -eq 'failed'" in source
+    assert "[string]$Readback.runtime_status -eq 'unsupported'" in source
+    assert "$Payload.error = if ([string]$Readback.runtime_status -eq 'unsupported')" in source
+    assert "$Payload.child_runtime_status = [string]$Readback.runtime_status" in source
+    assert "$Payload.child_runtime_status_message = [string]$Readback.runtime_status_message" in source
+
+
+def test_lens_hotkey_binding_run_uses_hidden_message_loop_form() -> None:
+    source = (_repo_root() / "scripts" / "lens-hotkey-binding.ps1").read_text(encoding="utf-8")
+
+    assert "New-Object System.Windows.Forms.Form" in source
+    assert "$MainForm.ShowInTaskbar = $false" in source
+    assert "$MainForm.Add_Shown({" in source
+    assert "$MainForm.Hide()" in source
+    assert "$MainForm.Close()" in source
+    assert "[System.Windows.Forms.Application]::Run($MainForm)" in source
+    assert "$MainForm.Dispose()" in source
+    assert "[System.Windows.Forms.Application]::Run()" not in source
+
+
+def test_lens_hotkey_binding_registers_configured_global_hotkey() -> None:
+    source = (_repo_root() / "scripts" / "lens-hotkey-binding.ps1").read_text(encoding="utf-8")
+
+    assert "function Resolve-HotkeyRegistration" in source
+    assert "function Resolve-HotkeyKeyCode" in source
+    assert "F([1-9]|1[0-9]|2[0-4])" in source
+    assert "Resolve-HotkeyRegistration -GlobalHotkey ([string]$ConfigForAction.global_hotkey)" in source
+    assert "[uint32]$HotkeyRegistration.modifiers" in source
+    assert "[uint32]$HotkeyRegistration.virtual_key" in source
+    assert "RegisterHotKey($Window.Handle, 1, 0x0003, 0x20)" not in source
+
+
 def _run_hotkey_binding(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [

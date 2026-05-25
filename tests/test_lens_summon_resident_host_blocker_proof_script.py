@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -34,6 +35,52 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
         check=False,
         text=True,
         capture_output=True,
+    )
+
+
+def _write_active_os_binding_grant(data_dir: Path) -> None:
+    receipt_root = data_dir / "lens" / "os_binding_authority_grants"
+    receipt_root.mkdir(parents=True, exist_ok=True)
+    ts = int(time.time())
+    (receipt_root / "losbag_test_active.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.os_binding.command_palette_binding_authority.grant_receipt",
+                "receipt_id": "losbag_test_active",
+                "ts": ts,
+                "status": "authority_granted",
+                "approval_id": "approval_test_active",
+                "actor": "test.operator",
+                "route": "/lens/os-binding/authority",
+                "authority_route": "/lens/os-binding/authority",
+                "request_route": "/lens/os-binding/authority/request",
+                "requests_route": "/lens/os-binding/authority/requests",
+                "grants_route": "/lens/os-binding/authority/grants",
+                "lease_seconds": 600,
+                "expires_ts": ts + 600,
+                "authority_granted": True,
+                "os_level_command_palette_binding_authority": True,
+                "hotkey_registration_authority": True,
+                "local_process_launch_authority": True,
+                "os_level_command_palette": False,
+                "summon_anywhere": False,
+                "opens_palette": False,
+                "registers_hotkey": False,
+                "launches_process": False,
+                "controls_overlay": False,
+                "governance": {
+                    "read_only_contract": True,
+                    "approval_request_write": False,
+                    "execution_authority": False,
+                    "approval_decision_authority": False,
+                    "memory_write": False,
+                    "resident_claim_authority": False,
+                    "mutation_authority_granted": False,
+                    "receipt_write_authority": True,
+                },
+            }
+        ),
+        encoding="utf-8",
     )
 
 
@@ -283,3 +330,39 @@ def test_lens_summon_resident_host_default_proof_keeps_checkpoint_safe_handoff(t
     assert payload["governance"]["resident_runtime_candidate_process_supervision_enabled"] is True
     assert payload["governance"]["bounded_local_process_launch"] is False
     assert payload["governance"]["temporary_runtime_state_write"] is False
+
+
+def test_lens_summon_resident_host_blocker_accepts_granted_os_binding_readback_without_side_effects(
+    tmp_path: Path,
+) -> None:
+    data_dir = tmp_path / "data"
+    _write_active_os_binding_grant(data_dir)
+
+    proc = _run_proof("-Mode", "Status", "-DataDir", str(data_dir))
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "proof_passed"
+    assert payload["ok"] is True
+    assert payload["authority_granted"] is False
+    assert payload["side_effects_denied"] is True
+    assert payload["summon_os_binding_authority_request_readback_observed"] is True
+
+    authority_readback = payload["summon_os_binding_authority_request_readback"]
+    assert authority_readback["status"] == "authority_granted"
+    assert authority_readback["authority_granted"] is True
+    assert authority_readback["os_level_command_palette_binding_authority"] is True
+    assert authority_readback["os_level_command_palette"] is False
+    assert authority_readback["summon_anywhere"] is False
+    assert authority_readback["opens_palette"] is False
+    assert authority_readback["registers_hotkey"] is False
+    assert authority_readback["launches_process"] is False
+    assert authority_readback["controls_overlay"] is False
+    assert authority_readback["governance"]["read_only_contract"] is True
+    assert authority_readback["governance"]["execution_authority"] is False
+    assert authority_readback["governance"]["approval_decision_authority"] is False
+    assert authority_readback["governance"]["memory_write"] is False
+    assert authority_readback["governance"]["resident_claim_authority"] is False
+
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["summon_os_binding_authority_readback"]["status"] == "authority_readback_consumed"
