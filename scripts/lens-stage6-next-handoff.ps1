@@ -1151,6 +1151,30 @@ $Stage6CompletionAuditPersistentSupervisionResidentClaimBoundaryHandoffObserved 
   -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'resident_claim_allowed' -Default $true) -and
   (ConvertTo-StringArray -Value (Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'blockers')) -contains 'resident_claim_authority_not_granted'
 )
+$Stage6CompletionAuditPersistentSupervisionFirstMissingRequirementHandoffObserved = (
+  $Stage6CompletionAuditReadbackObserved -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_handoff_source' -Default '') -eq 'persistent_supervision_prerequisites_first_missing_requirement_handoff' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'next_smallest_truthful_gap' -Default '') -eq 'persistent_supervision_required_prerequisites_missing' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_next_slice' -Default '') -eq 'resolve_resident_host_process_before_persistent_supervision_enablement' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_proof_script' -Default '') -eq 'scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'authority_required' -Default '') -eq 'resident_host_process_tray_hotkey_overlay_and_summon_prerequisites' -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'authority_granted' -Default $true) -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'id' -Default '') -eq 'resident_host_process' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'family' -Default '') -eq 'resident_host' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'resident_host_process_not_supervised' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'next_step' -Default '') -eq 'resolve_resident_host_process_before_persistent_supervision_enablement' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'proof_script' -Default '') -eq 'scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'route' -Default '') -eq '/lens/host' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'readiness_route' -Default '') -eq '/lens/host/runtime-loop/readiness' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'authority_required' -Default '') -eq 'resident_host_process_tray_hotkey_overlay_and_summon_prerequisites' -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'authority_granted' -Default $true) -and
+  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'read_only_contract' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'diagnostic_only' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_execute' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_mutate' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_write_memory' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_decide_approval' -Default $false)
+)
 $Stage6CompletionAuditPrerequisiteBringupOperatorPlanAction = Get-PropertyValue `
   -Payload $Stage6CompletionAuditRecommendedHandoff `
   -Name 'next_operator_action' `
@@ -1622,6 +1646,7 @@ $Stage6CompletionAuditRecommendedHandoffConsumed = (
   $Stage6CompletionAuditResidentRuntimeTrayPresenceHandoffObserved -or
   $Stage6CompletionAuditPersistentSupervisionApiExecutionHandoffObserved -or
   $Stage6CompletionAuditPersistentSupervisionResidentClaimBoundaryHandoffObserved -or
+  $Stage6CompletionAuditPersistentSupervisionFirstMissingRequirementHandoffObserved -or
   $Stage6CompletionAuditPrerequisiteBringupOperatorPlanHandoffObserved -or
   $Stage6CompletionAuditPrerequisiteBringupEnablementReceiptHandoffObserved
 )
@@ -1965,6 +1990,7 @@ $Payload = [ordered]@{
   stage6_completion_audit_resident_runtime_tray_presence_handoff_observed = $Stage6CompletionAuditResidentRuntimeTrayPresenceHandoffObserved
   stage6_completion_audit_persistent_supervision_api_execution_handoff_observed = $Stage6CompletionAuditPersistentSupervisionApiExecutionHandoffObserved
   stage6_completion_audit_persistent_supervision_resident_claim_boundary_handoff_observed = $Stage6CompletionAuditPersistentSupervisionResidentClaimBoundaryHandoffObserved
+  stage6_completion_audit_persistent_supervision_first_missing_requirement_handoff_observed = $Stage6CompletionAuditPersistentSupervisionFirstMissingRequirementHandoffObserved
   stage6_completion_audit_prerequisite_bringup_operator_plan_handoff_observed = $Stage6CompletionAuditPrerequisiteBringupOperatorPlanHandoffObserved
   stage6_completion_audit_enablement_receipt_review_handoff_observed = $Stage6CompletionAuditPrerequisiteBringupEnablementReceiptHandoffObserved
   stage6_completion_audit_recommended_handoff_consumed = $Stage6CompletionAuditRecommendedHandoffConsumed
@@ -2069,6 +2095,7 @@ $Payload = [ordered]@{
     stage6_completion_audit_resident_runtime_tray_presence_handoff_observed = $Stage6CompletionAuditResidentRuntimeTrayPresenceHandoffObserved
     stage6_completion_audit_persistent_supervision_api_execution_handoff_observed = $Stage6CompletionAuditPersistentSupervisionApiExecutionHandoffObserved
     stage6_completion_audit_persistent_supervision_resident_claim_boundary_handoff_observed = $Stage6CompletionAuditPersistentSupervisionResidentClaimBoundaryHandoffObserved
+    stage6_completion_audit_persistent_supervision_first_missing_requirement_handoff_observed = $Stage6CompletionAuditPersistentSupervisionFirstMissingRequirementHandoffObserved
     stage6_completion_audit_prerequisite_bringup_operator_plan_handoff_observed = $Stage6CompletionAuditPrerequisiteBringupOperatorPlanHandoffObserved
     stage6_completion_audit_enablement_receipt_review_handoff_observed = $Stage6CompletionAuditPrerequisiteBringupEnablementReceiptHandoffObserved
     stage6_completion_audit_recommended_handoff_consumed = $Stage6CompletionAuditRecommendedHandoffConsumed

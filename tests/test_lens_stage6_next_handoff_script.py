@@ -96,6 +96,10 @@ def test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback() -> N
     assert "'persistent_supervision_execution_authority_handoff'" in script
     assert "'review_persistent_supervision_resident_claim_boundary_without_runtime_start'" in script
     assert "stage6_completion_audit_persistent_supervision_resident_claim_boundary_handoff_observed" in script
+    assert "$Stage6CompletionAuditPersistentSupervisionFirstMissingRequirementHandoffObserved = (" in script
+    assert "'persistent_supervision_prerequisites_first_missing_requirement_handoff'" in script
+    assert "'resolve_resident_host_process_before_persistent_supervision_enablement'" in script
+    assert "stage6_completion_audit_persistent_supervision_first_missing_requirement_handoff_observed" in script
     assert "$Stage6CompletionAuditPrerequisiteBringupOperatorPlanHandoffObserved = (" in script
     assert "'stage6_prerequisite_bringup_operator_plan'" in script
     assert "'run_stage6_prerequisite_bringup_request_next_for_resident_host_process'" in script
@@ -790,6 +794,7 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority(tm
         "stage6_completion_audit_resident_runtime_tray_presence_handoff_observed": False,
         "stage6_completion_audit_persistent_supervision_api_execution_handoff_observed": False,
         "stage6_completion_audit_persistent_supervision_resident_claim_boundary_handoff_observed": False,
+        "stage6_completion_audit_persistent_supervision_first_missing_requirement_handoff_observed": False,
         "stage6_completion_audit_prerequisite_bringup_operator_plan_handoff_observed": False,
         "stage6_completion_audit_enablement_receipt_review_handoff_observed": False,
         "stage6_completion_audit_recommended_handoff_consumed": False,
@@ -2199,6 +2204,131 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     }
     enablement_receipt_checks = {item["id"]: item for item in enablement_receipt_payload["checks"]}
     assert enablement_receipt_checks["stage6_completion_audit_runtime_authority_handoff"]["status"] == (
+        "completion_audit_recommended_handoff_consumed"
+    )
+
+    persistent_prereq_audit_json = tmp_path / "stage6-persistent-supervision-first-missing-audit.json"
+    persistent_prereq_audit_json.write_text(
+        json.dumps(
+            {
+                "kind": "lens.stage6.completion_audit",
+                "ok": True,
+                "status": "blocked",
+                "audit_status": "complete",
+                "allow_launch_on_hotkey": True,
+                "next_smallest_truthful_gap": "persistent_supervision_required_prerequisites_missing",
+                "recommended_handoff_source": (
+                    "persistent_supervision_prerequisites_first_missing_requirement_handoff"
+                ),
+                "recommended_next_slice": "resolve_resident_host_process_before_persistent_supervision_enablement",
+                "recommended_proof_script": "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status",
+                "authority_required": "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites",
+                "authority_granted": False,
+                "recommended_handoff": {
+                    "id": "resident_host_process",
+                    "family": "resident_host",
+                    "status": "blocked",
+                    "blocker": "resident_host_process_missing",
+                    "requirement_state": "missing",
+                    "next_smallest_truthful_gap": "resident_host_process_not_supervised",
+                    "next_step": "resolve_resident_host_process_before_persistent_supervision_enablement",
+                    "proof_script": "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status",
+                    "route": "/lens/host",
+                    "readiness_route": "/lens/host/runtime-loop/readiness",
+                    "authority_required": "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites",
+                    "authority_granted": False,
+                    "read_only_contract": True,
+                    "diagnostic_only": True,
+                    "would_execute": False,
+                    "would_mutate": False,
+                    "would_write_memory": False,
+                    "would_decide_approval": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    persistent_prereq_proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-CompletionAuditJsonPath",
+        str(persistent_prereq_audit_json),
+        env=proof_env,
+    )
+
+    assert persistent_prereq_proc.returncode == 0, persistent_prereq_proc.stderr or persistent_prereq_proc.stdout
+    persistent_prereq_payload = json.loads(persistent_prereq_proc.stdout)
+    assert persistent_prereq_payload["recommended_handoff_source"] == (
+        "persistent_supervision_prerequisites_first_missing_requirement_handoff"
+    )
+    assert persistent_prereq_payload["next_smallest_truthful_gap"] == (
+        "persistent_supervision_required_prerequisites_missing"
+    )
+    assert persistent_prereq_payload["recommended_next_slice"] == (
+        "resolve_resident_host_process_before_persistent_supervision_enablement"
+    )
+    assert persistent_prereq_payload["recommended_proof_script"] == (
+        "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status"
+    )
+    assert persistent_prereq_payload["recommended_route"] == "/lens/host"
+    assert persistent_prereq_payload["recommended_readiness_route"] == "/lens/host/runtime-loop/readiness"
+    assert persistent_prereq_payload["authority_required"] == (
+        "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
+    )
+    assert persistent_prereq_payload["authority_granted"] is False
+    assert persistent_prereq_payload["stage6_completion_audit_readback_observed"] is True
+    assert (
+        persistent_prereq_payload[
+            "stage6_completion_audit_persistent_supervision_first_missing_requirement_handoff_observed"
+        ]
+        is True
+    )
+    assert persistent_prereq_payload["stage6_completion_audit_recommended_handoff_consumed"] is True
+    assert persistent_prereq_payload["stage6_completion_audit_runtime_readback_required"] is False
+    assert persistent_prereq_payload["recommended_concrete_next_smallest_truthful_gap"] == (
+        "resident_host_process_not_supervised"
+    )
+    persistent_prereq_handoff = persistent_prereq_payload["recommended_handoff"]
+    assert persistent_prereq_handoff["id"] == "resident_host_process"
+    assert persistent_prereq_handoff["family"] == "resident_host"
+    assert persistent_prereq_handoff["next_smallest_truthful_gap"] == "resident_host_process_not_supervised"
+    assert persistent_prereq_handoff["next_step"] == (
+        "resolve_resident_host_process_before_persistent_supervision_enablement"
+    )
+    assert persistent_prereq_handoff["proof_script"] == (
+        "scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status"
+    )
+    assert persistent_prereq_handoff["route"] == "/lens/host"
+    assert persistent_prereq_handoff["readiness_route"] == "/lens/host/runtime-loop/readiness"
+    assert persistent_prereq_handoff["authority_granted"] is False
+    assert persistent_prereq_handoff["read_only_contract"] is True
+    assert persistent_prereq_handoff["diagnostic_only"] is True
+    assert persistent_prereq_handoff["would_execute"] is False
+    assert persistent_prereq_handoff["would_mutate"] is False
+    assert persistent_prereq_payload["recommended_operator_handoff"]["source"] == (
+        "stage6_completion_audit_recommended_handoff"
+    )
+    assert persistent_prereq_payload["recommended_next_operator_action_requirement"] == (
+        "stage6_completion_audit_recommended_readback"
+    )
+    assert persistent_prereq_payload["recommended_next_operator_action"]["id"] == (
+        "resolve_resident_host_process_before_persistent_supervision_enablement"
+    )
+    assert persistent_prereq_payload["recommended_next_operator_action"]["method"] == "LOCAL_SCRIPT"
+    assert persistent_prereq_payload["recommended_next_operator_action"]["script_would_execute"] is False
+    assert persistent_prereq_payload["recommended_next_operator_action"]["script_would_mutate"] is False
+    assert persistent_prereq_payload["recommended_next_operator_command"] == {
+        "command": ".\\scripts\\lens-resident-host-runtime-boundary-proof.ps1 -Mode Status",
+        "mode": "Status",
+        "requires_confirmation": False,
+        "requires_explicit_operator_opt_in": False,
+        "requires_actor": False,
+        "requires_approval_id": False,
+        "requires_operator_approval_decision": False,
+    }
+    persistent_prereq_checks = {item["id"]: item for item in persistent_prereq_payload["checks"]}
+    assert persistent_prereq_checks["stage6_completion_audit_runtime_authority_handoff"]["status"] == (
         "completion_audit_recommended_handoff_consumed"
     )
 
