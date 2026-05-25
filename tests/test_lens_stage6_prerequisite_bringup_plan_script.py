@@ -1510,18 +1510,33 @@ def test_lens_stage6_prerequisite_bringup_grant_next_creates_only_next_grant_rec
     approved_status = _run_plan("-Mode", "Status", "-DataDir", str(data_dir))
     assert approved_status.returncode == 0, approved_status.stderr or approved_status.stdout
     approved_payload = json.loads(approved_status.stdout)
-    assert approved_payload["next_operator_action"]["id"] == ("grant_resident_runtime_execution_authority")
+    assert approved_payload["next_operator_action"]["id"] == (
+        "select_exact_approved_resident_runtime_execution_authority_request"
+    )
+    assert approved_payload["next_operator_action"]["route"] == "/lens/resident-runtime/authority-grant/requests"
+    assert approved_payload["next_operator_action"]["method"] == "GET"
     assert approved_payload["next_operator_action"]["approved_approval_id"] == approval_id
+    assert approved_payload["next_operator_action"]["script_would_request_authority"] is False
+    assert approved_payload["next_operator_action"]["script_would_grant_authority"] is False
+    assert approved_payload["next_operator_action"]["script_would_decide_approval"] is False
+    follow_up_grant = approved_payload["next_operator_action"]["follow_up_grant_action"]
+    assert follow_up_grant["id"] == "grant_resident_runtime_execution_authority"
+    assert follow_up_grant["route"] == "/lens/resident-runtime/authority-grant"
+    assert follow_up_grant["approved_approval_id"] == approval_id
+    assert follow_up_grant["preview_only"] is True
+    assert follow_up_grant["availability_reason"] == (
+        "approved_request_selected_but_authority_grant_is_separate_operator_step"
+    )
     assert approved_payload["next_operator_command"] == {
-        "command": (
-            ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 "
-            f"-Mode GrantNext -Actor <actor> -ApprovalId {approval_id} -ConfirmGrant"
-        ),
-        "mode": "GrantNext",
-        "requires_confirmation": True,
-        "requires_approval_id": True,
-        "requires_operator_approval_decision": True,
+        "command": ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status",
+        "mode": "Status",
+        "requires_confirmation": False,
+        "requires_approval_id": False,
+        "requires_operator_approval_decision": False,
     }
+    assert approved_payload["next_operator_actor_scope_readiness"]["ready"] is True
+    assert approved_payload["next_operator_actor_scope_readiness"]["reason"] == "not_required"
+    assert approved_payload["next_operator_actor_scope_readiness"]["required_scope"] == ""
     assert approved_payload["next_operator_action"]["script_would_execute"] is False
     assert approved_payload["next_operator_action"]["script_would_mutate"] is False
 
@@ -1544,6 +1559,12 @@ def test_lens_stage6_prerequisite_bringup_grant_next_creates_only_next_grant_rec
     assert payload["mode"] == "grantnext"
     assert payload["status"] == "authority_granted"
     assert payload["ok"] is True
+    assert payload["grant_target_action"]["id"] == "grant_resident_runtime_execution_authority"
+    assert payload["grant_target_action"]["approved_approval_id"] == approval_id
+    assert payload["grant_target_action"]["grant_target_source"] == "selected_approved_request_handoff"
+    assert payload["grant_target_action"]["selected_instead_of_next_operator_action_id"] == (
+        "select_exact_approved_resident_runtime_execution_authority_request"
+    )
     grant_result = payload["grant_result"]
     assert grant_result["ok"] is True
     assert grant_result["authority_granted"] is True

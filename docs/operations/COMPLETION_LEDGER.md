@@ -38482,6 +38482,51 @@ handoff:
   Result: `passed; Git reported the expected LF-to-CRLF warning for the touched
   PowerShell script`
 
+### 2026-05-25 - Stage 6 prerequisite approved-request selection handoff
+
+Roadmap area: Stage 6 / Lens MVP, governed runtime authority visibility and
+operator handoff truthfulness.
+
+Material change:
+
+- The Stage 6 prerequisite bring-up plan now matches the next-handoff authority
+  boundary when a resident-runtime execution authority request is already
+  approved. It reports
+  `select_exact_approved_resident_runtime_execution_authority_request` as a
+  read-only `GET` selection/readback before surfacing any grant execution.
+- The resident-runtime authority grant remains available only as a
+  `follow_up_grant_action` preview tied to the exact approved approval id.
+  `GrantNext` can still execute the grant when the operator supplies that
+  approved id and confirmation, but the Status path no longer describes the
+  approved-request state as an immediate grant command.
+- Request, approval decision, approved-request selection, and authority-grant
+  receipt creation remain separate governed operator steps.
+- Stage 6 still does not close and Stage 7 does not start. This change does not
+  request approval, decide approval, grant authority, execute runtime actions,
+  write memory, claim residency, or mutate Lens runtime state from Status mode.
+
+Latest validation for Stage 6 prerequisite approved-request selection handoff:
+
+- PowerShell AST parse of
+  `scripts\lens-stage6-prerequisite-bringup-plan.ps1`
+  Result: `passed`
+- `python -m pytest
+  tests/test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_grant_next_creates_only_next_grant_receipt
+  -q --tb=short`
+  Result: `passed`
+- `python -m pytest
+  tests/test_lens_stage6_prerequisite_bringup_plan_script.py -q --tb=short`
+  Result: `passed`
+- `python -m ruff check
+  tests/test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests/test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed; already formatted`
+- `git diff --check`
+  Result: `passed; Git reported the expected LF-to-CRLF warning for the touched
+  PowerShell script`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

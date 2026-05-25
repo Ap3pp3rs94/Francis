@@ -368,6 +368,38 @@ def _await_action(
     }
 
 
+def _select_approved_request_action(
+    *,
+    action_id: str,
+    route: str,
+    approval_action: str,
+    approved_approval_id: str,
+    grant_action: dict[str, Any],
+) -> dict[str, Any]:
+    follow_up_grant_action = dict(grant_action)
+    follow_up_grant_action["approved_approval_id"] = approved_approval_id
+    follow_up_grant_action["preview_only"] = True
+    follow_up_grant_action["availability_reason"] = "approved_request_selected_but_authority_grant_is_separate_operator_step"
+    return {
+        "id": action_id,
+        "route": route,
+        "method": "GET",
+        "approval_action": approval_action,
+        "requires": ["exact approved resident runtime authority approval_id"],
+        "mode": "approval_readback",
+        "live_effect": "select approved resident-runtime authority request without writing a grant receipt",
+        "operator_supplied_values_required": False,
+        "approval_decision_required": False,
+        "approved_approval_id": approved_approval_id,
+        "follow_up_grant_action": follow_up_grant_action,
+        "script_would_execute": False,
+        "script_would_mutate": False,
+        "script_would_request_authority": False,
+        "script_would_grant_authority": False,
+        "script_would_decide_approval": False,
+    }
+
+
 def _resident_actions() -> list[dict[str, Any]]:
     return [
         _action(
@@ -482,9 +514,13 @@ def _next_action(requirement_id: str, status: dict[str, Any], actions: list[dict
         host_requests = _as_dict(_as_dict(status.get("resident_host")).get("supervision_authority_requests"))
         if not resident_granted:
             if _approved_count(resident_requests) > 0:
-                grant_action = dict(actions[1])
-                grant_action["approved_approval_id"] = _latest_approved_id(resident_requests)
-                return grant_action
+                return _select_approved_request_action(
+                    action_id="select_exact_approved_resident_runtime_execution_authority_request",
+                    route="/lens/resident-runtime/authority-grant/requests",
+                    approval_action="lens.resident_runtime.execution_authority",
+                    approved_approval_id=_latest_approved_id(resident_requests),
+                    grant_action=actions[1],
+                )
             if _pending_count(resident_requests) > 0:
                 return _await_action(
                     "await_resident_runtime_execution_authority_approval",
@@ -753,6 +789,14 @@ def _operator_command(action: dict[str, Any]) -> dict[str, Any]:
             "requires_operator_approval_decision": False,
             "approval_request_command": action.get("approval_request_command", {}),
         }
+    if action_id.startswith("select_"):
+        return {
+            "command": ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status",
+            "mode": "Status",
+            "requires_confirmation": False,
+            "requires_approval_id": False,
+            "requires_operator_approval_decision": False,
+        }
     if action_id.startswith("grant_"):
         command = (
             ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 "
@@ -825,6 +869,11 @@ def _is_grant_action(action: dict[str, Any]) -> bool:
     return _safe_str(action.get("id")).startswith("grant_")
 
 
+def _follow_up_grant_action(action: dict[str, Any]) -> dict[str, Any]:
+    candidate = _as_dict(action.get("follow_up_grant_action"))
+    return dict(candidate) if _is_grant_action(candidate) else {}
+
+
 def _is_execution_action(action: dict[str, Any]) -> bool:
     action_id = _safe_str(action.get("id"))
     return action_id.startswith("execute_") or action_id.startswith("apply_")
@@ -847,10 +896,16 @@ def _grant_target_action(
         return dict(next_operator_action)
 
     candidates: list[dict[str, Any]] = []
+    follow_up_candidate = _follow_up_grant_action(next_operator_action)
+    if follow_up_candidate:
+        candidates.append(follow_up_candidate)
     for step in ordered_steps:
         candidate = _as_dict(step.get("next_operator_action"))
         if _is_grant_action(candidate):
             candidates.append(dict(candidate))
+        follow_up_candidate = _follow_up_grant_action(candidate)
+        if follow_up_candidate:
+            candidates.append(follow_up_candidate)
 
     enablement_candidate = _next_enablement_action(enablement_sequence, resident_host)
     if _is_grant_action(enablement_candidate):
@@ -859,7 +914,11 @@ def _grant_target_action(
     for candidate in candidates:
         if _safe_str(candidate.get("approved_approval_id")).strip() != requested_approval_id:
             continue
-        candidate["grant_target_source"] = "approved_approval_id_handoff"
+        candidate["grant_target_source"] = (
+            "selected_approved_request_handoff"
+            if _safe_str(next_operator_action.get("id")).startswith("select_")
+            else "approved_approval_id_handoff"
+        )
         candidate["selected_instead_of_next_operator_action_id"] = _safe_str(next_operator_action.get("id"))
         return candidate
 
