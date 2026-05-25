@@ -888,9 +888,14 @@ $Stage6PrerequisiteBringupPlanNextOperatorCommand = $Stage6PrerequisiteBringupPl
 $Stage6PrerequisiteBringupPlanCommandAvailability = $Stage6PrerequisiteBringupPlan.operator_sequence_command_availability
 $Stage6PrerequisiteBringupPlanNextOperatorActionId = [string]$Stage6PrerequisiteBringupPlanNextOperatorAction.id
 $Stage6PrerequisiteBringupPlanNextOperatorCommandMode = [string]$Stage6PrerequisiteBringupPlanNextOperatorCommand.mode
+$Stage6PrerequisiteBringupPlanAllowedFirstMissingRequirements = @(
+  'resident_host_process',
+  'tray_presence'
+)
 $Stage6PrerequisiteBringupPlanAllowedFirstMissingTruthfulGaps = @(
   'resident_host_process_not_supervised',
-  'resident_supervision_not_persistent'
+  'resident_supervision_not_persistent',
+  'summon_tray_presence_blocker_boundary'
 )
 $Stage6PrerequisiteBringupPlanAllowedMissingPrerequisites = @(
   'resident_host_process',
@@ -963,15 +968,26 @@ $Stage6PrerequisiteBringupPlanResidentHostActionObserved = (
     -not [bool]$Stage6PrerequisiteBringupPlanNextOperatorCommand.requires_operator_approval_decision
   )
 )
+$Stage6PrerequisiteBringupPlanTrayPresenceActionObserved = (
+  $Stage6PrerequisiteBringupPlanNextOperatorActionId -eq 'request_tray_presence_authority' -and
+  $Stage6PrerequisiteBringupPlanNextOperatorCommandMode -eq 'RequestNext' -and
+  [bool]$Stage6PrerequisiteBringupPlanNextOperatorCommand.requires_confirmation -and
+  -not [bool]$Stage6PrerequisiteBringupPlanNextOperatorCommand.requires_approval_id -and
+  -not [bool]$Stage6PrerequisiteBringupPlanNextOperatorCommand.requires_operator_approval_decision
+)
+$Stage6PrerequisiteBringupPlanFirstMissingActionObserved = (
+  $Stage6PrerequisiteBringupPlanResidentHostActionObserved -or
+  $Stage6PrerequisiteBringupPlanTrayPresenceActionObserved
+)
 $Stage6PrerequisiteBringupPlanMissingPrerequisitesObserved = (
   [string]$Stage6PrerequisiteBringupPlan.status -eq 'blocked' -and
   [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap -eq 'persistent_supervision_required_prerequisites_missing' -and
   [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap_basis -eq 'missing_required_before_enable' -and
-  [string]$Stage6PrerequisiteBringupPlan.current_first_missing_requirement -eq 'resident_host_process' -and
+  $Stage6PrerequisiteBringupPlanAllowedFirstMissingRequirements -contains [string]$Stage6PrerequisiteBringupPlan.current_first_missing_requirement -and
   $Stage6PrerequisiteBringupPlanAllowedFirstMissingTruthfulGaps -contains [string]$Stage6PrerequisiteBringupPlan.current_first_missing_truthful_gap -and
   -not [bool]$Stage6PrerequisiteBringupPlan.required_before_enable_ready -and
-  [string]$Stage6PrerequisiteBringupPlan.next_operator_action_requirement -eq 'resident_host_process' -and
-  $Stage6PrerequisiteBringupPlanResidentHostActionObserved -and
+  [string]$Stage6PrerequisiteBringupPlan.next_operator_action_requirement -eq [string]$Stage6PrerequisiteBringupPlan.current_first_missing_requirement -and
+  $Stage6PrerequisiteBringupPlanFirstMissingActionObserved -and
   [string]$Stage6PrerequisiteBringupPlanNextOperatorAction.method -eq 'POST' -and
   -not [string]::IsNullOrWhiteSpace([string]$Stage6PrerequisiteBringupPlanNextOperatorAction.approval_action) -and
   -not [bool]$Stage6PrerequisiteBringupPlanNextOperatorAction.script_would_execute -and
@@ -979,7 +995,7 @@ $Stage6PrerequisiteBringupPlanMissingPrerequisitesObserved = (
   [int]$Stage6PrerequisiteBringupPlanCommandAvailability.available_now_count -eq 1 -and
   [int]$Stage6PrerequisiteBringupPlanCommandAvailability.preview_only_count -ge 0 -and
   [bool]$Stage6PrerequisiteBringupPlanCommandAvailability.truthful -and
-  $Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable -contains 'resident_host_process' -and
+  $Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable -contains [string]$Stage6PrerequisiteBringupPlan.current_first_missing_requirement -and
   @(
     $Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable |
       Where-Object { $Stage6PrerequisiteBringupPlanAllowedMissingPrerequisites -notcontains [string]$_ }
@@ -3545,6 +3561,12 @@ if (
   [string]$Stage6PrerequisiteBringupMissingRequirementAction.id -eq 'request_resident_runtime_execution_authority'
 ) {
   $Stage6PrerequisiteBringupMissingRequirementRecommendedNextSlice = 'run_stage6_prerequisite_bringup_request_next_for_resident_host_process'
+}
+if (
+  $Stage6PrerequisiteBringupMissingRequirementActionRequirement -eq 'tray_presence' -and
+  [string]$Stage6PrerequisiteBringupMissingRequirementAction.id -eq 'request_tray_presence_authority'
+) {
+  $Stage6PrerequisiteBringupMissingRequirementRecommendedNextSlice = 'run_stage6_prerequisite_bringup_request_next_for_tray_presence'
 }
 if (
   $PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable -eq 'resident_host_process' -and

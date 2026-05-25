@@ -259,11 +259,29 @@ def test_lens_stage6_completion_audit_consumes_stage6_prerequisite_bringup_plan_
         "[string]$Stage6PrerequisiteBringupPlan.current_truthful_gap "
         "-eq 'persistent_supervision_required_prerequisites_missing'"
     ) in script
+    assert "$Stage6PrerequisiteBringupPlanAllowedFirstMissingRequirements = @(" in script
     assert "$Stage6PrerequisiteBringupPlanAllowedFirstMissingTruthfulGaps" in script
+    assert "'summon_tray_presence_blocker_boundary'" in script
     assert "$Stage6PrerequisiteBringupPlanAllowedMissingPrerequisites = @(" in script
     assert "$Stage6PrerequisiteBringupPlanMissingPrerequisitesObserved = (" in script
-    assert "$Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable -contains 'resident_host_process' -and" in script
+    assert (
+        "$Stage6PrerequisiteBringupPlanAllowedFirstMissingRequirements "
+        "-contains [string]$Stage6PrerequisiteBringupPlan.current_first_missing_requirement"
+    ) in script
+    assert (
+        "[string]$Stage6PrerequisiteBringupPlan.next_operator_action_requirement "
+        "-eq [string]$Stage6PrerequisiteBringupPlan.current_first_missing_requirement"
+    ) in script
+    assert "$Stage6PrerequisiteBringupPlanTrayPresenceActionObserved = (" in script
+    assert "'request_tray_presence_authority'" in script
+    assert (
+        "$Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable "
+        "-contains [string]$Stage6PrerequisiteBringupPlan.current_first_missing_requirement"
+    ) in script
     assert "$Stage6PrerequisiteBringupPlanAllowedMissingPrerequisites -notcontains [string]$_" in script
+    assert (
+        "$Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable -contains 'resident_host_process' -and" not in script
+    )
     assert "$Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable -contains 'tray_presence' -and" not in script
     assert (
         "$Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable -contains 'global_hotkey_binding' -and" not in script

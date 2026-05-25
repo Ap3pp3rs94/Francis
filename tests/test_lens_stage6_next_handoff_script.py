@@ -99,6 +99,9 @@ def test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback() -> N
     assert "$Stage6CompletionAuditPersistentSupervisionFirstMissingRequirementHandoffObserved = (" in script
     assert "'persistent_supervision_prerequisites_first_missing_requirement_handoff'" in script
     assert "'resolve_resident_host_process_before_persistent_supervision_enablement'" in script
+    assert "'resolve_tray_presence_before_persistent_supervision_enablement'" in script
+    assert "'scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status'" in script
+    assert "$Stage6CompletionAuditPersistentSupervisionFirstMissingRequirementTrayPresenceObserved = (" in script
     assert "stage6_completion_audit_persistent_supervision_first_missing_requirement_handoff_observed" in script
     assert "$Stage6CompletionAuditPrerequisiteBringupOperatorPlanHandoffObserved = (" in script
     assert "'stage6_prerequisite_bringup_operator_plan'" in script
@@ -2331,6 +2334,116 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     assert persistent_prereq_checks["stage6_completion_audit_runtime_authority_handoff"]["status"] == (
         "completion_audit_recommended_handoff_consumed"
     )
+
+    persistent_prereq_tray_audit_json = tmp_path / "stage6-persistent-supervision-first-missing-tray-audit.json"
+    persistent_prereq_tray_audit_json.write_text(
+        json.dumps(
+            {
+                "kind": "lens.stage6.completion_audit",
+                "ok": True,
+                "status": "blocked",
+                "audit_status": "complete",
+                "allow_launch_on_hotkey": True,
+                "next_smallest_truthful_gap": "persistent_supervision_required_prerequisites_missing",
+                "recommended_handoff_source": (
+                    "persistent_supervision_prerequisites_first_missing_requirement_handoff"
+                ),
+                "recommended_next_slice": "resolve_tray_presence_before_persistent_supervision_enablement",
+                "recommended_proof_script": "scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status",
+                "authority_required": "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites",
+                "authority_granted": False,
+                "recommended_handoff": {
+                    "id": "tray_presence",
+                    "family": "tray_presence",
+                    "status": "blocked",
+                    "blocker": "tray_host_missing",
+                    "requirement_state": "missing",
+                    "next_smallest_truthful_gap": "summon_tray_presence_blocker_boundary",
+                    "next_step": "resolve_tray_presence_before_persistent_supervision_enablement",
+                    "proof_script": "scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status",
+                    "route": "/lens/tray",
+                    "readiness_route": "/lens/tray/readiness",
+                    "authority_required": "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites",
+                    "authority_granted": False,
+                    "read_only_contract": True,
+                    "diagnostic_only": True,
+                    "would_execute": False,
+                    "would_mutate": False,
+                    "would_write_memory": False,
+                    "would_decide_approval": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    persistent_prereq_tray_proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-CompletionAuditJsonPath",
+        str(persistent_prereq_tray_audit_json),
+        env=proof_env,
+    )
+
+    assert persistent_prereq_tray_proc.returncode == 0, (
+        persistent_prereq_tray_proc.stderr or persistent_prereq_tray_proc.stdout
+    )
+    persistent_prereq_tray_payload = json.loads(persistent_prereq_tray_proc.stdout)
+    assert persistent_prereq_tray_payload["recommended_handoff_source"] == (
+        "persistent_supervision_prerequisites_first_missing_requirement_handoff"
+    )
+    assert persistent_prereq_tray_payload["next_smallest_truthful_gap"] == (
+        "persistent_supervision_required_prerequisites_missing"
+    )
+    assert persistent_prereq_tray_payload["recommended_next_slice"] == (
+        "resolve_tray_presence_before_persistent_supervision_enablement"
+    )
+    assert persistent_prereq_tray_payload["recommended_proof_script"] == (
+        "scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status"
+    )
+    assert persistent_prereq_tray_payload["recommended_route"] == "/lens/tray"
+    assert persistent_prereq_tray_payload["recommended_readiness_route"] == "/lens/tray/readiness"
+    assert persistent_prereq_tray_payload["authority_required"] == (
+        "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
+    )
+    assert persistent_prereq_tray_payload["authority_granted"] is False
+    assert (
+        persistent_prereq_tray_payload[
+            "stage6_completion_audit_persistent_supervision_first_missing_requirement_handoff_observed"
+        ]
+        is True
+    )
+    assert persistent_prereq_tray_payload["stage6_completion_audit_recommended_handoff_consumed"] is True
+    assert persistent_prereq_tray_payload["stage6_completion_audit_runtime_readback_required"] is False
+    assert persistent_prereq_tray_payload["recommended_concrete_next_smallest_truthful_gap"] == (
+        "summon_tray_presence_blocker_boundary"
+    )
+    persistent_prereq_tray_handoff = persistent_prereq_tray_payload["recommended_handoff"]
+    assert persistent_prereq_tray_handoff["id"] == "tray_presence"
+    assert persistent_prereq_tray_handoff["family"] == "tray_presence"
+    assert persistent_prereq_tray_handoff["next_smallest_truthful_gap"] == "summon_tray_presence_blocker_boundary"
+    assert persistent_prereq_tray_handoff["next_step"] == (
+        "resolve_tray_presence_before_persistent_supervision_enablement"
+    )
+    assert persistent_prereq_tray_handoff["proof_script"] == (
+        "scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status"
+    )
+    assert persistent_prereq_tray_handoff["read_only_contract"] is True
+    assert persistent_prereq_tray_handoff["diagnostic_only"] is True
+    assert persistent_prereq_tray_handoff["would_execute"] is False
+    assert persistent_prereq_tray_handoff["would_mutate"] is False
+    assert persistent_prereq_tray_payload["recommended_next_operator_action"]["id"] == (
+        "resolve_tray_presence_before_persistent_supervision_enablement"
+    )
+    assert persistent_prereq_tray_payload["recommended_next_operator_command"] == {
+        "command": ".\\scripts\\lens-summon-tray-presence-blocker-proof.ps1 -Mode Status",
+        "mode": "Status",
+        "requires_confirmation": False,
+        "requires_explicit_operator_opt_in": False,
+        "requires_actor": False,
+        "requires_approval_id": False,
+        "requires_operator_approval_decision": False,
+    }
 
     persistent_api_audit_json = tmp_path / "stage6-persistent-supervision-api-audit.json"
     persistent_api_audit_json.write_text(

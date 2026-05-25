@@ -1151,21 +1151,42 @@ $Stage6CompletionAuditPersistentSupervisionResidentClaimBoundaryHandoffObserved 
   -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'resident_claim_allowed' -Default $true) -and
   (ConvertTo-StringArray -Value (Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'blockers')) -contains 'resident_claim_authority_not_granted'
 )
+$Stage6CompletionAuditPersistentSupervisionFirstMissingHandoffNextSlice = [string](
+  Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'next_step' -Default ''
+)
+$Stage6CompletionAuditPersistentSupervisionFirstMissingHandoffProofScript = [string](
+  Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'proof_script' -Default ''
+)
+$Stage6CompletionAuditPersistentSupervisionFirstMissingRequirementResidentHostObserved = (
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'id' -Default '') -eq 'resident_host_process' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'family' -Default '') -eq 'resident_host' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'resident_host_process_not_supervised' -and
+  $Stage6CompletionAuditPersistentSupervisionFirstMissingHandoffNextSlice -eq 'resolve_resident_host_process_before_persistent_supervision_enablement' -and
+  $Stage6CompletionAuditPersistentSupervisionFirstMissingHandoffProofScript -eq 'scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'route' -Default '') -eq '/lens/host' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'readiness_route' -Default '') -eq '/lens/host/runtime-loop/readiness'
+)
+$Stage6CompletionAuditPersistentSupervisionFirstMissingRequirementTrayPresenceObserved = (
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'id' -Default '') -eq 'tray_presence' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'family' -Default '') -eq 'tray_presence' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'summon_tray_presence_blocker_boundary' -and
+  $Stage6CompletionAuditPersistentSupervisionFirstMissingHandoffNextSlice -eq 'resolve_tray_presence_before_persistent_supervision_enablement' -and
+  $Stage6CompletionAuditPersistentSupervisionFirstMissingHandoffProofScript -eq 'scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'route' -Default '') -eq '/lens/tray' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'readiness_route' -Default '') -eq '/lens/tray/readiness'
+)
 $Stage6CompletionAuditPersistentSupervisionFirstMissingRequirementHandoffObserved = (
   $Stage6CompletionAuditReadbackObserved -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_handoff_source' -Default '') -eq 'persistent_supervision_prerequisites_first_missing_requirement_handoff' -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'next_smallest_truthful_gap' -Default '') -eq 'persistent_supervision_required_prerequisites_missing' -and
-  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_next_slice' -Default '') -eq 'resolve_resident_host_process_before_persistent_supervision_enablement' -and
-  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_proof_script' -Default '') -eq 'scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_next_slice' -Default '') -eq $Stage6CompletionAuditPersistentSupervisionFirstMissingHandoffNextSlice -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_proof_script' -Default '') -eq $Stage6CompletionAuditPersistentSupervisionFirstMissingHandoffProofScript -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'authority_required' -Default '') -eq 'resident_host_process_tray_hotkey_overlay_and_summon_prerequisites' -and
   -not [bool](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'authority_granted' -Default $true) -and
-  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'id' -Default '') -eq 'resident_host_process' -and
-  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'family' -Default '') -eq 'resident_host' -and
-  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'resident_host_process_not_supervised' -and
-  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'next_step' -Default '') -eq 'resolve_resident_host_process_before_persistent_supervision_enablement' -and
-  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'proof_script' -Default '') -eq 'scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status' -and
-  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'route' -Default '') -eq '/lens/host' -and
-  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'readiness_route' -Default '') -eq '/lens/host/runtime-loop/readiness' -and
+  (
+    $Stage6CompletionAuditPersistentSupervisionFirstMissingRequirementResidentHostObserved -or
+    $Stage6CompletionAuditPersistentSupervisionFirstMissingRequirementTrayPresenceObserved
+  ) -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'authority_required' -Default '') -eq 'resident_host_process_tray_hotkey_overlay_and_summon_prerequisites' -and
   -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'authority_granted' -Default $true) -and
   [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'read_only_contract' -Default $false) -and
