@@ -127,6 +127,35 @@ function Test-SafeTempPath {
   return $Resolved.StartsWith($TempRoot, [System.StringComparison]::OrdinalIgnoreCase)
 }
 
+function Remove-ProofDataRoot {
+  param(
+    [string]$Path,
+    [int]$MaxAttempts = 30,
+    [int]$DelayMilliseconds = 100
+  )
+
+  if (-not (Test-SafeTempPath -Path $Path)) {
+    return $false
+  }
+
+  for ($Attempt = 0; $Attempt -lt $MaxAttempts; $Attempt += 1) {
+    try {
+      if (Test-Path -LiteralPath $Path) {
+        Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop
+      }
+    } catch {
+    }
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+      return $true
+    }
+
+    Start-Sleep -Milliseconds $DelayMilliseconds
+  }
+
+  return -not (Test-Path -LiteralPath $Path)
+}
+
 $PowerShellPath = Get-PowerShellPath
 $HostSupervisorPath = Join-Path $PSScriptRoot 'lens-host-supervisor.ps1'
 $PlanPath = Join-Path $PSScriptRoot 'lens-persistent-supervision-plan.ps1'
@@ -174,8 +203,7 @@ try {
   }
 
   if (Test-SafeTempPath -Path $DataRoot) {
-    Remove-Item -LiteralPath $DataRoot -Recurse -Force -ErrorAction SilentlyContinue
-    $DataRootRemoved = -not (Test-Path -LiteralPath $DataRoot)
+    $DataRootRemoved = Remove-ProofDataRoot -Path $DataRoot
   }
 }
 

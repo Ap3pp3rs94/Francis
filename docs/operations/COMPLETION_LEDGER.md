@@ -38660,6 +38660,46 @@ Latest validation for Stage 6 applied enablement handoff precedence guard:
   Leftover Lens proof process was stopped and Lens hotkey, tray, overlay, and
   host supervisor runtimes were stopped afterward.`
 
+### 2026-05-25 - Stage 6 plan-consumption proof cleanup retry hardening
+
+Roadmap area: Stage 6 / Lens MVP, validation reliability for resident-host,
+tray, and surface runtime plan-consumption proofs.
+
+Material change:
+
+- The resident-host, tray, and surface plan-consumption proof scripts now retry
+  safe temporary data-root cleanup instead of treating a transient Windows file
+  lock after a single `Remove-Item` attempt as proof failure.
+- The cleanup hardening does not weaken the proof gates: each proof still must
+  observe the same resident/surface runtime readback, plan-consumption handoff,
+  bounded side-effect posture, and stopped resident supervisor before returning
+  `proof_passed`.
+- Stage 6 still does not close and Stage 7 does not start. The current Stage 6
+  closure path still requires the full launch-on-hotkey completion-audit runtime
+  readback to pass.
+
+Latest validation for Stage 6 plan-consumption proof cleanup retry hardening:
+
+- PowerShell AST parse of
+  `scripts\lens-resident-host-plan-consumption-proof.ps1`
+  Result: `passed`
+- PowerShell AST parse of
+  `scripts\lens-tray-plan-consumption-proof.ps1`
+  Result: `passed`
+- PowerShell AST parse of
+  `scripts\lens-surface-plan-consumption-proof.ps1`
+  Result: `passed`
+- `python -m pytest tests/test_lens_surface_plan_consumption_proof_script.py
+  tests/test_lens_tray_plan_consumption_proof_script.py
+  tests/test_lens_resident_host_plan_consumption_proof_script.py -q --tb=short`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-surface-plan-consumption-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed; ok=true; data_root_removed=true;
+  next_smallest_truthful_gap=persistent_supervision_authority_not_granted;
+  recommended_next_slice=resolve_persistent_supervision_authority_before_enablement;
+  stop_observed=true; side_effects_bounded=true`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
