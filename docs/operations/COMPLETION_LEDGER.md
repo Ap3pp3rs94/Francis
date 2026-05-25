@@ -37962,6 +37962,69 @@ Latest validation for prerequisite runtime-readiness handoff guard:
   Result: `passed; Git reported expected LF-to-CRLF warnings for the touched
   PowerShell scripts`
 
+### 2026-05-25 - Stage 6 first-missing prerequisite handoff advancement
+
+Roadmap area: Stage 6 / Lens MVP, governed persistent-supervision prerequisite
+bring-up, completion-audit handoff consumption, and operator handoff
+truthfulness.
+
+Material change:
+
+- The Stage 6 next-handoff proof now consumes a supplied completion-audit
+  `persistent_supervision_prerequisites_first_missing_requirement_handoff`
+  instead of falling back to stale launch-on-hotkey runtime-readback guidance.
+- The resident-host execution contract now proves that a bounded supervised
+  resident-host lease advances the first missing prerequisite from
+  `resident_host_process` to `tray_presence` in both the prerequisite bring-up
+  plan and `/lens/status`.
+- The Stage 6 completion audit and next-handoff proof now accept `tray_presence`
+  as the next first-missing persistent-supervision prerequisite after resident
+  host evidence is consumed. The concrete next gap remains
+  `summon_tray_presence_blocker_boundary` with the read-only proof script
+  `scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status`.
+- Stage 6 still does not close. This does not start Stage 7, grant tray,
+  hotkey, overlay, summon, process-supervision, resident-claim, or memory-write
+  authority, and does not claim persistent resident runtime readiness.
+
+Latest validation for Stage 6 first-missing prerequisite handoff advancement:
+
+- PowerShell AST parse of `scripts\lens-stage6-completion-audit.ps1` and
+  `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed`
+- `python -m pytest
+  tests\test_api_lens.py::test_lens_resident_runtime_execute_starts_supervised_resident_host_lease -q`
+  Result: `passed`
+- `python -m pytest
+  tests\test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_execute_next_runs_only_current_bounded_execution -q`
+  Result: `passed`
+- `python -m pytest
+  tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_consumes_stage6_prerequisite_bringup_plan_readback
+  tests\test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback
+  tests\test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_applied_bringup_review_state -q`
+  Result: `passed`
+- `python -m pytest
+  tests\test_lens_stage6_completion_audit_script.py
+  tests\test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed; one expected skip`
+- `ruff check
+  tests\test_lens_stage6_completion_audit_script.py
+  tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `ruff format --check
+  tests\test_lens_stage6_completion_audit_script.py
+  tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; already formatted after applying Ruff formatting`
+- `git diff --check`
+  Result: `passed; Git reported expected LF-to-CRLF warnings for
+  scripts\lens-stage6-completion-audit.ps1` and
+  `scripts\lens-stage6-next-handoff.ps1`
+- GitHub Actions `ci` run `26395018742` for commit `efd9ece0`
+  Result: `passed across ubuntu-latest/windows-2025-vs2026 on Python 3.12
+  and 3.13`
+- GitHub Actions `ci` run `26396458260` for commit `ba5b8597`
+  Result: `passed across ubuntu-latest/windows-2025-vs2026 on Python 3.12
+  and 3.13`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
