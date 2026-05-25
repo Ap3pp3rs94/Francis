@@ -1321,6 +1321,13 @@ $Stage6CompletionAuditPrerequisiteBringupOperatorPlanRequirement = [string](
 $Stage6CompletionAuditPrerequisiteBringupOperatorPlanFirstMissingRequirement = [string](
   Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'first_missing_required_before_enable' -Default ''
 )
+$Stage6CompletionAuditPrerequisiteBringupOperatorPlanEffectiveFirstMissingRequirement = if (
+  -not [string]::IsNullOrWhiteSpace($Stage6CompletionAuditPrerequisiteBringupOperatorPlanFirstMissingRequirement)
+) {
+  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanFirstMissingRequirement
+} else {
+  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanRequirement
+}
 $Stage6CompletionAuditPrerequisiteBringupOperatorPlanAllowedRequirements = @(
   'resident_host_process',
   'tray_presence',
@@ -1453,22 +1460,43 @@ $Stage6CompletionAuditPrerequisiteBringupOperatorPlanActionObserved = (
   $Stage6CompletionAuditPrerequisiteBringupOperatorPlanSurfaceExecuteActionObserved -or
   $Stage6CompletionAuditPrerequisiteBringupOperatorPlanSurfaceAwaitActionObserved
 )
+$Stage6CompletionAuditPrerequisiteBringupOperatorPlanSource = [string](
+  Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_handoff_source' -Default ''
+)
+$Stage6CompletionAuditPrerequisiteBringupOperatorPlanGap = [string](
+  Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'next_smallest_truthful_gap' -Default ''
+)
+$Stage6CompletionAuditPrerequisiteBringupOperatorPlanHandoffGap = [string](
+  Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'next_smallest_truthful_gap' -Default ''
+)
+$Stage6CompletionAuditPrerequisiteBringupOperatorPlanSourceObserved = (
+  (
+    $Stage6CompletionAuditPrerequisiteBringupOperatorPlanSource -eq 'stage6_prerequisite_bringup_operator_plan' -and
+    $Stage6CompletionAuditPrerequisiteBringupOperatorPlanGap -eq 'persistent_supervision_required_prerequisites_missing' -and
+    $Stage6CompletionAuditPrerequisiteBringupOperatorPlanHandoffGap -eq 'persistent_supervision_required_prerequisites_missing'
+  ) -or
+  (
+    $Stage6CompletionAuditPrerequisiteBringupOperatorPlanSource -eq 'stage6_closure_readback_summon_resident_host_blocker' -and
+    $Stage6CompletionAuditPrerequisiteBringupOperatorPlanGap -eq 'summon_anywhere_blockers' -and
+    $Stage6CompletionAuditPrerequisiteBringupOperatorPlanHandoffGap -eq 'persistent_supervision_execution_boundary' -and
+    [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'consumed_summon_anywhere_next_smallest_truthful_gap' -Default '') -eq 'summon_anywhere_blockers' -and
+    [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'previous_next_smallest_truthful_gap' -Default '') -eq 'stage6_lens_completion_audit'
+  )
+)
 $Stage6CompletionAuditPrerequisiteBringupOperatorPlanHandoffObserved = (
   $Stage6CompletionAuditReadbackObserved -and
-  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_handoff_source' -Default '') -eq 'stage6_prerequisite_bringup_operator_plan' -and
-  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'next_smallest_truthful_gap' -Default '') -eq 'persistent_supervision_required_prerequisites_missing' -and
+  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanSourceObserved -and
   $Stage6CompletionAuditPrerequisiteBringupOperatorPlanNextSliceObserved -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_proof_script' -Default '') -eq 'scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status' -and
   $Stage6CompletionAuditPrerequisiteBringupOperatorPlanAuthorityObserved -and
   -not [bool](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'authority_granted' -Default $true) -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'status' -Default '') -eq 'blocked' -and
-  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'persistent_supervision_required_prerequisites_missing' -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'proof_script' -Default '') -eq 'scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status' -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'route' -Default '') -eq '/lens/host/persistent-supervision' -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'readiness_route' -Default '') -eq '/lens/host/persistent-supervision/enablement' -and
   -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'authority_granted' -Default $true) -and
-  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanAllowedRequirements -contains $Stage6CompletionAuditPrerequisiteBringupOperatorPlanFirstMissingRequirement -and
-  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanRequirement -eq $Stage6CompletionAuditPrerequisiteBringupOperatorPlanFirstMissingRequirement -and
+  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanAllowedRequirements -contains $Stage6CompletionAuditPrerequisiteBringupOperatorPlanEffectiveFirstMissingRequirement -and
+  $Stage6CompletionAuditPrerequisiteBringupOperatorPlanRequirement -eq $Stage6CompletionAuditPrerequisiteBringupOperatorPlanEffectiveFirstMissingRequirement -and
   $Stage6CompletionAuditPrerequisiteBringupOperatorPlanActionObserved -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanAction -Name 'method' -Default '') -eq 'POST' -and
   [bool](Get-PropertyValue -Payload $Stage6CompletionAuditPrerequisiteBringupOperatorPlanAction -Name 'operator_supplied_values_required' -Default $false) -and

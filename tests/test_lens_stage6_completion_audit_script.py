@@ -174,6 +174,24 @@ def test_lens_stage6_completion_audit_accepts_fresh_supervised_runtime_after_bri
     assert "resident_supervised_runtime = [bool]$HostSupervisorReadback.resident_supervised_runtime" in script
 
 
+def test_lens_stage6_completion_audit_accepts_consumed_authority_handoff_evidence() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    assert "$HostSupervisionAuthorityReadinessEvidenceObserved = (" in script
+    assert "$HostSupervisionAuthorityReadinessHandoffObserved -or" in script
+    assert "$Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and" in script
+    assert "$HostSupervisionAuthorityRequestProofObserved" in script
+    assert "$PersistentSupervisionApiExecutionProofObserved" in script
+    assert "$OsBindingAuthorityEvidenceObserved = (" in script
+    assert "$OsBindingAuthorityRequestReadbackObserved -or" in script
+    assert "$OsBindingApiExecutionProofObserved" in script
+    assert "$Stage6CompletionEvidenceReviewed = (" in script
+    assert "$HostSupervisionAuthorityReadinessEvidenceObserved -and" in script
+    assert "$OsBindingAuthorityEvidenceObserved -and" in script
+    assert "resident_host_supervision_authority_readiness_evidence_readback" in script
+    assert "os_binding_authority_evidence_readback" in script
+
+
 def test_lens_stage6_completion_audit_outer_timeout_covers_serial_child_budget() -> None:
     expected_minimum = sum(_expected_audit_child_proof_timeouts(_AUDIT_CHILD_PROOF_TIMEOUT_SECONDS).values())
 
@@ -1278,7 +1296,7 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
         "  -not $ReadyToClose -and\n"
         "  $BlockedCriterionIds -contains 'summon_anywhere' -and\n"
         "  $ResidentHostProcessSupervisionEvidenceObserved -and\n"
-        "  $HostSupervisionAuthorityReadinessHandoffObserved -and\n"
+        "  $HostSupervisionAuthorityReadinessEvidenceObserved -and\n"
         "  $HostSupervisionAuthorityRequestProofObserved -and\n"
         "  $PersistentSupervisionPrerequisitesProofObserved -and\n"
         "  $PersistentSupervisionServiceInstallPlanProofObserved -and\n"

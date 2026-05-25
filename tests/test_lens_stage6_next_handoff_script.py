@@ -107,6 +107,9 @@ def test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback() -> N
     assert "stage6_completion_audit_persistent_supervision_first_missing_requirement_handoff_observed" in script
     assert "$Stage6CompletionAuditPrerequisiteBringupOperatorPlanHandoffObserved = (" in script
     assert "'stage6_prerequisite_bringup_operator_plan'" in script
+    assert "'stage6_closure_readback_summon_resident_host_blocker'" in script
+    assert "$Stage6CompletionAuditPrerequisiteBringupOperatorPlanSourceObserved = (" in script
+    assert "$Stage6CompletionAuditPrerequisiteBringupOperatorPlanEffectiveFirstMissingRequirement" in script
     assert "'grant_resident_runtime_execution_authority'" in script
     assert "'execute_supervised_resident_host_start'" in script
     assert "$Stage6CompletionAuditPrerequisiteBringupOperatorPlanNextSliceObserved = (" in script
@@ -2045,6 +2048,107 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     prerequisite_operator_plan_checks = {item["id"]: item for item in prerequisite_operator_plan_payload["checks"]}
     assert prerequisite_operator_plan_checks["stage6_completion_audit_runtime_authority_handoff"]["status"] == (
         "completion_audit_recommended_handoff_consumed"
+    )
+
+    closure_operator_plan_audit_json = tmp_path / "stage6-completion-audit-closure-operator-plan.json"
+    closure_operator_plan_audit_json.write_text(
+        json.dumps(
+            {
+                "kind": "lens.stage6.completion_audit",
+                "ok": True,
+                "status": "blocked",
+                "audit_status": "complete",
+                "allow_launch_on_hotkey": True,
+                "stage6_completion_reviewed": True,
+                "next_smallest_truthful_gap": "summon_anywhere_blockers",
+                "recommended_handoff_source": "stage6_closure_readback_summon_resident_host_blocker",
+                "recommended_next_slice": "run_stage6_prerequisite_bringup_request_next_for_resident_host_process",
+                "recommended_proof_script": "scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status",
+                "authority_required": "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites",
+                "authority_granted": False,
+                "recommended_handoff": {
+                    "status": "blocked",
+                    "previous_next_smallest_truthful_gap": "stage6_lens_completion_audit",
+                    "consumed_summon_anywhere_next_smallest_truthful_gap": "summon_anywhere_blockers",
+                    "next_smallest_truthful_gap": "persistent_supervision_execution_boundary",
+                    "next_step": "run_stage6_prerequisite_bringup_request_next_for_resident_host_process",
+                    "proof_script": "scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status",
+                    "route": "/lens/host/persistent-supervision",
+                    "readiness_route": "/lens/host/persistent-supervision/enablement",
+                    "operator_plan_script": "scripts/lens-stage6-prerequisite-bringup-plan.ps1",
+                    "next_operator_action_requirement": "resident_host_process",
+                    "next_operator_action": {
+                        "id": "request_resident_runtime_execution_authority",
+                        "route": "/lens/resident-runtime/authority-grant/request",
+                        "method": "POST",
+                        "approval_action": "lens.resident_runtime.execution_authority",
+                        "requires": ["actor with system.write scope"],
+                        "mode": "",
+                        "live_effect": "approval request receipt only",
+                        "operator_supplied_values_required": True,
+                        "script_would_execute": False,
+                        "script_would_mutate": False,
+                    },
+                    "next_operator_command": {
+                        "command": (
+                            ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 "
+                            "-Mode RequestNext -Actor <actor> -ConfirmRequest"
+                        ),
+                        "mode": "RequestNext",
+                        "requires_confirmation": True,
+                        "requires_approval_id": False,
+                        "requires_operator_approval_decision": False,
+                    },
+                    "authority_required": "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites",
+                    "authority_granted": False,
+                    "read_only_contract": True,
+                    "diagnostic_only": True,
+                    "would_execute": False,
+                    "would_mutate": False,
+                    "would_supervise_process": False,
+                    "would_restart_process": False,
+                    "would_install_service": False,
+                    "would_start_service": False,
+                    "would_write_memory": False,
+                    "would_decide_approval": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    closure_operator_plan_proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-CompletionAuditJsonPath",
+        str(closure_operator_plan_audit_json),
+        env=proof_env,
+    )
+
+    assert closure_operator_plan_proc.returncode == 0, (
+        closure_operator_plan_proc.stderr or closure_operator_plan_proc.stdout
+    )
+    closure_operator_plan_payload = json.loads(closure_operator_plan_proc.stdout)
+    assert (
+        closure_operator_plan_payload["recommended_handoff_source"]
+        == "stage6_closure_readback_summon_resident_host_blocker"
+    )
+    assert closure_operator_plan_payload["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+    assert closure_operator_plan_payload["recommended_next_slice"] == (
+        "run_stage6_prerequisite_bringup_request_next_for_resident_host_process"
+    )
+    assert closure_operator_plan_payload["stage6_completion_audit_readback_observed"] is True
+    assert (
+        closure_operator_plan_payload["stage6_completion_audit_prerequisite_bringup_operator_plan_handoff_observed"]
+        is True
+    )
+    assert closure_operator_plan_payload["stage6_completion_audit_recommended_handoff_consumed"] is True
+    assert closure_operator_plan_payload["stage6_completion_audit_runtime_readback_required"] is False
+    assert closure_operator_plan_payload["recommended_handoff"]["next_smallest_truthful_gap"] == (
+        "persistent_supervision_execution_boundary"
+    )
+    assert closure_operator_plan_payload["recommended_next_operator_action"]["id"] == (
+        "run_stage6_prerequisite_bringup_request_next_for_resident_host_process"
     )
 
     overlay_operator_plan_audit_json = tmp_path / "stage6-completion-audit-overlay-operator-plan.json"

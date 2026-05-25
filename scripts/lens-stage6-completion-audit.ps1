@@ -3133,6 +3133,24 @@ $PersistentSupervisionApiExecutionResidentClaimBoundaryObserved = (
   $PersistentSupervisionApiExecutionProofBlockers -contains 'resident_claim_authority_not_granted' -and
   [string]$PersistentSupervisionApiExecutionProofCheckStatuses['execution_readiness_reaches_resident_claim_boundary'] -eq 'blocked'
 )
+$HostSupervisionAuthorityReadinessEvidenceObserved = (
+  $HostSupervisionAuthorityReadinessHandoffObserved -or
+  (
+    $Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and
+    $HostSupervisionAuthorityRequestProofObserved
+  ) -or
+  (
+    [bool]$AllowLaunchOnHotkey -and
+    $PersistentSupervisionApiExecutionProofObserved
+  )
+)
+$OsBindingAuthorityEvidenceObserved = (
+  $OsBindingAuthorityRequestReadbackObserved -or
+  (
+    [bool]$AllowLaunchOnHotkey -and
+    $OsBindingApiExecutionProofObserved
+  )
+)
 $SummonAnywhereRuntimeReadbackObserved = [bool]$SummonApiLaunchOnHotkeyProofObserved
 $Stage6AcceptanceNextGap = if ($BlockedCriterionIds -contains 'summon_anywhere' -and -not $SummonAnywhereRuntimeReadbackObserved) {
   'summon_anywhere_blockers'
@@ -3156,12 +3174,12 @@ $Stage6CompletionEvidenceReviewed = (
   $PersistentSupervisionResidentClaimBoundaryObserved -and
   $ResidentHostProcessSupervisionEvidenceObserved -and
   $ResidentSupervisionPersistenceBoundaryProofObserved -and
-  $HostSupervisionAuthorityReadinessHandoffObserved -and
+  $HostSupervisionAuthorityReadinessEvidenceObserved -and
   $HostSupervisionAuthorityRequestProofObserved -and
   $PersistentSupervisionPrerequisitesProofObserved -and
   $CommandPaletteShellBridgeObserved -and
   $CommandPaletteOsBindingObserved -and
-  $OsBindingAuthorityRequestReadbackObserved -and
+  $OsBindingAuthorityEvidenceObserved -and
   $SummonAnywhereBlockersProofObserved -and
   $CheckpointSummonEnablementGateHandoffObserved -and
   $SummonAuthorityBlockerProofObserved -and
@@ -3231,7 +3249,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $PersistentSupervisionResidentClaimBoundaryObserved -and
   $ResidentHostProcessSupervisionEvidenceObserved -and
   $ResidentSupervisionPersistenceBoundaryProofObserved -and
-  -not $HostSupervisionAuthorityReadinessHandoffObserved
+  -not $HostSupervisionAuthorityReadinessEvidenceObserved
 ) {
   'resident_host_supervision_authority_readiness_handoff'
 } elseif (
@@ -3240,7 +3258,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $PersistentSupervisionResidentClaimBoundaryObserved -and
   $ResidentHostProcessSupervisionEvidenceObserved -and
   $ResidentSupervisionPersistenceBoundaryProofObserved -and
-  $HostSupervisionAuthorityReadinessHandoffObserved -and
+  $HostSupervisionAuthorityReadinessEvidenceObserved -and
   -not $HostSupervisionAuthorityRequestProofObserved
 ) {
   'host_supervision_authority_exact_approval_request'
@@ -3250,7 +3268,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $PersistentSupervisionResidentClaimBoundaryObserved -and
   $ResidentHostProcessSupervisionEvidenceObserved -and
   $ResidentSupervisionPersistenceBoundaryProofObserved -and
-  $HostSupervisionAuthorityReadinessHandoffObserved -and
+  $HostSupervisionAuthorityReadinessEvidenceObserved -and
   $HostSupervisionAuthorityRequestProofObserved -and
   -not $PersistentSupervisionPrerequisitesProofObserved
 ) {
@@ -3260,7 +3278,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $PersistentSupervisionEnablementExecutionDenialObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
   $ResidentHostProcessSupervisionEvidenceObserved -and
-  $HostSupervisionAuthorityReadinessHandoffObserved -and
+  $HostSupervisionAuthorityReadinessEvidenceObserved -and
   $HostSupervisionAuthorityRequestProofObserved -and
   -not $CommandPaletteShellBridgeObserved
 ) {
@@ -3270,7 +3288,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $PersistentSupervisionEnablementExecutionDenialObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
   $ResidentHostProcessSupervisionEvidenceObserved -and
-  $HostSupervisionAuthorityReadinessHandoffObserved -and
+  $HostSupervisionAuthorityReadinessEvidenceObserved -and
   $CommandPaletteShellBridgeObserved -and
   -not $CommandPaletteOsBindingObserved
 ) {
@@ -3280,10 +3298,10 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $PersistentSupervisionEnablementExecutionDenialObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
   $ResidentHostProcessSupervisionEvidenceObserved -and
-  $HostSupervisionAuthorityReadinessHandoffObserved -and
+  $HostSupervisionAuthorityReadinessEvidenceObserved -and
   $CommandPaletteShellBridgeObserved -and
   $CommandPaletteOsBindingObserved -and
-  -not $OsBindingAuthorityRequestReadbackObserved
+  -not $OsBindingAuthorityEvidenceObserved
 ) {
   'os_binding_authority_request_readback'
 } elseif (
@@ -3291,10 +3309,10 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $PersistentSupervisionEnablementExecutionDenialObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
   $ResidentHostProcessSupervisionEvidenceObserved -and
-  $HostSupervisionAuthorityReadinessHandoffObserved -and
+  $HostSupervisionAuthorityReadinessEvidenceObserved -and
   $CommandPaletteShellBridgeObserved -and
   $CommandPaletteOsBindingObserved -and
-  $OsBindingAuthorityRequestReadbackObserved -and
+  $OsBindingAuthorityEvidenceObserved -and
   -not $SummonAnywhereBlockersProofObserved
 ) {
   'summon_anywhere_blockers_proof_readback'
@@ -3303,10 +3321,10 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $PersistentSupervisionEnablementExecutionDenialObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
   $ResidentHostProcessSupervisionEvidenceObserved -and
-  $HostSupervisionAuthorityReadinessHandoffObserved -and
+  $HostSupervisionAuthorityReadinessEvidenceObserved -and
   $CommandPaletteShellBridgeObserved -and
   $CommandPaletteOsBindingObserved -and
-  $OsBindingAuthorityRequestReadbackObserved -and
+  $OsBindingAuthorityEvidenceObserved -and
   $SummonAnywhereBlockersProofObserved -and
   -not $CheckpointSummonEnablementGateHandoffObserved
 ) {
@@ -3316,10 +3334,10 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $PersistentSupervisionEnablementExecutionDenialObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
   $ResidentHostProcessSupervisionEvidenceObserved -and
-  $HostSupervisionAuthorityReadinessHandoffObserved -and
+  $HostSupervisionAuthorityReadinessEvidenceObserved -and
   $CommandPaletteShellBridgeObserved -and
   $CommandPaletteOsBindingObserved -and
-  $OsBindingAuthorityRequestReadbackObserved -and
+  $OsBindingAuthorityEvidenceObserved -and
   $SummonAnywhereBlockersProofObserved -and
   $CheckpointSummonEnablementGateHandoffObserved -and
   -not $SummonAuthorityBlockerProofObserved
@@ -3330,10 +3348,10 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $PersistentSupervisionEnablementExecutionDenialObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
   $ResidentHostProcessSupervisionEvidenceObserved -and
-  $HostSupervisionAuthorityReadinessHandoffObserved -and
+  $HostSupervisionAuthorityReadinessEvidenceObserved -and
   $CommandPaletteShellBridgeObserved -and
   $CommandPaletteOsBindingObserved -and
-  $OsBindingAuthorityRequestReadbackObserved -and
+  $OsBindingAuthorityEvidenceObserved -and
   $SummonAnywhereBlockersProofObserved -and
   $CheckpointSummonEnablementGateHandoffObserved -and
   $SummonAuthorityBlockerProofObserved -and
@@ -3345,7 +3363,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   -not $ReadyToClose -and
   $BlockedCriterionIds -contains 'summon_anywhere' -and
   $ResidentHostProcessSupervisionEvidenceObserved -and
-  $HostSupervisionAuthorityReadinessHandoffObserved -and
+  $HostSupervisionAuthorityReadinessEvidenceObserved -and
   $HostSupervisionAuthorityRequestProofObserved -and
   $PersistentSupervisionPrerequisitesProofObserved -and
   -not $Stage6PrerequisiteBringupPlanObserved
@@ -3356,7 +3374,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   -not $ReadyToClose -and
   $BlockedCriterionIds -contains 'summon_anywhere' -and
   $ResidentHostProcessSupervisionEvidenceObserved -and
-  $HostSupervisionAuthorityReadinessHandoffObserved -and
+  $HostSupervisionAuthorityReadinessEvidenceObserved -and
   $HostSupervisionAuthorityRequestProofObserved -and
   $PersistentSupervisionPrerequisitesProofObserved -and
   $Stage6PrerequisiteBringupPlanObserved -and
@@ -3368,7 +3386,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   -not $ReadyToClose -and
   $BlockedCriterionIds -contains 'summon_anywhere' -and
   $ResidentHostProcessSupervisionEvidenceObserved -and
-  $HostSupervisionAuthorityReadinessHandoffObserved -and
+  $HostSupervisionAuthorityReadinessEvidenceObserved -and
   $HostSupervisionAuthorityRequestProofObserved -and
   $PersistentSupervisionPrerequisitesProofObserved -and
   $Stage6PrerequisiteBringupPlanObserved -and
@@ -3390,7 +3408,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   -not $ReadyToClose -and
   $BlockedCriterionIds -contains 'summon_anywhere' -and
   $ResidentHostProcessSupervisionEvidenceObserved -and
-  $HostSupervisionAuthorityReadinessHandoffObserved -and
+  $HostSupervisionAuthorityReadinessEvidenceObserved -and
   $HostSupervisionAuthorityRequestProofObserved -and
   $PersistentSupervisionPrerequisitesProofObserved -and
   $PersistentSupervisionServiceInstallPlanProofObserved -and
@@ -3724,9 +3742,13 @@ if (
     would_execute = $false
     would_mutate = $false
     would_supervise_process = $false
+    would_restart_process = $false
+    would_install_service = $false
+    would_start_service = $false
     would_register_hotkey = $false
     would_control_overlay = $false
     would_summon = $false
+    would_write_memory = $false
     would_decide_approval = $false
     blockers = [string[]]@($Blockers)
   }
@@ -7087,6 +7109,7 @@ $Payload = [ordered]@{
     resident_host_process_handoff_consumed = [bool]$ResidentHostProcessSupervisionBlockerProof.handoff_consumed
     resident_supervision_persistence_boundary_proof_readback = $ResidentSupervisionPersistenceBoundaryProofObserved
     resident_host_supervision_authority_readiness_handoff_readback = $HostSupervisionAuthorityReadinessHandoffObserved
+    resident_host_supervision_authority_readiness_evidence_readback = $HostSupervisionAuthorityReadinessEvidenceObserved
     host_supervision_authority_request_proof_readback = $HostSupervisionAuthorityRequestProofObserved
     helpful_not_noisy_runtime_authority_readiness_handoff_readback = $ResidentRuntimeAuthorityGrantReadinessHandoffObserved
     persistent_supervision_plan_readback = $PersistentSupervisionPlanObserved
@@ -7116,6 +7139,7 @@ $Payload = [ordered]@{
     command_palette_os_binding_blockers_proof_readback = $CommandPaletteOsBindingObserved
     command_palette_os_binding_candidate_readback = $CommandPaletteOsBindingCandidateObserved
     os_binding_authority_request_readback = $OsBindingAuthorityRequestReadbackObserved
+    os_binding_authority_evidence_readback = $OsBindingAuthorityEvidenceObserved
     summon_anywhere_blockers_proof_readback = $SummonAnywhereBlockersProofObserved
     summon_anywhere_first_blocker_family_handoff_readback = $SummonAnywhereBlockersProofFirstFamilyHandoffObserved
     summon_resident_host_blocker_proof_readback = $SummonResidentHostBlockerProofObserved
