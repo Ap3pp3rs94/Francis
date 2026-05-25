@@ -54,6 +54,10 @@ def _prerequisites_wrapper_timeout_seconds(child_timeout_seconds: int) -> int:
     return _prerequisites_child_timeout_seconds(child_timeout_seconds) + 60
 
 
+def _summon_resident_host_blocker_timeout_seconds(child_timeout_seconds: int) -> int:
+    return max((child_timeout_seconds * 2) + 60, 360)
+
+
 def _transition_plan_wrapper_timeout_seconds(child_timeout_seconds: int) -> int:
     return (child_timeout_seconds * 3) + _AUDIT_TRANSITION_PLAN_WRAPPER_OVERHEAD_SECONDS
 
@@ -66,6 +70,7 @@ def _expected_audit_child_proof_timeouts(child_timeout_seconds: int) -> dict[str
         "resident_host_runtime_boundary": child_timeout_seconds,
         "process_supervision_boundary": child_timeout_seconds,
         "resident_host_process_supervision_blocker": child_timeout_seconds,
+        "summon_resident_host_blocker": _summon_resident_host_blocker_timeout_seconds(child_timeout_seconds),
         "resident_supervision_persistence_boundary": min(child_timeout_seconds, 240),
         "host_supervision_authority_request": child_timeout_seconds,
         "persistent_supervision_plan": child_timeout_seconds,
@@ -709,6 +714,27 @@ def test_lens_stage6_completion_audit_observes_process_supervision_boundary_auth
 def test_lens_stage6_completion_audit_observes_resident_host_process_supervision_handoff_authority_gate() -> None:
     script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
 
+    assert "$SummonResidentHostBlockerProofScript = Join-Path $PSScriptRoot 'lens-summon-resident-host-blocker-proof.ps1'" in script
+    assert "$SummonResidentHostBlockerProofDataDir = Join-Path $RepoRoot (" in script
+    assert "'data/test_runs/lens-stage6-completion-audit/summon-resident-host-blocker-'" in script
+    assert "$SummonResidentHostBlockerProofResult = Invoke-JsonScript" in script
+    assert "'-DataDir', $SummonResidentHostBlockerProofDataDir" in script
+    assert "'-ConsumeProcessSupervisionHandoff'" in script
+    assert "[string]$SummonResidentHostBlockerProof.kind -eq 'lens.summon_resident_host_blocker.proof'" in script
+    assert (
+        "[string]$SummonResidentHostBlockerProof.recommended_handoff_source -eq "
+        "'resident_host_process_supervision_handoff.recommended_handoff'"
+    ) in script
+    assert "[string]$SummonResidentHostBlockerProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit'" in script
+    assert "[string]$SummonResidentHostBlockerProof.authority_required -eq 'none_new_stage6_completion_audit'" in script
+    assert "-not [bool]$SummonResidentHostBlockerProof.authority_granted" in script
+    assert "[bool]$SummonResidentHostBlockerProofGovernance.wraps_resident_host_process_supervision_blocker_proof" in script
+    assert "-not [bool]$SummonResidentHostBlockerProofGovernance.process_supervision_authority" in script
+    assert "summon_resident_host_blocker_proof_readback = $SummonResidentHostBlockerProofObserved" in script
+    assert (
+        "summon_resident_host_process_supervision_handoff_readback = "
+        "[bool]$SummonResidentHostBlockerProof.resident_host_process_supervision_handoff_observed"
+    ) in script
     assert (
         "[string]$ResidentHostProcessSupervisionBlockerProof.authority_required -eq 'none_new_stage6_completion_audit'"
     ) in script
@@ -802,7 +828,7 @@ def test_lens_stage6_completion_audit_prefers_closure_handoff_after_resident_cla
     script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
 
     consumed_flag = "$Stage6CompletionAuditHandoffConsumedByClosureReadback = ("
-    closure_source = "$RecommendedHandoffSource = 'stage6_closure_readback_summon_anywhere_blockers'"
+    closure_source = "$RecommendedHandoffSource = 'stage6_closure_readback_summon_resident_host_blocker'"
     prerequisite_source = "$RecommendedHandoffSource = 'stage6_prerequisite_bringup_operator_plan'"
 
     assert consumed_flag in script
@@ -812,8 +838,12 @@ def test_lens_stage6_completion_audit_prefers_closure_handoff_after_resident_cla
     ) in script
     assert "stage6_completion_audit_handoff_consumed_by_closure_readback" in script
     assert closure_source in script
-    assert "next_step = 'run_summon_anywhere_blockers_proof_after_stage6_completion_review'" in script
-    assert "proof_script = 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status'" in script
+    assert "$SummonResidentHostBlockerProofObserved -and" in script
+    assert "consumed_resident_host_bridge_next_smallest_truthful_gap" in script
+    assert "next_step = $Stage6PrerequisiteBringupMissingRequirementRecommendedNextSlice" in script
+    assert "proof_script = 'scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status'" in script
+    assert "summon_resident_host_blocker_bridge = $SummonResidentHostBlockerProof.recommended_handoff" in script
+    assert "summon_resident_host_blocker_bridge_source = [string]$SummonResidentHostBlockerProof.recommended_handoff_source" in script
     assert "$RecommendedConcreteHandoffSource = $RecommendedHandoffSource" in script
     assert "$RecommendedConcreteHandoffSource = 'persistent_supervision_resident_claim_boundary_handoff'" in script
     assert "$RecommendedConcreteHandoff = $PersistentSupervisionResidentClaimBoundaryProof.handoff" in script
@@ -1256,6 +1286,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "resident_host_runtime_boundary",
         "process_supervision_boundary",
         "resident_host_process_supervision_blocker",
+        "summon_resident_host_blocker",
         "resident_supervision_persistence_boundary",
         "host_supervision_authority_request",
         "persistent_supervision_plan",
@@ -3113,6 +3144,39 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status" in process_handoff["evidence"]
     )
 
+    summon_resident_host = payload["summon_resident_host_blocker_proof"]
+    assert summon_resident_host["kind"] == "lens.summon_resident_host_blocker.proof"
+    assert summon_resident_host["status"] == "proof_passed"
+    assert summon_resident_host["ok"] is True
+    assert summon_resident_host["exit_code"] == 0
+    assert summon_resident_host["summon_next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+    assert summon_resident_host["resident_host_lifecycle_next_smallest_truthful_gap"] == (
+        "resident_host_runtime_blocker_boundary"
+    )
+    assert summon_resident_host["resident_host_process_supervision_next_smallest_truthful_gap"] == (
+        "stage6_lens_completion_audit"
+    )
+    assert summon_resident_host["recommended_handoff_source"] == (
+        "resident_host_process_supervision_handoff.recommended_handoff"
+    )
+    assert summon_resident_host["recommended_handoff"]["next_step"] == (
+        "run_stage6_lens_completion_audit_after_process_supervision_handoff_readback"
+    )
+    assert summon_resident_host["recommended_handoff"]["proof_script"] == (
+        "scripts/lens-stage6-completion-audit.ps1 -Mode Status"
+    )
+    assert summon_resident_host["authority_required"] == "none_new_stage6_completion_audit"
+    assert summon_resident_host["authority_granted"] is False
+    assert summon_resident_host["consume_process_supervision_handoff"] is True
+    assert summon_resident_host["resident_host_process_supervision_handoff_observed"] is True
+    assert summon_resident_host["handoff_aligned"] is True
+    assert summon_resident_host["side_effects_denied"] is True
+    summon_bridge_governance = summon_resident_host["governance"]
+    assert summon_bridge_governance["wraps_summon_anywhere_blockers_proof"] is True
+    assert summon_bridge_governance["wraps_resident_host_process_supervision_blocker_proof"] is True
+    assert summon_bridge_governance["api_local_process_launch_authority"] is False
+    assert summon_bridge_governance["process_supervision_authority"] is False
+
     persistent_plan = payload["persistent_supervision_plan"]
     assert persistent_plan["status"] == "blocked"
     assert persistent_plan["ok"] is True
@@ -3516,6 +3580,8 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert governance["os_binding_authority_request_readback"] is True
     assert governance["summon_anywhere_blockers_proof_readback"] is True
     assert governance["summon_anywhere_first_blocker_family_handoff_readback"] is True
+    assert governance["summon_resident_host_blocker_proof_readback"] is True
+    assert governance["summon_resident_host_process_supervision_handoff_readback"] is True
     assert governance["resident_host_runtime_boundary_proof_readback"] is True
     assert governance["checkpoint_summon_enablement_gate_handoff_readback"] is True
     assert governance["summon_authority_blocker_proof_readback"] is True

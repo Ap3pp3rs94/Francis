@@ -265,6 +265,7 @@ $PersistentSupervisionEnablementTransitionPlanProofScript = Join-Path $PSScriptR
 $PersistentSupervisionApiExecutionProofScript = Join-Path $PSScriptRoot 'lens-persistent-supervision-api-execution-proof.ps1'
 $Stage6PrerequisiteBringupPlanScript = Join-Path $PSScriptRoot 'lens-stage6-prerequisite-bringup-plan.ps1'
 $SummonAnywhereBlockersProofScript = Join-Path $PSScriptRoot 'lens-summon-anywhere-blockers-proof.ps1'
+$SummonResidentHostBlockerProofScript = Join-Path $PSScriptRoot 'lens-summon-resident-host-blocker-proof.ps1'
 $SummonAuthorityBlockerProofScript = Join-Path $PSScriptRoot 'lens-summon-authority-blocker-proof.ps1'
 $SummonAnywhereFamilyChainProofScript = Join-Path $PSScriptRoot 'lens-summon-anywhere-family-chain-proof.ps1'
 $SummonApiExecutionProofScript = Join-Path $PSScriptRoot 'lens-summon-api-execution-proof.ps1'
@@ -591,6 +592,81 @@ $ResidentHostProcessSupervisionBlockerProofObserved = (
   $ResidentHostProcessSupervisionBlockerProofBlockers -contains 'process_restart_authority_not_granted' -and
   $ResidentHostProcessSupervisionBlockerProofBlockers -contains 'service_install_authority_not_granted' -and
   $ResidentHostProcessSupervisionBlockerProofBlockers -contains 'service_control_authority_not_granted'
+)
+$SummonResidentHostBlockerProofTimeoutSeconds = [Math]::Max(($ChildProofTimeoutSeconds * 2) + 60, 360)
+$SummonResidentHostBlockerProofDataDir = Join-Path $RepoRoot (
+  'data/test_runs/lens-stage6-completion-audit/summon-resident-host-blocker-' + [Guid]::NewGuid().ToString('N')
+)
+New-Item -ItemType Directory -Path $SummonResidentHostBlockerProofDataDir -Force | Out-Null
+$SummonResidentHostBlockerProofResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonResidentHostBlockerProofScript -ScriptArgs @(
+  '-Mode', 'Status',
+  '-StartupTimeoutSeconds', [string]$ChildStartupTimeoutSeconds,
+  '-ForegroundRunSeconds', '2',
+  '-HostLaunchRunSeconds', [string]$ChildHostLaunchRunSeconds,
+  '-SupervisorRunSeconds', [string]$SupervisorRunSeconds,
+  '-DataDir', $SummonResidentHostBlockerProofDataDir,
+  '-ConsumeProcessSupervisionHandoff'
+) -TimeoutSeconds $SummonResidentHostBlockerProofTimeoutSeconds
+$SummonResidentHostBlockerProof = $SummonResidentHostBlockerProofResult.payload
+$SummonResidentHostBlockerProofGovernance = $SummonResidentHostBlockerProof.governance
+$SummonResidentHostBlockerProofRecommendedHandoff = $SummonResidentHostBlockerProof.recommended_handoff
+$SummonResidentHostBlockerProcessHandoff = $SummonResidentHostBlockerProof.resident_host_process_supervision_handoff
+$SummonResidentHostBlockerProcessHandoffRecommended = $SummonResidentHostBlockerProcessHandoff.recommended_handoff
+$SummonResidentHostBlockerProofBlockers = ConvertTo-StringArray -Value $SummonResidentHostBlockerProof.summon_resident_host_blockers
+$SummonResidentHostBlockerProofObserved = (
+  [int]$SummonResidentHostBlockerProofResult.exit_code -eq 0 -and
+  [string]$SummonResidentHostBlockerProof.kind -eq 'lens.summon_resident_host_blocker.proof' -and
+  [bool]$SummonResidentHostBlockerProof.ok -and
+  [string]$SummonResidentHostBlockerProof.status -eq 'proof_passed' -and
+  [string]$SummonResidentHostBlockerProof.acceptance_criterion -eq 'summon_anywhere' -and
+  [string]$SummonResidentHostBlockerProof.first_summon_blocker_family -eq 'resident_host' -and
+  [string]$SummonResidentHostBlockerProof.summon_next_smallest_truthful_gap -eq 'summon_anywhere_blockers' -and
+  [string]$SummonResidentHostBlockerProof.resident_host_lifecycle_next_smallest_truthful_gap -eq 'resident_host_runtime_blocker_boundary' -and
+  [string]$SummonResidentHostBlockerProof.resident_host_process_supervision_next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
+  [string]$SummonResidentHostBlockerProof.resident_host_next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
+  [string]$SummonResidentHostBlockerProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
+  [string]$SummonResidentHostBlockerProof.recommended_handoff_source -eq 'resident_host_process_supervision_handoff.recommended_handoff' -and
+  [string]$SummonResidentHostBlockerProof.recommended_next_slice -eq 'run_stage6_lens_completion_audit_after_process_supervision_handoff_readback' -and
+  [string]$SummonResidentHostBlockerProof.recommended_proof_script -eq 'scripts/lens-stage6-completion-audit.ps1 -Mode Status' -and
+  [string]$SummonResidentHostBlockerProof.authority_required -eq 'none_new_stage6_completion_audit' -and
+  -not [bool]$SummonResidentHostBlockerProof.authority_granted -and
+  [bool]$SummonResidentHostBlockerProof.summon_first_family_observed -and
+  [bool]$SummonResidentHostBlockerProof.resident_host_lifecycle_observed -and
+  [bool]$SummonResidentHostBlockerProof.consume_process_supervision_handoff -and
+  [bool]$SummonResidentHostBlockerProof.resident_host_process_supervision_handoff_observed -and
+  [bool]$SummonResidentHostBlockerProof.handoff_aligned -and
+  [bool]$SummonResidentHostBlockerProof.side_effects_denied -and
+  [string]$SummonResidentHostBlockerProcessHandoff.previous_next_smallest_truthful_gap -eq 'resident_host_process_not_supervised' -and
+  [string]$SummonResidentHostBlockerProcessHandoff.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
+  [bool]$SummonResidentHostBlockerProcessHandoff.resident_host_process_handoff_observed -and
+  [bool]$SummonResidentHostBlockerProcessHandoff.process_supervision_boundary_observed -and
+  [bool]$SummonResidentHostBlockerProcessHandoff.handoff_consumed -and
+  [bool]$SummonResidentHostBlockerProcessHandoff.authority_denied -and
+  [string]$SummonResidentHostBlockerProcessHandoff.authority_required -eq 'none_new_stage6_completion_audit' -and
+  -not [bool]$SummonResidentHostBlockerProcessHandoff.authority_granted -and
+  [string]$SummonResidentHostBlockerProcessHandoffRecommended.next_step -eq 'run_stage6_lens_completion_audit_after_process_supervision_handoff_readback' -and
+  [bool]$SummonResidentHostBlockerProofGovernance.diagnostic_only -and
+  [bool]$SummonResidentHostBlockerProofGovernance.wraps_summon_anywhere_blockers_proof -and
+  [bool]$SummonResidentHostBlockerProofGovernance.summon_os_binding_authority_request_readback -and
+  [bool]$SummonResidentHostBlockerProofGovernance.wraps_resident_host_lifecycle_blockers_proof -and
+  [bool]$SummonResidentHostBlockerProofGovernance.wraps_resident_host_process_supervision_blocker_proof -and
+  [bool]$SummonResidentHostBlockerProofGovernance.read_only_contract -and
+  [bool]$SummonResidentHostBlockerProofGovernance.bounded_local_process_launch -and
+  [bool]$SummonResidentHostBlockerProofGovernance.temporary_runtime_state_write -and
+  -not [bool]$SummonResidentHostBlockerProofGovernance.api_local_process_launch_authority -and
+  -not [bool]$SummonResidentHostBlockerProofGovernance.product_execution_authority -and
+  -not [bool]$SummonResidentHostBlockerProofGovernance.execution_authority -and
+  -not [bool]$SummonResidentHostBlockerProofGovernance.approval_decision_authority -and
+  -not [bool]$SummonResidentHostBlockerProofGovernance.memory_write -and
+  -not [bool]$SummonResidentHostBlockerProofGovernance.local_process_launch_authority -and
+  -not [bool]$SummonResidentHostBlockerProofGovernance.process_supervision_authority -and
+  -not [bool]$SummonResidentHostBlockerProofGovernance.process_restart_authority -and
+  -not [bool]$SummonResidentHostBlockerProofGovernance.service_install_authority -and
+  -not [bool]$SummonResidentHostBlockerProofGovernance.service_control_authority -and
+  -not [bool]$SummonResidentHostBlockerProofGovernance.summon_authority -and
+  -not [bool]$SummonResidentHostBlockerProofGovernance.resident_claim_authority -and
+  -not [bool]$SummonResidentHostBlockerProofGovernance.mutation_authority_granted -and
+  $SummonResidentHostBlockerProofBlockers -contains 'local_process_launch_authority_not_granted'
 )
 $ResidentSupervisionPersistenceBoundaryProofOuterTimeoutSeconds = [Math]::Min($ChildProofTimeoutSeconds, 240)
 $ResidentSupervisionPersistenceBoundaryProofChildTimeoutSeconds = [Math]::Min($ChildProofTimeoutSeconds, 180)
@@ -1220,6 +1296,7 @@ $ChildProofRuns = @(
   New-ChildProofRunSummary -Name 'resident_host_runtime_boundary' -Result $ResidentHostRuntimeBoundaryProofResult
   New-ChildProofRunSummary -Name 'process_supervision_boundary' -Result $ProcessSupervisionBoundaryResult
   New-ChildProofRunSummary -Name 'resident_host_process_supervision_blocker' -Result $ResidentHostProcessSupervisionBlockerProofResult
+  New-ChildProofRunSummary -Name 'summon_resident_host_blocker' -Result $SummonResidentHostBlockerProofResult
   New-ChildProofRunSummary -Name 'resident_supervision_persistence_boundary' -Result $ResidentSupervisionPersistenceBoundaryProofResult
   New-ChildProofRunSummary -Name 'host_supervision_authority_request' -Result $HostSupervisionAuthorityRequestProofResult
   New-ChildProofRunSummary -Name 'persistent_supervision_plan' -Result $PersistentSupervisionPlanResult
@@ -3513,32 +3590,48 @@ $Stage6CompletionAuditHandoffConsumedByClosureReadback = (
   [string]$PersistentSupervisionResidentClaimBoundaryProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
   $SummonAnywhereBlockersProofObserved -and
   $SummonAnywhereFamilyChainProofObserved -and
-  $SummonAnywhereBlockersProofFirstFamilyHandoffObserved
+  $SummonAnywhereBlockersProofFirstFamilyHandoffObserved -and
+  $SummonResidentHostBlockerProofObserved -and
+  $Stage6PrerequisiteBringupPlanObserved
 )
 if (
   $Stage6CompletionAuditHandoffConsumedByClosureReadback
 ) {
-  $RecommendedHandoffSource = 'stage6_closure_readback_summon_anywhere_blockers'
+  $RecommendedHandoffSource = 'stage6_closure_readback_summon_resident_host_blocker'
   $RecommendedHandoff = [ordered]@{
     status = 'blocked'
     previous_next_smallest_truthful_gap = 'stage6_lens_completion_audit'
     consumed_summon_anywhere_next_smallest_truthful_gap = [string]$SummonAnywhereBlockersProof.next_smallest_truthful_gap
     consumed_family_chain_next_smallest_truthful_gap = [string]$SummonAnywhereFamilyChainProof.next_smallest_truthful_gap
-    next_smallest_truthful_gap = 'summon_anywhere_blockers'
-    next_step = 'run_summon_anywhere_blockers_proof_after_stage6_completion_review'
-    proof_script = 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status'
-    route = '/lens/summon'
-    readiness_route = '/lens/summon/readiness'
+    consumed_resident_host_bridge_next_smallest_truthful_gap = [string]$SummonResidentHostBlockerProof.next_smallest_truthful_gap
+    consumed_process_supervision_next_smallest_truthful_gap = [string]$SummonResidentHostBlockerProcessHandoff.next_smallest_truthful_gap
+    next_smallest_truthful_gap = [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap
+    next_step = $Stage6PrerequisiteBringupMissingRequirementRecommendedNextSlice
+    proof_script = 'scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status'
+    route = '/lens/host/persistent-supervision'
+    readiness_route = '/lens/host/persistent-supervision/enablement'
     acceptance_criterion = 'summon_anywhere'
     first_blocker_family = [string]$SummonAnywhereBlockersProof.first_blocker_family
     first_blocker_family_handoff = $SummonAnywhereBlockersProofFirstFamilyHandoff
     blocker_families = [string[]]@(ConvertTo-StringArray -Value $SummonAnywhereBlockersProof.blocked_families)
     blocked_family_handoffs = @($SummonAnywhereBlockersProofFamilyHandoffs)
+    summon_resident_host_blocker_bridge = $SummonResidentHostBlockerProof.recommended_handoff
+    summon_resident_host_blocker_bridge_source = [string]$SummonResidentHostBlockerProof.recommended_handoff_source
+    summon_resident_host_blocker_bridge_next_slice = [string]$SummonResidentHostBlockerProof.recommended_next_slice
+    process_supervision_boundary_observed = [bool]$SummonResidentHostBlockerProcessHandoff.process_supervision_boundary_observed
+    process_supervision_handoff_consumed = [bool]$SummonResidentHostBlockerProcessHandoff.handoff_consumed
+    resident_host_process_state = [string]$SummonResidentHostBlockerProcessHandoff.resident_host_process_state
+    resident_host_process_blocker = [string]$SummonResidentHostBlockerProcessHandoff.resident_host_process_blocker
+    operator_plan_script = 'scripts/lens-stage6-prerequisite-bringup-plan.ps1'
     stage6_prerequisite_bringup_plan_status = [string]$Stage6PrerequisiteBringupPlan.status
     stage6_prerequisite_bringup_current_truthful_gap = [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap
     stage6_prerequisite_bringup_next_operator_action_requirement = [string]$Stage6PrerequisiteBringupPlan.next_operator_action_requirement
+    next_operator_action_requirement = $Stage6PrerequisiteBringupMissingRequirementActionRequirement
+    next_operator_action = $Stage6PrerequisiteBringupMissingRequirementAction
+    next_operator_command = $Stage6PrerequisiteBringupMissingRequirementCommand
+    operator_sequence_command_availability = $Stage6PrerequisiteBringupMissingRequirementCommandAvailability
     persistent_supervision_resident_claim_boundary_next_smallest_truthful_gap = [string]$PersistentSupervisionResidentClaimBoundaryProof.next_smallest_truthful_gap
-    authority_required = 'summon_hotkey_overlay_and_process_authority'
+    authority_required = 'resident_host_process_tray_hotkey_overlay_and_summon_prerequisites'
     authority_granted = $false
     read_only_contract = $true
     diagnostic_only = $true
@@ -5922,6 +6015,62 @@ $Payload = [ordered]@{
       mutation_authority_granted = $false
     }
   }
+  summon_resident_host_blocker_proof = [ordered]@{
+    status = if ($SummonResidentHostBlockerProofObserved) { [string]$SummonResidentHostBlockerProof.status } else { 'missing_or_failed' }
+    ok = $SummonResidentHostBlockerProofObserved
+    exit_code = [int]$SummonResidentHostBlockerProofResult.exit_code
+    kind = [string]$SummonResidentHostBlockerProof.kind
+    evidence = [string[]]@(ConvertTo-StringArray -Value $SummonResidentHostBlockerProof.evidence)
+    acceptance_criterion = [string]$SummonResidentHostBlockerProof.acceptance_criterion
+    first_summon_blocker_family = [string]$SummonResidentHostBlockerProof.first_summon_blocker_family
+    summon_next_smallest_truthful_gap = [string]$SummonResidentHostBlockerProof.summon_next_smallest_truthful_gap
+    resident_host_lifecycle_next_smallest_truthful_gap = [string]$SummonResidentHostBlockerProof.resident_host_lifecycle_next_smallest_truthful_gap
+    resident_host_process_supervision_next_smallest_truthful_gap = [string]$SummonResidentHostBlockerProof.resident_host_process_supervision_next_smallest_truthful_gap
+    resident_host_next_smallest_truthful_gap = [string]$SummonResidentHostBlockerProof.resident_host_next_smallest_truthful_gap
+    next_smallest_truthful_gap = [string]$SummonResidentHostBlockerProof.next_smallest_truthful_gap
+    recommended_handoff_source = [string]$SummonResidentHostBlockerProof.recommended_handoff_source
+    recommended_next_slice = [string]$SummonResidentHostBlockerProof.recommended_next_slice
+    recommended_proof_script = [string]$SummonResidentHostBlockerProof.recommended_proof_script
+    recommended_route = [string]$SummonResidentHostBlockerProof.recommended_route
+    recommended_readiness_route = [string]$SummonResidentHostBlockerProof.recommended_readiness_route
+    recommended_handoff = $SummonResidentHostBlockerProofRecommendedHandoff
+    authority_required = [string]$SummonResidentHostBlockerProof.authority_required
+    authority_granted = [bool]$SummonResidentHostBlockerProof.authority_granted
+    summon_first_family_observed = [bool]$SummonResidentHostBlockerProof.summon_first_family_observed
+    resident_host_lifecycle_observed = [bool]$SummonResidentHostBlockerProof.resident_host_lifecycle_observed
+    consume_process_supervision_handoff = [bool]$SummonResidentHostBlockerProof.consume_process_supervision_handoff
+    resident_host_process_supervision_handoff_observed = [bool]$SummonResidentHostBlockerProof.resident_host_process_supervision_handoff_observed
+    handoff_aligned = [bool]$SummonResidentHostBlockerProof.handoff_aligned
+    side_effects_denied = [bool]$SummonResidentHostBlockerProof.side_effects_denied
+    summon_resident_host_blockers = [string[]]@($SummonResidentHostBlockerProofBlockers)
+    resident_host_runtime_blockers = [string[]]@(ConvertTo-StringArray -Value $SummonResidentHostBlockerProof.resident_host_runtime_blockers)
+    resident_host_process_supervision_blockers = [string[]]@(ConvertTo-StringArray -Value $SummonResidentHostBlockerProof.resident_host_process_supervision_blockers)
+    resident_host_surface_blockers = [string[]]@(ConvertTo-StringArray -Value $SummonResidentHostBlockerProof.resident_host_surface_blockers)
+    resident_host_process_supervision_handoff = $SummonResidentHostBlockerProcessHandoff
+    governance = [ordered]@{
+      diagnostic_only = [bool]$SummonResidentHostBlockerProofGovernance.diagnostic_only
+      wraps_summon_anywhere_blockers_proof = [bool]$SummonResidentHostBlockerProofGovernance.wraps_summon_anywhere_blockers_proof
+      summon_os_binding_authority_request_readback = [bool]$SummonResidentHostBlockerProofGovernance.summon_os_binding_authority_request_readback
+      wraps_resident_host_lifecycle_blockers_proof = [bool]$SummonResidentHostBlockerProofGovernance.wraps_resident_host_lifecycle_blockers_proof
+      wraps_resident_host_process_supervision_blocker_proof = [bool]$SummonResidentHostBlockerProofGovernance.wraps_resident_host_process_supervision_blocker_proof
+      read_only_contract = [bool]$SummonResidentHostBlockerProofGovernance.read_only_contract
+      bounded_local_process_launch = [bool]$SummonResidentHostBlockerProofGovernance.bounded_local_process_launch
+      temporary_runtime_state_write = [bool]$SummonResidentHostBlockerProofGovernance.temporary_runtime_state_write
+      api_local_process_launch_authority = $false
+      product_execution_authority = $false
+      execution_authority = $false
+      approval_decision_authority = $false
+      memory_write = $false
+      local_process_launch_authority = $false
+      process_supervision_authority = $false
+      process_restart_authority = $false
+      service_install_authority = $false
+      service_control_authority = $false
+      summon_authority = $false
+      resident_claim_authority = $false
+      mutation_authority_granted = $false
+    }
+  }
   summon_authority_blocker_proof = [ordered]@{
     status = if ($SummonAuthorityBlockerProofObserved) { [string]$SummonAuthorityBlockerProof.status } else { 'missing_or_failed' }
     ok = $SummonAuthorityBlockerProofObserved
@@ -6843,6 +6992,8 @@ $Payload = [ordered]@{
     os_binding_authority_request_readback = $OsBindingAuthorityRequestReadbackObserved
     summon_anywhere_blockers_proof_readback = $SummonAnywhereBlockersProofObserved
     summon_anywhere_first_blocker_family_handoff_readback = $SummonAnywhereBlockersProofFirstFamilyHandoffObserved
+    summon_resident_host_blocker_proof_readback = $SummonResidentHostBlockerProofObserved
+    summon_resident_host_process_supervision_handoff_readback = [bool]$SummonResidentHostBlockerProof.resident_host_process_supervision_handoff_observed
     resident_host_runtime_boundary_proof_readback = $ResidentHostRuntimeBoundaryProofObserved
     checkpoint_summon_enablement_gate_handoff_readback = $CheckpointSummonEnablementGateHandoffObserved
     summon_authority_blocker_proof_readback = $SummonAuthorityBlockerProofObserved
