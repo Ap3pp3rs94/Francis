@@ -907,6 +907,16 @@ def test_lens_stage6_completion_audit_prefers_closure_handoff_after_resident_cla
         "[string]$PersistentSupervisionResidentClaimBoundaryProof.next_smallest_truthful_gap "
         "-eq 'stage6_lens_completion_audit'"
     ) in script
+    assert (
+        "$PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable -eq 'resident_host_process' -and\n"
+        "  -not $Stage6PrerequisiteBringupPlanMissingPrerequisitesObserved -and\n"
+        "  -not $Stage6PrerequisiteBringupPlanAppliedEnablementObserved"
+    ) in script
+    assert (
+        "$Stage6CompletionAuditHandoffConsumedByClosureReadback = (\n"
+        "  $NextSmallestTruthfulGap -eq 'summon_anywhere_blockers' -and\n"
+        "  -not $Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and"
+    ) in script
     assert "stage6_completion_audit_handoff_consumed_by_closure_readback" in script
     assert closure_source in script
     assert "$SummonResidentHostBlockerProofObserved -and" in script

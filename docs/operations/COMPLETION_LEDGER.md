@@ -38597,6 +38597,69 @@ Latest validation for Stage 6 completion-audit consumed handoff evidence:
   Result: `passed; Git reported the expected LF-to-CRLF warning for the touched
   PowerShell scripts`
 
+### 2026-05-25 - Stage 6 applied enablement handoff precedence guard
+
+Roadmap area: Stage 6 / Lens MVP, completion audit and next-handoff
+truthfulness after governed prerequisite bring-up.
+
+Material change:
+
+- The Stage 6 completion audit no longer routes a consumed
+  `stage6_closure_readback_summon_resident_host_blocker` handoff back to a
+  resident-host authority request after the prerequisite bring-up plan has
+  already reached applied persistent-supervision enablement receipt review.
+- The older closure-readback bridge remains available for the resident-host
+  blocker case, but applied enablement now lets the prerequisite bring-up
+  receipt-review path remain the authoritative next read-only step.
+- Stage 6 still does not close and Stage 7 does not start. This change does
+  not execute runtime actions, grant authority, start services, claim resident
+  status, write memory, or mutate Lens state from Status mode.
+
+Latest validation for Stage 6 applied enablement handoff precedence guard:
+
+- PowerShell AST parse of `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `python -m pytest
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_prefers_closure_handoff_after_resident_claim_boundary
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_accepts_consumed_authority_handoff_evidence
+  -q --tb=short`
+  Result: `passed`
+- `python -m pytest
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_applied_bringup_review_state
+  -q --tb=short`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status`
+  Result: `passed; status=persistent_supervision_enablement_applied;
+  current_truthful_gap=persistent_supervision_execution_boundary;
+  recommended_next_slice=run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt;
+  next_operator_action.id=review_persistent_supervision_enablement_receipt;
+  next_operator_action.method=GET; authority_required=none_readback_only;
+  would_execute=false; would_mutate=false`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-next-handoff.ps1 -Mode Status`
+  Result: `passed; status=proof_passed; ready_to_close=false;
+  next_smallest_truthful_gap=stage6_lens_completion_audit_runtime_readback;
+  recommended_next_slice=run_stage6_completion_audit_with_launch_on_hotkey_runtime_readback;
+  recommended_handoff_source=stage6_completion_audit_launch_on_hotkey_readback_required;
+  stage6_completion_audit_runtime_readback_required=true`
+- `python -m ruff check
+  tests/test_lens_stage6_completion_audit_script.py
+  tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests/test_lens_stage6_completion_audit_script.py
+  tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed; already formatted`
+- `git diff --check`
+  Result: `passed; Git reported the expected LF-to-CRLF warning for the touched
+  PowerShell script`
+- Attempted full launch-on-hotkey Stage 6 completion audit with a 420 second
+  wrapper timeout.
+  Result: `timed out; no JSON was written; not counted as passing validation.
+  Leftover Lens proof process was stopped and Lens hotkey, tray, overlay, and
+  host supervisor runtimes were stopped afterward.`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

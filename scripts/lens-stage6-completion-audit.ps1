@@ -3652,7 +3652,8 @@ if (
 }
 if (
   $PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable -eq 'resident_host_process' -and
-  -not $Stage6PrerequisiteBringupPlanMissingPrerequisitesObserved
+  -not $Stage6PrerequisiteBringupPlanMissingPrerequisitesObserved -and
+  -not $Stage6PrerequisiteBringupPlanAppliedEnablementObserved
 ) {
   $Stage6PrerequisiteBringupMissingRequirementActionRequirement = 'resident_host_process'
   $Stage6PrerequisiteBringupMissingRequirementAction = [ordered]@{
@@ -3687,6 +3688,7 @@ if (
 }
 $Stage6CompletionAuditHandoffConsumedByClosureReadback = (
   $NextSmallestTruthfulGap -eq 'summon_anywhere_blockers' -and
+  -not $Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and
   $Stage6CompletionReviewed -and
   -not $ReadyToClose -and
   $BlockedCriterionIds -contains 'summon_anywhere' -and
