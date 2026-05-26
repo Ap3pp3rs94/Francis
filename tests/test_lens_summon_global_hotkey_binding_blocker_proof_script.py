@@ -37,6 +37,29 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _write_summon_binding_runtime_readback(data_root: Path) -> None:
+    runtime_root = data_root / "runtime" / "lens-summon"
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    (runtime_root / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.summon.runtime_state",
+                "status": "summon_binding_observed",
+                "global_hotkey": "Ctrl+Alt+Space",
+                "binding_scope": "global",
+                "bounded_handoff_ready": True,
+                "local_open_ready": True,
+                "opened": False,
+                "no_launch": True,
+                "summon_anywhere": False,
+                "os_level_summon": False,
+                "updated_at": "2026-05-26T00:00:00Z",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 def test_lens_summon_global_hotkey_binding_blocker_uses_overlay_family_contract() -> None:
     script = (_repo_root() / "scripts" / "lens-summon-global-hotkey-binding-blocker-proof.ps1").read_text(
         encoding="utf-8",
@@ -187,3 +210,48 @@ def test_lens_summon_global_hotkey_binding_blocker_proof_is_readback_only(
         "resident_claim_authority": False,
         "mutation_authority_granted": False,
     }
+
+
+def test_lens_summon_global_hotkey_binding_blocker_skips_observed_summon_binding(
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "data"
+    _write_summon_binding_runtime_readback(data_root)
+
+    proc = _run_proof("-Mode", "Status", "-DataDir", str(data_root))
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "proof_passed"
+    assert payload["ok"] is True
+    assert payload["summon_binding_runtime_readback_observed"] is True
+    assert payload["summon_binding_resolved_to_authority_handoff"] is True
+    assert payload["next_summon_blocker_family"] == "authority"
+    assert payload["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert payload["recommended_handoff_source"] == "summon_authority_handoff_after_summon_binding_runtime_readback"
+    assert payload["recommended_next_slice"] == "run_summon_authority_blocker_proof"
+    assert payload["recommended_proof_script"] == "scripts/lens-summon-authority-blocker-proof.ps1 -Mode Status"
+    assert payload["authority_required"] == "summon_hotkey_overlay_and_process_authority"
+    assert payload["authority_granted"] is False
+
+    handoff = payload["recommended_handoff"]
+    assert handoff["id"] == "authority"
+    assert handoff["previous_summon_blocker_family"] == "global_hotkey_binding"
+    assert handoff["next_summon_blocker_family"] == "authority"
+    assert handoff["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert handoff["next_step"] == "run_summon_authority_blocker_proof"
+    assert handoff["proof_script"] == "scripts/lens-summon-authority-blocker-proof.ps1 -Mode Status"
+    assert handoff["authority_required"] == "summon_hotkey_overlay_and_process_authority"
+    assert handoff["authority_granted"] is False
+    assert handoff["read_only_contract"] is True
+    assert handoff["diagnostic_only"] is True
+    assert handoff["would_execute"] is False
+    assert handoff["would_mutate"] is False
+    assert "summon_authority_not_granted" in handoff["blockers"]
+    assert "hotkey_registration_authority_not_granted" in handoff["blockers"]
+    assert "overlay_control_authority_not_granted" in handoff["blockers"]
+
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["summon_binding_runtime_readback"]["status"] == "resolved_to_authority_handoff"
+    assert checks["summon_global_hotkey_binding_family"]["status"] == "fourth_family_projected"
+    assert all(item["passed"] for item in payload["checks"])

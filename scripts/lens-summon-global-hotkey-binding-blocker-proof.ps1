@@ -167,15 +167,27 @@ $SummonBlockedFamilies = ConvertTo-StringArray -Value (
 )
 $SummonFamilyHandoffs = Get-PropertyValue -Payload $SummonPayload -Name 'blocked_family_handoffs' -Default @()
 $OverlayWindowFamilyHandoff = Get-HandoffById -Handoffs $SummonFamilyHandoffs -Id 'overlay_window'
+$AuthorityFamilyHandoff = Get-HandoffById -Handoffs $SummonFamilyHandoffs -Id 'authority'
 $OverlayWindowFamilyBlockers = ConvertTo-StringArray -Value (
   Get-PropertyValue -Payload $OverlayWindowFamilyHandoff -Name 'blockers' -Default @()
+)
+$AuthorityFamilyBlockers = ConvertTo-StringArray -Value (
+  Get-PropertyValue -Payload $AuthorityFamilyHandoff -Name 'blockers' -Default @()
 )
 $SummonGlobalHotkeyBlockers = ConvertTo-StringArray -Value (
   Get-PropertyValue -Payload $SummonBlockerGroups -Name 'global_hotkey_binding' -Default @()
 )
 $SummonGovernance = Get-PropertyValue -Payload $SummonPayload -Name 'governance'
+$SurfaceRuntimeReadbackObserved = Get-PropertyValue -Payload $SummonPayload -Name 'surface_runtime_readback_observed' -Default ([ordered]@{})
+$SummonBindingRuntimeObserved = [bool](Get-PropertyValue -Payload $SurfaceRuntimeReadbackObserved -Name 'summon_binding' -Default $false)
 $OverlayWindowFamilyIndex = [array]::IndexOf([string[]]@($SummonBlockedFamilies), 'overlay_window')
 $GlobalHotkeyFamilyIndex = [array]::IndexOf([string[]]@($SummonBlockedFamilies), 'global_hotkey_binding')
+$AuthorityFamilyIndex = [array]::IndexOf([string[]]@($SummonBlockedFamilies), 'authority')
+$SummonBindingResolvedToAuthority = (
+  $SummonBindingRuntimeObserved -and
+  $AuthorityFamilyIndex -eq ($GlobalHotkeyFamilyIndex + 1) -and
+  [string](Get-PropertyValue -Payload $AuthorityFamilyHandoff -Name 'id' -Default '') -eq 'authority'
+)
 
 $HotkeyBoundaryArgs = @('-Mode', 'Status')
 if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
@@ -276,41 +288,55 @@ $SideEffectsDenied = (
   -not [bool](Get-PropertyValue -Payload $HotkeyBoundaryGovernance -Name 'mutation_authority_granted' -Default $true)
 )
 
-$Checks = @(
-  (New-Check -Id 'summon_global_hotkey_binding_family' -Status $(if ($SummonGlobalHotkeyFamilyObserved) { 'fourth_family_projected' } else { 'missing_or_unexpected' }) -Passed $SummonGlobalHotkeyFamilyObserved -Evidence 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status' -Reason 'The summon-anywhere blocker proof must keep global_hotkey_binding as the fourth blocked acceptance family after overlay_window.'),
-  (New-Check -Id 'previous_overlay_window_contract' -Status $(if ($OverlayWindowContractReadbackObserved) { 'previous_family_contract_observed' } else { 'missing_or_unexpected' }) -Passed $OverlayWindowContractReadbackObserved -Evidence 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status blocked_family_handoffs[overlay_window]' -Reason 'The global-hotkey handoff should consume the overlay-window family contract before moving to the fourth blocker family.'),
-  (New-Check -Id 'previous_overlay_window_contract_readback' -Status $(if ($OverlayWindowContractReadbackObserved) { 'previous_contract_readback_observed' } else { 'missing_or_unexpected' }) -Passed $OverlayWindowContractReadbackObserved -Evidence 'summon_anywhere_blockers.blocked_family_handoffs[overlay_window]' -Reason 'The global-hotkey proof must preserve the bounded overlay-window contract without rerunning the slower overlay bridge proof.'),
-  (New-Check -Id 'resident_runtime_hotkey_summon_boundary' -Status $(if ($HotkeySummonBoundaryObserved) { 'blocked_readback_ready' } else { 'missing_or_unexpected' }) -Passed $HotkeySummonBoundaryObserved -Evidence 'scripts/lens-resident-runtime-hotkey-summon-boundary-proof.ps1 -Mode Status' -Reason 'The resident-runtime hotkey-summon boundary proof must remain blocked and read-only.'),
-  (New-Check -Id 'handoff_alignment' -Status $(if ($HandoffAligned) { 'handoff_aligned' } else { 'handoff_mismatch' }) -Passed $HandoffAligned -Evidence 'summon global_hotkey_binding blocker group + resident-runtime hotkey-summon boundary proof' -Reason 'The summon global_hotkey_binding blocker must map to direct summon preflight and resident-runtime hotkey-summon boundary without changing authority.'),
-  (New-Check -Id 'side_effects_denied' -Status $(if ($SideEffectsDenied) { 'diagnostic_bounded' } else { 'unexpected_authority' }) -Passed $SideEffectsDenied -Evidence 'summon, overlay family contract, and hotkey-summon boundary governance payloads' -Reason 'The bridge proof must remain diagnostic/readback only and grant no summon, hotkey, overlay, tray, process, service, memory, approval-decision, or resident-claim authority.')
-)
-
-$ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
-
-$Payload = [ordered]@{
-  ok = $ProofPassed
-  kind = 'lens.summon_global_hotkey_binding_blocker.proof'
-  status = if ($ProofPassed) { 'proof_passed' } else { 'proof_failed' }
-  mode = $Mode.ToLowerInvariant()
-  repo_root = $RepoRoot
-  stage = 'Stage 6 / Lens MVP'
-  stage_state = 'active'
-  acceptance_criterion = 'summon_anywhere'
-  previous_summon_blocker_family = 'overlay_window'
-  summon_global_hotkey_binding_blocker_family = 'global_hotkey_binding'
-  fourth_summon_blocker_family = 'global_hotkey_binding'
-  next_summon_blocker_family = 'summon_binding'
-  summon_next_smallest_truthful_gap = 'summon_anywhere_blockers'
-  resident_runtime_next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $HotkeyBoundaryPayload -Name 'next_smallest_truthful_gap' -Default '')
-  next_smallest_truthful_gap = 'summon_binding_blocker_boundary'
-  recommended_handoff_source = 'summon_global_hotkey_binding_handoff'
-  recommended_next_slice = 'run_summon_binding_blocker_proof'
-  recommended_proof_script = 'scripts/lens-summon-binding-blocker-proof.ps1 -Mode Status'
-  recommended_route = '/lens/summon'
-  recommended_readiness_route = '/lens/summon/readiness'
-  authority_required = 'summon_authority'
-  authority_granted = $false
-  recommended_handoff = [ordered]@{
+$NextSummonBlockerFamily = if ($SummonBindingResolvedToAuthority) { 'authority' } else { 'summon_binding' }
+$NextSmallestTruthfulGap = if ($SummonBindingResolvedToAuthority) {
+  [string](Get-PropertyValue -Payload $AuthorityFamilyHandoff -Name 'next_smallest_truthful_gap' -Default 'stage6_lens_completion_audit')
+} else {
+  'summon_binding_blocker_boundary'
+}
+$RecommendedHandoffSource = if ($SummonBindingResolvedToAuthority) {
+  'summon_authority_handoff_after_summon_binding_runtime_readback'
+} else {
+  'summon_global_hotkey_binding_handoff'
+}
+$RecommendedNextSlice = if ($SummonBindingResolvedToAuthority) {
+  [string](Get-PropertyValue -Payload $AuthorityFamilyHandoff -Name 'next_step' -Default 'run_summon_authority_blocker_proof')
+} else {
+  'run_summon_binding_blocker_proof'
+}
+$RecommendedProofScript = if ($SummonBindingResolvedToAuthority) {
+  [string](Get-PropertyValue -Payload $AuthorityFamilyHandoff -Name 'proof_script' -Default 'scripts/lens-summon-authority-blocker-proof.ps1 -Mode Status')
+} else {
+  'scripts/lens-summon-binding-blocker-proof.ps1 -Mode Status'
+}
+$RecommendedAuthorityRequired = if ($SummonBindingResolvedToAuthority) {
+  [string](Get-PropertyValue -Payload $AuthorityFamilyHandoff -Name 'authority_required' -Default 'summon_hotkey_overlay_and_process_authority')
+} else {
+  'summon_authority'
+}
+$RecommendedHandoff = if ($SummonBindingResolvedToAuthority) {
+  [ordered]@{
+    id = 'authority'
+    status = [string](Get-PropertyValue -Payload $AuthorityFamilyHandoff -Name 'status' -Default 'blocked')
+    previous_summon_blocker_family = 'global_hotkey_binding'
+    next_summon_blocker_family = 'authority'
+    next_smallest_truthful_gap = $NextSmallestTruthfulGap
+    next_step = $RecommendedNextSlice
+    proof_script = $RecommendedProofScript
+    route = [string](Get-PropertyValue -Payload $AuthorityFamilyHandoff -Name 'route' -Default '/lens/summon')
+    readiness_route = [string](Get-PropertyValue -Payload $AuthorityFamilyHandoff -Name 'readiness_route' -Default '/lens/summon/readiness')
+    acceptance_criterion = 'summon_anywhere'
+    blocker_family = 'authority'
+    authority_required = $RecommendedAuthorityRequired
+    authority_granted = $false
+    read_only_contract = [bool](Get-PropertyValue -Payload $AuthorityFamilyHandoff -Name 'read_only_contract' -Default $true)
+    diagnostic_only = [bool](Get-PropertyValue -Payload $AuthorityFamilyHandoff -Name 'diagnostic_only' -Default $true)
+    would_execute = [bool](Get-PropertyValue -Payload $AuthorityFamilyHandoff -Name 'would_execute' -Default $false)
+    would_mutate = [bool](Get-PropertyValue -Payload $AuthorityFamilyHandoff -Name 'would_mutate' -Default $false)
+    blockers = [string[]]@($AuthorityFamilyBlockers)
+  }
+} else {
+  [ordered]@{
     id = 'summon_binding'
     status = 'blocked'
     previous_summon_blocker_family = 'global_hotkey_binding'
@@ -329,6 +355,46 @@ $Payload = [ordered]@{
     would_execute = $false
     would_mutate = $false
   }
+}
+
+$Checks = @(
+  (New-Check -Id 'summon_global_hotkey_binding_family' -Status $(if ($SummonGlobalHotkeyFamilyObserved) { 'fourth_family_projected' } else { 'missing_or_unexpected' }) -Passed $SummonGlobalHotkeyFamilyObserved -Evidence 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status' -Reason 'The summon-anywhere blocker proof must keep global_hotkey_binding as the fourth blocked acceptance family after overlay_window.'),
+  (New-Check -Id 'previous_overlay_window_contract' -Status $(if ($OverlayWindowContractReadbackObserved) { 'previous_family_contract_observed' } else { 'missing_or_unexpected' }) -Passed $OverlayWindowContractReadbackObserved -Evidence 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status blocked_family_handoffs[overlay_window]' -Reason 'The global-hotkey handoff should consume the overlay-window family contract before moving to the fourth blocker family.'),
+  (New-Check -Id 'previous_overlay_window_contract_readback' -Status $(if ($OverlayWindowContractReadbackObserved) { 'previous_contract_readback_observed' } else { 'missing_or_unexpected' }) -Passed $OverlayWindowContractReadbackObserved -Evidence 'summon_anywhere_blockers.blocked_family_handoffs[overlay_window]' -Reason 'The global-hotkey proof must preserve the bounded overlay-window contract without rerunning the slower overlay bridge proof.'),
+  (New-Check -Id 'resident_runtime_hotkey_summon_boundary' -Status $(if ($HotkeySummonBoundaryObserved) { 'blocked_readback_ready' } else { 'missing_or_unexpected' }) -Passed $HotkeySummonBoundaryObserved -Evidence 'scripts/lens-resident-runtime-hotkey-summon-boundary-proof.ps1 -Mode Status' -Reason 'The resident-runtime hotkey-summon boundary proof must remain blocked and read-only.'),
+  (New-Check -Id 'summon_binding_runtime_readback' -Status $(if ($SummonBindingResolvedToAuthority) { 'resolved_to_authority_handoff' } elseif ($SummonBindingRuntimeObserved) { 'readback_present_without_authority_handoff' } else { 'not_present' }) -Passed $true -Evidence 'summon_anywhere_blockers.surface_runtime_readback_observed.summon_binding' -Reason 'If the aggregate proof already observed summon binding runtime, global-hotkey must hand forward to authority instead of a resolved surface family.'),
+  (New-Check -Id 'handoff_alignment' -Status $(if ($HandoffAligned) { 'handoff_aligned' } else { 'handoff_mismatch' }) -Passed $HandoffAligned -Evidence 'summon global_hotkey_binding blocker group + resident-runtime hotkey-summon boundary proof' -Reason 'The summon global_hotkey_binding blocker must map to direct summon preflight and resident-runtime hotkey-summon boundary without changing authority.'),
+  (New-Check -Id 'side_effects_denied' -Status $(if ($SideEffectsDenied) { 'diagnostic_bounded' } else { 'unexpected_authority' }) -Passed $SideEffectsDenied -Evidence 'summon, overlay family contract, and hotkey-summon boundary governance payloads' -Reason 'The bridge proof must remain diagnostic/readback only and grant no summon, hotkey, overlay, tray, process, service, memory, approval-decision, or resident-claim authority.')
+)
+
+$ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
+
+$Payload = [ordered]@{
+  ok = $ProofPassed
+  kind = 'lens.summon_global_hotkey_binding_blocker.proof'
+  status = if ($ProofPassed) { 'proof_passed' } else { 'proof_failed' }
+  mode = $Mode.ToLowerInvariant()
+  repo_root = $RepoRoot
+  stage = 'Stage 6 / Lens MVP'
+  stage_state = 'active'
+  acceptance_criterion = 'summon_anywhere'
+  previous_summon_blocker_family = 'overlay_window'
+  summon_global_hotkey_binding_blocker_family = 'global_hotkey_binding'
+  fourth_summon_blocker_family = 'global_hotkey_binding'
+  next_summon_blocker_family = $NextSummonBlockerFamily
+  summon_next_smallest_truthful_gap = 'summon_anywhere_blockers'
+  resident_runtime_next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $HotkeyBoundaryPayload -Name 'next_smallest_truthful_gap' -Default '')
+  next_smallest_truthful_gap = $NextSmallestTruthfulGap
+  recommended_handoff_source = $RecommendedHandoffSource
+  recommended_next_slice = $RecommendedNextSlice
+  recommended_proof_script = $RecommendedProofScript
+  recommended_route = '/lens/summon'
+  recommended_readiness_route = '/lens/summon/readiness'
+  authority_required = $RecommendedAuthorityRequired
+  authority_granted = $false
+  recommended_handoff = $RecommendedHandoff
+  summon_binding_runtime_readback_observed = $SummonBindingRuntimeObserved
+  summon_binding_resolved_to_authority_handoff = $SummonBindingResolvedToAuthority
   summon_global_hotkey_family_observed = $SummonGlobalHotkeyFamilyObserved
   previous_overlay_window_contract_observed = $OverlayWindowContractReadbackObserved
   previous_overlay_window_contract_readback_observed = $OverlayWindowContractReadbackObserved
