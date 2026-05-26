@@ -476,6 +476,53 @@ def test_lens_stage6_next_handoff_prefers_first_missing_prerequisite_after_appli
     assert concrete_handoff["would_execute"] is False
     assert concrete_handoff["would_mutate"] is False
 
+    audit_with_ready_concrete = json.loads(audit_json.read_text(encoding="utf-8"))
+    audit_with_ready_concrete["recommended_concrete_handoff"]["required_before_enable_ready"] = True
+    audit_with_ready_concrete["recommended_concrete_handoff"]["missing_required_before_enable"] = []
+    audit_with_ready_concrete["recommended_concrete_handoff"]["next_operator_action_requirement"] = (
+        "persistent_supervision_enablement_receipt"
+    )
+    audit_with_ready_concrete["recommended_concrete_handoff"]["next_operator_action"] = {
+        "id": "review_persistent_supervision_enablement_receipt",
+        "route": "/lens/host/persistent-supervision/enablement/executions",
+        "method": "GET",
+        "mode": "readback",
+        "script_would_execute": False,
+        "script_would_mutate": False,
+        "latest_receipt_id": "lpsee_test",
+    }
+    audit_with_ready_concrete_json = tmp_path / "stage6-completion-audit-ready-concrete.json"
+    audit_with_ready_concrete_json.write_text(json.dumps(audit_with_ready_concrete), encoding="utf-8")
+
+    ready_concrete_proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-CompletionAuditJsonPath",
+        str(audit_with_ready_concrete_json),
+        env={
+            "FRANCIS_DATA_DIR": str(data_root),
+            "FRANCIS_LENS_HOST_SERVICE_CONFIG_PATH": str(service_config_path),
+        },
+    )
+
+    assert ready_concrete_proc.returncode == 0, ready_concrete_proc.stderr or ready_concrete_proc.stdout
+    ready_concrete_payload = json.loads(ready_concrete_proc.stdout)
+    assert ready_concrete_payload["persistent_supervision_missing_required_before_enable"] == [
+        "tray_presence",
+        "global_hotkey_binding",
+        "overlay_window",
+        "summon_binding",
+    ]
+    assert ready_concrete_payload["stage6_prerequisite_bringup_plan"]["missing_required_before_enable"] == []
+    assert ready_concrete_payload["recommended_concrete_handoff_source"] == (
+        "persistent_supervision_resident_claim_boundary_handoff"
+    )
+    assert ready_concrete_payload["recommended_concrete_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert ready_concrete_payload["recommended_concrete_next_slice"] == (
+        "run_stage6_lens_completion_audit_after_resident_claim_boundary_readback"
+    )
+    assert ready_concrete_payload["recommended_concrete_authority_required"] == "none_new_stage6_completion_audit"
+
 
 def _write_lens_host_runtime_state(data_root: Path, *, pid: int) -> None:
     runtime_root = data_root / "runtime" / "lens-host"

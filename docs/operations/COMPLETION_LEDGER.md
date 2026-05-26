@@ -39218,6 +39218,70 @@ Latest validation for Stage 6 resident overlay runtime child proof CI hardening:
   -q`
   Result: `passed`
 
+### 2026-05-26 - Stage 6 launch-audit concrete handoff precedence
+
+Roadmap area: Stage 6 / Lens MVP, completion-audit and system-resident
+presence handoff truthfulness.
+
+Material change:
+
+- `scripts/lens-stage6-next-handoff.ps1` now treats a supplied completion-audit
+  concrete handoff with `required_before_enable_ready=true`,
+  `missing_required_before_enable=[]`, and
+  `next_operator_action_requirement=persistent_supervision_enablement_receipt`
+  as fresher than older persistent-supervision prerequisite missing-readback.
+- The stale first-missing prerequisite override remains available when the
+  supplied audit does not prove prerequisite readiness.
+- With the latest opt-in launch-on-hotkey audit JSON consumed, the concrete
+  handoff now advances to
+  `persistent_supervision_resident_claim_boundary_handoff` /
+  `run_stage6_lens_completion_audit_after_resident_claim_boundary_readback`
+  instead of re-reporting
+  `resolve_tray_presence_before_persistent_supervision_enablement`.
+- Stage 6 still does not close and Stage 7 does not start. The broad blocker
+  remains `system_resident_presence_blockers`; this change only corrects the
+  concrete handoff precedence after runtime audit readback has been supplied.
+
+Latest validation for Stage 6 launch-audit concrete handoff precedence:
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey
+  -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2
+  -ResidentSurfaceForegroundRunSeconds 2 -SupervisorRunSeconds 3
+  -ChildProofTimeoutSeconds 120`
+  Result: `passed; status=blocked; audit_status=complete;
+  ready_to_close=false; can_close_stage6=false; transition_allowed=false;
+  child_proof_timeouts=[]; next_smallest_truthful_gap=system_resident_presence_blockers;
+  remaining_stage6_acceptance_blockers=summon_anywhere,system_resident_presence;
+  summon_api_launch_on_hotkey_proof.ok=true; opened=true;
+  summon_anywhere=true`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath
+  .tmp\stage6-completion-audit-live-launch-on-hotkey.json`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=system_resident_presence_blockers;
+  stage6_completion_audit_runtime_readback_required=false;
+  stage6_completion_audit_launch_on_hotkey_runtime_readback_observed=true;
+  stage6_completion_audit_remaining_acceptance_handoff_observed=true;
+  stage6_completion_audit_recommended_handoff_consumed=true;
+  recommended_concrete_handoff_source=persistent_supervision_resident_claim_boundary_handoff;
+  recommended_concrete_next_slice=run_stage6_lens_completion_audit_after_resident_claim_boundary_readback;
+  recommended_concrete_next_smallest_truthful_gap=stage6_lens_completion_audit`
+- PowerShell AST parse of `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed`
+- `python -m ruff check tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m pytest
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_prefers_first_missing_prerequisite_after_applied_enablement
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_preserves_completion_audit_concrete_handoff
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_applied_bringup_review_state
+  -q --tb=short`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
