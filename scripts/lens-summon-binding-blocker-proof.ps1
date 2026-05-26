@@ -78,7 +78,9 @@ function Invoke-JsonScript {
     [Parameter(Mandatory = $true)]
     [string]$ScriptPath,
 
-    [string[]]$ScriptArgs = @()
+    [string[]]$ScriptArgs = @(),
+
+    [string]$DataRoot = ''
   )
 
   if (-not (Test-Path -LiteralPath $ScriptPath -PathType Leaf)) {
@@ -89,8 +91,21 @@ function Invoke-JsonScript {
     }
   }
 
-  $Output = & $PowerShellPath -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @ScriptArgs 2>&1
-  $ExitCode = $LASTEXITCODE
+  $HadPreviousDataRoot = Test-Path Env:\FRANCIS_DATA_DIR
+  $PreviousDataRoot = [string]$env:FRANCIS_DATA_DIR
+  try {
+    if (-not [string]::IsNullOrWhiteSpace($DataRoot)) {
+      $env:FRANCIS_DATA_DIR = [System.IO.Path]::GetFullPath($DataRoot)
+    }
+    $Output = & $PowerShellPath -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @ScriptArgs 2>&1
+    $ExitCode = $LASTEXITCODE
+  } finally {
+    if ($HadPreviousDataRoot) {
+      $env:FRANCIS_DATA_DIR = $PreviousDataRoot
+    } else {
+      Remove-Item Env:\FRANCIS_DATA_DIR -ErrorAction SilentlyContinue
+    }
+  }
   $Text = ($Output | ForEach-Object { [string]$_ }) -join "`n"
   $Payload = $null
   try {
@@ -139,8 +154,12 @@ $PowerShell = Get-Command pwsh -ErrorAction SilentlyContinue
 if ($null -eq $PowerShell) {
   $PowerShell = Get-Command powershell -ErrorAction Stop
 }
+$ChildDataRoot = ''
+if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
+  $ChildDataRoot = [System.IO.Path]::GetFullPath($DataDir)
+}
 
-$SummonResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonBlockersScript -ScriptArgs @('-Mode', 'Status')
+$SummonResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonBlockersScript -ScriptArgs @('-Mode', 'Status') -DataRoot $ChildDataRoot
 $SummonPayload = $SummonResult.payload
 $SummonBlockerGroups = Get-PropertyValue -Payload $SummonPayload -Name 'blocker_groups'
 $SummonBlockedFamilies = ConvertTo-StringArray -Value (
@@ -155,8 +174,10 @@ $SummonBindingBlockers = ConvertTo-StringArray -Value (
   Get-PropertyValue -Payload $SummonBlockerGroups -Name 'summon_binding' -Default @()
 )
 $SummonGovernance = Get-PropertyValue -Payload $SummonPayload -Name 'governance'
+$GlobalHotkeyFamilyIndex = [array]::IndexOf([string[]]@($SummonBlockedFamilies), 'global_hotkey_binding')
+$SummonBindingFamilyIndex = [array]::IndexOf([string[]]@($SummonBlockedFamilies), 'summon_binding')
 
-$SummonPreflightResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonPreflightScript -ScriptArgs @('-Mode', 'Status')
+$SummonPreflightResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonPreflightScript -ScriptArgs @('-Mode', 'Status') -DataRoot $ChildDataRoot
 $SummonPreflightPayload = $SummonPreflightResult.payload
 $SummonPreflightGovernance = Get-PropertyValue -Payload $SummonPreflightPayload -Name 'governance'
 $SummonPreflightGroups = Get-PropertyValue -Payload $SummonPreflightPayload -Name 'blocker_groups'
@@ -180,9 +201,8 @@ $SummonBindingFamilyObserved = (
   [string](Get-PropertyValue -Payload $SummonPayload -Name 'status' -Default '') -eq 'proof_passed' -and
   [string](Get-PropertyValue -Payload $SummonPayload -Name 'acceptance_criterion' -Default '') -eq 'summon_anywhere' -and
   [string](Get-PropertyValue -Payload $SummonPayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'summon_anywhere_blockers' -and
-  @($SummonBlockedFamilies).Count -ge 5 -and
-  [string]$SummonBlockedFamilies[3] -eq 'global_hotkey_binding' -and
-  [string]$SummonBlockedFamilies[4] -eq 'summon_binding' -and
+  $GlobalHotkeyFamilyIndex -ge 0 -and
+  $SummonBindingFamilyIndex -eq ($GlobalHotkeyFamilyIndex + 1) -and
   $SummonBindingBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
   $SummonBindingBlockers -contains 'summon_authority_not_granted'
 )

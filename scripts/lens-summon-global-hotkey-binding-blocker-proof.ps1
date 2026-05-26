@@ -78,7 +78,9 @@ function Invoke-JsonScript {
     [Parameter(Mandatory = $true)]
     [string]$ScriptPath,
 
-    [string[]]$ScriptArgs = @()
+    [string[]]$ScriptArgs = @(),
+
+    [string]$DataRoot = ''
   )
 
   if (-not (Test-Path -LiteralPath $ScriptPath -PathType Leaf)) {
@@ -89,8 +91,21 @@ function Invoke-JsonScript {
     }
   }
 
-  $Output = & $PowerShellPath -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @ScriptArgs 2>&1
-  $ExitCode = $LASTEXITCODE
+  $HadPreviousDataRoot = Test-Path Env:\FRANCIS_DATA_DIR
+  $PreviousDataRoot = [string]$env:FRANCIS_DATA_DIR
+  try {
+    if (-not [string]::IsNullOrWhiteSpace($DataRoot)) {
+      $env:FRANCIS_DATA_DIR = [System.IO.Path]::GetFullPath($DataRoot)
+    }
+    $Output = & $PowerShellPath -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @ScriptArgs 2>&1
+    $ExitCode = $LASTEXITCODE
+  } finally {
+    if ($HadPreviousDataRoot) {
+      $env:FRANCIS_DATA_DIR = $PreviousDataRoot
+    } else {
+      Remove-Item Env:\FRANCIS_DATA_DIR -ErrorAction SilentlyContinue
+    }
+  }
   $Text = ($Output | ForEach-Object { [string]$_ }) -join "`n"
   $Payload = $null
   try {
@@ -139,8 +154,12 @@ $PowerShell = Get-Command pwsh -ErrorAction SilentlyContinue
 if ($null -eq $PowerShell) {
   $PowerShell = Get-Command powershell -ErrorAction Stop
 }
+$ChildDataRoot = ''
+if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
+  $ChildDataRoot = [System.IO.Path]::GetFullPath($DataDir)
+}
 
-$SummonResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonBlockersScript -ScriptArgs @('-Mode', 'Status')
+$SummonResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonBlockersScript -ScriptArgs @('-Mode', 'Status') -DataRoot $ChildDataRoot
 $SummonPayload = $SummonResult.payload
 $SummonBlockerGroups = Get-PropertyValue -Payload $SummonPayload -Name 'blocker_groups'
 $SummonBlockedFamilies = ConvertTo-StringArray -Value (
@@ -155,12 +174,14 @@ $SummonGlobalHotkeyBlockers = ConvertTo-StringArray -Value (
   Get-PropertyValue -Payload $SummonBlockerGroups -Name 'global_hotkey_binding' -Default @()
 )
 $SummonGovernance = Get-PropertyValue -Payload $SummonPayload -Name 'governance'
+$OverlayWindowFamilyIndex = [array]::IndexOf([string[]]@($SummonBlockedFamilies), 'overlay_window')
+$GlobalHotkeyFamilyIndex = [array]::IndexOf([string[]]@($SummonBlockedFamilies), 'global_hotkey_binding')
 
 $HotkeyBoundaryArgs = @('-Mode', 'Status')
 if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
   $HotkeyBoundaryArgs += @('-DataDir', $DataDir)
 }
-$HotkeyBoundaryResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $HotkeySummonBoundaryScript -ScriptArgs $HotkeyBoundaryArgs
+$HotkeyBoundaryResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $HotkeySummonBoundaryScript -ScriptArgs $HotkeyBoundaryArgs -DataRoot $ChildDataRoot
 $HotkeyBoundaryPayload = $HotkeyBoundaryResult.payload
 $HotkeyBoundaryGovernance = Get-PropertyValue -Payload $HotkeyBoundaryPayload -Name 'governance'
 $HotkeySummon = Get-PropertyValue -Payload $HotkeyBoundaryPayload -Name 'hotkey_summon'
@@ -181,9 +202,8 @@ $SummonGlobalHotkeyFamilyObserved = (
   [string](Get-PropertyValue -Payload $SummonPayload -Name 'status' -Default '') -eq 'proof_passed' -and
   [string](Get-PropertyValue -Payload $SummonPayload -Name 'acceptance_criterion' -Default '') -eq 'summon_anywhere' -and
   [string](Get-PropertyValue -Payload $SummonPayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'summon_anywhere_blockers' -and
-  @($SummonBlockedFamilies).Count -ge 4 -and
-  [string]$SummonBlockedFamilies[2] -eq 'overlay_window' -and
-  [string]$SummonBlockedFamilies[3] -eq 'global_hotkey_binding' -and
+  $OverlayWindowFamilyIndex -ge 0 -and
+  $GlobalHotkeyFamilyIndex -eq ($OverlayWindowFamilyIndex + 1) -and
   $SummonGlobalHotkeyBlockers -contains 'global_hotkey_binding_disabled' -and
   $SummonGlobalHotkeyBlockers -contains 'global_hotkey_registration_disabled' -and
   $SummonGlobalHotkeyBlockers -contains 'hotkey_registration_authority_not_granted'

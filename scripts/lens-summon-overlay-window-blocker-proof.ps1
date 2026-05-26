@@ -78,7 +78,9 @@ function Invoke-JsonScript {
     [Parameter(Mandatory = $true)]
     [string]$ScriptPath,
 
-    [string[]]$ScriptArgs = @()
+    [string[]]$ScriptArgs = @(),
+
+    [string]$DataRoot = ''
   )
 
   if (-not (Test-Path -LiteralPath $ScriptPath -PathType Leaf)) {
@@ -89,8 +91,21 @@ function Invoke-JsonScript {
     }
   }
 
-  $Output = & $PowerShellPath -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @ScriptArgs 2>&1
-  $ExitCode = $LASTEXITCODE
+  $HadPreviousDataRoot = Test-Path Env:\FRANCIS_DATA_DIR
+  $PreviousDataRoot = [string]$env:FRANCIS_DATA_DIR
+  try {
+    if (-not [string]::IsNullOrWhiteSpace($DataRoot)) {
+      $env:FRANCIS_DATA_DIR = [System.IO.Path]::GetFullPath($DataRoot)
+    }
+    $Output = & $PowerShellPath -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @ScriptArgs 2>&1
+    $ExitCode = $LASTEXITCODE
+  } finally {
+    if ($HadPreviousDataRoot) {
+      $env:FRANCIS_DATA_DIR = $PreviousDataRoot
+    } else {
+      Remove-Item Env:\FRANCIS_DATA_DIR -ErrorAction SilentlyContinue
+    }
+  }
   $Text = ($Output | ForEach-Object { [string]$_ }) -join "`n"
   $Payload = $null
   try {
@@ -139,8 +154,12 @@ $PowerShell = Get-Command pwsh -ErrorAction SilentlyContinue
 if ($null -eq $PowerShell) {
   $PowerShell = Get-Command powershell -ErrorAction Stop
 }
+$ChildDataRoot = ''
+if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
+  $ChildDataRoot = [System.IO.Path]::GetFullPath($DataDir)
+}
 
-$SummonResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonBlockersScript -ScriptArgs @('-Mode', 'Status')
+$SummonResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonBlockersScript -ScriptArgs @('-Mode', 'Status') -DataRoot $ChildDataRoot
 $SummonPayload = $SummonResult.payload
 $SummonBlockerGroups = Get-PropertyValue -Payload $SummonPayload -Name 'blocker_groups'
 $SummonBlockedFamilies = ConvertTo-StringArray -Value (
@@ -155,12 +174,14 @@ $SummonOverlayBlockers = ConvertTo-StringArray -Value (
   Get-PropertyValue -Payload $SummonBlockerGroups -Name 'overlay_window' -Default @()
 )
 $SummonGovernance = Get-PropertyValue -Payload $SummonPayload -Name 'governance'
+$TrayPresenceFamilyIndex = [array]::IndexOf([string[]]@($SummonBlockedFamilies), 'tray_presence')
+$OverlayWindowFamilyIndex = [array]::IndexOf([string[]]@($SummonBlockedFamilies), 'overlay_window')
 
 $OverlayBoundaryArgs = @('-Mode', 'Status')
 if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
   $OverlayBoundaryArgs += @('-DataDir', (Join-Path $DataDir 'proofs\resident-runtime-overlay-window-boundary\data'))
 }
-$OverlayBoundaryResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $OverlayBoundaryScript -ScriptArgs $OverlayBoundaryArgs
+$OverlayBoundaryResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $OverlayBoundaryScript -ScriptArgs $OverlayBoundaryArgs -DataRoot $ChildDataRoot
 $OverlayBoundaryPayload = $OverlayBoundaryResult.payload
 $OverlayBoundaryGovernance = Get-PropertyValue -Payload $OverlayBoundaryPayload -Name 'governance'
 $OverlayWindow = Get-PropertyValue -Payload $OverlayBoundaryPayload -Name 'overlay_window'
@@ -175,9 +196,8 @@ $SummonOverlayFamilyObserved = (
   [string](Get-PropertyValue -Payload $SummonPayload -Name 'status' -Default '') -eq 'proof_passed' -and
   [string](Get-PropertyValue -Payload $SummonPayload -Name 'acceptance_criterion' -Default '') -eq 'summon_anywhere' -and
   [string](Get-PropertyValue -Payload $SummonPayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'summon_anywhere_blockers' -and
-  @($SummonBlockedFamilies).Count -ge 3 -and
-  [string]$SummonBlockedFamilies[1] -eq 'tray_presence' -and
-  [string]$SummonBlockedFamilies[2] -eq 'overlay_window' -and
+  $TrayPresenceFamilyIndex -ge 0 -and
+  $OverlayWindowFamilyIndex -eq ($TrayPresenceFamilyIndex + 1) -and
   $SummonOverlayBlockers -contains 'overlay_window_missing'
 )
 $TrayPresenceContractReadbackObserved = (

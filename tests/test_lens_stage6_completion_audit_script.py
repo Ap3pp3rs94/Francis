@@ -1198,6 +1198,20 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     assert "$RecommendedHandoffSource = 'stage6_overlay_api_execution_readback_required'" in script
     assert "$RecommendedHandoffSource = 'stage6_summon_api_bounded_execution_readback_required'" in script
     assert "$RecommendedHandoffSource = 'stage6_persistent_supervision_api_execution_readback_required'" in script
+    assert "$Stage6CompletionReviewed -and -not [string]::IsNullOrWhiteSpace($Stage6AcceptanceNextGap)" in script
+    assert "$BlockedCriterionIds -contains 'summon_anywhere' -and -not $SummonAnywhereRuntimeReadbackObserved" in script
+    assert "$RecommendedHandoffSource = 'stage6_remaining_acceptance_blockers_after_summon_runtime_readback'" in script
+    assert "review_helpful_not_noisy_acceptance_blockers_after_summon_runtime_readback" in script
+    assert "review_system_resident_presence_acceptance_blockers_after_summon_runtime_readback" in script
+    assert "consumed_summon_anywhere_runtime_readback = $SummonAnywhereRuntimeReadbackObserved" in script
+    assert (
+        "consumed_persistent_supervision_api_execution_proof = $PersistentSupervisionApiExecutionProofObserved"
+        in script
+    )
+    assert "proof_script = 'scripts/lens-stage6-checkpoint.ps1 -Mode Status'" in script
+    assert script.index("stage6_remaining_acceptance_blockers_after_summon_runtime_readback") < script.index(
+        "stage6_reviewed_summon_anywhere_first_blocker"
+    )
     assert "$RecommendedHandoffSource = [string]$ResidentRuntimeApiExecutionProof.recommended_handoff_source" in script
     assert "$RecommendedHandoffSource = [string]$TrayPresenceApiExecutionProof.recommended_handoff_source" in script
     assert "$RecommendedHandoffSource = [string]$OsBindingApiExecutionProof.recommended_handoff_source" in script

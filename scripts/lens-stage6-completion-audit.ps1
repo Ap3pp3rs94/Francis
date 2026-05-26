@@ -3667,12 +3667,12 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   'resident_surface_missing'
 } elseif ($BlockedCriterionIds -contains 'helpful_not_noisy' -and $Blockers -contains 'operator_experience_proof_missing') {
   'resident_surface_operator_experience_proof'
-} elseif ($BlockedCriterionIds -contains 'summon_anywhere') {
+} elseif ($Stage6CompletionReviewed -and -not [string]::IsNullOrWhiteSpace($Stage6AcceptanceNextGap)) {
+  $Stage6AcceptanceNextGap
+} elseif ($BlockedCriterionIds -contains 'summon_anywhere' -and -not $SummonAnywhereRuntimeReadbackObserved) {
   'summon_anywhere_blockers'
 } elseif ($BlockedCriterionIds -contains 'system_resident_presence') {
   'system_resident_presence_blockers'
-} elseif ($Stage6CompletionReviewed -and -not [string]::IsNullOrWhiteSpace($Stage6AcceptanceNextGap)) {
-  $Stage6AcceptanceNextGap
 } else {
   'review_stage6_checkpoint_blockers'
 }
@@ -3866,6 +3866,67 @@ if (
     would_claim_resident = $false
     would_decide_approval = $false
     blockers = [string[]]@($ProcessSupervisionBoundaryBlockers)
+  }
+  $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
+  $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
+  $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
+} elseif (
+  @('helpful_not_noisy_blockers', 'system_resident_presence_blockers') -contains $NextSmallestTruthfulGap -and
+  $Stage6CompletionReviewed -and
+  -not $ReadyToClose -and
+  $SummonAnywhereRuntimeReadbackObserved -and
+  $SummonAnywhereBlockersProofObserved -and
+  $SummonAnywhereFamilyChainProofObserved
+) {
+  $RecommendedHandoffSource = 'stage6_remaining_acceptance_blockers_after_summon_runtime_readback'
+  $RemainingAcceptanceNextSlice = if ($NextSmallestTruthfulGap -eq 'helpful_not_noisy_blockers') {
+    'review_helpful_not_noisy_acceptance_blockers_after_summon_runtime_readback'
+  } else {
+    'review_system_resident_presence_acceptance_blockers_after_summon_runtime_readback'
+  }
+  $RemainingAcceptanceCriterion = if ($NextSmallestTruthfulGap -eq 'helpful_not_noisy_blockers') {
+    'helpful_not_noisy'
+  } else {
+    'system_resident_presence'
+  }
+  $RecommendedHandoff = [ordered]@{
+    status = 'blocked'
+    previous_next_smallest_truthful_gap = 'summon_anywhere_blockers'
+    consumed_summon_anywhere_runtime_readback = $SummonAnywhereRuntimeReadbackObserved
+    consumed_summon_anywhere_next_smallest_truthful_gap = [string]$SummonAnywhereBlockersProof.next_smallest_truthful_gap
+    consumed_family_chain_next_smallest_truthful_gap = [string]$SummonAnywhereFamilyChainProof.next_smallest_truthful_gap
+    consumed_summon_api_launch_on_hotkey_runtime_readback = $SummonApiLaunchOnHotkeyProofObserved
+    consumed_resident_runtime_api_execution_proof = $ResidentRuntimeApiExecutionProofObserved
+    consumed_tray_presence_api_execution_proof = $TrayPresenceApiExecutionProofObserved
+    consumed_os_binding_api_execution_proof = $OsBindingApiExecutionProofObserved
+    consumed_overlay_api_execution_proof = $OverlayApiExecutionProofObserved
+    consumed_summon_api_bounded_execution_proof = $SummonApiBoundedExecutionProofObserved
+    consumed_persistent_supervision_api_execution_proof = $PersistentSupervisionApiExecutionProofObserved
+    next_smallest_truthful_gap = $NextSmallestTruthfulGap
+    next_step = $RemainingAcceptanceNextSlice
+    proof_script = 'scripts/lens-stage6-checkpoint.ps1 -Mode Status'
+    route = '/lens/status'
+    readiness_route = '/lens/status'
+    acceptance_criterion = $RemainingAcceptanceCriterion
+    remaining_stage6_acceptance_blockers = [string[]]@($BlockedCriterionIds)
+    ready_to_close = $ReadyToClose
+    transition_allowed = $false
+    authority_required = 'none_readback_only'
+    authority_granted = $false
+    read_only_contract = $true
+    diagnostic_only = $true
+    would_execute = $false
+    would_mutate = $false
+    would_supervise_process = $false
+    would_restart_process = $false
+    would_install_service = $false
+    would_start_service = $false
+    would_register_hotkey = $false
+    would_control_overlay = $false
+    would_summon = $false
+    would_write_memory = $false
+    would_decide_approval = $false
+    blockers = [string[]]@($Blockers)
   }
   $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
   $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
