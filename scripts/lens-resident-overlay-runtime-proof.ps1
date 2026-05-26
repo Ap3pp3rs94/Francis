@@ -276,6 +276,12 @@ $PowerShellPath = Get-PowerShellPath
 $ResidentSurfaceProofPath = Join-Path $PSScriptRoot 'lens-resident-surface-proof.ps1'
 $SupervisorObservationProofPath = Join-Path $PSScriptRoot 'lens-host-supervisor-observation-proof.ps1'
 $ResidentSurfaceTimeoutSeconds = [Math]::Max(150, ($ResidentSurfaceForegroundRunSeconds * 2) + 120)
+$ResidentSurfaceEffectiveRunSeconds = $ResidentSurfaceForegroundRunSeconds
+$ResidentSurfaceEffectiveTimeoutSeconds = $ResidentSurfaceTimeoutSeconds
+$ResidentSurfaceRetryAttempted = $false
+$ResidentSurfaceRetryRunSeconds = 0
+$ResidentSurfaceInitialStatus = ''
+$ResidentSurfaceRetryReason = ''
 $ResidentSurfaceArgs = @('-Mode', 'Status', '-ForegroundRunSeconds', [string]$ResidentSurfaceForegroundRunSeconds)
 
 $CachedResidentSurfaceResult = Read-CachedJsonScriptResult -Path $CachedResidentSurfaceProofPath
@@ -283,6 +289,20 @@ if ($null -ne $CachedResidentSurfaceResult) {
   $ResidentSurfaceResult = $CachedResidentSurfaceResult
 } else {
   $ResidentSurfaceResult = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $ResidentSurfaceProofPath -ScriptArgs $ResidentSurfaceArgs -TimeoutSeconds $ResidentSurfaceTimeoutSeconds
+  $ResidentSurfaceInitialPayload = Get-PropertyValue -Payload $ResidentSurfaceResult -Name 'payload'
+  $ResidentSurfaceInitialStatus = [string](Get-PropertyValue -Payload $ResidentSurfaceInitialPayload -Name 'status' -Default '')
+  if (
+    [string]$ResidentSurfaceInitialStatus -ne 'proof_passed' -and
+    $ResidentSurfaceForegroundRunSeconds -lt 18
+  ) {
+    $ResidentSurfaceRetryAttempted = $true
+    $ResidentSurfaceRetryRunSeconds = 18
+    $ResidentSurfaceRetryReason = 'resident_surface_child_proof_initially_failed'
+    $ResidentSurfaceEffectiveRunSeconds = $ResidentSurfaceRetryRunSeconds
+    $ResidentSurfaceEffectiveTimeoutSeconds = [Math]::Max(190, ($ResidentSurfaceRetryRunSeconds * 2) + 150)
+    $ResidentSurfaceRetryArgs = @('-Mode', 'Status', '-ForegroundRunSeconds', [string]$ResidentSurfaceRetryRunSeconds)
+    $ResidentSurfaceResult = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $ResidentSurfaceProofPath -ScriptArgs $ResidentSurfaceRetryArgs -TimeoutSeconds $ResidentSurfaceEffectiveTimeoutSeconds
+  }
 }
 $SupervisorArgs = @('-Mode', 'Status', '-RunSeconds', [string]$SupervisorRunSeconds)
 if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
@@ -397,7 +417,13 @@ $Payload = [ordered]@{
   supervisor_run_seconds = $SupervisorRunSeconds
   requested_resident_surface_foreground_run_seconds = $ResidentSurfaceForegroundRunSeconds
   resident_surface_foreground_run_seconds = $ResidentSurfaceForegroundRunSeconds
+  resident_surface_effective_foreground_run_seconds = $ResidentSurfaceEffectiveRunSeconds
+  resident_surface_retry_attempted = $ResidentSurfaceRetryAttempted
+  resident_surface_retry_foreground_run_seconds = $ResidentSurfaceRetryRunSeconds
+  resident_surface_initial_status = $ResidentSurfaceInitialStatus
+  resident_surface_retry_reason = $ResidentSurfaceRetryReason
   resident_surface_timeout_seconds = $ResidentSurfaceTimeoutSeconds
+  resident_surface_effective_timeout_seconds = $ResidentSurfaceEffectiveTimeoutSeconds
   resident_overlay_runtime_ready = $false
   ready_for_lens_resident_claim = $false
   resident_claim_allowed = $false

@@ -4525,6 +4525,17 @@ def _stage6_readiness(
                 "evidence": ["/lens/tray", "/lens/preflight", "/lens/status"],
                 "ready": bool(tray_enablement_gate.get("ready")),
                 "tray_presence": bool(tray_enablement_gate.get("tray_presence")),
+                "tray_presence_observed": bool(tray_enablement_gate.get("tray_presence_observed")),
+                "tray_presence_source": _safe_str(tray_enablement_gate.get("tray_presence_source")).strip(),
+                "tray_runtime_ready": bool(tray_enablement_gate.get("tray_runtime_ready")),
+                "tray_runtime_readback": _as_dict(tray_enablement_gate.get("tray_runtime_readback")),
+                "tray_runtime_requirement_state": _safe_str(
+                    tray_enablement_gate.get("tray_runtime_requirement_state")
+                ).strip(),
+                "tray_runtime_blocker": _safe_str(tray_enablement_gate.get("tray_runtime_blocker")).strip(),
+                "tray_runtime_process_alive": bool(tray_enablement_gate.get("tray_runtime_process_alive")),
+                "tray_runtime_icon_visible": bool(tray_enablement_gate.get("tray_runtime_icon_visible")),
+                "tray_runtime_pid": _safe_int(tray_enablement_gate.get("tray_runtime_pid")),
                 "presence_name": _safe_str(tray_enablement_gate.get("presence_name")).strip(),
                 "blockers": _as_list(tray_enablement_gate.get("blockers")),
                 "execution_authority": False,
@@ -4980,7 +4991,10 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
     summon_enablement_gate = lens_summon_enablement_gate(preflight=preflight)
     summon_authority_requests = lens_summon_authority_request_readback(limit=safe_limit)
     summon_execution_receipts = lens_summon_action_execution_receipts(limit=safe_limit)
-    tray_enablement_gate = lens_tray_enablement_gate(preflight=preflight)
+    tray_enablement_gate = lens_tray_enablement_gate(
+        preflight=preflight,
+        tray_runtime_readback=_as_dict(resident_host.get("tray_runtime_readback")),
+    )
     tray_authority_requests = lens_tray_authority_request_readback(limit=safe_limit)
     tray_execution_receipts = lens_tray_presence_execution_receipts(limit=safe_limit)
     overlay_enablement_gate = lens_overlay_enablement_gate(preflight=preflight)

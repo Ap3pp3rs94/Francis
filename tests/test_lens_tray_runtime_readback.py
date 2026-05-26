@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 
 from francis.lens.host_manifest import lens_host_launch_manifest
-from francis.lens.preflight import lens_preflight
+from francis.lens.preflight import lens_preflight, lens_tray_enablement_gate
 
 
 def test_lens_preflight_reports_live_tray_runtime_readback(
@@ -30,7 +30,8 @@ def test_lens_preflight_reports_live_tray_runtime_readback(
     )
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_dir))
 
-    tray = lens_preflight()["surfaces"]["tray"]
+    preflight = lens_preflight()
+    tray = preflight["surfaces"]["tray"]
 
     assert tray["status"] == "blocked"
     assert tray["ready"] is False
@@ -44,6 +45,17 @@ def test_lens_preflight_reports_live_tray_runtime_readback(
     checks = {item["id"]: item for item in tray["checks"]}
     assert checks["tray_runner"]["status"] == "present"
     assert checks["tray_runtime"]["status"] == "running"
+
+    gate = lens_tray_enablement_gate(preflight=preflight)
+    assert gate["ready"] is False
+    assert gate["tray_presence"] is False
+    assert gate["tray_presence_observed"] is True
+    assert gate["tray_presence_source"] == "live_runtime_readback"
+    assert gate["tray_runtime_ready"] is True
+    assert gate["tray_runtime_readback"]["ready"] is True
+    assert gate["tray_runtime_process_alive"] is True
+    assert gate["tray_runtime_icon_visible"] is True
+    assert gate["tray_runtime_pid"] == pid
 
 
 def test_lens_host_manifest_reports_live_tray_runtime_readback_with_bom_pid(

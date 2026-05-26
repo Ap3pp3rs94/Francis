@@ -55,7 +55,18 @@ def test_lens_resident_overlay_runtime_proof_observes_boundary_without_authority
     assert payload["supervisor_run_seconds"] == int(run_seconds)
     assert payload["requested_resident_surface_foreground_run_seconds"] == int(run_seconds)
     assert payload["resident_surface_foreground_run_seconds"] == int(run_seconds)
+    assert payload["resident_surface_effective_foreground_run_seconds"] >= int(run_seconds)
     assert payload["resident_surface_timeout_seconds"] == 150
+    assert payload["resident_surface_effective_timeout_seconds"] >= payload["resident_surface_timeout_seconds"]
+    if payload["resident_surface_retry_attempted"]:
+        assert payload["resident_surface_initial_status"] != "proof_passed"
+        assert payload["resident_surface_retry_foreground_run_seconds"] == 18
+        assert payload["resident_surface_effective_foreground_run_seconds"] == 18
+        assert payload["resident_surface_retry_reason"] == "resident_surface_child_proof_initially_failed"
+    else:
+        assert payload["resident_surface_initial_status"] == "proof_passed"
+        assert payload["resident_surface_retry_foreground_run_seconds"] == 0
+        assert payload["resident_surface_retry_reason"] == ""
     assert payload["resident_overlay_runtime_ready"] is False
     assert payload["ready_for_lens_resident_claim"] is False
     assert payload["resident_claim_allowed"] is False

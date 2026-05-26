@@ -165,6 +165,34 @@ def _tray_runtime_readback() -> dict[str, Any]:
     }
 
 
+def _tray_runtime_gate_readback(readback: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "ready": bool(readback.get("ready")),
+        "process_alive": bool(readback.get("process_alive")),
+        "process_alive_check": _safe_str(readback.get("process_alive_check")),
+        "tray_icon_visible": bool(readback.get("tray_icon_visible")),
+        "pid": _int_value(readback.get("pid")),
+        "pid_present": bool(readback.get("pid_present")),
+        "status_path": _safe_str(
+            readback.get("status_path") or readback.get("runtime_state_path"),
+            "data/runtime/lens-tray/status.json",
+        ),
+        "pid_path": _safe_str(readback.get("pid_path"), "data/runtime/lens-tray/lens-tray.pid"),
+        "runtime_state_exists": bool(readback.get("runtime_state_exists") or readback.get("state_exists")),
+        "runtime_status": _safe_str(readback.get("runtime_status") or readback.get("state_status")),
+        "runtime_status_kind": _safe_str(readback.get("runtime_status_kind") or readback.get("state_kind")),
+        "runtime_status_pid": _int_value(readback.get("runtime_status_pid") or readback.get("state_pid")),
+        "runtime_status_pid_matches_pid_file": bool(
+            readback.get("runtime_status_pid_matches_pid_file") or readback.get("state_pid_matches_pid_file")
+        ),
+        "runtime_state_updated_at": _safe_str(
+            readback.get("runtime_state_updated_at") or readback.get("state_updated_at")
+        ),
+        "requirement_state": _safe_str(readback.get("requirement_state"), "missing"),
+        "blocker": _safe_str(readback.get("blocker")),
+    }
+
+
 def _hotkey_runtime_readback(
     *,
     global_hotkey: str,
@@ -2002,7 +2030,11 @@ def lens_os_binding_readiness(
     }
 
 
-def lens_tray_enablement_gate(*, preflight: dict[str, Any] | None = None) -> dict[str, Any]:
+def lens_tray_enablement_gate(
+    *,
+    preflight: dict[str, Any] | None = None,
+    tray_runtime_readback: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     lens_preflight_payload = preflight if isinstance(preflight, dict) else lens_preflight()
     surfaces = _dict_value(lens_preflight_payload, "surfaces")
     host = _dict_value(surfaces, "host")
@@ -2010,6 +2042,9 @@ def lens_tray_enablement_gate(*, preflight: dict[str, Any] | None = None) -> dic
     tray = _dict_value(surfaces, "tray")
     overlay = _dict_value(surfaces, "overlay")
     tray_binding = _dict_value(tray, "tray")
+    tray_runtime = _tray_runtime_gate_readback(
+        tray_runtime_readback if isinstance(tray_runtime_readback, dict) else _dict_value(tray, "tray_runtime")
+    )
     blocker_set = {
         *_blockers(host),
         *_blockers(summon),
@@ -2017,6 +2052,7 @@ def lens_tray_enablement_gate(*, preflight: dict[str, Any] | None = None) -> dic
         *_blockers(overlay),
     }
     tray_ready = bool(tray.get("ready"))
+    tray_runtime_ready = bool(tray_runtime.get("ready"))
     resident_host_ready = bool(host.get("ready"))
     summon_ready = bool(summon.get("ready"))
     overlay_ready = bool(overlay.get("ready"))
@@ -2031,7 +2067,16 @@ def lens_tray_enablement_gate(*, preflight: dict[str, Any] | None = None) -> dic
         "host_route": "/lens/host",
         "ready": ready,
         "tray_presence": ready,
+        "tray_presence_observed": tray_runtime_ready,
+        "tray_presence_source": "live_runtime_readback" if tray_runtime_ready else "not_observed",
         "tray_preflight_ready": tray_ready,
+        "tray_runtime_ready": tray_runtime_ready,
+        "tray_runtime_readback": tray_runtime,
+        "tray_runtime_requirement_state": _safe_str(tray_runtime.get("requirement_state"), "missing"),
+        "tray_runtime_blocker": _safe_str(tray_runtime.get("blocker")),
+        "tray_runtime_process_alive": bool(tray_runtime.get("process_alive")),
+        "tray_runtime_icon_visible": bool(tray_runtime.get("tray_icon_visible")),
+        "tray_runtime_pid": _int_value(tray_runtime.get("pid")),
         "resident_host_ready": resident_host_ready,
         "summon_binding_ready": summon_ready,
         "overlay_ready": overlay_ready,

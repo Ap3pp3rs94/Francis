@@ -39139,6 +39139,85 @@ Latest validation for Stage 6 first-missing resident prerequisite handoff:
   recommended_concrete_next_smallest_truthful_gap=summon_tray_presence_blocker_boundary;
   recommended_concrete_authority_granted=false`
 
+### 2026-05-26 - Stage 6 tray runtime observed evidence gate
+
+Roadmap area: Stage 6 / Lens MVP, tray presence and system-resident
+truthfulness.
+
+Material change:
+
+- The Lens tray enablement gate now exposes live tray runtime evidence from the
+  existing tray runtime readback instead of only surfacing full tray-gate
+  readiness.
+- `/lens/tray`, `/lens/tray/readiness`, and the Stage 6 readiness projection now
+  include `tray_presence_observed`, `tray_presence_source`,
+  `tray_runtime_ready`, `tray_runtime_readback`, and related runtime fields.
+- `/lens/status` sources the tray gate's runtime evidence from the same
+  resident-host launch-manifest readback that powers `resident_host`, avoiding a
+  split between resident-host tray evidence and Stage 6 tray-gate evidence.
+- This observed evidence remains separate from governed readiness:
+  `ready=false` and `tray_presence=false` until the full tray, host, summon, and
+  overlay gate chain is satisfied.
+- Stage 6 still does not close and Stage 7 does not start. This change only
+  makes the live tray prerequisite inspectable without granting tray
+  registration, execution, mutation, or resident-claim authority.
+
+Latest validation for Stage 6 tray runtime observed evidence gate:
+
+- `python -m ruff check src/francis/lens/preflight.py
+  src/francis/lens/status.py tests/test_api_lens.py
+  tests/test_lens_tray_runtime_readback.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/lens/preflight.py
+  src/francis/lens/status.py tests/test_api_lens.py
+  tests/test_lens_tray_runtime_readback.py`
+  Result: `passed`
+- `python -m pytest tests/test_lens_tray_runtime_readback.py
+  tests/test_api_lens.py::test_lens_status_promotes_live_tray_runtime_before_hotkey
+  tests/test_api_lens.py::test_lens_status_projects_readonly_stage6_contract -q`
+  Result: `passed; 4 passed`
+- `git diff --check`
+  Result: `passed`
+
+### 2026-05-26 - Stage 6 resident overlay runtime child proof CI hardening
+
+Roadmap area: Stage 6 / Lens MVP, resident overlay runtime proof and CI
+truthfulness.
+
+Material change:
+
+- `scripts/lens-resident-overlay-runtime-proof.ps1` now performs one bounded
+  retry of the child resident-surface proof when the initial child proof fails
+  before the overlay-runtime boundary can be evaluated.
+- The retry is explicit in the payload via
+  `resident_surface_retry_attempted`,
+  `resident_surface_retry_foreground_run_seconds`,
+  `resident_surface_effective_foreground_run_seconds`,
+  `resident_surface_initial_status`, and
+  `resident_surface_retry_reason`.
+- This does not convert missing evidence into a pass. If the retry still cannot
+  observe the required child resident-surface readback, the outer proof remains
+  `proof_failed`.
+- The change addresses the Windows 3.13 CI failure where the supervisor
+  observation completed but the child resident-surface proof initially returned
+  `proof_failed`, collapsing the outer overlay-runtime boundary checks.
+- Stage 6 still does not close and Stage 7 does not start.
+
+Latest validation for Stage 6 resident overlay runtime child proof CI hardening:
+
+- PowerShell AST parse of `scripts\lens-resident-overlay-runtime-proof.ps1`
+  Result: `passed`
+- `python -m ruff check
+  tests/test_lens_resident_overlay_runtime_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests/test_lens_resident_overlay_runtime_proof_script.py`
+  Result: `passed`
+- `python -m pytest
+  tests/test_lens_resident_overlay_runtime_proof_script.py::test_lens_resident_overlay_runtime_proof_observes_boundary_without_authority
+  -q`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

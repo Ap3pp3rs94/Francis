@@ -3368,7 +3368,12 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert tray_enablement_gate["host_route"] == "/lens/host"
     assert tray_enablement_gate["ready"] is False
     assert tray_enablement_gate["tray_presence"] is False
+    assert tray_enablement_gate["tray_presence_observed"] is False
+    assert tray_enablement_gate["tray_presence_source"] == "not_observed"
     assert tray_enablement_gate["tray_preflight_ready"] is False
+    assert tray_enablement_gate["tray_runtime_ready"] is False
+    assert tray_enablement_gate["tray_runtime_readback"]["ready"] is False
+    assert tray_enablement_gate["tray_runtime_requirement_state"] == "missing"
     assert tray_enablement_gate["resident_host_ready"] is False
     assert tray_enablement_gate["summon_binding_ready"] is False
     assert tray_enablement_gate["overlay_ready"] is False
@@ -4331,6 +4336,11 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert tray_gate_criterion["status"] == "blocked"
     assert tray_gate_criterion["ready"] is False
     assert tray_gate_criterion["tray_presence"] is False
+    assert tray_gate_criterion["tray_presence_observed"] is False
+    assert tray_gate_criterion["tray_presence_source"] == "not_observed"
+    assert tray_gate_criterion["tray_runtime_ready"] is False
+    assert tray_gate_criterion["tray_runtime_readback"]["ready"] is False
+    assert tray_gate_criterion["tray_runtime_requirement_state"] == "missing"
     assert tray_gate_criterion["evidence"] == ["/lens/tray", "/lens/preflight", "/lens/status"]
     assert tray_gate_criterion["presence_name"] == "Francis Lens Tray Presence"
     assert "tray_registration_authority_not_granted" in tray_gate_criterion["blockers"]
@@ -9655,6 +9665,26 @@ def test_lens_status_promotes_live_tray_runtime_before_hotkey(monkeypatch, tmp_p
     assert resident_host["tray_runtime_readback"]["ready"] is True
     assert resident_host["tray_runtime_readback"]["process_alive"] is True
     assert resident_host["tray_runtime_readback"]["tray_icon_visible"] is True
+    tray_enablement_gate = body["tray_enablement_gate"]
+    assert tray_enablement_gate["ready"] is False
+    assert tray_enablement_gate["tray_presence"] is False
+    assert tray_enablement_gate["tray_presence_observed"] is True
+    assert tray_enablement_gate["tray_presence_source"] == "live_runtime_readback"
+    assert tray_enablement_gate["tray_runtime_ready"] is True
+    assert tray_enablement_gate["tray_runtime_readback"]["ready"] is True
+    assert tray_enablement_gate["tray_runtime_process_alive"] is True
+    assert tray_enablement_gate["tray_runtime_icon_visible"] is True
+    assert tray_enablement_gate["tray_runtime_pid"] == 4321
+    tray_gate_criterion = _criterion(body, "tray_enablement_gate")
+    assert tray_gate_criterion["ready"] is False
+    assert tray_gate_criterion["tray_presence"] is False
+    assert tray_gate_criterion["tray_presence_observed"] is True
+    assert tray_gate_criterion["tray_presence_source"] == "live_runtime_readback"
+    assert tray_gate_criterion["tray_runtime_ready"] is True
+    assert tray_gate_criterion["tray_runtime_readback"]["ready"] is True
+    assert tray_gate_criterion["tray_runtime_process_alive"] is True
+    assert tray_gate_criterion["tray_runtime_icon_visible"] is True
+    assert tray_gate_criterion["tray_runtime_pid"] == 4321
 
     persistent_plan = resident_host["persistent_supervision_plan"]
     assert persistent_plan["missing_required_before_enable"] == [
