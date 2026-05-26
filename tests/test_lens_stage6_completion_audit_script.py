@@ -952,6 +952,52 @@ def test_lens_stage6_completion_audit_prefers_closure_handoff_after_resident_cla
     assert script.index(reviewed_summon_source) < script.index(prerequisite_source)
 
 
+def test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_to_bringup_plan() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    broad_source = "$RecommendedHandoffSource = 'stage6_remaining_acceptance_blockers_after_summon_runtime_readback'"
+    concrete_source = "$RecommendedConcreteHandoffSource = 'stage6_prerequisite_bringup_operator_plan_handoff'"
+    resident_claim_source = (
+        "$RecommendedConcreteHandoffSource = 'persistent_supervision_resident_claim_boundary_handoff'"
+    )
+
+    assert broad_source in script
+    assert (
+        "$RecommendedHandoffSource -eq 'stage6_remaining_acceptance_blockers_after_summon_runtime_readback' -and\n"
+        "  [string]$RecommendedHandoff.acceptance_criterion -eq 'system_resident_presence' -and\n"
+        "  $Stage6PrerequisiteBringupPlanObserved"
+    ) in script
+    assert concrete_source in script
+    assert "previous_next_smallest_truthful_gap = [string]$RecommendedHandoff.next_smallest_truthful_gap" in script
+    assert "next_smallest_truthful_gap = [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap" in script
+    assert "next_step = [string]$Stage6PrerequisiteBringupPlan.recommended_next_slice" in script
+    assert "proof_script = [string]$Stage6PrerequisiteBringupPlan.recommended_proof_script" in script
+    assert "operator_plan_script = 'scripts/lens-stage6-prerequisite-bringup-plan.ps1'" in script
+    assert "acceptance_criterion = 'system_resident_presence'" in script
+    assert "next_operator_action = $Stage6PrerequisiteBringupPlanNextOperatorAction" in script
+    assert "next_operator_command = $Stage6PrerequisiteBringupPlanNextOperatorCommand" in script
+    assert "authority_required = [string]$Stage6PrerequisiteBringupPlan.authority_required" in script
+    assert "authority_granted = $false" in script
+    assert "read_only_contract = [bool]$Stage6PrerequisiteBringupPlanGovernance.read_only_contract" in script
+    assert "diagnostic_only = [bool]$Stage6PrerequisiteBringupPlanGovernance.diagnostic_only" in script
+    assert "would_execute = [bool]$Stage6PrerequisiteBringupPlanGovernance.would_execute" in script
+    assert "would_mutate = [bool]$Stage6PrerequisiteBringupPlanGovernance.would_mutate" in script
+    assert (
+        "would_register_hotkey = [bool]$Stage6PrerequisiteBringupPlanGovernance.hotkey_registration_authority" in script
+    )
+    assert "would_control_overlay = [bool]$Stage6PrerequisiteBringupPlanGovernance.overlay_control_authority" in script
+    assert "would_summon = [bool]$Stage6PrerequisiteBringupPlanGovernance.summon_authority" in script
+    assert "$RecommendedConcreteHandoff['next_step'] = $Stage6PrerequisiteBringupPlanRecommendedNextSlice" in script
+    assert (
+        "$RecommendedConcreteHandoff['proof_script'] = 'scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status'"
+    ) in script
+    assert (
+        "$RecommendedConcreteHandoff['authority_required'] = $Stage6PrerequisiteBringupPlanRecommendedAuthorityRequired"
+    ) in script
+    assert script.index(broad_source) < script.index(concrete_source)
+    assert script.index(concrete_source) < script.index(resident_claim_source)
+
+
 def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_readback() -> None:
     script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
 

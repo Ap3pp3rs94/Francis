@@ -5030,6 +5030,69 @@ if (
 $RecommendedAuthorityGranted = [bool]$RecommendedHandoff.authority_granted
 $RecommendedConcreteHandoffSource = $RecommendedHandoffSource
 $RecommendedConcreteHandoff = $RecommendedHandoff
+if (
+  $RecommendedHandoffSource -eq 'stage6_remaining_acceptance_blockers_after_summon_runtime_readback' -and
+  [string]$RecommendedHandoff.acceptance_criterion -eq 'system_resident_presence' -and
+  $Stage6PrerequisiteBringupPlanObserved
+) {
+  $RecommendedConcreteHandoffSource = 'stage6_prerequisite_bringup_operator_plan_handoff'
+  $RecommendedConcreteHandoff = [ordered]@{
+    status = [string]$Stage6PrerequisiteBringupPlan.status
+    previous_next_smallest_truthful_gap = [string]$RecommendedHandoff.next_smallest_truthful_gap
+    next_smallest_truthful_gap = [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap
+    next_step = [string]$Stage6PrerequisiteBringupPlan.recommended_next_slice
+    proof_script = [string]$Stage6PrerequisiteBringupPlan.recommended_proof_script
+    route = '/lens/host/persistent-supervision'
+    readiness_route = '/lens/host/persistent-supervision/enablement'
+    operator_plan_script = 'scripts/lens-stage6-prerequisite-bringup-plan.ps1'
+    acceptance_criterion = 'system_resident_presence'
+    current_truthful_gap = [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap
+    current_truthful_gap_basis = [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap_basis
+    current_first_missing_requirement = [string]$Stage6PrerequisiteBringupPlan.current_first_missing_requirement
+    current_first_missing_truthful_gap = [string]$Stage6PrerequisiteBringupPlan.current_first_missing_truthful_gap
+    closure_next_smallest_truthful_gap = [string]$Stage6PrerequisiteBringupPlan.closure_next_smallest_truthful_gap
+    persistent_supervision_next_smallest_truthful_gap = [string]$Stage6PrerequisiteBringupPlan.persistent_supervision_next_smallest_truthful_gap
+    next_operator_action_requirement = [string]$Stage6PrerequisiteBringupPlan.next_operator_action_requirement
+    next_operator_action = $Stage6PrerequisiteBringupPlanNextOperatorAction
+    next_operator_command = $Stage6PrerequisiteBringupPlanNextOperatorCommand
+    operator_sequence_command_availability = $Stage6PrerequisiteBringupPlanCommandAvailability
+    required_before_enable = [string[]]@($Stage6PrerequisiteBringupPlanRequiredBeforeEnable)
+    missing_required_before_enable = [string[]]@($Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable)
+    required_before_enable_ready = [bool]$Stage6PrerequisiteBringupPlan.required_before_enable_ready
+    authority_required = [string]$Stage6PrerequisiteBringupPlan.authority_required
+    authority_granted = $false
+    read_only_contract = [bool]$Stage6PrerequisiteBringupPlanGovernance.read_only_contract
+    diagnostic_only = [bool]$Stage6PrerequisiteBringupPlanGovernance.diagnostic_only
+    plan_only = [bool]$Stage6PrerequisiteBringupPlanGovernance.plan_only
+    requires_explicit_operator_execution = [bool]$Stage6PrerequisiteBringupPlanGovernance.requires_explicit_operator_execution
+    would_execute = [bool]$Stage6PrerequisiteBringupPlanGovernance.would_execute
+    would_mutate = [bool]$Stage6PrerequisiteBringupPlanGovernance.would_mutate
+    would_request_authority = [bool]$Stage6PrerequisiteBringupPlanGovernance.would_request_authority
+    would_grant_authority = [bool]$Stage6PrerequisiteBringupPlanGovernance.would_grant_authority
+    would_supervise_process = [bool]$Stage6PrerequisiteBringupPlanGovernance.process_supervision_authority
+    would_restart_process = $false
+    would_install_service = [bool]$Stage6PrerequisiteBringupPlanGovernance.service_install_authority
+    would_start_service = [bool]$Stage6PrerequisiteBringupPlanGovernance.service_control_authority
+    would_register_hotkey = [bool]$Stage6PrerequisiteBringupPlanGovernance.hotkey_registration_authority
+    would_control_overlay = [bool]$Stage6PrerequisiteBringupPlanGovernance.overlay_control_authority
+    would_summon = [bool]$Stage6PrerequisiteBringupPlanGovernance.summon_authority
+    would_write_memory = [bool]$Stage6PrerequisiteBringupPlanGovernance.memory_write
+    would_decide_approval = [bool]$Stage6PrerequisiteBringupPlanGovernance.approval_decision_authority
+    blockers = [string[]]@(@(
+        [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap
+        [string]$Stage6PrerequisiteBringupPlan.current_first_missing_truthful_gap
+      ) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Sort-Object -Unique)
+  }
+  if ([string]::IsNullOrWhiteSpace([string]$RecommendedConcreteHandoff.next_step)) {
+    $RecommendedConcreteHandoff['next_step'] = $Stage6PrerequisiteBringupPlanRecommendedNextSlice
+  }
+  if ([string]::IsNullOrWhiteSpace([string]$RecommendedConcreteHandoff.proof_script)) {
+    $RecommendedConcreteHandoff['proof_script'] = 'scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status'
+  }
+  if ([string]::IsNullOrWhiteSpace([string]$RecommendedConcreteHandoff.authority_required)) {
+    $RecommendedConcreteHandoff['authority_required'] = $Stage6PrerequisiteBringupPlanRecommendedAuthorityRequired
+  }
+}
 if ($Stage6CompletionAuditHandoffConsumedByClosureReadback -and $PersistentSupervisionResidentClaimBoundaryObserved) {
   $RecommendedConcreteHandoffSource = 'persistent_supervision_resident_claim_boundary_handoff'
   $RecommendedConcreteHandoff = $PersistentSupervisionResidentClaimBoundaryProof.handoff

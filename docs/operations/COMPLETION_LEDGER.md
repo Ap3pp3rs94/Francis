@@ -39017,6 +39017,75 @@ Latest validation for Stage 6 helpful-not-noisy blocker scoping:
   stage6_completion_audit_recommended_handoff_consumed=true;
   stage6_completion_audit_runtime_readback_required=false`
 
+### 2026-05-26 - Stage 6 system-resident concrete handoff readback
+
+Roadmap area: Stage 6 / Lens MVP, completion-audit and next-handoff
+truthfulness for system-resident presence.
+
+Material change:
+
+- The Stage 6 completion audit now keeps the broad
+  `system_resident_presence_blockers` acceptance blocker unchanged while also
+  exposing a concrete `recommended_concrete_handoff` from the existing
+  prerequisite bring-up plan.
+- The concrete handoff source is now
+  `stage6_prerequisite_bringup_operator_plan_handoff`; it points to
+  `run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt`
+  and `scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status`.
+- The Stage 6 next-handoff proof now preserves a supplied completion-audit
+  `recommended_concrete_handoff` instead of re-emitting only the broad
+  checkpoint review handoff.
+- Stage 6 still does not close and Stage 7 does not start. The latest
+  launch-on-hotkey completion audit remains `status=blocked`,
+  `ready_to_close=false`, `can_close_stage6=false`, and
+  `transition_allowed=false`.
+- The concrete handoff is read-only and diagnostic:
+  `authority_required=none_readback_only`, `authority_granted=false`,
+  `would_execute=false`, `would_mutate=false`, and `would_write_memory=false`.
+
+Latest validation for Stage 6 system-resident concrete handoff readback:
+
+- PowerShell AST parse of `scripts\lens-stage6-completion-audit.ps1` and
+  `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed`
+- `python -m ruff check
+  tests/test_lens_stage6_completion_audit_script.py
+  tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests/test_lens_stage6_completion_audit_script.py
+  tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m pytest tests/test_lens_stage6_completion_audit_script.py
+  -k "concrete_handoff or closure_handoff"`
+  Result: `passed; 2 passed, 42 deselected`
+- `python -m pytest tests/test_lens_stage6_next_handoff_script.py
+  -k "remaining_acceptance_handoff or preserves_completion_audit_concrete_handoff"`
+  Result: `passed; 2 passed, 10 deselected`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -AllowLaunchOnHotkey -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2
+  -ResidentSurfaceForegroundRunSeconds 2 -SupervisorRunSeconds 3
+  -ChildProofTimeoutSeconds 120`
+  Result: `passed; status=blocked; audit_status=complete;
+  ready_to_close=false; can_close_stage6=false; transition_allowed=false;
+  child_proof_timeouts=[]; next_smallest_truthful_gap=system_resident_presence_blockers;
+  recommended_concrete_handoff_source=stage6_prerequisite_bringup_operator_plan_handoff;
+  recommended_concrete_next_slice=run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt;
+  recommended_concrete_next_smallest_truthful_gap=persistent_supervision_execution_boundary`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath
+  .tmp\stage6-completion-audit-after-system-resident-concrete-handoff.json`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=system_resident_presence_blockers;
+  stage6_completion_audit_remaining_acceptance_handoff_observed=true;
+  stage6_completion_audit_recommended_handoff_consumed=true;
+  stage6_completion_audit_runtime_readback_required=false;
+  recommended_concrete_handoff_source=stage6_prerequisite_bringup_operator_plan_handoff;
+  recommended_concrete_next_slice=run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt;
+  recommended_concrete_next_smallest_truthful_gap=persistent_supervision_execution_boundary`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

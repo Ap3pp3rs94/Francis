@@ -1456,6 +1456,8 @@ $Stage6CompletionAuditResult = [ordered]@{
 }
 $Stage6CompletionAudit = [ordered]@{}
 $Stage6CompletionAuditRecommendedHandoff = [ordered]@{}
+$Stage6CompletionAuditRecommendedConcreteHandoff = [ordered]@{}
+$Stage6CompletionAuditRecommendedConcreteHandoffSource = ''
 $ResolvedCompletionAuditJsonPath = ''
 if (-not [string]::IsNullOrWhiteSpace($CompletionAuditJsonPath)) {
   if (-not (Test-Path -LiteralPath $CompletionAuditJsonPath -PathType Leaf)) {
@@ -1472,6 +1474,13 @@ if (-not [string]::IsNullOrWhiteSpace($CompletionAuditJsonPath)) {
     $Stage6CompletionAudit = $WrappedCompletionAuditPayload
   }
   $Stage6CompletionAuditRecommendedHandoff = Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_handoff' -Default ([ordered]@{})
+  $Stage6CompletionAuditRecommendedConcreteHandoff = Get-PropertyValue `
+    -Payload $Stage6CompletionAudit `
+    -Name 'recommended_concrete_handoff' `
+    -Default ([ordered]@{})
+  $Stage6CompletionAuditRecommendedConcreteHandoffSource = [string](
+    Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_concrete_handoff_source' -Default ''
+  )
 }
 $Stage6CompletionAuditReadbackObserved = (
   -not [string]::IsNullOrWhiteSpace($CompletionAuditJsonPath) -and
@@ -2531,6 +2540,19 @@ if ($Stage6CompletionAuditRecommendedHandoffConsumed) {
 
 $RecommendedConcreteHandoffSource = $RecommendedHandoffSource
 $RecommendedConcreteHandoff = $RecommendedHandoff
+if (
+  $Stage6CompletionAuditRecommendedHandoffConsumed -and
+  -not [string]::IsNullOrWhiteSpace($Stage6CompletionAuditRecommendedConcreteHandoffSource) -and
+  -not [string]::IsNullOrWhiteSpace(
+    [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedConcreteHandoff -Name 'next_step' -Default '')
+  ) -and
+  -not [string]::IsNullOrWhiteSpace(
+    [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedConcreteHandoff -Name 'proof_script' -Default '')
+  )
+) {
+  $RecommendedConcreteHandoffSource = $Stage6CompletionAuditRecommendedConcreteHandoffSource
+  $RecommendedConcreteHandoff = $Stage6CompletionAuditRecommendedConcreteHandoff
+}
 $RecommendedConcreteNextSlice = [string](
   Get-PropertyValue -Payload $RecommendedConcreteHandoff -Name 'next_step' -Default $RecommendedNextSlice
 )
