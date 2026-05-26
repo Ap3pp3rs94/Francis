@@ -113,6 +113,10 @@ def test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback() -> N
     assert "'review_persistent_supervision_resident_claim_boundary_without_runtime_start'" in script
     assert "'resolve_resident_claim_authority_before_persistent_supervision_resident_claim'" in script
     assert "stage6_completion_audit_persistent_supervision_resident_claim_boundary_handoff_observed" in script
+    assert "$Stage6CompletionAuditRemainingAcceptanceHandoffObserved = (" in script
+    assert "'stage6_remaining_acceptance_blockers_after_summon_runtime_readback'" in script
+    assert "'review_helpful_not_noisy_acceptance_blockers_after_summon_runtime_readback'" in script
+    assert "stage6_completion_audit_remaining_acceptance_handoff_observed" in script
     assert "$Stage6CompletionAuditPersistentSupervisionFirstMissingRequirementHandoffObserved = (" in script
     assert "'persistent_supervision_prerequisites_first_missing_requirement_handoff'" in script
     assert "'resolve_resident_host_process_before_persistent_supervision_enablement'" in script
@@ -141,6 +145,105 @@ def test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback() -> N
     assert "'stage6_completion_audit_launch_on_hotkey_readback_required'" in script
     assert "'scripts/lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey'" in script
     assert "Invoke-JsonScriptReadback `\n    -ScriptPath $Stage6CompletionAuditScript" not in script
+
+
+def test_lens_stage6_next_handoff_consumes_remaining_acceptance_handoff(tmp_path: Path) -> None:
+    data_root = tmp_path / "data"
+    audit_json = tmp_path / "stage6-completion-audit-helpful-not-noisy.json"
+    audit_json.write_text(
+        json.dumps(
+            {
+                "kind": "lens.stage6.completion_audit",
+                "ok": True,
+                "status": "blocked",
+                "audit_status": "complete",
+                "allow_launch_on_hotkey": True,
+                "next_smallest_truthful_gap": "helpful_not_noisy_blockers",
+                "recommended_handoff_source": ("stage6_remaining_acceptance_blockers_after_summon_runtime_readback"),
+                "recommended_next_slice": (
+                    "review_helpful_not_noisy_acceptance_blockers_after_summon_runtime_readback"
+                ),
+                "recommended_proof_script": "scripts/lens-stage6-checkpoint.ps1 -Mode Status",
+                "authority_required": "none_readback_only",
+                "authority_granted": False,
+                "recommended_handoff": {
+                    "status": "blocked",
+                    "previous_next_smallest_truthful_gap": "summon_anywhere_blockers",
+                    "consumed_summon_anywhere_runtime_readback": True,
+                    "next_smallest_truthful_gap": "helpful_not_noisy_blockers",
+                    "next_step": ("review_helpful_not_noisy_acceptance_blockers_after_summon_runtime_readback"),
+                    "proof_script": "scripts/lens-stage6-checkpoint.ps1 -Mode Status",
+                    "route": "/lens/status",
+                    "readiness_route": "/lens/status",
+                    "acceptance_criterion": "helpful_not_noisy",
+                    "authority_required": "none_readback_only",
+                    "authority_granted": False,
+                    "read_only_contract": True,
+                    "diagnostic_only": True,
+                    "would_execute": False,
+                    "would_mutate": False,
+                    "would_write_memory": False,
+                    "would_decide_approval": False,
+                    "blockers": [
+                        "global_hotkey_binding_missing",
+                        "overlay_window_missing",
+                        "tray_presence_missing",
+                    ],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-CompletionAuditJsonPath",
+        str(audit_json),
+        env={"FRANCIS_DATA_DIR": str(data_root)},
+    )
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload["recommended_handoff_source"] == (
+        "stage6_remaining_acceptance_blockers_after_summon_runtime_readback"
+    )
+    assert payload["next_smallest_truthful_gap"] == "helpful_not_noisy_blockers"
+    assert payload["recommended_next_slice"] == (
+        "review_helpful_not_noisy_acceptance_blockers_after_summon_runtime_readback"
+    )
+    assert payload["recommended_proof_script"] == "scripts/lens-stage6-checkpoint.ps1 -Mode Status"
+    assert payload["authority_required"] == "none_readback_only"
+    assert payload["authority_granted"] is False
+    assert payload["stage6_completion_audit_readback_observed"] is True
+    assert payload["stage6_completion_audit_remaining_acceptance_handoff_observed"] is True
+    assert payload["stage6_completion_audit_recommended_handoff_consumed"] is True
+    assert payload["stage6_completion_audit_runtime_readback_required"] is False
+
+    handoff = payload["recommended_handoff"]
+    assert handoff["acceptance_criterion"] == "helpful_not_noisy"
+    assert handoff["consumed_summon_anywhere_runtime_readback"] is True
+    assert handoff["read_only_contract"] is True
+    assert handoff["diagnostic_only"] is True
+    assert handoff["would_execute"] is False
+    assert handoff["would_mutate"] is False
+    assert handoff["would_write_memory"] is False
+    assert handoff["would_decide_approval"] is False
+
+    assert payload["recommended_operator_handoff"]["source"] == "stage6_completion_audit_recommended_handoff"
+    assert payload["recommended_next_operator_action_requirement"] == ("stage6_completion_audit_recommended_readback")
+    assert payload["recommended_next_operator_action"]["id"] == (
+        "review_helpful_not_noisy_acceptance_blockers_after_summon_runtime_readback"
+    )
+    assert payload["recommended_next_operator_command"] == {
+        "command": ".\\scripts\\lens-stage6-checkpoint.ps1 -Mode Status",
+        "mode": "Status",
+        "requires_confirmation": False,
+        "requires_explicit_operator_opt_in": False,
+        "requires_actor": False,
+        "requires_approval_id": False,
+        "requires_operator_approval_decision": False,
+    }
 
 
 def _write_lens_host_runtime_state(data_root: Path, *, pid: int) -> None:
