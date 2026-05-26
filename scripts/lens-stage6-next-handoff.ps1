@@ -1930,7 +1930,10 @@ $Stage6CompletionAuditRecommendedHandoffConsumed = (
   $Stage6CompletionAuditPersistentSupervisionResidentClaimBoundaryHandoffObserved -or
   $Stage6CompletionAuditPersistentSupervisionFirstMissingRequirementHandoffObserved -or
   $Stage6CompletionAuditPrerequisiteBringupOperatorPlanHandoffObserved -or
-  $Stage6CompletionAuditPrerequisiteBringupEnablementReceiptHandoffObserved
+  (
+    $Stage6CompletionAuditPrerequisiteBringupEnablementReceiptHandoffObserved -and
+    -not $PersistentSupervisionResidentClaimBoundaryHandoffObserved
+  )
 )
 if ($Stage6CompletionAuditRecommendedHandoffConsumed) {
   $RecommendedHandoffSource = [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_handoff_source' -Default '')

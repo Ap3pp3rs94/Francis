@@ -38767,6 +38767,61 @@ runtime grant:
   recommended_next_slice=run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt;
   recommended_concrete_next_smallest_truthful_gap=persistent_supervision_execution_boundary`
 
+### 2026-05-25 - Stage 6 stale completion-audit receipt handoff guard
+
+Roadmap area: Stage 6 / Lens MVP, governed resident-runtime readback and
+completion-audit handoff truthfulness.
+
+Material change:
+
+- The Stage 6 next-handoff proof no longer lets a stale supplied
+  completion-audit enablement-receipt handoff override fresher local
+  persistent-supervision resident-claim-boundary readback.
+- When resident-claim-boundary evidence is already present locally, stale
+  receipt-review audit JSON now leaves the next handoff at the fresh
+  launch-on-hotkey completion-audit runtime readback boundary instead of
+  regressing to the earlier enablement receipt review boundary.
+- Stage 6 still does not close and Stage 7 does not start. The latest full
+  launch-on-hotkey completion audit completed without child proof timeouts and
+  still returns `ready_to_close=false`, `can_close_stage6=false`,
+  `transition_allowed=false`, and
+  `next_smallest_truthful_gap=resident_surface_runtime_not_supervised`.
+
+Latest validation for stale completion-audit receipt handoff guard:
+
+- PowerShell AST parse of `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed`
+- `python -m ruff check tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m pytest
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_applied_bringup_review_state
+  -q --tb=short`
+  Result: `passed`
+- `python -m pytest tests/test_lens_stage6_next_handoff_script.py -q
+  --tb=short`
+  Result: `passed; collected earlier as 10 tests`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey
+  -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2
+  -ResidentSurfaceForegroundRunSeconds 2 -SupervisorRunSeconds 3
+  -ChildProofTimeoutSeconds 240`
+  Result: `passed; status=blocked; audit_status=complete;
+  ready_to_close=false; can_close_stage6=false; transition_allowed=false;
+  child_proof_timeouts=0; child_proof_run_count=24;
+  next_smallest_truthful_gap=resident_surface_runtime_not_supervised;
+  recommended_handoff_source=stage6_helpful_not_noisy_runtime_authority_readiness_handoff`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath .tmp\stage6-completion-audit-continue-current.json`
+  Result: `passed; status=proof_passed; ready_to_close=false;
+  next_smallest_truthful_gap=resident_surface_runtime_not_supervised;
+  recommended_handoff_source=stage6_helpful_not_noisy_runtime_authority_readiness_handoff;
+  recommended_next_slice=create_or_select_exact_approved_resident_runtime_execution_authority_request;
+  authority_required=operator_approval`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
