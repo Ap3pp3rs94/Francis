@@ -167,13 +167,23 @@ $SummonBlockedFamilies = ConvertTo-StringArray -Value (
 )
 $SummonFamilyHandoffs = Get-PropertyValue -Payload $SummonPayload -Name 'blocked_family_handoffs' -Default @()
 $SummonBindingFamilyHandoff = Get-HandoffById -Handoffs $SummonFamilyHandoffs -Id 'summon_binding'
+$AuthorityFamilyHandoff = Get-HandoffById -Handoffs $SummonFamilyHandoffs -Id 'authority'
 $SummonBindingFamilyBlockers = ConvertTo-StringArray -Value (
   Get-PropertyValue -Payload $SummonBindingFamilyHandoff -Name 'blockers' -Default @()
+)
+$AuthorityFamilyBlockers = ConvertTo-StringArray -Value (
+  Get-PropertyValue -Payload $AuthorityFamilyHandoff -Name 'blockers' -Default @()
 )
 $SummonAuthorityBlockers = ConvertTo-StringArray -Value (
   Get-PropertyValue -Payload $SummonBlockerGroups -Name 'authority' -Default @()
 )
 $SummonGovernance = Get-PropertyValue -Payload $SummonPayload -Name 'governance'
+$SurfaceRuntimeReadbackObserved = Get-PropertyValue -Payload $SummonPayload -Name 'surface_runtime_readback_observed' -Default ([ordered]@{})
+$SurfaceRuntimeSuppressedBlockers = Get-PropertyValue -Payload $SummonPayload -Name 'surface_runtime_suppressed_blockers' -Default ([ordered]@{})
+$SummonBindingRuntimeObserved = [bool](Get-PropertyValue -Payload $SurfaceRuntimeReadbackObserved -Name 'summon_binding' -Default $false)
+$SummonBindingSuppressedBlockers = ConvertTo-StringArray -Value (
+  Get-PropertyValue -Payload $SurfaceRuntimeSuppressedBlockers -Name 'summon_binding' -Default @()
+)
 $ResidentHostSupervisedRuntimeObserved = [bool](
   Get-PropertyValue -Payload $SummonPayload -Name 'resident_host_supervised_runtime_observed' -Default $false
 )
@@ -208,9 +218,17 @@ $RequiredDirectAuthorityBlockers = @(
   'local_process_launch_authority_not_granted'
 )
 $SummonBindingFamilyIndex = [array]::IndexOf([string[]]@($SummonBlockedFamilies), 'summon_binding')
+$GlobalHotkeyFamilyIndex = [array]::IndexOf([string[]]@($SummonBlockedFamilies), 'global_hotkey_binding')
 $SummonAuthorityFamilyIndex = [array]::IndexOf([string[]]@($SummonBlockedFamilies), 'authority')
+$SummonBindingResolvedByRuntimeReadbackObserved = (
+  $SummonBindingRuntimeObserved -and
+  $GlobalHotkeyFamilyIndex -ge 0 -and
+  $SummonAuthorityFamilyIndex -eq ($GlobalHotkeyFamilyIndex + 1) -and
+  [string](Get-PropertyValue -Payload $AuthorityFamilyHandoff -Name 'id' -Default '') -eq 'authority' -and
+  ($RequiredAuthorityBlockers | Where-Object { $AuthorityFamilyBlockers -notcontains $_ }).Count -eq 0
+)
 
-$SummonAuthorityFamilyObserved = (
+$SummonAuthorityFamilyObservedLegacy = (
   [int]$SummonResult.exit_code -eq 0 -and
   [string](Get-PropertyValue -Payload $SummonPayload -Name 'kind' -Default '') -eq 'lens.summon_anywhere_blockers.proof' -and
   [string](Get-PropertyValue -Payload $SummonPayload -Name 'status' -Default '') -eq 'proof_passed' -and
@@ -220,7 +238,17 @@ $SummonAuthorityFamilyObserved = (
   $SummonAuthorityFamilyIndex -eq ($SummonBindingFamilyIndex + 1) -and
   ($RequiredAuthorityBlockers | Where-Object { $SummonAuthorityBlockers -notcontains $_ }).Count -eq 0
 )
-$SummonBindingContractReadbackObserved = (
+$SummonAuthorityFamilyObservedResolved = (
+  [int]$SummonResult.exit_code -eq 0 -and
+  [string](Get-PropertyValue -Payload $SummonPayload -Name 'kind' -Default '') -eq 'lens.summon_anywhere_blockers.proof' -and
+  [string](Get-PropertyValue -Payload $SummonPayload -Name 'status' -Default '') -eq 'proof_passed' -and
+  [string](Get-PropertyValue -Payload $SummonPayload -Name 'acceptance_criterion' -Default '') -eq 'summon_anywhere' -and
+  [string](Get-PropertyValue -Payload $SummonPayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'summon_anywhere_blockers' -and
+  $SummonBindingResolvedByRuntimeReadbackObserved -and
+  ($RequiredAuthorityBlockers | Where-Object { $SummonAuthorityBlockers -notcontains $_ }).Count -eq 0
+)
+$SummonAuthorityFamilyObserved = $SummonAuthorityFamilyObservedLegacy -or $SummonAuthorityFamilyObservedResolved
+$SummonBindingContractReadbackObservedLegacy = (
   [string](Get-PropertyValue -Payload $SummonBindingFamilyHandoff -Name 'id' -Default '') -eq 'summon_binding' -and
   [string](Get-PropertyValue -Payload $SummonBindingFamilyHandoff -Name 'status' -Default '') -eq 'blocked' -and
   [string](Get-PropertyValue -Payload $SummonBindingFamilyHandoff -Name 'proof_script' -Default '') -eq 'scripts/lens-summon-binding-blocker-proof.ps1 -Mode Status' -and
@@ -234,6 +262,10 @@ $SummonBindingContractReadbackObserved = (
   -not [bool](Get-PropertyValue -Payload $SummonBindingFamilyHandoff -Name 'would_mutate' -Default $true) -and
   $SummonBindingFamilyBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
   $SummonBindingFamilyBlockers -contains 'summon_authority_not_granted'
+)
+$SummonBindingContractReadbackObserved = (
+  $SummonBindingContractReadbackObservedLegacy -or
+  $SummonBindingResolvedByRuntimeReadbackObserved
 )
 $SummonPreflightAuthorityObserved = (
   [int]$SummonPreflightResult.exit_code -eq 0 -and
@@ -292,10 +324,63 @@ $SideEffectsDenied = (
   -not [bool](Get-PropertyValue -Payload $SummonPreflightGovernance -Name 'mutation_authority_granted' -Default $true)
 )
 
+$PreviousSummonBlockerFamily = if ($SummonBindingResolvedByRuntimeReadbackObserved) {
+  'global_hotkey_binding'
+} else {
+  'summon_binding'
+}
+$PreviousBindingNextGap = if ($SummonBindingResolvedByRuntimeReadbackObserved) {
+  'stage6_lens_completion_audit'
+} else {
+  [string](Get-PropertyValue -Payload $SummonBindingFamilyHandoff -Name 'next_smallest_truthful_gap' -Default '')
+}
+$PreviousBindingHandoff = if ($SummonBindingResolvedByRuntimeReadbackObserved) {
+  [ordered]@{
+    source = 'summon_anywhere_blockers.surface_runtime_readback_observed'
+    status = 'runtime_readback_resolved'
+    contract_status = 'resolved'
+    proof_script = 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status'
+    previous_summon_blocker_family = 'global_hotkey_binding'
+    summon_binding_blocker_family = 'summon_binding'
+    next_summon_blocker_family = 'authority'
+    next_smallest_truthful_gap = 'stage6_lens_completion_audit'
+    authority_required = [string](Get-PropertyValue -Payload $AuthorityFamilyHandoff -Name 'authority_required' -Default 'summon_hotkey_overlay_and_process_authority')
+    authority_granted = $false
+    read_only_contract = $true
+    diagnostic_only = $true
+    would_execute = $false
+    would_mutate = $false
+    handoff_aligned = $true
+    side_effects_denied = $true
+    blockers = [string[]]@()
+    suppressed_blockers = [string[]]@($SummonBindingSuppressedBlockers)
+  }
+} else {
+  [ordered]@{
+    source = 'summon_anywhere_blockers.blocked_family_handoffs'
+    status = 'contract_projected'
+    contract_status = [string](Get-PropertyValue -Payload $SummonBindingFamilyHandoff -Name 'status' -Default 'missing')
+    proof_script = [string](Get-PropertyValue -Payload $SummonBindingFamilyHandoff -Name 'proof_script' -Default '')
+    previous_summon_blocker_family = 'global_hotkey_binding'
+    summon_binding_blocker_family = [string](Get-PropertyValue -Payload $SummonBindingFamilyHandoff -Name 'id' -Default '')
+    next_summon_blocker_family = 'authority'
+    next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $SummonBindingFamilyHandoff -Name 'next_smallest_truthful_gap' -Default '')
+    authority_required = [string](Get-PropertyValue -Payload $SummonBindingFamilyHandoff -Name 'authority_required' -Default '')
+    authority_granted = [bool](Get-PropertyValue -Payload $SummonBindingFamilyHandoff -Name 'authority_granted' -Default $false)
+    read_only_contract = [bool](Get-PropertyValue -Payload $SummonBindingFamilyHandoff -Name 'read_only_contract' -Default $false)
+    diagnostic_only = [bool](Get-PropertyValue -Payload $SummonBindingFamilyHandoff -Name 'diagnostic_only' -Default $false)
+    would_execute = [bool](Get-PropertyValue -Payload $SummonBindingFamilyHandoff -Name 'would_execute' -Default $false)
+    would_mutate = [bool](Get-PropertyValue -Payload $SummonBindingFamilyHandoff -Name 'would_mutate' -Default $false)
+    handoff_aligned = $SummonBindingContractReadbackObserved
+    side_effects_denied = $SummonBindingContractReadbackObserved
+    blockers = [string[]]@($SummonBindingFamilyBlockers)
+  }
+}
+
 $Checks = @(
-  (New-Check -Id 'summon_authority_family' -Status $(if ($SummonAuthorityFamilyObserved) { 'sixth_family_projected' } else { 'missing_or_unexpected' }) -Passed $SummonAuthorityFamilyObserved -Evidence 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status' -Reason 'The summon-anywhere blocker proof must keep authority as the sixth blocked acceptance family after summon_binding.'),
-  (New-Check -Id 'previous_summon_binding_contract' -Status $(if ($SummonBindingContractReadbackObserved) { 'previous_family_contract_observed' } else { 'missing_or_unexpected' }) -Passed $SummonBindingContractReadbackObserved -Evidence 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status blocked_family_handoffs[summon_binding]' -Reason 'The summon-authority handoff should consume the summon-binding family contract before moving to the final blocker family.'),
-  (New-Check -Id 'previous_summon_binding_contract_readback' -Status $(if ($SummonBindingContractReadbackObserved) { 'previous_contract_readback_observed' } else { 'missing_or_unexpected' }) -Passed $SummonBindingContractReadbackObserved -Evidence 'summon_anywhere_blockers.blocked_family_handoffs[summon_binding]' -Reason 'The summon-authority proof must preserve the bounded summon-binding contract without rerunning the slower summon-binding bridge proof.'),
+  (New-Check -Id 'summon_authority_family' -Status $(if ($SummonAuthorityFamilyObservedResolved) { 'authority_family_after_resolved_summon_binding' } elseif ($SummonAuthorityFamilyObserved) { 'sixth_family_projected' } else { 'missing_or_unexpected' }) -Passed $SummonAuthorityFamilyObserved -Evidence 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status' -Reason 'The summon-anywhere blocker proof must keep authority after either the summon-binding family or explicit summon-binding runtime readback.'),
+  (New-Check -Id 'previous_summon_binding_contract' -Status $(if ($SummonBindingResolvedByRuntimeReadbackObserved) { 'summon_binding_runtime_readback_resolved' } elseif ($SummonBindingContractReadbackObserved) { 'previous_family_contract_observed' } else { 'missing_or_unexpected' }) -Passed $SummonBindingContractReadbackObserved -Evidence 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status blocked_family_handoffs[summon_binding]' -Reason 'The summon-authority handoff should consume the summon-binding family contract or the explicit runtime readback before moving to the final blocker family.'),
+  (New-Check -Id 'previous_summon_binding_contract_readback' -Status $(if ($SummonBindingResolvedByRuntimeReadbackObserved) { 'runtime_readback_resolved' } elseif ($SummonBindingContractReadbackObserved) { 'previous_contract_readback_observed' } else { 'missing_or_unexpected' }) -Passed $SummonBindingContractReadbackObserved -Evidence 'summon_anywhere_blockers.blocked_family_handoffs[summon_binding]' -Reason 'The summon-authority proof must preserve the bounded summon-binding contract or the explicit runtime readback without rerunning the slower summon-binding bridge proof.'),
   (New-Check -Id 'summon_preflight_authority' -Status $(if ($SummonPreflightAuthorityObserved) { 'blocked_readback_ready' } else { 'missing_or_unexpected' }) -Passed $SummonPreflightAuthorityObserved -Evidence 'scripts/lens-summon-preflight.ps1 -Mode Status' -Reason 'The direct summon preflight must remain blocked by explicit summon, hotkey-registration, overlay-control, and local-process-launch authority denials.'),
   (New-Check -Id 'handoff_alignment' -Status $(if ($HandoffAligned) { 'handoff_aligned' } else { 'handoff_mismatch' }) -Passed $HandoffAligned -Evidence 'summon authority blocker group + direct summon preflight authority blocker group' -Reason 'The authority blocker family must map to direct summon preflight without changing authority.'),
   (New-Check -Id 'side_effects_denied' -Status $(if ($SideEffectsDenied) { 'diagnostic_bounded' } else { 'unexpected_authority' }) -Passed $SideEffectsDenied -Evidence 'summon, summon-binding family contract, and summon preflight governance payloads' -Reason 'The bridge proof must remain diagnostic/readback only and grant no summon, hotkey, overlay, process, memory, approval-decision, sensing, capture, or resident authority.')
@@ -312,12 +397,12 @@ $Payload = [ordered]@{
   stage = 'Stage 6 / Lens MVP'
   stage_state = 'active'
   acceptance_criterion = 'summon_anywhere'
-  previous_summon_blocker_family = 'summon_binding'
+  previous_summon_blocker_family = $PreviousSummonBlockerFamily
   summon_authority_blocker_family = 'authority'
   sixth_summon_blocker_family = 'authority'
   next_summon_blocker_family = 'stage6_lens_completion_audit'
   summon_next_smallest_truthful_gap = 'summon_anywhere_blockers'
-  previous_binding_next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $SummonBindingFamilyHandoff -Name 'next_smallest_truthful_gap' -Default '')
+  previous_binding_next_smallest_truthful_gap = $PreviousBindingNextGap
   direct_summon_preflight_next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $SummonPreflightPayload -Name 'next_smallest_truthful_gap' -Default '')
   next_smallest_truthful_gap = 'stage6_lens_completion_audit'
   authority_required = 'summon_hotkey_overlay_and_process_authority'
@@ -347,8 +432,11 @@ $Payload = [ordered]@{
     would_mutate = $false
   }
   summon_authority_family_observed = $SummonAuthorityFamilyObserved
+  summon_authority_family_observed_after_resolved_summon_binding = $SummonAuthorityFamilyObservedResolved
   previous_summon_binding_contract_observed = $SummonBindingContractReadbackObserved
   previous_summon_binding_contract_readback_observed = $SummonBindingContractReadbackObserved
+  summon_binding_runtime_readback_observed = $SummonBindingRuntimeObserved
+  summon_binding_resolved_by_runtime_readback = $SummonBindingResolvedByRuntimeReadbackObserved
   summon_preflight_authority_observed = $SummonPreflightAuthorityObserved
   resident_host_supervised_runtime_observed = $ResidentHostSupervisedRuntimeObserved
   all_summon_blocker_families_consumed = $HandoffAligned
@@ -357,25 +445,7 @@ $Payload = [ordered]@{
   summon_authority_blockers = [string[]]@($SummonAuthorityBlockers)
   direct_summon_preflight_authority_blockers = [string[]]@($SummonPreflightAuthorityBlockers)
   direct_summon_preflight_binding_blockers = [string[]]@($SummonPreflightBindingBlockers)
-  previous_binding_handoff = [ordered]@{
-    source = 'summon_anywhere_blockers.blocked_family_handoffs'
-    status = 'contract_projected'
-    contract_status = [string](Get-PropertyValue -Payload $SummonBindingFamilyHandoff -Name 'status' -Default 'missing')
-    proof_script = [string](Get-PropertyValue -Payload $SummonBindingFamilyHandoff -Name 'proof_script' -Default '')
-    previous_summon_blocker_family = 'global_hotkey_binding'
-    summon_binding_blocker_family = [string](Get-PropertyValue -Payload $SummonBindingFamilyHandoff -Name 'id' -Default '')
-    next_summon_blocker_family = 'authority'
-    next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $SummonBindingFamilyHandoff -Name 'next_smallest_truthful_gap' -Default '')
-    authority_required = [string](Get-PropertyValue -Payload $SummonBindingFamilyHandoff -Name 'authority_required' -Default '')
-    authority_granted = [bool](Get-PropertyValue -Payload $SummonBindingFamilyHandoff -Name 'authority_granted' -Default $false)
-    read_only_contract = [bool](Get-PropertyValue -Payload $SummonBindingFamilyHandoff -Name 'read_only_contract' -Default $false)
-    diagnostic_only = [bool](Get-PropertyValue -Payload $SummonBindingFamilyHandoff -Name 'diagnostic_only' -Default $false)
-    would_execute = [bool](Get-PropertyValue -Payload $SummonBindingFamilyHandoff -Name 'would_execute' -Default $false)
-    would_mutate = [bool](Get-PropertyValue -Payload $SummonBindingFamilyHandoff -Name 'would_mutate' -Default $false)
-    handoff_aligned = $SummonBindingContractReadbackObserved
-    side_effects_denied = $SummonBindingContractReadbackObserved
-    blockers = [string[]]@($SummonBindingFamilyBlockers)
-  }
+  previous_binding_handoff = $PreviousBindingHandoff
   summon_authority_boundary = [ordered]@{
     status = [string](Get-PropertyValue -Payload $SummonPreflightPayload -Name 'status' -Default 'missing')
     ready = [bool](Get-PropertyValue -Payload $SummonPreflightPayload -Name 'ready' -Default $false)
@@ -406,6 +476,8 @@ $Payload = [ordered]@{
     wraps_summon_binding_blocker_proof = $false
     uses_summon_binding_family_contract_readback = $SummonBindingContractReadbackObserved
     summon_binding_contract_readback = $SummonBindingContractReadbackObserved
+    summon_binding_runtime_readback_observed = $SummonBindingRuntimeObserved
+    summon_binding_resolved_by_runtime_readback = $SummonBindingResolvedByRuntimeReadbackObserved
     wraps_summon_preflight = $true
     read_only_contract = $true
     approval_request_write = $false
