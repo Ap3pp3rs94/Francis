@@ -928,6 +928,7 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority(tm
         "stage6_completion_audit_prerequisite_bringup_operator_plan_handoff_observed": False,
         "stage6_completion_audit_enablement_receipt_review_handoff_observed": False,
         "stage6_completion_audit_recommended_handoff_consumed": False,
+        "stage6_completion_audit_remaining_acceptance_handoff_observed": False,
         "stage6_completion_audit_runtime_readback_required": False,
         "stage6_completion_audit_json_path_supplied": False,
         "proof_script": "scripts/lens-stage6-next-handoff.ps1 -Mode Status",
