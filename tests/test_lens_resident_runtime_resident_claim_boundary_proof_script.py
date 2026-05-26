@@ -44,9 +44,62 @@ def test_lens_resident_runtime_resident_claim_boundary_accepts_cached_parent_pro
 
     assert "[string]$CachedAuthorityBlockersProofPath = ''" in script
     assert "[string]$CachedOverlayWindowBoundaryProofPath = ''" in script
+    assert "[string]$CachedResidentSurfaceProofPath = ''" in script
     assert "'-CachedAuthorityBlockersProofPath', $CachedAuthorityBlockersProofPath" in script
     assert "Read-CachedJsonScriptResult -Path $CachedOverlayWindowBoundaryProofPath" in script
+    assert "Read-CachedJsonScriptResult -Path $CachedResidentSurfaceProofPath" in script
     assert "cached_overlay_window_boundary_proof" in script
+    assert "cached_resident_surface_proof" in script
+
+
+def test_lens_resident_runtime_resident_claim_boundary_consumes_cached_resident_surface_runtime(
+    tmp_path: Path,
+) -> None:
+    cached_proof = tmp_path / "resident-surface-proof.json"
+    cached_proof.write_text(
+        json.dumps(
+            {
+                "ok": True,
+                "kind": "lens.resident_surface.readiness_proof",
+                "status": "proof_passed",
+                "resident_surface_resident_runtime_readback": True,
+                "resident_surface_resident_runtime_observed": True,
+                "resident_surface_runtime_status": "resident_runtime_observed",
+                "resident_surface_ready": True,
+                "resident_host_process": True,
+                "ready_for_lens_resident_claim": False,
+                "resident_claim_allowed": False,
+                "resident_claim_authority": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_proof("-Mode", "Status", "-CachedResidentSurfaceProofPath", str(cached_proof))
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "proof_passed"
+    assert payload["resident_claim_boundary_observed"] is True
+    assert payload["resident_surface_runtime_proof_observed"] is True
+    assert payload["resident_surface_runtime_missing_boundary_observed"] is True
+    assert payload["resident_surface_resident_runtime_readback"] is True
+    assert payload["resident_surface_resident_runtime_observed"] is True
+    assert payload["resident_surface_runtime_status"] == "resident_runtime_observed"
+    assert payload["resident_surface_ready"] is True
+    assert payload["resident_surface_claim_allowed"] is False
+    assert payload["cached_resident_surface_proof"] is True
+    assert "resident_claim_authority_not_granted" in payload["blockers"]
+    assert "resident_surface_runtime_missing" not in payload["blockers"]
+    assert "resident_surface_runtime_missing" in payload["raw_resident_claim_blockers"]
+    assert "resident_surface_runtime_missing" not in payload["resident_claim"]["blockers"]
+    assert payload["authority_granted"] is False
+    assert payload["resident_claim_authority"] is False
+    assert payload["would_claim_resident"] is False
+
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["resident_surface_runtime_readback"]["status"] == "resident_runtime_observed"
+    assert all(item["passed"] for item in payload["checks"])
 
 
 def test_lens_resident_runtime_resident_claim_boundary_is_readback_only() -> None:
@@ -106,6 +159,9 @@ def test_lens_resident_runtime_resident_claim_boundary_is_readback_only() -> Non
     assert "resident_claim_authority_not_granted" in resident_claim["blockers"]
     assert "resident_surface_runtime_missing" in resident_claim["blockers"]
     assert payload["blockers"] == resident_claim["blockers"]
+    assert payload["resident_surface_runtime_proof_observed"] is False
+    assert payload["resident_surface_runtime_missing_boundary_observed"] is True
+    assert payload["cached_resident_surface_proof"] is False
 
     assert payload["remaining_authority_families_after_this_boundary"] == []
     assert payload["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
@@ -113,6 +169,7 @@ def test_lens_resident_runtime_resident_claim_boundary_is_readback_only() -> Non
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["resident_runtime_authority_blockers_proof"]["status"] == "proof_observed"
     assert checks["previous_overlay_window_family"]["status"] == "blocked"
+    assert checks["resident_surface_runtime_readback"]["status"] == "missing_boundary"
     assert checks["resident_claim_family"]["status"] == "blocked"
     assert checks["resident_claim_side_effects_denied"]["status"] == "denied_no_resident_claim"
     assert checks["authority_boundary"]["status"] == "diagnostic_bounded"

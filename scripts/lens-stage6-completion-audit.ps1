@@ -2095,7 +2095,16 @@ $ResidentRuntimeResidentClaimBoundaryObserved = (
   -not [bool]$ResidentRuntimeResidentClaimBoundaryProof.would_write_memory -and
   -not [bool]$ResidentRuntimeResidentClaimBoundaryProof.would_claim_resident -and
   $ResidentRuntimeResidentClaimBoundaryBlockers -contains 'resident_claim_authority_not_granted' -and
-  $ResidentRuntimeResidentClaimBoundaryBlockers -contains 'resident_surface_runtime_missing' -and
+  (
+    (
+      [bool]$ResidentRuntimeResidentClaimBoundaryProof.resident_surface_runtime_proof_observed -and
+      -not ($ResidentRuntimeResidentClaimBoundaryBlockers -contains 'resident_surface_runtime_missing')
+    ) -or
+    (
+      -not [bool]$ResidentRuntimeResidentClaimBoundaryProof.resident_surface_runtime_proof_observed -and
+      $ResidentRuntimeResidentClaimBoundaryBlockers -contains 'resident_surface_runtime_missing'
+    )
+  ) -and
   [string]$ResidentRuntimeResidentClaimBoundaryProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit'
 )
 $CommandPaletteShellBridge = $Checkpoint.command_palette_shell_bridge
@@ -6229,6 +6238,12 @@ $Payload = [ordered]@{
     authority_blockers_proof_observed = [bool]$ResidentRuntimeResidentClaimBoundaryProof.authority_blockers_proof_observed
     side_effects_denied = [bool]$ResidentRuntimeResidentClaimBoundaryProof.side_effects_denied
     sixth_authority_family_consumed = [bool]$ResidentRuntimeResidentClaimBoundaryProof.sixth_authority_family_consumed
+    resident_surface_runtime_proof_observed = [bool]$ResidentRuntimeResidentClaimBoundaryProof.resident_surface_runtime_proof_observed
+    resident_surface_runtime_missing_boundary_observed = [bool]$ResidentRuntimeResidentClaimBoundaryProof.resident_surface_runtime_missing_boundary_observed
+    resident_surface_resident_runtime_readback = [bool]$ResidentRuntimeResidentClaimBoundaryProof.resident_surface_resident_runtime_readback
+    resident_surface_resident_runtime_observed = [bool]$ResidentRuntimeResidentClaimBoundaryProof.resident_surface_resident_runtime_observed
+    resident_surface_runtime_status = [string]$ResidentRuntimeResidentClaimBoundaryProof.resident_surface_runtime_status
+    cached_resident_surface_proof = [bool]$ResidentRuntimeResidentClaimBoundaryProof.cached_resident_surface_proof
     authority_required = [string]$ResidentRuntimeResidentClaimBoundaryProof.authority_required
     authority_granted = [bool]$ResidentRuntimeResidentClaimBoundaryProof.authority_granted
     resident_claim = $ResidentRuntimeResidentClaimBoundaryProof.resident_claim

@@ -69,6 +69,7 @@ def test_lens_stage6_checkpoint_honors_explicit_observation_windows_without_chan
     ) in script
     assert "$ResidentOverlayRuntimeProofCachePath = Write-ProofPayloadCache" in script
     assert "'-CachedResidentOverlayRuntimeProofPath', $ResidentOverlayRuntimeProofCachePath" in script
+    assert "'-CachedResidentSurfaceProofPath', $ResidentSurfaceProofCachePath" in script
     assert "$ResidentRuntimeAuthorityBlockersProofCachePath = Write-ProofPayloadCache" in script
     assert "'-CachedAuthorityBlockersProofPath', $ResidentRuntimeAuthorityBlockersProofCachePath" in script
     assert "$ResidentRuntimeTrayPresenceBoundaryProofCachePath = Write-ProofPayloadCache" in script
@@ -1238,6 +1239,14 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert runtime_resident_claim_boundary["authority_blockers_proof_observed"] is True
     assert runtime_resident_claim_boundary["side_effects_denied"] is True
     assert runtime_resident_claim_boundary["sixth_authority_family_consumed"] is True
+    assert runtime_resident_claim_boundary["resident_surface_runtime_proof_observed"] is False
+    assert runtime_resident_claim_boundary["resident_surface_runtime_missing_boundary_observed"] is True
+    assert runtime_resident_claim_boundary["resident_surface_resident_runtime_readback"] is False
+    assert runtime_resident_claim_boundary["resident_surface_runtime_status"] in {
+        "foreground_runtime_observed",
+        "",
+    }
+    assert runtime_resident_claim_boundary["cached_resident_surface_proof"] is True
     assert runtime_resident_claim_boundary["authority_required"] == "resident_claim_authority"
     assert runtime_resident_claim_boundary["authority_granted"] is False
     assert runtime_resident_claim_boundary["local_process_launch_authority"] is False

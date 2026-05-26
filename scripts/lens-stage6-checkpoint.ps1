@@ -1668,6 +1668,9 @@ if (-not [string]::IsNullOrWhiteSpace($ResidentRuntimeAuthorityBlockersProofCach
 if (-not [string]::IsNullOrWhiteSpace($ResidentRuntimeOverlayWindowBoundaryProofCachePath)) {
   $ResidentRuntimeResidentClaimBoundaryArgs += @('-CachedOverlayWindowBoundaryProofPath', $ResidentRuntimeOverlayWindowBoundaryProofCachePath)
 }
+if (-not [string]::IsNullOrWhiteSpace($ResidentSurfaceProofCachePath)) {
+  $ResidentRuntimeResidentClaimBoundaryArgs += @('-CachedResidentSurfaceProofPath', $ResidentSurfaceProofCachePath)
+}
 $ResidentRuntimeResidentClaimBoundaryProof = Invoke-JsonScriptWithProofRetry -PowerShellPath $PowerShellPath -ScriptPath $ResidentRuntimeResidentClaimBoundaryProofPath -ScriptArgs $ResidentRuntimeResidentClaimBoundaryArgs -ExpectedKind 'lens.resident_runtime.resident_claim_boundary.proof'
 $ResidentRuntimeResidentClaimBoundaryExitCode = -1
 $ResidentRuntimeResidentClaimBoundaryPayload = $null
@@ -1710,7 +1713,16 @@ $ResidentRuntimeResidentClaimBoundaryProofPassed = (
   -not [bool](Get-PropertyValue -Payload $ResidentRuntimeResidentClaimBoundaryPayload -Name 'would_write_memory' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ResidentRuntimeResidentClaimBoundaryPayload -Name 'would_claim_resident' -Default $true) -and
   $ResidentRuntimeResidentClaimBoundaryBlockers -contains 'resident_claim_authority_not_granted' -and
-  $ResidentRuntimeResidentClaimBoundaryBlockers -contains 'resident_surface_runtime_missing' -and
+  (
+    (
+      [bool](Get-PropertyValue -Payload $ResidentRuntimeResidentClaimBoundaryPayload -Name 'resident_surface_runtime_proof_observed' -Default $false) -and
+      -not ($ResidentRuntimeResidentClaimBoundaryBlockers -contains 'resident_surface_runtime_missing')
+    ) -or
+    (
+      -not [bool](Get-PropertyValue -Payload $ResidentRuntimeResidentClaimBoundaryPayload -Name 'resident_surface_runtime_proof_observed' -Default $false) -and
+      $ResidentRuntimeResidentClaimBoundaryBlockers -contains 'resident_surface_runtime_missing'
+    )
+  ) -and
   [string](Get-PropertyValue -Payload $ResidentRuntimeResidentClaimBoundaryPayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'stage6_lens_completion_audit'
 )
 $ResidentRuntimeAuthorityFamilyProofChainObserved = (
@@ -2798,6 +2810,12 @@ $Payload = [ordered]@{
     authority_blockers_proof_observed = [bool](Get-PropertyValue -Payload $ResidentRuntimeResidentClaimBoundaryPayload -Name 'authority_blockers_proof_observed' -Default $false)
     side_effects_denied = [bool](Get-PropertyValue -Payload $ResidentRuntimeResidentClaimBoundaryPayload -Name 'side_effects_denied' -Default $false)
     sixth_authority_family_consumed = [bool](Get-PropertyValue -Payload $ResidentRuntimeResidentClaimBoundaryPayload -Name 'sixth_authority_family_consumed' -Default $false)
+    resident_surface_runtime_proof_observed = [bool](Get-PropertyValue -Payload $ResidentRuntimeResidentClaimBoundaryPayload -Name 'resident_surface_runtime_proof_observed' -Default $false)
+    resident_surface_runtime_missing_boundary_observed = [bool](Get-PropertyValue -Payload $ResidentRuntimeResidentClaimBoundaryPayload -Name 'resident_surface_runtime_missing_boundary_observed' -Default $false)
+    resident_surface_resident_runtime_readback = [bool](Get-PropertyValue -Payload $ResidentRuntimeResidentClaimBoundaryPayload -Name 'resident_surface_resident_runtime_readback' -Default $false)
+    resident_surface_resident_runtime_observed = [bool](Get-PropertyValue -Payload $ResidentRuntimeResidentClaimBoundaryPayload -Name 'resident_surface_resident_runtime_observed' -Default $false)
+    resident_surface_runtime_status = [string](Get-PropertyValue -Payload $ResidentRuntimeResidentClaimBoundaryPayload -Name 'resident_surface_runtime_status' -Default '')
+    cached_resident_surface_proof = [bool](Get-PropertyValue -Payload $ResidentRuntimeResidentClaimBoundaryPayload -Name 'cached_resident_surface_proof' -Default $false)
     authority_required = [string](Get-PropertyValue -Payload $ResidentRuntimeResidentClaimBoundaryPayload -Name 'authority_required' -Default '')
     authority_granted = [bool](Get-PropertyValue -Payload $ResidentRuntimeResidentClaimBoundaryPayload -Name 'authority_granted' -Default $false)
     resident_claim = Get-PropertyValue -Payload $ResidentRuntimeResidentClaimBoundaryPayload -Name 'resident_claim'

@@ -664,6 +664,7 @@ def test_lens_stage6_completion_audit_observes_resident_runtime_resident_claim_a
 
     assert required_gate in script
     assert granted_gate in script
+    assert "[bool]$ResidentRuntimeResidentClaimBoundaryProof.resident_surface_runtime_proof_observed" in script
 
 
 def test_lens_stage6_completion_audit_observes_os_binding_authority_request_required_authority_gate() -> None:
@@ -2685,6 +2686,14 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert runtime_resident_claim_boundary["authority_blockers_proof_observed"] is True
     assert runtime_resident_claim_boundary["side_effects_denied"] is True
     assert runtime_resident_claim_boundary["sixth_authority_family_consumed"] is True
+    assert runtime_resident_claim_boundary["resident_surface_runtime_proof_observed"] is False
+    assert runtime_resident_claim_boundary["resident_surface_runtime_missing_boundary_observed"] is True
+    assert runtime_resident_claim_boundary["resident_surface_resident_runtime_readback"] is False
+    assert runtime_resident_claim_boundary["resident_surface_runtime_status"] in {
+        "foreground_runtime_observed",
+        "",
+    }
+    assert runtime_resident_claim_boundary["cached_resident_surface_proof"] is True
     assert runtime_resident_claim_boundary["authority_required"] == "resident_claim_authority"
     assert runtime_resident_claim_boundary["authority_granted"] is False
     assert runtime_resident_claim_boundary["local_process_launch_authority"] is False
