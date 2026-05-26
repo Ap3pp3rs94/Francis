@@ -1148,6 +1148,25 @@ if ($ResidentSurfaceRuntimeProofPassed) {
     @($ResidentSurfaceRuntimeProofBlockers)
   ) | Sort-Object -Unique
 }
+$HelpfulNotNoisyReady = (
+  $LiveOperatorProofPassed -and
+  $ResidentSurfaceResidentRuntimeProofPassed
+)
+$HelpfulNotNoisyStatus = if ($HelpfulNotNoisyReady) {
+  'readback_ready'
+} else {
+  $LiveOperatorStatus
+}
+$HelpfulNotNoisyBlockers = if ($HelpfulNotNoisyReady) {
+  @()
+} else {
+  @($LiveOperatorBlockers)
+}
+$HelpfulNotNoisyBasis = if ($HelpfulNotNoisyReady) {
+  'Live HTTP Lens readback, direct resident-surface content readback, and supervised resident-surface runtime readback are present; remaining tray, hotkey, overlay, and summon blockers belong to summon-anywhere or system-resident presence.'
+} else {
+  'Live HTTP Lens readback and direct resident-surface content readback exist; resident runtime still blocks a finished Lens claim.'
+}
 $ResidentSurfaceProofCachePath = Write-ProofPayloadCache -Payload $ResidentSurfaceProofPayload -FileName 'resident-surface-proof.json'
 
 $HostLaunchProofResult = @(Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $HostLaunchProofPath -ScriptArgs @('-Mode', 'Status', '-RunSeconds', [string]$HostLaunchRunSeconds, '-DataDir', $CheckpointProofDataRoot))
@@ -1782,11 +1801,11 @@ $Criteria = @(
   (New-Criterion `
       -Id 'helpful_not_noisy' `
       -Label 'Lens is helpful, not noisy' `
-      -Status $LiveOperatorStatus `
-      -Ready $false `
+      -Status $HelpfulNotNoisyStatus `
+      -Ready $HelpfulNotNoisyReady `
       -Evidence @('/lens/status', '/lens/resident-surface', 'chat_ui.system_orb', 'scripts/lens-live-operator-proof.ps1') `
-      -Blockers $LiveOperatorBlockers `
-      -Basis 'Live HTTP Lens readback and direct resident-surface content readback exist; resident runtime still blocks a finished Lens claim.')
+      -Blockers ([string[]]@($HelpfulNotNoisyBlockers)) `
+      -Basis $HelpfulNotNoisyBasis)
   (New-Criterion `
       -Id 'mode_visibility' `
       -Label 'Mode visibility becomes real' `

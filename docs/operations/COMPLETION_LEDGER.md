@@ -38958,6 +38958,65 @@ Latest validation for Stage 6 runtime-readback handoff truth fixes:
   recommended_next_slice=run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt;
   authority_required=none_readback_only; would_execute=false; would_mutate=false`
 
+### 2026-05-26 - Stage 6 helpful-not-noisy blockers scoped to resident runtime proof
+
+Roadmap area: Stage 6 / Lens MVP, operator-surface truthfulness and governed
+resident runtime acceptance.
+
+Material change:
+
+- The Stage 6 checkpoint now marks `helpful_not_noisy` ready only when the live
+  operator proof and supervised resident-surface runtime proof are both present.
+- When that proof pair is present, the checkpoint reports
+  `helpful_not_noisy.status=readback_ready`, `helpful_not_noisy.ready=true`,
+  and an empty `helpful_not_noisy.blockers` list.
+- Tray, hotkey, overlay, summon, and resident-presence blockers no longer keep
+  the helpful-not-noisy criterion blocked after the resident-runtime readback
+  proof exists; those blockers remain assigned to `summon_anywhere` and
+  `system_resident_presence`.
+- Stage 6 still does not close and Stage 7 does not start. The latest
+  launch-on-hotkey completion audit remains `status=blocked`,
+  `ready_to_close=false`, `can_close_stage6=false`, and
+  `transition_allowed=false`.
+
+Latest validation for Stage 6 helpful-not-noisy blocker scoping:
+
+- PowerShell AST parse of `scripts\lens-stage6-checkpoint.ps1`
+  Result: `passed`
+- `python -m pytest
+  tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_keeps_helpful_not_noisy_blockers_scoped
+  tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority
+  -q --tb=short`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-checkpoint.ps1 -Mode Status
+  -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2
+  -ResidentSurfaceForegroundRunSeconds 2 -SupervisorRunSeconds 3`
+  Result: `passed; status=blocked; ready_to_close=false; ready_total=3;
+  blocked_total=2; helpful_not_noisy.status=readback_ready;
+  helpful_not_noisy.ready=true; helpful_not_noisy.blockers=[];
+  next_smallest_truthful_gap=stage6_lens_completion_audit`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -AllowLaunchOnHotkey -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2
+  -ResidentSurfaceForegroundRunSeconds 2 -SupervisorRunSeconds 3
+  -ChildProofTimeoutSeconds 120`
+  Result: `passed; status=blocked; audit_status=complete;
+  ready_to_close=false; can_close_stage6=false; transition_allowed=false;
+  child_proof_timeouts=0;
+  next_smallest_truthful_gap=system_resident_presence_blockers;
+  remaining_stage6_acceptance_blockers=summon_anywhere,system_resident_presence`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath
+  .tmp\stage6-completion-audit-after-helpful-not-noisy-scope.json`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=system_resident_presence_blockers;
+  recommended_next_slice=review_system_resident_presence_acceptance_blockers_after_summon_runtime_readback;
+  stage6_completion_audit_remaining_acceptance_handoff_observed=true;
+  stage6_completion_audit_recommended_handoff_consumed=true;
+  stage6_completion_audit_runtime_readback_required=false`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

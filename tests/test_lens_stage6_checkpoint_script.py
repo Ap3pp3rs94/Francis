@@ -82,6 +82,20 @@ def test_lens_stage6_checkpoint_honors_explicit_observation_windows_without_chan
     assert "'-CachedOverlayWindowBoundaryProofPath', $ResidentRuntimeOverlayWindowBoundaryProofCachePath" in script
 
 
+def test_lens_stage6_checkpoint_keeps_helpful_not_noisy_blockers_scoped() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-checkpoint.ps1").read_text(encoding="utf-8")
+
+    assert "$HelpfulNotNoisyReady = (" in script
+    assert "$LiveOperatorProofPassed -and" in script
+    assert "$ResidentSurfaceResidentRuntimeProofPassed" in script
+    assert "-Status $HelpfulNotNoisyStatus" in script
+    assert "-Ready $HelpfulNotNoisyReady" in script
+    assert "-Blockers ([string[]]@($HelpfulNotNoisyBlockers))" in script
+    assert (
+        "remaining tray, hotkey, overlay, and summon blockers belong to summon-anywhere or system-resident presence"
+    ) in script
+
+
 def test_lens_stage6_checkpoint_accepts_summon_runtime_readback_handoff() -> None:
     script = (_repo_root() / "scripts" / "lens-stage6-checkpoint.ps1").read_text(encoding="utf-8")
 
