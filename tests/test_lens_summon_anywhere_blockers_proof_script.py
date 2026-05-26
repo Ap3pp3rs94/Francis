@@ -125,6 +125,30 @@ def _write_lens_status_with_active_os_binding_grant(path: Path) -> None:
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
+def _write_lens_status_with_supervised_resident_host(path: Path) -> None:
+    _write_lens_status(path)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["resident_host"] = {
+        "process_readback": {
+            "status": "process_observed",
+            "state_status": "resident_running",
+            "process_alive": True,
+        },
+        "supervision_gate": {
+            "resident_supervised_runtime": True,
+            "resident_host_supervised": True,
+            "fresh_supervisor_readback": True,
+            "supervisor_readback": {
+                "status": "resident_supervising",
+                "fresh_readback": True,
+                "observed_process_alive": True,
+                "observed_pid_matches_host_process": True,
+            },
+        },
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
 def _write_lens_status_with_approved_os_binding_request_without_authority(path: Path) -> None:
     _write_lens_status(path)
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -396,6 +420,90 @@ def test_lens_summon_anywhere_blockers_proof_is_readback_only(tmp_path: Path) ->
     assert authority_request_readback["registers_hotkey"] is False
     assert authority_request_readback["launches_process"] is False
     assert authority_request_readback["controls_overlay"] is False
+
+
+def test_lens_summon_anywhere_blockers_proof_advances_past_supervised_resident_host(
+    tmp_path: Path,
+) -> None:
+    status_path = tmp_path / "lens-status.json"
+    _write_lens_status_with_supervised_resident_host(status_path)
+
+    proc = _run_proof("-Mode", "Status", "-StatusPath", str(status_path))
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "proof_passed"
+    assert payload["ok"] is True
+    assert payload["resident_host_supervised_runtime_observed"] is True
+    assert payload["stage6_family_projection_observed"] is True
+    assert payload["first_blocker_family_handoff_observed"] is True
+    assert payload["first_blocker_family"] == "tray_presence"
+    assert payload["recommended_handoff_source"] == "first_blocker_family_handoff"
+    assert payload["recommended_next_slice"] == "run_tray_presence_blocker_proof"
+    assert payload["recommended_proof_script"] == "scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status"
+    assert payload["recommended_route"] == "/lens/tray"
+    assert payload["recommended_readiness_route"] == "/lens/tray/readiness"
+    assert payload["recommended_authority_required"] == "tray_registration_authority"
+    assert payload["recommended_authority_granted"] is False
+    assert payload["recommended_concrete_handoff_source"] == "first_blocker_family_handoff"
+    assert payload["recommended_concrete_next_slice"] == "run_tray_presence_blocker_proof"
+    assert payload["recommended_concrete_next_smallest_truthful_gap"] == "summon_overlay_window_blocker_boundary"
+
+    assert payload["blocked_families"] == [
+        "tray_presence",
+        "overlay_window",
+        "global_hotkey_binding",
+        "summon_binding",
+        "authority",
+    ]
+    assert [handoff["id"] for handoff in payload["blocked_family_handoffs"]] == payload["blocked_families"]
+
+    first_handoff = payload["first_blocker_family_handoff"]
+    assert first_handoff == {
+        "id": "tray_presence",
+        "label": "Tray presence",
+        "status": "blocked",
+        "blockers": ["tray_host_missing"],
+        "proof_script": "scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status",
+        "route": "/lens/tray",
+        "readiness_route": "/lens/tray/readiness",
+        "next_step": "run_tray_presence_blocker_proof",
+        "next_smallest_truthful_gap": "summon_overlay_window_blocker_boundary",
+        "authority_required": "tray_registration_authority",
+        "authority_granted": False,
+        "read_only_contract": True,
+        "diagnostic_only": True,
+        "would_execute": False,
+        "would_mutate": False,
+    }
+
+    blocker_groups = payload["blocker_groups"]
+    assert blocker_groups["resident_host"] == []
+    assert blocker_groups["tray_presence"] == ["tray_host_missing"]
+    assert blocker_groups["authority"] == [
+        "summon_authority_not_granted",
+        "hotkey_registration_authority_not_granted",
+        "overlay_control_authority_not_granted",
+    ]
+
+    supervision = payload["resident_host_supervision_readback"]
+    assert supervision["process_observed"] is True
+    assert supervision["supervision_gate_observed"] is True
+    assert supervision["supervisor_fresh_observed"] is True
+    assert supervision["process_status"] == "process_observed"
+    assert supervision["state_status"] == "resident_running"
+    assert supervision["process_alive"] is True
+    assert supervision["resident_supervised_runtime"] is True
+    assert supervision["resident_host_supervised"] is True
+    assert supervision["supervisor_status"] == "resident_supervising"
+    assert supervision["fresh_supervisor_readback"] is True
+    assert supervision["observed_process_alive"] is True
+    assert supervision["observed_pid_matches_host_process"] is True
+
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["stage6_family_projection"]["status"] == "blocked_families_projected"
+    assert checks["first_blocker_family_handoff"]["status"] == "handoff_ready"
+    assert all(item["passed"] for item in payload["checks"])
 
 
 def test_lens_summon_anywhere_blockers_proof_projects_closure_completion_handoff(

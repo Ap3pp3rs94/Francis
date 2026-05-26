@@ -337,6 +337,35 @@ $SummonPreflightRequiredBeforeEnable = ConvertTo-StringArray -Value (
 $SummonPreflightGovernance = Get-PropertyValue -Payload $SummonPreflightPayload -Name 'governance'
 $LensStatusRead = Get-LensStatus -StatusPath $StatusPath
 $LensStatus = Get-PropertyValue -Payload $LensStatusRead -Name 'payload'
+$ResidentHostReadback = Get-PropertyValue -Payload $LensStatus -Name 'resident_host' -Default ([ordered]@{})
+$ResidentHostProcessReadback = Get-PropertyValue -Payload $ResidentHostReadback -Name 'process_readback' -Default ([ordered]@{})
+$ResidentHostSupervisionGate = Get-PropertyValue -Payload $ResidentHostReadback -Name 'supervision_gate' -Default ([ordered]@{})
+$ResidentHostSupervisorReadback = Get-PropertyValue -Payload $ResidentHostSupervisionGate -Name 'supervisor_readback' -Default (
+  Get-PropertyValue -Payload $ResidentHostReadback -Name 'supervisor_readback' -Default ([ordered]@{})
+)
+$ResidentHostProcessObserved = (
+  [string](Get-PropertyValue -Payload $ResidentHostProcessReadback -Name 'status' -Default '') -eq 'process_observed' -and
+  [string](Get-PropertyValue -Payload $ResidentHostProcessReadback -Name 'state_status' -Default '') -eq 'resident_running' -and
+  [bool](Get-PropertyValue -Payload $ResidentHostProcessReadback -Name 'process_alive' -Default $false)
+)
+$ResidentHostSupervisionGateObserved = (
+  [bool](Get-PropertyValue -Payload $ResidentHostSupervisionGate -Name 'resident_supervised_runtime' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $ResidentHostSupervisionGate -Name 'resident_host_supervised' -Default $false)
+)
+$ResidentHostSupervisorFreshObserved = (
+  [string](Get-PropertyValue -Payload $ResidentHostSupervisorReadback -Name 'status' -Default '') -eq 'resident_supervising' -and
+  [bool](Get-PropertyValue -Payload $ResidentHostSupervisorReadback -Name 'fresh_readback' -Default (
+      Get-PropertyValue -Payload $ResidentHostSupervisionGate -Name 'fresh_supervisor_readback' -Default $false
+    )) -and
+  [bool](Get-PropertyValue -Payload $ResidentHostSupervisorReadback -Name 'observed_process_alive' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $ResidentHostSupervisorReadback -Name 'observed_pid_matches_host_process' -Default $false)
+)
+$ResidentHostSupervisedRuntimeObserved = (
+  [bool](Get-PropertyValue -Payload $LensStatusRead -Name 'ok' -Default $false) -and
+  $ResidentHostProcessObserved -and
+  $ResidentHostSupervisionGateObserved -and
+  $ResidentHostSupervisorFreshObserved
+)
 $Stage6Readiness = Get-PropertyValue -Payload $LensStatus -Name 'stage6_readiness'
 $Stage6ClosureReadback = Get-PropertyValue -Payload $Stage6Readiness -Name 'closure_readback'
 $SummonAnywhereClosureCriterion = Get-ClosureReadinessCriterion -Stage6Readiness $Stage6Readiness -CriterionId 'summon_anywhere'
@@ -386,14 +415,28 @@ $OsBindingReadinessEvidence = ConvertTo-StringArray -Value (
   Get-PropertyValue -Payload $OsBindingReadinessCriterion -Name 'evidence' -Default @()
 )
 
+$ResidentHostBlockers = [string[]]@(Select-Blockers -Blockers $SummonPreflightBlockers -Candidates @(
+    'lens_host_runtime_not_implemented',
+    'lens_host_persistent_supervision_prerequisites_pending',
+    'resident_host_process_missing',
+    'resident_host_process_not_supervised',
+    'local_process_launch_authority_not_granted'
+  ))
+$AuthorityBlockers = [string[]]@(Select-Blockers -Blockers $SummonPreflightBlockers -Candidates @(
+    'summon_authority_not_granted',
+    'hotkey_registration_authority_not_granted',
+    'overlay_control_authority_not_granted',
+    'local_process_launch_authority_not_granted'
+  ))
+if ($ResidentHostSupervisedRuntimeObserved) {
+  $ResidentHostBlockers = [string[]]@()
+  $AuthorityBlockers = [string[]]@(
+    $AuthorityBlockers | Where-Object { $_ -ne 'local_process_launch_authority_not_granted' }
+  )
+}
+
 $Stage6BlockerGroups = [ordered]@{
-  resident_host = [string[]]@(Select-Blockers -Blockers $SummonPreflightBlockers -Candidates @(
-      'lens_host_runtime_not_implemented',
-      'lens_host_persistent_supervision_prerequisites_pending',
-      'resident_host_process_missing',
-      'resident_host_process_not_supervised',
-      'local_process_launch_authority_not_granted'
-    ))
+  resident_host = [string[]]@($ResidentHostBlockers)
   tray_presence = [string[]]@(Select-Blockers -Blockers $SummonPreflightBlockers -Candidates @(
       'tray_host_missing'
     ))
@@ -410,12 +453,7 @@ $Stage6BlockerGroups = [ordered]@{
       'lens_summon_binding_disabled_pending_authority',
       'summon_authority_not_granted'
     ))
-  authority = [string[]]@(Select-Blockers -Blockers $SummonPreflightBlockers -Candidates @(
-      'summon_authority_not_granted',
-      'hotkey_registration_authority_not_granted',
-      'overlay_control_authority_not_granted',
-      'local_process_launch_authority_not_granted'
-    ))
+  authority = [string[]]@($AuthorityBlockers)
 }
 
 $Stage6BlockerFamilyOrder = @(
@@ -445,15 +483,25 @@ $SummonPreflightObserved = (
   $SummonPreflightBlockers -contains 'summon_authority_not_granted' -and
   $SummonPreflightBlockers -contains 'hotkey_registration_authority_not_granted'
 )
-$Stage6FamilyProjectionObserved = (
-  @($Stage6BlockedFamilies).Count -eq 6 -and
-  $Stage6BlockedFamilies[0] -eq 'resident_host' -and
-  $Stage6BlockedFamilies -contains 'tray_presence' -and
-  $Stage6BlockedFamilies -contains 'overlay_window' -and
-  $Stage6BlockedFamilies -contains 'global_hotkey_binding' -and
-  $Stage6BlockedFamilies -contains 'summon_binding' -and
-  $Stage6BlockedFamilies -contains 'authority'
+$Stage6ExpectedBlockedFamilies = [string[]]@(
+  if (-not $ResidentHostSupervisedRuntimeObserved) {
+    'resident_host'
+  }
+  'tray_presence'
+  'overlay_window'
+  'global_hotkey_binding'
+  'summon_binding'
+  'authority'
 )
+$Stage6FamilyProjectionObserved = @($Stage6BlockedFamilies).Count -eq @($Stage6ExpectedBlockedFamilies).Count
+for ($Index = 0; $Index -lt @($Stage6ExpectedBlockedFamilies).Count; $Index++) {
+  if (-not $Stage6FamilyProjectionObserved) {
+    break
+  }
+  if ([string]$Stage6BlockedFamilies[$Index] -ne [string]$Stage6ExpectedBlockedFamilies[$Index]) {
+    $Stage6FamilyProjectionObserved = $false
+  }
+}
 $SideEffectsDenied = (
   [bool](Get-PropertyValue -Payload $SummonPreflightGovernance -Name 'read_only_contract' -Default $false) -and
   -not [bool](Get-PropertyValue -Payload $SummonPreflightGovernance -Name 'execution_authority' -Default $true) -and
@@ -542,6 +590,19 @@ $FirstBlockerFamilyHandoff = if (@($Stage6BlockerFamilyHandoffs).Count -gt 0) {
 } else {
   $null
 }
+$ExpectedFirstBlockerFamily = if (@($Stage6BlockedFamilies).Count -gt 0) {
+  [string]$Stage6BlockedFamilies[0]
+} else {
+  ''
+}
+$ExpectedFirstBlockerFamilyHandoff = if (-not [string]::IsNullOrWhiteSpace($ExpectedFirstBlockerFamily)) {
+  $ExpectedFirstBlockers = ConvertTo-StringArray -Value (
+    Get-PropertyValue -Payload $Stage6BlockerGroups -Name $ExpectedFirstBlockerFamily -Default @()
+  )
+  New-BlockerFamilyHandoff -Family $ExpectedFirstBlockerFamily -Blockers $ExpectedFirstBlockers
+} else {
+  $null
+}
 
 $AllFamilyHandoffsBounded = $true
 foreach ($Handoff in @($Stage6BlockerFamilyHandoffs)) {
@@ -559,16 +620,16 @@ foreach ($Handoff in @($Stage6BlockerFamilyHandoffs)) {
 $FirstBlockerFamilyHandoffObserved = (
   @($Stage6BlockedFamilies).Count -gt 0 -and
   @($Stage6BlockerFamilyHandoffs).Count -eq @($Stage6BlockedFamilies).Count -and
-  [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'id' -Default '') -eq [string]$Stage6BlockedFamilies[0] -and
-  [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'id' -Default '') -eq 'resident_host' -and
-  [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'proof_script' -Default '') -eq 'scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status' -and
-  [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'route' -Default '') -eq '/lens/host' -and
-  [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'readiness_route' -Default '') -eq '/lens/host/runtime-loop/readiness' -and
-  [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'resident_host_runtime_blocker_boundary' -and
-  [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'authority_required' -Default '') -eq 'resident_runtime_execution_authority' -and
+  [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'id' -Default '') -eq $ExpectedFirstBlockerFamily -and
+  [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'proof_script' -Default '') -eq [string](Get-PropertyValue -Payload $ExpectedFirstBlockerFamilyHandoff -Name 'proof_script' -Default '') -and
+  [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'route' -Default '') -eq [string](Get-PropertyValue -Payload $ExpectedFirstBlockerFamilyHandoff -Name 'route' -Default '') -and
+  [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'readiness_route' -Default '') -eq [string](Get-PropertyValue -Payload $ExpectedFirstBlockerFamilyHandoff -Name 'readiness_route' -Default '') -and
+  [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq [string](Get-PropertyValue -Payload $ExpectedFirstBlockerFamilyHandoff -Name 'next_smallest_truthful_gap' -Default '') -and
+  [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'authority_required' -Default '') -eq [string](Get-PropertyValue -Payload $ExpectedFirstBlockerFamilyHandoff -Name 'authority_required' -Default '') -and
   $AllFamilyHandoffsBounded
 )
 $FirstBlockerFamilyCompletionAuditHandoffObserved = (
+  -not $ResidentHostSupervisedRuntimeObserved -and
   [bool](Get-PropertyValue -Payload $LensStatusRead -Name 'ok' -Default $false) -and
   [string](Get-PropertyValue -Payload $Stage6ClosureReadback -Name 'kind' -Default '') -eq 'lens.stage6.closure_readback' -and
   [string](Get-PropertyValue -Payload $SummonAnywhereClosureCriterion -Name 'id' -Default '') -eq 'summon_anywhere' -and
@@ -710,6 +771,23 @@ $Payload = [ordered]@{
   first_blocker_family = if (@($Stage6BlockedFamilies).Count -gt 0) { [string]$Stage6BlockedFamilies[0] } else { '' }
   first_blocker_family_handoff = $FirstBlockerFamilyHandoff
   first_blocker_family_completion_audit_handoff = $FirstBlockerFamilyCompletionAuditHandoff
+  resident_host_supervised_runtime_observed = $ResidentHostSupervisedRuntimeObserved
+  resident_host_supervision_readback = [ordered]@{
+    process_observed = $ResidentHostProcessObserved
+    supervision_gate_observed = $ResidentHostSupervisionGateObserved
+    supervisor_fresh_observed = $ResidentHostSupervisorFreshObserved
+    process_status = [string](Get-PropertyValue -Payload $ResidentHostProcessReadback -Name 'status' -Default '')
+    state_status = [string](Get-PropertyValue -Payload $ResidentHostProcessReadback -Name 'state_status' -Default '')
+    process_alive = [bool](Get-PropertyValue -Payload $ResidentHostProcessReadback -Name 'process_alive' -Default $false)
+    resident_supervised_runtime = [bool](Get-PropertyValue -Payload $ResidentHostSupervisionGate -Name 'resident_supervised_runtime' -Default $false)
+    resident_host_supervised = [bool](Get-PropertyValue -Payload $ResidentHostSupervisionGate -Name 'resident_host_supervised' -Default $false)
+    supervisor_status = [string](Get-PropertyValue -Payload $ResidentHostSupervisorReadback -Name 'status' -Default '')
+    fresh_supervisor_readback = [bool](Get-PropertyValue -Payload $ResidentHostSupervisorReadback -Name 'fresh_readback' -Default (
+        Get-PropertyValue -Payload $ResidentHostSupervisionGate -Name 'fresh_supervisor_readback' -Default $false
+      ))
+    observed_process_alive = [bool](Get-PropertyValue -Payload $ResidentHostSupervisorReadback -Name 'observed_process_alive' -Default $false)
+    observed_pid_matches_host_process = [bool](Get-PropertyValue -Payload $ResidentHostSupervisorReadback -Name 'observed_pid_matches_host_process' -Default $false)
+  }
   blocked_families = [string[]]@($Stage6BlockedFamilies)
   blocked_family_handoffs = @($Stage6BlockerFamilyHandoffs)
   stage6_prerequisite_bringup_plan_observed = $Stage6PrerequisiteBringupPlanObserved
@@ -817,7 +895,7 @@ $Payload = [ordered]@{
     resident_claim_authority = $false
     mutation_authority_granted = $false
   }
-  message = $(if ($Stage6PrerequisiteBringupPlanObserved) { 'Stage 6 summon-anywhere remains blocked; this proof preserves the blocker-family inventory while handing the next concrete step to the governed Stage 6 prerequisite bring-up plan readback.' } else { 'Stage 6 summon-anywhere remains blocked by resident host, tray, overlay, global hotkey binding, summon binding, and authority gaps; this proof is read-only and grants no summon or runtime authority.' })
+  message = $(if ($Stage6PrerequisiteBringupPlanObserved) { 'Stage 6 summon-anywhere remains blocked; this proof preserves the blocker-family inventory while handing the next concrete step to the governed Stage 6 prerequisite bring-up plan readback.' } elseif ($ResidentHostSupervisedRuntimeObserved) { 'Stage 6 summon-anywhere remains blocked by tray, overlay, global hotkey binding, summon binding, and authority gaps; resident host supervision was observed through Lens status readback.' } else { 'Stage 6 summon-anywhere remains blocked by resident host, tray, overlay, global hotkey binding, summon binding, and authority gaps; this proof is read-only and grants no summon or runtime authority.' })
 }
 
 $Payload | ConvertTo-Json -Depth 8

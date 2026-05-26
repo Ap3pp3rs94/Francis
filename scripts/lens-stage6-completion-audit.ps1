@@ -2294,7 +2294,7 @@ foreach ($Handoff in @($SummonAnywhereBlockersProofFamilyHandoffs)) {
     $SummonAnywhereBlockersProofFamilyHandoffsBounded = $false
   }
 }
-$SummonAnywhereBlockersProofFirstFamilyHandoffObserved = (
+$SummonAnywhereBlockersProofFirstFamilyResidentHostObserved = (
   [bool]$SummonAnywhereBlockersProof.first_blocker_family_handoff_observed -and
   [bool]$SummonAnywhereBlockersProofGovernance.first_blocker_family_handoff_readback -and
   $SummonAnywhereBlockersProofFamilyHandoffsAligned -and
@@ -2314,6 +2314,36 @@ $SummonAnywhereBlockersProofFirstFamilyHandoffObserved = (
   -not [bool]$SummonAnywhereBlockersProofFirstFamilyHandoff.would_execute -and
   -not [bool]$SummonAnywhereBlockersProofFirstFamilyHandoff.would_mutate
 )
+$SummonAnywhereBlockersProofResidentHostSupervisedObserved = (
+  [bool]$SummonAnywhereBlockersProof.resident_host_supervised_runtime_observed -and
+  @($SummonAnywhereBlockersProofResidentHostBlockers).Count -eq 0 -and
+  -not ($SummonAnywhereBlockersProofAuthorityBlockers -contains 'local_process_launch_authority_not_granted')
+)
+$SummonAnywhereBlockersProofFirstFamilyTrayObserved = (
+  [bool]$SummonAnywhereBlockersProof.first_blocker_family_handoff_observed -and
+  [bool]$SummonAnywhereBlockersProofGovernance.first_blocker_family_handoff_readback -and
+  $SummonAnywhereBlockersProofFamilyHandoffsAligned -and
+  $SummonAnywhereBlockersProofFamilyHandoffsBounded -and
+  $SummonAnywhereBlockersProofResidentHostSupervisedObserved -and
+  [string]$SummonAnywhereBlockersProofFirstFamilyHandoff.id -eq 'tray_presence' -and
+  [string]$SummonAnywhereBlockersProofFirstFamilyHandoff.status -eq 'blocked' -and
+  [string]$SummonAnywhereBlockersProofFirstFamilyHandoff.proof_script -eq 'scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status' -and
+  [string]$SummonAnywhereBlockersProofFirstFamilyHandoff.route -eq '/lens/tray' -and
+  [string]$SummonAnywhereBlockersProofFirstFamilyHandoff.readiness_route -eq '/lens/tray/readiness' -and
+  [string]$SummonAnywhereBlockersProofFirstFamilyHandoff.next_step -eq 'run_tray_presence_blocker_proof' -and
+  [string]$SummonAnywhereBlockersProofFirstFamilyHandoff.next_smallest_truthful_gap -eq 'summon_overlay_window_blocker_boundary' -and
+  [string]$SummonAnywhereBlockersProofFirstFamilyHandoff.authority_required -eq 'tray_registration_authority' -and
+  $SummonAnywhereBlockersProofFirstFamilyHandoffBlockers -contains 'tray_host_missing' -and
+  -not [bool]$SummonAnywhereBlockersProofFirstFamilyHandoff.authority_granted -and
+  [bool]$SummonAnywhereBlockersProofFirstFamilyHandoff.read_only_contract -and
+  [bool]$SummonAnywhereBlockersProofFirstFamilyHandoff.diagnostic_only -and
+  -not [bool]$SummonAnywhereBlockersProofFirstFamilyHandoff.would_execute -and
+  -not [bool]$SummonAnywhereBlockersProofFirstFamilyHandoff.would_mutate
+)
+$SummonAnywhereBlockersProofFirstFamilyHandoffObserved = (
+  $SummonAnywhereBlockersProofFirstFamilyResidentHostObserved -or
+  $SummonAnywhereBlockersProofFirstFamilyTrayObserved
+)
 $SummonAnywhereBlockersProofObserved = (
   [int]$SummonAnywhereBlockersProofResult.exit_code -eq 0 -and
   [bool]$SummonAnywhereBlockersProof.ok -and
@@ -2327,14 +2357,24 @@ $SummonAnywhereBlockersProofObserved = (
   [bool]$SummonAnywhereBlockersProof.os_binding_authority_request_readback_observed -and
   [string]$SummonAnywhereBlockersProofAuthorityRequestReadback.authority_required -eq 'os_level_command_palette_binding_authority' -and
   $SummonAnywhereBlockersProofFirstFamilyHandoffObserved -and
-  [string]$SummonAnywhereBlockersProof.first_blocker_family -eq 'resident_host' -and
-  $SummonAnywhereBlockersProofFamilies -contains 'resident_host' -and
+  (
+    (
+      [string]$SummonAnywhereBlockersProof.first_blocker_family -eq 'resident_host' -and
+      $SummonAnywhereBlockersProofFamilies -contains 'resident_host' -and
+      $SummonAnywhereBlockersProofResidentHostBlockers -contains 'local_process_launch_authority_not_granted' -and
+      $SummonAnywhereBlockersProofAuthorityBlockers -contains 'local_process_launch_authority_not_granted'
+    ) -or
+    (
+      [string]$SummonAnywhereBlockersProof.first_blocker_family -eq 'tray_presence' -and
+      $SummonAnywhereBlockersProofResidentHostSupervisedObserved -and
+      -not ($SummonAnywhereBlockersProofFamilies -contains 'resident_host')
+    )
+  ) -and
   $SummonAnywhereBlockersProofFamilies -contains 'tray_presence' -and
   $SummonAnywhereBlockersProofFamilies -contains 'overlay_window' -and
   $SummonAnywhereBlockersProofFamilies -contains 'global_hotkey_binding' -and
   $SummonAnywhereBlockersProofFamilies -contains 'summon_binding' -and
   $SummonAnywhereBlockersProofFamilies -contains 'authority' -and
-  $SummonAnywhereBlockersProofResidentHostBlockers -contains 'local_process_launch_authority_not_granted' -and
   $SummonAnywhereBlockersProofTrayBlockers -contains 'tray_host_missing' -and
   $SummonAnywhereBlockersProofOverlayBlockers -contains 'overlay_window_missing' -and
   $SummonAnywhereBlockersProofGlobalHotkeyBlockers -contains 'global_hotkey_binding_disabled' -and
@@ -2345,7 +2385,6 @@ $SummonAnywhereBlockersProofObserved = (
   $SummonAnywhereBlockersProofAuthorityBlockers -contains 'summon_authority_not_granted' -and
   $SummonAnywhereBlockersProofAuthorityBlockers -contains 'hotkey_registration_authority_not_granted' -and
   $SummonAnywhereBlockersProofAuthorityBlockers -contains 'overlay_control_authority_not_granted' -and
-  $SummonAnywhereBlockersProofAuthorityBlockers -contains 'local_process_launch_authority_not_granted' -and
   [bool]$SummonAnywhereBlockersProofGovernance.diagnostic_only -and
   [bool]$SummonAnywhereBlockersProofGovernance.wraps_summon_preflight -and
   [bool]$SummonAnywhereBlockersProofGovernance.wraps_lens_status -and
@@ -2373,6 +2412,7 @@ $SummonAuthorityBoundaryRequiredBeforeEnable = ConvertTo-StringArray -Value $Sum
 $SummonAuthorityBoundaryBlockers = ConvertTo-StringArray -Value $SummonAuthorityBoundary.blockers
 $SummonAuthorityBoundaryBindingBlockers = ConvertTo-StringArray -Value $SummonAuthorityBoundary.summon_binding_blockers
 $SummonAuthorityBoundaryAuthorityBlockers = ConvertTo-StringArray -Value $SummonAuthorityBoundary.authority_blockers
+$SummonAuthorityResidentHostSupervisedObserved = [bool]$SummonAuthorityBlockerProof.resident_host_supervised_runtime_observed
 $SummonAuthorityBlockerProofObserved = (
   [int]$SummonAuthorityBlockerProofResult.exit_code -eq 0 -and
   [bool]$SummonAuthorityBlockerProof.ok -and
@@ -2399,7 +2439,10 @@ $SummonAuthorityBlockerProofObserved = (
   $SummonAuthorityBlockers -contains 'summon_authority_not_granted' -and
   $SummonAuthorityBlockers -contains 'hotkey_registration_authority_not_granted' -and
   $SummonAuthorityBlockers -contains 'overlay_control_authority_not_granted' -and
-  $SummonAuthorityBlockers -contains 'local_process_launch_authority_not_granted' -and
+  (
+    $SummonAuthorityResidentHostSupervisedObserved -or
+    $SummonAuthorityBlockers -contains 'local_process_launch_authority_not_granted'
+  ) -and
   $DirectSummonPreflightAuthorityBlockers -contains 'summon_authority_not_granted' -and
   $DirectSummonPreflightAuthorityBlockers -contains 'hotkey_registration_authority_not_granted' -and
   $DirectSummonPreflightAuthorityBlockers -contains 'overlay_control_authority_not_granted' -and
@@ -2470,14 +2513,22 @@ $SummonAnywhereFamilyChainProofBlockedFamilies = ConvertTo-StringArray -Value $S
 $SummonAnywhereFamilyChainProofResidentHostBlockers = ConvertTo-StringArray -Value (
   $SummonAnywhereFamilyChainProofResidentHost.blockers
 )
+$SummonAnywhereFamilyChainProofResidentHostResolvedBySupervision = [bool](
+  $SummonAnywhereFamilyChainProof.resident_host_family_resolved_by_supervision
+)
+$SummonAnywhereFamilyChainProofResidentHostSupervisedObserved = [bool](
+  $SummonAnywhereFamilyChainProof.resident_host_supervised_runtime_observed
+)
 $SummonAnywhereFamilyChainProofFinalAuthorityPreviousBindingBlockers = ConvertTo-StringArray -Value (
   $SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.blockers
 )
 $SummonAnywhereFamilyChainProofFinalAuthorityBlockers = ConvertTo-StringArray -Value (
   $SummonAnywhereFamilyChainProofFinalAuthority.blockers
 )
-$ExpectedSummonAnywhereFamilyChain = @(
-  'resident_host',
+$ExpectedSummonAnywhereFamilyChain = [string[]]@(
+  if (-not $SummonAnywhereFamilyChainProofResidentHostResolvedBySupervision) {
+    'resident_host'
+  }
   'tray_presence',
   'overlay_window',
   'global_hotkey_binding',
@@ -2527,23 +2578,38 @@ $SummonAnywhereFamilyChainProofObserved = (
   [bool]$SummonAnywhereFamilyChainProof.all_summon_blocker_families_consumed -and
   [bool]$SummonAnywhereFamilyChainProof.handoff_aligned -and
   [bool]$SummonAnywhereFamilyChainProof.side_effects_denied -and
-  [string]$SummonAnywhereFamilyChainProof.first_blocker_family -eq 'resident_host' -and
+  [string]$SummonAnywhereFamilyChainProof.first_blocker_family -eq [string]$ExpectedSummonAnywhereFamilyChain[0] -and
   $SummonAnywhereFamilyChainBlockedFamiliesAligned -and
-  [string]$SummonAnywhereFamilyChainProofResidentHost.handoff_source -eq 'summon_anywhere_blockers_first_family_handoff' -and
-  [string]$SummonAnywhereFamilyChainProofResidentHost.id -eq 'resident_host' -and
-  [string]$SummonAnywhereFamilyChainProofResidentHost.status -eq 'blocked' -and
-  [string]$SummonAnywhereFamilyChainProofResidentHost.proof_script -eq 'scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status' -and
-  [string]$SummonAnywhereFamilyChainProofResidentHost.route -eq '/lens/host' -and
-  [string]$SummonAnywhereFamilyChainProofResidentHost.readiness_route -eq '/lens/host/runtime-loop/readiness' -and
-  [string]$SummonAnywhereFamilyChainProofResidentHost.next_step -eq 'run_resident_host_blocker_proof' -and
-  [string]$SummonAnywhereFamilyChainProofResidentHost.next_smallest_truthful_gap -eq 'resident_host_runtime_blocker_boundary' -and
-  [string]$SummonAnywhereFamilyChainProofResidentHost.authority_required -eq 'resident_runtime_execution_authority' -and
+  (
+    (
+      -not $SummonAnywhereFamilyChainProofResidentHostResolvedBySupervision -and
+      [string]$SummonAnywhereFamilyChainProofResidentHost.handoff_source -eq 'summon_anywhere_blockers_first_family_handoff' -and
+      [string]$SummonAnywhereFamilyChainProofResidentHost.id -eq 'resident_host' -and
+      [string]$SummonAnywhereFamilyChainProofResidentHost.status -eq 'blocked' -and
+      [string]$SummonAnywhereFamilyChainProofResidentHost.proof_script -eq 'scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status' -and
+      [string]$SummonAnywhereFamilyChainProofResidentHost.route -eq '/lens/host' -and
+      [string]$SummonAnywhereFamilyChainProofResidentHost.readiness_route -eq '/lens/host/runtime-loop/readiness' -and
+      [string]$SummonAnywhereFamilyChainProofResidentHost.next_step -eq 'run_resident_host_blocker_proof' -and
+      [string]$SummonAnywhereFamilyChainProofResidentHost.next_smallest_truthful_gap -eq 'resident_host_runtime_blocker_boundary' -and
+      [string]$SummonAnywhereFamilyChainProofResidentHost.authority_required -eq 'resident_runtime_execution_authority' -and
+      $SummonAnywhereFamilyChainProofResidentHostBlockers -contains 'local_process_launch_authority_not_granted'
+    ) -or
+    (
+      $SummonAnywhereFamilyChainProofResidentHostResolvedBySupervision -and
+      $SummonAnywhereFamilyChainProofResidentHostSupervisedObserved -and
+      [string]$SummonAnywhereFamilyChainProofResidentHost.handoff_source -eq 'summon_anywhere_blockers.resident_host_supervised_runtime_observed' -and
+      [string]$SummonAnywhereFamilyChainProofResidentHost.id -eq 'resident_host' -and
+      [string]$SummonAnywhereFamilyChainProofResidentHost.status -eq 'resolved_by_supervision' -and
+      [string]$SummonAnywhereFamilyChainProofResidentHost.next_smallest_truthful_gap -eq 'summon_tray_presence_blocker_boundary' -and
+      [string]$SummonAnywhereFamilyChainProofResidentHost.authority_required -eq 'none_readback_only' -and
+      @($SummonAnywhereFamilyChainProofResidentHostBlockers).Count -eq 0
+    )
+  ) -and
   -not [bool]$SummonAnywhereFamilyChainProofResidentHost.authority_granted -and
   [bool]$SummonAnywhereFamilyChainProofResidentHost.read_only_contract -and
   [bool]$SummonAnywhereFamilyChainProofResidentHost.diagnostic_only -and
   -not [bool]$SummonAnywhereFamilyChainProofResidentHost.would_execute -and
   -not [bool]$SummonAnywhereFamilyChainProofResidentHost.would_mutate -and
-  $SummonAnywhereFamilyChainProofResidentHostBlockers -contains 'local_process_launch_authority_not_granted' -and
   [string]$SummonAnywhereFamilyChainProofFinalAuthority.previous_summon_blocker_family -eq 'summon_binding' -and
   [string]$SummonAnywhereFamilyChainProofFinalAuthority.summon_authority_blocker_family -eq 'authority' -and
   [string]$SummonAnywhereFamilyChainProofFinalAuthority.next_summon_blocker_family -eq 'stage6_lens_completion_audit' -and
@@ -3758,6 +3824,53 @@ if (
   $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
   $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
 } elseif (
+  $NextSmallestTruthfulGap -eq 'resident_host_process_not_supervised' -and
+  $ProcessSupervisionBoundaryObserved -and
+  [bool]$ProcessSupervisionBoundary.authority_granted -and
+  [bool]$ProcessSupervisionBoundary.process_supervision_authority_granted -and
+  -not [bool]$ProcessSupervisionBoundary.resident_host_supervised
+) {
+  $RecommendedHandoffSource = 'stage6_resident_host_supervised_start_required'
+  $RecommendedHandoff = [ordered]@{
+    status = 'execution_handoff_ready'
+    previous_next_smallest_truthful_gap = 'resident_host_process_not_supervised'
+    consumed_process_supervision_boundary_observed = $ProcessSupervisionBoundaryObserved
+    consumed_process_supervision_boundary_next_smallest_truthful_gap = [string]$ProcessSupervisionBoundary.next_smallest_truthful_gap
+    next_smallest_truthful_gap = 'resident_host_process_not_supervised'
+    next_step = 'start_supervised_resident_host_after_authority_grants'
+    proof_script = 'scripts/lens-host-supervisor.ps1 -Mode StartResident'
+    route = '/lens/host/supervision'
+    readiness_route = '/lens/host/supervision/authority/readiness'
+    resident_start_script = 'scripts/lens-host-supervisor.ps1 -Mode StartResident'
+    resident_stop_script = 'scripts/lens-host-supervisor.ps1 -Mode StopResident'
+    acceptance_criterion = 'system_resident_presence'
+    authority_required = 'resident_runtime_execution_and_host_supervision_authority'
+    authority_granted = $true
+    active_host_supervision_authority_grant_receipt_id = [string]$ProcessSupervisionBoundary.active_host_supervision_authority_grant_receipt_id
+    process_supervision_authority_required = [string]$ProcessSupervisionBoundary.process_supervision_authority_required
+    process_supervision_authority_granted = [bool]$ProcessSupervisionBoundary.process_supervision_authority_granted
+    resident_host_supervised = [bool]$ProcessSupervisionBoundary.resident_host_supervised
+    supervision_ready = [bool]$ProcessSupervisionBoundary.supervision_ready
+    ready_for_resident_claim = [bool]$ProcessSupervisionBoundary.ready_for_resident_claim
+    resident_claim_allowed = [bool]$ProcessSupervisionBoundary.resident_claim_allowed
+    read_only_contract = $false
+    diagnostic_only = $true
+    would_execute = $true
+    would_mutate = $true
+    would_launch_process = $true
+    would_supervise_process = $true
+    would_restart_process = $false
+    would_install_service = $false
+    would_start_service = $false
+    would_write_memory = $false
+    would_claim_resident = $false
+    would_decide_approval = $false
+    blockers = [string[]]@($ProcessSupervisionBoundaryBlockers)
+  }
+  $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
+  $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
+  $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
+} elseif (
   $NextSmallestTruthfulGap -eq 'summon_anywhere_blockers' -and
   $Stage6CompletionReviewed -and
   -not $ReadyToClose -and
@@ -4409,6 +4522,18 @@ if (
   @('resident_surface_runtime_not_supervised', 'resident_surface_operator_experience_proof') -contains $NextSmallestTruthfulGap -and
   $BlockedCriterionIds -contains 'helpful_not_noisy'
 ) {
+  $HelpfulNotNoisyHostSupervisionAuthorityHandoffObserved = (
+    $ResidentSurfaceRuntimeProofObserved -and
+    $ResidentSurfaceRuntimeSupervisionHandoffObserved -and
+    $HostSupervisionAuthorityReadinessHandoffObserved -and
+    [string]$HostSupervisionAuthorityReadinessFirstBlockedRequirement -eq 'exact_supervision_authority_approval' -and
+    [string]$HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff.id -eq 'exact_supervision_authority_approval' -and
+    [string]$HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff.next_step -eq 'create_or_select_exact_approved_host_supervision_authority_request' -and
+    [string]$HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff.authority_required -eq 'operator_approval' -and
+    -not [bool]$HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff.authority_granted -and
+    -not [bool]$HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff.would_execute -and
+    -not [bool]$HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff.would_mutate
+  )
   $RecommendedHandoffSource = if (
     $NextSmallestTruthfulGap -eq 'resident_surface_operator_experience_proof' -and
     $ResidentSurfaceRuntimeSupervisionHandoffObserved
@@ -4419,6 +4544,10 @@ if (
     $ResidentRuntimeAuthorityGrantReadinessHandoffObserved
   ) {
     'stage6_helpful_not_noisy_runtime_authority_readiness_handoff'
+  } elseif (
+    $HelpfulNotNoisyHostSupervisionAuthorityHandoffObserved
+  ) {
+    'stage6_helpful_not_noisy_host_supervision_authority_readiness_handoff'
   } else {
     'stage6_helpful_not_noisy_resident_surface_runtime_handoff'
   }
@@ -4440,6 +4569,16 @@ if (
     $HelpfulNotNoisyAuthorityRequired = [string]$ResidentRuntimeAuthorityGrantReadinessFirstBlockedRequirementHandoff.authority_required
     $HelpfulNotNoisyFirstBlockedRequirement = [string]$ResidentRuntimeAuthorityGrantReadinessFirstBlockedRequirement
     $HelpfulNotNoisyFirstBlockedRequirementHandoff = $ResidentRuntimeAuthorityGrantReadinessFirstBlockedRequirementHandoff
+  } elseif (
+    $HelpfulNotNoisyHostSupervisionAuthorityHandoffObserved
+  ) {
+    $HelpfulNotNoisyNextStep = [string]$HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff.next_step
+    $HelpfulNotNoisyProofScript = 'scripts/lens-host-runtime-loop-readiness-proof.ps1 -Mode Status'
+    $HelpfulNotNoisyRoute = [string]$HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff.route
+    $HelpfulNotNoisyReadinessRoute = [string]$HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff.readiness_route
+    $HelpfulNotNoisyAuthorityRequired = [string]$HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff.authority_required
+    $HelpfulNotNoisyFirstBlockedRequirement = [string]$HostSupervisionAuthorityReadinessFirstBlockedRequirement
+    $HelpfulNotNoisyFirstBlockedRequirementHandoff = $HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff
   } elseif (
     $ResidentSurfaceRuntimeProofObserved -and
     $ResidentSurfaceRuntimeSupervisionHandoffObserved
@@ -4474,8 +4613,14 @@ if (
     authority_granted = $false
     resident_runtime_authority_grant_readiness_observed = $ResidentRuntimeAuthorityGrantReadinessHandoffObserved
     resident_runtime_authority_grant_next_smallest_truthful_gap = [string]$ResidentRuntimeAuthorityGrantReadiness.next_smallest_truthful_gap
-    resident_runtime_authority_grant_first_blocked_requirement = $HelpfulNotNoisyFirstBlockedRequirement
-    resident_runtime_authority_grant_first_blocked_requirement_handoff = $HelpfulNotNoisyFirstBlockedRequirementHandoff
+    resident_runtime_authority_grant_first_blocked_requirement = [string]$ResidentRuntimeAuthorityGrantReadinessFirstBlockedRequirement
+    resident_runtime_authority_grant_first_blocked_requirement_handoff = $ResidentRuntimeAuthorityGrantReadinessFirstBlockedRequirementHandoff
+    host_supervision_authority_readiness_observed = $HostSupervisionAuthorityReadinessHandoffObserved
+    host_supervision_authority_first_blocked_requirement = [string]$HostSupervisionAuthorityReadinessFirstBlockedRequirement
+    host_supervision_authority_first_blocked_requirement_handoff = $HostSupervisionAuthorityReadinessFirstBlockedRequirementHandoff
+    host_supervision_authority_handoff_promoted_from_resident_surface = (
+      $RecommendedHandoffSource -eq 'stage6_helpful_not_noisy_host_supervision_authority_readiness_handoff'
+    )
     resident_surface_runtime_supervision_handoff_observed = $ResidentSurfaceRuntimeSupervisionHandoffObserved
     resident_surface_runtime_supervision_handoff_source = $ResidentSurfaceForegroundRuntimeProofRecommendedHandoffSource
     resident_surface_runtime_supervision_handoff = $ResidentSurfaceForegroundRuntimeProofRecommendedHandoff
@@ -4497,7 +4642,8 @@ if (
   if (
     $ResidentSurfaceRuntimeProofObserved -and
     $ResidentSurfaceRuntimeSupervisionHandoffObserved -and
-    -not $ResidentRuntimeAuthorityGrantReadinessHandoffObserved
+    -not $ResidentRuntimeAuthorityGrantReadinessHandoffObserved -and
+    -not $HelpfulNotNoisyHostSupervisionAuthorityHandoffObserved
   ) {
     $RecommendedHandoff = $ResidentSurfaceForegroundRuntimeProofRecommendedHandoff
   }

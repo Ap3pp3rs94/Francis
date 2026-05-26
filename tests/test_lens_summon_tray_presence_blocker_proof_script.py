@@ -153,6 +153,7 @@ def test_lens_summon_tray_presence_blocker_proof_is_readback_only(tmp_path: Path
         "wraps_summon_resident_host_blocker_proof": False,
         "uses_resident_host_family_contract_readback": True,
         "resident_host_contract_readback": True,
+        "resident_host_supervised_runtime_readback": False,
         "wraps_resident_runtime_tray_presence_boundary_proof": True,
         "tray_preflight_readback": True,
         "read_only_contract": True,

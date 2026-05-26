@@ -1205,6 +1205,18 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     assert "$RecommendedHandoffSource = [string]$SummonApiBoundedExecutionProof.recommended_handoff_source" in script
     assert "'stage6_helpful_not_noisy_runtime_authority_readiness_handoff'" in script
     assert "'stage6_helpful_not_noisy_resident_surface_runtime_handoff'" in script
+    assert "'stage6_helpful_not_noisy_host_supervision_authority_readiness_handoff'" in script
+    assert "$HelpfulNotNoisyHostSupervisionAuthorityHandoffObserved = (" in script
+    assert "'create_or_select_exact_approved_host_supervision_authority_request'" in script
+    assert "'scripts/lens-host-runtime-loop-readiness-proof.ps1 -Mode Status'" in script
+    assert "'stage6_resident_host_supervised_start_required'" in script
+    assert "'start_supervised_resident_host_after_authority_grants'" in script
+    assert "'scripts/lens-host-supervisor.ps1 -Mode StartResident'" in script
+    assert "$SummonAnywhereBlockersProofFirstFamilyResidentHostObserved = (" in script
+    assert "$SummonAnywhereBlockersProofResidentHostSupervisedObserved = (" in script
+    assert "$SummonAnywhereBlockersProofFirstFamilyTrayObserved = (" in script
+    assert "[string]$SummonAnywhereBlockersProofFirstFamilyHandoff.id -eq 'tray_presence'" in script
+    assert "[string]$SummonAnywhereBlockersProof.first_blocker_family -eq 'tray_presence'" in script
     assert "'api_resident_runtime_execution_tray_presence_handoff'" in script
     assert "'prove_governed_tray_presence_api_execution_after_resident_supervision'" in script
     assert "'scripts/lens-tray-presence-api-execution-proof.ps1 -Mode Status'" in script
@@ -1271,8 +1283,11 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
         "$ResidentSurfaceForegroundRuntimeProofRecommendedHandoff" in script
     )
     assert "resident_runtime_authority_grant_first_blocked_requirement_handoff" in script
+    assert "host_supervision_authority_handoff_promoted_from_resident_surface" in script
+    assert "host_supervision_authority_first_blocked_requirement_handoff" in script
     assert "$HelpfulNotNoisyProofScript = 'scripts/lens-stage6-checkpoint.ps1 -Mode Status'" in script
     assert "$HelpfulNotNoisyProofScript = 'scripts/lens-resident-surface-proof.ps1 -Mode Status'" in script
+    assert "$HelpfulNotNoisyProofScript = 'scripts/lens-host-runtime-loop-readiness-proof.ps1 -Mode Status'" in script
     assert "proof_script = $HelpfulNotNoisyProofScript" in script
     assert "next_smallest_truthful_gap = 'resident_surface_runtime_not_supervised'" in script
     assert "$Stage6PrerequisiteBringupAppliedEnablementReceiptReviewPending = (" in script

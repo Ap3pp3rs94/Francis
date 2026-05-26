@@ -78,7 +78,9 @@ function Invoke-JsonScript {
     [Parameter(Mandatory = $true)]
     [string]$ScriptPath,
 
-    [string[]]$ScriptArgs = @()
+    [string[]]$ScriptArgs = @(),
+
+    [string]$DataRoot = ''
   )
 
   if (-not (Test-Path -LiteralPath $ScriptPath -PathType Leaf)) {
@@ -89,8 +91,21 @@ function Invoke-JsonScript {
     }
   }
 
-  $Output = & $PowerShellPath -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @ScriptArgs 2>&1
-  $ExitCode = $LASTEXITCODE
+  $HadPreviousDataRoot = Test-Path Env:\FRANCIS_DATA_DIR
+  $PreviousDataRoot = [string]$env:FRANCIS_DATA_DIR
+  try {
+    if (-not [string]::IsNullOrWhiteSpace($DataRoot)) {
+      $env:FRANCIS_DATA_DIR = [System.IO.Path]::GetFullPath($DataRoot)
+    }
+    $Output = & $PowerShellPath -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @ScriptArgs 2>&1
+    $ExitCode = $LASTEXITCODE
+  } finally {
+    if ($HadPreviousDataRoot) {
+      $env:FRANCIS_DATA_DIR = $PreviousDataRoot
+    } else {
+      Remove-Item Env:\FRANCIS_DATA_DIR -ErrorAction SilentlyContinue
+    }
+  }
   $Text = ($Output | ForEach-Object { [string]$_ }) -join "`n"
   $Payload = $null
   try {
@@ -139,8 +154,12 @@ $PowerShell = Get-Command pwsh -ErrorAction SilentlyContinue
 if ($null -eq $PowerShell) {
   $PowerShell = Get-Command powershell -ErrorAction Stop
 }
+$ChildDataRoot = ''
+if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
+  $ChildDataRoot = [System.IO.Path]::GetFullPath($DataDir)
+}
 
-$SummonResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonBlockersScript -ScriptArgs @('-Mode', 'Status')
+$SummonResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonBlockersScript -ScriptArgs @('-Mode', 'Status') -DataRoot $ChildDataRoot
 $SummonPayload = $SummonResult.payload
 $SummonBlockerGroups = Get-PropertyValue -Payload $SummonPayload -Name 'blocker_groups'
 $SummonBlockedFamilies = ConvertTo-StringArray -Value (
@@ -155,8 +174,11 @@ $SummonAuthorityBlockers = ConvertTo-StringArray -Value (
   Get-PropertyValue -Payload $SummonBlockerGroups -Name 'authority' -Default @()
 )
 $SummonGovernance = Get-PropertyValue -Payload $SummonPayload -Name 'governance'
+$ResidentHostSupervisedRuntimeObserved = [bool](
+  Get-PropertyValue -Payload $SummonPayload -Name 'resident_host_supervised_runtime_observed' -Default $false
+)
 
-$SummonPreflightResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonPreflightScript -ScriptArgs @('-Mode', 'Status')
+$SummonPreflightResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonPreflightScript -ScriptArgs @('-Mode', 'Status') -DataRoot $ChildDataRoot
 $SummonPreflightPayload = $SummonPreflightResult.payload
 $SummonPreflightGovernance = Get-PropertyValue -Payload $SummonPreflightPayload -Name 'governance'
 $SummonPreflightGroups = Get-PropertyValue -Payload $SummonPreflightPayload -Name 'blocker_groups'
@@ -177,9 +199,16 @@ $SummonBinding = Get-PropertyValue -Payload $SummonPreflightPayload -Name 'bindi
 $RequiredAuthorityBlockers = @(
   'summon_authority_not_granted',
   'hotkey_registration_authority_not_granted',
+  'overlay_control_authority_not_granted'
+)
+$RequiredDirectAuthorityBlockers = @(
+  'summon_authority_not_granted',
+  'hotkey_registration_authority_not_granted',
   'overlay_control_authority_not_granted',
   'local_process_launch_authority_not_granted'
 )
+$SummonBindingFamilyIndex = [array]::IndexOf([string[]]@($SummonBlockedFamilies), 'summon_binding')
+$SummonAuthorityFamilyIndex = [array]::IndexOf([string[]]@($SummonBlockedFamilies), 'authority')
 
 $SummonAuthorityFamilyObserved = (
   [int]$SummonResult.exit_code -eq 0 -and
@@ -187,9 +216,8 @@ $SummonAuthorityFamilyObserved = (
   [string](Get-PropertyValue -Payload $SummonPayload -Name 'status' -Default '') -eq 'proof_passed' -and
   [string](Get-PropertyValue -Payload $SummonPayload -Name 'acceptance_criterion' -Default '') -eq 'summon_anywhere' -and
   [string](Get-PropertyValue -Payload $SummonPayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'summon_anywhere_blockers' -and
-  @($SummonBlockedFamilies).Count -ge 6 -and
-  [string]$SummonBlockedFamilies[4] -eq 'summon_binding' -and
-  [string]$SummonBlockedFamilies[5] -eq 'authority' -and
+  $SummonBindingFamilyIndex -ge 0 -and
+  $SummonAuthorityFamilyIndex -eq ($SummonBindingFamilyIndex + 1) -and
   ($RequiredAuthorityBlockers | Where-Object { $SummonAuthorityBlockers -notcontains $_ }).Count -eq 0
 )
 $SummonBindingContractReadbackObserved = (
@@ -221,15 +249,19 @@ $SummonPreflightAuthorityObserved = (
   -not [bool](Get-PropertyValue -Payload $SummonBinding -Name 'binding_enabled' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $SummonBinding -Name 'register_hotkey' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $SummonBinding -Name 'startup_register' -Default $true) -and
-  ($RequiredAuthorityBlockers | Where-Object { $SummonPreflightAuthorityBlockers -notcontains $_ }).Count -eq 0 -and
-  ($RequiredAuthorityBlockers | Where-Object { $SummonPreflightBlockers -notcontains $_ }).Count -eq 0
+  ($RequiredDirectAuthorityBlockers | Where-Object { $SummonPreflightAuthorityBlockers -notcontains $_ }).Count -eq 0 -and
+  ($RequiredDirectAuthorityBlockers | Where-Object { $SummonPreflightBlockers -notcontains $_ }).Count -eq 0
 )
 $HandoffAligned = (
   $SummonAuthorityFamilyObserved -and
   $SummonBindingContractReadbackObserved -and
   $SummonPreflightAuthorityObserved -and
   ($RequiredAuthorityBlockers | Where-Object { $SummonAuthorityBlockers -notcontains $_ }).Count -eq 0 -and
-  ($RequiredAuthorityBlockers | Where-Object { $SummonPreflightAuthorityBlockers -notcontains $_ }).Count -eq 0 -and
+  (
+    $ResidentHostSupervisedRuntimeObserved -or
+    $SummonAuthorityBlockers -contains 'local_process_launch_authority_not_granted'
+  ) -and
+  ($RequiredDirectAuthorityBlockers | Where-Object { $SummonPreflightAuthorityBlockers -notcontains $_ }).Count -eq 0 -and
   $SummonPreflightBindingBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
   $SummonPreflightBindingBlockers -contains 'summon_authority_not_granted' -and
   $SummonPreflightRequiredBefore -contains 'summon_binding'
@@ -318,6 +350,7 @@ $Payload = [ordered]@{
   previous_summon_binding_contract_observed = $SummonBindingContractReadbackObserved
   previous_summon_binding_contract_readback_observed = $SummonBindingContractReadbackObserved
   summon_preflight_authority_observed = $SummonPreflightAuthorityObserved
+  resident_host_supervised_runtime_observed = $ResidentHostSupervisedRuntimeObserved
   all_summon_blocker_families_consumed = $HandoffAligned
   handoff_aligned = $HandoffAligned
   side_effects_denied = $SideEffectsDenied

@@ -81,6 +81,21 @@ def test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback() -> N
     assert "Get-Content -LiteralPath $ResolvedCompletionAuditJsonPath -Raw | ConvertFrom-Json" in script
     assert "$Stage6CompletionAuditHelpfulNotNoisyResidentSurfaceRuntimeHandoffObserved = (" in script
     assert "'stage6_helpful_not_noisy_resident_surface_runtime_handoff'" in script
+    assert "$Stage6CompletionAuditHelpfulNotNoisyHostSupervisionAuthorityHandoffObserved = (" in script
+    assert "'stage6_helpful_not_noisy_host_supervision_authority_readiness_handoff'" in script
+    assert "'create_or_select_exact_approved_host_supervision_authority_request'" in script
+    assert "'scripts/lens-host-runtime-loop-readiness-proof.ps1 -Mode Status'" in script
+    assert "stage6_completion_audit_host_supervision_authority_handoff_observed" in script
+    assert "New-HostSupervisionAuthorityRequestOperatorHandoff" in script
+    assert "host_supervision_authority_first_blocked_requirement_handoff" in script
+    assert "'request_host_supervision_authority'" in script
+    assert "$Stage6CompletionAuditResidentHostSupervisedStartHandoffObserved = (" in script
+    assert "'stage6_resident_host_supervised_start_required'" in script
+    assert "'start_supervised_resident_host_after_authority_grants'" in script
+    assert "'scripts/lens-host-supervisor.ps1 -Mode StartResident'" in script
+    assert "stage6_completion_audit_resident_host_supervised_start_handoff_observed" in script
+    assert "script_would_launch_process = $ScriptWouldLaunchProcess" in script
+    assert "script_would_supervise_process = $ScriptWouldSuperviseProcess" in script
     assert "$Stage6CompletionAuditResidentRuntimeTrayPresenceHandoffObserved = (" in script
     assert "'api_resident_runtime_execution_tray_presence_handoff'" in script
     assert "'summon_tray_presence_blocker_boundary'" in script
@@ -1773,6 +1788,199 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     assert resident_surface_checks["stage6_completion_audit_runtime_authority_handoff"]["status"] == (
         "completion_audit_recommended_handoff_consumed"
     )
+
+    host_supervision_audit_json = tmp_path / "stage6-completion-audit-host-supervision-authority.json"
+    host_supervision_handoff = {
+        "id": "exact_supervision_authority_approval",
+        "label": "Exact approved host supervision authority request",
+        "status": "blocked",
+        "route": "/lens/host/supervision/authority/requests",
+        "readiness_route": "/lens/host/supervision/authority/readiness",
+        "request_route": "/lens/host/supervision/authority/request",
+        "requests_route": "/lens/host/supervision/authority/requests",
+        "grant_route": "/lens/host/supervision/authority",
+        "grants_route": "/lens/host/supervision/authority/grants",
+        "denials_route": "/lens/host/supervision/authority/denials",
+        "approval_action": "lens.host.supervision_authority",
+        "next_step": "create_or_select_exact_approved_host_supervision_authority_request",
+        "authority_required": "operator_approval",
+        "authority_granted": False,
+        "blockers": ["approval_id_required"],
+        "would_execute": False,
+        "would_mutate": False,
+    }
+    host_supervision_audit_json.write_text(
+        json.dumps(
+            {
+                "kind": "lens.stage6.completion_audit",
+                "ok": True,
+                "status": "blocked",
+                "audit_status": "complete",
+                "allow_launch_on_hotkey": True,
+                "next_smallest_truthful_gap": "resident_surface_runtime_not_supervised",
+                "recommended_handoff_source": ("stage6_helpful_not_noisy_host_supervision_authority_readiness_handoff"),
+                "recommended_next_slice": ("create_or_select_exact_approved_host_supervision_authority_request"),
+                "recommended_proof_script": "scripts/lens-host-runtime-loop-readiness-proof.ps1 -Mode Status",
+                "authority_required": "operator_approval",
+                "authority_granted": False,
+                "recommended_handoff": {
+                    "status": "authority_readiness_handoff_ready",
+                    "next_smallest_truthful_gap": "resident_surface_runtime_not_supervised",
+                    "next_step": "create_or_select_exact_approved_host_supervision_authority_request",
+                    "proof_script": "scripts/lens-host-runtime-loop-readiness-proof.ps1 -Mode Status",
+                    "route": "/lens/host/supervision/authority/requests",
+                    "readiness_route": "/lens/host/supervision/authority/readiness",
+                    "authority_required": "operator_approval",
+                    "authority_granted": False,
+                    "consumed_resident_surface_foreground_runtime_proof": True,
+                    "host_supervision_authority_readiness_observed": True,
+                    "host_supervision_authority_handoff_promoted_from_resident_surface": True,
+                    "host_supervision_authority_first_blocked_requirement": "exact_supervision_authority_approval",
+                    "host_supervision_authority_first_blocked_requirement_handoff": host_supervision_handoff,
+                    "read_only_contract": True,
+                    "diagnostic_only": True,
+                    "would_execute": False,
+                    "would_mutate": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    host_supervision_proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-CompletionAuditJsonPath",
+        str(host_supervision_audit_json),
+        env=proof_env,
+    )
+
+    assert host_supervision_proc.returncode == 0, host_supervision_proc.stderr or host_supervision_proc.stdout
+    host_supervision_payload = json.loads(host_supervision_proc.stdout)
+    assert host_supervision_payload["recommended_handoff_source"] == (
+        "stage6_helpful_not_noisy_host_supervision_authority_readiness_handoff"
+    )
+    assert host_supervision_payload["recommended_next_slice"] == (
+        "create_or_select_exact_approved_host_supervision_authority_request"
+    )
+    assert host_supervision_payload["recommended_proof_script"] == (
+        "scripts/lens-host-runtime-loop-readiness-proof.ps1 -Mode Status"
+    )
+    assert host_supervision_payload["authority_required"] == "operator_approval"
+    assert host_supervision_payload["stage6_completion_audit_recommended_handoff_consumed"] is True
+    assert host_supervision_payload["stage6_completion_audit_host_supervision_authority_handoff_observed"] is True
+    assert host_supervision_payload["stage6_completion_audit_resident_surface_runtime_handoff_observed"] is False
+    assert host_supervision_payload["recommended_operator_handoff"]["source"] == (
+        "host_supervision_authority_readiness_handoff"
+    )
+    assert host_supervision_payload["recommended_next_operator_action_requirement"] == (
+        "exact_supervision_authority_approval"
+    )
+    assert host_supervision_payload["recommended_next_operator_action"]["id"] == "request_host_supervision_authority"
+    assert host_supervision_payload["recommended_next_operator_action"]["route"] == (
+        "/lens/host/supervision/authority/request"
+    )
+    assert host_supervision_payload["recommended_next_operator_action"]["script_would_execute"] is False
+    assert host_supervision_payload["recommended_next_operator_action"]["script_would_mutate"] is False
+    assert host_supervision_payload["recommended_next_operator_action"]["script_would_request_authority"] is True
+    assert host_supervision_payload["recommended_next_operator_command"]["mode"] == "ApiRequest"
+    assert host_supervision_payload["recommended_next_operator_command"]["route"] == (
+        "/lens/host/supervision/authority/request"
+    )
+    assert host_supervision_payload["recommended_next_operator_command"]["method"] == "POST"
+    assert host_supervision_payload["recommended_next_operator_command"]["requires_confirmation"] is True
+    assert host_supervision_payload["recommended_next_operator_command"]["requires_explicit_operator_opt_in"] is True
+    assert host_supervision_payload["recommended_next_operator_command"]["requires_actor"] is True
+    assert host_supervision_payload["recommended_operator_handoff"]["read_only_status_command"] == (
+        f".\\scripts\\lens-stage6-next-handoff.ps1 -Mode Status -CompletionAuditJsonPath '{host_supervision_audit_json}'"
+    )
+
+    resident_host_start_audit_json = tmp_path / "stage6-completion-audit-resident-host-start.json"
+    resident_host_start_audit_json.write_text(
+        json.dumps(
+            {
+                "kind": "lens.stage6.completion_audit",
+                "ok": True,
+                "status": "blocked",
+                "audit_status": "complete",
+                "allow_launch_on_hotkey": True,
+                "next_smallest_truthful_gap": "resident_host_process_not_supervised",
+                "recommended_handoff_source": "stage6_resident_host_supervised_start_required",
+                "recommended_next_slice": "start_supervised_resident_host_after_authority_grants",
+                "recommended_proof_script": "scripts/lens-host-supervisor.ps1 -Mode StartResident",
+                "authority_required": "resident_runtime_execution_and_host_supervision_authority",
+                "authority_granted": True,
+                "recommended_handoff": {
+                    "status": "execution_handoff_ready",
+                    "previous_next_smallest_truthful_gap": "resident_host_process_not_supervised",
+                    "consumed_process_supervision_boundary_observed": True,
+                    "next_smallest_truthful_gap": "resident_host_process_not_supervised",
+                    "next_step": "start_supervised_resident_host_after_authority_grants",
+                    "proof_script": "scripts/lens-host-supervisor.ps1 -Mode StartResident",
+                    "route": "/lens/host/supervision",
+                    "readiness_route": "/lens/host/supervision/authority/readiness",
+                    "resident_start_script": "scripts/lens-host-supervisor.ps1 -Mode StartResident",
+                    "resident_stop_script": "scripts/lens-host-supervisor.ps1 -Mode StopResident",
+                    "authority_required": "resident_runtime_execution_and_host_supervision_authority",
+                    "authority_granted": True,
+                    "read_only_contract": False,
+                    "diagnostic_only": True,
+                    "would_execute": True,
+                    "would_mutate": True,
+                    "would_launch_process": True,
+                    "would_supervise_process": True,
+                    "would_restart_process": False,
+                    "would_install_service": False,
+                    "would_start_service": False,
+                    "would_write_memory": False,
+                    "would_claim_resident": False,
+                    "would_decide_approval": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    resident_host_start_proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-CompletionAuditJsonPath",
+        str(resident_host_start_audit_json),
+        env=proof_env,
+    )
+
+    assert resident_host_start_proc.returncode == 0, resident_host_start_proc.stderr or resident_host_start_proc.stdout
+    resident_host_start_payload = json.loads(resident_host_start_proc.stdout)
+    assert resident_host_start_payload["recommended_handoff_source"] == (
+        "stage6_resident_host_supervised_start_required"
+    )
+    assert resident_host_start_payload["recommended_next_slice"] == (
+        "start_supervised_resident_host_after_authority_grants"
+    )
+    assert resident_host_start_payload["recommended_proof_script"] == (
+        "scripts/lens-host-supervisor.ps1 -Mode StartResident"
+    )
+    assert resident_host_start_payload["authority_granted"] is True
+    assert resident_host_start_payload["stage6_completion_audit_recommended_handoff_consumed"] is True
+    assert (
+        resident_host_start_payload["stage6_completion_audit_resident_host_supervised_start_handoff_observed"] is True
+    )
+    assert resident_host_start_payload["recommended_next_operator_action"]["id"] == (
+        "start_supervised_resident_host_after_authority_grants"
+    )
+    assert resident_host_start_payload["recommended_next_operator_action"]["script_would_execute"] is True
+    assert resident_host_start_payload["recommended_next_operator_action"]["script_would_mutate"] is True
+    assert resident_host_start_payload["recommended_next_operator_action"]["script_would_launch_process"] is True
+    assert resident_host_start_payload["recommended_next_operator_action"]["script_would_supervise_process"] is True
+    assert resident_host_start_payload["recommended_next_operator_command"] == {
+        "command": ".\\scripts\\lens-host-supervisor.ps1 -Mode StartResident",
+        "mode": "StartResident",
+        "requires_confirmation": False,
+        "requires_explicit_operator_opt_in": True,
+        "requires_actor": False,
+        "requires_approval_id": False,
+        "requires_operator_approval_decision": False,
+    }
 
     summon_launch_audit_json = tmp_path / "stage6-completion-audit-summon-launch-readback.json"
     summon_launch_audit_json.write_text(

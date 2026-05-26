@@ -93,6 +93,8 @@ function Invoke-JsonScript {
 
     [string[]]$ScriptArgs = @(),
 
+    [string]$DataRoot = '',
+
     [int]$TimeoutSeconds = $ChildProofTimeoutSeconds
   )
 
@@ -127,6 +129,9 @@ function Invoke-JsonScript {
   $StartInfo.CreateNoWindow = $true
   $StartInfo.RedirectStandardOutput = $true
   $StartInfo.RedirectStandardError = $true
+  if (-not [string]::IsNullOrWhiteSpace($DataRoot)) {
+    $StartInfo.EnvironmentVariables['FRANCIS_DATA_DIR'] = [System.IO.Path]::GetFullPath($DataRoot)
+  }
 
   $Process = [System.Diagnostics.Process]::new()
   $Process.StartInfo = $StartInfo
@@ -262,19 +267,27 @@ $PowerShell = Get-Command pwsh -ErrorAction SilentlyContinue
 if ($null -eq $PowerShell) {
   $PowerShell = Get-Command powershell -ErrorAction Stop
 }
+$ChildDataRoot = ''
+if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
+  $ChildDataRoot = [System.IO.Path]::GetFullPath($DataDir)
+}
 
-$SummonResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonBlockersScript -ScriptArgs @('-Mode', 'Status')
+$SummonResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonBlockersScript -ScriptArgs @('-Mode', 'Status') -DataRoot $ChildDataRoot
 $SummonPayload = $SummonResult.payload
 $SummonGovernance = Get-PropertyValue -Payload $SummonPayload -Name 'governance'
 $SummonFamilies = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $SummonPayload -Name 'blocked_families' -Default @())
 $SummonHandoffs = Get-PropertyValue -Payload $SummonPayload -Name 'blocked_family_handoffs' -Default @()
 $SummonFirstHandoff = Get-PropertyValue -Payload $SummonPayload -Name 'first_blocker_family_handoff'
+$SummonFirstBlockerFamily = [string](Get-PropertyValue -Payload $SummonPayload -Name 'first_blocker_family' -Default '')
+$ResidentHostSupervisedRuntimeObserved = [bool](
+  Get-PropertyValue -Payload $SummonPayload -Name 'resident_host_supervised_runtime_observed' -Default $false
+)
 
 $AuthorityArgs = @('-Mode', 'Status')
 if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
   $AuthorityArgs += @('-DataDir', $DataDir)
 }
-$AuthorityResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonAuthorityBridgeScript -ScriptArgs $AuthorityArgs
+$AuthorityResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonAuthorityBridgeScript -ScriptArgs $AuthorityArgs -DataRoot $ChildDataRoot
 $AuthorityPayload = $AuthorityResult.payload
 $AuthorityGovernance = Get-PropertyValue -Payload $AuthorityPayload -Name 'governance'
 $AuthorityBlockers = ConvertTo-StringArray -Value (
@@ -293,12 +306,14 @@ $ChildProofRuns = @(
 )
 $ChildProofTimeouts = @($ChildProofRuns | Where-Object { [bool]$_['timed_out'] } | ForEach-Object { [string]$_['name'] })
 
-$ExpectedFamilies = @(
-  'resident_host',
-  'tray_presence',
-  'overlay_window',
-  'global_hotkey_binding',
-  'summon_binding',
+$ExpectedFamilies = [string[]]@(
+  if (-not $ResidentHostSupervisedRuntimeObserved) {
+    'resident_host'
+  }
+  'tray_presence'
+  'overlay_window'
+  'global_hotkey_binding'
+  'summon_binding'
   'authority'
 )
 $FamilyChainObserved = (
@@ -306,7 +321,7 @@ $FamilyChainObserved = (
   [string](Get-PropertyValue -Payload $SummonPayload -Name 'kind' -Default '') -eq 'lens.summon_anywhere_blockers.proof' -and
   [string](Get-PropertyValue -Payload $SummonPayload -Name 'status' -Default '') -eq 'proof_passed' -and
   [bool](Get-PropertyValue -Payload $SummonPayload -Name 'first_blocker_family_handoff_observed' -Default $false) -and
-  [string](Get-PropertyValue -Payload $SummonPayload -Name 'first_blocker_family' -Default '') -eq 'resident_host' -and
+  $SummonFirstBlockerFamily -eq [string]$ExpectedFamilies[0] -and
   [string](Get-PropertyValue -Payload $SummonPayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'summon_anywhere_blockers' -and
   @($SummonFamilies).Count -eq @($ExpectedFamilies).Count -and
   -not @(
@@ -317,7 +332,7 @@ $FamilyChainObserved = (
     }
   )
 )
-$ResidentHostFamilyHandoffObserved = (
+$ResidentHostFamilyHandoffObservedLegacy = (
   [string](Get-PropertyValue -Payload $SummonFirstHandoff -Name 'id' -Default '') -eq 'resident_host' -and
   [string](Get-PropertyValue -Payload $SummonFirstHandoff -Name 'status' -Default '') -eq 'blocked' -and
   [string](Get-PropertyValue -Payload $SummonFirstHandoff -Name 'proof_script' -Default '') -eq 'scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status' -and
@@ -332,6 +347,18 @@ $ResidentHostFamilyHandoffObserved = (
   -not [bool](Get-PropertyValue -Payload $SummonFirstHandoff -Name 'would_execute' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $SummonFirstHandoff -Name 'would_mutate' -Default $true) -and
   $ResidentHostFamilyBlockers -contains 'local_process_launch_authority_not_granted'
+)
+$ResidentHostFamilyResolvedBySupervisionObserved = (
+  $ResidentHostSupervisedRuntimeObserved -and
+  $SummonFirstBlockerFamily -eq 'tray_presence' -and
+  -not ($SummonFamilies -contains 'resident_host') -and
+  @($ResidentHostFamilyBlockers).Count -gt 0 -and
+  [string](Get-PropertyValue -Payload $SummonFirstHandoff -Name 'id' -Default '') -eq 'tray_presence' -and
+  [string](Get-PropertyValue -Payload $SummonFirstHandoff -Name 'proof_script' -Default '') -eq 'scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status'
+)
+$ResidentHostFamilyHandoffObserved = (
+  $ResidentHostFamilyHandoffObservedLegacy -or
+  $ResidentHostFamilyResolvedBySupervisionObserved
 )
 $FinalAuthorityHandoffObserved = (
   [int]$AuthorityResult.exit_code -eq 0 -and
@@ -348,7 +375,10 @@ $FinalAuthorityHandoffObserved = (
   $AuthorityBlockers -contains 'summon_authority_not_granted' -and
   $AuthorityBlockers -contains 'hotkey_registration_authority_not_granted' -and
   $AuthorityBlockers -contains 'overlay_control_authority_not_granted' -and
-  $AuthorityBlockers -contains 'local_process_launch_authority_not_granted'
+  (
+    $ResidentHostSupervisedRuntimeObserved -or
+    $AuthorityBlockers -contains 'local_process_launch_authority_not_granted'
+  )
 )
 $FinalAuthorityPreviousHandoffReadbackObserved = (
   [bool](Get-PropertyValue -Payload $AuthorityPayload -Name 'previous_summon_binding_contract_readback_observed' -Default $false) -and
@@ -402,7 +432,16 @@ $HandoffAligned = (
   $FamilyChainObserved -and
   $ResidentHostFamilyHandoffObserved -and
   $FinalAuthorityHandoffObserved -and
-  [string](Get-PropertyValue -Payload $SummonFirstHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'resident_host_runtime_blocker_boundary' -and
+  (
+    (
+      $ResidentHostFamilyHandoffObservedLegacy -and
+      [string](Get-PropertyValue -Payload $SummonFirstHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'resident_host_runtime_blocker_boundary'
+    ) -or
+    (
+      $ResidentHostFamilyResolvedBySupervisionObserved -and
+      [string](Get-PropertyValue -Payload $SummonFirstHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'summon_overlay_window_blocker_boundary'
+    )
+  ) -and
   [string](Get-PropertyValue -Payload $AuthorityPayload -Name 'summon_next_smallest_truthful_gap' -Default '') -eq 'summon_anywhere_blockers'
 )
 
@@ -463,6 +502,8 @@ $RecommendedHandoff = [ordered]@{
   authority_granted = [bool](Get-PropertyValue -Payload $AuthorityPayload -Name 'authority_granted' -Default $false)
   family_chain_observed = $FamilyChainObserved
   resident_host_family_handoff_observed = $ResidentHostFamilyHandoffObserved
+  resident_host_family_resolved_by_supervision = $ResidentHostFamilyResolvedBySupervisionObserved
+  resident_host_supervised_runtime_observed = $ResidentHostSupervisedRuntimeObserved
   final_summon_authority_handoff_observed = $FinalAuthorityHandoffObserved
   final_summon_authority_contract_readback_observed = $FinalAuthorityPreviousHandoffReadbackObserved
   all_summon_blocker_families_consumed = $HandoffAligned
@@ -473,24 +514,24 @@ $RecommendedHandoff = [ordered]@{
   child_proof_runs = @($ChildProofRuns)
   blocked_families = [string[]]@($SummonFamilies)
   blocked_family_handoffs = @($SummonHandoffs)
-  first_blocker_family = [string](Get-PropertyValue -Payload $SummonPayload -Name 'first_blocker_family' -Default '')
+  first_blocker_family = $SummonFirstBlockerFamily
   first_blocker_family_handoff = $SummonFirstHandoff
   resident_host = [ordered]@{
-    handoff_source = 'summon_anywhere_blockers_first_family_handoff'
-    id = [string](Get-PropertyValue -Payload $SummonFirstHandoff -Name 'id' -Default '')
-    status = [string](Get-PropertyValue -Payload $SummonFirstHandoff -Name 'status' -Default '')
-    proof_script = [string](Get-PropertyValue -Payload $SummonFirstHandoff -Name 'proof_script' -Default '')
-    route = [string](Get-PropertyValue -Payload $SummonFirstHandoff -Name 'route' -Default '')
-    readiness_route = [string](Get-PropertyValue -Payload $SummonFirstHandoff -Name 'readiness_route' -Default '')
-    next_step = [string](Get-PropertyValue -Payload $SummonFirstHandoff -Name 'next_step' -Default '')
-    next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $SummonFirstHandoff -Name 'next_smallest_truthful_gap' -Default '')
-    authority_required = [string](Get-PropertyValue -Payload $SummonFirstHandoff -Name 'authority_required' -Default '')
-    authority_granted = [bool](Get-PropertyValue -Payload $SummonFirstHandoff -Name 'authority_granted' -Default $false)
-    read_only_contract = [bool](Get-PropertyValue -Payload $SummonFirstHandoff -Name 'read_only_contract' -Default $false)
-    diagnostic_only = [bool](Get-PropertyValue -Payload $SummonFirstHandoff -Name 'diagnostic_only' -Default $false)
-    would_execute = [bool](Get-PropertyValue -Payload $SummonFirstHandoff -Name 'would_execute' -Default $false)
-    would_mutate = [bool](Get-PropertyValue -Payload $SummonFirstHandoff -Name 'would_mutate' -Default $false)
-    blockers = [string[]]@($ResidentHostFamilyBlockers)
+    handoff_source = $(if ($ResidentHostFamilyResolvedBySupervisionObserved) { 'summon_anywhere_blockers.resident_host_supervised_runtime_observed' } else { 'summon_anywhere_blockers_first_family_handoff' })
+    id = 'resident_host'
+    status = $(if ($ResidentHostFamilyResolvedBySupervisionObserved) { 'resolved_by_supervision' } else { [string](Get-PropertyValue -Payload $SummonFirstHandoff -Name 'status' -Default '') })
+    proof_script = $(if ($ResidentHostFamilyResolvedBySupervisionObserved) { 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status' } else { [string](Get-PropertyValue -Payload $SummonFirstHandoff -Name 'proof_script' -Default '') })
+    route = '/lens/host'
+    readiness_route = '/lens/host/runtime-loop/readiness'
+    next_step = $(if ($ResidentHostFamilyResolvedBySupervisionObserved) { 'resident_host_supervised_runtime_observed' } else { [string](Get-PropertyValue -Payload $SummonFirstHandoff -Name 'next_step' -Default '') })
+    next_smallest_truthful_gap = $(if ($ResidentHostFamilyResolvedBySupervisionObserved) { 'summon_tray_presence_blocker_boundary' } else { [string](Get-PropertyValue -Payload $SummonFirstHandoff -Name 'next_smallest_truthful_gap' -Default '') })
+    authority_required = $(if ($ResidentHostFamilyResolvedBySupervisionObserved) { 'none_readback_only' } else { [string](Get-PropertyValue -Payload $SummonFirstHandoff -Name 'authority_required' -Default '') })
+    authority_granted = $(if ($ResidentHostFamilyResolvedBySupervisionObserved) { $false } else { [bool](Get-PropertyValue -Payload $SummonFirstHandoff -Name 'authority_granted' -Default $false) })
+    read_only_contract = $true
+    diagnostic_only = $true
+    would_execute = $false
+    would_mutate = $false
+    blockers = [string[]]@($(if ($ResidentHostFamilyResolvedBySupervisionObserved) { @() } else { $ResidentHostFamilyBlockers }))
   }
   final_authority = [ordered]@{
     previous_summon_blocker_family = [string](Get-PropertyValue -Payload $AuthorityPayload -Name 'previous_summon_blocker_family' -Default '')
