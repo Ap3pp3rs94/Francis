@@ -39,6 +39,14 @@ def _run_script(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def test_lens_resident_host_plan_consumption_retries_stale_plan_readback() -> None:
+    script = (_repo_root() / "scripts" / "lens-resident-host-plan-consumption-proof.ps1").read_text(encoding="utf-8")
+
+    assert "$PlanRetryAttempted" in script
+    assert "persistent-supervision-plan-retry" in script
+    assert "initial_plan_still_reported_resident_host_process_missing" in script
+
+
 def test_lens_resident_host_plan_consumption_proof_moves_handoff_to_tray_presence() -> None:
     if platform.system() != "Windows":
         pytest.skip("Live resident host plan-consumption proof is Windows-hosted.")
@@ -56,6 +64,18 @@ def test_lens_resident_host_plan_consumption_proof_moves_handoff_to_tray_presenc
     assert payload["live_resident_host_observed"] is True
     assert payload["persistent_supervision_plan_consumed_live_resident_host"] is True
     assert payload["resident_dependency_ready"] is True
+    assert payload["plan_retry_attempted"] in {True, False}
+    if payload["plan_retry_attempted"]:
+        assert payload["plan_retry_reason"] in {
+            "initial_plan_still_reported_resident_host_process_missing",
+            "initial_plan_did_not_consume_supervised_resident_host",
+        }
+    else:
+        assert payload["plan_retry_reason"] == ""
+    assert payload["initial_plan_next_smallest_truthful_gap"] in {
+        "persistent_supervision_required_prerequisites_missing",
+        "summon_tray_presence_blocker_boundary",
+    }
     assert payload["first_missing_required_before_enable"] == "tray_presence"
     assert payload["missing_required_before_enable"] == [
         "tray_presence",

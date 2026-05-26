@@ -39282,6 +39282,50 @@ Latest validation for Stage 6 launch-audit concrete handoff precedence:
   -q --tb=short`
   Result: `passed`
 
+### 2026-05-26 - Stage 6 resident-host plan consumption retry hardening
+
+Roadmap area: Stage 6 / Lens MVP, resident-host plan-consumption proof and CI
+truthfulness.
+
+Material change:
+
+- `scripts/lens-resident-host-plan-consumption-proof.ps1` now performs one
+  bounded retry of the persistent-supervision plan readback when a freshly
+  started supervised resident host is observed but the first plan readback has
+  not consumed that supervised resident-host state.
+- The retry is explicit in the proof payload through `plan_retry_attempted`,
+  `plan_retry_reason`, `initial_plan_first_missing_required_before_enable`, and
+  `initial_plan_next_smallest_truthful_gap`.
+- This does not make missing resident-host evidence pass. If the retry still
+  reports `resident_host_process` as missing, the proof remains `proof_failed`.
+- This addresses the Windows 3.13 CI failure in run `26480261990`, where
+  `StartResident` returned `resident_supervised_runtime=true` but the immediate
+  plan readback still reported `first_missing_required_before_enable=resident_host_process`.
+- Stage 6 still does not close and Stage 7 does not start.
+
+Latest validation for Stage 6 resident-host plan consumption retry hardening:
+
+- PowerShell AST parse of
+  `scripts\lens-resident-host-plan-consumption-proof.ps1`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-resident-host-plan-consumption-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed; live_resident_host_observed=true;
+  persistent_supervision_plan_consumed_live_resident_host=true;
+  resident_dependency_ready=true; plan_retry_attempted=false;
+  first_missing_required_before_enable=tray_presence;
+  next_smallest_truthful_gap=tray_presence; stop_observed=true;
+  data_root_removed=true`
+- `python -m ruff check
+  tests/test_lens_resident_host_plan_consumption_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests/test_lens_resident_host_plan_consumption_proof_script.py`
+  Result: `passed`
+- `python -m pytest
+  tests/test_lens_resident_host_plan_consumption_proof_script.py -q --tb=short`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

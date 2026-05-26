@@ -164,6 +164,9 @@ New-Item -ItemType Directory -Force -Path $DataRoot | Out-Null
 
 $StartResult = $null
 $PlanResult = $null
+$PlanInitialResult = $null
+$PlanRetryAttempted = $false
+$PlanRetryReason = ''
 $StopResult = $null
 $DataRootRemoved = $false
 
@@ -183,6 +186,59 @@ try {
     -DataRootEnv $DataRoot `
     -RunRoot $DataRoot `
     -Name 'persistent-supervision-plan'
+  $PlanInitialResult = $PlanResult
+
+  $InitialStartPayload = Get-PropertyValue -Payload $StartResult -Name 'payload'
+  $InitialPlanPayload = Get-PropertyValue -Payload $PlanResult -Name 'payload'
+  $InitialPlanDependencies = @(Get-PropertyValue -Payload $InitialPlanPayload -Name 'enablement_dependency_readback' -Default @())
+  $InitialResidentDependency = @(
+    $InitialPlanDependencies |
+      Where-Object { [string](Get-PropertyValue -Payload $_ -Name 'id' -Default '') -eq 'resident_host_process' } |
+      Select-Object -First 1
+  )
+  $InitialMissingRequired = ConvertTo-StringArray -Value (
+    Get-PropertyValue -Payload $InitialPlanPayload -Name 'missing_required_before_enable' -Default @()
+  )
+  $InitialFirstMissing = [string](
+    Get-PropertyValue -Payload $InitialPlanPayload -Name 'first_missing_required_before_enable' -Default ''
+  )
+  $InitialStartObserved = (
+    [int](Get-PropertyValue -Payload $StartResult -Name 'exit_code' -Default 1) -eq 0 -and
+    [string](Get-PropertyValue -Payload $InitialStartPayload -Name 'status' -Default '') -in @('resident_supervision_started', 'resident_supervision_already_running') -and
+    [bool](Get-PropertyValue -Payload $InitialStartPayload -Name 'resident_host_process' -Default $false) -and
+    [bool](Get-PropertyValue -Payload $InitialStartPayload -Name 'resident_supervised_runtime' -Default $false)
+  )
+  $InitialResidentDependencyReady = (
+    $InitialResidentDependency.Count -gt 0 -and
+    [bool](Get-PropertyValue -Payload $InitialResidentDependency[0] -Name 'ready' -Default $false) -and
+    [string](Get-PropertyValue -Payload $InitialResidentDependency[0] -Name 'status' -Default '') -eq 'ready' -and
+    [bool](Get-PropertyValue -Payload $InitialResidentDependency[0] -Name 'resident_supervised_runtime' -Default $false) -and
+    [bool](Get-PropertyValue -Payload $InitialResidentDependency[0] -Name 'process_alive' -Default $false)
+  )
+  $InitialPlanConsumedLiveResidentHost = (
+    [int](Get-PropertyValue -Payload $PlanResult -Name 'exit_code' -Default 1) -eq 0 -and
+    [string](Get-PropertyValue -Payload $InitialPlanPayload -Name 'status' -Default '') -eq 'blocked' -and
+    $InitialResidentDependencyReady -and
+    $InitialFirstMissing -eq 'tray_presence' -and
+    -not ($InitialMissingRequired -contains 'resident_host_process')
+  )
+
+  if ($InitialStartObserved -and -not $InitialPlanConsumedLiveResidentHost) {
+    $PlanRetryAttempted = $true
+    $PlanRetryReason = if ($InitialFirstMissing -eq 'resident_host_process') {
+      'initial_plan_still_reported_resident_host_process_missing'
+    } else {
+      'initial_plan_did_not_consume_supervised_resident_host'
+    }
+    Start-Sleep -Milliseconds 1000
+    $PlanResult = Invoke-JsonScript `
+      -PowerShellPath $PowerShellPath `
+      -ScriptPath $PlanPath `
+      -ArgumentList @('-Mode', 'Status') `
+      -DataRootEnv $DataRoot `
+      -RunRoot $DataRoot `
+      -Name 'persistent-supervision-plan-retry'
+  }
 } finally {
   try {
     $StopResult = Invoke-JsonScript `
@@ -299,6 +355,20 @@ $Payload = [ordered]@{
   live_resident_host_observed = $LiveResidentHostObserved
   persistent_supervision_plan_consumed_live_resident_host = $PlanConsumedLiveResidentHost
   resident_dependency_ready = $ResidentDependencyReady
+  plan_retry_attempted = $PlanRetryAttempted
+  plan_retry_reason = $PlanRetryReason
+  initial_plan_first_missing_required_before_enable = [string](
+    Get-PropertyValue `
+      -Payload (Get-PropertyValue -Payload $PlanInitialResult -Name 'payload') `
+      -Name 'first_missing_required_before_enable' `
+      -Default ''
+  )
+  initial_plan_next_smallest_truthful_gap = [string](
+    Get-PropertyValue `
+      -Payload (Get-PropertyValue -Payload $PlanInitialResult -Name 'payload') `
+      -Name 'next_smallest_truthful_gap' `
+      -Default ''
+  )
   first_missing_required_before_enable = $FirstMissing
   missing_required_before_enable = $MissingRequired
   next_smallest_truthful_gap = $NextGap
