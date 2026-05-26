@@ -38822,6 +38822,142 @@ Latest validation for stale completion-audit receipt handoff guard:
   recommended_next_slice=create_or_select_exact_approved_resident_runtime_execution_authority_request;
   authority_required=operator_approval`
 
+### 2026-05-26 - Stage 6 checkpoint runtime proof-chain handoff
+
+Roadmap area: Stage 6 / Lens MVP, governed resident-runtime audit
+truthfulness.
+
+Material change:
+
+- The Stage 6 checkpoint now recognizes the full resident-runtime authority
+  family proof chain before falling back to the older host-supervision readiness
+  spine selector.
+- This prevents `scripts\lens-stage6-checkpoint.ps1 -Mode Status` from
+  re-reporting the stale `supervised_resident_host_runtime_authority_boundary`
+  gap after the resident-runtime grant/readback and all resident-runtime
+  authority-family child proofs are already observed.
+- The live local evidence now has active authority receipts for the current
+  Stage 6 runtime audit path: resident-runtime grant receipt
+  `lrag_1779763171_c482004ffaef` and host-supervision authority receipt
+  `lhsag_1779764719_58e398bef71d`.
+- Stage 6 still does not close and Stage 7 does not start. The checkpoint
+  remains `status=blocked`, `ready_to_close=false`, and `2/5` criteria ready;
+  it now hands back to `stage6_lens_completion_audit` instead of a stale
+  authority-boundary label. This change does not launch, supervise, install,
+  register, claim resident status, write memory, or grant new authority.
+
+Latest validation for Stage 6 checkpoint runtime proof-chain handoff:
+
+- PowerShell AST parse of `scripts\lens-stage6-checkpoint.ps1`
+  Result: `passed`
+- `python -m ruff check tests/test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_stage6_checkpoint_script.py`
+  Result: `passed; already formatted`
+- `python -m pytest tests/test_lens_stage6_checkpoint_script.py -q
+  --tb=short`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-checkpoint.ps1 -Mode Status`
+  Result: `passed; status=blocked; ready_to_close=false; criteria=2/5;
+  resident_runtime_execution_authority_grant_receipt_readback_observed=true;
+  resident-runtime authority-family proof chain observed=true;
+  next_smallest_truthful_gap=stage6_lens_completion_audit`
+- `git diff --check`
+  Result: `passed; Git reported the expected LF-to-CRLF warning for the touched
+  PowerShell script`
+
+### 2026-05-26 - Stage 6 runtime-readback handoff truth fixes
+
+Roadmap area: Stage 6 / Lens MVP, governed summon-anywhere/runtime audit
+truthfulness.
+
+Material change:
+
+- The Stage 6 checkpoint now accepts the OS binding authority-request readback
+  after the matching command-palette binding authority has been granted, while
+  still requiring the readback surface to remain non-executing: it must not open
+  the palette, register a hotkey, launch a process, control overlay, write
+  memory, decide approval, or claim resident state.
+- The Stage 6 next-handoff proof now consumes a supplied completion audit that
+  already opted into launch-on-hotkey runtime readback and proved
+  `summon_anywhere=true`, instead of re-requesting the same audit. This preserves
+  the explicit opt-in boundary while preventing a stale rerun handoff loop.
+- The local Stage 6 runtime evidence now includes the following bounded receipts
+  from the current bring-up path: resident-runtime grant
+  `lrag_1779763171_c482004ffaef`, host-supervision grant
+  `lhsag_1779764719_58e398bef71d`, supervised resident-host execution
+  `lhse_1779766877_fd9f0c54e30e`, tray authority/execution
+  `ltpag_1779767028_9adc99005881` / `ltpe_1779767070_37fd50e11409`,
+  OS binding authority/execution `losbag_1779767029_357db683470d` /
+  `losbe_1779768862_edfaf03b53c0`, overlay authority/execution
+  `lowag_1779767028_f58f17f72177` / `lowe_1779768877_051db02862ef`, and
+  summon authority/execution `lsag_1779767028_868528f566b9` /
+  `lsae_1779768899_3e5666ab1b4f`.
+- Stage 6 still does not close and Stage 7 does not start. The latest
+  launch-on-hotkey completion audit is complete, reviewed, and has no child
+  proof failures/timeouts, but it still returns `ready_to_close=false`,
+  `can_close_stage6=false`, `transition_allowed=false`, and
+  `next_smallest_truthful_gap=summon_anywhere_blockers`.
+
+Latest validation for Stage 6 runtime-readback handoff truth fixes:
+
+- PowerShell AST parse of `scripts\lens-stage6-checkpoint.ps1`
+  Result: `passed`
+- PowerShell AST parse of `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed`
+- `python -m ruff check tests/test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `python -m pytest tests/test_lens_stage6_checkpoint_script.py -q
+  --tb=short`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-checkpoint.ps1 -Mode Status`
+  Result: `passed; status=blocked; ready_to_close=false; criteria=2/5;
+  os_binding_authority_request_readback.status=authority_granted;
+  os_binding_authority_request_readback.ok=true;
+  os_binding_authority_request_readback_observed=true;
+  next_smallest_truthful_gap=stage6_lens_completion_audit`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey
+  -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2
+  -ResidentSurfaceForegroundRunSeconds 2 -SupervisorRunSeconds 3
+  -ChildProofTimeoutSeconds 240`
+  Result: `passed; status=blocked; audit_status=complete;
+  stage6_completion_reviewed=true; ready_to_close=false;
+  can_close_stage6=false; transition_allowed=false; child_proof_timeouts=0;
+  child_proof_run_count=24; child proof failures=0;
+  summon_api_launch_on_hotkey_proof.ok=true;
+  summon_api_launch_on_hotkey_proof.opened=true;
+  summon_api_launch_on_hotkey_proof.summon_anywhere=true;
+  next_smallest_truthful_gap=summon_anywhere_blockers`
+- `python -m ruff check tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m pytest
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_applied_bringup_review_state
+  -q --tb=short`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath
+  .tmp\stage6-completion-audit-after-os-binding-readback-fix.json`
+  Result: `passed; status=proof_passed; next_smallest_truthful_gap=summon_anywhere_blockers;
+  recommended_next_slice=run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt;
+  stage6_completion_audit_launch_on_hotkey_runtime_readback_observed=true;
+  stage6_completion_audit_runtime_readback_required=false;
+  stage6_completion_audit_recommended_handoff_consumed=true`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status`
+  Result: `passed; status=persistent_supervision_enablement_applied;
+  required_before_enable_ready=true;
+  next_smallest_truthful_gap=persistent_supervision_execution_boundary;
+  recommended_next_slice=run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt;
+  authority_required=none_readback_only; would_execute=false; would_mutate=false`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

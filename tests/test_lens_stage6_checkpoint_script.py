@@ -93,6 +93,44 @@ def test_lens_stage6_checkpoint_accepts_summon_runtime_readback_handoff() -> Non
     ) in script
 
 
+def test_lens_stage6_checkpoint_prefers_runtime_authority_family_chain_before_legacy_spine() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-checkpoint.ps1").read_text(encoding="utf-8")
+
+    assert "$ResidentRuntimeAuthorityFamilyProofChainObserved = (" in script
+    assert "$ResidentRuntimeGrantedBoundaryProofPassed -and" in script
+    assert "$ResidentRuntimeAuthorityBlockersProofPassed -and" in script
+    assert "$ResidentRuntimeProcessSupervisionBoundaryProofPassed -and" in script
+    assert "$ResidentRuntimeServiceControlBoundaryProofPassed -and" in script
+    assert "$ResidentRuntimeTrayPresenceBoundaryProofPassed -and" in script
+    assert "$ResidentRuntimeHotkeySummonBoundaryProofPassed -and" in script
+    assert "$ResidentRuntimeOverlayWindowBoundaryProofPassed -and" in script
+    assert "$ResidentRuntimeResidentClaimBoundaryProofPassed" in script
+    assert script.index("} elseif ($ResidentRuntimeAuthorityFamilyProofChainObserved) {") < script.index(
+        "} elseif ($RuntimeGrantReadinessSpineObserved"
+    )
+
+
+def test_lens_stage6_checkpoint_os_binding_request_readback_allows_granted_authority() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-checkpoint.ps1").read_text(encoding="utf-8")
+    block_start = script.index("$OsBindingAuthorityRequestReadbackObserved = (")
+    block_end = script.index(")\n$PilotIndicator", block_start)
+    block = script[block_start:block_end]
+
+    assert "-not [bool](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'authority_granted'" not in block
+    assert (
+        "-not [bool](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'os_level_command_palette_binding_authority'"
+        not in block
+    )
+    assert (
+        "-not [bool](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'os_level_command_palette'" in block
+    )
+    assert "-not [bool](Get-PropertyValue -Payload $OsBindingAuthorityRequests -Name 'summon_anywhere'" in block
+    assert (
+        "-not [bool](Get-PropertyValue -Payload $OsBindingAuthorityRequestsGovernance -Name 'execution_authority'"
+        in block
+    )
+
+
 def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority() -> None:
     proc = _run_checkpoint(
         "-Mode",

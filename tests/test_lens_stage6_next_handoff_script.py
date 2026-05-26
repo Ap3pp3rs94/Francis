@@ -2662,6 +2662,50 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
         "completion_audit_readback_observed"
     )
 
+    runtime_operator_receipt_audit_json = tmp_path / "stage6-completion-audit-operator-receipt-runtime.json"
+    runtime_operator_receipt_audit = json.loads(generic_operator_receipt_audit_json.read_text(encoding="utf-8"))
+    runtime_operator_receipt_audit["summon_api_launch_on_hotkey_proof"] = {
+        "status": "proof_passed",
+        "ok": True,
+        "allow_launch_on_hotkey": True,
+        "opened": True,
+        "summon_anywhere": True,
+        "os_level_summon": True,
+        "next_smallest_truthful_gap": "stage6_lens_completion_audit",
+    }
+    runtime_operator_receipt_audit_json.write_text(
+        json.dumps(runtime_operator_receipt_audit),
+        encoding="utf-8",
+    )
+
+    runtime_operator_receipt_proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-CompletionAuditJsonPath",
+        str(runtime_operator_receipt_audit_json),
+        env=proof_env,
+    )
+
+    assert runtime_operator_receipt_proc.returncode == 0, (
+        runtime_operator_receipt_proc.stderr or runtime_operator_receipt_proc.stdout
+    )
+    runtime_operator_receipt_payload = json.loads(runtime_operator_receipt_proc.stdout)
+    assert runtime_operator_receipt_payload["recommended_handoff_source"] == (
+        "stage6_prerequisite_bringup_operator_plan"
+    )
+    assert runtime_operator_receipt_payload["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+    assert runtime_operator_receipt_payload["recommended_next_slice"] == (
+        "run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt"
+    )
+    assert (
+        runtime_operator_receipt_payload["stage6_completion_audit_launch_on_hotkey_runtime_readback_observed"] is True
+    )
+    assert runtime_operator_receipt_payload["stage6_completion_audit_recommended_handoff_consumed"] is True
+    assert runtime_operator_receipt_payload["stage6_completion_audit_runtime_readback_required"] is False
+    assert runtime_operator_receipt_payload["recommended_handoff"]["next_smallest_truthful_gap"] == (
+        "persistent_supervision_execution_boundary"
+    )
+
     persistent_prereq_audit_json = tmp_path / "stage6-persistent-supervision-first-missing-audit.json"
     persistent_prereq_audit_json.write_text(
         json.dumps(
