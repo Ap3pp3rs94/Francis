@@ -97,6 +97,59 @@ def _write_cached_resident_surface_proof(path: Path) -> None:
     )
 
 
+def _write_cached_resident_surface_resident_runtime_proof(path: Path) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "kind": "lens.resident_surface.readiness_proof",
+                "status": "proof_passed",
+                "ok": True,
+                "resident_surface_content_readback": True,
+                "resident_surface_foreground_runtime_readback": True,
+                "resident_surface_foreground_runtime_observed": True,
+                "resident_surface_runtime_status": "resident_runtime_observed",
+                "foreground_host_process_observed": True,
+                "foreground_host_runtime_completed": True,
+                "resident_surface_ready": True,
+                "resident_claim_allowed": False,
+                "resident_host_process": True,
+                "next_smallest_truthful_gap": "resident_surface_operator_experience_proof",
+                "blockers": [
+                    "tray_presence_missing",
+                    "overlay_window_missing",
+                    "summon_anywhere_missing",
+                ],
+                "recommended_handoff_source": "resident_surface_runtime_supervision_handoff",
+                "recommended_next_slice": ("prove_resident_surface_operator_experience_before_helpful_not_noisy_claim"),
+                "recommended_proof_script": "scripts/lens-resident-surface-proof.ps1 -Mode Status",
+                "authority_required": "operator_experience_proof",
+                "authority_granted": False,
+                "recommended_handoff": {
+                    "id": "resident_surface_runtime_supervision",
+                    "next_smallest_truthful_gap": "resident_surface_operator_experience_proof",
+                    "readiness_route": "/lens/resident-runtime/authority-grant/readiness",
+                    "authority_required": "operator_experience_proof",
+                    "authority_granted": False,
+                    "read_only_contract": True,
+                    "diagnostic_only": True,
+                    "would_execute": False,
+                    "would_mutate": False,
+                    "would_supervise_process": False,
+                    "would_restart_process": False,
+                    "would_claim_resident": False,
+                },
+                "proof": {
+                    "resident_surface_foreground_runtime_blockers": [
+                        "resident_surface_runtime_not_supervised",
+                        "resident_surface_not_resident",
+                    ],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 def _write_cached_host_supervision_proof(path: Path) -> None:
     path.write_text(
         json.dumps(
@@ -519,7 +572,7 @@ def test_lens_process_supervision_boundary_consumes_active_authority_readback(tm
     data_root = tmp_path / "data"
     cached_resident_surface = tmp_path / "resident-surface-proof.json"
     cached_host_supervision = tmp_path / "host-supervision-proof.json"
-    _write_cached_resident_surface_proof(cached_resident_surface)
+    _write_cached_resident_surface_resident_runtime_proof(cached_resident_surface)
     _write_cached_host_supervision_proof(cached_host_supervision)
     _write_active_authority_receipts(data_root)
 
@@ -554,6 +607,16 @@ def test_lens_process_supervision_boundary_consumes_active_authority_readback(tm
     assert payload["bounded_resident_candidate_ready"] is True
     assert payload["activation_plan_would_launch_process"] is True
     assert payload["activation_plan_would_supervise_process"] is True
+    assert payload["resident_surface_runtime_proof_observed"] is True
+    assert payload["resident_surface_foreground_runtime_proof_observed"] is False
+    assert payload["resident_surface_resident_runtime_proof_observed"] is True
+    assert payload["resident_surface_runtime_supervision_handoff_observed"] is True
+    assert payload["resident_surface_operator_experience_handoff_observed"] is True
+    assert payload["resident_surface_next_smallest_truthful_gap"] == "resident_surface_operator_experience_proof"
+    assert payload["resident_surface_authority_required"] == "operator_experience_proof"
+    assert payload["resident_surface_recommended_next_slice"] == (
+        "prove_resident_surface_operator_experience_before_helpful_not_noisy_claim"
+    )
     assert payload["process_supervision_authority_granted"] is True
     assert payload["process_restart_authority_granted"] is True
     assert payload["service_install_authority_granted"] is False
@@ -577,6 +640,8 @@ def test_lens_process_supervision_boundary_consumes_active_authority_readback(tm
 
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["resident_runtime_activation_plan_readback"]["status"] == "authority_granted"
+    assert checks["resident_surface_foreground_runtime_proof"]["status"] == "resident_runtime_observed"
+    assert checks["resident_surface_runtime_supervision_handoff"]["status"] == "handoff_observed"
     assert checks["process_supervision_denied"]["status"] == "authority_granted"
     assert all(item["passed"] for item in payload["checks"])
 
@@ -586,6 +651,10 @@ def test_lens_process_supervision_boundary_consumes_active_authority_readback(tm
     assert proof["active_resident_runtime_authority_grant_receipt_id"] == "lrag_test_active"
     assert proof["active_host_supervision_authority_grant_receipt_id"] == "lhsag_test_active"
     assert proof["activation_plan_would_supervise_process"] is True
+    assert proof["resident_surface_runtime_proof_observed"] is True
+    assert proof["resident_surface_foreground_runtime_proof_observed"] is False
+    assert proof["resident_surface_resident_runtime_proof_observed"] is True
+    assert proof["resident_surface_operator_experience_handoff_observed"] is True
 
     governance = payload["governance"]
     assert governance["resident_runtime_activation_plan_readback"] is True
@@ -594,6 +663,9 @@ def test_lens_process_supervision_boundary_consumes_active_authority_readback(tm
     assert governance["host_supervision_authority"] is True
     assert governance["process_supervision_authority"] is True
     assert governance["process_restart_authority"] is True
+    assert governance["resident_surface_runtime_readback"] is True
+    assert governance["resident_surface_resident_runtime_readback"] is True
+    assert governance["resident_surface_operator_experience_handoff_readback"] is True
     assert governance["execution_authority"] is False
     assert governance["approval_decision_authority"] is False
     assert governance["memory_write"] is False

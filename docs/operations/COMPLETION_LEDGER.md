@@ -38700,6 +38700,73 @@ Latest validation for Stage 6 plan-consumption proof cleanup retry hardening:
   recommended_next_slice=resolve_persistent_supervision_authority_before_enablement;
   stop_observed=true; side_effects_bounded=true`
 
+### 2026-05-25 - Stage 6 process-supervision boundary after resident runtime grant
+
+Roadmap area: Stage 6 / Lens MVP, governed resident-runtime supervision and
+completion-audit handoff truthfulness.
+
+Material change:
+
+- The process-supervision authority boundary proof now accepts the post-grant
+  resident-runtime posture as a valid consumed resident-surface runtime proof.
+  Before this, the proof still expected only the earlier foreground-runtime
+  denial shape, so a live resident runtime grant could make the full Stage 6
+  completion audit report a child proof failure even though the runtime
+  supervision handoff had advanced.
+- The proof now reports separate foreground-runtime and resident-runtime
+  readback fields, plus an operator-experience handoff readback when the
+  resident runtime is already observed.
+- Stage 6 still does not close and Stage 7 does not start. The latest full
+  launch-on-hotkey completion audit now has no child proof failures and no child
+  proof timeouts, but it still returns `ready_to_close=false`,
+  `can_close_stage6=false`, `transition_allowed=false`, and
+  `next_smallest_truthful_gap=summon_anywhere_blockers`. The concrete handoff is
+  still the persistent-supervision enablement receipt review boundary.
+
+Latest validation for Stage 6 process-supervision boundary after resident
+runtime grant:
+
+- PowerShell AST parse of
+  `scripts\lens-process-supervision-authority-boundary-proof.ps1`
+  Result: `passed`
+- `python -m pytest
+  tests/test_lens_process_supervision_authority_boundary_proof_script.py -q
+  --tb=short`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-process-supervision-authority-boundary-proof.ps1 -Mode Status
+  -StartupTimeoutSeconds 30 -ForegroundRunSeconds 2 -HostLaunchRunSeconds 5
+  -SupervisorRunSeconds 3 -ChildProofTimeoutSeconds 240`
+  Result: `passed; status=proof_passed; ok=true;
+  resident_surface_runtime_proof_observed=true;
+  resident_surface_resident_runtime_proof_observed=true;
+  resident_surface_runtime_supervision_handoff_observed=true;
+  resident_surface_operator_experience_handoff_observed=true;
+  process_supervision_boundary_observed=true;
+  next_smallest_truthful_gap=stage6_lens_completion_audit`
+- `python -m pytest
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_observes_process_supervision_boundary_authority_gates
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_observes_resident_runtime_process_supervision_authority_gate
+  -q --tb=short`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey
+  -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2
+  -ResidentSurfaceForegroundRunSeconds 2 -SupervisorRunSeconds 3
+  -ChildProofTimeoutSeconds 240`
+  Result: `passed; audit_status=complete; ready_to_close=false;
+  can_close_stage6=false; transition_allowed=false;
+  child_proof_timeouts=[]; all child proof runs exit_code=0;
+  next_smallest_truthful_gap=summon_anywhere_blockers;
+  recommended_concrete_next_smallest_truthful_gap=persistent_supervision_execution_boundary`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath .tmp\stage6-completion-audit-after-process-proof-fix.json`
+  Result: `passed; status=proof_passed; ready_to_close=false;
+  next_smallest_truthful_gap=summon_anywhere_blockers;
+  recommended_next_slice=run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt;
+  recommended_concrete_next_smallest_truthful_gap=persistent_supervision_execution_boundary`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
