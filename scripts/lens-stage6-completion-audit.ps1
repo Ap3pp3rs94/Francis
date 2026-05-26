@@ -2272,6 +2272,14 @@ $SummonAnywhereBlockersProofOverlayBlockers = ConvertTo-StringArray -Value $Summ
 $SummonAnywhereBlockersProofGlobalHotkeyBlockers = ConvertTo-StringArray -Value $SummonAnywhereBlockersProofGroups.global_hotkey_binding
 $SummonAnywhereBlockersProofSummonBlockers = ConvertTo-StringArray -Value $SummonAnywhereBlockersProofGroups.summon_binding
 $SummonAnywhereBlockersProofAuthorityBlockers = ConvertTo-StringArray -Value $SummonAnywhereBlockersProofGroups.authority
+$SummonAnywhereBlockersProofSurfaceRuntimeReadbackObserved = $SummonAnywhereBlockersProof.surface_runtime_readback_observed
+$SummonAnywhereBlockersProofSurfaceRuntimeSuppressedBlockers = $SummonAnywhereBlockersProof.surface_runtime_suppressed_blockers
+$SummonAnywhereBlockersProofSummonBindingRuntimeObserved = [bool](
+  $SummonAnywhereBlockersProofSurfaceRuntimeReadbackObserved.summon_binding
+)
+$SummonAnywhereBlockersProofSuppressedSummonBindingBlockers = ConvertTo-StringArray -Value (
+  $SummonAnywhereBlockersProofSurfaceRuntimeSuppressedBlockers.summon_binding
+)
 $SummonAnywhereBlockersProofFirstFamilyHandoff = $SummonAnywhereBlockersProof.first_blocker_family_handoff
 $SummonAnywhereBlockersProofFirstFamilyHandoffBlockers = ConvertTo-StringArray -Value (
   $SummonAnywhereBlockersProofFirstFamilyHandoff.blockers
@@ -2353,6 +2361,19 @@ $SummonAnywhereBlockersProofFirstFamilyHandoffObserved = (
   $SummonAnywhereBlockersProofFirstFamilyResidentHostObserved -or
   $SummonAnywhereBlockersProofFirstFamilyTrayObserved
 )
+$SummonAnywhereBlockersProofSummonBindingBoundaryObserved = (
+  (
+    -not $SummonAnywhereBlockersProofSummonBindingRuntimeObserved -and
+    $SummonAnywhereBlockersProofFamilies -contains 'summon_binding' -and
+    $SummonAnywhereBlockersProofSummonBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
+    $SummonAnywhereBlockersProofSummonBlockers -contains 'summon_authority_not_granted'
+  ) -or (
+    $SummonAnywhereBlockersProofSummonBindingRuntimeObserved -and
+    -not ($SummonAnywhereBlockersProofFamilies -contains 'summon_binding') -and
+    $SummonAnywhereBlockersProofSuppressedSummonBindingBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
+    $SummonAnywhereBlockersProofSuppressedSummonBindingBlockers -contains 'summon_authority_not_granted'
+  )
+)
 $SummonAnywhereBlockersProofObserved = (
   [int]$SummonAnywhereBlockersProofResult.exit_code -eq 0 -and
   [bool]$SummonAnywhereBlockersProof.ok -and
@@ -2382,15 +2403,13 @@ $SummonAnywhereBlockersProofObserved = (
   $SummonAnywhereBlockersProofFamilies -contains 'tray_presence' -and
   $SummonAnywhereBlockersProofFamilies -contains 'overlay_window' -and
   $SummonAnywhereBlockersProofFamilies -contains 'global_hotkey_binding' -and
-  $SummonAnywhereBlockersProofFamilies -contains 'summon_binding' -and
+  $SummonAnywhereBlockersProofSummonBindingBoundaryObserved -and
   $SummonAnywhereBlockersProofFamilies -contains 'authority' -and
   $SummonAnywhereBlockersProofTrayBlockers -contains 'tray_host_missing' -and
   $SummonAnywhereBlockersProofOverlayBlockers -contains 'overlay_window_missing' -and
   $SummonAnywhereBlockersProofGlobalHotkeyBlockers -contains 'global_hotkey_binding_disabled' -and
   $SummonAnywhereBlockersProofGlobalHotkeyBlockers -contains 'global_hotkey_registration_disabled' -and
   $SummonAnywhereBlockersProofGlobalHotkeyBlockers -contains 'hotkey_registration_authority_not_granted' -and
-  $SummonAnywhereBlockersProofSummonBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
-  $SummonAnywhereBlockersProofSummonBlockers -contains 'summon_authority_not_granted' -and
   $SummonAnywhereBlockersProofAuthorityBlockers -contains 'summon_authority_not_granted' -and
   $SummonAnywhereBlockersProofAuthorityBlockers -contains 'hotkey_registration_authority_not_granted' -and
   $SummonAnywhereBlockersProofAuthorityBlockers -contains 'overlay_control_authority_not_granted' -and
@@ -2422,18 +2441,34 @@ $SummonAuthorityBoundaryBlockers = ConvertTo-StringArray -Value $SummonAuthority
 $SummonAuthorityBoundaryBindingBlockers = ConvertTo-StringArray -Value $SummonAuthorityBoundary.summon_binding_blockers
 $SummonAuthorityBoundaryAuthorityBlockers = ConvertTo-StringArray -Value $SummonAuthorityBoundary.authority_blockers
 $SummonAuthorityResidentHostSupervisedObserved = [bool]$SummonAuthorityBlockerProof.resident_host_supervised_runtime_observed
+$SummonAuthoritySummonBindingRuntimeReadbackObserved = [bool]$SummonAuthorityBlockerProof.summon_binding_runtime_readback_observed
+$SummonAuthoritySummonBindingResolvedByRuntimeReadback = [bool]$SummonAuthorityBlockerProof.summon_binding_resolved_by_runtime_readback
+$SummonAuthorityPreviousFamilyObserved = (
+  [string]$SummonAuthorityBlockerProof.previous_summon_blocker_family -eq 'summon_binding' -or
+  (
+    $SummonAuthoritySummonBindingResolvedByRuntimeReadback -and
+    [string]$SummonAuthorityBlockerProof.previous_summon_blocker_family -eq 'global_hotkey_binding'
+  )
+)
+$SummonAuthorityPreviousBindingGapObserved = (
+  [string]$SummonAuthorityBlockerProof.previous_binding_next_smallest_truthful_gap -eq 'summon_authority_blocker_boundary' -or
+  (
+    $SummonAuthoritySummonBindingResolvedByRuntimeReadback -and
+    [string]$SummonAuthorityBlockerProof.previous_binding_next_smallest_truthful_gap -eq 'stage6_lens_completion_audit'
+  )
+)
 $SummonAuthorityBlockerProofObserved = (
   [int]$SummonAuthorityBlockerProofResult.exit_code -eq 0 -and
   [bool]$SummonAuthorityBlockerProof.ok -and
   [string]$SummonAuthorityBlockerProof.kind -eq 'lens.summon_authority_blocker.proof' -and
   [string]$SummonAuthorityBlockerProof.status -eq 'proof_passed' -and
   [string]$SummonAuthorityBlockerProof.acceptance_criterion -eq 'summon_anywhere' -and
-  [string]$SummonAuthorityBlockerProof.previous_summon_blocker_family -eq 'summon_binding' -and
+  $SummonAuthorityPreviousFamilyObserved -and
   [string]$SummonAuthorityBlockerProof.summon_authority_blocker_family -eq 'authority' -and
   [string]$SummonAuthorityBlockerProof.sixth_summon_blocker_family -eq 'authority' -and
   [string]$SummonAuthorityBlockerProof.next_summon_blocker_family -eq 'stage6_lens_completion_audit' -and
   [string]$SummonAuthorityBlockerProof.summon_next_smallest_truthful_gap -eq 'summon_anywhere_blockers' -and
-  [string]$SummonAuthorityBlockerProof.previous_binding_next_smallest_truthful_gap -eq 'summon_authority_blocker_boundary' -and
+  $SummonAuthorityPreviousBindingGapObserved -and
   [string]$SummonAuthorityBlockerProof.direct_summon_preflight_next_smallest_truthful_gap -eq 'summon_anywhere_blockers' -and
   [string]$SummonAuthorityBlockerProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
   [string]$SummonAuthorityBlockerProof.authority_required -eq 'summon_hotkey_overlay_and_process_authority' -and
@@ -2531,19 +2566,29 @@ $SummonAnywhereFamilyChainProofResidentHostSupervisedObserved = [bool](
 $SummonAnywhereFamilyChainProofFinalAuthorityPreviousBindingBlockers = ConvertTo-StringArray -Value (
   $SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.blockers
 )
+$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBindingSuppressedBlockers = ConvertTo-StringArray -Value (
+  $SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.suppressed_blockers
+)
 $SummonAnywhereFamilyChainProofFinalAuthorityBlockers = ConvertTo-StringArray -Value (
   $SummonAnywhereFamilyChainProofFinalAuthority.blockers
 )
-$ExpectedSummonAnywhereFamilyChain = [string[]]@(
-  if (-not $SummonAnywhereFamilyChainProofResidentHostResolvedBySupervision) {
-    'resident_host'
-  }
-  'tray_presence',
-  'overlay_window',
-  'global_hotkey_binding',
-  'summon_binding',
-  'authority'
+$SummonAnywhereFamilyChainProofSummonBindingRuntimeObserved = [bool](
+  $SummonAnywhereFamilyChainProof.summon_binding_runtime_readback_observed
 )
+$SummonAnywhereFamilyChainProofFinalAuthorityRuntimeReadbackResolved = [bool](
+  $SummonAnywhereFamilyChainProof.final_summon_authority_runtime_readback_resolved
+)
+$ExpectedSummonAnywhereFamilyChain = @()
+if (-not $SummonAnywhereFamilyChainProofResidentHostResolvedBySupervision) {
+  $ExpectedSummonAnywhereFamilyChain += 'resident_host'
+}
+$ExpectedSummonAnywhereFamilyChain += 'tray_presence'
+$ExpectedSummonAnywhereFamilyChain += 'overlay_window'
+$ExpectedSummonAnywhereFamilyChain += 'global_hotkey_binding'
+if (-not $SummonAnywhereFamilyChainProofSummonBindingRuntimeObserved) {
+  $ExpectedSummonAnywhereFamilyChain += 'summon_binding'
+}
+$ExpectedSummonAnywhereFamilyChain += 'authority'
 $SummonAnywhereFamilyChainBlockedFamiliesAligned = (
   @($SummonAnywhereFamilyChainProofBlockedFamilies).Count -eq @($ExpectedSummonAnywhereFamilyChain).Count
 )
@@ -2619,7 +2664,13 @@ $SummonAnywhereFamilyChainProofObserved = (
   [bool]$SummonAnywhereFamilyChainProofResidentHost.diagnostic_only -and
   -not [bool]$SummonAnywhereFamilyChainProofResidentHost.would_execute -and
   -not [bool]$SummonAnywhereFamilyChainProofResidentHost.would_mutate -and
-  [string]$SummonAnywhereFamilyChainProofFinalAuthority.previous_summon_blocker_family -eq 'summon_binding' -and
+  (
+    [string]$SummonAnywhereFamilyChainProofFinalAuthority.previous_summon_blocker_family -eq 'summon_binding' -or
+    (
+      $SummonAnywhereFamilyChainProofFinalAuthorityRuntimeReadbackResolved -and
+      [string]$SummonAnywhereFamilyChainProofFinalAuthority.previous_summon_blocker_family -eq 'global_hotkey_binding'
+    )
+  ) -and
   [string]$SummonAnywhereFamilyChainProofFinalAuthority.summon_authority_blocker_family -eq 'authority' -and
   [string]$SummonAnywhereFamilyChainProofFinalAuthority.next_summon_blocker_family -eq 'stage6_lens_completion_audit' -and
   [string]$SummonAnywhereFamilyChainProofFinalAuthority.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
@@ -2628,22 +2679,40 @@ $SummonAnywhereFamilyChainProofObserved = (
   [bool]$SummonAnywhereFamilyChainProofFinalAuthority.all_summon_blocker_families_consumed -and
   [bool]$SummonAnywhereFamilyChainProofFinalAuthority.previous_summon_binding_contract_observed -and
   [bool]$SummonAnywhereFamilyChainProofFinalAuthority.previous_summon_binding_contract_readback_observed -and
-  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.source -eq 'summon_anywhere_blockers.blocked_family_handoffs' -and
-  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.status -eq 'contract_projected' -and
-  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.contract_status -eq 'blocked' -and
-  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.proof_script -eq 'scripts/lens-summon-binding-blocker-proof.ps1 -Mode Status' -and
-  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.previous_summon_blocker_family -eq 'global_hotkey_binding' -and
-  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.summon_binding_blocker_family -eq 'summon_binding' -and
-  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.next_summon_blocker_family -eq 'authority' -and
-  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.next_smallest_truthful_gap -eq 'summon_authority_blocker_boundary' -and
-  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.authority_required -eq 'summon_authority' -and
+  (
+    (
+      -not $SummonAnywhereFamilyChainProofFinalAuthorityRuntimeReadbackResolved -and
+      [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.source -eq 'summon_anywhere_blockers.blocked_family_handoffs' -and
+      [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.status -eq 'contract_projected' -and
+      [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.contract_status -eq 'blocked' -and
+      [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.proof_script -eq 'scripts/lens-summon-binding-blocker-proof.ps1 -Mode Status' -and
+      [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.previous_summon_blocker_family -eq 'global_hotkey_binding' -and
+      [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.summon_binding_blocker_family -eq 'summon_binding' -and
+      [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.next_summon_blocker_family -eq 'authority' -and
+      [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.next_smallest_truthful_gap -eq 'summon_authority_blocker_boundary' -and
+      [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.authority_required -eq 'summon_authority' -and
+      $SummonAnywhereFamilyChainProofFinalAuthorityPreviousBindingBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
+      $SummonAnywhereFamilyChainProofFinalAuthorityPreviousBindingBlockers -contains 'summon_authority_not_granted'
+    ) -or (
+      $SummonAnywhereFamilyChainProofFinalAuthorityRuntimeReadbackResolved -and
+      [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.source -eq 'summon_anywhere_blockers.surface_runtime_readback_observed' -and
+      [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.status -eq 'runtime_readback_resolved' -and
+      [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.contract_status -eq 'resolved' -and
+      [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.proof_script -eq 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status' -and
+      [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.previous_summon_blocker_family -eq 'global_hotkey_binding' -and
+      [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.summon_binding_blocker_family -eq 'summon_binding' -and
+      [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.next_summon_blocker_family -eq 'authority' -and
+      [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
+      [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.authority_required -eq 'summon_hotkey_overlay_and_process_authority' -and
+      $SummonAnywhereFamilyChainProofFinalAuthorityPreviousBindingSuppressedBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
+      $SummonAnywhereFamilyChainProofFinalAuthorityPreviousBindingSuppressedBlockers -contains 'summon_authority_not_granted'
+    )
+  ) -and
   -not [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.authority_granted -and
   [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.read_only_contract -and
   [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.diagnostic_only -and
   -not [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.would_execute -and
   -not [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.would_mutate -and
-  $SummonAnywhereFamilyChainProofFinalAuthorityPreviousBindingBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
-  $SummonAnywhereFamilyChainProofFinalAuthorityPreviousBindingBlockers -contains 'summon_authority_not_granted' -and
   $SummonAnywhereFamilyChainProofFinalAuthorityBlockers -contains 'summon_authority_not_granted' -and
   [bool]$SummonAnywhereFamilyChainProofGovernance.diagnostic_only -and
   [bool]$SummonAnywhereFamilyChainProofGovernance.wraps_summon_anywhere_blockers_proof -and
