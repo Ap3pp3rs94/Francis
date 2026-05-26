@@ -2553,6 +2553,28 @@ if (
   $RecommendedConcreteHandoffSource = $Stage6CompletionAuditRecommendedConcreteHandoffSource
   $RecommendedConcreteHandoff = $Stage6CompletionAuditRecommendedConcreteHandoff
 }
+if (
+  $Stage6CompletionAuditRecommendedHandoffConsumed -and
+  $Stage6CompletionAuditRemainingAcceptanceHandoffObserved -and
+  $Stage6PrerequisiteBringupPlanAppliedObserved -and
+  @($PersistentSupervisionMissingRequiredBeforeEnable).Count -gt 0 -and
+  $PersistentSupervisionFirstMissingRequirementHandoffReady -and
+  $Stage6CompletionAuditRecommendedConcreteHandoffSource -eq 'stage6_prerequisite_bringup_operator_plan_handoff' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedConcreteHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'persistent_supervision_execution_boundary'
+) {
+  $RecommendedConcreteHandoffSource = 'persistent_supervision_first_missing_requirement_handoff'
+  $RecommendedConcreteHandoff = $PersistentSupervisionFirstMissingRequirementHandoff
+} elseif (
+  $Stage6CompletionAuditRecommendedHandoffConsumed -and
+  $Stage6CompletionAuditRemainingAcceptanceHandoffObserved -and
+  $PersistentSupervisionResidentClaimBoundaryHandoffObserved -and
+  @($PersistentSupervisionMissingRequiredBeforeEnable).Count -eq 0 -and
+  $Stage6CompletionAuditRecommendedConcreteHandoffSource -eq 'stage6_prerequisite_bringup_operator_plan_handoff' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedConcreteHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'persistent_supervision_execution_boundary'
+) {
+  $RecommendedConcreteHandoffSource = 'persistent_supervision_resident_claim_boundary_handoff'
+  $RecommendedConcreteHandoff = $PersistentSupervisionResidentClaimBoundaryHandoff
+}
 $RecommendedConcreteNextSlice = [string](
   Get-PropertyValue -Payload $RecommendedConcreteHandoff -Name 'next_step' -Default $RecommendedNextSlice
 )

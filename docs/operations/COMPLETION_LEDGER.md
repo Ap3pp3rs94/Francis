@@ -39086,6 +39086,59 @@ Latest validation for Stage 6 system-resident concrete handoff readback:
   recommended_concrete_next_slice=run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt;
   recommended_concrete_next_smallest_truthful_gap=persistent_supervision_execution_boundary`
 
+### 2026-05-26 - Stage 6 first-missing resident prerequisite handoff
+
+Roadmap area: Stage 6 / Lens MVP, system-resident presence handoff
+truthfulness.
+
+Material change:
+
+- The Stage 6 next-handoff proof now keeps the broad completion-audit
+  `system_resident_presence_blockers` result while selecting the freshest
+  concrete resident-presence prerequisite when persistent supervision
+  enablement was already applied but live persistent-supervision prerequisites
+  are still missing.
+- In that posture, `recommended_concrete_handoff_source` now becomes
+  `persistent_supervision_first_missing_requirement_handoff` and the live
+  concrete next slice is
+  `resolve_tray_presence_before_persistent_supervision_enablement`.
+- The concrete proof remains read-only and diagnostic:
+  `scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status`,
+  `authority_granted=false`, `would_execute=false`, and `would_mutate=false`.
+- If no persistent-supervision prerequisite is missing, the prior
+  resident-claim boundary handoff remains available after the enablement
+  receipt and resident-claim boundary reviews are consumed.
+- Stage 6 still does not close and Stage 7 does not start. This change only
+  improves the operator-facing handoff priority for the remaining
+  system-resident prerequisite chain.
+
+Latest validation for Stage 6 first-missing resident prerequisite handoff:
+
+- PowerShell AST parse of `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed`
+- `python -m ruff check tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m pytest
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_preserves_completion_audit_concrete_handoff
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_prefers_first_missing_prerequisite_after_applied_enablement
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_applied_bringup_review_state
+  -x`
+  Result: `passed; 4 passed in 280.00s`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath
+  .tmp\stage6-completion-audit-after-system-resident-concrete-handoff.json`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=system_resident_presence_blockers;
+  recommended_concrete_handoff_source=persistent_supervision_first_missing_requirement_handoff;
+  recommended_concrete_next_slice=resolve_tray_presence_before_persistent_supervision_enablement;
+  recommended_concrete_next_smallest_truthful_gap=summon_tray_presence_blocker_boundary;
+  recommended_concrete_authority_granted=false`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
