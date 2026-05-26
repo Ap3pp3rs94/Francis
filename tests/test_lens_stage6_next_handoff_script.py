@@ -2706,6 +2706,94 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
         "persistent_supervision_execution_boundary"
     )
 
+    reviewed_first_blocker_audit_json = tmp_path / "stage6-completion-audit-reviewed-first-blocker.json"
+    reviewed_first_blocker_audit = json.loads(runtime_operator_receipt_audit_json.read_text(encoding="utf-8"))
+    reviewed_first_blocker_audit["recommended_handoff_source"] = "stage6_reviewed_summon_anywhere_first_blocker"
+    reviewed_first_blocker_audit["recommended_next_slice"] = "run_resident_host_blocker_proof"
+    reviewed_first_blocker_audit["recommended_proof_script"] = (
+        "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status"
+    )
+    reviewed_first_blocker_audit["authority_required"] = "resident_runtime_execution_authority"
+    reviewed_first_blocker_audit["recommended_handoff"] = {
+        "status": "blocked",
+        "previous_next_smallest_truthful_gap": "stage6_lens_completion_audit",
+        "consumed_summon_anywhere_next_smallest_truthful_gap": "summon_anywhere_blockers",
+        "consumed_family_chain_next_smallest_truthful_gap": "summon_anywhere_blockers",
+        "consumed_persistent_supervision_resident_claim_boundary_next_smallest_truthful_gap": (
+            "stage6_lens_completion_audit"
+        ),
+        "next_smallest_truthful_gap": "resident_host_runtime_blocker_boundary",
+        "next_step": "run_resident_host_blocker_proof",
+        "proof_script": "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status",
+        "route": "/lens/host",
+        "readiness_route": "/lens/host/runtime-loop/readiness",
+        "acceptance_criterion": "summon_anywhere",
+        "first_blocker_family": "resident_host",
+        "authority_required": "resident_runtime_execution_authority",
+        "authority_granted": False,
+        "read_only_contract": True,
+        "diagnostic_only": True,
+        "would_execute": False,
+        "would_mutate": False,
+        "would_supervise_process": False,
+        "would_restart_process": False,
+        "would_install_service": False,
+        "would_start_service": False,
+        "would_register_hotkey": False,
+        "would_control_overlay": False,
+        "would_summon": False,
+        "would_write_memory": False,
+        "would_decide_approval": False,
+        "blockers": ["local_process_launch_authority_not_granted"],
+    }
+    reviewed_first_blocker_audit_json.write_text(
+        json.dumps(reviewed_first_blocker_audit),
+        encoding="utf-8",
+    )
+
+    reviewed_first_blocker_proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-CompletionAuditJsonPath",
+        str(reviewed_first_blocker_audit_json),
+        env=proof_env,
+    )
+
+    assert reviewed_first_blocker_proc.returncode == 0, (
+        reviewed_first_blocker_proc.stderr or reviewed_first_blocker_proc.stdout
+    )
+    reviewed_first_blocker_payload = json.loads(reviewed_first_blocker_proc.stdout)
+    assert (
+        reviewed_first_blocker_payload["recommended_handoff_source"] == "stage6_reviewed_summon_anywhere_first_blocker"
+    )
+    assert reviewed_first_blocker_payload["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+    assert reviewed_first_blocker_payload["recommended_next_slice"] == "run_resident_host_blocker_proof"
+    assert reviewed_first_blocker_payload["recommended_proof_script"] == (
+        "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status"
+    )
+    assert reviewed_first_blocker_payload["authority_required"] == "resident_runtime_execution_authority"
+    assert reviewed_first_blocker_payload["authority_granted"] is False
+    assert (
+        reviewed_first_blocker_payload["stage6_completion_audit_reviewed_summon_first_blocker_handoff_observed"] is True
+    )
+    assert reviewed_first_blocker_payload["stage6_completion_audit_recommended_handoff_consumed"] is True
+    assert reviewed_first_blocker_payload["stage6_completion_audit_runtime_readback_required"] is False
+    reviewed_first_blocker_handoff = reviewed_first_blocker_payload["recommended_handoff"]
+    assert reviewed_first_blocker_handoff["next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
+    assert reviewed_first_blocker_handoff["next_step"] == "run_resident_host_blocker_proof"
+    assert reviewed_first_blocker_handoff["read_only_contract"] is True
+    assert reviewed_first_blocker_handoff["diagnostic_only"] is True
+    assert reviewed_first_blocker_payload["recommended_concrete_next_smallest_truthful_gap"] == (
+        "resident_host_runtime_blocker_boundary"
+    )
+    assert reviewed_first_blocker_payload["recommended_operator_handoff"]["source"] == (
+        "stage6_completion_audit_recommended_handoff"
+    )
+    assert reviewed_first_blocker_payload["recommended_next_operator_action_requirement"] == (
+        "stage6_completion_audit_recommended_readback"
+    )
+    assert reviewed_first_blocker_payload["recommended_next_operator_action"]["id"] == "run_resident_host_blocker_proof"
+
     persistent_prereq_audit_json = tmp_path / "stage6-persistent-supervision-first-missing-audit.json"
     persistent_prereq_audit_json.write_text(
         json.dumps(

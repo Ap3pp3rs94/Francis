@@ -3759,6 +3759,58 @@ if (
   $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
 } elseif (
   $NextSmallestTruthfulGap -eq 'summon_anywhere_blockers' -and
+  $Stage6CompletionReviewed -and
+  -not $ReadyToClose -and
+  $SummonAnywhereRuntimeReadbackObserved -and
+  $Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and
+  $PersistentSupervisionResidentClaimBoundaryObserved -and
+  [string]$PersistentSupervisionResidentClaimBoundaryProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
+  $SummonAnywhereBlockersProofObserved -and
+  $SummonAnywhereFamilyChainProofObserved -and
+  $SummonAnywhereBlockersProofFirstFamilyHandoffObserved
+) {
+  $RecommendedHandoffSource = 'stage6_reviewed_summon_anywhere_first_blocker'
+  $RecommendedHandoff = [ordered]@{
+    status = 'blocked'
+    previous_next_smallest_truthful_gap = 'stage6_lens_completion_audit'
+    consumed_summon_anywhere_next_smallest_truthful_gap = [string]$SummonAnywhereBlockersProof.next_smallest_truthful_gap
+    consumed_family_chain_next_smallest_truthful_gap = [string]$SummonAnywhereFamilyChainProof.next_smallest_truthful_gap
+    consumed_persistent_supervision_resident_claim_boundary_next_smallest_truthful_gap = [string]$PersistentSupervisionResidentClaimBoundaryProof.next_smallest_truthful_gap
+    next_smallest_truthful_gap = [string]$SummonAnywhereBlockersProofFirstFamilyHandoff.next_smallest_truthful_gap
+    next_step = [string]$SummonAnywhereBlockersProofFirstFamilyHandoff.next_step
+    proof_script = [string]$SummonAnywhereBlockersProofFirstFamilyHandoff.proof_script
+    route = [string]$SummonAnywhereBlockersProofFirstFamilyHandoff.route
+    readiness_route = [string]$SummonAnywhereBlockersProofFirstFamilyHandoff.readiness_route
+    acceptance_criterion = 'summon_anywhere'
+    first_blocker_family = [string]$SummonAnywhereBlockersProof.first_blocker_family
+    first_blocker_family_handoff = $SummonAnywhereBlockersProofFirstFamilyHandoff
+    blocker_families = [string[]]@(ConvertTo-StringArray -Value $SummonAnywhereBlockersProof.blocked_families)
+    blocked_family_handoffs = @($SummonAnywhereBlockersProofFamilyHandoffs)
+    stage6_prerequisite_bringup_plan_status = [string]$Stage6PrerequisiteBringupPlan.status
+    stage6_prerequisite_bringup_current_truthful_gap = [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap
+    stage6_prerequisite_bringup_next_operator_action_requirement = [string]$Stage6PrerequisiteBringupPlan.next_operator_action_requirement
+    authority_required = [string]$SummonAnywhereBlockersProofFirstFamilyHandoff.authority_required
+    authority_granted = $false
+    read_only_contract = $true
+    diagnostic_only = $true
+    would_execute = $false
+    would_mutate = $false
+    would_supervise_process = $false
+    would_restart_process = $false
+    would_install_service = $false
+    would_start_service = $false
+    would_register_hotkey = $false
+    would_control_overlay = $false
+    would_summon = $false
+    would_write_memory = $false
+    would_decide_approval = $false
+    blockers = [string[]]@($SummonAnywhereBlockersProofFirstFamilyHandoffBlockers)
+  }
+  $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
+  $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
+  $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
+} elseif (
+  $NextSmallestTruthfulGap -eq 'summon_anywhere_blockers' -and
   $Stage6PrerequisiteBringupPlanObserved -and
   $SummonAnywhereBlockersProofObserved -and
   $SummonAnywhereFamilyChainProofObserved

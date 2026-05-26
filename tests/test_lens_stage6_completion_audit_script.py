@@ -900,6 +900,7 @@ def test_lens_stage6_completion_audit_prefers_closure_handoff_after_resident_cla
 
     consumed_flag = "$Stage6CompletionAuditHandoffConsumedByClosureReadback = ("
     closure_source = "$RecommendedHandoffSource = 'stage6_closure_readback_summon_resident_host_blocker'"
+    reviewed_summon_source = "$RecommendedHandoffSource = 'stage6_reviewed_summon_anywhere_first_blocker'"
     prerequisite_source = "$RecommendedHandoffSource = 'stage6_prerequisite_bringup_operator_plan'"
 
     assert consumed_flag in script
@@ -931,12 +932,23 @@ def test_lens_stage6_completion_audit_prefers_closure_handoff_after_resident_cla
     assert "$RecommendedConcreteHandoffSource = $RecommendedHandoffSource" in script
     assert "$RecommendedConcreteHandoffSource = 'persistent_supervision_resident_claim_boundary_handoff'" in script
     assert "$RecommendedConcreteHandoff = $PersistentSupervisionResidentClaimBoundaryProof.handoff" in script
+    assert reviewed_summon_source in script
+    assert "$SummonAnywhereRuntimeReadbackObserved -and" in script
+    assert "$Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and" in script
+    assert "first_blocker_family_handoff = $SummonAnywhereBlockersProofFirstFamilyHandoff" in script
+    assert (
+        "consumed_persistent_supervision_resident_claim_boundary_next_smallest_truthful_gap = "
+        "[string]$PersistentSupervisionResidentClaimBoundaryProof.next_smallest_truthful_gap"
+    ) in script
+    assert "next_step = [string]$SummonAnywhereBlockersProofFirstFamilyHandoff.next_step" in script
+    assert "proof_script = [string]$SummonAnywhereBlockersProofFirstFamilyHandoff.proof_script" in script
     assert "recommended_concrete_handoff_source = $RecommendedConcreteHandoffSource" in script
     assert "recommended_concrete_next_slice = $RecommendedConcreteNextSlice" in script
     assert "recommended_concrete_proof_script = $RecommendedConcreteProofScript" in script
     assert "stage6_completion_audit_concrete_handoff_observed = $ConcreteHandoffObserved" in script
     assert script.index(consumed_flag) < script.index(closure_source)
     assert script.index(closure_source) < script.index(prerequisite_source)
+    assert script.index(reviewed_summon_source) < script.index(prerequisite_source)
 
 
 def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_readback() -> None:
