@@ -149,6 +149,78 @@ def _write_lens_status_with_supervised_resident_host(path: Path) -> None:
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
+def _write_lens_status_with_supervised_resident_host_and_live_surface_readbacks(
+    path: Path,
+) -> None:
+    _write_lens_status_with_supervised_resident_host(path)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    readbacks = {
+        "tray_runtime_readback": {
+            "ready": True,
+            "status": "running",
+            "runtime_state_path": "data/runtime/lens-tray/status.json",
+            "state_kind": "lens.tray.runtime_state",
+            "state_status": "tray_running",
+            "process_alive": True,
+            "tray_icon_visible": True,
+            "requirement_state": "ready",
+            "blocker": "",
+        },
+        "hotkey_runtime_readback": {
+            "ready": True,
+            "status": "running",
+            "runtime_state_path": "data/runtime/lens-hotkey/status.json",
+            "state_kind": "lens.hotkey.runtime_state",
+            "state_status": "hotkey_bound",
+            "process_alive": True,
+            "hotkey_bound": True,
+            "global_hotkey": "Ctrl+Alt+Space",
+            "expected_global_hotkey": "Ctrl+Alt+Space",
+            "binding_scope": "global",
+            "expected_binding_scope": "global",
+            "launch_on_hotkey": True,
+            "requirement_state": "bound",
+            "blocker": "",
+        },
+        "overlay_runtime_readback": {
+            "ready": True,
+            "status": "running",
+            "runtime_state_path": "data/runtime/lens-overlay/status.json",
+            "state_kind": "lens.overlay.runtime_state",
+            "state_status": "overlay_running",
+            "process_alive": True,
+            "overlay_window_visible": True,
+            "always_on_top": True,
+            "overlay_name": "Francis Lens Overlay",
+            "expected_overlay_name": "Francis Lens Overlay",
+            "overlay_scope": "user_session",
+            "expected_overlay_scope": "user_session",
+            "requirement_state": "visible",
+            "blocker": "",
+        },
+        "summon_runtime_readback": {
+            "ready": True,
+            "status": "observed",
+            "runtime_state_path": "data/runtime/lens-summon/status.json",
+            "state_kind": "lens.summon.runtime_state",
+            "state_status": "summon_binding_observed",
+            "global_hotkey": "Ctrl+Alt+Space",
+            "expected_global_hotkey": "Ctrl+Alt+Space",
+            "binding_scope": "global",
+            "expected_binding_scope": "global",
+            "bounded_handoff_ready": True,
+            "local_open_ready": True,
+            "summon_anywhere": False,
+            "os_level_summon": False,
+            "requirement_state": "bounded_handoff_observed",
+            "blocker": "",
+        },
+    }
+    payload["resident_host"].update(readbacks)
+    payload["resident_host"]["launch_manifest"] = readbacks
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
 def _write_lens_status_with_approved_os_binding_request_without_authority(path: Path) -> None:
     _write_lens_status(path)
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -501,6 +573,82 @@ def test_lens_summon_anywhere_blockers_proof_advances_past_supervised_resident_h
     assert supervision["observed_pid_matches_host_process"] is True
 
     checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["stage6_family_projection"]["status"] == "blocked_families_projected"
+    assert checks["first_blocker_family_handoff"]["status"] == "handoff_ready"
+    assert all(item["passed"] for item in payload["checks"])
+
+
+def test_lens_summon_anywhere_blockers_proof_consumes_live_surface_runtime_readback(
+    tmp_path: Path,
+) -> None:
+    status_path = tmp_path / "lens-status.json"
+    _write_lens_status_with_supervised_resident_host_and_live_surface_readbacks(status_path)
+
+    proc = _run_proof("-Mode", "Status", "-StatusPath", str(status_path))
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "proof_passed"
+    assert payload["ok"] is True
+    assert payload["resident_host_supervised_runtime_observed"] is True
+    assert payload["surface_runtime_readback_observed"] == {
+        "tray_presence": True,
+        "overlay_window": True,
+        "global_hotkey_binding": True,
+        "summon_binding": True,
+    }
+    assert payload["stage6_family_projection_observed"] is True
+    assert payload["first_blocker_family_handoff_observed"] is True
+    assert payload["first_blocker_family"] == "authority"
+    assert payload["recommended_handoff_source"] == "first_blocker_family_handoff"
+    assert payload["recommended_next_slice"] == "run_summon_authority_blocker_proof"
+    assert payload["recommended_proof_script"] == "scripts/lens-summon-authority-blocker-proof.ps1 -Mode Status"
+    assert payload["recommended_route"] == "/lens/summon"
+    assert payload["recommended_readiness_route"] == "/lens/summon/readiness"
+    assert payload["recommended_authority_required"] == "summon_hotkey_overlay_and_process_authority"
+    assert payload["recommended_authority_granted"] is False
+    assert payload["recommended_concrete_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+
+    assert payload["blocked_families"] == ["authority"]
+    assert [handoff["id"] for handoff in payload["blocked_family_handoffs"]] == ["authority"]
+
+    blocker_groups = payload["blocker_groups"]
+    assert blocker_groups["resident_host"] == []
+    assert blocker_groups["tray_presence"] == []
+    assert blocker_groups["overlay_window"] == []
+    assert blocker_groups["global_hotkey_binding"] == []
+    assert blocker_groups["summon_binding"] == []
+    assert blocker_groups["authority"] == [
+        "summon_authority_not_granted",
+        "hotkey_registration_authority_not_granted",
+        "overlay_control_authority_not_granted",
+    ]
+
+    assert payload["surface_runtime_suppressed_blockers"] == {
+        "tray_presence": ["tray_host_missing"],
+        "overlay_window": ["overlay_window_missing"],
+        "global_hotkey_binding": [
+            "global_hotkey_binding_disabled",
+            "global_hotkey_registration_disabled",
+            "hotkey_registration_authority_not_granted",
+        ],
+        "summon_binding": [
+            "lens_summon_binding_disabled_pending_authority",
+            "summon_authority_not_granted",
+        ],
+    }
+
+    readback = payload["surface_runtime_readback"]
+    assert readback["tray_presence"]["requirement_state"] == "ready"
+    assert readback["overlay_window"]["requirement_state"] == "visible"
+    assert readback["global_hotkey_binding"]["requirement_state"] == "bound"
+    assert readback["global_hotkey_binding"]["launch_on_hotkey"] is True
+    assert readback["summon_binding"]["requirement_state"] == "bounded_handoff_observed"
+    assert readback["summon_binding"]["summon_anywhere"] is False
+    assert readback["summon_binding"]["os_level_summon"] is False
+
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["surface_runtime_readback"]["status"] == "readback_consumed"
     assert checks["stage6_family_projection"]["status"] == "blocked_families_projected"
     assert checks["first_blocker_family_handoff"]["status"] == "handoff_ready"
     assert all(item["passed"] for item in payload["checks"])

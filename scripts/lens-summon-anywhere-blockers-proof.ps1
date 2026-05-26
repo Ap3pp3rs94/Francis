@@ -99,6 +99,26 @@ function Select-Blockers {
   return [string[]]@($Candidates | Where-Object { $Blockers -contains $_ })
 }
 
+function Test-LiveSurfaceReadbackObserved {
+  param(
+    [AllowNull()]
+    [object]$Readback,
+    [string[]]$AllowedStatuses,
+    [string[]]$AllowedRequirementStates = @()
+  )
+
+  if ($null -eq $Readback) {
+    return $false
+  }
+
+  $Ready = [bool](Get-PropertyValue -Payload $Readback -Name 'ready' -Default $false)
+  $Status = [string](Get-PropertyValue -Payload $Readback -Name 'status' -Default '')
+  $RequirementState = [string](Get-PropertyValue -Payload $Readback -Name 'requirement_state' -Default '')
+  $StatusObserved = @($AllowedStatuses).Count -eq 0 -or $AllowedStatuses -contains $Status
+  $RequirementObserved = @($AllowedRequirementStates).Count -eq 0 -or $AllowedRequirementStates -contains $RequirementState
+  return $Ready -and $StatusObserved -and $RequirementObserved
+}
+
 function New-Check {
   param(
     [string]$Id,
@@ -338,11 +358,25 @@ $SummonPreflightGovernance = Get-PropertyValue -Payload $SummonPreflightPayload 
 $LensStatusRead = Get-LensStatus -StatusPath $StatusPath
 $LensStatus = Get-PropertyValue -Payload $LensStatusRead -Name 'payload'
 $ResidentHostReadback = Get-PropertyValue -Payload $LensStatus -Name 'resident_host' -Default ([ordered]@{})
+$ResidentHostLaunchManifestReadback = Get-PropertyValue -Payload $ResidentHostReadback -Name 'launch_manifest' -Default ([ordered]@{})
 $ResidentHostProcessReadback = Get-PropertyValue -Payload $ResidentHostReadback -Name 'process_readback' -Default ([ordered]@{})
+$TrayRuntimeReadback = Get-PropertyValue -Payload $ResidentHostReadback -Name 'tray_runtime_readback' -Default (
+  Get-PropertyValue -Payload $ResidentHostLaunchManifestReadback -Name 'tray_runtime_readback' -Default ([ordered]@{})
+)
+$HotkeyRuntimeReadback = Get-PropertyValue -Payload $ResidentHostReadback -Name 'hotkey_runtime_readback' -Default (
+  Get-PropertyValue -Payload $ResidentHostLaunchManifestReadback -Name 'hotkey_runtime_readback' -Default ([ordered]@{})
+)
+$OverlayRuntimeReadback = Get-PropertyValue -Payload $ResidentHostReadback -Name 'overlay_runtime_readback' -Default (
+  Get-PropertyValue -Payload $ResidentHostLaunchManifestReadback -Name 'overlay_runtime_readback' -Default ([ordered]@{})
+)
+$SummonRuntimeReadback = Get-PropertyValue -Payload $ResidentHostReadback -Name 'summon_runtime_readback' -Default (
+  Get-PropertyValue -Payload $ResidentHostLaunchManifestReadback -Name 'summon_runtime_readback' -Default ([ordered]@{})
+)
 $ResidentHostSupervisionGate = Get-PropertyValue -Payload $ResidentHostReadback -Name 'supervision_gate' -Default ([ordered]@{})
 $ResidentHostSupervisorReadback = Get-PropertyValue -Payload $ResidentHostSupervisionGate -Name 'supervisor_readback' -Default (
   Get-PropertyValue -Payload $ResidentHostReadback -Name 'supervisor_readback' -Default ([ordered]@{})
 )
+$LensStatusOk = [bool](Get-PropertyValue -Payload $LensStatusRead -Name 'ok' -Default $false)
 $ResidentHostProcessObserved = (
   [string](Get-PropertyValue -Payload $ResidentHostProcessReadback -Name 'status' -Default '') -eq 'process_observed' -and
   [string](Get-PropertyValue -Payload $ResidentHostProcessReadback -Name 'state_status' -Default '') -eq 'resident_running' -and
@@ -361,11 +395,15 @@ $ResidentHostSupervisorFreshObserved = (
   [bool](Get-PropertyValue -Payload $ResidentHostSupervisorReadback -Name 'observed_pid_matches_host_process' -Default $false)
 )
 $ResidentHostSupervisedRuntimeObserved = (
-  [bool](Get-PropertyValue -Payload $LensStatusRead -Name 'ok' -Default $false) -and
+  $LensStatusOk -and
   $ResidentHostProcessObserved -and
   $ResidentHostSupervisionGateObserved -and
   $ResidentHostSupervisorFreshObserved
 )
+$TrayPresenceRuntimeObserved = $LensStatusOk -and (Test-LiveSurfaceReadbackObserved -Readback $TrayRuntimeReadback -AllowedStatuses @('running') -AllowedRequirementStates @('ready'))
+$GlobalHotkeyRuntimeObserved = $LensStatusOk -and (Test-LiveSurfaceReadbackObserved -Readback $HotkeyRuntimeReadback -AllowedStatuses @('running') -AllowedRequirementStates @('bound'))
+$OverlayWindowRuntimeObserved = $LensStatusOk -and (Test-LiveSurfaceReadbackObserved -Readback $OverlayRuntimeReadback -AllowedStatuses @('running') -AllowedRequirementStates @('visible'))
+$SummonBindingRuntimeObserved = $LensStatusOk -and (Test-LiveSurfaceReadbackObserved -Readback $SummonRuntimeReadback -AllowedStatuses @('observed') -AllowedRequirementStates @('bounded_handoff_observed'))
 $Stage6Readiness = Get-PropertyValue -Payload $LensStatus -Name 'stage6_readiness'
 $Stage6ClosureReadback = Get-PropertyValue -Payload $Stage6Readiness -Name 'closure_readback'
 $SummonAnywhereClosureCriterion = Get-ClosureReadinessCriterion -Stage6Readiness $Stage6Readiness -CriterionId 'summon_anywhere'
@@ -434,25 +472,51 @@ if ($ResidentHostSupervisedRuntimeObserved) {
     $AuthorityBlockers | Where-Object { $_ -ne 'local_process_launch_authority_not_granted' }
   )
 }
+$TrayPresenceBlockers = [string[]]@(Select-Blockers -Blockers $SummonPreflightBlockers -Candidates @(
+    'tray_host_missing'
+  ))
+$OverlayWindowBlockers = [string[]]@(Select-Blockers -Blockers $SummonPreflightBlockers -Candidates @(
+    'overlay_window_missing'
+  ))
+$GlobalHotkeyBindingBlockers = [string[]]@(Select-Blockers -Blockers $SummonPreflightBlockers -Candidates @(
+    'global_hotkey_binding_disabled',
+    'global_hotkey_registration_disabled',
+    'hotkey_registration_authority_not_granted'
+  ))
+$SummonBindingBlockers = [string[]]@(Select-Blockers -Blockers $SummonPreflightBlockers -Candidates @(
+    'lens_summon_binding_not_implemented',
+    'lens_summon_binding_disabled_pending_authority',
+    'summon_authority_not_granted'
+  ))
+$SurfaceRuntimeSuppressedBlockers = [ordered]@{
+  tray_presence = [string[]]@()
+  overlay_window = [string[]]@()
+  global_hotkey_binding = [string[]]@()
+  summon_binding = [string[]]@()
+}
+if ($TrayPresenceRuntimeObserved) {
+  $SurfaceRuntimeSuppressedBlockers.tray_presence = [string[]]@($TrayPresenceBlockers)
+  $TrayPresenceBlockers = [string[]]@()
+}
+if ($OverlayWindowRuntimeObserved) {
+  $SurfaceRuntimeSuppressedBlockers.overlay_window = [string[]]@($OverlayWindowBlockers)
+  $OverlayWindowBlockers = [string[]]@()
+}
+if ($GlobalHotkeyRuntimeObserved) {
+  $SurfaceRuntimeSuppressedBlockers.global_hotkey_binding = [string[]]@($GlobalHotkeyBindingBlockers)
+  $GlobalHotkeyBindingBlockers = [string[]]@()
+}
+if ($SummonBindingRuntimeObserved) {
+  $SurfaceRuntimeSuppressedBlockers.summon_binding = [string[]]@($SummonBindingBlockers)
+  $SummonBindingBlockers = [string[]]@()
+}
 
 $Stage6BlockerGroups = [ordered]@{
   resident_host = [string[]]@($ResidentHostBlockers)
-  tray_presence = [string[]]@(Select-Blockers -Blockers $SummonPreflightBlockers -Candidates @(
-      'tray_host_missing'
-    ))
-  overlay_window = [string[]]@(Select-Blockers -Blockers $SummonPreflightBlockers -Candidates @(
-      'overlay_window_missing'
-    ))
-  global_hotkey_binding = [string[]]@(Select-Blockers -Blockers $SummonPreflightBlockers -Candidates @(
-      'global_hotkey_binding_disabled',
-      'global_hotkey_registration_disabled',
-      'hotkey_registration_authority_not_granted'
-    ))
-  summon_binding = [string[]]@(Select-Blockers -Blockers $SummonPreflightBlockers -Candidates @(
-      'lens_summon_binding_not_implemented',
-      'lens_summon_binding_disabled_pending_authority',
-      'summon_authority_not_granted'
-    ))
+  tray_presence = [string[]]@($TrayPresenceBlockers)
+  overlay_window = [string[]]@($OverlayWindowBlockers)
+  global_hotkey_binding = [string[]]@($GlobalHotkeyBindingBlockers)
+  summon_binding = [string[]]@($SummonBindingBlockers)
   authority = [string[]]@($AuthorityBlockers)
 }
 
@@ -487,11 +551,21 @@ $Stage6ExpectedBlockedFamilies = [string[]]@(
   if (-not $ResidentHostSupervisedRuntimeObserved) {
     'resident_host'
   }
-  'tray_presence'
-  'overlay_window'
-  'global_hotkey_binding'
-  'summon_binding'
-  'authority'
+  if (-not $TrayPresenceRuntimeObserved -and @($TrayPresenceBlockers).Count -gt 0) {
+    'tray_presence'
+  }
+  if (-not $OverlayWindowRuntimeObserved -and @($OverlayWindowBlockers).Count -gt 0) {
+    'overlay_window'
+  }
+  if (-not $GlobalHotkeyRuntimeObserved -and @($GlobalHotkeyBindingBlockers).Count -gt 0) {
+    'global_hotkey_binding'
+  }
+  if (-not $SummonBindingRuntimeObserved -and @($SummonBindingBlockers).Count -gt 0) {
+    'summon_binding'
+  }
+  if (@($AuthorityBlockers).Count -gt 0) {
+    'authority'
+  }
 )
 $Stage6FamilyProjectionObserved = @($Stage6BlockedFamilies).Count -eq @($Stage6ExpectedBlockedFamilies).Count
 for ($Index = 0; $Index -lt @($Stage6ExpectedBlockedFamilies).Count; $Index++) {
@@ -729,6 +803,7 @@ $Checks = @(
   (New-Check -Id 'first_blocker_family_handoff' -Status $(if ($FirstBlockerFamilyHandoffObserved) { 'handoff_ready' } else { 'missing_or_unexpected' }) -Passed $FirstBlockerFamilyHandoffObserved -Evidence 'summon first blocker family to resident-host proof script' -Reason 'The aggregate summon-anywhere blocker proof must hand the first blocked acceptance family to its bounded proof without granting authority.'),
   (New-Check -Id 'summon_side_effects_denied' -Status $(if ($SideEffectsDenied) { 'diagnostic_bounded' } else { 'unexpected_authority' }) -Passed $SideEffectsDenied -Evidence 'lens.summon.preflight.governance' -Reason 'The proof must not grant summon, hotkey, overlay, process, memory, capture, sensing, approval-decision, or execution authority.'),
   (New-Check -Id 'os_binding_authority_request_readback' -Status $(if ($OsBindingAuthorityRequestReadbackObserved) { 'readback_ready' } else { 'missing_or_unexpected' }) -Passed $OsBindingAuthorityRequestReadbackObserved -Evidence '/lens/status:/lens/os-binding/authority/requests' -Reason 'The summon-anywhere blocker proof must consume OS-binding authority request readback before treating command-palette authority visibility as audited.'),
+  (New-Check -Id 'surface_runtime_readback' -Status $(if ($TrayPresenceRuntimeObserved -or $GlobalHotkeyRuntimeObserved -or $OverlayWindowRuntimeObserved -or $SummonBindingRuntimeObserved) { 'readback_consumed' } else { 'not_present' }) -Passed $true -Evidence '/lens/status resident_host.*_runtime_readback' -Reason 'Live surface runtime readback may suppress stale static preflight surface blockers, while authority blockers stay separate.'),
   (New-Check -Id 'first_blocker_family_completion_audit_handoff' -Status $(if ($FirstBlockerFamilyCompletionAuditHandoffObserved) { 'closure_handoff_ready' } else { 'not_present' }) -Passed $true -Evidence '/lens/status stage6_readiness.closure_readback' -Reason 'When Lens status exposes the summon-anywhere resident-host completion-audit handoff, the aggregate proof should project it separately from the default family front door.'),
   (New-Check -Id 'stage6_prerequisite_bringup_plan' -Status $(if ($Stage6PrerequisiteBringupPlanObserved -and $Stage6PrerequisiteBringupPlanApplied) { 'applied_readback_ready' } elseif ($Stage6PrerequisiteBringupPlanObserved) { 'operator_plan_readback_ready' } elseif ($Stage6PrerequisiteBringupPlanPresent) { 'missing_or_unexpected' } else { 'not_present' }) -Passed $(-not $Stage6PrerequisiteBringupPlanPresent -or $Stage6PrerequisiteBringupPlanObserved) -Evidence '/lens/status stage6_readiness.prerequisite_bringup' -Reason 'When Lens status exposes the governed Stage 6 prerequisite bring-up plan, the aggregate summon-anywhere proof should consume its readback without routing back to an already-applied operator handoff.')
 )
@@ -787,6 +862,44 @@ $Payload = [ordered]@{
       ))
     observed_process_alive = [bool](Get-PropertyValue -Payload $ResidentHostSupervisorReadback -Name 'observed_process_alive' -Default $false)
     observed_pid_matches_host_process = [bool](Get-PropertyValue -Payload $ResidentHostSupervisorReadback -Name 'observed_pid_matches_host_process' -Default $false)
+  }
+  surface_runtime_readback_observed = [ordered]@{
+    tray_presence = $TrayPresenceRuntimeObserved
+    overlay_window = $OverlayWindowRuntimeObserved
+    global_hotkey_binding = $GlobalHotkeyRuntimeObserved
+    summon_binding = $SummonBindingRuntimeObserved
+  }
+  surface_runtime_suppressed_blockers = $SurfaceRuntimeSuppressedBlockers
+  surface_runtime_readback = [ordered]@{
+    tray_presence = [ordered]@{
+      ready = [bool](Get-PropertyValue -Payload $TrayRuntimeReadback -Name 'ready' -Default $false)
+      status = [string](Get-PropertyValue -Payload $TrayRuntimeReadback -Name 'status' -Default '')
+      requirement_state = [string](Get-PropertyValue -Payload $TrayRuntimeReadback -Name 'requirement_state' -Default '')
+      blocker = [string](Get-PropertyValue -Payload $TrayRuntimeReadback -Name 'blocker' -Default '')
+    }
+    overlay_window = [ordered]@{
+      ready = [bool](Get-PropertyValue -Payload $OverlayRuntimeReadback -Name 'ready' -Default $false)
+      status = [string](Get-PropertyValue -Payload $OverlayRuntimeReadback -Name 'status' -Default '')
+      requirement_state = [string](Get-PropertyValue -Payload $OverlayRuntimeReadback -Name 'requirement_state' -Default '')
+      blocker = [string](Get-PropertyValue -Payload $OverlayRuntimeReadback -Name 'blocker' -Default '')
+    }
+    global_hotkey_binding = [ordered]@{
+      ready = [bool](Get-PropertyValue -Payload $HotkeyRuntimeReadback -Name 'ready' -Default $false)
+      status = [string](Get-PropertyValue -Payload $HotkeyRuntimeReadback -Name 'status' -Default '')
+      requirement_state = [string](Get-PropertyValue -Payload $HotkeyRuntimeReadback -Name 'requirement_state' -Default '')
+      blocker = [string](Get-PropertyValue -Payload $HotkeyRuntimeReadback -Name 'blocker' -Default '')
+      launch_on_hotkey = [bool](Get-PropertyValue -Payload $HotkeyRuntimeReadback -Name 'launch_on_hotkey' -Default $false)
+    }
+    summon_binding = [ordered]@{
+      ready = [bool](Get-PropertyValue -Payload $SummonRuntimeReadback -Name 'ready' -Default $false)
+      status = [string](Get-PropertyValue -Payload $SummonRuntimeReadback -Name 'status' -Default '')
+      requirement_state = [string](Get-PropertyValue -Payload $SummonRuntimeReadback -Name 'requirement_state' -Default '')
+      blocker = [string](Get-PropertyValue -Payload $SummonRuntimeReadback -Name 'blocker' -Default '')
+      bounded_handoff_ready = [bool](Get-PropertyValue -Payload $SummonRuntimeReadback -Name 'bounded_handoff_ready' -Default $false)
+      local_open_ready = [bool](Get-PropertyValue -Payload $SummonRuntimeReadback -Name 'local_open_ready' -Default $false)
+      summon_anywhere = [bool](Get-PropertyValue -Payload $SummonRuntimeReadback -Name 'summon_anywhere' -Default $false)
+      os_level_summon = [bool](Get-PropertyValue -Payload $SummonRuntimeReadback -Name 'os_level_summon' -Default $false)
+    }
   }
   blocked_families = [string[]]@($Stage6BlockedFamilies)
   blocked_family_handoffs = @($Stage6BlockerFamilyHandoffs)
@@ -895,7 +1008,7 @@ $Payload = [ordered]@{
     resident_claim_authority = $false
     mutation_authority_granted = $false
   }
-  message = $(if ($Stage6PrerequisiteBringupPlanObserved) { 'Stage 6 summon-anywhere remains blocked; this proof preserves the blocker-family inventory while handing the next concrete step to the governed Stage 6 prerequisite bring-up plan readback.' } elseif ($ResidentHostSupervisedRuntimeObserved) { 'Stage 6 summon-anywhere remains blocked by tray, overlay, global hotkey binding, summon binding, and authority gaps; resident host supervision was observed through Lens status readback.' } else { 'Stage 6 summon-anywhere remains blocked by resident host, tray, overlay, global hotkey binding, summon binding, and authority gaps; this proof is read-only and grants no summon or runtime authority.' })
+  message = $(if ($Stage6PrerequisiteBringupPlanObserved) { 'Stage 6 summon-anywhere remains blocked; this proof preserves the blocker-family inventory while handing the next concrete step to the governed Stage 6 prerequisite bring-up plan readback.' } elseif ($ResidentHostSupervisedRuntimeObserved) { 'Stage 6 summon-anywhere remains blocked by the remaining tray, overlay, global hotkey binding, summon binding, and authority gaps after live resident host surface readback is consumed.' } else { 'Stage 6 summon-anywhere remains blocked by resident host, tray, overlay, global hotkey binding, summon binding, and authority gaps; this proof is read-only and grants no summon or runtime authority.' })
 }
 
 $Payload | ConvertTo-Json -Depth 8
