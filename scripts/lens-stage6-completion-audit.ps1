@@ -527,9 +527,9 @@ $ResidentHostProcessSupervisionBlockerProofResult = [ordered]@{
     evidence = @('data/runtime/lens-host-supervisor/status.json', 'scripts/lens-stage6-checkpoint.ps1 -Mode Status')
     previous_next_smallest_truthful_gap = 'resident_host_process_not_supervised'
     next_smallest_truthful_gap = 'stage6_lens_completion_audit'
-    resident_host_process_handoff_observed = $false
-    process_supervision_boundary_observed = $false
-    handoff_consumed = $false
+    resident_host_process_handoff_observed = $EarlyFreshResidentSupervisedRuntimeReadbackObserved
+    process_supervision_boundary_observed = $ProcessSupervisionBoundaryObserved
+    handoff_consumed = ($EarlyFreshResidentSupervisedRuntimeReadbackObserved -and $ProcessSupervisionBoundaryObserved)
     authority_denied = $true
     authority_required = 'none_new_stage6_completion_audit'
     authority_granted = $false
@@ -592,6 +592,9 @@ $ResidentHostProcessSupervisionBlockerProofObserved = (
   $ResidentHostProcessSupervisionBlockerProofBlockers -contains 'process_restart_authority_not_granted' -and
   $ResidentHostProcessSupervisionBlockerProofBlockers -contains 'service_install_authority_not_granted' -and
   $ResidentHostProcessSupervisionBlockerProofBlockers -contains 'service_control_authority_not_granted'
+)
+$ResidentHostProcessSupervisionBlockerProofReadbackObserved = (
+  $ResidentHostProcessSupervisionBlockerProofObserved -or $ResidentHostProcessSupervisionBlockerProofSkippedForFreshRuntime
 )
 $SummonResidentHostBlockerProofTimeoutSeconds = [Math]::Max(($ChildProofTimeoutSeconds * 2) + 60, 360)
 $SummonResidentHostBlockerProofDataDir = Join-Path $RepoRoot (
@@ -6978,8 +6981,8 @@ $Payload = [ordered]@{
     blockers = [string[]]@($ProcessSupervisionBoundaryBlockers)
   }
   resident_host_process_supervision_blocker_proof = [ordered]@{
-    status = if ($ResidentHostProcessSupervisionBlockerProofObserved -or $ResidentHostProcessSupervisionBlockerProofSkippedForFreshRuntime) { [string]$ResidentHostProcessSupervisionBlockerProof.status } else { 'missing_or_failed' }
-    ok = ($ResidentHostProcessSupervisionBlockerProofObserved -or $ResidentHostProcessSupervisionBlockerProofSkippedForFreshRuntime)
+    status = if ($ResidentHostProcessSupervisionBlockerProofReadbackObserved) { [string]$ResidentHostProcessSupervisionBlockerProof.status } else { 'missing_or_failed' }
+    ok = $ResidentHostProcessSupervisionBlockerProofReadbackObserved
     exit_code = [int]$ResidentHostProcessSupervisionBlockerProofResult.exit_code
     skipped_for_fresh_resident_supervised_runtime_readback = $ResidentHostProcessSupervisionBlockerProofSkippedForFreshRuntime
     evidence = [string[]]@(
@@ -7559,7 +7562,7 @@ $Payload = [ordered]@{
     checkpoint_readback = $true
     child_proof_timeout_readback = $true
     process_supervision_authority_boundary_readback = $ProcessSupervisionBoundaryObserved
-    resident_host_process_supervision_blocker_proof_readback = $ResidentHostProcessSupervisionBlockerProofObserved
+    resident_host_process_supervision_blocker_proof_readback = $ResidentHostProcessSupervisionBlockerProofReadbackObserved
     fresh_resident_supervised_runtime_readback = $FreshResidentSupervisedRuntimeReadbackObserved
     resident_host_process_supervision_evidence_readback = $ResidentHostProcessSupervisionEvidenceObserved
     resident_host_process_handoff_consumed = [bool]$ResidentHostProcessSupervisionBlockerProof.handoff_consumed

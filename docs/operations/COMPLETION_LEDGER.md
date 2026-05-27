@@ -39764,6 +39764,46 @@ alignment:
   recommended_concrete_next_slice=resolve_resident_host_process_before_persistent_supervision_enablement;
   recommended_concrete_proof_script=scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status`
 
+### 2026-05-27 - Stage 6 completion-audit skipped supervision readback truthfulness
+
+Roadmap area: Stage 6 / Lens MVP, resident-host supervision handoff readback and
+completion-audit governance truthfulness.
+
+Material change:
+
+- When `scripts/lens-stage6-completion-audit.ps1` skips the resident-host
+  process supervision blocker proof because fresh resident-supervised runtime
+  readback is already present, the synthetic skipped-proof payload now reports
+  the resident-host process handoff, the process-supervision boundary, and
+  `handoff_consumed` from the same evidence that made the skip valid.
+- The audit payload now uses a single
+  `ResidentHostProcessSupervisionBlockerProofReadbackObserved` flag for
+  `resident_host_process_supervision_blocker_proof.status`, `.ok`, and
+  `governance.resident_host_process_supervision_blocker_proof_readback`, so the
+  full child proof and the fresh-runtime skip path report the same readback
+  truth.
+- Stage 6 still does not close and Stage 7 does not start. This is a reporting
+  correction only; it does not launch or supervise a new resident process, grant
+  process restart authority, install or control a service, write memory, grant
+  resident-claim authority, or claim system-resident readiness.
+
+Latest validation for Stage 6 completion-audit skipped supervision readback
+truthfulness:
+
+- PowerShell AST parse of `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `.\.venv\Scripts\ruff.exe check
+  tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `.\.venv\Scripts\ruff.exe format --check
+  tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 1 file already formatted`
+- `python -m pytest tests/test_lens_stage6_completion_audit_script.py -k
+  "accepts_fresh_supervised_runtime_after_bringup or
+  consumes_stage6_prerequisite_bringup_plan_readback or
+  distills_system_resident_concrete_handoff_to_resident_claim_boundary"`
+  Result: `passed; 3 passed, 41 deselected`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

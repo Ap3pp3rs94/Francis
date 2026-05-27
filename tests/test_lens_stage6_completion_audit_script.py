@@ -170,6 +170,21 @@ def test_lens_stage6_completion_audit_accepts_fresh_supervised_runtime_after_bri
     assert "$ResidentHostProcessSupervisionEvidenceObserved = (" in script
     assert "$ResidentHostProcessSupervisionBlockerProofObserved -or" in script
     assert "$FreshResidentSupervisedRuntimeReadbackObserved" in script
+    assert "resident_host_process_handoff_observed = $EarlyFreshResidentSupervisedRuntimeReadbackObserved" in script
+    assert "process_supervision_boundary_observed = $ProcessSupervisionBoundaryObserved" in script
+    assert (
+        "handoff_consumed = ($EarlyFreshResidentSupervisedRuntimeReadbackObserved -and "
+        "$ProcessSupervisionBoundaryObserved)"
+    ) in script
+    assert "$ResidentHostProcessSupervisionBlockerProofReadbackObserved = (" in script
+    assert (
+        "$ResidentHostProcessSupervisionBlockerProofObserved -or "
+        "$ResidentHostProcessSupervisionBlockerProofSkippedForFreshRuntime"
+    ) in script
+    assert (
+        "resident_host_process_supervision_blocker_proof_readback = "
+        "$ResidentHostProcessSupervisionBlockerProofReadbackObserved"
+    ) in script
     assert "$ResidentHostProcessSupervisionEvidenceObserved -and" in script
     assert "resident_supervised_runtime = [bool]$HostSupervisorReadback.resident_supervised_runtime" in script
 
