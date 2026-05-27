@@ -97,8 +97,11 @@ def test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback() -> N
     assert "New-SummonAnywhereAuthorityRequestBundleOperatorHandoff" in script
     assert "'summon_anywhere_authority_request_bundle_handoff'" in script
     assert "'request_global_hotkey_binding_authority'" in script
+    assert "'grant_global_hotkey_binding_authority'" in script
     assert "'request_overlay_window_authority'" in script
+    assert "'grant_overlay_window_authority'" in script
     assert "'request_summon_binding_authority'" in script
+    assert "'grant_summon_binding_authority'" in script
     assert "'scripts/lens-summon-api-execution-proof.ps1 -Mode Status -AllowLaunchOnHotkey'" in script
     assert "script_would_launch_process = $ScriptWouldLaunchProcess" in script
     assert "script_would_supervise_process = $ScriptWouldSuperviseProcess" in script
@@ -524,16 +527,24 @@ def test_lens_stage6_next_handoff_consumes_reviewed_summon_authority_handoff(tmp
     assert approved_payload["recommended_operator_handoff"]["source"] == (
         "summon_anywhere_authority_request_bundle_handoff"
     )
-    assert approved_payload["recommended_operator_handoff"]["status"] == "approved_authority_request_selected"
+    assert approved_payload["recommended_operator_handoff"]["status"] == "authority_grant_required"
+    assert approved_payload["recommended_operator_handoff"]["authority_grant_receipt_write_if_run"] is True
     assert approved_payload["recommended_next_operator_action_requirement"] == (
         "exact_global_hotkey_binding_authority_approval"
     )
-    assert approved_payload["recommended_next_operator_action"]["id"] == (
-        "select_exact_approved_global_hotkey_binding_authority_request"
+    assert approved_payload["recommended_next_operator_action"]["id"] == "grant_global_hotkey_binding_authority"
+    assert approved_payload["recommended_next_operator_action"]["route"] == "/lens/os-binding/authority"
+    assert approved_payload["recommended_next_operator_action"]["requests_route"] == (
+        "/lens/os-binding/authority/requests"
     )
-    assert approved_payload["recommended_next_operator_action"]["route"] == "/lens/os-binding/authority/requests"
+    assert approved_payload["recommended_next_operator_action"]["grants_route"] == ("/lens/os-binding/authority/grants")
+    assert approved_payload["recommended_next_operator_action"]["method"] == "POST"
+    assert approved_payload["recommended_next_operator_action"]["mode"] == "authority_grant"
     assert approved_payload["recommended_next_operator_action"]["approved_approval_id"] == approved_hotkey_approval_id
-    assert approved_payload["recommended_next_operator_action"]["follow_up_authority_grant_command"] == {
+    assert approved_payload["recommended_next_operator_action"]["script_would_request_authority"] is False
+    assert approved_payload["recommended_next_operator_action"]["script_would_grant_authority"] is True
+    assert approved_payload["recommended_next_operator_action"]["script_would_decide_approval"] is False
+    assert approved_payload["recommended_next_operator_action"]["authority_grant_command"] == {
         "command": (
             f"$body = @{{ approval_id = '{approved_hotkey_approval_id}'; actor = '<actor>'; "
             "reason = '<reason>'; lease_seconds = 3600 } | ConvertTo-Json -Compress; "
@@ -558,6 +569,24 @@ def test_lens_stage6_next_handoff_consumes_reviewed_summon_authority_handoff(tmp
         "preview_only": True,
         "availability_reason": "approved_request_selected_but_authority_grant_is_separate_operator_step",
     }
+    assert approved_payload["recommended_next_operator_command"] == {
+        "command": (
+            f"$body = @{{ approval_id = '{approved_hotkey_approval_id}'; actor = '<actor>'; "
+            "reason = '<reason>'; lease_seconds = 3600 } | ConvertTo-Json -Compress; "
+            "Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/lens/os-binding/authority' "
+            "-ContentType 'application/json' -Body $body"
+        ),
+        "mode": "ApiGrant",
+        "route": "/lens/os-binding/authority",
+        "method": "POST",
+        "requires_confirmation": True,
+        "requires_explicit_operator_opt_in": True,
+        "requires_actor": True,
+        "requires_approval_id": True,
+        "requires_operator_approval_decision": False,
+    }
+    assert approved_payload["recommended_next_operator_actor_scope_readiness"]["required_scope"] == "system.write"
+    assert approved_payload["recommended_next_operator_actor_scope_readiness"]["operator_must_supply_actor"] is True
 
     hotkey_grant_receipt_id = "active-hotkey-authority-grant-test"
     write_json(

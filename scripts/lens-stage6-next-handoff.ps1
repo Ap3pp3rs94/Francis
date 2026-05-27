@@ -1066,6 +1066,7 @@ function New-SummonAnywhereAuthorityRequestBundleOperatorHandoff {
       request_action_id = 'request_global_hotkey_binding_authority'
       await_action_id = 'await_global_hotkey_binding_authority_approval'
       select_action_id = 'select_exact_approved_global_hotkey_binding_authority_request'
+      grant_action_id = 'grant_global_hotkey_binding_authority'
       review_action_id = 'review_global_hotkey_binding_authority_grant_receipt'
       requirement = 'global_hotkey_binding'
       request_route = '/lens/os-binding/authority/request'
@@ -1084,6 +1085,7 @@ function New-SummonAnywhereAuthorityRequestBundleOperatorHandoff {
       request_action_id = 'request_overlay_window_authority'
       await_action_id = 'await_overlay_window_authority_approval'
       select_action_id = 'select_exact_approved_overlay_window_authority_request'
+      grant_action_id = 'grant_overlay_window_authority'
       review_action_id = 'review_overlay_window_authority_grant_receipt'
       requirement = 'overlay_window'
       request_route = '/lens/overlay/authority/request'
@@ -1102,6 +1104,7 @@ function New-SummonAnywhereAuthorityRequestBundleOperatorHandoff {
       request_action_id = 'request_summon_binding_authority'
       await_action_id = 'await_summon_binding_authority_approval'
       select_action_id = 'select_exact_approved_summon_binding_authority_request'
+      grant_action_id = 'grant_summon_binding_authority'
       review_action_id = 'review_summon_binding_authority_grant_receipt'
       requirement = 'summon_binding'
       request_route = '/lens/summon/authority/request'
@@ -1211,6 +1214,7 @@ function New-SummonAnywhereAuthorityRequestBundleOperatorHandoff {
   $RequestActionId = [string](Get-PropertyValue -Payload $CurrentDefinition -Name 'request_action_id' -Default '')
   $AwaitActionId = [string](Get-PropertyValue -Payload $CurrentDefinition -Name 'await_action_id' -Default '')
   $SelectActionId = [string](Get-PropertyValue -Payload $CurrentDefinition -Name 'select_action_id' -Default '')
+  $GrantActionId = [string](Get-PropertyValue -Payload $CurrentDefinition -Name 'grant_action_id' -Default '')
   $ReviewActionId = [string](Get-PropertyValue -Payload $CurrentDefinition -Name 'review_action_id' -Default '')
   $LiveEffect = [string](Get-PropertyValue -Payload $CurrentDefinition -Name 'live_effect' -Default 'bounded authority')
   $RequestCommand = (
@@ -1229,30 +1233,31 @@ function New-SummonAnywhereAuthorityRequestBundleOperatorHandoff {
   if (-not [string]::IsNullOrWhiteSpace($ApprovedApprovalId)) {
     return [ordered]@{
       source = 'summon_anywhere_authority_request_bundle_handoff'
-      status = 'approved_authority_request_selected'
+      status = 'authority_grant_required'
       next_operator_action_requirement = "exact_${Requirement}_authority_approval"
       active_grant_receipts = $ActiveGrantReceipts
       current_requirement = $Requirement
       current_authority_required = $AuthorityRequired
       next_operator_action = [ordered]@{
-        id = $SelectActionId
-        route = $RequestsRoute
+        id = $GrantActionId
+        route = $GrantRoute
         requests_route = $RequestsRoute
+        grants_route = $GrantsRoute
         readiness_route = $ReadinessRoute
         execute_route = $ExecuteRoute
-        method = 'GET'
+        method = 'POST'
         approval_action = $ApprovalAction
         approved_approval_id = $ApprovedApprovalId
         requires = [string[]]@("exact approved $Requirement authority approval_id")
-        mode = 'approval_readback'
-        live_effect = "selects the approved $Requirement authority request; no authority grant receipt is written"
-        operator_supplied_values_required = $false
+        mode = 'authority_grant'
+        live_effect = "writes the bounded $Requirement authority grant receipt only if the operator runs the explicit command"
+        operator_supplied_values_required = $true
         script_would_execute = $false
         script_would_mutate = $false
         script_would_request_authority = $false
-        script_would_grant_authority = $false
+        script_would_grant_authority = $true
         script_would_decide_approval = $false
-        follow_up_authority_grant_command = [ordered]@{
+        authority_grant_command = [ordered]@{
           command = $GrantCommand
           route = $GrantRoute
           method = 'POST'
@@ -1274,27 +1279,27 @@ function New-SummonAnywhereAuthorityRequestBundleOperatorHandoff {
         }
       }
       next_operator_command = [ordered]@{
-        command = $ReceiptReviewReadbackCommand
-        mode = 'Status'
-        route = $RequestsRoute
-        method = 'GET'
-        requires_confirmation = $false
-        requires_explicit_operator_opt_in = $false
-        requires_actor = $false
-        requires_approval_id = $false
+        command = $GrantCommand
+        mode = 'ApiGrant'
+        route = $GrantRoute
+        method = 'POST'
+        requires_confirmation = $true
+        requires_explicit_operator_opt_in = $true
+        requires_actor = $true
+        requires_approval_id = $true
         requires_operator_approval_decision = $false
       }
       read_only_status_command = $ReceiptReviewReadbackCommand
       next_operator_actor_scope_readiness = [ordered]@{
-        ready = $true
-        reason = 'not_required'
+        ready = $false
+        reason = 'actor_not_supplied'
         actor_present = $false
-        scope_required = $false
-        required_scope = ''
-        action_id = $SelectActionId
-        route = $RequestsRoute
-        method = 'GET'
-        operator_must_supply_actor = $false
+        scope_required = $true
+        required_scope = 'system.write'
+        action_id = $GrantActionId
+        route = $GrantRoute
+        method = 'POST'
+        operator_must_supply_actor = $true
         env_var = 'FRANCIS_API_ACTOR_SCOPES'
         json_shape = [ordered]@{ '<actor>' = [string[]]@('system.write') }
         powershell_example = '$env:FRANCIS_API_ACTOR_SCOPES = ''{"<actor>":["system.write"]}'''
@@ -1308,7 +1313,7 @@ function New-SummonAnywhereAuthorityRequestBundleOperatorHandoff {
       read_only_contract = $true
       diagnostic_only = $true
       approval_request_write_if_run = $false
-      authority_grant_receipt_write_if_run = $false
+      authority_grant_receipt_write_if_run = $true
       approval_decision_authority = $false
       would_execute = $false
       would_mutate = $false
@@ -3369,6 +3374,7 @@ $Stage6CompletionAuditSummonAuthorityRequestBundleHandoffObserved = (
     'authority_request_required',
     'operator_approval_decision_required',
     'approved_authority_request_selected',
+    'authority_grant_required',
     'authority_grants_ready_for_launch_on_hotkey_runtime_readback'
   ) -contains $RecommendedOperatorHandoffStatus -and
   [bool](Get-PropertyValue -Payload $RecommendedOperatorHandoff -Name 'diagnostic_only' -Default $false) -and

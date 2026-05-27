@@ -40312,6 +40312,48 @@ Latest validation for authority request-bundle handoff:
   operator_route=/lens/os-binding/authority/requests;
   request_write_if_run=false; would_execute=false; would_mutate=false`
 
+### 2026-05-27 - Stage 6 approved summon authority handoff advances to grant action
+
+Roadmap area: Stage 6 / Lens MVP, summon-anywhere governed authority handoff.
+
+Material change:
+
+- `scripts/lens-stage6-next-handoff.ps1` now treats an already approved
+  summon-anywhere authority request as an explicit authority-grant step instead
+  of stopping at a read-only approved-request selection state.
+- The handoff still does not grant authority, decide approvals, execute runtime
+  behavior, write memory, or claim Stage 6 closure in `Status` mode. It exposes
+  the exact `ApiGrant` command, approval id, route, actor-scope requirement, and
+  `authority_grant_receipt_write_if_run=true` so the operator surface is honest
+  about what would happen if the command is run.
+- This keeps the authority boundary governed and auditable while making the next
+  operator action directly actionable: approved hotkey/overlay/summon authority
+  can advance to a grant receipt before the launch-on-hotkey runtime readback.
+- Stage 6 remains active. Stage 7 has not started.
+
+Latest validation for approved authority grant handoff:
+
+- PowerShell AST parse of `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 1 file already formatted`
+- `python -m pytest
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_reviewed_summon_authority_handoff
+  -q`
+  Result: `passed`
+- `.\scripts\lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath .tmp\stage6-completion-audit-authority-live.json`
+  Result: `passed; ok=true; status=proof_passed;
+  handoff_source=stage6_reviewed_summon_anywhere_authority_handoff;
+  bundle_observed=true; operator_status=authority_grant_required;
+  operator_action=grant_global_hotkey_binding_authority;
+  operator_command_mode=ApiGrant; grant_write_if_run=true;
+  would_execute=false; would_mutate=false`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
