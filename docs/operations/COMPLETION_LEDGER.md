@@ -40410,6 +40410,39 @@ Latest validation for active summon authority grants:
   operator_action=run_summon_api_launch_on_hotkey_proof_for_runtime_readback;
   would_execute=true; would_mutate=true`
 
+### 2026-05-27 - Stage 6 launch-on-hotkey runtime readback passed
+
+Roadmap area: Stage 6 / Lens MVP, summon-anywhere runtime proof.
+
+Material change:
+
+- After the governed hotkey, overlay, and summon authority grant receipts were
+  active, the bounded launch-on-hotkey summon API execution proof passed with
+  `-AllowLaunchOnHotkey`.
+- The proof used its isolated proof data root, ran for a bounded two-second
+  runtime window, observed `summon_anywhere=true`, observed
+  `hotkey_launch_on_press=true`, and then stopped the overlay, hotkey, tray, and
+  resident-supervision runtime pieces.
+- The proof recommends returning to the Stage 6 completion audit:
+  `run_stage6_completion_audit_after_launch_on_hotkey_runtime_readback`.
+- This is runtime evidence for the Stage 6 done criterion "the user can summon
+  Francis anywhere" inside the bounded proof harness. It does not by itself
+  close Stage 6, does not start Stage 7, and does not claim persistent
+  user-facing residency outside the proof window.
+
+Latest validation for launch-on-hotkey runtime readback:
+
+- `.\scripts\lens-summon-api-execution-proof.ps1 -Mode Status -RunSeconds 2
+  -AllowLaunchOnHotkey`
+  Result: `passed; ok=true; status=proof_passed;
+  next_smallest_truthful_gap=stage6_lens_completion_audit;
+  recommended_handoff_source=api_launch_on_hotkey_runtime_readback_handoff;
+  recommended_next_slice=run_stage6_completion_audit_after_launch_on_hotkey_runtime_readback;
+  allow_launch_on_hotkey=true; summon_anywhere=true;
+  hotkey_launch_on_press=true; overlay_stop_observed=true;
+  hotkey_stop_observed=true; tray_presence_stop_observed=true;
+  resident_supervision_stop_observed=true; cleanup_errors=[]`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
