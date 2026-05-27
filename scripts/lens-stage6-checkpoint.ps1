@@ -210,6 +210,21 @@ function Get-ReadinessCriterion {
   return $null
 }
 
+function Get-ClosureCriterion {
+  param(
+    [object]$ClosureReadback,
+    [string]$CriterionId
+  )
+
+  $Criteria = Get-PropertyValue -Payload $ClosureReadback -Name 'criteria' -Default @()
+  foreach ($Criterion in @($Criteria)) {
+    if ((Get-PropertyValue -Payload $Criterion -Name 'id' -Default '') -eq $CriterionId) {
+      return $Criterion
+    }
+  }
+  return $null
+}
+
 function New-Criterion {
   param(
     [string]$Id,
@@ -218,10 +233,12 @@ function New-Criterion {
     [bool]$Ready,
     [string[]]$Evidence = @(),
     [string[]]$Blockers = @(),
-    [string]$Basis = ''
+    [string]$Basis = '',
+    [string]$NextSmallestTruthfulGap = '',
+    [object]$Handoff = $null
   )
 
-  return [ordered]@{
+  $Criterion = [ordered]@{
     id = $Id
     label = $Label
     status = $Status
@@ -230,14 +247,29 @@ function New-Criterion {
     blockers = @($Blockers)
     basis = $Basis
   }
+  if (-not [string]::IsNullOrWhiteSpace($NextSmallestTruthfulGap)) {
+    $Criterion['next_smallest_truthful_gap'] = $NextSmallestTruthfulGap
+  }
+  if ($null -ne $Handoff) {
+    $HandoffNextStep = [string](Get-PropertyValue -Payload $Handoff -Name 'next_step' -Default '')
+    $HandoffNextGap = [string](Get-PropertyValue -Payload $Handoff -Name 'next_smallest_truthful_gap' -Default '')
+    if (-not [string]::IsNullOrWhiteSpace($HandoffNextStep) -or -not [string]::IsNullOrWhiteSpace($HandoffNextGap)) {
+      $Criterion['handoff'] = $Handoff
+    }
+  }
+  return $Criterion
 }
 
 $LensStatus = Get-LensStatus
 $LensStatusOk = [bool](Get-PropertyValue -Payload $LensStatus -Name 'ok' -Default $false)
 $Stage6Readiness = Get-PropertyValue -Payload $LensStatus -Name 'stage6_readiness'
 $StageClaim = [string](Get-PropertyValue -Payload $Stage6Readiness -Name 'claim' -Default 'unavailable')
+$Stage6ClosureReadback = Get-PropertyValue -Payload $Stage6Readiness -Name 'closure_readback' -Default ([ordered]@{})
 
 $SummonCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'summon_anywhere'
+$SummonClosureCriterion = Get-ClosureCriterion -ClosureReadback $Stage6ClosureReadback -CriterionId 'summon_anywhere'
+$HelpfulNotNoisyClosureCriterion = Get-ClosureCriterion -ClosureReadback $Stage6ClosureReadback -CriterionId 'helpful_not_noisy'
+$SystemResidentClosureCriterion = Get-ClosureCriterion -ClosureReadback $Stage6ClosureReadback -CriterionId 'system_resident_presence'
 $SummonEnablementGateCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'summon_enablement_gate'
 $ModeCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'mode_visibility'
 $HudCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'hud_layer_runtime'
@@ -330,6 +362,12 @@ $ResidentSurfaceReadbackReady = (
 
 $SummonStatus = [string](Get-PropertyValue -Payload $SummonCriterion -Name 'status' -Default 'missing')
 $SummonBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $SummonCriterion -Name 'blockers' -Default @())
+$SummonClosureNextSmallestTruthfulGap = [string](Get-PropertyValue -Payload $SummonClosureCriterion -Name 'next_smallest_truthful_gap' -Default '')
+$SummonClosureHandoff = Get-PropertyValue -Payload $SummonClosureCriterion -Name 'handoff' -Default ([ordered]@{})
+$HelpfulNotNoisyClosureNextSmallestTruthfulGap = [string](Get-PropertyValue -Payload $HelpfulNotNoisyClosureCriterion -Name 'next_smallest_truthful_gap' -Default '')
+$HelpfulNotNoisyClosureHandoff = Get-PropertyValue -Payload $HelpfulNotNoisyClosureCriterion -Name 'handoff' -Default ([ordered]@{})
+$SystemResidentClosureNextSmallestTruthfulGap = [string](Get-PropertyValue -Payload $SystemResidentClosureCriterion -Name 'next_smallest_truthful_gap' -Default '')
+$SystemResidentClosureHandoff = Get-PropertyValue -Payload $SystemResidentClosureCriterion -Name 'handoff' -Default ([ordered]@{})
 $ModeStatus = [string](Get-PropertyValue -Payload $ModeCriterion -Name 'status' -Default 'missing')
 $HudStatus = [string](Get-PropertyValue -Payload $HudCriterion -Name 'status' -Default 'missing')
 $HudBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HudCriterion -Name 'blockers' -Default @())
@@ -1797,7 +1835,9 @@ $Criteria = @(
       -Ready ($SummonStatus -eq 'ready') `
       -Evidence @('/lens/status', '/lens/preflight', 'scripts/lens-summon-preflight.ps1') `
       -Blockers $SummonBlockers `
-      -Basis 'Roadmap Stage 6 done criterion')
+      -Basis 'Roadmap Stage 6 done criterion' `
+      -NextSmallestTruthfulGap $SummonClosureNextSmallestTruthfulGap `
+      -Handoff $SummonClosureHandoff)
   (New-Criterion `
       -Id 'helpful_not_noisy' `
       -Label 'Lens is helpful, not noisy' `
@@ -1805,7 +1845,9 @@ $Criteria = @(
       -Ready $HelpfulNotNoisyReady `
       -Evidence @('/lens/status', '/lens/resident-surface', 'chat_ui.system_orb', 'scripts/lens-live-operator-proof.ps1') `
       -Blockers ([string[]]@($HelpfulNotNoisyBlockers)) `
-      -Basis $HelpfulNotNoisyBasis)
+      -Basis $HelpfulNotNoisyBasis `
+      -NextSmallestTruthfulGap $HelpfulNotNoisyClosureNextSmallestTruthfulGap `
+      -Handoff $HelpfulNotNoisyClosureHandoff)
   (New-Criterion `
       -Id 'mode_visibility' `
       -Label 'Mode visibility becomes real' `
@@ -1829,7 +1871,9 @@ $Criteria = @(
       -Ready ($HostStatus -eq 'ready') `
       -Evidence @('/lens/host', '/lens/preflight', '/lens/resident-surface', '/lens/resident-runtime/preflight', '/lens/resident-runtime/policy', '/lens/resident-runtime/authority-grant', '/lens/resident-runtime/plan', '/lens/resident-runtime/execute', '/lens/resident-surface/activation', 'scripts/lens-host.ps1', 'scripts/lens-host-foreground-proof.ps1', 'scripts/lens-host-launch-proof.ps1', 'scripts/lens-host-supervisor.ps1', 'scripts/lens-host-supervisor-observation-proof.ps1', 'scripts/lens-host-supervision-proof.ps1', 'scripts/lens-resident-surface-proof.ps1', 'scripts/lens-resident-overlay-runtime-proof.ps1', 'scripts/lens-resident-overlay-activation-boundary-proof.ps1') `
       -Blockers $SystemResidentBlockers `
-      -Basis $(if ($ResidentOverlayActivationBoundaryProofPassed) { 'Resident overlay activation boundary proof composes live Lens readback, resident overlay boundary observation, and blocked activation readback; resident supervision and real overlay activation remain blocked.' } elseif ($ResidentOverlayRuntimeProofPassed) { 'Resident overlay runtime boundary proof composes one bounded supervisor observation with blocked overlay, tray, hotkey, and summon preflights; resident supervision and real overlay runtime remain blocked.' } elseif ($HostSupervisorOwnedSessionPassed) { 'Bounded supervisor-owned session starts and observes one diagnostic host process through running and stopped states; persistent resident supervision, tray, hotkey, and overlay runtime remain blocked.' } elseif ($HostSupervisorProofPassed) { 'Bounded supervisor observation sees one diagnostic host process through running and stopped states; resident supervision, tray, hotkey, and overlay runtime remain blocked.' } elseif ($HostLaunchProofPassed) { 'Bounded host launch is observable and self-stopping; resident supervision, tray, hotkey, and overlay runtime remain blocked.' } else { 'Resident host, tray, hotkey, and overlay runtime remain blocked.' }))
+      -Basis $(if ($ResidentOverlayActivationBoundaryProofPassed) { 'Resident overlay activation boundary proof composes live Lens readback, resident overlay boundary observation, and blocked activation readback; resident supervision and real overlay activation remain blocked.' } elseif ($ResidentOverlayRuntimeProofPassed) { 'Resident overlay runtime boundary proof composes one bounded supervisor observation with blocked overlay, tray, hotkey, and summon preflights; resident supervision and real overlay runtime remain blocked.' } elseif ($HostSupervisorOwnedSessionPassed) { 'Bounded supervisor-owned session starts and observes one diagnostic host process through running and stopped states; persistent resident supervision, tray, hotkey, and overlay runtime remain blocked.' } elseif ($HostSupervisorProofPassed) { 'Bounded supervisor observation sees one diagnostic host process through running and stopped states; resident supervision, tray, hotkey, and overlay runtime remain blocked.' } elseif ($HostLaunchProofPassed) { 'Bounded host launch is observable and self-stopping; resident supervision, tray, hotkey, and overlay runtime remain blocked.' } else { 'Resident host, tray, hotkey, and overlay runtime remain blocked.' }) `
+      -NextSmallestTruthfulGap $SystemResidentClosureNextSmallestTruthfulGap `
+      -Handoff $SystemResidentClosureHandoff)
 )
 
 $EnablementGateIds = @(

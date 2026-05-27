@@ -96,6 +96,21 @@ def test_lens_stage6_checkpoint_keeps_helpful_not_noisy_blockers_scoped() -> Non
     ) in script
 
 
+def test_lens_stage6_checkpoint_projects_closure_readback_handoffs() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-checkpoint.ps1").read_text(encoding="utf-8")
+
+    assert "function Get-ClosureCriterion" in script
+    assert "$Stage6ClosureReadback = Get-PropertyValue -Payload $Stage6Readiness -Name 'closure_readback'" in script
+    assert "[string]$NextSmallestTruthfulGap = ''" in script
+    assert "[object]$Handoff = $null" in script
+    assert "$Criterion['next_smallest_truthful_gap'] = $NextSmallestTruthfulGap" in script
+    assert "$Criterion['handoff'] = $Handoff" in script
+    assert "-NextSmallestTruthfulGap $SummonClosureNextSmallestTruthfulGap" in script
+    assert "-NextSmallestTruthfulGap $HelpfulNotNoisyClosureNextSmallestTruthfulGap" in script
+    assert "-NextSmallestTruthfulGap $SystemResidentClosureNextSmallestTruthfulGap" in script
+    assert "-Handoff $SystemResidentClosureHandoff" in script
+
+
 def test_lens_stage6_checkpoint_accepts_summon_runtime_readback_handoff() -> None:
     script = (_repo_root() / "scripts" / "lens-stage6-checkpoint.ps1").read_text(encoding="utf-8")
 
@@ -336,6 +351,25 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert "resident_surface_not_resident" in criteria["system_resident_presence"]["blockers"]
     assert "resident_surface_runtime_not_supervised" in criteria["system_resident_presence"]["blockers"]
     assert "resident_overlay_runtime_missing" in criteria["system_resident_presence"]["blockers"]
+    assert criteria["system_resident_presence"]["next_smallest_truthful_gap"] == (
+        "resident_host_supervision_authority_readiness_blockers"
+    )
+    system_handoff = criteria["system_resident_presence"]["handoff"]
+    assert system_handoff["next_step"] == "resolve_resident_host_runtime_loop_before_system_resident_claim"
+    assert system_handoff["runtime_loop_readiness_route"] == "/lens/host/runtime-loop/readiness"
+    assert system_handoff["supervision_authority_readiness_route"] == ("/lens/host/supervision/authority/readiness")
+    assert (
+        system_handoff["next_smallest_truthful_gap"]
+        == (criteria["system_resident_presence"]["next_smallest_truthful_gap"])
+    )
+    assert system_handoff["supervision_authority_next_smallest_truthful_gap"] == (
+        "host_supervision_authority_exact_approval_request"
+    )
+    assert system_handoff["supervision_authority_first_blocked_requirement"] == ("exact_supervision_authority_approval")
+    assert system_handoff["read_only_contract"] is True
+    assert system_handoff["diagnostic_only"] is True
+    assert system_handoff["would_execute"] is False
+    assert system_handoff["would_mutate"] is False
     assert "tray_host_missing" in payload["blockers"]
     host_supervisor_readback = payload["host_supervisor_readback"]
     assert host_supervisor_readback["readback_ready"] is True

@@ -39326,6 +39326,53 @@ Latest validation for Stage 6 resident-host plan consumption retry hardening:
   tests/test_lens_resident_host_plan_consumption_proof_script.py -q --tb=short`
   Result: `passed`
 
+### 2026-05-27 - Stage 6 checkpoint closure handoff projection
+
+Roadmap area: Stage 6 / Lens MVP, completion checkpoint and operator-surface
+truthfulness.
+
+Material change:
+
+- `scripts/lens-stage6-checkpoint.ps1` now preserves closure-readback
+  `next_smallest_truthful_gap` and `handoff` fields when it rebuilds Stage 6
+  done-criterion payloads for `summon_anywhere`, `helpful_not_noisy`, and
+  `system_resident_presence`.
+- The `system_resident_presence` criterion now exposes the concrete
+  read-only handoff instead of only a broad blocker list. Current live
+  readback names
+  `next_smallest_truthful_gap=resident_host_supervision_authority_readiness_blockers`
+  and `handoff.next_step=resolve_resident_host_runtime_loop_before_system_resident_claim`.
+- The projected handoff is diagnostic/read-only and preserves
+  `would_execute=false` and `would_mutate=false`; it does not grant host,
+  overlay, tray, summon, memory, service, approval-decision, or resident-claim
+  authority.
+- Stage 6 still does not close and Stage 7 does not start.
+
+Latest validation for Stage 6 checkpoint closure handoff projection:
+
+- PowerShell AST parse of `scripts\lens-stage6-checkpoint.ps1`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-checkpoint.ps1 -Mode Status`
+  Result: `passed; status=blocked;
+  top_next_smallest_truthful_gap=stage6_lens_completion_audit;
+  summon_next_smallest_truthful_gap=summon_anywhere_blockers;
+  system_next_smallest_truthful_gap=resident_host_supervision_authority_readiness_blockers;
+  system_handoff_next_step=resolve_resident_host_runtime_loop_before_system_resident_claim;
+  system_handoff_supervision_gap=host_supervision_authority_exact_approval_request;
+  system_handoff_read_only=true; system_handoff_would_execute=false;
+  ready_to_close=false`
+- `python -m ruff check tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests\test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `python -m pytest
+  tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_projects_closure_readback_handoffs
+  tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority
+  -q --tb=short`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
