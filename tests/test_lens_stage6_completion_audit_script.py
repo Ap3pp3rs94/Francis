@@ -411,6 +411,10 @@ def test_lens_stage6_completion_audit_consumes_stage6_prerequisite_bringup_plan_
         "-eq 'persistent_supervision_required_prerequisites_missing'\n) {\n"
         "  'persistent_supervision_required_prerequisites_missing'"
     )
+    applied_enablement_receipt_review_branch = (
+        "$Stage6PrerequisiteBringupAppliedEnablementReceiptReviewPending\n) {\n"
+        "  [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap"
+    )
     generic_acceptance_branch = (
         "$PersistentSupervisionEnablementDenialObserved -and\n"
         "  $PersistentSupervisionEnablementExecutionDenialObserved -and\n"
@@ -419,8 +423,12 @@ def test_lens_stage6_completion_audit_consumes_stage6_prerequisite_bringup_plan_
     )
     assert reviewed_prerequisite_branch in script
     assert applied_enablement_prerequisite_guard_branch in script
+    assert applied_enablement_receipt_review_branch in script
     assert generic_acceptance_branch in script
     assert script.index(reviewed_prerequisite_branch) < script.index(generic_acceptance_branch)
+    assert script.index(applied_enablement_receipt_review_branch) < script.index(
+        applied_enablement_prerequisite_guard_branch
+    )
     assert script.index(applied_enablement_prerequisite_guard_branch) < script.index(generic_acceptance_branch)
     assert (
         "$NextSmallestTruthfulGap -eq 'persistent_supervision_required_prerequisites_missing' -and\n"
@@ -1461,10 +1469,12 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     assert "$Stage6PrerequisiteBringupAppliedEnablementReceiptReviewPending = (" in script
     assert (
         "$Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and\n"
-        "  -not $PersistentSupervisionResidentClaimBoundaryObserved\n)" in script
+        "  $Stage6PrerequisiteBringupPlanNextOperatorActionId "
+        "-eq 'review_persistent_supervision_enablement_receipt'\n)" in script
     )
     assert (
-        "$SummonAnywhereRuntimeReadbackObserved -and\n  $Stage6PrerequisiteBringupAppliedEnablementReceiptReviewPending"
+        "$NextSmallestTruthfulGap -eq 'persistent_supervision_execution_boundary' -and\n"
+        "  $Stage6PrerequisiteBringupAppliedEnablementReceiptReviewPending"
     ) in script
     assert "summon_api_launch_on_hotkey_runtime_readback_observed = $SummonApiLaunchOnHotkeyProofObserved" in script
     assert "summon_api_launch_on_hotkey_proof = [ordered]@{" in script

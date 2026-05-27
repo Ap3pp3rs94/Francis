@@ -1302,7 +1302,7 @@ $PersistentSupervisionResidentClaimBoundaryObserved = (
 )
 $Stage6PrerequisiteBringupAppliedEnablementReceiptReviewPending = (
   $Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and
-  -not $PersistentSupervisionResidentClaimBoundaryObserved
+  $Stage6PrerequisiteBringupPlanNextOperatorActionId -eq 'review_persistent_supervision_enablement_receipt'
 )
 $PersistentSupervisionEnablementTransitionPlanProofSiblingChildProofCount = 3
 $PersistentSupervisionEnablementTransitionPlanProofTimeoutSeconds = (
@@ -3576,6 +3576,12 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
 } elseif (
   $Stage6CompletionReviewed -and
   -not $ReadyToClose -and
+  $Stage6PrerequisiteBringupAppliedEnablementReceiptReviewPending
+) {
+  [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap
+} elseif (
+  $Stage6CompletionReviewed -and
+  -not $ReadyToClose -and
   $BlockedCriterionIds -contains 'system_resident_presence' -and
   $Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and
   $ResidentHostProcessSupervisionEvidenceObserved -and
@@ -3621,13 +3627,6 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   [string]$ResidentSupervisionPersistenceBoundaryProof.route_next_smallest_truthful_gap -eq 'persistent_supervision_authority_not_granted'
 ) {
   'persistent_supervision_authority_not_granted'
-} elseif (
-  $Stage6CompletionReviewed -and
-  -not $ReadyToClose -and
-  $SummonAnywhereRuntimeReadbackObserved -and
-  $Stage6PrerequisiteBringupAppliedEnablementReceiptReviewPending
-) {
-  [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap
 } elseif (
   $AllowLaunchOnHotkey -and
   $SummonAnywhereBlockersProofObserved -and
@@ -4152,7 +4151,6 @@ if (
   $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
 } elseif (
   $NextSmallestTruthfulGap -eq 'persistent_supervision_execution_boundary' -and
-  $SummonAnywhereRuntimeReadbackObserved -and
   $Stage6PrerequisiteBringupAppliedEnablementReceiptReviewPending
 ) {
   $RecommendedHandoffSource = 'stage6_prerequisite_bringup_enablement_receipt_review'

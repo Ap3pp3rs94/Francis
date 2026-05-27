@@ -2551,6 +2551,9 @@ def test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_con
     assert followup_payload["next_operator_action"]["script_would_mutate"] is False
     assert followup_payload["next_operator_command"]["mode"] == "Status"
     assert followup_payload["next_smallest_truthful_gap"] == "persistent_supervision_execution_boundary"
+    expected_gap_basis = "persistent_supervision_enablement_execution_receipt.post_plan.next_smallest_truthful_gap"
+    assert followup_payload["current_truthful_gap_basis"] == expected_gap_basis
+    assert followup_payload["next_smallest_truthful_gap_basis"] == expected_gap_basis
     assert followup_payload["recommended_next_slice"] == (
         "run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt"
     )

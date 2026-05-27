@@ -39973,6 +39973,55 @@ Latest validation for runtime-proved concrete handoff promotion:
   Result: `passed; status=blocked; ready_to_close=false; ready_total=3;
   blocked_total=2; next_smallest_truthful_gap=stage6_lens_completion_audit`
 
+### 2026-05-27 - Stage 6 audit consumes applied persistent-supervision enablement receipt
+
+Roadmap area: Stage 6 / Lens MVP, persistent-supervision enablement receipt
+readback and completion-audit handoff truthfulness.
+
+Material change:
+
+- `scripts/lens-stage6-completion-audit.ps1` now treats the applied
+  persistent-supervision enablement receipt review as the next truthful handoff
+  even after the resident-claim boundary proof has been observed.
+- The audit no longer collapses an applied enablement receipt state back to the
+  older `persistent_supervision_required_prerequisites_missing` operator
+  handoff.
+- The live audit remains blocked and does not close Stage 6. The current
+  truthful next gap is `persistent_supervision_execution_boundary`, with
+  `recommended_handoff_source=stage6_prerequisite_bringup_enablement_receipt_review`
+  and `recommended_next_slice=run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt`.
+- Stage 7 does not start. Remaining Stage 6 checkpoint blockers are still
+  `summon_anywhere` and `system_resident_presence`.
+
+Latest validation for applied enablement receipt handoff consumption:
+
+- PowerShell AST parse of `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `python -m ruff check
+  tests/test_lens_stage6_completion_audit_script.py
+  tests/test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests/test_lens_stage6_completion_audit_script.py
+  tests/test_lens_stage6_prerequisite_bringup_plan_script.py`
+  Result: `passed; 2 files already formatted`
+- `python -m pytest tests/test_lens_stage6_completion_audit_script.py -q`
+  Result: `passed`
+- `python -m pytest
+  tests/test_lens_stage6_prerequisite_bringup_plan_script.py::test_lens_stage6_prerequisite_bringup_applies_enablement_to_temp_service_config_only -q`
+  Result: `passed`
+- `.\scripts\lens-stage6-completion-audit.ps1 -Mode Status`
+  Result: `passed; ok=true; status=blocked; ready_to_close=false;
+  next_smallest_truthful_gap=persistent_supervision_execution_boundary;
+  recommended_handoff_source=stage6_prerequisite_bringup_enablement_receipt_review;
+  recommended_next_slice=run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt;
+  stage6_prerequisite_bringup_plan.status=persistent_supervision_enablement_applied;
+  stage6_prerequisite_bringup_plan.current_truthful_gap=persistent_supervision_execution_boundary;
+  stage6_prerequisite_bringup_plan.current_truthful_gap_basis=persistent_supervision_enablement_execution_receipt.post_plan.next_smallest_truthful_gap`
+- `.\scripts\lens-stage6-checkpoint.ps1 -Mode Status`
+  Result: `passed; status=blocked; ready_to_close=false; ready_total=3;
+  blocked_total=2; next_smallest_truthful_gap=stage6_lens_completion_audit`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
