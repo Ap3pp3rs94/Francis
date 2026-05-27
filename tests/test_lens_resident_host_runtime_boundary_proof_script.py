@@ -65,6 +65,15 @@ def test_lens_resident_host_runtime_boundary_accepts_existing_candidate_readback
     assert "bounded_resident_candidate_launch = $FreshResidentCandidateObserved" in script
 
 
+def test_lens_resident_host_runtime_boundary_accepts_lifecycle_child_handoff() -> None:
+    script = (_repo_root() / "scripts" / "lens-resident-host-runtime-boundary-proof.ps1").read_text(encoding="utf-8")
+
+    assert "[string](Get-PropertyValue -Payload $SummonResidentHostPayload -Name 'recommended_handoff_source'" in script
+    assert "'resident_host_lifecycle_handoff'" in script
+    assert "'run_resident_host_lifecycle_blockers_proof'" in script
+    assert "'scripts/lens-resident-host-lifecycle-blockers-proof.ps1 -Mode Status'" in script
+
+
 def test_lens_resident_host_runtime_boundary_consumes_handoff_without_authority(tmp_path: Path) -> None:
     proc = _run_proof(
         "-Mode",

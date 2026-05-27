@@ -39458,6 +39458,61 @@ consumption:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-27 - Stage 6 resident-host lifecycle handoff guard
+
+Roadmap area: Stage 6 / Lens MVP, resident-host runtime proof and
+system-resident presence handoff truthfulness.
+
+Material change:
+
+- `scripts/lens-resident-host-runtime-boundary-proof.ps1` now accepts the
+  current child proof's `resident_host_lifecycle_handoff` shape as a valid
+  resident-host runtime blocker boundary, in addition to the older direct
+  `first_summon_blocker_family=resident_host` shape.
+- The guard still requires
+  `next_smallest_truthful_gap=resident_host_runtime_blocker_boundary`,
+  `authority_required=process_supervision_authority`, and
+  `authority_granted=false`. It does not execute a host process, grant process
+  supervision authority, write memory, mutate files, or claim resident runtime
+  readiness.
+- The live resident-host runtime boundary proof now advances truthfully to
+  `resident_host_process_not_supervised` and the process-supervision blocker
+  proof hands the operator back to the Stage 6 completion audit path.
+- Stage 6 still does not close and Stage 7 does not start.
+
+Latest validation for Stage 6 resident-host lifecycle handoff guard:
+
+- PowerShell AST parse of
+  `scripts\lens-resident-host-runtime-boundary-proof.ps1`
+  Result: `passed`
+- `.\.venv\Scripts\ruff.exe check
+  tests\test_lens_resident_host_runtime_boundary_proof_script.py`
+  Result: `passed`
+- `.\.venv\Scripts\ruff.exe format --check
+  tests\test_lens_resident_host_runtime_boundary_proof_script.py`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-resident-host-runtime-boundary-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=resident_host_process_not_supervised;
+  recommended_next_slice=consume_resident_host_process_supervision_handoff_before_stage6_closure;
+  recommended_proof_script=scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status;
+  runtime_handoff_observed=true; runtime_boundary_blocked=true;
+  process_supervision_handoff_observed=true;
+  resident_runtime_candidate_observed=true; side_effects_bounded=true`
+- `.\.venv\Scripts\pytest.exe
+  tests\test_lens_resident_host_runtime_boundary_proof_script.py`
+  Result: `passed; 4 passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed;
+  previous_next_smallest_truthful_gap=resident_host_process_not_supervised;
+  next_smallest_truthful_gap=stage6_lens_completion_audit;
+  recommended_next_slice=run_stage6_lens_completion_audit_after_process_supervision_handoff_readback;
+  recommended_proof_script=scripts/lens-stage6-completion-audit.ps1 -Mode Status;
+  authority_required=none_new_stage6_completion_audit;
+  authority_granted=false`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

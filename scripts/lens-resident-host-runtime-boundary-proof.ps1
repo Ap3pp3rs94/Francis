@@ -357,7 +357,14 @@ $RuntimeHandoffObserved = (
   [string](Get-PropertyValue -Payload $SummonResidentHostPayload -Name 'kind' -Default '') -eq 'lens.summon_resident_host_blocker.proof' -and
   [string](Get-PropertyValue -Payload $SummonResidentHostPayload -Name 'status' -Default '') -eq 'proof_passed' -and
   [string](Get-PropertyValue -Payload $SummonResidentHostPayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'resident_host_runtime_blocker_boundary' -and
-  [string](Get-PropertyValue -Payload $SummonResidentHostPayload -Name 'first_summon_blocker_family' -Default '') -eq 'resident_host' -and
+  (
+    [string](Get-PropertyValue -Payload $SummonResidentHostPayload -Name 'first_summon_blocker_family' -Default '') -eq 'resident_host' -or
+    (
+      [string](Get-PropertyValue -Payload $SummonResidentHostPayload -Name 'recommended_handoff_source' -Default '') -eq 'resident_host_lifecycle_handoff' -and
+      [string](Get-PropertyValue -Payload $SummonResidentHostPayload -Name 'recommended_next_slice' -Default '') -eq 'run_resident_host_lifecycle_blockers_proof' -and
+      [string](Get-PropertyValue -Payload $SummonResidentHostPayload -Name 'recommended_proof_script' -Default '') -eq 'scripts/lens-resident-host-lifecycle-blockers-proof.ps1 -Mode Status'
+    )
+  ) -and
   [string](Get-PropertyValue -Payload $SummonResidentHostPayload -Name 'authority_required' -Default '') -eq 'process_supervision_authority' -and
   -not [bool](Get-PropertyValue -Payload $SummonResidentHostPayload -Name 'authority_granted' -Default $true)
 )
