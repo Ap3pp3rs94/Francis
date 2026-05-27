@@ -40443,6 +40443,61 @@ Latest validation for launch-on-hotkey runtime readback:
   hotkey_stop_observed=true; tray_presence_stop_observed=true;
   resident_supervision_stop_observed=true; cleanup_errors=[]`
 
+### 2026-05-27 - Stage 6 completion audit consumes launch-on-hotkey readback
+
+Roadmap area: Stage 6 / Lens MVP, completion-audit runtime readback.
+
+Material change:
+
+- The opt-in Stage 6 completion audit now invokes the launch-on-hotkey summon
+  API execution proof with the same bounded two-second runtime window used by
+  the standalone runtime readback.
+- The audit predicate now requires the runtime proof to report
+  `hotkey_launch_on_press=true`, stopped overlay/hotkey/tray/resident
+  supervision components, no post-stop pid files, and no cleanup errors before
+  it treats the launch-on-hotkey child proof as observed.
+- The audit payload now projects those stop/readback and cleanup fields under
+  `summon_api_launch_on_hotkey_proof`, so the shorter runtime window is backed
+  by explicit cleanup evidence instead of only by child exit status.
+- The live opt-in completion audit completed without child proof failures or
+  child proof timeouts after consuming the launch-on-hotkey readback. It still
+  returns `ready_to_close=false`, `can_close_stage6=false`, and
+  `transition_allowed=false`.
+- Stage 6 remains active. Stage 7 has not started. The next truthful closure
+  work is still the summon-anywhere blocker path reported by the audit.
+
+Latest validation for completion-audit launch-on-hotkey consumption:
+
+- PowerShell AST parse of `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 1 file already formatted`
+- `python -m pytest
+  tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_readback
+  tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_outer_timeout_covers_serial_child_budget
+  -q`
+  Result: `passed; 2 passed`
+- `.\scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -AllowLaunchOnHotkey -ChildProofTimeoutSeconds 120`
+  Result: `passed; ok=true; status=blocked; audit_status=complete;
+  ready_to_close=false; can_close_stage6=false; transition_allowed=false;
+  stage6_completion_reviewed=true;
+  next_smallest_truthful_gap=summon_anywhere_blockers;
+  recommended_handoff_source=stage6_reviewed_summon_anywhere_authority_handoff;
+  recommended_next_slice=run_summon_authority_blocker_proof;
+  recommended_proof_script=scripts/lens-summon-authority-blocker-proof.ps1
+  -Mode Status; authority_required=summon_hotkey_overlay_and_process_authority;
+  authority_granted=false; child_proof_failures=[];
+  child_proof_timeouts=[]; allow_launch_on_hotkey=true;
+  summon_api_launch_on_hotkey_proof.status=proof_passed;
+  summon_api_launch_on_hotkey_proof.ok=true;
+  hotkey_launch_on_press=true; overlay_stop_observed=true;
+  hotkey_stop_observed=true; tray_presence_stop_observed=true;
+  resident_supervision_stop_observed=true; cleanup_errors=[]`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

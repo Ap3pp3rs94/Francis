@@ -1166,7 +1166,7 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     assert "$PersistentSupervisionApiExecutionProofScript" in script
     assert "lens-persistent-supervision-api-execution-proof.ps1" in script
     assert "if ($AllowLaunchOnHotkey) {" in script
-    assert "'-RunSeconds', '10', '-AllowLaunchOnHotkey'" in script
+    assert "'-RunSeconds', '2', '-AllowLaunchOnHotkey'" in script
     assert "'-RunSeconds', '1'" in script
     assert "New-ChildProofRunSummary -Name 'summon_api_launch_on_hotkey'" in script
     assert "New-ChildProofRunSummary -Name 'resident_runtime_api_execution'" in script
@@ -1189,6 +1189,17 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     assert "$PersistentSupervisionApiExecutionResidentClaimBoundaryObserved = (" in script
     assert "[bool]$SummonApiLaunchOnHotkeyProof.allow_launch_on_hotkey" in script
     assert "[bool]$SummonApiLaunchOnHotkeyProof.summon_anywhere" in script
+    assert "[bool]$SummonApiLaunchOnHotkeyProof.hotkey_launch_on_press" in script
+    assert "[bool]$SummonApiLaunchOnHotkeyProof.overlay_stop_observed" in script
+    assert "[bool]$SummonApiLaunchOnHotkeyProof.hotkey_stop_observed" in script
+    assert "[bool]$SummonApiLaunchOnHotkeyProof.tray_presence_stop_observed" in script
+    assert "[bool]$SummonApiLaunchOnHotkeyProof.resident_supervision_stop_observed" in script
+    assert "-not [bool]$SummonApiLaunchOnHotkeyProof.overlay_pid_file_present_after_stop" in script
+    assert "-not [bool]$SummonApiLaunchOnHotkeyProof.hotkey_pid_file_present_after_stop" in script
+    assert "-not [bool]$SummonApiLaunchOnHotkeyProof.tray_pid_file_present_after_stop" in script
+    assert "-not [bool]$SummonApiLaunchOnHotkeyProof.host_pid_file_present_after_stop" in script
+    assert "$SummonApiLaunchOnHotkeyCleanupErrors = ConvertTo-StringArray" in script
+    assert "@($SummonApiLaunchOnHotkeyCleanupErrors).Count -eq 0" in script
     assert (
         "[string]$SummonApiLaunchOnHotkeyProof.recommended_handoff_source "
         "-eq 'api_launch_on_hotkey_runtime_readback_handoff'" in script
@@ -1457,6 +1468,14 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
         "summon_readiness_status_after_execute = [string]$SummonApiLaunchOnHotkeyProof.summon_readiness_status_after_execute"
         in script
     )
+    assert "hotkey_launch_on_press = [bool]$SummonApiLaunchOnHotkeyProof.hotkey_launch_on_press" in script
+    assert "overlay_stop_observed = [bool]$SummonApiLaunchOnHotkeyProof.overlay_stop_observed" in script
+    assert "hotkey_stop_observed = [bool]$SummonApiLaunchOnHotkeyProof.hotkey_stop_observed" in script
+    assert "tray_presence_stop_observed = [bool]$SummonApiLaunchOnHotkeyProof.tray_presence_stop_observed" in script
+    assert (
+        "resident_supervision_stop_observed = [bool]$SummonApiLaunchOnHotkeyProof.resident_supervision_stop_observed"
+    ) in script
+    assert "cleanup_errors = [string[]]@($SummonApiLaunchOnHotkeyCleanupErrors)" in script
     assert "blockers = [string[]]@($SummonApiLaunchOnHotkeyProofReadinessBlockersAfterExecute)" in script
     assert "$ResidentSurfaceForegroundRuntimeProofObserved = (" in script
     assert "$ResidentSurfaceForegroundRuntimeProofRecommendedHandoffSource" in script

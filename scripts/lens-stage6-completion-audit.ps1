@@ -345,7 +345,7 @@ if ($AllowLaunchOnHotkey) {
   $SummonApiLaunchOnHotkeyProofResult = Invoke-JsonScript `
     -PowerShellPath $PowerShell.Source `
     -ScriptPath $SummonApiExecutionProofScript `
-    -ScriptArgs @('-Mode', 'Status', '-RunSeconds', '10', '-AllowLaunchOnHotkey') `
+    -ScriptArgs @('-Mode', 'Status', '-RunSeconds', '2', '-AllowLaunchOnHotkey') `
     -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 120)) `
     -EnvironmentVariables @{ FRANCIS_PROOF_GLOBAL_HOTKEY = $Stage6ApiExecutionProofHotkeys.summon_api_launch_on_hotkey }
 }
@@ -2775,6 +2775,9 @@ $SummonApiLaunchOnHotkeyProofGovernance = $SummonApiLaunchOnHotkeyProof.governan
 $SummonApiLaunchOnHotkeyReadinessBlockers = ConvertTo-StringArray -Value (
   $SummonApiLaunchOnHotkeyProof.summon_readiness_blockers_after_execute
 )
+$SummonApiLaunchOnHotkeyCleanupErrors = ConvertTo-StringArray -Value (
+  $SummonApiLaunchOnHotkeyProof.cleanup_errors
+)
 $SummonApiLaunchOnHotkeyProofObserved = (
   [bool]$AllowLaunchOnHotkey -and
   [int]$SummonApiLaunchOnHotkeyProofResult.exit_code -eq 0 -and
@@ -2787,6 +2790,16 @@ $SummonApiLaunchOnHotkeyProofObserved = (
   [bool]$SummonApiLaunchOnHotkeyProof.summon_anywhere -and
   [bool]$SummonApiLaunchOnHotkeyProof.os_level_summon -and
   [bool]$SummonApiLaunchOnHotkeyProof.hotkey_launch_on_press_authority -and
+  [bool]$SummonApiLaunchOnHotkeyProof.hotkey_launch_on_press -and
+  [bool]$SummonApiLaunchOnHotkeyProof.overlay_stop_observed -and
+  [bool]$SummonApiLaunchOnHotkeyProof.hotkey_stop_observed -and
+  [bool]$SummonApiLaunchOnHotkeyProof.tray_presence_stop_observed -and
+  [bool]$SummonApiLaunchOnHotkeyProof.resident_supervision_stop_observed -and
+  -not [bool]$SummonApiLaunchOnHotkeyProof.overlay_pid_file_present_after_stop -and
+  -not [bool]$SummonApiLaunchOnHotkeyProof.hotkey_pid_file_present_after_stop -and
+  -not [bool]$SummonApiLaunchOnHotkeyProof.tray_pid_file_present_after_stop -and
+  -not [bool]$SummonApiLaunchOnHotkeyProof.host_pid_file_present_after_stop -and
+  @($SummonApiLaunchOnHotkeyCleanupErrors).Count -eq 0 -and
   [string]$SummonApiLaunchOnHotkeyProof.summon_readiness_status_after_execute -eq 'ready_for_operator_review' -and
   @($SummonApiLaunchOnHotkeyReadinessBlockers).Count -eq 0 -and
   [string]$SummonApiLaunchOnHotkeyProof.recommended_handoff_source -eq 'api_launch_on_hotkey_runtime_readback_handoff' -and
@@ -5709,6 +5722,16 @@ $Payload = [ordered]@{
     summon_anywhere = [bool]$SummonApiLaunchOnHotkeyProof.summon_anywhere
     os_level_summon = [bool]$SummonApiLaunchOnHotkeyProof.os_level_summon
     hotkey_launch_on_press_authority = [bool]$SummonApiLaunchOnHotkeyProof.hotkey_launch_on_press_authority
+    hotkey_launch_on_press = [bool]$SummonApiLaunchOnHotkeyProof.hotkey_launch_on_press
+    overlay_stop_observed = [bool]$SummonApiLaunchOnHotkeyProof.overlay_stop_observed
+    hotkey_stop_observed = [bool]$SummonApiLaunchOnHotkeyProof.hotkey_stop_observed
+    tray_presence_stop_observed = [bool]$SummonApiLaunchOnHotkeyProof.tray_presence_stop_observed
+    resident_supervision_stop_observed = [bool]$SummonApiLaunchOnHotkeyProof.resident_supervision_stop_observed
+    overlay_pid_file_present_after_stop = [bool]$SummonApiLaunchOnHotkeyProof.overlay_pid_file_present_after_stop
+    hotkey_pid_file_present_after_stop = [bool]$SummonApiLaunchOnHotkeyProof.hotkey_pid_file_present_after_stop
+    tray_pid_file_present_after_stop = [bool]$SummonApiLaunchOnHotkeyProof.tray_pid_file_present_after_stop
+    host_pid_file_present_after_stop = [bool]$SummonApiLaunchOnHotkeyProof.host_pid_file_present_after_stop
+    cleanup_errors = [string[]]@($SummonApiLaunchOnHotkeyCleanupErrors)
     summon_readiness_status_after_execute = [string]$SummonApiLaunchOnHotkeyProof.summon_readiness_status_after_execute
     summon_readiness_blockers_after_execute = [string[]]@($SummonApiLaunchOnHotkeyReadinessBlockers)
     next_smallest_truthful_gap = [string]$SummonApiLaunchOnHotkeyProof.next_smallest_truthful_gap
