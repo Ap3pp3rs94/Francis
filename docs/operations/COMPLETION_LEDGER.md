@@ -40354,6 +40354,62 @@ Latest validation for approved authority grant handoff:
   operator_command_mode=ApiGrant; grant_write_if_run=true;
   would_execute=false; would_mutate=false`
 
+### 2026-05-27 - Stage 6 summon authority grants active for runtime readback
+
+Roadmap area: Stage 6 / Lens MVP, governed summon-anywhere authority readiness.
+
+Material change:
+
+- The approved Stage 6 authority requests for global hotkey binding, overlay
+  window, and summon binding were granted through their existing governed grant
+  functions with `record_receipt=true` and an explicit `system.write` actor
+  scope.
+- The local grant receipts are now active:
+  `losbag_1779923757_ca513407fec7` for global hotkey binding,
+  `lowag_1779923908_ae75f7263a61` for overlay window, and
+  `lsag_1779923908_069560ad8773` for summon binding.
+- This did not execute the hotkey binding, open/control an overlay, perform a
+  summon, write memory, decide approvals, or claim Stage 6 closure. It only
+  moved the governed authority state from approved requests to active grant
+  receipts.
+- `scripts/lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath .tmp\stage6-completion-audit-authority-live.json`
+  now advances to
+  `authority_grants_ready_for_launch_on_hotkey_runtime_readback` and points at
+  `scripts/lens-summon-api-execution-proof.ps1 -Mode Status
+  -AllowLaunchOnHotkey` as the next explicit runtime proof.
+- Stage 6 remains active. Stage 7 has not started.
+
+Latest validation for active summon authority grants:
+
+- Governed OS-binding authority grant
+  Result: `passed; status=authority_granted;
+  approval_id=90717568-d550-4409-9a0a-cdc1f6f7a4cd;
+  receipt_written=true; receipt_id=losbag_1779923757_ca513407fec7;
+  blockers=[]`
+- Governed overlay authority grant
+  Result: `passed; status=authority_granted;
+  approval_id=83f36f9a-0e8a-42c7-a28f-21b3cbe67a7f;
+  receipt_written=true; receipt_id=lowag_1779923908_ae75f7263a61;
+  blockers=[]`
+- Governed summon authority grant
+  Result: `passed; status=authority_granted;
+  approval_id=41e2b1de-91b5-42bc-8354-3866848c8a3c;
+  receipt_written=true; receipt_id=lsag_1779923908_069560ad8773;
+  blockers=[]`
+- Lens status readback
+  Result: `passed; os_binding_authority_requests.status=authority_granted;
+  overlay_authority_requests.status=authority_granted;
+  summon_authority_requests.status=authority_granted`
+- Stage 6 next-handoff readback
+  Result: `passed; ok=true; status=proof_passed;
+  operator_status=authority_grants_ready_for_launch_on_hotkey_runtime_readback;
+  active_grants.global_hotkey_binding=losbag_1779923757_ca513407fec7;
+  active_grants.overlay_window=lowag_1779923908_ae75f7263a61;
+  active_grants.summon_binding=lsag_1779923908_069560ad8773;
+  operator_action=run_summon_api_launch_on_hotkey_proof_for_runtime_readback;
+  would_execute=true; would_mutate=true`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
