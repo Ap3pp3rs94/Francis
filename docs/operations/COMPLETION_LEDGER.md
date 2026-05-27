@@ -40259,6 +40259,59 @@ Latest validation for summon-authority completion-audit advancement:
   handoff_runtime_readback_required=false;
   handoff_operator_action_id=run_summon_authority_blocker_proof`
 
+### 2026-05-27 - Stage 6 authority handoff resolves to governed request bundle
+
+Roadmap area: Stage 6 / Lens MVP, summon-anywhere authority handoff and
+operator next-action truthfulness.
+
+Material change:
+
+- `scripts/lens-stage6-next-handoff.ps1` now consumes the reviewed
+  summon-authority completion-audit handoff into a concrete read-only
+  summon-anywhere authority request bundle instead of only routing the operator
+  back to `scripts/lens-summon-authority-blocker-proof.ps1 -Mode Status`.
+- The handoff reads the existing governed authority request/readback surfaces
+  for `/lens/os-binding/authority/requests`,
+  `/lens/overlay/authority/requests`, and
+  `/lens/summon/authority/requests`, then selects the first missing authority in
+  the established Stage 6 prerequisite order: global hotkey binding, overlay
+  window, then bounded summon binding.
+- Status mode still does not grant authority, decide approvals, execute the
+  hotkey/overlay/summon path, write memory, or claim Stage 6 closure. It only
+  exposes exact operator next actions for request creation, pending approval
+  decision readback, approved-request selection with preview-only grant
+  command, or launch-on-hotkey runtime proof once all exact grant receipts are
+  active.
+- Stage 6 remains active. Stage 7 has not started. The next truthful closure
+  work remains the governed summon-anywhere authority and launch-on-hotkey
+  runtime-readback path.
+
+Latest validation for authority request-bundle handoff:
+
+- PowerShell AST parse of `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 1 file already formatted`
+- `python -m pytest
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_reviewed_summon_authority_handoff
+  -q`
+  Result: `passed`
+- `.\scripts\lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath .tmp\stage6-completion-audit-authority-live.json`
+  Result: `passed; ok=true; status=proof_passed;
+  handoff_source=stage6_reviewed_summon_anywhere_authority_handoff;
+  consumed=true; bundle_observed=true;
+  operator_source=summon_anywhere_authority_request_bundle_handoff;
+  operator_status=approved_authority_request_selected;
+  operator_action=select_exact_approved_global_hotkey_binding_authority_request;
+  operator_requirement=exact_global_hotkey_binding_authority_approval;
+  operator_route=/lens/os-binding/authority/requests;
+  request_write_if_run=false; would_execute=false; would_mutate=false`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

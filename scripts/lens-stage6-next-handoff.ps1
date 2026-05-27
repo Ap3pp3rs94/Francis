@@ -1034,6 +1034,444 @@ function New-HostSupervisionAuthorityRequestOperatorHandoff {
   }
 }
 
+function New-SummonAnywhereAuthorityRequestBundleOperatorHandoff {
+  param(
+    [AllowNull()]
+    [object]$SourceHandoff,
+
+    [AllowNull()]
+    [object]$OsBindingAuthorityRequests,
+
+    [AllowNull()]
+    [object]$OverlayAuthorityRequests,
+
+    [AllowNull()]
+    [object]$SummonAuthorityRequests,
+
+    [string]$CompletionAuditJsonPath = ''
+  )
+
+  $ReceiptReviewReadbackCommand = '.\scripts\lens-stage6-next-handoff.ps1 -Mode Status'
+  if (-not [string]::IsNullOrWhiteSpace($CompletionAuditJsonPath)) {
+    $EscapedCompletionAuditJsonPath = $CompletionAuditJsonPath.Replace("'", "''")
+    $ReceiptReviewReadbackCommand = ".\scripts\lens-stage6-next-handoff.ps1 -Mode Status -CompletionAuditJsonPath '$EscapedCompletionAuditJsonPath'"
+  }
+
+  $ApiBaseUrl = 'http://127.0.0.1:8000'
+  $RuntimeReadbackCommand = '.\scripts\lens-summon-api-execution-proof.ps1 -Mode Status -AllowLaunchOnHotkey'
+  $Definitions = @(
+    [ordered]@{
+      id = 'global_hotkey_binding'
+      readback = $OsBindingAuthorityRequests
+      request_action_id = 'request_global_hotkey_binding_authority'
+      await_action_id = 'await_global_hotkey_binding_authority_approval'
+      select_action_id = 'select_exact_approved_global_hotkey_binding_authority_request'
+      review_action_id = 'review_global_hotkey_binding_authority_grant_receipt'
+      requirement = 'global_hotkey_binding'
+      request_route = '/lens/os-binding/authority/request'
+      requests_route = '/lens/os-binding/authority/requests'
+      grant_route = '/lens/os-binding/authority'
+      grants_route = '/lens/os-binding/authority/grants'
+      execute_route = '/lens/os-binding/execute'
+      readiness_route = '/lens/summon/readiness'
+      approval_action = 'lens.os_binding.command_palette_binding_authority'
+      authority_required = 'hotkey_registration_authority'
+      live_effect = 'bounded global hotkey binding authority'
+    }
+    [ordered]@{
+      id = 'overlay_window'
+      readback = $OverlayAuthorityRequests
+      request_action_id = 'request_overlay_window_authority'
+      await_action_id = 'await_overlay_window_authority_approval'
+      select_action_id = 'select_exact_approved_overlay_window_authority_request'
+      review_action_id = 'review_overlay_window_authority_grant_receipt'
+      requirement = 'overlay_window'
+      request_route = '/lens/overlay/authority/request'
+      requests_route = '/lens/overlay/authority/requests'
+      grant_route = '/lens/overlay/authority'
+      grants_route = '/lens/overlay/authority/grants'
+      execute_route = '/lens/overlay/execute'
+      readiness_route = '/lens/overlay/readiness'
+      approval_action = 'lens.overlay.window_authority'
+      authority_required = 'overlay_control_authority'
+      live_effect = 'bounded overlay window authority'
+    }
+    [ordered]@{
+      id = 'summon_binding'
+      readback = $SummonAuthorityRequests
+      request_action_id = 'request_summon_binding_authority'
+      await_action_id = 'await_summon_binding_authority_approval'
+      select_action_id = 'select_exact_approved_summon_binding_authority_request'
+      review_action_id = 'review_summon_binding_authority_grant_receipt'
+      requirement = 'summon_binding'
+      request_route = '/lens/summon/authority/request'
+      requests_route = '/lens/summon/authority/requests'
+      grant_route = '/lens/summon/authority'
+      grants_route = '/lens/summon/authority/grants'
+      execute_route = '/lens/summon/execute'
+      readiness_route = '/lens/summon/readiness'
+      approval_action = 'lens.summon.action_authority'
+      authority_required = 'summon_authority'
+      live_effect = 'bounded local summon handoff authority'
+    }
+  )
+
+  $ActiveGrantReceipts = [ordered]@{}
+  $CurrentDefinition = $null
+  foreach ($Definition in $Definitions) {
+    $Readback = Get-PropertyValue -Payload $Definition -Name 'readback' -Default ([ordered]@{})
+    $ActiveReceiptId = Get-AuthorityGrantActiveReceiptId -Readback $Readback
+    if (-not [string]::IsNullOrWhiteSpace($ActiveReceiptId)) {
+      $ActiveGrantReceipts[[string](Get-PropertyValue -Payload $Definition -Name 'id' -Default '')] = $ActiveReceiptId
+      continue
+    }
+    $CurrentDefinition = $Definition
+    break
+  }
+
+  if ($null -eq $CurrentDefinition) {
+    return [ordered]@{
+      source = 'summon_anywhere_authority_request_bundle_handoff'
+      status = 'authority_grants_ready_for_launch_on_hotkey_runtime_readback'
+      next_operator_action_requirement = 'launch_on_hotkey_runtime_readback'
+      active_grant_receipts = $ActiveGrantReceipts
+      next_operator_action = [ordered]@{
+        id = 'run_summon_api_launch_on_hotkey_proof_for_runtime_readback'
+        route = '/lens/summon/execute'
+        readiness_route = '/lens/summon/readiness'
+        method = 'LOCAL_SCRIPT'
+        mode = 'Status'
+        proof_script = 'scripts/lens-summon-api-execution-proof.ps1 -Mode Status -AllowLaunchOnHotkey'
+        live_effect = 'runs the explicit launch-on-hotkey summon runtime readback proof after exact authority grants are present'
+        operator_supplied_values_required = $false
+        requires_explicit_operator_opt_in = $true
+        active_grant_receipts = $ActiveGrantReceipts
+        script_would_execute = $true
+        script_would_mutate = $true
+        script_would_request_authority = $false
+        script_would_grant_authority = $false
+        script_would_decide_approval = $false
+        script_would_launch_process = $true
+        script_would_write_memory = $false
+        script_would_claim_resident = $false
+      }
+      next_operator_command = [ordered]@{
+        command = $RuntimeReadbackCommand
+        mode = 'Status'
+        requires_confirmation = $false
+        requires_explicit_operator_opt_in = $true
+        requires_actor = $false
+        requires_approval_id = $false
+        requires_operator_approval_decision = $false
+      }
+      read_only_status_command = $ReceiptReviewReadbackCommand
+      operator_sequence_command_availability = [ordered]@{
+        available_now_count = 1
+        preview_only_count = 0
+        sequence_length = 1
+        truthful = $true
+      }
+      read_only_contract = $false
+      diagnostic_only = $true
+      approval_request_write_if_run = $false
+      authority_grant_receipt_write_if_run = $false
+      approval_decision_authority = $false
+      would_execute = $true
+      would_mutate = $true
+      would_launch_process = $true
+      would_write_memory = $false
+      would_claim_resident = $false
+    }
+  }
+
+  $CurrentReadback = Get-PropertyValue -Payload $CurrentDefinition -Name 'readback' -Default ([ordered]@{})
+  $Requirement = [string](Get-PropertyValue -Payload $CurrentDefinition -Name 'requirement' -Default '')
+  $RequestRoute = [string](Get-PropertyValue -Payload $CurrentReadback -Name 'request_route' -Default (
+      Get-PropertyValue -Payload $CurrentDefinition -Name 'request_route' -Default ''
+    ))
+  $RequestsRoute = [string](Get-PropertyValue -Payload $CurrentReadback -Name 'route' -Default (
+      Get-PropertyValue -Payload $CurrentDefinition -Name 'requests_route' -Default ''
+    ))
+  $GrantRoute = [string](Get-PropertyValue -Payload $CurrentReadback -Name 'authority_route' -Default (
+      Get-PropertyValue -Payload $CurrentDefinition -Name 'grant_route' -Default ''
+    ))
+  $GrantsRoute = [string](Get-PropertyValue -Payload $CurrentReadback -Name 'grants_route' -Default (
+      Get-PropertyValue -Payload $CurrentDefinition -Name 'grants_route' -Default ''
+    ))
+  $ExecuteRoute = [string](Get-PropertyValue -Payload $CurrentReadback -Name 'execute_route' -Default (
+      Get-PropertyValue -Payload $CurrentDefinition -Name 'execute_route' -Default ''
+    ))
+  $ReadinessRoute = [string](Get-PropertyValue -Payload $CurrentDefinition -Name 'readiness_route' -Default '/lens/summon/readiness')
+  $ApprovalAction = [string](Get-PropertyValue -Payload $CurrentReadback -Name 'action' -Default (
+      Get-PropertyValue -Payload $CurrentDefinition -Name 'approval_action' -Default ''
+    ))
+  $AuthorityRequired = [string](Get-PropertyValue -Payload $CurrentDefinition -Name 'authority_required' -Default '')
+  $ApprovedApprovalId = Get-ApprovalReadbackLatestApprovedId -Readback $CurrentReadback
+  $PendingApprovalId = Get-ApprovalReadbackLatestPendingId -Readback $CurrentReadback
+  $RequestActionId = [string](Get-PropertyValue -Payload $CurrentDefinition -Name 'request_action_id' -Default '')
+  $AwaitActionId = [string](Get-PropertyValue -Payload $CurrentDefinition -Name 'await_action_id' -Default '')
+  $SelectActionId = [string](Get-PropertyValue -Payload $CurrentDefinition -Name 'select_action_id' -Default '')
+  $ReviewActionId = [string](Get-PropertyValue -Payload $CurrentDefinition -Name 'review_action_id' -Default '')
+  $LiveEffect = [string](Get-PropertyValue -Payload $CurrentDefinition -Name 'live_effect' -Default 'bounded authority')
+  $RequestCommand = (
+    "`$body = @{ actor = '<actor>'; reason = '<reason>' } | ConvertTo-Json -Compress; " +
+    "Invoke-RestMethod -Method Post -Uri '$ApiBaseUrl$RequestRoute' -ContentType 'application/json' -Body `$body"
+  )
+  $DecisionCommand = (
+    "`$body = @{ id = '$PendingApprovalId'; action = '<approve|reject>'; comment = '<comment>'; actor = '<actor>' } | ConvertTo-Json -Compress; " +
+    "Invoke-RestMethod -Method Post -Uri '$ApiBaseUrl/approvals/decision' -ContentType 'application/json' -Body `$body"
+  )
+  $GrantCommand = (
+    "`$body = @{ approval_id = '$ApprovedApprovalId'; actor = '<actor>'; reason = '<reason>'; lease_seconds = 3600 } | ConvertTo-Json -Compress; " +
+    "Invoke-RestMethod -Method Post -Uri '$ApiBaseUrl$GrantRoute' -ContentType 'application/json' -Body `$body"
+  )
+
+  if (-not [string]::IsNullOrWhiteSpace($ApprovedApprovalId)) {
+    return [ordered]@{
+      source = 'summon_anywhere_authority_request_bundle_handoff'
+      status = 'approved_authority_request_selected'
+      next_operator_action_requirement = "exact_${Requirement}_authority_approval"
+      active_grant_receipts = $ActiveGrantReceipts
+      current_requirement = $Requirement
+      current_authority_required = $AuthorityRequired
+      next_operator_action = [ordered]@{
+        id = $SelectActionId
+        route = $RequestsRoute
+        requests_route = $RequestsRoute
+        readiness_route = $ReadinessRoute
+        execute_route = $ExecuteRoute
+        method = 'GET'
+        approval_action = $ApprovalAction
+        approved_approval_id = $ApprovedApprovalId
+        requires = [string[]]@("exact approved $Requirement authority approval_id")
+        mode = 'approval_readback'
+        live_effect = "selects the approved $Requirement authority request; no authority grant receipt is written"
+        operator_supplied_values_required = $false
+        script_would_execute = $false
+        script_would_mutate = $false
+        script_would_request_authority = $false
+        script_would_grant_authority = $false
+        script_would_decide_approval = $false
+        follow_up_authority_grant_command = [ordered]@{
+          command = $GrantCommand
+          route = $GrantRoute
+          method = 'POST'
+          api_base_url = $ApiBaseUrl
+          payload_shape = [ordered]@{
+            approval_id = $ApprovedApprovalId
+            actor = '<actor>'
+            reason = '<reason>'
+            lease_seconds = 3600
+          }
+          required_scope = 'system.write'
+          requires_running_api = $true
+          requires_operator_actor = $true
+          requires_approval_id = $true
+          would_grant_authority_if_run = $true
+          status_readback_would_grant_authority = $false
+          preview_only = $true
+          availability_reason = 'approved_request_selected_but_authority_grant_is_separate_operator_step'
+        }
+      }
+      next_operator_command = [ordered]@{
+        command = $ReceiptReviewReadbackCommand
+        mode = 'Status'
+        route = $RequestsRoute
+        method = 'GET'
+        requires_confirmation = $false
+        requires_explicit_operator_opt_in = $false
+        requires_actor = $false
+        requires_approval_id = $false
+        requires_operator_approval_decision = $false
+      }
+      read_only_status_command = $ReceiptReviewReadbackCommand
+      next_operator_actor_scope_readiness = [ordered]@{
+        ready = $true
+        reason = 'not_required'
+        actor_present = $false
+        scope_required = $false
+        required_scope = ''
+        action_id = $SelectActionId
+        route = $RequestsRoute
+        method = 'GET'
+        operator_must_supply_actor = $false
+        env_var = 'FRANCIS_API_ACTOR_SCOPES'
+        json_shape = [ordered]@{ '<actor>' = [string[]]@('system.write') }
+        powershell_example = '$env:FRANCIS_API_ACTOR_SCOPES = ''{"<actor>":["system.write"]}'''
+      }
+      operator_sequence_command_availability = [ordered]@{
+        available_now_count = 1
+        preview_only_count = 0
+        sequence_length = 1
+        truthful = $true
+      }
+      read_only_contract = $true
+      diagnostic_only = $true
+      approval_request_write_if_run = $false
+      authority_grant_receipt_write_if_run = $false
+      approval_decision_authority = $false
+      would_execute = $false
+      would_mutate = $false
+    }
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($PendingApprovalId)) {
+    return [ordered]@{
+      source = 'summon_anywhere_authority_request_bundle_handoff'
+      status = 'operator_approval_decision_required'
+      next_operator_action_requirement = "exact_${Requirement}_authority_approval"
+      active_grant_receipts = $ActiveGrantReceipts
+      current_requirement = $Requirement
+      current_authority_required = $AuthorityRequired
+      next_operator_action = [ordered]@{
+        id = $AwaitActionId
+        route = $RequestsRoute
+        readiness_route = $ReadinessRoute
+        execute_route = $ExecuteRoute
+        method = 'GET'
+        approval_action = $ApprovalAction
+        pending_approval_id = $PendingApprovalId
+        mode = 'approval_wait'
+        live_effect = "approval request exists for $LiveEffect; operator approval decision is required before grant receipt"
+        operator_supplied_values_required = $false
+        requires_operator_approval_decision = $true
+        script_would_execute = $false
+        script_would_mutate = $false
+        script_would_request_authority = $false
+        script_would_grant_authority = $false
+        script_would_decide_approval = $false
+        approval_decision_command = [ordered]@{
+          command = $DecisionCommand
+          route = '/approvals/decision'
+          method = 'POST'
+          api_base_url = $ApiBaseUrl
+          payload_shape = [ordered]@{
+            id = $PendingApprovalId
+            action = '<approve|reject>'
+            comment = '<comment>'
+            actor = '<actor>'
+          }
+          required_scope = 'approvals.decide'
+          requires_running_api = $true
+          requires_operator_actor = $true
+          requires_local_caller_unless_remote_enabled = $true
+          remote_enable_env_var = 'FRANCIS_APPROVALS_ALLOW_REMOTE_DECISIONS'
+          would_decide_approval_if_run = $true
+          status_readback_would_decide_approval = $false
+          preview_only = $true
+        }
+      }
+      next_operator_command = [ordered]@{
+        command = $ReceiptReviewReadbackCommand
+        mode = 'Status'
+        route = $RequestsRoute
+        method = 'GET'
+        requires_confirmation = $false
+        requires_explicit_operator_opt_in = $false
+        requires_actor = $false
+        requires_approval_id = $false
+        requires_operator_approval_decision = $true
+      }
+      read_only_status_command = $ReceiptReviewReadbackCommand
+      operator_sequence_command_availability = [ordered]@{
+        available_now_count = 1
+        preview_only_count = 0
+        sequence_length = 1
+        truthful = $true
+      }
+      read_only_contract = $true
+      diagnostic_only = $true
+      approval_request_write_if_run = $false
+      authority_grant_receipt_write_if_run = $false
+      approval_decision_authority = $false
+      would_execute = $false
+      would_mutate = $false
+    }
+  }
+
+  return [ordered]@{
+    source = 'summon_anywhere_authority_request_bundle_handoff'
+    status = 'authority_request_required'
+    next_operator_action_requirement = "exact_${Requirement}_authority_approval"
+    active_grant_receipts = $ActiveGrantReceipts
+    current_requirement = $Requirement
+    current_authority_required = $AuthorityRequired
+    next_operator_action = [ordered]@{
+      id = $RequestActionId
+      route = $RequestRoute
+      requests_route = $RequestsRoute
+      readiness_route = $ReadinessRoute
+      execute_route = $ExecuteRoute
+      method = 'POST'
+      approval_action = $ApprovalAction
+      authority_required = $AuthorityRequired
+      requires = [string[]]@('system.write actor scope', 'explicit operator execution')
+      mode = 'approval_request'
+      live_effect = "creates a pending approval request for $LiveEffect only"
+      operator_supplied_values_required = $true
+      script_would_execute = $false
+      script_would_mutate = $false
+      script_would_request_authority = $true
+      script_would_grant_authority = $false
+      script_would_decide_approval = $false
+      approval_request_command = [ordered]@{
+        command = $RequestCommand
+        route = $RequestRoute
+        method = 'POST'
+        api_base_url = $ApiBaseUrl
+        payload_shape = [ordered]@{
+          actor = '<actor>'
+          reason = '<reason>'
+        }
+        required_scope = 'system.write'
+        requires_running_api = $true
+        requires_operator_actor = $true
+        would_request_approval_if_run = $true
+        status_readback_would_request_approval = $false
+      }
+    }
+    next_operator_command = [ordered]@{
+      command = $RequestCommand
+      mode = 'ApiRequest'
+      route = $RequestRoute
+      method = 'POST'
+      requires_confirmation = $true
+      requires_explicit_operator_opt_in = $true
+      requires_actor = $true
+      requires_approval_id = $false
+      requires_operator_approval_decision = $false
+    }
+    read_only_status_command = $ReceiptReviewReadbackCommand
+    next_operator_actor_scope_readiness = [ordered]@{
+      ready = $false
+      reason = 'actor_not_supplied'
+      actor_present = $false
+      scope_required = $true
+      required_scope = 'system.write'
+      action_id = $RequestActionId
+      route = $RequestRoute
+      method = 'POST'
+      operator_must_supply_actor = $true
+      env_var = 'FRANCIS_API_ACTOR_SCOPES'
+      json_shape = [ordered]@{ '<actor>' = [string[]]@('system.write') }
+      powershell_example = '$env:FRANCIS_API_ACTOR_SCOPES = ''{"<actor>":["system.write"]}'''
+    }
+    operator_sequence_command_availability = [ordered]@{
+      available_now_count = 1
+      preview_only_count = 0
+      sequence_length = 1
+      truthful = $true
+    }
+    read_only_contract = $true
+    diagnostic_only = $true
+    approval_request_write_if_run = $true
+    authority_grant_receipt_write_if_run = $false
+    approval_decision_authority = $false
+    would_execute = $false
+    would_mutate = $false
+  }
+}
+
 function Find-Criterion {
   param(
     [AllowNull()]
@@ -1262,6 +1700,9 @@ $HostSupervisionAuthorityGrants = Get-PropertyValue -Payload $ResidentHostReadba
 if ($null -eq $HostSupervisionAuthorityGrants) {
   $HostSupervisionAuthorityGrants = Get-PropertyValue -Payload $StatusReadback -Name 'supervision_authority_grant_receipts' -Default ([ordered]@{})
 }
+$OsBindingAuthorityRequests = Get-PropertyValue -Payload $StatusReadback -Name 'os_binding_authority_requests' -Default ([ordered]@{})
+$OverlayAuthorityRequests = Get-PropertyValue -Payload $StatusReadback -Name 'overlay_authority_requests' -Default ([ordered]@{})
+$SummonAuthorityRequests = Get-PropertyValue -Payload $StatusReadback -Name 'summon_authority_requests' -Default ([ordered]@{})
 $FreshResidentRuntimeCandidateSupervised = [bool](
   Get-PropertyValue -Payload $ResidentHostReadback -Name 'fresh_resident_runtime_candidate_supervised' -Default $false
 )
@@ -2870,6 +3311,16 @@ if ($Stage6CompletionAuditRuntimeReadbackRequired) {
     -HostSupervisionAuthorityRequests $HostSupervisionAuthorityRequests `
     -HostSupervisionAuthorityGrants $HostSupervisionAuthorityGrants `
     -CompletionAuditJsonPath $ResolvedCompletionAuditJsonPath
+} elseif (
+  $Stage6CompletionAuditRecommendedHandoffConsumed -and
+  $Stage6CompletionAuditReviewedSummonAuthorityHandoffObserved
+) {
+  $RecommendedOperatorHandoff = New-SummonAnywhereAuthorityRequestBundleOperatorHandoff `
+    -SourceHandoff $RecommendedHandoff `
+    -OsBindingAuthorityRequests $OsBindingAuthorityRequests `
+    -OverlayAuthorityRequests $OverlayAuthorityRequests `
+    -SummonAuthorityRequests $SummonAuthorityRequests `
+    -CompletionAuditJsonPath $ResolvedCompletionAuditJsonPath
 } elseif ($Stage6CompletionAuditRecommendedHandoffConsumed) {
   $RecommendedOperatorHandoff = New-Stage6CompletionAuditReadbackOperatorHandoff `
     -RecommendedHandoff $RecommendedHandoff `
@@ -2910,6 +3361,20 @@ $RecommendedOperatorSequenceCommandAvailability = Get-PropertyValue `
   -Default ([ordered]@{})
 $RecommendedOperatorHandoffStatus = [string](
   Get-PropertyValue -Payload $RecommendedOperatorHandoff -Name 'status' -Default ''
+)
+$Stage6CompletionAuditSummonAuthorityRequestBundleHandoffObserved = (
+  $Stage6CompletionAuditReviewedSummonAuthorityHandoffObserved -and
+  [string](Get-PropertyValue -Payload $RecommendedOperatorHandoff -Name 'source' -Default '') -eq 'summon_anywhere_authority_request_bundle_handoff' -and
+  @(
+    'authority_request_required',
+    'operator_approval_decision_required',
+    'approved_authority_request_selected',
+    'authority_grants_ready_for_launch_on_hotkey_runtime_readback'
+  ) -contains $RecommendedOperatorHandoffStatus -and
+  [bool](Get-PropertyValue -Payload $RecommendedOperatorHandoff -Name 'diagnostic_only' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $RecommendedOperatorHandoff -Name 'approval_decision_authority' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $RecommendedOperatorHandoff -Name 'would_write_memory' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $RecommendedOperatorHandoff -Name 'would_claim_resident' -Default $false)
 )
 if (
   $Stage6CompletionAuditRecommendedHandoffConsumed -and
@@ -3007,7 +3472,7 @@ $Checks = @(
   New-Check -Id 'stage6_prerequisite_bringup_plan' -Status $(if ($Stage6PrerequisiteBringupPlanObserved) { 'operator_plan_readback_ready' } else { 'missing_or_unexpected' }) -Passed $Stage6PrerequisiteBringupPlanObserved -Evidence 'scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status' -Reason 'The next handoff should point at the governed prerequisite bring-up runbook instead of lower-level proof fragments.'
   New-Check -Id 'persistent_supervision_enablement_receipt_review' -Status $(if ($PersistentSupervisionEnablementReceiptReviewObserved) { 'receipt_reviewed' } elseif ($Stage6PrerequisiteBringupPlanAppliedObserved) { 'missing_or_unexpected' } else { 'not_applicable' }) -Passed $(-not $Stage6PrerequisiteBringupPlanAppliedObserved -or $PersistentSupervisionEnablementReceiptReviewObserved) -Evidence '/lens/status resident_host.persistent_supervision_enablement_execution_receipts' -Reason 'After enablement is applied, the next handoff must consume the read-only receipt review before advancing to resident-claim boundary review.'
   New-Check -Id 'persistent_supervision_resident_claim_boundary_review' -Status $(if ($PersistentSupervisionResidentClaimBoundaryHandoffObserved) { 'resident_claim_boundary_consumed' } elseif ($PersistentSupervisionEnablementReceiptReviewObserved) { 'missing_or_unexpected' } else { 'not_applicable' }) -Passed $(-not $PersistentSupervisionEnablementReceiptReviewObserved -or $PersistentSupervisionResidentClaimBoundaryHandoffObserved) -Evidence 'scripts/lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status' -Reason 'After enablement receipt review, the next handoff must consume the read-only resident-claim boundary before routing to the Stage 6 completion audit.'
-  New-Check -Id 'stage6_completion_audit_runtime_authority_handoff' -Status $(if ($Stage6CompletionAuditHelpfulNotNoisyRuntimeAuthorityHandoffObserved) { 'runtime_authority_handoff_consumed' } elseif ($Stage6CompletionAuditRecommendedHandoffConsumed) { 'completion_audit_recommended_handoff_consumed' } elseif ($Stage6CompletionAuditReadbackObserved) { 'completion_audit_readback_observed' } elseif ($Stage6CompletionAuditRuntimeReadbackRequired) { 'runtime_readback_required' } else { 'not_requested' }) -Passed $([string]::IsNullOrWhiteSpace($CompletionAuditJsonPath) -or $Stage6CompletionAuditReadbackObserved) -Evidence 'scripts/lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey or -CompletionAuditJsonPath <audit.json>' -Reason 'When Stage 6 closure readback reaches the completion-audit boundary, the next handoff should require the explicit launch-on-hotkey audit readback or consume a supplied completion-audit JSON payload instead of falling back to stale closure readback.'
+  New-Check -Id 'stage6_completion_audit_runtime_authority_handoff' -Status $(if ($Stage6CompletionAuditHelpfulNotNoisyRuntimeAuthorityHandoffObserved) { 'runtime_authority_handoff_consumed' } elseif ($Stage6CompletionAuditSummonAuthorityRequestBundleHandoffObserved) { 'summon_authority_request_bundle_ready' } elseif ($Stage6CompletionAuditRecommendedHandoffConsumed) { 'completion_audit_recommended_handoff_consumed' } elseif ($Stage6CompletionAuditReadbackObserved) { 'completion_audit_readback_observed' } elseif ($Stage6CompletionAuditRuntimeReadbackRequired) { 'runtime_readback_required' } else { 'not_requested' }) -Passed $([string]::IsNullOrWhiteSpace($CompletionAuditJsonPath) -or $Stage6CompletionAuditReadbackObserved) -Evidence 'scripts/lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey or -CompletionAuditJsonPath <audit.json>' -Reason 'When Stage 6 closure readback reaches the completion-audit boundary, the next handoff should require the explicit launch-on-hotkey audit readback or consume a supplied completion-audit JSON payload instead of falling back to stale closure readback.'
   New-Check -Id 'persistent_supervision_enablement_authority_handoff' -Status $(if ($PersistentSupervisionEnablementAuthorityHandoffObserved) { 'enablement_authority_handoff_ready' } else { 'not_observed' }) -Passed $true -Evidence '/lens/status resident_host.persistent_supervision_enablement_authority_readiness' -Reason 'When the enablement authority denial and execution-denial readiness are already audited, the next handoff can point at the enablement-authority proof without granting authority.'
   New-Check -Id 'activation_execution_handoff' -Status $(if ($ActivationExecutionHandoffReady) { 'activation_execution_handoff_ready' } else { 'not_observed' }) -Passed $true -Evidence '/lens/status resident_host.activation_state latest_execution_handoff' -Reason 'When a bounded activation execution receipt exists, the handoff can point directly at process-supervision proof without claiming resident host status.'
   New-Check -Id 'resident_runtime_candidate_handoff' -Status $(if ($ResidentRuntimeCandidateHandoffObserved -and $CandidateObservedByDurableReceipt) { 'receipt_candidate_handoff_ready' } elseif ($ResidentRuntimeCandidateHandoffObserved) { 'fresh_candidate_handoff_ready' } else { 'not_observed' }) -Passed $true -Evidence '/lens/status resident_host resident candidate readback' -Reason 'When a fresh or receipt-backed supervised resident candidate is present, the handoff can point at persistence; otherwise it remains on the first missing resident-host prerequisite.'
@@ -3068,6 +3533,7 @@ $Payload = [ordered]@{
   stage6_completion_audit_system_resident_current_acceptance_handoff_observed = $Stage6CompletionAuditSystemResidentCurrentAcceptanceHandoffObserved
   stage6_completion_audit_reviewed_summon_first_blocker_handoff_observed = $Stage6CompletionAuditReviewedSummonFirstBlockerHandoffObserved
   stage6_completion_audit_reviewed_summon_authority_handoff_observed = $Stage6CompletionAuditReviewedSummonAuthorityHandoffObserved
+  stage6_completion_audit_summon_authority_request_bundle_handoff_observed = $Stage6CompletionAuditSummonAuthorityRequestBundleHandoffObserved
   stage6_completion_audit_persistent_supervision_first_missing_requirement_handoff_observed = $Stage6CompletionAuditPersistentSupervisionFirstMissingRequirementHandoffObserved
   stage6_completion_audit_prerequisite_bringup_operator_plan_handoff_observed = $Stage6CompletionAuditPrerequisiteBringupOperatorPlanHandoffObserved
   stage6_completion_audit_enablement_receipt_review_handoff_observed = $Stage6CompletionAuditPrerequisiteBringupEnablementReceiptHandoffObserved

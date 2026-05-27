@@ -94,6 +94,12 @@ def test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback() -> N
     assert "'start_supervised_resident_host_after_authority_grants'" in script
     assert "'scripts/lens-host-supervisor.ps1 -Mode StartResident'" in script
     assert "stage6_completion_audit_resident_host_supervised_start_handoff_observed" in script
+    assert "New-SummonAnywhereAuthorityRequestBundleOperatorHandoff" in script
+    assert "'summon_anywhere_authority_request_bundle_handoff'" in script
+    assert "'request_global_hotkey_binding_authority'" in script
+    assert "'request_overlay_window_authority'" in script
+    assert "'request_summon_binding_authority'" in script
+    assert "'scripts/lens-summon-api-execution-proof.ps1 -Mode Status -AllowLaunchOnHotkey'" in script
     assert "script_would_launch_process = $ScriptWouldLaunchProcess" in script
     assert "script_would_supervise_process = $ScriptWouldSuperviseProcess" in script
     assert "$Stage6CompletionAuditResidentRuntimeTrayPresenceHandoffObserved = (" in script
@@ -345,6 +351,11 @@ def test_lens_stage6_next_handoff_consumes_reviewed_tray_first_blocker_handoff(t
 def test_lens_stage6_next_handoff_consumes_reviewed_summon_authority_handoff(tmp_path: Path) -> None:
     data_root = tmp_path / "data"
     audit_json = tmp_path / "stage6-completion-audit-reviewed-summon-authority.json"
+
+    def write_json(path: Path, payload: dict[str, Any]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
     audit_json.write_text(
         json.dumps(
             {
@@ -419,13 +430,181 @@ def test_lens_stage6_next_handoff_consumes_reviewed_summon_authority_handoff(tmp
     assert payload["recommended_proof_script"] == "scripts/lens-summon-authority-blocker-proof.ps1 -Mode Status"
     assert payload["authority_required"] == "summon_hotkey_overlay_and_process_authority"
     assert payload["stage6_completion_audit_reviewed_summon_authority_handoff_observed"] is True
+    assert payload["stage6_completion_audit_summon_authority_request_bundle_handoff_observed"] is True
     assert payload["stage6_completion_audit_recommended_handoff_consumed"] is True
     assert payload["stage6_completion_audit_runtime_readback_required"] is False
     handoff = payload["recommended_handoff"]
     assert handoff["active_blocker_family"] == "authority"
     assert handoff["next_smallest_truthful_gap"] == "summon_authority_blocker_boundary"
     assert handoff["next_step"] == "run_summon_authority_blocker_proof"
-    assert payload["recommended_next_operator_action"]["id"] == "run_summon_authority_blocker_proof"
+    operator_handoff = payload["recommended_operator_handoff"]
+    assert operator_handoff["source"] == "summon_anywhere_authority_request_bundle_handoff"
+    assert operator_handoff["status"] == "authority_request_required"
+    assert operator_handoff["approval_request_write_if_run"] is True
+    assert operator_handoff["authority_grant_receipt_write_if_run"] is False
+    assert operator_handoff["approval_decision_authority"] is False
+    assert operator_handoff["would_execute"] is False
+    assert operator_handoff["would_mutate"] is False
+    assert payload["recommended_next_operator_action_requirement"] == "exact_global_hotkey_binding_authority_approval"
+    assert payload["recommended_next_operator_action"]["id"] == "request_global_hotkey_binding_authority"
+    assert payload["recommended_next_operator_action"]["route"] == "/lens/os-binding/authority/request"
+    assert payload["recommended_next_operator_action"]["approval_action"] == (
+        "lens.os_binding.command_palette_binding_authority"
+    )
+    assert payload["recommended_next_operator_action"]["script_would_request_authority"] is True
+    assert payload["recommended_next_operator_action"]["script_would_grant_authority"] is False
+    assert payload["recommended_next_operator_action"]["script_would_decide_approval"] is False
+    request_command = (
+        "$body = @{ actor = '<actor>'; reason = '<reason>' } | ConvertTo-Json -Compress; "
+        "Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/lens/os-binding/authority/request' "
+        "-ContentType 'application/json' -Body $body"
+    )
+    assert payload["recommended_next_operator_action"]["approval_request_command"] == {
+        "command": request_command,
+        "route": "/lens/os-binding/authority/request",
+        "method": "POST",
+        "api_base_url": "http://127.0.0.1:8000",
+        "payload_shape": {
+            "actor": "<actor>",
+            "reason": "<reason>",
+        },
+        "required_scope": "system.write",
+        "requires_running_api": True,
+        "requires_operator_actor": True,
+        "would_request_approval_if_run": True,
+        "status_readback_would_request_approval": False,
+    }
+    assert payload["recommended_next_operator_command"] == {
+        "command": request_command,
+        "mode": "ApiRequest",
+        "route": "/lens/os-binding/authority/request",
+        "method": "POST",
+        "requires_confirmation": True,
+        "requires_explicit_operator_opt_in": True,
+        "requires_actor": True,
+        "requires_approval_id": False,
+        "requires_operator_approval_decision": False,
+    }
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["stage6_completion_audit_runtime_authority_handoff"]["status"] == (
+        "summon_authority_request_bundle_ready"
+    )
+
+    created_ts = int(datetime.now(UTC).timestamp())
+    approved_hotkey_approval_id = "approved-hotkey-authority-test"
+    write_json(
+        data_root / "approvals" / "approved" / f"{approved_hotkey_approval_id}.json",
+        {
+            "id": approved_hotkey_approval_id,
+            "ts": created_ts,
+            "action": "lens.os_binding.command_palette_binding_authority",
+            "reason": "test approved hotkey binding authority",
+            "payload": {
+                "actor": "test.system.write",
+                "route": "/lens/os-binding/authority/request",
+            },
+            "status": "approved",
+            "decision": "approve",
+            "decision_actor": "test.approvals.decision",
+            "decided_ts": created_ts,
+        },
+    )
+
+    approved_proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-CompletionAuditJsonPath",
+        str(audit_json),
+        env={"FRANCIS_DATA_DIR": str(data_root)},
+    )
+
+    assert approved_proc.returncode == 0, approved_proc.stderr or approved_proc.stdout
+    approved_payload = json.loads(approved_proc.stdout)
+    assert approved_payload["stage6_completion_audit_summon_authority_request_bundle_handoff_observed"] is True
+    assert approved_payload["recommended_operator_handoff"]["source"] == (
+        "summon_anywhere_authority_request_bundle_handoff"
+    )
+    assert approved_payload["recommended_operator_handoff"]["status"] == "approved_authority_request_selected"
+    assert approved_payload["recommended_next_operator_action_requirement"] == (
+        "exact_global_hotkey_binding_authority_approval"
+    )
+    assert approved_payload["recommended_next_operator_action"]["id"] == (
+        "select_exact_approved_global_hotkey_binding_authority_request"
+    )
+    assert approved_payload["recommended_next_operator_action"]["route"] == "/lens/os-binding/authority/requests"
+    assert approved_payload["recommended_next_operator_action"]["approved_approval_id"] == approved_hotkey_approval_id
+    assert approved_payload["recommended_next_operator_action"]["follow_up_authority_grant_command"] == {
+        "command": (
+            f"$body = @{{ approval_id = '{approved_hotkey_approval_id}'; actor = '<actor>'; "
+            "reason = '<reason>'; lease_seconds = 3600 } | ConvertTo-Json -Compress; "
+            "Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/lens/os-binding/authority' "
+            "-ContentType 'application/json' -Body $body"
+        ),
+        "route": "/lens/os-binding/authority",
+        "method": "POST",
+        "api_base_url": "http://127.0.0.1:8000",
+        "payload_shape": {
+            "approval_id": approved_hotkey_approval_id,
+            "actor": "<actor>",
+            "reason": "<reason>",
+            "lease_seconds": 3600,
+        },
+        "required_scope": "system.write",
+        "requires_running_api": True,
+        "requires_operator_actor": True,
+        "requires_approval_id": True,
+        "would_grant_authority_if_run": True,
+        "status_readback_would_grant_authority": False,
+        "preview_only": True,
+        "availability_reason": "approved_request_selected_but_authority_grant_is_separate_operator_step",
+    }
+
+    hotkey_grant_receipt_id = "active-hotkey-authority-grant-test"
+    write_json(
+        data_root / "lens" / "os_binding_authority_grants" / f"{hotkey_grant_receipt_id}.json",
+        {
+            "kind": "lens.os_binding.command_palette_binding_authority.grant_receipt",
+            "receipt_id": hotkey_grant_receipt_id,
+            "ts": created_ts,
+            "status": "authority_granted",
+            "approval_id": approved_hotkey_approval_id,
+            "actor": "test.system.write",
+            "route": "/lens/os-binding/authority",
+            "authority_route": "/lens/os-binding/authority",
+            "request_route": "/lens/os-binding/authority/request",
+            "requests_route": "/lens/os-binding/authority/requests",
+            "grants_route": "/lens/os-binding/authority/grants",
+            "execute_route": "/lens/os-binding/execute",
+            "lease_seconds": 3600,
+            "expires_ts": created_ts + 3600,
+            "authority_granted": True,
+            "hotkey_registration_authority": True,
+            "local_process_launch_authority": True,
+        },
+    )
+
+    hotkey_granted_proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-CompletionAuditJsonPath",
+        str(audit_json),
+        env={"FRANCIS_DATA_DIR": str(data_root)},
+    )
+
+    assert hotkey_granted_proc.returncode == 0, hotkey_granted_proc.stderr or hotkey_granted_proc.stdout
+    hotkey_granted_payload = json.loads(hotkey_granted_proc.stdout)
+    assert hotkey_granted_payload["recommended_operator_handoff"]["source"] == (
+        "summon_anywhere_authority_request_bundle_handoff"
+    )
+    assert hotkey_granted_payload["recommended_operator_handoff"]["status"] == "authority_request_required"
+    assert hotkey_granted_payload["recommended_operator_handoff"]["active_grant_receipts"] == {
+        "global_hotkey_binding": hotkey_grant_receipt_id
+    }
+    assert hotkey_granted_payload["recommended_next_operator_action_requirement"] == (
+        "exact_overlay_window_authority_approval"
+    )
+    assert hotkey_granted_payload["recommended_next_operator_action"]["id"] == "request_overlay_window_authority"
+    assert hotkey_granted_payload["recommended_next_operator_action"]["route"] == "/lens/overlay/authority/request"
 
 
 def test_lens_stage6_next_handoff_preserves_completion_audit_concrete_handoff(tmp_path: Path) -> None:
