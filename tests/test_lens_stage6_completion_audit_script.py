@@ -1006,6 +1006,7 @@ def test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_
 
     broad_source = "$RecommendedHandoffSource = 'stage6_remaining_acceptance_blockers_after_summon_runtime_readback'"
     concrete_source = "$RecommendedConcreteHandoffSource = 'stage6_prerequisite_bringup_operator_plan_handoff'"
+    runtime_chain_flag = "$PersistentSupervisionTrayPrerequisiteRuntimeChainConcreteObserved = ("
     resident_claim_source = (
         "$RecommendedConcreteHandoffSource = 'persistent_supervision_resident_claim_boundary_handoff'"
     )
@@ -1053,6 +1054,25 @@ def test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_
     assert (
         "$RecommendedConcreteHandoff['authority_required'] = $Stage6PrerequisiteBringupPlanRecommendedAuthorityRequired"
     ) in script
+    assert runtime_chain_flag in script
+    assert (
+        "$PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable -eq 'tray_presence' -and\n"
+        "  $TrayPresenceApiExecutionProofObserved"
+    ) in script
+    assert (
+        "$RecommendedConcreteHandoffSource = [string]$OsBindingApiExecutionProof.recommended_handoff_source" in script
+    )
+    assert (
+        "$RecommendedConcreteHandoffSource = [string]$TrayPresenceApiExecutionProof.recommended_handoff_source"
+        in script
+    )
+    assert "consumed_persistent_supervision_prerequisite_first_missing = 'tray_presence'" in script
+    assert "consumed_os_binding_api_execution_proof = $OsBindingApiExecutionProofObserved" in script
+    assert "consumed_tray_presence_api_execution_proof = $TrayPresenceApiExecutionProofObserved" in script
+    assert (
+        "persistent_supervision_tray_prerequisite_runtime_chain_concrete_observed = "
+        "$PersistentSupervisionTrayPrerequisiteRuntimeChainConcreteObserved"
+    ) in script
     assert "$SystemResidentAppliedEnablementConcreteHandoffObserved = (" in script
     assert (
         "$RecommendedHandoffSource -eq 'stage6_remaining_acceptance_blockers_after_summon_runtime_readback' -and\n"
@@ -1063,6 +1083,8 @@ def test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_
     assert "$Stage6CompletionAuditHandoffConsumedByClosureReadback -or" in script
     assert "$SystemResidentAppliedEnablementConcreteHandoffObserved" in script
     assert script.index(broad_source) < script.index(concrete_source)
+    assert script.index(concrete_source) < script.index(runtime_chain_flag)
+    assert script.index(runtime_chain_flag) < script.index(resident_claim_source)
     assert script.index(concrete_source) < script.index(resident_claim_source)
 
 

@@ -5136,6 +5136,111 @@ if (
     $RecommendedConcreteHandoff['authority_required'] = $Stage6PrerequisiteBringupPlanRecommendedAuthorityRequired
   }
 }
+$PersistentSupervisionTrayPrerequisiteRuntimeChainConcreteObserved = (
+  $NextSmallestTruthfulGap -eq 'persistent_supervision_required_prerequisites_missing' -and
+  $PersistentSupervisionPrerequisitesProofObserved -and
+  $PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable -eq 'tray_presence' -and
+  $TrayPresenceApiExecutionProofObserved
+)
+if (
+  $PersistentSupervisionTrayPrerequisiteRuntimeChainConcreteObserved -and
+  $OsBindingApiExecutionProofObserved
+) {
+  $OsBindingApiExecutionProofRecommendedHandoff = $OsBindingApiExecutionProof.recommended_handoff
+  $RecommendedConcreteHandoffSource = [string]$OsBindingApiExecutionProof.recommended_handoff_source
+  $RecommendedConcreteHandoff = [ordered]@{
+    status = 'blocked'
+    previous_next_smallest_truthful_gap = 'os_level_command_palette_binding'
+    consumed_persistent_supervision_prerequisite_first_missing = 'tray_presence'
+    consumed_tray_presence_api_execution_proof = $TrayPresenceApiExecutionProofObserved
+    consumed_os_binding_api_execution_proof = $OsBindingApiExecutionProofObserved
+    consumed_os_binding_api_next_smallest_truthful_gap = [string]$OsBindingApiExecutionProof.next_smallest_truthful_gap
+    next_smallest_truthful_gap = [string]$OsBindingApiExecutionProof.next_smallest_truthful_gap
+    next_step = [string]$OsBindingApiExecutionProof.recommended_next_slice
+    proof_script = [string]$OsBindingApiExecutionProof.recommended_proof_script
+    route = [string]$OsBindingApiExecutionProofRecommendedHandoff.route
+    readiness_route = [string]$OsBindingApiExecutionProofRecommendedHandoff.readiness_route
+    acceptance_criterion = 'summon_anywhere'
+    authority_required = [string]$OsBindingApiExecutionProofRecommendedHandoff.authority_required
+    authority_granted = $false
+    recommended_handoff = $OsBindingApiExecutionProofRecommendedHandoff
+    resident_runtime_execution_authority = [bool]$OsBindingApiExecutionProof.resident_runtime_execution_authority
+    host_supervision_authority = [bool]$OsBindingApiExecutionProof.host_supervision_authority
+    tray_presence_authority = [bool]$OsBindingApiExecutionProof.tray_presence_authority
+    os_binding_authority = [bool]$OsBindingApiExecutionProof.os_binding_authority
+    resident_host_process_started = [bool]$OsBindingApiExecutionProof.resident_host_process_started
+    resident_supervised_runtime_started = [bool]$OsBindingApiExecutionProof.resident_supervised_runtime_started
+    tray_presence_started = [bool]$OsBindingApiExecutionProof.tray_presence_started
+    tray_runtime_ready = [bool]$OsBindingApiExecutionProof.tray_runtime_ready
+    global_hotkey_bound = [bool]$OsBindingApiExecutionProof.global_hotkey_bound
+    hotkey_runtime_ready = [bool]$OsBindingApiExecutionProof.hotkey_runtime_ready
+    os_level_command_palette = [bool]$OsBindingApiExecutionProof.os_level_command_palette
+    hotkey_stop_observed = [bool]$OsBindingApiExecutionProof.hotkey_stop_observed
+    tray_presence_stop_observed = [bool]$OsBindingApiExecutionProof.tray_presence_stop_observed
+    resident_supervision_stop_observed = [bool]$OsBindingApiExecutionProof.resident_supervision_stop_observed
+    required_before_enable_after_hotkey = [string[]]@($OsBindingApiExecutionProofRequiredBeforeEnable)
+    overlay_window = [bool]$OsBindingApiExecutionProof.overlay_window
+    summon_anywhere = [bool]$OsBindingApiExecutionProof.summon_anywhere
+    service_managed = [bool]$OsBindingApiExecutionProof.service_managed
+    resident_claim_allowed = [bool]$OsBindingApiExecutionProof.resident_claim_allowed
+    read_only_contract = [bool]$OsBindingApiExecutionProofRecommendedHandoff.read_only_contract
+    diagnostic_only = [bool]$OsBindingApiExecutionProofRecommendedHandoff.diagnostic_only
+    would_execute = [bool]$OsBindingApiExecutionProofRecommendedHandoff.would_execute
+    would_mutate = [bool]$OsBindingApiExecutionProofRecommendedHandoff.would_mutate
+    would_register_tray = $false
+    would_register_hotkey = $false
+    would_open_overlay = $false
+    would_write_memory = $false
+    would_claim_resident = $false
+    blockers = [string[]]@($OsBindingApiExecutionProofBlockers)
+  }
+} elseif ($PersistentSupervisionTrayPrerequisiteRuntimeChainConcreteObserved) {
+  $TrayPresenceApiExecutionProofRecommendedHandoff = $TrayPresenceApiExecutionProof.recommended_handoff
+  $RecommendedConcreteHandoffSource = [string]$TrayPresenceApiExecutionProof.recommended_handoff_source
+  $RecommendedConcreteHandoff = [ordered]@{
+    status = 'blocked'
+    previous_next_smallest_truthful_gap = 'summon_tray_presence_blocker_boundary'
+    consumed_persistent_supervision_prerequisite_first_missing = 'tray_presence'
+    consumed_resident_runtime_api_execution_proof = $ResidentRuntimeApiExecutionProofObserved
+    consumed_tray_presence_api_execution_proof = $TrayPresenceApiExecutionProofObserved
+    consumed_tray_presence_api_next_smallest_truthful_gap = [string]$TrayPresenceApiExecutionProof.next_smallest_truthful_gap
+    next_smallest_truthful_gap = [string]$TrayPresenceApiExecutionProof.next_smallest_truthful_gap
+    next_step = [string]$TrayPresenceApiExecutionProof.recommended_next_slice
+    proof_script = [string]$TrayPresenceApiExecutionProof.recommended_proof_script
+    route = [string]$TrayPresenceApiExecutionProofRecommendedHandoff.route
+    readiness_route = [string]$TrayPresenceApiExecutionProofRecommendedHandoff.readiness_route
+    acceptance_criterion = 'summon_anywhere'
+    authority_required = [string]$TrayPresenceApiExecutionProofRecommendedHandoff.authority_required
+    authority_granted = $false
+    recommended_handoff = $TrayPresenceApiExecutionProofRecommendedHandoff
+    resident_runtime_execution_authority = [bool]$TrayPresenceApiExecutionProof.resident_runtime_execution_authority
+    host_supervision_authority = [bool]$TrayPresenceApiExecutionProof.host_supervision_authority
+    tray_presence_authority = [bool]$TrayPresenceApiExecutionProof.tray_presence_authority
+    resident_host_process_started = [bool]$TrayPresenceApiExecutionProof.resident_host_process_started
+    resident_supervised_runtime_started = [bool]$TrayPresenceApiExecutionProof.resident_supervised_runtime_started
+    tray_presence_started = [bool]$TrayPresenceApiExecutionProof.tray_presence_started
+    tray_runtime_ready = [bool]$TrayPresenceApiExecutionProof.tray_runtime_ready
+    tray_icon_visible = [bool]$TrayPresenceApiExecutionProof.tray_icon_visible
+    tray_presence_stop_observed = [bool]$TrayPresenceApiExecutionProof.tray_presence_stop_observed
+    resident_supervision_stop_observed = [bool]$TrayPresenceApiExecutionProof.resident_supervision_stop_observed
+    required_before_enable_after_tray = [string[]]@($TrayPresenceApiExecutionProofRequiredBeforeEnable)
+    global_hotkey = [bool]$TrayPresenceApiExecutionProof.global_hotkey
+    overlay_window = [bool]$TrayPresenceApiExecutionProof.overlay_window
+    summon_anywhere = [bool]$TrayPresenceApiExecutionProof.summon_anywhere
+    service_managed = [bool]$TrayPresenceApiExecutionProof.service_managed
+    resident_claim_allowed = [bool]$TrayPresenceApiExecutionProof.resident_claim_allowed
+    read_only_contract = [bool]$TrayPresenceApiExecutionProofRecommendedHandoff.read_only_contract
+    diagnostic_only = [bool]$TrayPresenceApiExecutionProofRecommendedHandoff.diagnostic_only
+    would_execute = [bool]$TrayPresenceApiExecutionProofRecommendedHandoff.would_execute
+    would_mutate = [bool]$TrayPresenceApiExecutionProofRecommendedHandoff.would_mutate
+    would_register_tray = $false
+    would_register_hotkey = $false
+    would_open_overlay = $false
+    would_write_memory = $false
+    would_claim_resident = $false
+    blockers = [string[]]@($TrayPresenceApiExecutionProofBlockers)
+  }
+}
 $SystemResidentAppliedEnablementConcreteHandoffObserved = (
   $RecommendedHandoffSource -eq 'stage6_remaining_acceptance_blockers_after_summon_runtime_readback' -and
   [string]$RecommendedHandoff.acceptance_criterion -eq 'system_resident_presence' -and
@@ -5222,6 +5327,7 @@ $Payload = [ordered]@{
   recommended_concrete_authority_required = $RecommendedConcreteAuthorityRequired
   recommended_concrete_authority_granted = $RecommendedConcreteAuthorityGranted
   recommended_concrete_handoff = $RecommendedConcreteHandoff
+  persistent_supervision_tray_prerequisite_runtime_chain_concrete_observed = $PersistentSupervisionTrayPrerequisiteRuntimeChainConcreteObserved
   stage6_completion_audit_handoff_consumed_by_closure_readback = $Stage6CompletionAuditHandoffConsumedByClosureReadback
   stage6_completion_audit_concrete_handoff_observed = $ConcreteHandoffObserved
   persistent_supervision_first_missing_required_before_enable = $PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable

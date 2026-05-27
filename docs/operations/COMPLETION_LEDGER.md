@@ -39867,6 +39867,66 @@ Latest validation for Stage 6 seeded resident runtime prerequisite consumption:
   resident_host_process_ready_in_prerequisites=true;
   ready_to_close=false; remaining_stage6_acceptance_blockers=[summon_anywhere,system_resident_presence]`
 
+### 2026-05-27 - Stage 6 audit promotes runtime-proved tray and OS binding handoffs
+
+Roadmap area: Stage 6 / Lens MVP, summon-anywhere runtime proof chain and
+system-resident prerequisite handoff truthfulness.
+
+Material change:
+
+- `scripts/lens-stage6-completion-audit.ps1` now preserves the broad
+  persistent-supervision prerequisite blocker while promoting the concrete
+  handoff when runtime proofs already advanced beyond it.
+- If the first persistent-supervision prerequisite is still `tray_presence` but
+  the governed tray API proof has passed, the audit exposes the concrete OS
+  binding proof handoff instead of looping back to the tray blocker.
+- If the governed OS binding proof has also passed, the audit exposes the
+  concrete overlay API proof handoff:
+  `prove_governed_overlay_window_api_execution_after_global_hotkey_binding`.
+- Stage 6 still does not close and Stage 7 does not start. The latest
+  checkpoint remains `status=blocked`, `ready_total=3`, `blocked_total=2`, with
+  `summon_anywhere` and `system_resident_presence` still blocked.
+
+Latest validation for runtime-proved concrete handoff promotion:
+
+- PowerShell AST parse of `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `python -m ruff check
+  tests/test_lens_stage6_completion_audit_script.py
+  tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests/test_lens_stage6_completion_audit_script.py
+  tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 2 files already formatted`
+- `python -m pytest
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_to_resident_claim_boundary
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_applied_bringup_review_state -q`
+  Result: `passed`
+- `.\scripts\lens-tray-presence-api-execution-proof.ps1 -Mode Status
+  -RunSeconds 1`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=os_level_command_palette_binding;
+  recommended_proof_script=scripts/lens-os-binding-api-execution-proof.ps1 -Mode Status;
+  tray_presence_started=true; tray_runtime_ready=true; tray_icon_visible=true;
+  tray_presence_stop_observed=true`
+- `.\scripts\lens-os-binding-api-execution-proof.ps1 -Mode Status
+  -RunSeconds 1`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=summon_overlay_window_blocker_boundary;
+  recommended_proof_script=scripts/lens-overlay-api-execution-proof.ps1 -Mode Status;
+  global_hotkey_bound=true; os_level_command_palette=true;
+  hotkey_stop_observed=true`
+- `.\scripts\lens-overlay-api-execution-proof.ps1 -Mode Status`
+  Result: `failed as current next blocker; status=proof_failed;
+  next_smallest_truthful_gap=os_level_command_palette_binding;
+  failed check=tray_and_hotkey_started_before_overlay; overlay runtime itself
+  started and stopped, but the proof did not carry forward the live hotkey
+  prerequisite`
+- `.\scripts\lens-stage6-checkpoint.ps1 -Mode Status`
+  Result: `passed; status=blocked; ready_to_close=false; ready_total=3;
+  blocked_total=2; next_smallest_truthful_gap=stage6_lens_completion_audit`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

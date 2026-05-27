@@ -4077,6 +4077,74 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
         "requires_operator_approval_decision": False,
     }
 
+    persistent_prereq_tray_runtime_audit = json.loads(persistent_prereq_tray_audit_json.read_text(encoding="utf-8"))
+    persistent_prereq_tray_runtime_audit["recommended_concrete_handoff_source"] = (
+        "api_os_binding_execution_overlay_window_handoff"
+    )
+    persistent_prereq_tray_runtime_audit["recommended_concrete_handoff"] = {
+        "status": "blocked",
+        "previous_next_smallest_truthful_gap": "os_level_command_palette_binding",
+        "consumed_persistent_supervision_prerequisite_first_missing": "tray_presence",
+        "consumed_tray_presence_api_execution_proof": True,
+        "consumed_os_binding_api_execution_proof": True,
+        "next_smallest_truthful_gap": "summon_overlay_window_blocker_boundary",
+        "next_step": "prove_governed_overlay_window_api_execution_after_global_hotkey_binding",
+        "proof_script": "scripts/lens-overlay-api-execution-proof.ps1 -Mode Status",
+        "route": "/lens/overlay",
+        "readiness_route": "/lens/overlay/readiness",
+        "authority_required": "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites",
+        "authority_granted": False,
+        "read_only_contract": True,
+        "diagnostic_only": True,
+        "would_execute": False,
+        "would_mutate": False,
+        "would_write_memory": False,
+        "would_claim_resident": False,
+    }
+    persistent_prereq_tray_runtime_json = tmp_path / "stage6-persistent-supervision-tray-runtime-audit.json"
+    persistent_prereq_tray_runtime_json.write_text(
+        json.dumps(persistent_prereq_tray_runtime_audit),
+        encoding="utf-8",
+    )
+
+    persistent_prereq_tray_runtime_proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-CompletionAuditJsonPath",
+        str(persistent_prereq_tray_runtime_json),
+        env=proof_env,
+    )
+
+    assert persistent_prereq_tray_runtime_proc.returncode == 0, (
+        persistent_prereq_tray_runtime_proc.stderr or persistent_prereq_tray_runtime_proc.stdout
+    )
+    persistent_prereq_tray_runtime_payload = json.loads(persistent_prereq_tray_runtime_proc.stdout)
+    assert persistent_prereq_tray_runtime_payload["recommended_handoff_source"] == (
+        "persistent_supervision_prerequisites_first_missing_requirement_handoff"
+    )
+    assert persistent_prereq_tray_runtime_payload["recommended_concrete_handoff_source"] == (
+        "api_os_binding_execution_overlay_window_handoff"
+    )
+    assert persistent_prereq_tray_runtime_payload["recommended_concrete_next_smallest_truthful_gap"] == (
+        "summon_overlay_window_blocker_boundary"
+    )
+    assert persistent_prereq_tray_runtime_payload["recommended_concrete_next_slice"] == (
+        "prove_governed_overlay_window_api_execution_after_global_hotkey_binding"
+    )
+    assert persistent_prereq_tray_runtime_payload["recommended_concrete_proof_script"] == (
+        "scripts/lens-overlay-api-execution-proof.ps1 -Mode Status"
+    )
+    persistent_prereq_tray_runtime_handoff = persistent_prereq_tray_runtime_payload["recommended_concrete_handoff"]
+    assert persistent_prereq_tray_runtime_handoff["consumed_persistent_supervision_prerequisite_first_missing"] == (
+        "tray_presence"
+    )
+    assert persistent_prereq_tray_runtime_handoff["consumed_tray_presence_api_execution_proof"] is True
+    assert persistent_prereq_tray_runtime_handoff["consumed_os_binding_api_execution_proof"] is True
+    assert persistent_prereq_tray_runtime_handoff["read_only_contract"] is True
+    assert persistent_prereq_tray_runtime_handoff["diagnostic_only"] is True
+    assert persistent_prereq_tray_runtime_handoff["would_execute"] is False
+    assert persistent_prereq_tray_runtime_handoff["would_mutate"] is False
+
     persistent_api_audit_json = tmp_path / "stage6-persistent-supervision-api-audit.json"
     persistent_api_audit_json.write_text(
         json.dumps(
