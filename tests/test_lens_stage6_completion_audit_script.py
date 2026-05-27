@@ -1060,6 +1060,15 @@ def test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_
         "  $TrayPresenceApiExecutionProofObserved"
     ) in script
     assert (
+        "$RecommendedConcreteHandoffSource = [string]$PersistentSupervisionApiExecutionProof.recommended_handoff_source"
+        in script
+    )
+    assert (
+        "$RecommendedConcreteHandoffSource = [string]$SummonApiBoundedExecutionProof.recommended_handoff_source"
+        in script
+    )
+    assert "$RecommendedConcreteHandoffSource = [string]$OverlayApiExecutionProof.recommended_handoff_source" in script
+    assert (
         "$RecommendedConcreteHandoffSource = [string]$OsBindingApiExecutionProof.recommended_handoff_source" in script
     )
     assert (
@@ -1067,8 +1076,16 @@ def test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_
         in script
     )
     assert "consumed_persistent_supervision_prerequisite_first_missing = 'tray_presence'" in script
+    assert (
+        "$RecommendedConcreteHandoff['consumed_persistent_supervision_api_execution_proof'] = "
+        "$PersistentSupervisionApiExecutionProofObserved"
+    ) in script
+    assert "consumed_summon_api_bounded_execution_proof = $SummonApiBoundedExecutionProofObserved" in script
+    assert "consumed_overlay_api_execution_proof = $OverlayApiExecutionProofObserved" in script
     assert "consumed_os_binding_api_execution_proof = $OsBindingApiExecutionProofObserved" in script
     assert "consumed_tray_presence_api_execution_proof = $TrayPresenceApiExecutionProofObserved" in script
+    assert "$ConcreteExecutionHandoffObserved = (" in script
+    assert "stage6_completion_audit_concrete_execution_handoff_observed = $ConcreteExecutionHandoffObserved" in script
     assert (
         "persistent_supervision_tray_prerequisite_runtime_chain_concrete_observed = "
         "$PersistentSupervisionTrayPrerequisiteRuntimeChainConcreteObserved"

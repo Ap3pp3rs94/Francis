@@ -39883,6 +39883,15 @@ Material change:
 - If the governed OS binding proof has also passed, the audit exposes the
   concrete overlay API proof handoff:
   `prove_governed_overlay_window_api_execution_after_global_hotkey_binding`.
+- If the governed overlay API proof has also passed, the audit exposes the
+  concrete summon API proof handoff:
+  `prove_governed_summon_api_execution_after_overlay_window`.
+- If the bounded summon API proof has also passed, the audit exposes the
+  concrete persistent-supervision API execution handoff while keeping Stage 6
+  blocked until resident/persistent closure readback is trustworthy.
+- If the persistent-supervision API execution proof has also passed, the audit
+  exposes the concrete Stage 6 completion-audit handoff instead of sending the
+  operator back to tray, OS binding, overlay, or summon proof paths.
 - Stage 6 still does not close and Stage 7 does not start. The latest
   checkpoint remains `status=blocked`, `ready_total=3`, `blocked_total=2`, with
   `summon_anywhere` and `system_resident_presence` still blocked.
@@ -39917,12 +39926,40 @@ Latest validation for runtime-proved concrete handoff promotion:
   recommended_proof_script=scripts/lens-overlay-api-execution-proof.ps1 -Mode Status;
   global_hotkey_bound=true; os_level_command_palette=true;
   hotkey_stop_observed=true`
-- `.\scripts\lens-overlay-api-execution-proof.ps1 -Mode Status`
-  Result: `failed as current next blocker; status=proof_failed;
-  next_smallest_truthful_gap=os_level_command_palette_binding;
-  failed check=tray_and_hotkey_started_before_overlay; overlay runtime itself
-  started and stopped, but the proof did not carry forward the live hotkey
-  prerequisite`
+- `$env:FRANCIS_PROOF_GLOBAL_HOTKEY='Ctrl+Alt+Shift+F15';
+  .\scripts\lens-overlay-api-execution-proof.ps1 -Mode Status -RunSeconds 1`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=summon_binding_blocker_boundary;
+  recommended_proof_script=scripts/lens-summon-api-execution-proof.ps1 -Mode Status;
+  overlay_window_started=true; overlay_runtime_ready=true;
+  overlay_stop_observed=true; hotkey_stop_observed=true;
+  required_before_enable_after_overlay=[summon_binding]`
+- `$env:FRANCIS_PROOF_GLOBAL_HOTKEY='Ctrl+Alt+Shift+F16';
+  .\scripts\lens-summon-api-execution-proof.ps1 -Mode Status -RunSeconds 1`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=summon_anywhere_runtime_readback;
+  recommended_proof_script=scripts/lens-persistent-supervision-api-execution-proof.ps1 -Mode Status;
+  summon_binding_observed=true; summon_runtime_ready=true;
+  required_before_enable_ready_after_summon=true; no_launch=true`
+- `$env:FRANCIS_PROOF_GLOBAL_HOTKEY='Ctrl+Alt+Shift+F17';
+  .\scripts\lens-persistent-supervision-api-execution-proof.ps1 -Mode Status
+  -RunSeconds 1`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=stage6_lens_completion_audit;
+  recommended_proof_script=scripts/lens-stage6-completion-audit.ps1 -Mode Status;
+  service_config_updated=true; receipt_written=true;
+  live_service_config_unchanged=true; resident_claim_allowed=true`
+- `.\scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -AllowLaunchOnHotkey -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2
+  -ResidentSurfaceForegroundRunSeconds 2 -SupervisorRunSeconds 3
+  -ChildProofTimeoutSeconds 120`
+  Result: `completed; ok=true; audit_status=complete; status=blocked;
+  ready_to_close=false; child_proof_timeouts=[];
+  recommended_concrete_handoff_source=api_persistent_supervision_execution_handoff;
+  recommended_concrete_next_smallest_truthful_gap=stage6_lens_completion_audit;
+  stage6_completion_audit_concrete_handoff_observed=true;
+  stage6_completion_audit_concrete_execution_handoff_observed=false;
+  next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`
 - `.\scripts\lens-stage6-checkpoint.ps1 -Mode Status`
   Result: `passed; status=blocked; ready_to_close=false; ready_total=3;
   blocked_total=2; next_smallest_truthful_gap=stage6_lens_completion_audit`

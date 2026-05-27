@@ -5144,6 +5144,124 @@ $PersistentSupervisionTrayPrerequisiteRuntimeChainConcreteObserved = (
 )
 if (
   $PersistentSupervisionTrayPrerequisiteRuntimeChainConcreteObserved -and
+  $PersistentSupervisionApiExecutionProofObserved
+) {
+  $RecommendedConcreteHandoffSource = [string]$PersistentSupervisionApiExecutionProof.recommended_handoff_source
+  $RecommendedConcreteHandoff = [ordered]@{}
+  foreach ($Property in @($PersistentSupervisionApiExecutionProof.handoff.PSObject.Properties)) {
+    $RecommendedConcreteHandoff[$Property.Name] = $Property.Value
+  }
+  $RecommendedConcreteHandoff['consumed_persistent_supervision_prerequisite_first_missing'] = 'tray_presence'
+  $RecommendedConcreteHandoff['consumed_summon_api_bounded_execution_proof'] = $SummonApiBoundedExecutionProofObserved
+  $RecommendedConcreteHandoff['consumed_persistent_supervision_api_execution_proof'] = $PersistentSupervisionApiExecutionProofObserved
+  $RecommendedConcreteHandoff['consumed_persistent_supervision_api_next_smallest_truthful_gap'] = [string]$PersistentSupervisionApiExecutionProof.next_smallest_truthful_gap
+} elseif (
+  $PersistentSupervisionTrayPrerequisiteRuntimeChainConcreteObserved -and
+  $SummonApiBoundedExecutionProofObserved
+) {
+  $RecommendedConcreteHandoffSource = [string]$SummonApiBoundedExecutionProof.recommended_handoff_source
+  $RecommendedConcreteHandoff = [ordered]@{
+    status = 'blocked'
+    previous_next_smallest_truthful_gap = 'summon_binding_blocker_boundary'
+    consumed_persistent_supervision_prerequisite_first_missing = 'tray_presence'
+    consumed_overlay_api_execution_proof = $OverlayApiExecutionProofObserved
+    consumed_summon_api_bounded_execution_proof = $SummonApiBoundedExecutionProofObserved
+    consumed_summon_api_bounded_next_smallest_truthful_gap = [string]$SummonApiBoundedExecutionProof.next_smallest_truthful_gap
+    next_smallest_truthful_gap = [string]$SummonApiBoundedExecutionProof.next_smallest_truthful_gap
+    next_step = [string]$SummonApiBoundedExecutionProof.recommended_next_slice
+    proof_script = [string]$SummonApiBoundedExecutionProof.recommended_proof_script
+    route = '/lens/host/persistent-supervision/enablement/execution/apply'
+    readiness_route = '/lens/host/persistent-supervision/enablement/execution/readiness'
+    acceptance_criterion = 'summon_anywhere'
+    authority_required = 'persistent_supervision_execution_authority'
+    authority_granted = $false
+    resident_runtime_execution_authority = [bool]$SummonApiBoundedExecutionProof.resident_runtime_execution_authority
+    host_supervision_authority = [bool]$SummonApiBoundedExecutionProof.host_supervision_authority
+    tray_presence_authority = [bool]$SummonApiBoundedExecutionProof.tray_presence_authority
+    os_binding_authority = [bool]$SummonApiBoundedExecutionProof.os_binding_authority
+    overlay_authority = [bool]$SummonApiBoundedExecutionProof.overlay_authority
+    summon_authority = [bool]$SummonApiBoundedExecutionProof.summon_authority
+    summon_binding_observed = [bool]$SummonApiBoundedExecutionProof.summon_binding_observed
+    summon_runtime_ready = [bool]$SummonApiBoundedExecutionProof.summon_runtime_ready
+    bounded_handoff_ready = [bool]$SummonApiBoundedExecutionProof.bounded_handoff_ready
+    local_open_ready = [bool]$SummonApiBoundedExecutionProof.local_open_ready
+    opened = [bool]$SummonApiBoundedExecutionProof.opened
+    no_launch = [bool]$SummonApiBoundedExecutionProof.no_launch
+    receipt_written = [bool]$SummonApiBoundedExecutionProof.receipt_written
+    required_before_enable_after_summon = [string[]]@($SummonApiBoundedExecutionProofRequiredBeforeEnable)
+    required_before_enable_ready_after_summon = [bool]$SummonApiBoundedExecutionProof.required_before_enable_ready_after_summon
+    summon_readiness_blockers_after_execute = [string[]]@($SummonApiBoundedExecutionProofReadinessBlockers)
+    summon_anywhere = [bool]$SummonApiBoundedExecutionProof.summon_anywhere
+    os_level_summon = [bool]$SummonApiBoundedExecutionProof.os_level_summon
+    service_managed = [bool]$SummonApiBoundedExecutionProof.service_managed
+    resident_claim_allowed = [bool]$SummonApiBoundedExecutionProof.resident_claim_allowed
+    read_only_contract = $false
+    diagnostic_only = $true
+    would_execute = $true
+    would_mutate = $true
+    would_start_service = $false
+    would_write_memory = $false
+    would_claim_resident = $false
+    blockers = [string[]]@($SummonApiBoundedExecutionProofReadinessBlockers)
+  }
+} elseif (
+  $PersistentSupervisionTrayPrerequisiteRuntimeChainConcreteObserved -and
+  $OverlayApiExecutionProofObserved
+) {
+  $OverlayApiExecutionProofRecommendedHandoff = $OverlayApiExecutionProof.recommended_handoff
+  $RecommendedConcreteHandoffSource = [string]$OverlayApiExecutionProof.recommended_handoff_source
+  $RecommendedConcreteHandoff = [ordered]@{
+    status = 'blocked'
+    previous_next_smallest_truthful_gap = 'summon_overlay_window_blocker_boundary'
+    consumed_persistent_supervision_prerequisite_first_missing = 'tray_presence'
+    consumed_os_binding_api_execution_proof = $OsBindingApiExecutionProofObserved
+    consumed_overlay_api_execution_proof = $OverlayApiExecutionProofObserved
+    consumed_overlay_api_next_smallest_truthful_gap = [string]$OverlayApiExecutionProof.next_smallest_truthful_gap
+    next_smallest_truthful_gap = [string]$OverlayApiExecutionProof.next_smallest_truthful_gap
+    next_step = [string]$OverlayApiExecutionProof.recommended_next_slice
+    proof_script = [string]$OverlayApiExecutionProof.recommended_proof_script
+    route = [string]$OverlayApiExecutionProofRecommendedHandoff.route
+    readiness_route = [string]$OverlayApiExecutionProofRecommendedHandoff.readiness_route
+    acceptance_criterion = 'summon_anywhere'
+    authority_required = [string]$OverlayApiExecutionProofRecommendedHandoff.authority_required
+    authority_granted = $false
+    recommended_handoff = $OverlayApiExecutionProofRecommendedHandoff
+    resident_runtime_execution_authority = [bool]$OverlayApiExecutionProof.resident_runtime_execution_authority
+    host_supervision_authority = [bool]$OverlayApiExecutionProof.host_supervision_authority
+    tray_presence_authority = [bool]$OverlayApiExecutionProof.tray_presence_authority
+    os_binding_authority = [bool]$OverlayApiExecutionProof.os_binding_authority
+    overlay_authority = [bool]$OverlayApiExecutionProof.overlay_authority
+    resident_host_process_started = [bool]$OverlayApiExecutionProof.resident_host_process_started
+    resident_supervised_runtime_started = [bool]$OverlayApiExecutionProof.resident_supervised_runtime_started
+    tray_presence_started = [bool]$OverlayApiExecutionProof.tray_presence_started
+    tray_runtime_ready = [bool]$OverlayApiExecutionProof.tray_runtime_ready
+    global_hotkey_bound = [bool]$OverlayApiExecutionProof.global_hotkey_bound
+    hotkey_runtime_ready = [bool]$OverlayApiExecutionProof.hotkey_runtime_ready
+    overlay_window_started = [bool]$OverlayApiExecutionProof.overlay_window_started
+    overlay_runtime_ready = [bool]$OverlayApiExecutionProof.overlay_runtime_ready
+    overlay_window_visible = [bool]$OverlayApiExecutionProof.overlay_window_visible
+    overlay_always_on_top = [bool]$OverlayApiExecutionProof.overlay_always_on_top
+    overlay_stop_observed = [bool]$OverlayApiExecutionProof.overlay_stop_observed
+    hotkey_stop_observed = [bool]$OverlayApiExecutionProof.hotkey_stop_observed
+    tray_presence_stop_observed = [bool]$OverlayApiExecutionProof.tray_presence_stop_observed
+    resident_supervision_stop_observed = [bool]$OverlayApiExecutionProof.resident_supervision_stop_observed
+    required_before_enable_after_overlay = [string[]]@($OverlayApiExecutionProofRequiredBeforeEnable)
+    summon_anywhere = [bool]$OverlayApiExecutionProof.summon_anywhere
+    service_managed = [bool]$OverlayApiExecutionProof.service_managed
+    resident_claim_allowed = [bool]$OverlayApiExecutionProof.resident_claim_allowed
+    read_only_contract = [bool]$OverlayApiExecutionProofRecommendedHandoff.read_only_contract
+    diagnostic_only = [bool]$OverlayApiExecutionProofRecommendedHandoff.diagnostic_only
+    would_execute = [bool]$OverlayApiExecutionProofRecommendedHandoff.would_execute
+    would_mutate = [bool]$OverlayApiExecutionProofRecommendedHandoff.would_mutate
+    would_register_tray = $false
+    would_register_hotkey = $false
+    would_open_overlay = $false
+    would_write_memory = $false
+    would_claim_resident = $false
+    blockers = [string[]]@($OverlayApiExecutionProofBlockers)
+  }
+} elseif (
+  $PersistentSupervisionTrayPrerequisiteRuntimeChainConcreteObserved -and
   $OsBindingApiExecutionProofObserved
 ) {
   $OsBindingApiExecutionProofRecommendedHandoff = $OsBindingApiExecutionProof.recommended_handoff
@@ -5274,8 +5392,19 @@ if ([string]::IsNullOrWhiteSpace($RecommendedConcreteAuthorityRequired)) {
   $RecommendedConcreteAuthorityRequired = $RecommendedAuthorityRequired
 }
 $RecommendedConcreteAuthorityGranted = [bool]$RecommendedConcreteHandoff.authority_granted
+$ConcreteExecutionHandoffObserved = (
+  -not [string]::IsNullOrWhiteSpace($RecommendedConcreteNextSlice) -and
+  -not [string]::IsNullOrWhiteSpace($RecommendedConcreteProofScript) -and
+  [bool]$RecommendedConcreteHandoff.diagnostic_only -and
+  [bool]$RecommendedConcreteHandoff.would_execute -and
+  [bool]$RecommendedConcreteHandoff.would_mutate -and
+  -not [bool]$RecommendedConcreteHandoff.would_start_service -and
+  -not [bool]$RecommendedConcreteHandoff.would_write_memory -and
+  -not [bool]$RecommendedConcreteHandoff.would_claim_resident
+)
 $ConcreteHandoffObserved = (
   -not $Stage6CompletionAuditHandoffConsumedByClosureReadback -or
+  $ConcreteExecutionHandoffObserved -or
   (
     -not [string]::IsNullOrWhiteSpace($RecommendedConcreteNextSlice) -and
     -not [string]::IsNullOrWhiteSpace($RecommendedConcreteProofScript) -and
@@ -5330,6 +5459,7 @@ $Payload = [ordered]@{
   persistent_supervision_tray_prerequisite_runtime_chain_concrete_observed = $PersistentSupervisionTrayPrerequisiteRuntimeChainConcreteObserved
   stage6_completion_audit_handoff_consumed_by_closure_readback = $Stage6CompletionAuditHandoffConsumedByClosureReadback
   stage6_completion_audit_concrete_handoff_observed = $ConcreteHandoffObserved
+  stage6_completion_audit_concrete_execution_handoff_observed = $ConcreteExecutionHandoffObserved
   persistent_supervision_first_missing_required_before_enable = $PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable
   persistent_supervision_first_missing_requirement_handoff = $PersistentSupervisionPrerequisitesFirstMissingRequirementHandoff
   next_smallest_truthful_gap_basis = if ($NextSmallestTruthfulGap -eq 'stage6_lens_completion_audit') {
