@@ -85,6 +85,7 @@ def test_lens_summon_binding_blocker_proof_is_readback_only(tmp_path: Path) -> N
     assert recommended_handoff["would_execute"] is False
     assert recommended_handoff["would_mutate"] is False
     assert payload["summon_binding_family_observed"] is True
+    assert isinstance(payload["summon_binding_family_projected_from_preflight"], bool)
     assert payload["previous_global_hotkey_contract_observed"] is True
     assert payload["previous_global_hotkey_contract_readback_observed"] is True
     previous_global_hotkey = payload["previous_global_hotkey_handoff"]
@@ -118,6 +119,10 @@ def test_lens_summon_binding_blocker_proof_is_readback_only(tmp_path: Path) -> N
         "lens_summon_binding_disabled_pending_authority",
         "summon_authority_not_granted",
     ]
+    if payload["summon_binding_family_projected_from_preflight"]:
+        assert payload["summon_anywhere_binding_blockers"] == []
+    else:
+        assert payload["summon_anywhere_binding_blockers"] == payload["summon_binding_blockers"]
     assert payload["direct_summon_preflight_binding_blockers"] == [
         "lens_summon_binding_disabled_pending_authority",
         "summon_authority_not_granted",

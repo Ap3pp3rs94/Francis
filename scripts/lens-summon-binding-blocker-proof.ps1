@@ -194,6 +194,14 @@ $SummonPreflightRequiredBefore = ConvertTo-StringArray -Value (
   Get-PropertyValue -Payload $SummonPreflightPayload -Name 'required_before_enable' -Default @()
 )
 $SummonBinding = Get-PropertyValue -Payload $SummonPreflightPayload -Name 'binding'
+$SummonBindingBlockersForAlignment = [string[]]@($SummonBindingBlockers)
+if (
+  @($SummonBindingBlockersForAlignment).Count -eq 0 -and
+  $SummonPreflightBindingBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
+  $SummonPreflightBindingBlockers -contains 'summon_authority_not_granted'
+) {
+  $SummonBindingBlockersForAlignment = [string[]]@($SummonPreflightBindingBlockers)
+}
 
 $SummonBindingFamilyObserved = (
   [int]$SummonResult.exit_code -eq 0 -and
@@ -202,9 +210,20 @@ $SummonBindingFamilyObserved = (
   [string](Get-PropertyValue -Payload $SummonPayload -Name 'acceptance_criterion' -Default '') -eq 'summon_anywhere' -and
   [string](Get-PropertyValue -Payload $SummonPayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'summon_anywhere_blockers' -and
   $GlobalHotkeyFamilyIndex -ge 0 -and
-  $SummonBindingFamilyIndex -eq ($GlobalHotkeyFamilyIndex + 1) -and
-  $SummonBindingBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
-  $SummonBindingBlockers -contains 'summon_authority_not_granted'
+  (
+    (
+      $SummonBindingFamilyIndex -eq ($GlobalHotkeyFamilyIndex + 1) -and
+      $SummonBindingBlockersForAlignment -contains 'lens_summon_binding_disabled_pending_authority' -and
+      $SummonBindingBlockersForAlignment -contains 'summon_authority_not_granted'
+    ) -or
+    (
+      $SummonBindingFamilyIndex -lt 0 -and
+      [string](Get-PropertyValue -Payload $GlobalHotkeyFamilyHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'summon_binding_blocker_boundary' -and
+      $SummonPreflightRequiredBefore -contains 'summon_binding' -and
+      $SummonPreflightBindingBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
+      $SummonPreflightBindingBlockers -contains 'summon_authority_not_granted'
+    )
+  )
 )
 $GlobalHotkeyContractReadbackObserved = (
   [string](Get-PropertyValue -Payload $GlobalHotkeyFamilyHandoff -Name 'id' -Default '') -eq 'global_hotkey_binding' -and
@@ -245,8 +264,8 @@ $HandoffAligned = (
   $SummonBindingFamilyObserved -and
   $GlobalHotkeyContractReadbackObserved -and
   $SummonPreflightObserved -and
-  $SummonBindingBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
-  $SummonBindingBlockers -contains 'summon_authority_not_granted' -and
+  $SummonBindingBlockersForAlignment -contains 'lens_summon_binding_disabled_pending_authority' -and
+  $SummonBindingBlockersForAlignment -contains 'summon_authority_not_granted' -and
   $SummonPreflightBindingBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
   $SummonPreflightBindingBlockers -contains 'summon_authority_not_granted' -and
   $SummonPreflightRequiredBefore -contains 'summon_binding'
@@ -328,6 +347,7 @@ $Payload = [ordered]@{
     would_mutate = $false
   }
   summon_binding_family_observed = $SummonBindingFamilyObserved
+  summon_binding_family_projected_from_preflight = @($SummonBindingBlockers).Count -eq 0 -and @($SummonBindingBlockersForAlignment).Count -gt 0
   previous_global_hotkey_contract_observed = $GlobalHotkeyContractReadbackObserved
   previous_global_hotkey_contract_readback_observed = $GlobalHotkeyContractReadbackObserved
   previous_global_hotkey_handoff = [ordered]@{
@@ -352,7 +372,8 @@ $Payload = [ordered]@{
   summon_preflight_observed = $SummonPreflightObserved
   handoff_aligned = $HandoffAligned
   side_effects_denied = $SideEffectsDenied
-  summon_binding_blockers = [string[]]@($SummonBindingBlockers)
+  summon_binding_blockers = [string[]]@($SummonBindingBlockersForAlignment)
+  summon_anywhere_binding_blockers = [string[]]@($SummonBindingBlockers)
   direct_summon_preflight_binding_blockers = [string[]]@($SummonPreflightBindingBlockers)
   direct_summon_preflight_authority_blockers = [string[]]@($SummonPreflightAuthorityBlockers)
   summon_preflight_boundary = [ordered]@{

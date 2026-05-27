@@ -39601,6 +39601,63 @@ Latest validation for Stage 6 next-handoff persistent enablement precedence:
   -q --tb=short`
   Result: `passed; 3 passed`
 
+### 2026-05-27 - Stage 6 summon-binding preflight projection guard
+
+Roadmap area: Stage 6 / Lens MVP, summon-anywhere acceptance and command
+palette/summon binding truthfulness.
+
+Material change:
+
+- `scripts/lens-summon-binding-blocker-proof.ps1` now accepts direct
+  `/lens/summon` preflight binding blockers as the current evidence source when
+  `scripts/lens-summon-anywhere-blockers-proof.ps1` has already collapsed the
+  aggregate `summon_binding` family out of `blocked_families`.
+- The proof still requires the bounded global-hotkey family handoff contract,
+  the direct summon preflight `summon_binding` requirement, and both
+  `lens_summon_binding_disabled_pending_authority` and
+  `summon_authority_not_granted` blockers before it advances.
+- The proof payload now reports
+  `summon_binding_family_projected_from_preflight=true` and preserves the empty
+  aggregate `summon_anywhere_binding_blockers` separately, so the operator can
+  see where the evidence came from.
+- Stage 6 still does not close and Stage 7 does not start. This is a readback
+  correction only; it does not register a hotkey, enable summon binding, grant
+  summon authority, mutate files, write memory, or claim summon-anywhere
+  readiness.
+
+Latest validation for Stage 6 summon-binding preflight projection guard:
+
+- PowerShell AST parse of `scripts\lens-summon-binding-blocker-proof.ps1`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-summon-binding-blocker-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=summon_authority_blocker_boundary;
+  recommended_next_slice=run_summon_authority_blocker_proof;
+  recommended_proof_script=scripts/lens-summon-authority-blocker-proof.ps1 -Mode Status;
+  summon_binding_family_observed=true;
+  summon_binding_family_projected_from_preflight=true;
+  handoff_aligned=true; side_effects_denied=true;
+  summon_binding_blockers=[lens_summon_binding_disabled_pending_authority,summon_authority_not_granted];
+  summon_anywhere_binding_blockers=[]`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-summon-authority-blocker-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=stage6_lens_completion_audit;
+  recommended_next_slice=run_stage6_lens_completion_audit_after_summon_authority_handoff;
+  recommended_proof_script=scripts/lens-stage6-completion-audit.ps1 -Mode Status;
+  authority_required=summon_hotkey_overlay_and_process_authority;
+  authority_granted=false; side_effects_denied=true`
+- `.\.venv\Scripts\ruff.exe check
+  tests\test_lens_summon_binding_blocker_proof_script.py`
+  Result: `passed`
+- `.\.venv\Scripts\ruff.exe format --check
+  tests\test_lens_summon_binding_blocker_proof_script.py`
+  Result: `passed`
+- `.\.venv\Scripts\pytest.exe
+  tests\test_lens_summon_binding_blocker_proof_script.py -q --tb=short`
+  Result: `passed; 1 passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
