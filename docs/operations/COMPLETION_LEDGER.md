@@ -40112,6 +40112,84 @@ Latest validation for default resident-claim audit handoff advancement:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-27 - Stage 6 completion audit advances to tray blocker after resident-claim readback
+
+Roadmap area: Stage 6 / Lens MVP, completion-audit and next-handoff
+truthfulness after applied persistent-supervision enablement and resident-claim
+boundary readback.
+
+Material change:
+
+- `scripts/lens-stage6-completion-audit.ps1` now stops treating applied
+  persistent-supervision enablement as receipt-review pending once the
+  persistent-supervision resident-claim boundary proof has already been
+  observed.
+- In that state, the completion audit now advances to the existing
+  summon-anywhere first-blocker handoff. The current live first blocker is
+  `tray_presence`, with next action `run_tray_presence_blocker_proof` and proof
+  script `scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status`.
+- `scripts/lens-stage6-next-handoff.ps1` now consumes a supplied
+  `stage6_reviewed_summon_anywhere_first_blocker` completion-audit handoff for
+  either `resident_host` or `tray_presence`, while preserving explicit route,
+  readiness, proof-script, authority, read-only, and non-mutation checks.
+- The completion audit now caps the resident-host bridge's nested
+  process-supervision child budget and the persistent-supervision transition
+  plan child budget before invoking those wrappers. This keeps the audit
+  bounded while preserving the same read-only proof contracts.
+- Stage 6 still does not close and Stage 7 does not start. The latest live
+  path removes another loopback and exposes the next concrete blocker proof.
+
+Latest validation for resident-claim completion-audit advancement:
+
+- PowerShell AST parse of `scripts\lens-stage6-completion-audit.ps1`,
+  `scripts\lens-stage6-next-handoff.ps1`, and
+  `scripts\lens-summon-resident-host-blocker-proof.ps1`
+  Result: `passed`
+- `python -m ruff check
+  tests/test_lens_stage6_completion_audit_script.py
+  tests/test_lens_stage6_next_handoff_script.py
+  tests/test_lens_summon_resident_host_blocker_proof_script.py`
+  Result: `passed`
+- `python -m ruff format
+  tests/test_lens_stage6_completion_audit_script.py
+  tests/test_lens_stage6_next_handoff_script.py
+  tests/test_lens_summon_resident_host_blocker_proof_script.py`
+  Result: `passed; 1 file reformatted, 2 files left unchanged`
+- `python -m pytest
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_budgets_transition_plan_wrapper
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_observes_resident_host_process_supervision_handoff_authority_gate
+  tests/test_lens_summon_resident_host_blocker_proof_script.py::test_lens_summon_resident_host_blocker_proof_aligns_handoff
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_reviewed_tray_first_blocker_handoff -q`
+  Result: `passed; 4 passed`
+- `python -m pytest
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_observes_resident_host_process_supervision_handoff_authority_gate
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_consumes_stage6_prerequisite_bringup_plan_readback
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_prefers_closure_handoff_after_resident_claim_boundary
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_reviewed_tray_first_blocker_handoff -q`
+  Result: `passed; 4 passed`
+- `.\scripts\lens-persistent-supervision-enablement-transition-plan-proof.ps1
+  -Mode Status -ChildProofTimeoutSeconds 180`
+  Result: `passed; status=proof_passed; ok=true;
+  next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing;
+  child_proof_timeout_seconds=180; duration_seconds=12.3`
+- `.\scripts\lens-stage6-completion-audit.ps1 -Mode Status |
+  Set-Content .tmp\stage6-completion-audit-resident-claim-live.json;
+  .\scripts\lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath .tmp\stage6-completion-audit-resident-claim-live.json`
+  Result: `passed; audit_ok=true; audit_status=blocked;
+  audit_next_smallest_truthful_gap=summon_anywhere_blockers;
+  audit_recommended_handoff_source=stage6_reviewed_summon_anywhere_first_blocker;
+  audit_recommended_next_slice=run_tray_presence_blocker_proof;
+  audit_recommended_proof_script=scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status;
+  audit_authority_required=tray_registration_authority;
+  audit_concrete_next_gap=summon_overlay_window_blocker_boundary;
+  handoff_ok=true; handoff_status=proof_passed;
+  handoff_reviewed_first_blocker_consumed=true;
+  handoff_recommended_consumed=true;
+  handoff_runtime_readback_required=false;
+  handoff_operator_action_id=run_tray_presence_blocker_proof;
+  duration_seconds=459`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

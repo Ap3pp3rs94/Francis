@@ -596,17 +596,25 @@ $ResidentHostProcessSupervisionBlockerProofObserved = (
 $ResidentHostProcessSupervisionBlockerProofReadbackObserved = (
   $ResidentHostProcessSupervisionBlockerProofObserved -or $ResidentHostProcessSupervisionBlockerProofSkippedForFreshRuntime
 )
-$SummonResidentHostBlockerProofTimeoutSeconds = [Math]::Max(($ChildProofTimeoutSeconds * 2) + 60, 360)
+$SummonResidentHostBlockerProofChildTimeoutSeconds = [Math]::Min($ChildProofTimeoutSeconds, 180)
+$SummonResidentHostBlockerProofStartupTimeoutSeconds = [Math]::Min($ChildStartupTimeoutSeconds, 20)
+$SummonResidentHostBlockerProofHostLaunchRunSeconds = [Math]::Min($ChildHostLaunchRunSeconds, 3)
+$SummonResidentHostBlockerProofSupervisorRunSeconds = [Math]::Min($SupervisorRunSeconds, 3)
+$SummonResidentHostBlockerProofTimeoutSeconds = [Math]::Max(
+  ($SummonResidentHostBlockerProofChildTimeoutSeconds * 2) + 90,
+  360
+)
 $SummonResidentHostBlockerProofDataDir = Join-Path $RepoRoot (
   'data/test_runs/lens-stage6-completion-audit/summon-resident-host-blocker-' + [Guid]::NewGuid().ToString('N')
 )
 New-Item -ItemType Directory -Path $SummonResidentHostBlockerProofDataDir -Force | Out-Null
 $SummonResidentHostBlockerProofResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonResidentHostBlockerProofScript -ScriptArgs @(
   '-Mode', 'Status',
-  '-StartupTimeoutSeconds', [string]$ChildStartupTimeoutSeconds,
+  '-StartupTimeoutSeconds', [string]$SummonResidentHostBlockerProofStartupTimeoutSeconds,
   '-ForegroundRunSeconds', '2',
-  '-HostLaunchRunSeconds', [string]$ChildHostLaunchRunSeconds,
-  '-SupervisorRunSeconds', [string]$SupervisorRunSeconds,
+  '-HostLaunchRunSeconds', [string]$SummonResidentHostBlockerProofHostLaunchRunSeconds,
+  '-SupervisorRunSeconds', [string]$SummonResidentHostBlockerProofSupervisorRunSeconds,
+  '-ChildProofTimeoutSeconds', [string]$SummonResidentHostBlockerProofChildTimeoutSeconds,
   '-DataDir', $SummonResidentHostBlockerProofDataDir,
   '-ConsumeProcessSupervisionHandoff'
 ) -TimeoutSeconds $SummonResidentHostBlockerProofTimeoutSeconds
@@ -1300,18 +1308,36 @@ $PersistentSupervisionResidentClaimBoundaryObserved = (
   $PersistentSupervisionResidentClaimBoundaryBlockers -contains 'resident_claim_authority_not_granted' -and
   [string]$PersistentSupervisionResidentClaimBoundaryProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit'
 )
+$Stage6AppliedEnablementResidentClaimBoundaryReadbackObserved = (
+  $Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and
+  $PersistentSupervisionResidentClaimBoundaryObserved -and
+  [string]$PersistentSupervisionResidentClaimBoundaryProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit'
+)
 $Stage6PrerequisiteBringupAppliedEnablementReceiptReviewPending = (
   $Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and
-  $Stage6PrerequisiteBringupPlanNextOperatorActionId -eq 'review_persistent_supervision_enablement_receipt'
+  $Stage6PrerequisiteBringupPlanNextOperatorActionId -eq 'review_persistent_supervision_enablement_receipt' -and
+  -not $Stage6AppliedEnablementResidentClaimBoundaryReadbackObserved
 )
 $PersistentSupervisionEnablementTransitionPlanProofSiblingChildProofCount = 3
+$PersistentSupervisionEnablementTransitionPlanProofChildTimeoutSeconds = [Math]::Min(
+  $ChildProofTimeoutSeconds,
+  180
+)
 $PersistentSupervisionEnablementTransitionPlanProofTimeoutSeconds = (
-  ($ChildProofTimeoutSeconds * $PersistentSupervisionEnablementTransitionPlanProofSiblingChildProofCount)
+  (
+    $PersistentSupervisionEnablementTransitionPlanProofChildTimeoutSeconds *
+    $PersistentSupervisionEnablementTransitionPlanProofSiblingChildProofCount
+  )
 ) + 60
 $PersistentSupervisionEnablementTransitionPlanProofResult = Invoke-JsonScript `
   -PowerShellPath $PowerShell.Source `
   -ScriptPath $PersistentSupervisionEnablementTransitionPlanProofScript `
-  -ScriptArgs @('-Mode', 'Status', '-ChildProofTimeoutSeconds', [string]$ChildProofTimeoutSeconds) `
+  -ScriptArgs @(
+    '-Mode',
+    'Status',
+    '-ChildProofTimeoutSeconds',
+    [string]$PersistentSupervisionEnablementTransitionPlanProofChildTimeoutSeconds
+  ) `
   -TimeoutSeconds $PersistentSupervisionEnablementTransitionPlanProofTimeoutSeconds
 $PersistentSupervisionEnablementTransitionPlanProof = $PersistentSupervisionEnablementTransitionPlanProofResult.payload
 $PersistentSupervisionEnablementTransitionPlanProofBlockers = ConvertTo-StringArray -Value $PersistentSupervisionEnablementTransitionPlanProof.blockers
@@ -3582,6 +3608,16 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
 } elseif (
   $Stage6CompletionReviewed -and
   -not $ReadyToClose -and
+  $BlockedCriterionIds -contains 'summon_anywhere' -and
+  $Stage6AppliedEnablementResidentClaimBoundaryReadbackObserved -and
+  $SummonAnywhereBlockersProofObserved -and
+  $SummonAnywhereFamilyChainProofObserved -and
+  $SummonAnywhereBlockersProofFirstFamilyHandoffObserved
+) {
+  'summon_anywhere_blockers'
+} elseif (
+  $Stage6CompletionReviewed -and
+  -not $ReadyToClose -and
   $BlockedCriterionIds -contains 'system_resident_presence' -and
   $Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and
   $ResidentHostProcessSupervisionEvidenceObserved -and
@@ -4054,7 +4090,10 @@ if (
   $NextSmallestTruthfulGap -eq 'summon_anywhere_blockers' -and
   $Stage6CompletionReviewed -and
   -not $ReadyToClose -and
-  $SummonAnywhereRuntimeReadbackObserved -and
+  (
+    $SummonAnywhereRuntimeReadbackObserved -or
+    $Stage6AppliedEnablementResidentClaimBoundaryReadbackObserved
+  ) -and
   $Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved -and
   [string]$PersistentSupervisionResidentClaimBoundaryProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and

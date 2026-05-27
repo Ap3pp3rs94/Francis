@@ -147,6 +147,8 @@ def test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback() -> N
     assert "stage6_completion_audit_prerequisite_bringup_operator_plan_handoff_observed" in script
     assert "$Stage6CompletionAuditPrerequisiteBringupEnablementReceiptHandoffObserved = (" in script
     assert "'stage6_prerequisite_bringup_enablement_receipt_review'" in script
+    assert "$Stage6CompletionAuditReviewedSummonFirstBlockerTrayPresenceObserved = (" in script
+    assert "$Stage6CompletionAuditReviewedSummonFirstBlockerResidentHostObserved = (" in script
     assert (
         "$Stage6CompletionAuditRecommendedConcreteHandoffSource -eq 'stage6_prerequisite_bringup_operator_plan_handoff'"
         in script
@@ -259,6 +261,85 @@ def test_lens_stage6_next_handoff_consumes_remaining_acceptance_handoff(tmp_path
         "requires_approval_id": False,
         "requires_operator_approval_decision": False,
     }
+
+
+def test_lens_stage6_next_handoff_consumes_reviewed_tray_first_blocker_handoff(tmp_path: Path) -> None:
+    data_root = tmp_path / "data"
+    audit_json = tmp_path / "stage6-completion-audit-reviewed-tray-blocker.json"
+    audit_json.write_text(
+        json.dumps(
+            {
+                "kind": "lens.stage6.completion_audit",
+                "ok": True,
+                "status": "blocked",
+                "audit_status": "complete",
+                "allow_launch_on_hotkey": True,
+                "next_smallest_truthful_gap": "summon_anywhere_blockers",
+                "recommended_handoff_source": "stage6_reviewed_summon_anywhere_first_blocker",
+                "recommended_next_slice": "run_tray_presence_blocker_proof",
+                "recommended_proof_script": "scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status",
+                "authority_required": "tray_registration_authority",
+                "authority_granted": False,
+                "recommended_handoff": {
+                    "status": "blocked",
+                    "previous_next_smallest_truthful_gap": "stage6_lens_completion_audit",
+                    "consumed_summon_anywhere_next_smallest_truthful_gap": "summon_anywhere_blockers",
+                    "consumed_family_chain_next_smallest_truthful_gap": "summon_anywhere_blockers",
+                    "consumed_persistent_supervision_resident_claim_boundary_next_smallest_truthful_gap": (
+                        "stage6_lens_completion_audit"
+                    ),
+                    "next_smallest_truthful_gap": "summon_overlay_window_blocker_boundary",
+                    "next_step": "run_tray_presence_blocker_proof",
+                    "proof_script": "scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status",
+                    "route": "/lens/tray",
+                    "readiness_route": "/lens/tray/readiness",
+                    "acceptance_criterion": "summon_anywhere",
+                    "first_blocker_family": "tray_presence",
+                    "authority_required": "tray_registration_authority",
+                    "authority_granted": False,
+                    "read_only_contract": True,
+                    "diagnostic_only": True,
+                    "would_execute": False,
+                    "would_mutate": False,
+                    "would_supervise_process": False,
+                    "would_restart_process": False,
+                    "would_install_service": False,
+                    "would_start_service": False,
+                    "would_register_hotkey": False,
+                    "would_control_overlay": False,
+                    "would_summon": False,
+                    "would_write_memory": False,
+                    "would_decide_approval": False,
+                    "blockers": ["tray_host_missing"],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-CompletionAuditJsonPath",
+        str(audit_json),
+        env={"FRANCIS_DATA_DIR": str(data_root)},
+    )
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload["recommended_handoff_source"] == "stage6_reviewed_summon_anywhere_first_blocker"
+    assert payload["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+    assert payload["recommended_next_slice"] == "run_tray_presence_blocker_proof"
+    assert payload["recommended_proof_script"] == "scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status"
+    assert payload["authority_required"] == "tray_registration_authority"
+    assert payload["stage6_completion_audit_reviewed_summon_first_blocker_handoff_observed"] is True
+    assert payload["stage6_completion_audit_recommended_handoff_consumed"] is True
+    assert payload["stage6_completion_audit_runtime_readback_required"] is False
+    handoff = payload["recommended_handoff"]
+    assert handoff["first_blocker_family"] == "tray_presence"
+    assert handoff["next_smallest_truthful_gap"] == "summon_overlay_window_blocker_boundary"
+    assert handoff["next_step"] == "run_tray_presence_blocker_proof"
+    assert payload["recommended_next_operator_action"]["id"] == "run_tray_presence_blocker_proof"
 
 
 def test_lens_stage6_next_handoff_preserves_completion_audit_concrete_handoff(tmp_path: Path) -> None:

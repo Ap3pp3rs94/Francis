@@ -234,10 +234,12 @@ def test_lens_stage6_completion_audit_budgets_transition_plan_wrapper() -> None:
     assert "PersistentSupervisionPrerequisitesProofFamilyChainChildProofCount" not in script
     assert "PersistentSupervisionPrerequisitesProofFamilyChainTimeoutSeconds" not in script
     assert "$PersistentSupervisionEnablementTransitionPlanProofSiblingChildProofCount = 3" in script
+    assert "$PersistentSupervisionEnablementTransitionPlanProofChildTimeoutSeconds = [Math]::Min(" in script
     assert (
-        "$ChildProofTimeoutSeconds * $PersistentSupervisionEnablementTransitionPlanProofSiblingChildProofCount"
-        in script
+        "$PersistentSupervisionEnablementTransitionPlanProofChildTimeoutSeconds *\n"
+        "    $PersistentSupervisionEnablementTransitionPlanProofSiblingChildProofCount" in script
     )
+    assert "[string]$PersistentSupervisionEnablementTransitionPlanProofChildTimeoutSeconds" in script
     assert "PersistentSupervisionEnablementTransitionPlanProofPrerequisitesTimeoutSeconds" not in script
     assert "-TimeoutSeconds $PersistentSupervisionEnablementTransitionPlanProofTimeoutSeconds" in script
     assert "'-ForegroundRunSeconds'" in script
@@ -341,6 +343,8 @@ def test_lens_stage6_completion_audit_consumes_stage6_prerequisite_bringup_plan_
     assert (
         "[string]$Stage6PrerequisiteBringupPlan.current_truthful_gap -eq 'persistent_supervision_execution_boundary'"
     ) in script
+    assert "$Stage6AppliedEnablementResidentClaimBoundaryReadbackObserved = (" in script
+    assert "-not $Stage6AppliedEnablementResidentClaimBoundaryReadbackObserved" in script
     assert "stage6_prerequisite_bringup_plan_applied_enablement_readback" in script
     assert "'resident_host_process_not_supervised'" in script
     assert "'resident_supervision_not_persistent'" in script
@@ -415,6 +419,13 @@ def test_lens_stage6_completion_audit_consumes_stage6_prerequisite_bringup_plan_
         "$Stage6PrerequisiteBringupAppliedEnablementReceiptReviewPending\n) {\n"
         "  [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap"
     )
+    applied_enablement_resident_claim_branch = (
+        "$Stage6AppliedEnablementResidentClaimBoundaryReadbackObserved -and\n"
+        "  $SummonAnywhereBlockersProofObserved -and\n"
+        "  $SummonAnywhereFamilyChainProofObserved -and\n"
+        "  $SummonAnywhereBlockersProofFirstFamilyHandoffObserved\n) {\n"
+        "  'summon_anywhere_blockers'"
+    )
     generic_acceptance_branch = (
         "$PersistentSupervisionEnablementDenialObserved -and\n"
         "  $PersistentSupervisionEnablementExecutionDenialObserved -and\n"
@@ -424,9 +435,13 @@ def test_lens_stage6_completion_audit_consumes_stage6_prerequisite_bringup_plan_
     assert reviewed_prerequisite_branch in script
     assert applied_enablement_prerequisite_guard_branch in script
     assert applied_enablement_receipt_review_branch in script
+    assert applied_enablement_resident_claim_branch in script
     assert generic_acceptance_branch in script
     assert script.index(reviewed_prerequisite_branch) < script.index(generic_acceptance_branch)
     assert script.index(applied_enablement_receipt_review_branch) < script.index(
+        applied_enablement_resident_claim_branch
+    )
+    assert script.index(applied_enablement_resident_claim_branch) < script.index(
         applied_enablement_prerequisite_guard_branch
     )
     assert script.index(applied_enablement_prerequisite_guard_branch) < script.index(generic_acceptance_branch)
@@ -840,7 +855,18 @@ def test_lens_stage6_completion_audit_observes_resident_host_process_supervision
     )
     assert "$SummonResidentHostBlockerProofDataDir = Join-Path $RepoRoot (" in script
     assert "'data/test_runs/lens-stage6-completion-audit/summon-resident-host-blocker-'" in script
+    assert "$SummonResidentHostBlockerProofChildTimeoutSeconds = [Math]::Min($ChildProofTimeoutSeconds, 180)" in script
+    assert (
+        "$SummonResidentHostBlockerProofStartupTimeoutSeconds = [Math]::Min($ChildStartupTimeoutSeconds, 20)" in script
+    )
+    assert "$SummonResidentHostBlockerProofHostLaunchRunSeconds = [Math]::Min($ChildHostLaunchRunSeconds, 3)" in script
+    assert "$SummonResidentHostBlockerProofSupervisorRunSeconds = [Math]::Min($SupervisorRunSeconds, 3)" in script
+    assert "($SummonResidentHostBlockerProofChildTimeoutSeconds * 2) + 90" in script
     assert "$SummonResidentHostBlockerProofResult = Invoke-JsonScript" in script
+    assert "'-StartupTimeoutSeconds', [string]$SummonResidentHostBlockerProofStartupTimeoutSeconds" in script
+    assert "'-HostLaunchRunSeconds', [string]$SummonResidentHostBlockerProofHostLaunchRunSeconds" in script
+    assert "'-SupervisorRunSeconds', [string]$SummonResidentHostBlockerProofSupervisorRunSeconds" in script
+    assert "'-ChildProofTimeoutSeconds', [string]$SummonResidentHostBlockerProofChildTimeoutSeconds" in script
     assert "'-DataDir', $SummonResidentHostBlockerProofDataDir" in script
     assert "'-ConsumeProcessSupervisionHandoff'" in script
     assert "[string]$SummonResidentHostBlockerProof.kind -eq 'lens.summon_resident_host_blocker.proof'" in script
@@ -1470,7 +1496,8 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     assert (
         "$Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and\n"
         "  $Stage6PrerequisiteBringupPlanNextOperatorActionId "
-        "-eq 'review_persistent_supervision_enablement_receipt'\n)" in script
+        "-eq 'review_persistent_supervision_enablement_receipt' -and\n"
+        "  -not $Stage6AppliedEnablementResidentClaimBoundaryReadbackObserved\n)" in script
     )
     assert (
         "$NextSmallestTruthfulGap -eq 'persistent_supervision_execution_boundary' -and\n"

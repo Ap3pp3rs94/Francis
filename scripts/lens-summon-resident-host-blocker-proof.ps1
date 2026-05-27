@@ -14,6 +14,9 @@ param(
   [ValidateRange(3, 30)]
   [int]$SupervisorRunSeconds = 20,
 
+  [ValidateRange(30, 600)]
+  [int]$ChildProofTimeoutSeconds = 180,
+
   [string]$DataDir = '',
 
   [switch]$ConsumeProcessSupervisionHandoff
@@ -351,7 +354,8 @@ if ($ConsumeProcessSupervisionHandoff) {
     '-StartupTimeoutSeconds', [string]$StartupTimeoutSeconds,
     '-ForegroundRunSeconds', [string]$ForegroundRunSeconds,
     '-HostLaunchRunSeconds', [string]$HostLaunchRunSeconds,
-    '-SupervisorRunSeconds', [string]$SupervisorRunSeconds
+    '-SupervisorRunSeconds', [string]$SupervisorRunSeconds,
+    '-ChildProofTimeoutSeconds', [string]$ChildProofTimeoutSeconds
   ) -DataRoot $DataDir
   $HostProcessHandoffPayload = $HostProcessHandoffResult.payload
   $HostProcessHandoffGovernance = Get-PropertyValue -Payload $HostProcessHandoffPayload -Name 'governance'
@@ -659,6 +663,7 @@ $Payload = [ordered]@{
   foreground_run_seconds = $ForegroundRunSeconds
   host_launch_run_seconds = $HostLaunchRunSeconds
   supervisor_run_seconds = $SupervisorRunSeconds
+  child_proof_timeout_seconds = $ChildProofTimeoutSeconds
   summon_os_binding_authority_request_readback = [ordered]@{
     status = if ($SummonAuthorityReadbackObserved) { [string](Get-PropertyValue -Payload $SummonAuthorityReadback -Name 'status' -Default '') } else { 'missing_or_failed' }
     ok = $SummonAuthorityReadbackObserved
@@ -735,6 +740,7 @@ $Payload = [ordered]@{
     summon_os_binding_authority_request_readback = $SummonAuthorityReadbackObserved
     wraps_resident_host_lifecycle_blockers_proof = $true
     wraps_resident_host_process_supervision_blocker_proof = [bool]$ConsumeProcessSupervisionHandoff
+    child_proof_timeout_seconds = $ChildProofTimeoutSeconds
     read_only_contract = $true
     resident_runtime_candidate_available = $ResidentRuntimeCandidateAvailable
     resident_runtime_candidate_supervised = $ResidentRuntimeCandidateSupervised

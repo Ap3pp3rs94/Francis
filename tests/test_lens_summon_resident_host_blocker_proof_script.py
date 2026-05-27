@@ -99,6 +99,8 @@ def test_lens_summon_resident_host_blocker_proof_aligns_handoff(tmp_path: Path) 
         "3",
         "-SupervisorRunSeconds",
         "3",
+        "-ChildProofTimeoutSeconds",
+        "180",
     )
 
     assert proc.returncode == 0, proc.stderr or proc.stdout
@@ -137,6 +139,7 @@ def test_lens_summon_resident_host_blocker_proof_aligns_handoff(tmp_path: Path) 
     assert payload["resident_host_process_supervision_handoff_observed"] is True
     assert payload["handoff_aligned"] is True
     assert payload["side_effects_denied"] is True
+    assert payload["child_proof_timeout_seconds"] == 180
 
     authority_readback = payload["summon_os_binding_authority_request_readback"]
     assert authority_readback["status"] in {"none", "approved_no_authority"}
@@ -245,6 +248,7 @@ def test_lens_summon_resident_host_blocker_proof_aligns_handoff(tmp_path: Path) 
         "summon_os_binding_authority_request_readback": True,
         "wraps_resident_host_lifecycle_blockers_proof": True,
         "wraps_resident_host_process_supervision_blocker_proof": True,
+        "child_proof_timeout_seconds": 180,
         "read_only_contract": True,
         "resident_runtime_candidate_available": True,
         "resident_runtime_candidate_supervised": False,
@@ -325,6 +329,7 @@ def test_lens_summon_resident_host_default_proof_keeps_checkpoint_safe_handoff(t
     assert "scripts/lens-resident-host-process-supervision-blocker-proof.ps1 -Mode Status" not in payload["evidence"]
     assert payload["governance"]["summon_os_binding_authority_request_readback"] is True
     assert payload["governance"]["wraps_resident_host_process_supervision_blocker_proof"] is False
+    assert payload["governance"]["child_proof_timeout_seconds"] == 180
     assert payload["governance"]["resident_runtime_candidate_available"] is True
     assert payload["governance"]["resident_runtime_candidate_supervised"] is False
     assert payload["governance"]["resident_runtime_candidate_process_supervision_enabled"] is True
