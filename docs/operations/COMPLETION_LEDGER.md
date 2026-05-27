@@ -39892,6 +39892,11 @@ Material change:
 - If the persistent-supervision API execution proof has also passed, the audit
   exposes the concrete Stage 6 completion-audit handoff instead of sending the
   operator back to tray, OS binding, overlay, or summon proof paths.
+- `scripts/lens-stage6-next-handoff.ps1` now consumes that supplied completion
+  audit shape directly: it preserves the broad
+  `persistent_supervision_required_prerequisites_missing` blocker while surfacing
+  `recommended_concrete_handoff_source=api_persistent_supervision_execution_handoff`
+  and a concrete next gap of `stage6_lens_completion_audit`.
 - Stage 6 still does not close and Stage 7 does not start. The latest
   checkpoint remains `status=blocked`, `ready_total=3`, `blocked_total=2`, with
   `summon_anywhere` and `system_resident_presence` still blocked.
@@ -39899,6 +39904,8 @@ Material change:
 Latest validation for runtime-proved concrete handoff promotion:
 
 - PowerShell AST parse of `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- PowerShell AST parse of `scripts\lens-stage6-next-handoff.ps1`
   Result: `passed`
 - `python -m ruff check
   tests/test_lens_stage6_completion_audit_script.py
@@ -39911,6 +39918,8 @@ Latest validation for runtime-proved concrete handoff promotion:
 - `python -m pytest
   tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_to_resident_claim_boundary
   tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_applied_bringup_review_state -q`
+  Result: `passed`
+- `python -m pytest tests/test_lens_stage6_next_handoff_script.py -q`
   Result: `passed`
 - `.\scripts\lens-tray-presence-api-execution-proof.ps1 -Mode Status
   -RunSeconds 1`

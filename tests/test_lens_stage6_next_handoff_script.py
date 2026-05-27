@@ -107,6 +107,10 @@ def test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback() -> N
     assert "'run_persistent_supervision_api_execution_proof_after_bounded_summon'" in script
     assert "'scripts/lens-persistent-supervision-api-execution-proof.ps1 -Mode Status'" in script
     assert "stage6_completion_audit_persistent_supervision_api_execution_handoff_observed" in script
+    assert "$Stage6CompletionAuditPersistentSupervisionApiExecutionConcreteHandoffObserved = (" in script
+    assert "'api_persistent_supervision_execution_handoff'" in script
+    assert "'run_stage6_lens_completion_audit_after_persistent_supervision_api_execution'" in script
+    assert "stage6_completion_audit_persistent_supervision_api_execution_concrete_handoff_observed" in script
     assert "$Stage6CompletionAuditPersistentSupervisionResidentClaimBoundaryHandoffObserved = (" in script
     assert "'persistent_supervision_execution_authority_handoff'" in script
     assert "'stage6_persistent_supervision_api_execution_resident_claim_boundary'" in script
@@ -351,6 +355,99 @@ def test_lens_stage6_next_handoff_preserves_completion_audit_concrete_handoff(tm
     assert payload["recommended_concrete_next_smallest_truthful_gap"] == ("persistent_supervision_execution_boundary")
     assert payload["recommended_concrete_authority_required"] == "none_readback_only"
     assert payload["recommended_concrete_authority_granted"] is False
+
+
+def test_lens_stage6_next_handoff_consumes_api_execution_concrete_audit_handoff(tmp_path: Path) -> None:
+    data_root = tmp_path / "data"
+    audit_json = tmp_path / "stage6-completion-audit-api-execution-concrete.json"
+    concrete_handoff = {
+        "recommended_handoff_source": "api_persistent_supervision_execution_handoff",
+        "status": "audit_needed",
+        "previous_next_smallest_truthful_gap": "persistent_supervision_execution_boundary",
+        "next_smallest_truthful_gap": "stage6_lens_completion_audit",
+        "next_step": "run_stage6_lens_completion_audit_after_persistent_supervision_api_execution",
+        "proof_script": "scripts/lens-stage6-completion-audit.ps1 -Mode Status",
+        "route": "/lens/host/persistent-supervision/enablement/execution/apply",
+        "readiness_route": "/lens/host/persistent-supervision/enablement/execution/readiness",
+        "authority_required": "none_new_stage6_completion_audit",
+        "authority_granted": False,
+        "read_only_contract": True,
+        "diagnostic_only": True,
+        "would_execute": False,
+        "would_mutate": False,
+    }
+    audit_json.write_text(
+        json.dumps(
+            {
+                "kind": "lens.stage6.completion_audit",
+                "ok": True,
+                "status": "blocked",
+                "audit_status": "complete",
+                "allow_launch_on_hotkey": True,
+                "next_smallest_truthful_gap": "persistent_supervision_required_prerequisites_missing",
+                "recommended_handoff_source": (
+                    "persistent_supervision_prerequisites_first_missing_requirement_handoff"
+                ),
+                "recommended_next_slice": "resolve_tray_presence_before_persistent_supervision_enablement",
+                "recommended_proof_script": "scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status",
+                "authority_required": "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites",
+                "authority_granted": False,
+                "recommended_handoff": {
+                    "id": "tray_presence",
+                    "family": "tray_presence",
+                    "status": "blocked",
+                    "blocker": "tray_host_missing",
+                    "requirement_state": "missing",
+                    "next_smallest_truthful_gap": "summon_tray_presence_blocker_boundary",
+                    "next_step": "resolve_tray_presence_before_persistent_supervision_enablement",
+                    "proof_script": "scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status",
+                    "route": "/lens/tray",
+                    "readiness_route": "/lens/tray/readiness",
+                    "authority_required": "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites",
+                    "authority_granted": False,
+                    "read_only_contract": True,
+                    "diagnostic_only": True,
+                    "would_execute": False,
+                    "would_mutate": False,
+                    "would_write_memory": False,
+                    "would_decide_approval": False,
+                },
+                "recommended_concrete_handoff_source": "api_persistent_supervision_execution_handoff",
+                "recommended_concrete_next_smallest_truthful_gap": "stage6_lens_completion_audit",
+                "recommended_concrete_handoff": concrete_handoff,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-CompletionAuditJsonPath",
+        str(audit_json),
+        env={"FRANCIS_DATA_DIR": str(data_root)},
+    )
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
+    assert payload["recommended_handoff_source"] == (
+        "persistent_supervision_prerequisites_first_missing_requirement_handoff"
+    )
+    assert payload["stage6_completion_audit_persistent_supervision_first_missing_requirement_handoff_observed"] is True
+    assert payload["stage6_completion_audit_persistent_supervision_api_execution_concrete_handoff_observed"] is True
+    assert payload["stage6_completion_audit_recommended_handoff_consumed"] is True
+    assert payload["recommended_concrete_handoff_source"] == "api_persistent_supervision_execution_handoff"
+    assert payload["recommended_concrete_handoff"] == concrete_handoff
+    assert payload["recommended_concrete_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert payload["recommended_concrete_next_slice"] == (
+        "run_stage6_lens_completion_audit_after_persistent_supervision_api_execution"
+    )
+    assert payload["recommended_concrete_proof_script"] == "scripts/lens-stage6-completion-audit.ps1 -Mode Status"
+    assert payload["recommended_concrete_authority_required"] == "none_new_stage6_completion_audit"
+    assert payload["recommended_concrete_authority_granted"] is False
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["concrete_handoff"]["status"] == "concrete_handoff_ready"
 
 
 def test_lens_stage6_next_handoff_promotes_system_resident_acceptance_boundary(tmp_path: Path) -> None:
@@ -1559,6 +1656,7 @@ def test_lens_stage6_next_handoff_distills_closure_readback_without_authority(tm
         "stage6_completion_audit_host_supervision_authority_handoff_observed": False,
         "stage6_completion_audit_resident_host_supervised_start_handoff_observed": False,
         "stage6_completion_audit_persistent_supervision_api_execution_handoff_observed": False,
+        "stage6_completion_audit_persistent_supervision_api_execution_concrete_handoff_observed": False,
         "stage6_completion_audit_persistent_supervision_resident_claim_boundary_handoff_observed": False,
         "stage6_completion_audit_persistent_supervision_first_missing_requirement_handoff_observed": False,
         "stage6_completion_audit_prerequisite_bringup_operator_plan_handoff_observed": False,
