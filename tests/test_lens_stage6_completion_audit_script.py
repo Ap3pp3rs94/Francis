@@ -374,6 +374,22 @@ def test_lens_stage6_completion_audit_consumes_stage6_prerequisite_bringup_plan_
         "-eq 'persistent_supervision_required_prerequisites_missing'\n) {\n"
         "  'persistent_supervision_required_prerequisites_missing'"
     )
+    applied_enablement_prerequisite_guard_branch = (
+        "$BlockedCriterionIds -contains 'system_resident_presence' -and\n"
+        "  $Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and\n"
+        "  $ResidentHostProcessSupervisionEvidenceObserved -and\n"
+        "  $ResidentSupervisionPersistenceBoundaryProofObserved -and\n"
+        "  $HostSupervisionAuthorityReadinessEvidenceObserved -and\n"
+        "  $HostSupervisionAuthorityRequestProofObserved -and\n"
+        "  $PersistentSupervisionPrerequisitesProofObserved -and\n"
+        "  $PersistentSupervisionResidentClaimBoundaryObserved -and\n"
+        "  $PersistentSupervisionEnablementTransitionPlanProofObserved -and\n"
+        "  [bool]$PersistentSupervisionEnablementTransitionPlanProof"
+        ".persistent_supervision_required_prerequisites_guard_observed -and\n"
+        "  [string]$PersistentSupervisionPrerequisitesProof.next_smallest_truthful_gap "
+        "-eq 'persistent_supervision_required_prerequisites_missing'\n) {\n"
+        "  'persistent_supervision_required_prerequisites_missing'"
+    )
     generic_acceptance_branch = (
         "$PersistentSupervisionEnablementDenialObserved -and\n"
         "  $PersistentSupervisionEnablementExecutionDenialObserved -and\n"
@@ -381,8 +397,20 @@ def test_lens_stage6_completion_audit_consumes_stage6_prerequisite_bringup_plan_
         "  $Stage6AcceptanceNextGap"
     )
     assert reviewed_prerequisite_branch in script
+    assert applied_enablement_prerequisite_guard_branch in script
     assert generic_acceptance_branch in script
     assert script.index(reviewed_prerequisite_branch) < script.index(generic_acceptance_branch)
+    assert script.index(applied_enablement_prerequisite_guard_branch) < script.index(generic_acceptance_branch)
+    assert (
+        "$NextSmallestTruthfulGap -eq 'persistent_supervision_required_prerequisites_missing' -and\n"
+        "  $PersistentSupervisionPrerequisitesProofObserved -and\n"
+        "  $Stage6PrerequisiteBringupPlanObserved -and\n"
+        "  -not $Stage6PrerequisiteBringupPlanAppliedEnablementObserved"
+    ) in script
+    assert (
+        "$RecommendedHandoffSource = 'persistent_supervision_prerequisites_first_missing_requirement_handoff'" in script
+    )
+    assert "$RecommendedHandoff = $PersistentSupervisionPrerequisitesProof.first_missing_requirement_handoff" in script
 
 
 def test_lens_stage6_completion_audit_preserves_persistent_authority_child_readbacks() -> None:

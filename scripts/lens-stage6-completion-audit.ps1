@@ -3569,6 +3569,22 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
 } elseif (
   $Stage6CompletionReviewed -and
   -not $ReadyToClose -and
+  $BlockedCriterionIds -contains 'system_resident_presence' -and
+  $Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and
+  $ResidentHostProcessSupervisionEvidenceObserved -and
+  $ResidentSupervisionPersistenceBoundaryProofObserved -and
+  $HostSupervisionAuthorityReadinessEvidenceObserved -and
+  $HostSupervisionAuthorityRequestProofObserved -and
+  $PersistentSupervisionPrerequisitesProofObserved -and
+  $PersistentSupervisionResidentClaimBoundaryObserved -and
+  $PersistentSupervisionEnablementTransitionPlanProofObserved -and
+  [bool]$PersistentSupervisionEnablementTransitionPlanProof.persistent_supervision_required_prerequisites_guard_observed -and
+  [string]$PersistentSupervisionPrerequisitesProof.next_smallest_truthful_gap -eq 'persistent_supervision_required_prerequisites_missing'
+) {
+  'persistent_supervision_required_prerequisites_missing'
+} elseif (
+  $Stage6CompletionReviewed -and
+  -not $ReadyToClose -and
   $BlockedCriterionIds -contains 'summon_anywhere' -and
   $ResidentSupervisionPersistenceBoundaryProofObserved -and
   $PersistentSupervisionExecutionAuthorityProofObserved -and
@@ -4988,7 +5004,8 @@ if (
 } elseif (
   $NextSmallestTruthfulGap -eq 'persistent_supervision_required_prerequisites_missing' -and
   $PersistentSupervisionPrerequisitesProofObserved -and
-  $Stage6PrerequisiteBringupPlanObserved
+  $Stage6PrerequisiteBringupPlanObserved -and
+  -not $Stage6PrerequisiteBringupPlanAppliedEnablementObserved
 ) {
   $RecommendedHandoffSource = 'stage6_prerequisite_bringup_operator_plan'
   $RecommendedHandoff = [ordered]@{

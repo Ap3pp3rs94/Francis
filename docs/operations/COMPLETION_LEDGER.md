@@ -39707,6 +39707,63 @@ alignment:
   ready_to_close=false; child_proof_timeouts=[]; ready_total=3;
   blocked_total=2; remaining_stage6_acceptance_blockers=[summon_anywhere,system_resident_presence]`
 
+### 2026-05-27 - Stage 6 completion-audit applied-prerequisite handoff alignment
+
+Roadmap area: Stage 6 / Lens MVP, system-resident presence acceptance and
+completion-audit handoff truthfulness.
+
+Material change:
+
+- `scripts/lens-stage6-completion-audit.ps1` now prefers the audited
+  persistent-supervision prerequisite guard after applied enablement when
+  system-resident presence remains blocked, instead of falling back to the broad
+  `system_resident_presence_blockers` acceptance bucket.
+- The producer now emits
+  `persistent_supervision_prerequisites_first_missing_requirement_handoff` with
+  the concrete first missing prerequisite `resident_host_process`, whose next
+  truthful gap is `resident_host_process_not_supervised`.
+- Stage 6 still does not close and Stage 7 does not start. The proof remains
+  read-only, non-mutating, and non-resident-claiming; it does not grant resident
+  runtime authority, launch a resident host, supervise a process, write memory,
+  or claim system-resident readiness.
+
+Latest validation for Stage 6 completion-audit applied-prerequisite handoff
+alignment:
+
+- PowerShell AST parse of `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `.\.venv\Scripts\ruff.exe check
+  tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `.\.venv\Scripts\ruff.exe format --check
+  tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 1 file already formatted`
+- `.\.venv\Scripts\pytest.exe
+  tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_consumes_stage6_prerequisite_bringup_plan_readback
+  tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_to_resident_claim_boundary
+  -q --tb=short`
+  Result: `passed; 2 passed`
+- `.\scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -AllowLaunchOnHotkey -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2
+  -ResidentSurfaceForegroundRunSeconds 2 -SupervisorRunSeconds 3
+  -ChildProofTimeoutSeconds 120`
+  Result: `passed; status=blocked; audit_status=complete;
+  next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing;
+  recommended_handoff_source=persistent_supervision_prerequisites_first_missing_requirement_handoff;
+  recommended_next_slice=resolve_resident_host_process_before_persistent_supervision_enablement;
+  recommended_proof_script=scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status;
+  ready_to_close=false; child_proof_timeouts=[]; ready_total=3;
+  blocked_total=2; remaining_stage6_acceptance_blockers=[summon_anywhere,system_resident_presence]`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath .tmp\stage6-completion-audit-applied-prereq-concrete.json`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing;
+  recommended_handoff_source=persistent_supervision_prerequisites_first_missing_requirement_handoff;
+  recommended_concrete_next_smallest_truthful_gap=resident_host_process_not_supervised;
+  recommended_concrete_next_slice=resolve_resident_host_process_before_persistent_supervision_enablement;
+  recommended_concrete_proof_script=scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
