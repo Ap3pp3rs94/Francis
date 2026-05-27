@@ -39658,6 +39658,55 @@ Latest validation for Stage 6 summon-binding preflight projection guard:
   tests\test_lens_summon_binding_blocker_proof_script.py -q --tb=short`
   Result: `passed; 1 passed`
 
+### 2026-05-27 - Stage 6 completion-audit resident-claim concrete handoff alignment
+
+Roadmap area: Stage 6 / Lens MVP, completion-audit handoff truthfulness and
+system-resident acceptance blocker readback.
+
+Material change:
+
+- `scripts/lens-stage6-completion-audit.ps1` now promotes the concrete
+  `persistent_supervision_resident_claim_boundary_handoff` itself when the
+  broad Stage 6 handoff is the system-resident blocker set, the current
+  acceptance criterion is `system_resident_presence`, applied enablement has
+  already been observed, and the resident-claim boundary proof is present.
+- This keeps the completion-audit producer aligned with the next-handoff
+  consumer instead of requiring `scripts/lens-stage6-next-handoff.ps1` to
+  correct a stale prerequisite-plan concrete handoff downstream.
+- Stage 6 still does not close and Stage 7 does not start. The audit remains
+  read-only and blocked by `summon_anywhere` and `system_resident_presence`;
+  this change does not grant resident-claim authority, launch or supervise a
+  resident process, mutate files, write memory, or claim system-resident
+  readiness.
+
+Latest validation for Stage 6 completion-audit resident-claim concrete handoff
+alignment:
+
+- PowerShell AST parse of `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `.\.venv\Scripts\ruff.exe check
+  tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `.\.venv\Scripts\ruff.exe format --check
+  tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 1 file already formatted`
+- `.\.venv\Scripts\pytest.exe
+  tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_to_resident_claim_boundary
+  -q --tb=short`
+  Result: `passed; 1 passed`
+- `.\scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -AllowLaunchOnHotkey -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2
+  -ResidentSurfaceForegroundRunSeconds 2 -SupervisorRunSeconds 3
+  -ChildProofTimeoutSeconds 120`
+  Result: `passed; status=blocked; audit_status=complete;
+  next_smallest_truthful_gap=system_resident_presence_blockers;
+  recommended_handoff_source=stage6_remaining_acceptance_blockers_after_summon_runtime_readback;
+  recommended_concrete_handoff_source=persistent_supervision_resident_claim_boundary_handoff;
+  recommended_concrete_next_smallest_truthful_gap=stage6_lens_completion_audit;
+  recommended_concrete_next_slice=run_stage6_lens_completion_audit_after_resident_claim_boundary_readback;
+  ready_to_close=false; child_proof_timeouts=[]; ready_total=3;
+  blocked_total=2; remaining_stage6_acceptance_blockers=[summon_anywhere,system_resident_presence]`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

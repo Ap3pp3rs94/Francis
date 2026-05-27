@@ -952,7 +952,7 @@ def test_lens_stage6_completion_audit_prefers_closure_handoff_after_resident_cla
     assert script.index(reviewed_summon_source) < script.index(prerequisite_source)
 
 
-def test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_to_bringup_plan() -> None:
+def test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_to_resident_claim_boundary() -> None:
     script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
 
     broad_source = "$RecommendedHandoffSource = 'stage6_remaining_acceptance_blockers_after_summon_runtime_readback'"
@@ -1004,6 +1004,15 @@ def test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_
     assert (
         "$RecommendedConcreteHandoff['authority_required'] = $Stage6PrerequisiteBringupPlanRecommendedAuthorityRequired"
     ) in script
+    assert "$SystemResidentAppliedEnablementConcreteHandoffObserved = (" in script
+    assert (
+        "$RecommendedHandoffSource -eq 'stage6_remaining_acceptance_blockers_after_summon_runtime_readback' -and\n"
+        "  [string]$RecommendedHandoff.acceptance_criterion -eq 'system_resident_presence' -and\n"
+        "  $Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and\n"
+        "  $PersistentSupervisionResidentClaimBoundaryObserved"
+    ) in script
+    assert "$Stage6CompletionAuditHandoffConsumedByClosureReadback -or" in script
+    assert "$SystemResidentAppliedEnablementConcreteHandoffObserved" in script
     assert script.index(broad_source) < script.index(concrete_source)
     assert script.index(concrete_source) < script.index(resident_claim_source)
 

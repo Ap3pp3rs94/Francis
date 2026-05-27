@@ -5112,7 +5112,19 @@ if (
     $RecommendedConcreteHandoff['authority_required'] = $Stage6PrerequisiteBringupPlanRecommendedAuthorityRequired
   }
 }
-if ($Stage6CompletionAuditHandoffConsumedByClosureReadback -and $PersistentSupervisionResidentClaimBoundaryObserved) {
+$SystemResidentAppliedEnablementConcreteHandoffObserved = (
+  $RecommendedHandoffSource -eq 'stage6_remaining_acceptance_blockers_after_summon_runtime_readback' -and
+  [string]$RecommendedHandoff.acceptance_criterion -eq 'system_resident_presence' -and
+  $Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and
+  $PersistentSupervisionResidentClaimBoundaryObserved
+)
+if (
+  $PersistentSupervisionResidentClaimBoundaryObserved -and
+  (
+    $Stage6CompletionAuditHandoffConsumedByClosureReadback -or
+    $SystemResidentAppliedEnablementConcreteHandoffObserved
+  )
+) {
   $RecommendedConcreteHandoffSource = 'persistent_supervision_resident_claim_boundary_handoff'
   $RecommendedConcreteHandoff = $PersistentSupervisionResidentClaimBoundaryProof.handoff
 }
