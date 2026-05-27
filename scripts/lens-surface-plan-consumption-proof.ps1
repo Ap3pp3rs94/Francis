@@ -263,6 +263,9 @@ $StartResult = $null
 $SurfaceRuntimeStates = $null
 $SurfaceRuntimeResult = $null
 $PlanResult = $null
+$PlanInitialResult = $null
+$PlanRetryAttempted = $false
+$PlanRetryReason = ''
 $StopResult = $null
 $DataRootRemoved = $false
 
@@ -292,6 +295,50 @@ try {
     -DataRootEnv $DataRoot `
     -RunRoot $DataRoot `
     -Name 'persistent-supervision-plan'
+  $PlanInitialResult = $PlanResult
+
+  $InitialStartPayload = Get-PropertyValue -Payload $StartResult -Name 'payload'
+  $InitialPlanPayload = Get-PropertyValue -Payload $PlanResult -Name 'payload'
+  $InitialPlanDependencies = @(Get-PropertyValue -Payload $InitialPlanPayload -Name 'enablement_dependency_readback' -Default @())
+  $InitialResidentDependency = @(Get-DependencyById -Dependencies $InitialPlanDependencies -Id 'resident_host_process')
+  $InitialMissingRequired = @(ConvertTo-StringArray -Value (
+      Get-PropertyValue -Payload $InitialPlanPayload -Name 'missing_required_before_enable' -Default @()
+    ))
+  $InitialFirstMissing = [string](
+    Get-PropertyValue -Payload $InitialPlanPayload -Name 'first_missing_required_before_enable' -Default ''
+  )
+  $InitialStartObserved = (
+    [int](Get-PropertyValue -Payload $StartResult -Name 'exit_code' -Default 1) -eq 0 -and
+    [string](Get-PropertyValue -Payload $InitialStartPayload -Name 'status' -Default '') -in @('resident_supervision_started', 'resident_supervision_already_running') -and
+    [bool](Get-PropertyValue -Payload $InitialStartPayload -Name 'resident_host_process' -Default $false) -and
+    [bool](Get-PropertyValue -Payload $InitialStartPayload -Name 'resident_supervised_runtime' -Default $false)
+  )
+  $InitialResidentDependencyReady = (
+    $InitialResidentDependency.Count -gt 0 -and
+    [bool](Get-PropertyValue -Payload $InitialResidentDependency[0] -Name 'ready' -Default $false) -and
+    [bool](Get-PropertyValue -Payload $InitialResidentDependency[0] -Name 'resident_supervised_runtime' -Default $false) -and
+    [bool](Get-PropertyValue -Payload $InitialResidentDependency[0] -Name 'process_alive' -Default $false)
+  )
+
+  if (
+    $InitialStartObserved -and
+    -not $InitialResidentDependencyReady -and
+    (
+      $InitialFirstMissing -eq 'resident_host_process' -or
+      $InitialMissingRequired -contains 'resident_host_process'
+    )
+  ) {
+    $PlanRetryAttempted = $true
+    $PlanRetryReason = 'initial_plan_still_reported_resident_host_process_missing'
+    Start-Sleep -Milliseconds 1000
+    $PlanResult = Invoke-JsonScript `
+      -PowerShellPath $PowerShellPath `
+      -ScriptPath $PlanPath `
+      -ArgumentList @('-Mode', 'Status') `
+      -DataRootEnv $DataRoot `
+      -RunRoot $DataRoot `
+      -Name 'persistent-supervision-plan-retry'
+  }
 } finally {
   try {
     $StopResult = Invoke-JsonScript `
@@ -492,6 +539,20 @@ $Payload = [ordered]@{
   coordinated_surface_runtime_readback_observed = $SurfaceRuntimeObserved
   persistent_supervision_plan_consumed_surface_runtime = $PlanConsumedSurfaceRuntime
   resident_dependency_ready = $ResidentDependencyReady
+  plan_retry_attempted = $PlanRetryAttempted
+  plan_retry_reason = $PlanRetryReason
+  initial_plan_first_missing_required_before_enable = [string](
+    Get-PropertyValue `
+      -Payload (Get-PropertyValue -Payload $PlanInitialResult -Name 'payload') `
+      -Name 'first_missing_required_before_enable' `
+      -Default ''
+  )
+  initial_plan_next_smallest_truthful_gap = [string](
+    Get-PropertyValue `
+      -Payload (Get-PropertyValue -Payload $PlanInitialResult -Name 'payload') `
+      -Name 'next_smallest_truthful_gap' `
+      -Default ''
+  )
   tray_dependency_ready = $TrayDependencyReady
   global_hotkey_dependency_ready = $HotkeyDependencyReady
   overlay_dependency_ready = $OverlayDependencyReady

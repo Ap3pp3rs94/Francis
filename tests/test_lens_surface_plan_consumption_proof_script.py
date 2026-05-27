@@ -57,6 +57,10 @@ def test_lens_surface_plan_consumption_proof_consumes_summon_handoff_readback() 
     assert payload["coordinated_surface_runtime_readback_observed"] is True
     assert payload["persistent_supervision_plan_consumed_surface_runtime"] is True
     assert payload["resident_dependency_ready"] is True
+    assert payload["plan_retry_attempted"] in {True, False}
+    assert isinstance(payload["plan_retry_reason"], str)
+    assert isinstance(payload["initial_plan_first_missing_required_before_enable"], str)
+    assert isinstance(payload["initial_plan_next_smallest_truthful_gap"], str)
     assert payload["tray_dependency_ready"] is True
     assert payload["global_hotkey_dependency_ready"] is True
     assert payload["overlay_dependency_ready"] is True
