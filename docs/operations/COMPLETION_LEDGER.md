@@ -40190,6 +40190,75 @@ Latest validation for resident-claim completion-audit advancement:
   handoff_operator_action_id=run_tray_presence_blocker_proof;
   duration_seconds=459`
 
+### 2026-05-27 - Stage 6 completion audit advances to summon authority blocker
+
+Roadmap area: Stage 6 / Lens MVP, completion-audit and next-handoff
+truthfulness for the summon-anywhere acceptance blocker chain.
+
+Material change:
+
+- `scripts/lens-stage6-completion-audit.ps1` now prefers the final
+  summon-authority handoff when the summon-authority blocker proof and
+  summon-anywhere family-chain proof have already consumed every summon blocker
+  family. The audit no longer reports the earlier tray handoff once the final
+  authority readback is available.
+- The emitted completion-audit handoff remains read-only and blocked:
+  `stage6_reviewed_summon_anywhere_authority_handoff`,
+  `run_summon_authority_blocker_proof`,
+  `scripts/lens-summon-authority-blocker-proof.ps1 -Mode Status`,
+  `active_blocker_family=authority`, and
+  `authority_required=summon_hotkey_overlay_and_process_authority`.
+- `scripts/lens-stage6-next-handoff.ps1` now consumes that authority-shaped
+  completion-audit handoff without granting summon, hotkey, overlay, process,
+  approval, resident-claim, receipt-write, or memory authority.
+- Stage 6 still does not close and Stage 7 does not start. The next truthful
+  blocker is the governed summon/hotkey/overlay/process authority boundary for
+  summon-anywhere, not telemetry work.
+
+Latest validation for summon-authority completion-audit advancement:
+
+- PowerShell AST parse of `scripts\lens-stage6-completion-audit.ps1` and
+  `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed`
+- `python -m ruff check
+  tests/test_lens_stage6_completion_audit_script.py
+  tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests/test_lens_stage6_completion_audit_script.py
+  tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 2 files already formatted`
+- `python -m pytest
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_prefers_closure_handoff_after_resident_claim_boundary
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_reviewed_tray_first_blocker_handoff
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_reviewed_summon_authority_handoff -q`
+  Result: `passed; 3 passed`
+- `.\scripts\lens-summon-authority-blocker-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed; ok=true;
+  next_smallest_truthful_gap=stage6_lens_completion_audit;
+  recommended_handoff_source=summon_authority_handoff;
+  authority_required=summon_hotkey_overlay_and_process_authority;
+  authority_granted=false;
+  all_summon_blocker_families_consumed=true;
+  handoff_aligned=true; side_effects_denied=true`
+- `.\scripts\lens-stage6-completion-audit.ps1 -Mode Status |
+  Set-Content .tmp\stage6-completion-audit-authority-live.json;
+  .\scripts\lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath .tmp\stage6-completion-audit-authority-live.json`
+  Result: `passed; audit_ok=true; audit_status=blocked;
+  audit_next_smallest_truthful_gap=summon_anywhere_blockers;
+  audit_recommended_handoff_source=stage6_reviewed_summon_anywhere_authority_handoff;
+  audit_recommended_next_slice=run_summon_authority_blocker_proof;
+  audit_recommended_proof_script=scripts/lens-summon-authority-blocker-proof.ps1 -Mode Status;
+  audit_authority_required=summon_hotkey_overlay_and_process_authority;
+  audit_recommended_handoff_next_gap=summon_authority_blocker_boundary;
+  audit_active_blocker_family=authority; handoff_ok=true;
+  handoff_status=proof_passed;
+  handoff_reviewed_authority_consumed=true;
+  handoff_recommended_consumed=true;
+  handoff_runtime_readback_required=false;
+  handoff_operator_action_id=run_summon_authority_blocker_proof`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

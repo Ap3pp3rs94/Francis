@@ -342,6 +342,92 @@ def test_lens_stage6_next_handoff_consumes_reviewed_tray_first_blocker_handoff(t
     assert payload["recommended_next_operator_action"]["id"] == "run_tray_presence_blocker_proof"
 
 
+def test_lens_stage6_next_handoff_consumes_reviewed_summon_authority_handoff(tmp_path: Path) -> None:
+    data_root = tmp_path / "data"
+    audit_json = tmp_path / "stage6-completion-audit-reviewed-summon-authority.json"
+    audit_json.write_text(
+        json.dumps(
+            {
+                "kind": "lens.stage6.completion_audit",
+                "ok": True,
+                "status": "blocked",
+                "audit_status": "complete",
+                "allow_launch_on_hotkey": True,
+                "next_smallest_truthful_gap": "summon_anywhere_blockers",
+                "recommended_handoff_source": "stage6_reviewed_summon_anywhere_authority_handoff",
+                "recommended_next_slice": "run_summon_authority_blocker_proof",
+                "recommended_proof_script": "scripts/lens-summon-authority-blocker-proof.ps1 -Mode Status",
+                "authority_required": "summon_hotkey_overlay_and_process_authority",
+                "authority_granted": False,
+                "recommended_handoff": {
+                    "status": "blocked",
+                    "previous_next_smallest_truthful_gap": "stage6_lens_completion_audit",
+                    "consumed_summon_anywhere_next_smallest_truthful_gap": "summon_anywhere_blockers",
+                    "consumed_family_chain_next_smallest_truthful_gap": "stage6_lens_completion_audit",
+                    "consumed_summon_authority_next_smallest_truthful_gap": "stage6_lens_completion_audit",
+                    "consumed_persistent_supervision_resident_claim_boundary_next_smallest_truthful_gap": (
+                        "stage6_lens_completion_audit"
+                    ),
+                    "next_smallest_truthful_gap": "summon_authority_blocker_boundary",
+                    "next_step": "run_summon_authority_blocker_proof",
+                    "proof_script": "scripts/lens-summon-authority-blocker-proof.ps1 -Mode Status",
+                    "route": "/lens/summon",
+                    "readiness_route": "/lens/summon/readiness",
+                    "acceptance_criterion": "summon_anywhere",
+                    "first_blocker_family": "tray_presence",
+                    "active_blocker_family": "authority",
+                    "final_blocker_family": "authority",
+                    "authority_required": "summon_hotkey_overlay_and_process_authority",
+                    "authority_granted": False,
+                    "read_only_contract": True,
+                    "diagnostic_only": True,
+                    "would_execute": False,
+                    "would_mutate": False,
+                    "would_supervise_process": False,
+                    "would_restart_process": False,
+                    "would_install_service": False,
+                    "would_start_service": False,
+                    "would_register_hotkey": False,
+                    "would_control_overlay": False,
+                    "would_summon": False,
+                    "would_write_memory": False,
+                    "would_decide_approval": False,
+                    "blockers": [
+                        "summon_authority_not_granted",
+                        "hotkey_registration_authority_not_granted",
+                        "overlay_control_authority_not_granted",
+                    ],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-CompletionAuditJsonPath",
+        str(audit_json),
+        env={"FRANCIS_DATA_DIR": str(data_root)},
+    )
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload["recommended_handoff_source"] == "stage6_reviewed_summon_anywhere_authority_handoff"
+    assert payload["next_smallest_truthful_gap"] == "summon_anywhere_blockers"
+    assert payload["recommended_next_slice"] == "run_summon_authority_blocker_proof"
+    assert payload["recommended_proof_script"] == "scripts/lens-summon-authority-blocker-proof.ps1 -Mode Status"
+    assert payload["authority_required"] == "summon_hotkey_overlay_and_process_authority"
+    assert payload["stage6_completion_audit_reviewed_summon_authority_handoff_observed"] is True
+    assert payload["stage6_completion_audit_recommended_handoff_consumed"] is True
+    assert payload["stage6_completion_audit_runtime_readback_required"] is False
+    handoff = payload["recommended_handoff"]
+    assert handoff["active_blocker_family"] == "authority"
+    assert handoff["next_smallest_truthful_gap"] == "summon_authority_blocker_boundary"
+    assert handoff["next_step"] == "run_summon_authority_blocker_proof"
+    assert payload["recommended_next_operator_action"]["id"] == "run_summon_authority_blocker_proof"
+
+
 def test_lens_stage6_next_handoff_preserves_completion_audit_concrete_handoff(tmp_path: Path) -> None:
     data_root = tmp_path / "data"
     audit_json = tmp_path / "stage6-completion-audit-system-resident.json"

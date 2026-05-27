@@ -1897,9 +1897,24 @@ $Stage6CompletionAuditReviewedSummonFirstBlockerTrayPresenceObserved = (
   [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'readiness_route' -Default '') -eq '/lens/tray/readiness' -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'authority_required' -Default '') -eq 'tray_registration_authority'
 )
+$Stage6CompletionAuditReviewedSummonActiveBlockerFamily = [string](
+  Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'active_blocker_family' -Default ''
+)
+$Stage6CompletionAuditReviewedSummonAuthorityHandoffObserved = (
+  $Stage6CompletionAuditReviewedSummonActiveBlockerFamily -eq 'authority' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'summon_authority_blocker_boundary' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'next_step' -Default '') -eq 'run_summon_authority_blocker_proof' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'proof_script' -Default '') -eq 'scripts/lens-summon-authority-blocker-proof.ps1 -Mode Status' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'route' -Default '') -eq '/lens/summon' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'readiness_route' -Default '') -eq '/lens/summon/readiness' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'authority_required' -Default '') -eq 'summon_hotkey_overlay_and_process_authority'
+)
 $Stage6CompletionAuditReviewedSummonFirstBlockerHandoffObserved = (
   $Stage6CompletionAuditReadbackObserved -and
-  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_handoff_source' -Default '') -eq 'stage6_reviewed_summon_anywhere_first_blocker' -and
+  @(
+    'stage6_reviewed_summon_anywhere_first_blocker',
+    'stage6_reviewed_summon_anywhere_authority_handoff'
+  ) -contains [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_handoff_source' -Default '') -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'next_smallest_truthful_gap' -Default '') -eq 'summon_anywhere_blockers' -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_next_slice' -Default '') -eq [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'next_step' -Default '') -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_proof_script' -Default '') -eq [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'proof_script' -Default '') -and
@@ -1907,7 +1922,8 @@ $Stage6CompletionAuditReviewedSummonFirstBlockerHandoffObserved = (
   -not [bool](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'authority_granted' -Default $true) -and
   (
     $Stage6CompletionAuditReviewedSummonFirstBlockerResidentHostObserved -or
-    $Stage6CompletionAuditReviewedSummonFirstBlockerTrayPresenceObserved
+    $Stage6CompletionAuditReviewedSummonFirstBlockerTrayPresenceObserved -or
+    $Stage6CompletionAuditReviewedSummonAuthorityHandoffObserved
   ) -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'status' -Default '') -eq 'blocked' -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'previous_next_smallest_truthful_gap' -Default '') -eq 'stage6_lens_completion_audit' -and
@@ -3051,6 +3067,7 @@ $Payload = [ordered]@{
   stage6_completion_audit_system_resident_acceptance_handoff_observed = $Stage6CompletionAuditSystemResidentAcceptanceHandoffObserved
   stage6_completion_audit_system_resident_current_acceptance_handoff_observed = $Stage6CompletionAuditSystemResidentCurrentAcceptanceHandoffObserved
   stage6_completion_audit_reviewed_summon_first_blocker_handoff_observed = $Stage6CompletionAuditReviewedSummonFirstBlockerHandoffObserved
+  stage6_completion_audit_reviewed_summon_authority_handoff_observed = $Stage6CompletionAuditReviewedSummonAuthorityHandoffObserved
   stage6_completion_audit_persistent_supervision_first_missing_requirement_handoff_observed = $Stage6CompletionAuditPersistentSupervisionFirstMissingRequirementHandoffObserved
   stage6_completion_audit_prerequisite_bringup_operator_plan_handoff_observed = $Stage6CompletionAuditPrerequisiteBringupOperatorPlanHandoffObserved
   stage6_completion_audit_enablement_receipt_review_handoff_observed = $Stage6CompletionAuditPrerequisiteBringupEnablementReceiptHandoffObserved
