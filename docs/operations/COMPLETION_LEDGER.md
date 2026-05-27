@@ -39513,6 +39513,94 @@ Latest validation for Stage 6 resident-host lifecycle handoff guard:
   authority_required=none_new_stage6_completion_audit;
   authority_granted=false`
 
+### 2026-05-27 - Stage 6 next-handoff persistent enablement precedence
+
+Roadmap area: Stage 6 / Lens MVP, completion-audit and next-handoff
+truthfulness for system-resident presence after persistent supervision
+enablement has already been applied.
+
+Material change:
+
+- `scripts/lens-stage6-next-handoff.ps1` now treats a supplied completion
+  audit's ready `stage6_prerequisite_bringup_operator_plan_handoff` concrete
+  readback as newer evidence than the older nested
+  `resident_host_supervision_authority_readiness_blockers` acceptance handoff.
+- When the completion audit shows
+  `persistent_supervision_enablement_applied` and
+  `persistent_supervision_execution_boundary`, the next-handoff proof no longer
+  sends the operator backward to
+  `scripts/lens-host-runtime-loop-readiness-proof.ps1 -Mode Status`.
+- Against the current local readback, the concrete handoff now advances to the
+  resident-claim boundary review and then back to the Stage 6 completion audit:
+  `scripts/lens-stage6-completion-audit.ps1 -Mode Status`.
+- Stage 6 still does not close and Stage 7 does not start. The next handoff is
+  readback-only and does not grant resident-claim authority, execute a runtime,
+  mutate files, write memory, or claim system-resident readiness.
+
+Latest validation for Stage 6 next-handoff persistent enablement precedence:
+
+- PowerShell AST parse of `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey
+  -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2
+  -ResidentSurfaceForegroundRunSeconds 2 -SupervisorRunSeconds 3
+  -ChildProofTimeoutSeconds 120`
+  Result: `passed; status=blocked; audit_status=complete;
+  next_smallest_truthful_gap=system_resident_presence_blockers;
+  recommended_handoff_source=stage6_remaining_acceptance_blockers_after_summon_runtime_readback;
+  ready_to_close=false; child_proof_timeouts=[]`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath .tmp\stage6-completion-audit-b08b333e.json`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=system_resident_presence_blockers;
+  recommended_concrete_handoff_source=persistent_supervision_resident_claim_boundary_handoff;
+  recommended_concrete_next_smallest_truthful_gap=stage6_lens_completion_audit;
+  recommended_concrete_next_slice=run_stage6_lens_completion_audit_after_resident_claim_boundary_readback;
+  recommended_concrete_proof_script=scripts/lens-stage6-completion-audit.ps1 -Mode Status;
+  recommended_concrete_authority_required=none_new_stage6_completion_audit;
+  persistent_supervision_resident_claim_boundary_handoff_observed=true;
+  persistent_supervision_enablement_receipt_review_handoff_observed=true`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-host-supervision-authority-request-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed;
+  previous_next_smallest_truthful_gap=host_supervision_authority_exact_approval_request;
+  next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing;
+  recommended_proof_script=scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status;
+  executed=false; resident_claim_allowed=false; memory_write=false`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing;
+  first_missing_required_before_enable=resident_host_process;
+  recommended_proof_script=scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status;
+  authority_granted=false; side_effects_denied=true; side_effects_bounded=true`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status`
+  Result: `passed; status=persistent_supervision_enablement_applied;
+  next_smallest_truthful_gap=persistent_supervision_execution_boundary;
+  next_operator_action_requirement=persistent_supervision_enablement_receipt`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-persistent-supervision-resident-claim-boundary-proof.ps1 -Mode Status`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=stage6_lens_completion_audit;
+  recommended_next_slice=run_stage6_lens_completion_audit_after_resident_claim_boundary_readback;
+  authority_required=none_new_stage6_completion_audit;
+  executed=false; resident_claim_allowed=false; side_effects_denied=true`
+- `.\.venv\Scripts\ruff.exe check
+  tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `.\.venv\Scripts\ruff.exe format --check
+  tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `.\.venv\Scripts\pytest.exe
+  tests\test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_promotes_system_resident_acceptance_boundary
+  tests\test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_prefers_ready_concrete_over_stale_system_resident_handoff
+  tests\test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_prefers_first_missing_prerequisite_after_applied_enablement
+  -q --tb=short`
+  Result: `passed; 3 passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

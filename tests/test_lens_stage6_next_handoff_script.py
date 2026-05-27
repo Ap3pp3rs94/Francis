@@ -500,6 +500,154 @@ def test_lens_stage6_next_handoff_promotes_system_resident_acceptance_boundary(t
     )
 
 
+def test_lens_stage6_next_handoff_prefers_ready_concrete_over_stale_system_resident_handoff(
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "data"
+    audit_json = tmp_path / "stage6-completion-audit-system-resident-current-acceptance.json"
+    stale_nested_handoff = {
+        "status": "blocked",
+        "previous_next_smallest_truthful_gap": "system_resident_presence_blockers",
+        "next_smallest_truthful_gap": "resident_host_supervision_authority_readiness_blockers",
+        "next_step": "resolve_resident_host_runtime_loop_before_system_resident_claim",
+        "host_route": "/lens/host",
+        "runtime_loop_route": "/lens/host/runtime-loop",
+        "runtime_loop_readiness_route": "/lens/host/runtime-loop/readiness",
+        "supervision_authority_readiness_route": "/lens/host/supervision/authority/readiness",
+        "supervision_authority_first_blocked_requirement": "exact_supervision_authority_approval",
+        "supervision_authority_first_blocked_requirement_handoff": {
+            "id": "exact_supervision_authority_approval",
+            "route": "/lens/host/supervision/authority/requests",
+            "readiness_route": "/lens/host/supervision/authority/readiness",
+            "request_route": "/lens/host/supervision/authority/request",
+            "approval_action": "lens.host.supervision_authority",
+            "next_step": "create_or_select_exact_approved_host_supervision_authority_request",
+            "authority_required": "operator_approval",
+            "authority_granted": False,
+            "read_only_contract": True,
+            "diagnostic_only": True,
+            "would_execute": False,
+            "would_mutate": False,
+            "would_decide_approval": False,
+            "blockers": ["approval_id_required"],
+        },
+        "authority_required": "resident_runtime_execution_authority",
+        "authority_granted": False,
+        "read_only_contract": True,
+        "diagnostic_only": True,
+        "would_execute": False,
+        "would_mutate": False,
+        "would_write_memory": False,
+        "would_decide_approval": False,
+        "blockers": ["exact_supervision_authority_approval"],
+    }
+    ready_concrete_handoff = {
+        "status": "persistent_supervision_enablement_applied",
+        "previous_next_smallest_truthful_gap": "system_resident_presence_blockers",
+        "next_smallest_truthful_gap": "persistent_supervision_execution_boundary",
+        "next_step": "run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt",
+        "proof_script": "scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status",
+        "route": "/lens/host/persistent-supervision",
+        "readiness_route": "/lens/host/persistent-supervision/enablement",
+        "acceptance_criterion": "system_resident_presence",
+        "required_before_enable_ready": True,
+        "missing_required_before_enable": [],
+        "next_operator_action_requirement": "persistent_supervision_enablement_receipt",
+        "next_operator_action": {
+            "id": "review_persistent_supervision_enablement_receipt",
+            "route": "/lens/host/persistent-supervision/enablement/executions",
+            "method": "GET",
+            "mode": "readback",
+            "script_would_execute": False,
+            "script_would_mutate": False,
+            "latest_receipt_id": "lpsee_test",
+        },
+        "authority_required": "none_readback_only",
+        "authority_granted": False,
+        "read_only_contract": True,
+        "diagnostic_only": True,
+        "would_execute": False,
+        "would_mutate": False,
+        "would_write_memory": False,
+        "would_decide_approval": False,
+        "blockers": ["persistent_supervision_execution_boundary"],
+    }
+    audit_json.write_text(
+        json.dumps(
+            {
+                "kind": "lens.stage6.completion_audit",
+                "ok": True,
+                "status": "blocked",
+                "audit_status": "complete",
+                "allow_launch_on_hotkey": True,
+                "next_smallest_truthful_gap": "system_resident_presence_blockers",
+                "recommended_handoff_source": ("stage6_remaining_acceptance_blockers_after_summon_runtime_readback"),
+                "recommended_next_slice": (
+                    "review_system_resident_presence_acceptance_blockers_after_summon_runtime_readback"
+                ),
+                "recommended_proof_script": "scripts/lens-stage6-checkpoint.ps1 -Mode Status",
+                "authority_required": "none_readback_only",
+                "authority_granted": False,
+                "recommended_handoff": {
+                    "status": "blocked",
+                    "previous_next_smallest_truthful_gap": "summon_anywhere_blockers",
+                    "consumed_summon_anywhere_runtime_readback": True,
+                    "next_smallest_truthful_gap": "system_resident_presence_blockers",
+                    "next_step": ("review_system_resident_presence_acceptance_blockers_after_summon_runtime_readback"),
+                    "proof_script": "scripts/lens-stage6-checkpoint.ps1 -Mode Status",
+                    "route": "/lens/status",
+                    "readiness_route": "/lens/status",
+                    "acceptance_criterion": "system_resident_presence",
+                    "acceptance_criterion_next_smallest_truthful_gap": (
+                        "resident_host_supervision_authority_readiness_blockers"
+                    ),
+                    "acceptance_criterion_handoff": stale_nested_handoff,
+                    "authority_required": "none_readback_only",
+                    "authority_granted": False,
+                    "read_only_contract": True,
+                    "diagnostic_only": True,
+                    "would_execute": False,
+                    "would_mutate": False,
+                    "would_write_memory": False,
+                    "would_decide_approval": False,
+                    "blockers": ["system_resident_presence_blockers"],
+                },
+                "recommended_concrete_handoff_source": "stage6_prerequisite_bringup_operator_plan_handoff",
+                "recommended_concrete_handoff": ready_concrete_handoff,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-CompletionAuditJsonPath",
+        str(audit_json),
+        env={"FRANCIS_DATA_DIR": str(data_root)},
+    )
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload["stage6_completion_audit_remaining_acceptance_handoff_observed"] is True
+    assert payload["stage6_completion_audit_system_resident_acceptance_handoff_observed"] is True
+    assert payload["recommended_concrete_handoff_source"] == "stage6_prerequisite_bringup_operator_plan_handoff"
+    assert payload["recommended_concrete_next_smallest_truthful_gap"] == "persistent_supervision_execution_boundary"
+    assert payload["recommended_concrete_next_slice"] == (
+        "run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt"
+    )
+    assert payload["recommended_concrete_proof_script"] == (
+        "scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status"
+    )
+    assert payload["recommended_concrete_authority_required"] == "none_readback_only"
+    concrete_handoff = payload["recommended_concrete_handoff"]
+    assert concrete_handoff["next_operator_action_requirement"] == "persistent_supervision_enablement_receipt"
+    assert concrete_handoff["next_operator_action"]["id"] == "review_persistent_supervision_enablement_receipt"
+    assert concrete_handoff["read_only_contract"] is True
+    assert concrete_handoff["would_execute"] is False
+    assert concrete_handoff["would_mutate"] is False
+
+
 def test_lens_stage6_next_handoff_prefers_first_missing_prerequisite_after_applied_enablement(
     tmp_path: Path,
 ) -> None:
