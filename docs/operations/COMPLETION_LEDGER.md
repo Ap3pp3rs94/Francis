@@ -39804,6 +39804,69 @@ truthfulness:
   distills_system_resident_concrete_handoff_to_resident_claim_boundary"`
   Result: `passed; 3 passed, 41 deselected`
 
+### 2026-05-27 - Stage 6 prerequisite proof consumes seeded resident runtime
+
+Roadmap area: Stage 6 / Lens MVP, system-resident presence prerequisites and
+completion-audit handoff truthfulness.
+
+Material change:
+
+- `scripts/lens-persistent-supervision-prerequisites-proof.ps1` can now consume
+  seeded runtime readback when a caller has already observed fresh
+  resident-supervised runtime. In that posture it marks `resident_host_process`
+  ready, skips the bounded resident-host diagnostic proof, and advances the
+  first missing prerequisite to the next real surface blocker.
+- `scripts/lens-stage6-completion-audit.ps1` now passes the current data root
+  into the prerequisite proof only after the audit has observed fresh supervised
+  resident runtime, so the completion audit no longer reopens
+  `resident_host_process_not_supervised` after consuming the resident-host
+  handoff.
+- Stage 6 still does not close and Stage 7 does not start. The latest audit is
+  still blocked by `summon_anywhere` and `system_resident_presence`; the concrete
+  next slice is now `resolve_tray_presence_before_persistent_supervision_enablement`.
+
+Latest validation for Stage 6 seeded resident runtime prerequisite consumption:
+
+- PowerShell AST parse of
+  `scripts\lens-persistent-supervision-prerequisites-proof.ps1` and
+  `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `.\.venv\Scripts\ruff.exe check
+  tests\test_lens_persistent_supervision_prerequisites_proof_script.py
+  tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `.\.venv\Scripts\ruff.exe format --check
+  tests\test_lens_persistent_supervision_prerequisites_proof_script.py
+  tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 2 files already formatted`
+- `python -m pytest
+  tests/test_lens_persistent_supervision_prerequisites_proof_script.py -q
+  --tb=short`
+  Result: `passed; 3 passed`
+- `python -m pytest tests/test_lens_stage6_completion_audit_script.py -k
+  "accepts_fresh_supervised_runtime_after_bringup or
+  budgets_transition_plan_wrapper or
+  projects_persistent_prerequisite_first_missing_readback" -q --tb=short`
+  Result: `passed; 3 passed`
+- `.\scripts\lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status
+  -DataDir .\data -SeededRuntimeReadbackAllowed -ChildProofTimeoutSeconds 120`
+  Result: `passed; status=proof_passed; first_missing_required_before_enable=tray_presence;
+  missing_required_before_enable=[tray_presence,global_hotkey_binding,overlay_window];
+  resident_host_process_ready_in_prerequisites=true;
+  first_missing_requirement_proof_required=false;
+  recommended_next_slice=resolve_tray_presence_before_persistent_supervision_enablement`
+- `.\scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -AllowLaunchOnHotkey -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2
+  -ResidentSurfaceForegroundRunSeconds 2 -SupervisorRunSeconds 3
+  -ChildProofTimeoutSeconds 120`
+  Result: `passed; status=blocked; audit_status=complete;
+  next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing;
+  recommended_concrete_next_slice=resolve_tray_presence_before_persistent_supervision_enablement;
+  recommended_concrete_proof_script=scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status;
+  persistent_supervision_prerequisites_proof.first_missing_required_before_enable=tray_presence;
+  resident_host_process_ready_in_prerequisites=true;
+  ready_to_close=false; remaining_stage6_acceptance_blockers=[summon_anywhere,system_resident_presence]`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

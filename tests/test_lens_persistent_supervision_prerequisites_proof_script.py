@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -56,6 +58,12 @@ def test_lens_persistent_supervision_prerequisites_uses_summon_family_contract_r
     assert "[string]$FirstMissingRequirementForegroundRunSeconds" in script
     assert "[string]$FirstMissingRequirementHostLaunchRunSeconds" in script
     assert "[string]$FirstMissingRequirementResidentCandidateRunSeconds" in script
+    assert "[switch]$SeededRuntimeReadbackAllowed" in script
+    assert (
+        "$FirstMissingRequirementProofRequired = $PreflightFirstMissingRequiredBeforeEnable -eq 'resident_host_process'"
+        in script
+    )
+    assert "skipped_resident_host_process_ready" in script
 
 
 def test_lens_persistent_supervision_prerequisites_align_to_summon_family_contract(
@@ -293,3 +301,87 @@ def test_lens_persistent_supervision_prerequisites_align_to_summon_family_contra
     assert not (data_dir / "runtime" / "lens-host-supervisor" / "status.json").exists()
     assert not (data_dir / "runtime" / "lens-host" / "status.json").exists()
     assert not (data_dir / "runtime" / "lens-host" / "lens-host.pid").exists()
+
+
+def test_lens_persistent_supervision_prerequisites_consumes_seeded_resident_runtime(
+    tmp_path: Path,
+) -> None:
+    data_dir = tmp_path / "data"
+    host_dir = data_dir / "runtime" / "lens-host"
+    supervisor_dir = data_dir / "runtime" / "lens-host-supervisor"
+    host_dir.mkdir(parents=True)
+    supervisor_dir.mkdir(parents=True)
+    pid = os.getpid()
+    now = datetime.now(UTC).isoformat()
+    (host_dir / "lens-host.pid").write_text(str(pid), encoding="utf-8")
+    (host_dir / "status.json").write_text(
+        json.dumps(
+            {
+                "kind": "lens.host.runtime_state",
+                "status": "resident_running",
+                "pid": pid,
+                "updated_at": now,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (supervisor_dir / "status.json").write_text(
+        json.dumps(
+            {
+                "status": "resident_supervising",
+                "mode": "supervise_resident",
+                "host_mode": "resident",
+                "supervisor_pid": pid,
+                "observed_pid": pid,
+                "observed_state": "resident_running",
+                "resident_supervised_runtime": True,
+                "process_supervision_authority": True,
+                "process_restart_authority": False,
+                "service_control_authority": False,
+                "updated_at": now,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-DataDir",
+        str(data_dir),
+        "-SeededRuntimeReadbackAllowed",
+        "-ChildProofTimeoutSeconds",
+        "180",
+    )
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "proof_passed"
+    assert payload["ok"] is True
+    assert payload["seeded_runtime_readback_allowed"] is True
+    assert payload["resident_host_process_ready_in_prerequisites"] is True
+    assert payload["first_missing_requirement_proof_required"] is False
+    assert payload["first_missing_requirement_proof_observed"] is True
+    assert payload["first_missing_requirement_side_effects_bounded"] is True
+    assert payload["missing_required_before_enable"] == [
+        "tray_presence",
+        "global_hotkey_binding",
+        "overlay_window",
+        "summon_binding",
+    ]
+    assert payload["first_missing_required_before_enable"] == "tray_presence"
+    assert payload["recommended_next_slice"] == "resolve_tray_presence_before_persistent_supervision_enablement"
+    assert payload["recommended_proof_script"] == "scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status"
+    proof = payload["first_missing_requirement_proof"]
+    assert proof["proof_required"] is False
+    assert proof["status"] == "skipped_resident_host_process_ready"
+    assert proof["kind"] == "lens.persistent_supervision.first_missing_requirement.proof_skipped"
+    dependency_readback = {item["id"]: item for item in payload["dependency_readback"]}
+    assert dependency_readback["resident_host_process"] == {
+        "id": "resident_host_process",
+        "family": "resident_host",
+        "route": "/lens/host",
+        "blocker": "",
+        "observed": True,
+    }
+    assert dependency_readback["tray_presence"]["blocker"] == "tray_host_missing"

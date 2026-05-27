@@ -799,15 +799,23 @@ $PersistentSupervisionPrerequisitesProofChildTimeoutSeconds = [Math]::Min($Child
 $PersistentSupervisionPrerequisitesProofTimeoutSeconds = (
   $PersistentSupervisionPrerequisitesProofChildTimeoutSeconds
 ) + 60
+$PersistentSupervisionPrerequisitesProofArgs = @(
+  '-Mode',
+  'Status',
+  '-ChildProofTimeoutSeconds',
+  [string]$PersistentSupervisionPrerequisitesProofChildTimeoutSeconds
+)
+if ($EarlyFreshResidentSupervisedRuntimeReadbackObserved) {
+  $PersistentSupervisionPrerequisitesProofArgs += @(
+    '-DataDir',
+    (Join-Path $RepoRoot 'data'),
+    '-SeededRuntimeReadbackAllowed'
+  )
+}
 $PersistentSupervisionPrerequisitesProofResult = Invoke-JsonScript `
   -PowerShellPath $PowerShell.Source `
   -ScriptPath $PersistentSupervisionPrerequisitesProofScript `
-  -ScriptArgs @(
-    '-Mode',
-    'Status',
-    '-ChildProofTimeoutSeconds',
-    [string]$PersistentSupervisionPrerequisitesProofChildTimeoutSeconds
-  ) `
+  -ScriptArgs $PersistentSupervisionPrerequisitesProofArgs `
   -TimeoutSeconds $PersistentSupervisionPrerequisitesProofTimeoutSeconds
 $PersistentSupervisionPrerequisitesProof = $PersistentSupervisionPrerequisitesProofResult.payload
 $PersistentSupervisionPrerequisitesProofGovernance = $PersistentSupervisionPrerequisitesProof.governance
@@ -847,11 +855,7 @@ $PersistentSupervisionPrerequisitesProofObserved = (
   $PersistentSupervisionPrerequisitesRequiredBeforeEnable -contains 'global_hotkey_binding' -and
   $PersistentSupervisionPrerequisitesRequiredBeforeEnable -contains 'overlay_window' -and
   $PersistentSupervisionPrerequisitesRequiredBeforeEnable -contains 'summon_binding' -and
-  $PersistentSupervisionPrerequisitesMissingRequiredBeforeEnable -contains 'resident_host_process' -and
-  $PersistentSupervisionPrerequisitesMissingRequiredBeforeEnable -contains 'tray_presence' -and
-  $PersistentSupervisionPrerequisitesMissingRequiredBeforeEnable -contains 'global_hotkey_binding' -and
-  $PersistentSupervisionPrerequisitesMissingRequiredBeforeEnable -contains 'overlay_window' -and
-  $PersistentSupervisionPrerequisitesMissingRequiredBeforeEnable -contains 'summon_binding' -and
+  @($PersistentSupervisionPrerequisitesMissingRequiredBeforeEnable).Count -ge 1 -and
   [bool]$PersistentSupervisionPrerequisitesProofGovernance.diagnostic_only -and
   -not [bool]$PersistentSupervisionPrerequisitesProofGovernance.read_only_contract -and
   [bool]$PersistentSupervisionPrerequisitesProofGovernance.route_readback_contract -and
@@ -7141,6 +7145,9 @@ $Payload = [ordered]@{
     dependency_readback_observed = [bool]$PersistentSupervisionPrerequisitesProof.dependency_readback_observed
     summon_family_contract_observed = [bool]$PersistentSupervisionPrerequisitesProof.summon_family_contract_observed
     prerequisites_mapped_to_summon_family_contract = [bool]$PersistentSupervisionPrerequisitesProof.prerequisites_mapped_to_summon_family_contract
+    seeded_runtime_readback_allowed = [bool]$PersistentSupervisionPrerequisitesProof.seeded_runtime_readback_allowed
+    resident_host_process_ready_in_prerequisites = [bool]$PersistentSupervisionPrerequisitesProof.resident_host_process_ready_in_prerequisites
+    first_missing_requirement_proof_required = [bool]$PersistentSupervisionPrerequisitesProof.first_missing_requirement_proof_required
     first_missing_requirement_proof_observed = [bool]$PersistentSupervisionPrerequisitesProof.first_missing_requirement_proof_observed
     first_missing_requirement_side_effects_bounded = [bool]$PersistentSupervisionPrerequisitesProof.first_missing_requirement_side_effects_bounded
     lens_status_operator_readback_observed = [bool]$PersistentSupervisionPrerequisitesProof.lens_status_operator_readback_observed

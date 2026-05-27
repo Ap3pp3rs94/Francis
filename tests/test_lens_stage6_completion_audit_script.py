@@ -185,6 +185,11 @@ def test_lens_stage6_completion_audit_accepts_fresh_supervised_runtime_after_bri
         "resident_host_process_supervision_blocker_proof_readback = "
         "$ResidentHostProcessSupervisionBlockerProofReadbackObserved"
     ) in script
+    assert "$PersistentSupervisionPrerequisitesProofArgs = @(" in script
+    assert "if ($EarlyFreshResidentSupervisedRuntimeReadbackObserved) {" in script
+    assert "'-DataDir'," in script
+    assert "(Join-Path $RepoRoot 'data')" in script
+    assert "'-SeededRuntimeReadbackAllowed'" in script
     assert "$ResidentHostProcessSupervisionEvidenceObserved -and" in script
     assert "resident_supervised_runtime = [bool]$HostSupervisorReadback.resident_supervised_runtime" in script
 
@@ -225,6 +230,7 @@ def test_lens_stage6_completion_audit_budgets_transition_plan_wrapper() -> None:
     )
     assert "$PersistentSupervisionPrerequisitesProofTimeoutSeconds" in script
     assert "[string]$PersistentSupervisionPrerequisitesProofChildTimeoutSeconds" in script
+    assert "-ScriptArgs $PersistentSupervisionPrerequisitesProofArgs" in script
     assert "PersistentSupervisionPrerequisitesProofFamilyChainChildProofCount" not in script
     assert "PersistentSupervisionPrerequisitesProofFamilyChainTimeoutSeconds" not in script
     assert "$PersistentSupervisionEnablementTransitionPlanProofSiblingChildProofCount = 3" in script
