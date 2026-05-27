@@ -39403,6 +39403,61 @@ Latest validation for Stage 6 checkpoint closure handoff projection:
   -q --tb=short`
   Result: `passed`
 
+### 2026-05-27 - Stage 6 next-handoff system-resident boundary consumption
+
+Roadmap area: Stage 6 / Lens MVP, completion-audit and next-handoff
+truthfulness for system-resident presence.
+
+Material change:
+
+- `scripts/lens-stage6-next-handoff.ps1` now consumes the nested
+  `acceptance_criterion_handoff` carried by a supplied Stage 6 completion audit
+  when the broad blocker is still `system_resident_presence_blockers`.
+- The broad handoff remains
+  `stage6_remaining_acceptance_blockers_after_summon_runtime_readback`, but the
+  concrete handoff now advances to
+  `stage6_remaining_acceptance_system_resident_presence_handoff` with
+  `next_smallest_truthful_gap=resident_host_supervision_authority_readiness_blockers`
+  and
+  `next_step=resolve_resident_host_runtime_loop_before_system_resident_claim`.
+- The concrete proof defaults to
+  `scripts/lens-host-runtime-loop-readiness-proof.ps1 -Mode Status` and
+  preserves the read-only/diagnostic contract from the completion-audit handoff.
+  It does not grant host-supervision authority, decide approvals, start a
+  process, write memory, mutate files, or claim system-resident readiness.
+- Stage 6 still does not close and Stage 7 does not start. This change corrects
+  the next actionable handoff after the completion audit projects the current
+  system-resident boundary.
+
+Latest validation for Stage 6 next-handoff system-resident boundary
+consumption:
+
+- PowerShell AST parse of `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath
+  .tmp\stage6-completion-audit-system-handoff-projection.json`
+  Result: `passed; status=proof_passed;
+  next_smallest_truthful_gap=system_resident_presence_blockers;
+  recommended_handoff_source=stage6_remaining_acceptance_blockers_after_summon_runtime_readback;
+  stage6_completion_audit_system_resident_acceptance_handoff_observed=true;
+  recommended_concrete_handoff_source=stage6_remaining_acceptance_system_resident_presence_handoff;
+  recommended_concrete_next_smallest_truthful_gap=resident_host_supervision_authority_readiness_blockers;
+  recommended_concrete_next_slice=resolve_resident_host_runtime_loop_before_system_resident_claim;
+  recommended_concrete_proof_script=scripts/lens-host-runtime-loop-readiness-proof.ps1 -Mode Status;
+  recommended_concrete_authority_required=resident_runtime_execution_authority`
+- `.\.venv\Scripts\ruff.exe check
+  tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `.\.venv\Scripts\ruff.exe format --check
+  tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `.\.venv\Scripts\pytest.exe tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 14 passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

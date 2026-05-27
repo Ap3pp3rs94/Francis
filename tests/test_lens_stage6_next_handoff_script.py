@@ -117,6 +117,11 @@ def test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback() -> N
     assert "'stage6_remaining_acceptance_blockers_after_summon_runtime_readback'" in script
     assert "'review_helpful_not_noisy_acceptance_blockers_after_summon_runtime_readback'" in script
     assert "stage6_completion_audit_remaining_acceptance_handoff_observed" in script
+    assert "$Stage6CompletionAuditSystemResidentAcceptanceHandoffObserved = (" in script
+    assert "'stage6_remaining_acceptance_system_resident_presence_handoff'" in script
+    assert "'resolve_resident_host_runtime_loop_before_system_resident_claim'" in script
+    assert "'scripts/lens-host-runtime-loop-readiness-proof.ps1 -Mode Status'" in script
+    assert "stage6_completion_audit_system_resident_acceptance_handoff_observed" in script
     assert "$Stage6CompletionAuditPersistentSupervisionFirstMissingRequirementHandoffObserved = (" in script
     assert "'persistent_supervision_prerequisites_first_missing_requirement_handoff'" in script
     assert "'resolve_resident_host_process_before_persistent_supervision_enablement'" in script
@@ -346,6 +351,153 @@ def test_lens_stage6_next_handoff_preserves_completion_audit_concrete_handoff(tm
     assert payload["recommended_concrete_next_smallest_truthful_gap"] == ("persistent_supervision_execution_boundary")
     assert payload["recommended_concrete_authority_required"] == "none_readback_only"
     assert payload["recommended_concrete_authority_granted"] is False
+
+
+def test_lens_stage6_next_handoff_promotes_system_resident_acceptance_boundary(tmp_path: Path) -> None:
+    data_root = tmp_path / "data"
+    audit_json = tmp_path / "stage6-completion-audit-system-resident-acceptance.json"
+    stale_concrete_handoff = {
+        "status": "persistent_supervision_enablement_applied",
+        "previous_next_smallest_truthful_gap": "system_resident_presence_blockers",
+        "next_smallest_truthful_gap": "persistent_supervision_execution_boundary",
+        "next_step": "run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt",
+        "proof_script": "scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status",
+        "authority_required": "none_readback_only",
+        "authority_granted": False,
+        "read_only_contract": True,
+        "diagnostic_only": True,
+        "would_execute": False,
+        "would_mutate": False,
+        "would_write_memory": False,
+        "would_decide_approval": False,
+    }
+    acceptance_criterion_handoff = {
+        "status": "blocked",
+        "previous_next_smallest_truthful_gap": "system_resident_presence_blockers",
+        "next_smallest_truthful_gap": "resident_host_supervision_authority_readiness_blockers",
+        "next_step": "resolve_resident_host_runtime_loop_before_system_resident_claim",
+        "host_route": "/lens/host",
+        "runtime_loop_route": "/lens/host/runtime-loop",
+        "runtime_loop_readiness_route": "/lens/host/runtime-loop/readiness",
+        "supervision_authority_readiness_route": "/lens/host/supervision/authority/readiness",
+        "supervision_authority_first_blocked_requirement": "exact_supervision_authority_approval",
+        "supervision_authority_first_blocked_requirement_handoff": {
+            "id": "exact_supervision_authority_approval",
+            "route": "/lens/host/supervision/authority/requests",
+            "readiness_route": "/lens/host/supervision/authority/readiness",
+            "request_route": "/lens/host/supervision/authority/request",
+            "approval_action": "lens.host.supervision_authority",
+            "next_step": "create_or_select_exact_approved_host_supervision_authority_request",
+            "authority_required": "operator_approval",
+            "authority_granted": False,
+            "read_only_contract": True,
+            "diagnostic_only": True,
+            "would_execute": False,
+            "would_mutate": False,
+            "would_decide_approval": False,
+            "blockers": ["approval_id_required"],
+        },
+        "authority_required": "resident_runtime_execution_authority",
+        "authority_granted": False,
+        "read_only_contract": True,
+        "diagnostic_only": True,
+        "would_execute": False,
+        "would_mutate": False,
+        "would_write_memory": False,
+        "would_decide_approval": False,
+        "blockers": ["exact_supervision_authority_approval"],
+    }
+    audit_json.write_text(
+        json.dumps(
+            {
+                "kind": "lens.stage6.completion_audit",
+                "ok": True,
+                "status": "blocked",
+                "audit_status": "complete",
+                "allow_launch_on_hotkey": True,
+                "next_smallest_truthful_gap": "system_resident_presence_blockers",
+                "recommended_handoff_source": ("stage6_remaining_acceptance_blockers_after_summon_runtime_readback"),
+                "recommended_next_slice": (
+                    "review_system_resident_presence_acceptance_blockers_after_summon_runtime_readback"
+                ),
+                "recommended_proof_script": "scripts/lens-stage6-checkpoint.ps1 -Mode Status",
+                "authority_required": "none_readback_only",
+                "authority_granted": False,
+                "recommended_handoff": {
+                    "status": "blocked",
+                    "previous_next_smallest_truthful_gap": "summon_anywhere_blockers",
+                    "consumed_summon_anywhere_runtime_readback": True,
+                    "next_smallest_truthful_gap": "system_resident_presence_blockers",
+                    "next_step": ("review_system_resident_presence_acceptance_blockers_after_summon_runtime_readback"),
+                    "proof_script": "scripts/lens-stage6-checkpoint.ps1 -Mode Status",
+                    "route": "/lens/status",
+                    "readiness_route": "/lens/status",
+                    "acceptance_criterion": "system_resident_presence",
+                    "acceptance_criterion_next_smallest_truthful_gap": (
+                        "resident_host_supervision_authority_readiness_blockers"
+                    ),
+                    "acceptance_criterion_handoff": acceptance_criterion_handoff,
+                    "authority_required": "none_readback_only",
+                    "authority_granted": False,
+                    "read_only_contract": True,
+                    "diagnostic_only": True,
+                    "would_execute": False,
+                    "would_mutate": False,
+                    "would_write_memory": False,
+                    "would_decide_approval": False,
+                    "blockers": ["system_resident_presence_blockers"],
+                },
+                "recommended_concrete_handoff_source": "stage6_prerequisite_bringup_operator_plan_handoff",
+                "recommended_concrete_handoff": stale_concrete_handoff,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-CompletionAuditJsonPath",
+        str(audit_json),
+        env={"FRANCIS_DATA_DIR": str(data_root)},
+    )
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload["recommended_handoff_source"] == (
+        "stage6_remaining_acceptance_blockers_after_summon_runtime_readback"
+    )
+    assert payload["next_smallest_truthful_gap"] == "system_resident_presence_blockers"
+    assert payload["stage6_completion_audit_remaining_acceptance_handoff_observed"] is True
+    assert payload["stage6_completion_audit_system_resident_acceptance_handoff_observed"] is True
+    assert payload["recommended_concrete_handoff_source"] == (
+        "stage6_remaining_acceptance_system_resident_presence_handoff"
+    )
+    assert payload["recommended_concrete_next_smallest_truthful_gap"] == (
+        "resident_host_supervision_authority_readiness_blockers"
+    )
+    assert payload["recommended_concrete_next_slice"] == (
+        "resolve_resident_host_runtime_loop_before_system_resident_claim"
+    )
+    assert payload["recommended_concrete_proof_script"] == (
+        "scripts/lens-host-runtime-loop-readiness-proof.ps1 -Mode Status"
+    )
+    assert payload["recommended_concrete_authority_required"] == "resident_runtime_execution_authority"
+    assert payload["recommended_concrete_authority_granted"] is False
+
+    concrete_handoff = payload["recommended_concrete_handoff"]
+    assert concrete_handoff["route"] == "/lens/host/runtime-loop"
+    assert concrete_handoff["readiness_route"] == "/lens/host/runtime-loop/readiness"
+    assert concrete_handoff["read_only_contract"] is True
+    assert concrete_handoff["diagnostic_only"] is True
+    assert concrete_handoff["would_execute"] is False
+    assert concrete_handoff["would_mutate"] is False
+    assert concrete_handoff["supervision_authority_first_blocked_requirement"] == (
+        "exact_supervision_authority_approval"
+    )
+    assert concrete_handoff["supervision_authority_first_blocked_requirement_handoff"]["approval_action"] == (
+        "lens.host.supervision_authority"
+    )
 
 
 def test_lens_stage6_next_handoff_prefers_first_missing_prerequisite_after_applied_enablement(

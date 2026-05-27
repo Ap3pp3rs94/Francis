@@ -1749,6 +1749,58 @@ $Stage6CompletionAuditRemainingAcceptanceHandoffObserved = (
   -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_write_memory' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'would_decide_approval' -Default $true)
 )
+$Stage6CompletionAuditSystemResidentAcceptanceHandoff = Get-PropertyValue `
+  -Payload $Stage6CompletionAuditRecommendedHandoff `
+  -Name 'acceptance_criterion_handoff' `
+  -Default ([ordered]@{})
+$Stage6CompletionAuditSystemResidentAcceptanceFirstBlockedRequirementHandoff = Get-PropertyValue `
+  -Payload $Stage6CompletionAuditSystemResidentAcceptanceHandoff `
+  -Name 'supervision_authority_first_blocked_requirement_handoff' `
+  -Default ([ordered]@{})
+$Stage6CompletionAuditSystemResidentAcceptanceHandoffObserved = (
+  $Stage6CompletionAuditReadbackObserved -and
+  $Stage6CompletionAuditRemainingAcceptanceHandoffObserved -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'next_smallest_truthful_gap' -Default '') -eq 'system_resident_presence_blockers' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'acceptance_criterion' -Default '') -eq 'system_resident_presence' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'acceptance_criterion_next_smallest_truthful_gap' -Default '') -eq 'resident_host_supervision_authority_readiness_blockers' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditSystemResidentAcceptanceHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'resident_host_supervision_authority_readiness_blockers' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditSystemResidentAcceptanceHandoff -Name 'next_step' -Default '') -eq 'resolve_resident_host_runtime_loop_before_system_resident_claim' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditSystemResidentAcceptanceHandoff -Name 'runtime_loop_readiness_route' -Default '') -eq '/lens/host/runtime-loop/readiness' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditSystemResidentAcceptanceHandoff -Name 'supervision_authority_readiness_route' -Default '') -eq '/lens/host/supervision/authority/readiness' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditSystemResidentAcceptanceHandoff -Name 'supervision_authority_first_blocked_requirement' -Default '') -eq 'exact_supervision_authority_approval' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditSystemResidentAcceptanceFirstBlockedRequirementHandoff -Name 'approval_action' -Default '') -eq 'lens.host.supervision_authority' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditSystemResidentAcceptanceHandoff -Name 'authority_required' -Default '') -eq 'resident_runtime_execution_authority' -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditSystemResidentAcceptanceHandoff -Name 'authority_granted' -Default $true) -and
+  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditSystemResidentAcceptanceHandoff -Name 'read_only_contract' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditSystemResidentAcceptanceHandoff -Name 'diagnostic_only' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditSystemResidentAcceptanceHandoff -Name 'would_execute' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditSystemResidentAcceptanceHandoff -Name 'would_mutate' -Default $true)
+)
+$Stage6CompletionAuditSystemResidentAcceptanceConcreteHandoff = [ordered]@{}
+if ($Stage6CompletionAuditSystemResidentAcceptanceHandoffObserved) {
+  foreach ($Property in @($Stage6CompletionAuditSystemResidentAcceptanceHandoff.PSObject.Properties)) {
+    $Stage6CompletionAuditSystemResidentAcceptanceConcreteHandoff[$Property.Name] = $Property.Value
+  }
+  if ([string]::IsNullOrWhiteSpace([string](Get-PropertyValue -Payload $Stage6CompletionAuditSystemResidentAcceptanceConcreteHandoff -Name 'proof_script' -Default ''))) {
+    $Stage6CompletionAuditSystemResidentAcceptanceConcreteHandoff['proof_script'] = 'scripts/lens-host-runtime-loop-readiness-proof.ps1 -Mode Status'
+  }
+  if ([string]::IsNullOrWhiteSpace([string](Get-PropertyValue -Payload $Stage6CompletionAuditSystemResidentAcceptanceConcreteHandoff -Name 'route' -Default ''))) {
+    $Stage6CompletionAuditSystemResidentAcceptanceConcreteHandoff['route'] = [string](
+      Get-PropertyValue `
+        -Payload $Stage6CompletionAuditSystemResidentAcceptanceHandoff `
+        -Name 'runtime_loop_route' `
+        -Default '/lens/host/runtime-loop'
+    )
+  }
+  if ([string]::IsNullOrWhiteSpace([string](Get-PropertyValue -Payload $Stage6CompletionAuditSystemResidentAcceptanceConcreteHandoff -Name 'readiness_route' -Default ''))) {
+    $Stage6CompletionAuditSystemResidentAcceptanceConcreteHandoff['readiness_route'] = [string](
+      Get-PropertyValue `
+        -Payload $Stage6CompletionAuditSystemResidentAcceptanceHandoff `
+        -Name 'runtime_loop_readiness_route' `
+        -Default '/lens/host/runtime-loop/readiness'
+    )
+  }
+}
 $Stage6CompletionAuditReviewedSummonFirstBlockerHandoffObserved = (
   $Stage6CompletionAuditReadbackObserved -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_handoff_source' -Default '') -eq 'stage6_reviewed_summon_anywhere_first_blocker' -and
@@ -2565,6 +2617,11 @@ if (
   $RecommendedConcreteHandoff = $Stage6CompletionAuditRecommendedConcreteHandoff
 }
 if (
+  $Stage6CompletionAuditSystemResidentAcceptanceHandoffObserved
+) {
+  $RecommendedConcreteHandoffSource = 'stage6_remaining_acceptance_system_resident_presence_handoff'
+  $RecommendedConcreteHandoff = $Stage6CompletionAuditSystemResidentAcceptanceConcreteHandoff
+} elseif (
   $Stage6CompletionAuditRecommendedHandoffConsumed -and
   $Stage6CompletionAuditRemainingAcceptanceHandoffObserved -and
   $Stage6PrerequisiteBringupPlanAppliedObserved -and
@@ -2873,6 +2930,7 @@ $Payload = [ordered]@{
   stage6_completion_audit_persistent_supervision_api_execution_handoff_observed = $Stage6CompletionAuditPersistentSupervisionApiExecutionHandoffObserved
   stage6_completion_audit_persistent_supervision_resident_claim_boundary_handoff_observed = $Stage6CompletionAuditPersistentSupervisionResidentClaimBoundaryHandoffObserved
   stage6_completion_audit_remaining_acceptance_handoff_observed = $Stage6CompletionAuditRemainingAcceptanceHandoffObserved
+  stage6_completion_audit_system_resident_acceptance_handoff_observed = $Stage6CompletionAuditSystemResidentAcceptanceHandoffObserved
   stage6_completion_audit_reviewed_summon_first_blocker_handoff_observed = $Stage6CompletionAuditReviewedSummonFirstBlockerHandoffObserved
   stage6_completion_audit_persistent_supervision_first_missing_requirement_handoff_observed = $Stage6CompletionAuditPersistentSupervisionFirstMissingRequirementHandoffObserved
   stage6_completion_audit_prerequisite_bringup_operator_plan_handoff_observed = $Stage6CompletionAuditPrerequisiteBringupOperatorPlanHandoffObserved
