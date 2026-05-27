@@ -3629,76 +3629,62 @@ def test_lens_stage6_next_handoff_consumes_applied_bringup_review_state(
     assert enablement_receipt_proc.returncode == 0, enablement_receipt_proc.stderr or enablement_receipt_proc.stdout
     enablement_receipt_payload = json.loads(enablement_receipt_proc.stdout)
     assert enablement_receipt_payload["recommended_handoff_source"] == (
-        "stage6_completion_audit_launch_on_hotkey_readback_required"
+        "stage6_prerequisite_bringup_enablement_receipt_review"
     )
-    assert enablement_receipt_payload["next_smallest_truthful_gap"] == ("stage6_lens_completion_audit_runtime_readback")
+    assert enablement_receipt_payload["next_smallest_truthful_gap"] == ("persistent_supervision_execution_boundary")
     assert enablement_receipt_payload["recommended_next_slice"] == (
-        "run_stage6_completion_audit_with_launch_on_hotkey_runtime_readback"
+        "run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt"
     )
     assert enablement_receipt_payload["recommended_proof_script"] == (
-        "scripts/lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey"
+        "scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status"
     )
-    assert enablement_receipt_payload["authority_required"] == "launch_on_hotkey_runtime_readback_opt_in"
+    assert enablement_receipt_payload["authority_required"] == "none_readback_only"
     assert enablement_receipt_payload["authority_granted"] is False
     assert enablement_receipt_payload["stage6_completion_audit_readback_observed"] is True
     assert enablement_receipt_payload["stage6_completion_audit_enablement_receipt_review_handoff_observed"] is True
-    assert enablement_receipt_payload["stage6_completion_audit_recommended_handoff_consumed"] is False
-    assert enablement_receipt_payload["stage6_completion_audit_runtime_readback_required"] is True
+    assert enablement_receipt_payload["stage6_completion_audit_recommended_handoff_consumed"] is True
+    assert enablement_receipt_payload["stage6_completion_audit_runtime_readback_required"] is False
     enablement_receipt_handoff = enablement_receipt_payload["recommended_handoff"]
-    assert enablement_receipt_handoff["status"] == "runtime_readback_required"
+    assert enablement_receipt_handoff["status"] == "receipt_review_ready"
     assert enablement_receipt_handoff["previous_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
-    assert enablement_receipt_handoff["previous_closure_readback_next_smallest_truthful_gap"] == (
-        "summon_anywhere_blockers"
-    )
-    assert enablement_receipt_handoff["next_smallest_truthful_gap"] == ("stage6_lens_completion_audit_runtime_readback")
+    assert enablement_receipt_handoff["next_smallest_truthful_gap"] == "persistent_supervision_execution_boundary"
     assert enablement_receipt_handoff["next_step"] == (
-        "run_stage6_completion_audit_with_launch_on_hotkey_runtime_readback"
+        "run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt"
     )
     assert enablement_receipt_handoff["proof_script"] == (
-        "scripts/lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey"
+        "scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status"
     )
-    assert enablement_receipt_handoff["route"] == "/lens/status"
-    assert enablement_receipt_handoff["readiness_route"] == "/lens/resident-runtime/authority-grant/readiness"
-    assert enablement_receipt_handoff["acceptance_criterion"] == "helpful_not_noisy"
-    assert enablement_receipt_handoff["first_blocker_family"] == "resident_host"
-    assert enablement_receipt_handoff["authority_required"] == "launch_on_hotkey_runtime_readback_opt_in"
+    assert enablement_receipt_handoff["route"] == "/lens/host/persistent-supervision/enablement/executions"
+    assert enablement_receipt_handoff["authority_required"] == "none_readback_only"
     assert enablement_receipt_handoff["authority_granted"] is False
-    assert enablement_receipt_handoff["requires_explicit_operator_opt_in"] is True
-    assert enablement_receipt_handoff["completion_audit_json_parameter"] == "-CompletionAuditJsonPath"
     assert enablement_receipt_handoff["read_only_contract"] is True
     assert enablement_receipt_handoff["diagnostic_only"] is True
     assert enablement_receipt_handoff["would_execute"] is False
     assert enablement_receipt_handoff["would_mutate"] is False
-    assert enablement_receipt_handoff["would_launch_process"] is False
-    assert enablement_receipt_handoff["would_supervise_process"] is False
-    assert enablement_receipt_handoff["would_register_hotkey"] is False
-    assert enablement_receipt_handoff["would_control_overlay"] is False
-    assert enablement_receipt_handoff["would_summon"] is False
     assert enablement_receipt_handoff["would_decide_approval"] is False
     assert enablement_receipt_payload["recommended_operator_handoff"]["source"] == (
-        "stage6_completion_audit_launch_on_hotkey_readback_required"
+        "stage6_completion_audit_recommended_handoff"
     )
     assert enablement_receipt_payload["recommended_next_operator_action_requirement"] == (
-        "stage6_completion_audit_runtime_readback"
+        "stage6_completion_audit_recommended_readback"
     )
     assert enablement_receipt_payload["recommended_next_operator_action"]["id"] == (
-        "run_stage6_completion_audit_with_launch_on_hotkey_runtime_readback"
+        "run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt"
     )
-    assert enablement_receipt_payload["recommended_next_operator_action"]["requires_explicit_operator_opt_in"] is True
     assert enablement_receipt_payload["recommended_next_operator_action"]["script_would_execute"] is False
     assert enablement_receipt_payload["recommended_next_operator_action"]["script_would_mutate"] is False
     assert enablement_receipt_payload["recommended_next_operator_command"] == {
-        "command": ".\\scripts\\lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey",
+        "command": ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status",
         "mode": "Status",
         "requires_confirmation": False,
-        "requires_explicit_operator_opt_in": True,
+        "requires_explicit_operator_opt_in": False,
+        "requires_actor": False,
         "requires_approval_id": False,
         "requires_operator_approval_decision": False,
-        "completion_audit_json_parameter": "-CompletionAuditJsonPath",
     }
     enablement_receipt_checks = {item["id"]: item for item in enablement_receipt_payload["checks"]}
     assert enablement_receipt_checks["stage6_completion_audit_runtime_authority_handoff"]["status"] == (
-        "completion_audit_readback_observed"
+        "completion_audit_recommended_handoff_consumed"
     )
 
     generic_operator_receipt_audit_json = tmp_path / "stage6-completion-audit-operator-receipt.json"

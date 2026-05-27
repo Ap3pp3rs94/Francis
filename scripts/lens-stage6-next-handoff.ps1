@@ -2589,6 +2589,7 @@ $Stage6CompletionAuditRecommendedHandoffConsumed = (
   (
     $Stage6CompletionAuditPrerequisiteBringupEnablementReceiptHandoffObserved -and
     (
+      $Stage6CompletionAuditPrerequisiteBringupEnablementReceiptSource -eq 'stage6_prerequisite_bringup_enablement_receipt_review' -or
       -not $PersistentSupervisionResidentClaimBoundaryHandoffObserved -or
       $Stage6CompletionAuditLaunchOnHotkeyRuntimeReadbackObserved
     )

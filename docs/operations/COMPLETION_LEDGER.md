@@ -40022,6 +40022,48 @@ Latest validation for applied enablement receipt handoff consumption:
   Result: `passed; status=blocked; ready_to_close=false; ready_total=3;
   blocked_total=2; next_smallest_truthful_gap=stage6_lens_completion_audit`
 
+### 2026-05-27 - Stage 6 next-handoff consumes applied enablement receipt audit
+
+Roadmap area: Stage 6 / Lens MVP, next-handoff truthfulness after applied
+persistent-supervision enablement receipt readback.
+
+Material change:
+
+- `scripts/lens-stage6-next-handoff.ps1` now consumes a supplied Stage 6
+  completion-audit JSON payload when that audit explicitly recommends
+  `stage6_prerequisite_bringup_enablement_receipt_review`.
+- The next-handoff proof no longer asks for launch-on-hotkey runtime readback
+  before forwarding the explicit receipt-review handoff.
+- The broad generic operator-plan receipt shape remains guarded by the existing
+  launch-on-hotkey runtime-readback requirement.
+- Stage 6 still does not close and Stage 7 does not start.
+
+Latest validation for next-handoff applied receipt audit consumption:
+
+- PowerShell AST parse of `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed`
+- `python -m ruff check tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 1 file already formatted`
+- `python -m pytest
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_applied_bringup_review_state -q`
+  Result: `passed`
+- `python -m pytest tests/test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `.\scripts\lens-stage6-completion-audit.ps1 -Mode Status |
+  Set-Content .tmp\stage6-completion-audit-receipt-review-live.json;
+  .\scripts\lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath .tmp\stage6-completion-audit-receipt-review-live.json`
+  Result: `passed; ok=true; status=proof_passed;
+  next_smallest_truthful_gap=persistent_supervision_execution_boundary;
+  recommended_handoff_source=stage6_prerequisite_bringup_enablement_receipt_review;
+  recommended_next_slice=run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt;
+  stage6_completion_audit_readback_observed=true;
+  stage6_completion_audit_enablement_receipt_review_handoff_observed=true;
+  stage6_completion_audit_recommended_handoff_consumed=true;
+  stage6_completion_audit_runtime_readback_required=false`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
