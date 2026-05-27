@@ -40064,6 +40064,54 @@ Latest validation for next-handoff applied receipt audit consumption:
   stage6_completion_audit_recommended_handoff_consumed=true;
   stage6_completion_audit_runtime_readback_required=false`
 
+### 2026-05-27 - Stage 6 default next-handoff advances resident-claim audit handoff
+
+Roadmap area: Stage 6 / Lens MVP, next-handoff truthfulness after applied
+persistent-supervision enablement receipt and resident-claim boundary readback.
+
+Material change:
+
+- `scripts/lens-stage6-next-handoff.ps1` now treats an already-observed
+  persistent-supervision resident-claim boundary handoff as the default
+  completion-audit handoff when no explicit completion-audit JSON readback is
+  supplied.
+- The default next-handoff proof now sends the operator to
+  `scripts/lens-stage6-completion-audit.ps1 -Mode Status` with
+  `run_stage6_lens_completion_audit_after_resident_claim_boundary_readback`
+  instead of falling back to the stale launch-on-hotkey runtime-readback
+  requirement.
+- Explicit supplied completion-audit JSON readbacks keep their existing
+  consumed-handoff or launch-on-hotkey runtime-readback semantics; the generic
+  operator-plan receipt shape remains guarded by launch-on-hotkey readback.
+- Stage 6 still does not close and Stage 7 does not start. This only corrects
+  the next truthful operator handoff after the receipt and resident-claim
+  boundary have already been read back.
+
+Latest validation for default resident-claim audit handoff advancement:
+
+- PowerShell AST parse of `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed`
+- `python -m ruff check tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 1 file already formatted`
+- `python -m pytest
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_applied_bringup_review_state -q`
+  Result: `passed`
+- `python -m pytest tests/test_lens_stage6_next_handoff_script.py -q`
+  Result: `passed`
+- `.\scripts\lens-stage6-next-handoff.ps1 -Mode Status`
+  Result: `passed; ok=true; status=proof_passed;
+  recommended_handoff_source=persistent_supervision_resident_claim_boundary_handoff;
+  next_smallest_truthful_gap=stage6_lens_completion_audit;
+  recommended_next_slice=run_stage6_lens_completion_audit_after_resident_claim_boundary_readback;
+  recommended_proof_script=scripts/lens-stage6-completion-audit.ps1 -Mode Status;
+  stage6_completion_audit_runtime_readback_required=false;
+  recommended_next_operator_action_id=run_stage6_lens_completion_audit_after_resident_claim_boundary_readback;
+  recommended_next_operator_command=.\scripts\lens-stage6-completion-audit.ps1 -Mode Status`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -2556,7 +2556,11 @@ if ($PersistentSupervisionEnablementReceiptReviewObserved) {
   $AuthorityRequired = [string]$PersistentSupervisionEnablementReceiptReviewHandoff.authority_required
   $AuthorityGranted = [bool]$PersistentSupervisionEnablementReceiptReviewHandoff.authority_granted
 }
-if ($PersistentSupervisionResidentClaimBoundaryHandoffObserved) {
+$PersistentSupervisionResidentClaimBoundaryDefaultHandoffReady = (
+  $PersistentSupervisionResidentClaimBoundaryHandoffObserved -and
+  -not $Stage6CompletionAuditReadbackObserved
+)
+if ($PersistentSupervisionResidentClaimBoundaryDefaultHandoffReady) {
   $RecommendedHandoffSource = 'persistent_supervision_resident_claim_boundary_handoff'
   $RecommendedNextGap = [string]$PersistentSupervisionResidentClaimBoundaryHandoff.next_smallest_truthful_gap
   $RecommendedNextSlice = [string]$PersistentSupervisionResidentClaimBoundaryHandoff.next_step
@@ -2608,7 +2612,8 @@ if ($Stage6CompletionAuditRecommendedHandoffConsumed) {
 $Stage6CompletionAuditRuntimeReadbackRequired = (
   $Stage6CompletionAuditHandoffConsumedByClosureReadback -and
   -not $Stage6CompletionAuditRecommendedHandoffConsumed -and
-  -not $Stage6CompletionAuditLaunchOnHotkeyRuntimeReadbackObserved
+  -not $Stage6CompletionAuditLaunchOnHotkeyRuntimeReadbackObserved -and
+  -not $PersistentSupervisionResidentClaimBoundaryDefaultHandoffReady
 )
 if ($Stage6CompletionAuditRuntimeReadbackRequired) {
   $RecommendedHandoffSource = 'stage6_completion_audit_launch_on_hotkey_readback_required'
@@ -2656,7 +2661,7 @@ if ($Stage6CompletionAuditRecommendedHandoffConsumed) {
       ConvertTo-StringArray -Value (Get-PropertyValue -Payload $FirstBlockedCriterion -Name 'blockers')
     )
   }
-} elseif ($PersistentSupervisionResidentClaimBoundaryHandoffObserved) {
+} elseif ($PersistentSupervisionResidentClaimBoundaryDefaultHandoffReady) {
   $RecommendedHandoff = $PersistentSupervisionResidentClaimBoundaryHandoff
 } elseif ($PersistentSupervisionEnablementReceiptReviewObserved) {
   $RecommendedHandoff = $PersistentSupervisionEnablementReceiptReviewHandoff
@@ -2830,6 +2835,15 @@ if ($Stage6CompletionAuditRuntimeReadbackRequired) {
     -HostSupervisionAuthorityGrants $HostSupervisionAuthorityGrants `
     -CompletionAuditJsonPath $ResolvedCompletionAuditJsonPath
 } elseif ($Stage6CompletionAuditRecommendedHandoffConsumed) {
+  $RecommendedOperatorHandoff = New-Stage6CompletionAuditReadbackOperatorHandoff `
+    -RecommendedHandoff $RecommendedHandoff `
+    -RecommendedNextSlice $RecommendedNextSlice `
+    -RecommendedProofScript $RecommendedProofScript `
+    -RecommendedRoute $RecommendedRoute `
+    -RecommendedReadinessRoute $RecommendedReadinessRoute `
+    -AuthorityRequired $AuthorityRequired `
+    -AuthorityGranted $AuthorityGranted
+} elseif ($PersistentSupervisionResidentClaimBoundaryDefaultHandoffReady) {
   $RecommendedOperatorHandoff = New-Stage6CompletionAuditReadbackOperatorHandoff `
     -RecommendedHandoff $RecommendedHandoff `
     -RecommendedNextSlice $RecommendedNextSlice `
