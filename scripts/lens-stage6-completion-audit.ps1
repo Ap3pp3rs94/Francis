@@ -1455,6 +1455,8 @@ $BlockedCriteria = @($Criteria | Where-Object { -not [bool]$_.ready })
 $Blockers = ConvertTo-StringArray -Value $Checkpoint.blockers
 $ReadyToClose = [bool]$Checkpoint.ready_to_close
 $BlockedCriterionIds = @($BlockedCriteria | ForEach-Object { [string]$_.id })
+$HelpfulNotNoisyCriterion = $Criteria | Where-Object { [string]$_.id -eq 'helpful_not_noisy' } | Select-Object -First 1
+$SystemResidentPresenceCriterion = $Criteria | Where-Object { [string]$_.id -eq 'system_resident_presence' } | Select-Object -First 1
 $ResidentSurfaceForegroundRuntimeProof = $Checkpoint.resident_surface_foreground_runtime_proof
 $ResidentSurfaceForegroundRuntimeProofBlockers = ConvertTo-StringArray -Value $ResidentSurfaceForegroundRuntimeProof.blockers
 $ResidentSurfaceForegroundRuntimeProofEvidence = ConvertTo-StringArray -Value $ResidentSurfaceForegroundRuntimeProof.evidence
@@ -3967,6 +3969,21 @@ if (
   } else {
     'system_resident_presence'
   }
+  $RemainingAcceptanceCriterionReadback = if ($RemainingAcceptanceCriterion -eq 'helpful_not_noisy') {
+    $HelpfulNotNoisyCriterion
+  } else {
+    $SystemResidentPresenceCriterion
+  }
+  $RemainingAcceptanceCriterionNextGap = ''
+  $RemainingAcceptanceCriterionHandoff = [ordered]@{}
+  if ($null -ne $RemainingAcceptanceCriterionReadback) {
+    if ($null -ne $RemainingAcceptanceCriterionReadback.PSObject.Properties['next_smallest_truthful_gap']) {
+      $RemainingAcceptanceCriterionNextGap = [string]$RemainingAcceptanceCriterionReadback.next_smallest_truthful_gap
+    }
+    if ($null -ne $RemainingAcceptanceCriterionReadback.PSObject.Properties['handoff']) {
+      $RemainingAcceptanceCriterionHandoff = $RemainingAcceptanceCriterionReadback.handoff
+    }
+  }
   $RecommendedHandoff = [ordered]@{
     status = 'blocked'
     previous_next_smallest_truthful_gap = 'summon_anywhere_blockers'
@@ -3986,6 +4003,8 @@ if (
     route = '/lens/status'
     readiness_route = '/lens/status'
     acceptance_criterion = $RemainingAcceptanceCriterion
+    acceptance_criterion_next_smallest_truthful_gap = $RemainingAcceptanceCriterionNextGap
+    acceptance_criterion_handoff = $RemainingAcceptanceCriterionHandoff
     remaining_stage6_acceptance_blockers = [string[]]@($BlockedCriterionIds)
     ready_to_close = $ReadyToClose
     transition_allowed = $false

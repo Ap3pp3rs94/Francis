@@ -974,6 +974,16 @@ def test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_
     assert "proof_script = [string]$Stage6PrerequisiteBringupPlan.recommended_proof_script" in script
     assert "operator_plan_script = 'scripts/lens-stage6-prerequisite-bringup-plan.ps1'" in script
     assert "acceptance_criterion = 'system_resident_presence'" in script
+    assert "$SystemResidentPresenceCriterion = $Criteria | Where-Object" in script
+    assert (
+        "$RemainingAcceptanceCriterionReadback = if ($RemainingAcceptanceCriterion -eq 'helpful_not_noisy')" in script
+    )
+    assert "$RemainingAcceptanceCriterionNextGap = ''" in script
+    assert "$RemainingAcceptanceCriterionHandoff = [ordered]@{}" in script
+    assert "$RemainingAcceptanceCriterionReadback.PSObject.Properties['next_smallest_truthful_gap']" in script
+    assert "$RemainingAcceptanceCriterionReadback.PSObject.Properties['handoff']" in script
+    assert "acceptance_criterion_next_smallest_truthful_gap = $RemainingAcceptanceCriterionNextGap" in script
+    assert "acceptance_criterion_handoff = $RemainingAcceptanceCriterionHandoff" in script
     assert "next_operator_action = $Stage6PrerequisiteBringupPlanNextOperatorAction" in script
     assert "next_operator_command = $Stage6PrerequisiteBringupPlanNextOperatorCommand" in script
     assert "authority_required = [string]$Stage6PrerequisiteBringupPlan.authority_required" in script

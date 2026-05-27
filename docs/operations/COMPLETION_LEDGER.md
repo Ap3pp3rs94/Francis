@@ -39346,6 +39346,11 @@ Material change:
   `would_execute=false` and `would_mutate=false`; it does not grant host,
   overlay, tray, summon, memory, service, approval-decision, or resident-claim
   authority.
+- `scripts/lens-stage6-completion-audit.ps1` now carries the same concrete
+  acceptance-criterion handoff inside the broad
+  `stage6_remaining_acceptance_blockers_after_summon_runtime_readback`
+  recommendation. Operators can see the next system-resident boundary from the
+  completion audit without manually drilling into the checkpoint criteria.
 - Stage 6 still does not close and Stage 7 does not start.
 
 Latest validation for Stage 6 checkpoint closure handoff projection:
@@ -39370,6 +39375,31 @@ Latest validation for Stage 6 checkpoint closure handoff projection:
 - `python -m pytest
   tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_projects_closure_readback_handoffs
   tests\test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority
+  -q --tb=short`
+  Result: `passed`
+- PowerShell AST parse of `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  .\scripts\lens-stage6-completion-audit.ps1 -Mode Status -AllowLaunchOnHotkey
+  -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2
+  -ResidentSurfaceForegroundRunSeconds 2 -SupervisorRunSeconds 3
+  -ChildProofTimeoutSeconds 120`
+  Result: `passed; status=blocked; audit_status=complete;
+  child_proof_timeouts=[]; next_smallest_truthful_gap=system_resident_presence_blockers;
+  recommended_handoff_source=stage6_remaining_acceptance_blockers_after_summon_runtime_readback;
+  acceptance_criterion=system_resident_presence;
+  acceptance_criterion_next_smallest_truthful_gap=resident_host_supervision_authority_readiness_blockers;
+  acceptance_criterion_handoff_next_step=resolve_resident_host_runtime_loop_before_system_resident_claim;
+  acceptance_criterion_handoff_supervision_gap=host_supervision_authority_exact_approval_request;
+  acceptance_criterion_handoff_would_execute=false; ready_to_close=false`
+- `python -m ruff check
+  tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m pytest
+  tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_to_bringup_plan
   -q --tb=short`
   Result: `passed`
 
