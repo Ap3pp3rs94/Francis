@@ -10914,6 +10914,22 @@ function SystemPanel(props: {
                       ) : null}
                     </div>
                   ) : null}
+                  {source.latest_diagnostic ? (
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                      diagnostic <code>{source.latest_diagnostic.event_id || "event"}</code>
+                      {source.latest_diagnostic.file ? (
+                        <>
+                          {" / "}file <code>{source.latest_diagnostic.file}</code>
+                        </>
+                      ) : null}
+                      {" / "}count <code>{source.latest_diagnostic.diagnostic_count}</code>
+                      {source.latest_diagnostic.highest_severity ? (
+                        <>
+                          {" / "}severity <code>{source.latest_diagnostic.highest_severity}</code>
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {source.blocked_by.length > 0 ? (
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
                       {source.blocked_by.map((blocker) => (

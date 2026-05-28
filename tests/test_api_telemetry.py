@@ -30,7 +30,7 @@ def test_telemetry_status_projects_stage7_readonly_sources(monkeypatch, tmp_path
     }
     assert body["source_total"] == 3
     assert body["active_source_total"] == sum(1 for source in body["sources"] if source["active"])
-    assert body["next_smallest_truthful_gap"] == "stage7_terminal_connector_scope_contract"
+    assert body["next_smallest_truthful_gap"] == "stage7_context_awareness_consumed_by_assist_surfaces"
 
     sources = {source["id"]: source for source in body["sources"]}
     assert set(sources) == {"terminal", "git", "ide_diagnostics"}
@@ -41,7 +41,10 @@ def test_telemetry_status_projects_stage7_readonly_sources(monkeypatch, tmp_path
     assert sources["git"]["routes"]["status"] == "/telemetry/git/status"
     assert sources["git"]["hidden_sensing"] is False
     assert sources["git"]["authority"]["execution_authority"] is False
+    assert sources["ide_diagnostics"]["status"] == "write_scope_required"
     assert sources["ide_diagnostics"]["active"] is False
+    assert sources["ide_diagnostics"]["routes"]["record"] == "/telemetry/ide-diagnostics/events"
+    assert sources["ide_diagnostics"]["routes"]["events"] == "/telemetry/ide-diagnostics/events"
     for source in sources.values():
         assert source["visible_indicator"] is True
         assert source["hidden_sensing"] is False
@@ -208,6 +211,121 @@ def test_terminal_scope_projects_permission_without_recording(monkeypatch, tmp_p
     assert body["governance"]["grants_execution_authority"] is False
     assert body["event_count"] == 0
     assert not data_root.exists()
+
+
+def test_ide_diagnostics_telemetry_denies_event_without_actor_scope(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps({}))
+
+    client = TestClient(create_app())
+    response = client.post(
+        "/telemetry/ide-diagnostics/events",
+        json={
+            "actor": "test.telemetry.ide",
+            "reason": "record denied diagnostic",
+            "file": "src/francis/example.py",
+            "diagnostics": [{"severity": "error", "code": "E999", "message": "syntax error"}],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["status"] == "denied"
+    assert body["source_id"] == "ide_diagnostics"
+    assert body["error"] == "api_permission_denied"
+    assert body["governance"]["gate"] == "permission_gate"
+    assert body["governance"]["required_scope"] == "telemetry.ide_diagnostics.write"
+    assert body["governance"]["reason"] == "missing_scopes"
+    assert not data_root.exists()
+
+
+def test_ide_diagnostics_records_redacted_explicit_diagnostic_event(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({"test.telemetry.ide": ["telemetry.ide_diagnostics.write"]}),
+    )
+
+    client = TestClient(create_app())
+    response = client.post(
+        "/telemetry/ide-diagnostics/events",
+        json={
+            "actor": "test.telemetry.ide",
+            "reason": "record IDE diagnostic token=reasonsecret123",
+            "source": "vscode",
+            "workspace": "D:/Francis",
+            "file": "src/francis/password=filesecret123.py",
+            "diagnostics": [
+                {
+                    "severity": "error",
+                    "code": "F821",
+                    "message": "undefined name token=diagsecret123",
+                    "range": {"start_line": 7, "start_character": 3, "end_line": 7, "end_character": 20},
+                },
+                {
+                    "severity": "warning",
+                    "code": "W0611",
+                    "message": "unused import",
+                    "range": {"line": 1, "character": 0},
+                },
+            ],
+            "operation_id": "op_ide",
+            "approval_id": "apr_ide",
+            "trace_id": "trace_ide",
+            "run_id": "run_ide",
+            "tags": ["stage7", "token=tagsecret123"],
+            "meta": {"api_key": "metasecret123", "ticket": "IDE-7"},
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["status"] == "recorded"
+    assert body["governance"]["grants_execution_authority"] is False
+    assert body["governance"]["stores_file_contents"] is False
+    item = body["item"]
+    assert item["kind"] == "francis.stage7.telemetry.ide_diagnostic_event"
+    assert item["capture_mode"] == "explicit_ide_diagnostic_report"
+    assert item["hidden_sensing"] is False
+    assert item["governance"]["stores_file_contents"] is False
+    assert item["file"] == "src/francis/password=[REDACTED:secret]"
+    assert item["diagnostic_count"] == 2
+    assert item["highest_severity"] == "error"
+    assert item["diagnostics"][0]["message"] == "undefined name token=[REDACTED:secret]"
+    assert item["diagnostics"][0]["range"]["start_line"] == 7
+    assert item["meta"]["api_key"] == "[REDACTED:secret]"
+    assert item["meta"]["ticket"] == "IDE-7"
+
+    raw_text = (data_root / "logs" / "telemetry" / "ide_diagnostics.jsonl").read_text(encoding="utf-8")
+    for raw_secret in ("reasonsecret123", "filesecret123", "diagsecret123", "tagsecret123", "metasecret123"):
+        assert raw_secret not in raw_text
+
+    listed = client.get("/telemetry/ide-diagnostics/events?limit=5").json()
+    assert listed["ok"] is True
+    assert listed["total"] == 1
+    assert listed["items"][0]["event_id"] == item["event_id"]
+    assert listed["stores_file_contents"] is False
+
+    scope = client.get("/telemetry/ide-diagnostics/scope?actor=test.telemetry.ide").json()
+    assert scope["ok"] is True
+    assert scope["status"] == "write_scope_ready"
+    assert scope["required_scope"] == "telemetry.ide_diagnostics.write"
+    assert scope["governance"]["captures_file_contents"] is False
+
+    status = client.get("/telemetry/status").json()
+    sources = {source["id"]: source for source in status["sources"]}
+    assert status["active"] is True
+    assert status["claim"] == "explicit_telemetry_events_recorded"
+    assert sources["ide_diagnostics"]["active"] is True
+    assert sources["ide_diagnostics"]["status"] == "explicit_diagnostics_recorded"
+    assert sources["ide_diagnostics"]["signals"] == ["diagnostic_summary"]
+    assert sources["ide_diagnostics"]["latest_diagnostic"]["event_id"] == item["event_id"]
+    assert sources["ide_diagnostics"]["latest_diagnostic"]["file"] == "src/francis/password=[REDACTED:secret]"
+    assert sources["ide_diagnostics"]["latest_diagnostic"]["highest_severity"] == "error"
 
 
 def test_git_telemetry_status_is_readonly_snapshot(monkeypatch, tmp_path: Path) -> None:

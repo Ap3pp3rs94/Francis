@@ -53,6 +53,7 @@ def telemetry_status_snapshot() -> dict[str, Any]:
     sources = [_inactive_source(definition) for definition in _SOURCE_DEFINITIONS]
     sources = [_apply_terminal_source_readback(source) for source in sources]
     sources = [_apply_git_source_readback(source) for source in sources]
+    sources = [_apply_ide_diagnostics_source_readback(source) for source in sources]
     active_source_total = sum(1 for source in sources if source["active"])
     event_count = sum(_event_count(source) for source in sources)
     active = active_source_total > 0
@@ -102,7 +103,7 @@ def telemetry_status_snapshot() -> dict[str, Any]:
             "grants_execution_authority": False,
             "grants_memory_write_authority": False,
         },
-        "next_smallest_truthful_gap": "stage7_terminal_connector_scope_contract",
+        "next_smallest_truthful_gap": "stage7_context_awareness_consumed_by_assist_surfaces",
     }
 
 
@@ -179,6 +180,24 @@ def _apply_git_source_readback(source: dict[str, Any]) -> dict[str, Any]:
     updated["retention"] = readback["retention"]
     updated["scope"] = readback["scope"]
     updated["latest_snapshot"] = readback["latest_snapshot"]
+    updated["routes"] = readback["routes"]
+    return updated
+
+
+def _apply_ide_diagnostics_source_readback(source: dict[str, Any]) -> dict[str, Any]:
+    if source.get("id") != "ide_diagnostics":
+        return source
+    from francis.telemetry.ide_diagnostics import ide_diagnostics_source_snapshot
+
+    readback = ide_diagnostics_source_snapshot()
+    updated = dict(source)
+    updated["status"] = readback["status"]
+    updated["active"] = readback["active"]
+    updated["blocked_by"] = readback["blocked_by"]
+    updated["signals"] = readback["signals"]
+    updated["retention"] = readback["retention"]
+    updated["scope"] = readback["scope"]
+    updated["latest_diagnostic"] = readback["latest_diagnostic"]
     updated["routes"] = readback["routes"]
     return updated
 

@@ -20,6 +20,7 @@ export type TelemetrySourceStatus = {
   authority: Record<string, boolean>;
   latest_event?: TelemetryTerminalEventSummary | null;
   latest_snapshot?: TelemetryGitSnapshotSummary | null;
+  latest_diagnostic?: TelemetryIdeDiagnosticSummary | null;
   routes: Record<string, string>;
 };
 
@@ -46,6 +47,20 @@ export type TelemetryGitSnapshotSummary = {
   changed_count: number;
   changed_paths: Array<{ status: string; path: string }>;
   ts?: number;
+};
+
+export type TelemetryIdeDiagnosticSummary = {
+  event_id: string;
+  recorded_ts?: number;
+  source: string;
+  workspace: string;
+  file: string;
+  diagnostic_count: number;
+  highest_severity: string;
+  operation_id: string;
+  approval_id: string;
+  trace_id: string;
+  run_id: string;
 };
 
 export type TelemetryStatusSnapshot = {
@@ -169,6 +184,7 @@ function parseTelemetrySource(value: unknown): TelemetrySourceStatus | null {
     authority: booleanRecord(value.authority),
     latest_event: parseTerminalEventSummary(value.latest_event),
     latest_snapshot: parseGitSnapshotSummary(value.latest_snapshot),
+    latest_diagnostic: parseIdeDiagnosticSummary(value.latest_diagnostic),
     routes: stringRecord(value.routes),
   };
 }
@@ -238,6 +254,23 @@ function parseGitChangedPath(value: unknown): { status: string; path: string } |
   return {
     status: safeString(value.status, ""),
     path: safeString(value.path, ""),
+  };
+}
+
+function parseIdeDiagnosticSummary(value: unknown): TelemetryIdeDiagnosticSummary | null {
+  if (!isRecord(value)) return null;
+  return {
+    event_id: safeString(value.event_id, ""),
+    recorded_ts: safeNumberOrUndefined(value.recorded_ts),
+    source: safeString(value.source, ""),
+    workspace: safeString(value.workspace, ""),
+    file: safeString(value.file, ""),
+    diagnostic_count: safeNumber(value.diagnostic_count, 0),
+    highest_severity: safeString(value.highest_severity, ""),
+    operation_id: safeString(value.operation_id, ""),
+    approval_id: safeString(value.approval_id, ""),
+    trace_id: safeString(value.trace_id, ""),
+    run_id: safeString(value.run_id, ""),
   };
 }
 

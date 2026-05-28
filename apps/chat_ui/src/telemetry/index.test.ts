@@ -37,10 +37,10 @@ test("parseTelemetryStatus preserves Stage 7 source readback truth", () => {
     stage: "Stage 7 / Telemetry MVP",
     status: "active",
     active: true,
-    claim: "explicit_telemetry_readback_available",
+    claim: "explicit_telemetry_events_recorded",
     ts: 123,
     source_total: 3,
-    active_source_total: 1,
+    active_source_total: 2,
     sources: [
       {
         id: "terminal",
@@ -113,18 +113,56 @@ test("parseTelemetryStatus preserves Stage 7 source readback truth", () => {
           status: "/telemetry/git/status",
         },
       },
+      {
+        id: "ide_diagnostics",
+        label: "IDE diagnostics connector",
+        description: "Editor diagnostics and focused file context, once explicitly scoped.",
+        status: "explicit_diagnostics_recorded",
+        active: true,
+        visible_indicator: true,
+        hidden_sensing: false,
+        scope: {
+          status: "write_scope_required",
+          allowed_paths: [],
+          allowed_processes: [],
+          denied_by_default: true,
+        },
+        redaction: { redact_before_storage: true },
+        retention: { stores_raw_events: false, event_count: 1 },
+        signals: ["diagnostic_summary"],
+        expected_signals: ["file", "diagnostic_code"],
+        blocked_by: [],
+        authority: { ide_diagnostics: false, execution_authority: false },
+        latest_diagnostic: {
+          event_id: "tel_ide_123",
+          recorded_ts: 123,
+          source: "vscode",
+          workspace: "D:/Francis",
+          file: "src/francis/telemetry/status.py",
+          diagnostic_count: 2,
+          highest_severity: "error",
+          operation_id: "op_ide",
+          approval_id: "apr_ide",
+          trace_id: "trace_ide",
+          run_id: "run_ide",
+        },
+        routes: {
+          record: "/telemetry/ide-diagnostics/events",
+          events: "/telemetry/ide-diagnostics/events",
+        },
+      },
     ],
     redaction: { status: "ready" },
-    retention: { status: "read_only_snapshot", stores_raw_events: false, event_count: 0 },
-    sensing: { status: "explicit_readback_available", hidden_sensing: false },
+    retention: { status: "bounded_redacted_events", stores_raw_events: false, event_count: 1 },
+    sensing: { status: "explicit_events_recorded", hidden_sensing: false },
     governance: { read_only_contract: true, telemetry_collection: false },
     next_smallest_truthful_gap: "stage7_terminal_connector_scope_contract",
   });
 
   assert.equal(status.kind, "francis.stage7.telemetry.status");
   assert.equal(status.active, true);
-  assert.equal(status.active_source_total, 1);
-  assert.equal(status.claim, "explicit_telemetry_readback_available");
+  assert.equal(status.active_source_total, 2);
+  assert.equal(status.claim, "explicit_telemetry_events_recorded");
   assert.equal(status.sources[0]?.id, "terminal");
   assert.equal(status.sources[0]?.active, false);
   assert.equal(status.sources[0]?.visible_indicator, true);
@@ -138,6 +176,9 @@ test("parseTelemetryStatus preserves Stage 7 source readback truth", () => {
   assert.equal(status.sources[1]?.latest_snapshot?.dirty, true);
   assert.equal(status.sources[1]?.latest_snapshot?.changed_paths[0]?.path, "src/francis/telemetry/git.py");
   assert.equal(status.sources[1]?.routes.status, "/telemetry/git/status");
+  assert.equal(status.sources[2]?.latest_diagnostic?.event_id, "tel_ide_123");
+  assert.equal(status.sources[2]?.latest_diagnostic?.highest_severity, "error");
+  assert.equal(status.sources[2]?.routes.record, "/telemetry/ide-diagnostics/events");
   assert.equal(status.governance.telemetry_collection, false);
 });
 

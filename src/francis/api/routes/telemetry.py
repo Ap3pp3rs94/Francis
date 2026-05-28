@@ -7,6 +7,12 @@ from pydantic import BaseModel, Field
 
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.telemetry.git import git_status_snapshot
+from francis.telemetry.ide_diagnostics import (
+    IDE_DIAGNOSTIC_WRITE_SCOPE,
+    ide_diagnostics_events_snapshot,
+    ide_diagnostics_scope_snapshot,
+    record_ide_diagnostic_event,
+)
 from francis.telemetry.status import telemetry_status_snapshot
 from francis.telemetry.terminal import (
     TERMINAL_WRITE_SCOPE,
@@ -37,6 +43,21 @@ class TerminalEventIn(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
+class IdeDiagnosticEventIn(BaseModel):
+    actor: str | None = None
+    reason: str = ""
+    source: str | None = None
+    workspace: str | None = None
+    file: str | None = None
+    diagnostics: list[dict[str, Any]] = Field(default_factory=list)
+    operation_id: str | None = None
+    approval_id: str | None = None
+    trace_id: str | None = None
+    run_id: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
 @router.get("/status")
 def status() -> dict[str, Any]:
     return telemetry_status_snapshot()
@@ -44,13 +65,34 @@ def status() -> dict[str, Any]:
 
 @router.get("/terminal/scope")
 def terminal_scope(actor: str = "") -> dict[str, Any]:
-    permission = _terminal_write_permission(actor, route="/telemetry/terminal/events", method="POST")
+    permission = _write_permission(
+        actor,
+        required_scope=TERMINAL_WRITE_SCOPE,
+        route="/telemetry/terminal/events",
+        method="POST",
+    )
     return terminal_scope_snapshot(actor=actor, permission=_permission_projection(permission))
 
 
 @router.get("/terminal/events")
 def terminal_events(limit: int = 20) -> dict[str, Any]:
     return terminal_events_snapshot(limit=limit)
+
+
+@router.get("/ide-diagnostics/scope")
+def ide_diagnostics_scope(actor: str = "") -> dict[str, Any]:
+    permission = _write_permission(
+        actor,
+        required_scope=IDE_DIAGNOSTIC_WRITE_SCOPE,
+        route="/telemetry/ide-diagnostics/events",
+        method="POST",
+    )
+    return ide_diagnostics_scope_snapshot(actor=actor, permission=_permission_projection(permission))
+
+
+@router.get("/ide-diagnostics/events")
+def ide_diagnostics_events(limit: int = 20) -> dict[str, Any]:
+    return ide_diagnostics_events_snapshot(limit=limit)
 
 
 @router.get("/git/status")
@@ -60,9 +102,19 @@ def git_status(limit: int = 50) -> dict[str, Any]:
 
 @router.post("/terminal/events")
 def terminal_event(payload: TerminalEventIn) -> dict[str, Any]:
-    permission = _terminal_write_permission(payload.actor, route="/telemetry/terminal/events", method="POST")
+    permission = _write_permission(
+        payload.actor,
+        required_scope=TERMINAL_WRITE_SCOPE,
+        route="/telemetry/terminal/events",
+        method="POST",
+    )
     if not permission.allowed:
-        return _permission_denied(permission)
+        return _permission_denied(
+            permission,
+            source_id="terminal",
+            required_scope=TERMINAL_WRITE_SCOPE,
+            next_step="configure_telemetry_write_actor_scope_before_recording_terminal_events",
+        )
     item = record_terminal_event(
         actor=payload.actor,
         reason=payload.reason,
@@ -98,24 +150,78 @@ def terminal_event(payload: TerminalEventIn) -> dict[str, Any]:
     }
 
 
-def _terminal_write_permission(actor: Any, *, route: str, method: str) -> ApiPermissionDecision:
+@router.post("/ide-diagnostics/events")
+def ide_diagnostic_event(payload: IdeDiagnosticEventIn) -> dict[str, Any]:
+    permission = _write_permission(
+        payload.actor,
+        required_scope=IDE_DIAGNOSTIC_WRITE_SCOPE,
+        route="/telemetry/ide-diagnostics/events",
+        method="POST",
+    )
+    if not permission.allowed:
+        return _permission_denied(
+            permission,
+            source_id="ide_diagnostics",
+            required_scope=IDE_DIAGNOSTIC_WRITE_SCOPE,
+            next_step="configure_telemetry_write_actor_scope_before_recording_ide_diagnostics",
+        )
+    item = record_ide_diagnostic_event(
+        actor=payload.actor,
+        reason=payload.reason,
+        source=payload.source,
+        workspace=payload.workspace,
+        file=payload.file,
+        diagnostics=payload.diagnostics,
+        operation_id=payload.operation_id,
+        approval_id=payload.approval_id,
+        trace_id=payload.trace_id,
+        run_id=payload.run_id,
+        tags=payload.tags,
+        meta=payload.meta,
+    )
+    return {
+        "ok": True,
+        "kind": "francis.stage7.telemetry.ide_diagnostic_event.recorded",
+        "status": "recorded",
+        "source_id": "ide_diagnostics",
+        "item": item,
+        "governance": {
+            "gate": "permission_gate",
+            "required_scope": IDE_DIAGNOSTIC_WRITE_SCOPE,
+            "redacted_before_storage": True,
+            "stores_file_contents": False,
+            "grants_execution_authority": False,
+            "grants_memory_write_authority": False,
+        },
+    }
+
+
+def _write_permission(actor: Any, *, required_scope: str, route: str, method: str) -> ApiPermissionDecision:
     return ApiPermissionGate.from_env().check(
         actor_id=actor,
-        required_scopes=[TERMINAL_WRITE_SCOPE],
+        required_scopes=[required_scope],
         route=route,
         method=method,
     )
 
 
-def _permission_denied(decision: ApiPermissionDecision) -> dict[str, object]:
+def _permission_denied(
+    decision: ApiPermissionDecision,
+    *,
+    source_id: str,
+    required_scope: str,
+    next_step: str,
+) -> dict[str, object]:
     return {
         "ok": False,
         "status": "denied",
         "error": "api_permission_denied",
+        "source_id": source_id,
         "governance": {
             "gate": "permission_gate",
             "reason": decision.reason,
-            "next_step": "configure_telemetry_write_actor_scope_before_recording_terminal_events",
+            "required_scope": required_scope,
+            "next_step": next_step,
             "evidence": decision.evidence,
         },
     }
