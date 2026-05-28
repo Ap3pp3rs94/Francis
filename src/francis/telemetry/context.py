@@ -1,12 +1,24 @@
 from __future__ import annotations
 
+import json
+import time
+import uuid
+from pathlib import Path
 from typing import Any
 
+from francis.kernel.paths import data_dir
+from francis.telemetry.audit import record as audit_record
 from francis.telemetry.status import STAGE7_TELEMETRY_STAGE, redact_telemetry_value, telemetry_status_snapshot
 
 TELEMETRY_CONTEXT_KIND = "francis.stage7.telemetry.context"
+TELEMETRY_CONTEXT_FEEDBACK_KIND = "francis.stage7.telemetry.context_feedback"
+TELEMETRY_CONTEXT_FEEDBACK_EVENTS_KIND = "francis.stage7.telemetry.context_feedback_events"
+TELEMETRY_CONTEXT_FEEDBACK_WRITE_SCOPE = "telemetry.context.feedback.write"
 _MAX_CONTEXT_ITEMS = 12
 _MAX_PATHS = 5
+_MAX_LIMIT = 100
+_MAX_TEXT_LENGTH = 2_000
+_MAX_TAGS = 16
 
 
 def telemetry_context_snapshot(*, surface: Any = "assist") -> dict[str, Any]:
@@ -15,10 +27,12 @@ def telemetry_context_snapshot(*, surface: Any = "assist") -> dict[str, Any]:
     sources: list[Any] = raw_sources if isinstance(raw_sources, list) else []
     context_items = _context_items(sources)
     prompt_lines = _prompt_lines(context_items)
+    feedback_count = telemetry_context_feedback_count()
 
     return {
         "ok": True,
         "kind": TELEMETRY_CONTEXT_KIND,
+        "context_id": f"tel_ctx_{uuid.uuid4().hex[:12]}",
         "stage": STAGE7_TELEMETRY_STAGE,
         "surface": _redact_text(surface),
         "status": "available" if context_items else "empty",
@@ -34,6 +48,13 @@ def telemetry_context_snapshot(*, surface: Any = "assist") -> dict[str, Any]:
         "hidden_sensing": False,
         "redacted": True,
         "stores_raw_events": False,
+        "feedback": {
+            "status": "available",
+            "event_count": feedback_count,
+            "write_route": "/telemetry/context/feedback",
+            "read_route": "/telemetry/context/feedback",
+            "required_scope": TELEMETRY_CONTEXT_FEEDBACK_WRITE_SCOPE,
+        },
         "grants_execution_authority": False,
         "grants_mutation_authority": False,
         "governance": {
@@ -47,8 +68,127 @@ def telemetry_context_snapshot(*, surface: Any = "assist") -> dict[str, Any]:
             "grants_execution_authority": False,
             "grants_memory_write_authority": False,
         },
-        "next_smallest_truthful_gap": "stage7_context_awareness_action_quality_feedback",
+        "next_smallest_truthful_gap": "stage7_context_feedback_quality_review",
     }
+
+
+def record_telemetry_context_feedback(
+    *,
+    actor: Any,
+    reason: Any = "",
+    context_id: Any = "",
+    surface: Any = "",
+    rating: Any = "",
+    message_id: Any = "",
+    reply_mode: Any = "",
+    notes: Any = "",
+    source_ids: Any = None,
+    tags: Any = None,
+    meta: Any = None,
+) -> dict[str, Any]:
+    feedback_id = f"tel_ctx_feedback_{uuid.uuid4().hex[:12]}"
+    payload = {
+        "ok": True,
+        "kind": TELEMETRY_CONTEXT_FEEDBACK_KIND,
+        "feedback_id": feedback_id,
+        "stage": STAGE7_TELEMETRY_STAGE,
+        "source_id": "telemetry_context",
+        "capture_mode": "explicit_operator_feedback",
+        "hidden_sensing": False,
+        "visible_indicator": True,
+        "actor": _redact_text(actor),
+        "reason": _redact_text(reason),
+        "context_id": _redact_text(context_id),
+        "surface": _redact_text(surface),
+        "rating": _safe_rating(rating),
+        "message_id": _redact_text(message_id),
+        "reply_mode": _redact_text(reply_mode),
+        "notes": _redact_text(notes)[:_MAX_TEXT_LENGTH],
+        "source_ids": _safe_text_list(source_ids, limit=_MAX_CONTEXT_ITEMS),
+        "tags": _safe_text_list(tags, limit=_MAX_TAGS),
+        "meta": _feedback_meta(meta or {}),
+        "recorded_ts": _now_s(),
+        "governance": {
+            "permission_scope": TELEMETRY_CONTEXT_FEEDBACK_WRITE_SCOPE,
+            "redacted_before_storage": True,
+            "telemetry_is_untrusted_input": True,
+            "stores_prompt_body": False,
+            "stores_model_response": False,
+            "trains_model": False,
+            "grants_execution_authority": False,
+            "grants_memory_write_authority": False,
+        },
+    }
+    _append_line(_feedback_path(), payload)
+    audit_record(
+        "telemetry.context.feedback_recorded",
+        actor=payload["actor"],
+        reason=payload["reason"],
+        feedback_id=feedback_id,
+        context_id=payload["context_id"],
+        rating=payload["rating"],
+        surface=payload["surface"],
+    )
+    return payload
+
+
+def telemetry_context_feedback_snapshot(*, limit: int = 20) -> dict[str, Any]:
+    safe_limit = _safe_limit(limit)
+    items = read_telemetry_context_feedback(limit=safe_limit)
+    return {
+        "ok": True,
+        "kind": TELEMETRY_CONTEXT_FEEDBACK_EVENTS_KIND,
+        "stage": STAGE7_TELEMETRY_STAGE,
+        "source_id": "telemetry_context",
+        "items": items,
+        "count": len(items),
+        "total": telemetry_context_feedback_count(),
+        "limit": safe_limit,
+        "redacted": True,
+        "hidden_sensing": False,
+        "stores_prompt_body": False,
+        "stores_model_response": False,
+        "trains_model": False,
+        "grants_execution_authority": False,
+        "grants_memory_write_authority": False,
+        "governance": {
+            "capture_mode": "explicit_operator_feedback",
+            "permission_scope": TELEMETRY_CONTEXT_FEEDBACK_WRITE_SCOPE,
+            "redacted_before_storage": True,
+            "telemetry_is_untrusted_input": True,
+            "stores_prompt_body": False,
+            "stores_model_response": False,
+            "trains_model": False,
+            "grants_execution_authority": False,
+            "grants_memory_write_authority": False,
+        },
+    }
+
+
+def read_telemetry_context_feedback(*, limit: int = 20) -> list[dict[str, Any]]:
+    path = _feedback_path()
+    if not path.exists():
+        return []
+    items: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            payload = json.loads(line)
+        except Exception:
+            continue
+        if isinstance(payload, dict):
+            items.append(payload)
+    safe_limit = _safe_limit(limit)
+    return items[-safe_limit:]
+
+
+def telemetry_context_feedback_count() -> int:
+    path = _feedback_path()
+    if not path.exists():
+        return 0
+    return sum(1 for line in path.read_text(encoding="utf-8", errors="replace").splitlines() if line.strip())
 
 
 def telemetry_context_prompt_lines(context: dict[str, Any] | None) -> list[str]:
@@ -200,6 +340,76 @@ def _changed_paths(value: Any) -> list[dict[str, str]]:
     return paths
 
 
+def _feedback_path() -> Path:
+    return data_dir() / "logs" / "telemetry" / "context_feedback.jsonl"
+
+
+def _append_line(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str) + "\n")
+
+
+def _redact_jsonable(value: Any) -> Any:
+    return redact_telemetry_value(_coerce_jsonable(value))
+
+
+def _feedback_meta(value: Any) -> dict[str, Any]:
+    redacted = _redact_jsonable(value)
+    if not isinstance(redacted, dict):
+        return {}
+    blocked_keys = {
+        "message",
+        "messages",
+        "model_response",
+        "prompt",
+        "prompt_body",
+        "response",
+        "response_body",
+    }
+    return {key: item for key, item in redacted.items() if str(key).strip().lower() not in blocked_keys}
+
+
+def _coerce_jsonable(value: Any) -> Any:
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, dict):
+        return {str(key): _coerce_jsonable(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_coerce_jsonable(item) for item in value]
+    return _safe_str(value)
+
+
+def _safe_text_list(value: Any, *, limit: int) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    items: list[str] = []
+    for item in value[:limit]:
+        text = _redact_text(item).strip()
+        if text:
+            items.append(text[:_MAX_TEXT_LENGTH])
+    return items
+
+
+def _safe_rating(value: Any) -> str:
+    text = _redact_text(value).strip().lower()
+    if text in {"useful", "not_useful", "neutral"}:
+        return text
+    return "neutral"
+
+
+def _safe_limit(value: int) -> int:
+    try:
+        limit = int(value)
+    except Exception:
+        return 20
+    if limit <= 0:
+        return 20
+    return min(limit, _MAX_LIMIT)
+
+
 def _safe_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
@@ -213,7 +423,7 @@ def _safe_int(value: Any, fallback: int) -> int:
 
 def _redact_text(value: Any) -> str:
     redacted = redact_telemetry_value(_safe_str(value))
-    return _safe_str(redacted)
+    return _safe_str(redacted)[:_MAX_TEXT_LENGTH]
 
 
 def _safe_str(value: Any) -> str:
@@ -223,3 +433,7 @@ def _safe_str(value: Any) -> str:
         return str(value)
     except Exception:
         return ""
+
+
+def _now_s() -> int:
+    return int(time.time())

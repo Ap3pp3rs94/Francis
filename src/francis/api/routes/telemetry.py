@@ -6,6 +6,12 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
+from francis.telemetry.context import (
+    TELEMETRY_CONTEXT_FEEDBACK_WRITE_SCOPE,
+    record_telemetry_context_feedback,
+    telemetry_context_feedback_snapshot,
+    telemetry_context_snapshot,
+)
 from francis.telemetry.git import git_status_snapshot
 from francis.telemetry.ide_diagnostics import (
     IDE_DIAGNOSTIC_WRITE_SCOPE,
@@ -13,7 +19,6 @@ from francis.telemetry.ide_diagnostics import (
     ide_diagnostics_scope_snapshot,
     record_ide_diagnostic_event,
 )
-from francis.telemetry.context import telemetry_context_snapshot
 from francis.telemetry.status import telemetry_status_snapshot
 from francis.telemetry.terminal import (
     TERMINAL_WRITE_SCOPE,
@@ -59,6 +64,20 @@ class IdeDiagnosticEventIn(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
+class TelemetryContextFeedbackIn(BaseModel):
+    actor: str | None = None
+    reason: str = ""
+    context_id: str | None = None
+    surface: str | None = None
+    rating: str = ""
+    message_id: str | None = None
+    reply_mode: str | None = None
+    notes: str = ""
+    source_ids: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
 @router.get("/status")
 def status() -> dict[str, Any]:
     return telemetry_status_snapshot()
@@ -67,6 +86,11 @@ def status() -> dict[str, Any]:
 @router.get("/context")
 def context(surface: str = "assist") -> dict[str, Any]:
     return telemetry_context_snapshot(surface=surface)
+
+
+@router.get("/context/feedback")
+def context_feedback(limit: int = 20) -> dict[str, Any]:
+    return telemetry_context_feedback_snapshot(limit=limit)
 
 
 @router.get("/terminal/scope")
@@ -104,6 +128,53 @@ def ide_diagnostics_events(limit: int = 20) -> dict[str, Any]:
 @router.get("/git/status")
 def git_status(limit: int = 50) -> dict[str, Any]:
     return git_status_snapshot(limit=limit)
+
+
+@router.post("/context/feedback")
+def context_feedback_event(payload: TelemetryContextFeedbackIn) -> dict[str, Any]:
+    permission = _write_permission(
+        payload.actor,
+        required_scope=TELEMETRY_CONTEXT_FEEDBACK_WRITE_SCOPE,
+        route="/telemetry/context/feedback",
+        method="POST",
+    )
+    if not permission.allowed:
+        return _permission_denied(
+            permission,
+            source_id="telemetry_context",
+            required_scope=TELEMETRY_CONTEXT_FEEDBACK_WRITE_SCOPE,
+            next_step="configure_telemetry_context_feedback_actor_scope_before_recording_feedback",
+        )
+    item = record_telemetry_context_feedback(
+        actor=payload.actor,
+        reason=payload.reason,
+        context_id=payload.context_id,
+        surface=payload.surface,
+        rating=payload.rating,
+        message_id=payload.message_id,
+        reply_mode=payload.reply_mode,
+        notes=payload.notes,
+        source_ids=payload.source_ids,
+        tags=payload.tags,
+        meta=payload.meta,
+    )
+    return {
+        "ok": True,
+        "kind": "francis.stage7.telemetry.context_feedback.recorded",
+        "status": "recorded",
+        "source_id": "telemetry_context",
+        "item": item,
+        "governance": {
+            "gate": "permission_gate",
+            "required_scope": TELEMETRY_CONTEXT_FEEDBACK_WRITE_SCOPE,
+            "redacted_before_storage": True,
+            "stores_prompt_body": False,
+            "stores_model_response": False,
+            "trains_model": False,
+            "grants_execution_authority": False,
+            "grants_memory_write_authority": False,
+        },
+    }
 
 
 @router.post("/terminal/events")

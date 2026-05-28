@@ -30,7 +30,7 @@ def test_telemetry_status_projects_stage7_readonly_sources(monkeypatch, tmp_path
     }
     assert body["source_total"] == 3
     assert body["active_source_total"] == sum(1 for source in body["sources"] if source["active"])
-    assert body["next_smallest_truthful_gap"] == "stage7_context_awareness_action_quality_feedback"
+    assert body["next_smallest_truthful_gap"] == "stage7_context_feedback_quality_review"
 
     sources = {source["id"]: source for source in body["sources"]}
     assert set(sources) == {"terminal", "git", "ide_diagnostics"}
@@ -138,7 +138,11 @@ def test_telemetry_context_projects_redacted_assist_surface(monkeypatch, tmp_pat
     assert body["grants_execution_authority"] is False
     assert body["governance"]["does_not_expand_collection_scope"] is True
     assert body["governance"]["telemetry_is_untrusted_input"] is True
-    assert body["next_smallest_truthful_gap"] == "stage7_context_awareness_action_quality_feedback"
+    assert body["feedback"]["event_count"] == 0
+    assert body["feedback"]["write_route"] == "/telemetry/context/feedback"
+    assert body["feedback"]["read_route"] == "/telemetry/context/feedback"
+    assert body["feedback"]["required_scope"] == "telemetry.context.feedback.write"
+    assert body["next_smallest_truthful_gap"] == "stage7_context_feedback_quality_review"
 
     source_ids = {item["source_id"] for item in body["context_items"]}
     assert "terminal" in source_ids
@@ -155,6 +159,122 @@ def test_telemetry_context_projects_redacted_assist_surface(monkeypatch, tmp_pat
     ):
         assert raw_secret not in context_text
     assert "[REDACTED:secret]" in context_text
+
+
+def test_telemetry_context_feedback_denies_event_without_actor_scope(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps({}))
+
+    client = TestClient(create_app())
+    response = client.post(
+        "/telemetry/context/feedback",
+        json={
+            "actor": "test.telemetry.feedback",
+            "reason": "record denied feedback",
+            "context_id": "tel_ctx_denied",
+            "surface": "chat",
+            "rating": "useful",
+            "notes": "denied",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["status"] == "denied"
+    assert body["source_id"] == "telemetry_context"
+    assert body["error"] == "api_permission_denied"
+    assert body["governance"]["gate"] == "permission_gate"
+    assert body["governance"]["required_scope"] == "telemetry.context.feedback.write"
+    assert body["governance"]["reason"] == "missing_scopes"
+    assert not data_root.exists()
+
+
+def test_telemetry_context_feedback_records_redacted_explicit_feedback(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({"test.telemetry.feedback": ["telemetry.context.feedback.write"]}),
+    )
+
+    client = TestClient(create_app())
+    response = client.post(
+        "/telemetry/context/feedback",
+        json={
+            "actor": "test.telemetry.feedback",
+            "reason": "record context feedback token=reasonsecret123",
+            "context_id": "tel_ctx token=ctxsecret123",
+            "surface": "chat",
+            "rating": "useful",
+            "message_id": "msg token=messagesecret123",
+            "reply_mode": "llm",
+            "notes": "good context token=notessecret123",
+            "source_ids": ["terminal", "git", "token=sourcesecret123"],
+            "tags": ["stage7", "token=tagsecret123"],
+            "meta": {
+                "api_key": "metasecret123",
+                "prompt_body": "do not store raw prompt token=promptsecret123",
+                "model_response": "do not store raw response token=responsesecret123",
+                "ticket": "TEL-FEEDBACK",
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["status"] == "recorded"
+    assert body["source_id"] == "telemetry_context"
+    assert body["governance"]["required_scope"] == "telemetry.context.feedback.write"
+    assert body["governance"]["stores_prompt_body"] is False
+    assert body["governance"]["stores_model_response"] is False
+    assert body["governance"]["trains_model"] is False
+    assert body["governance"]["grants_execution_authority"] is False
+    item = body["item"]
+    assert item["kind"] == "francis.stage7.telemetry.context_feedback"
+    assert item["capture_mode"] == "explicit_operator_feedback"
+    assert item["hidden_sensing"] is False
+    assert item["visible_indicator"] is True
+    assert item["rating"] == "useful"
+    assert item["context_id"] == "tel_ctx token=[REDACTED:secret]"
+    assert item["message_id"] == "msg token=[REDACTED:secret]"
+    assert item["source_ids"] == ["terminal", "git", "token=[REDACTED:secret]"]
+    assert item["meta"]["api_key"] == "[REDACTED:secret]"
+    assert item["meta"]["ticket"] == "TEL-FEEDBACK"
+    assert "prompt_body" not in item["meta"]
+    assert "model_response" not in item["meta"]
+    assert item["governance"]["stores_prompt_body"] is False
+    assert item["governance"]["stores_model_response"] is False
+    assert item["governance"]["trains_model"] is False
+    assert item["governance"]["grants_memory_write_authority"] is False
+
+    raw_text = (data_root / "logs" / "telemetry" / "context_feedback.jsonl").read_text(encoding="utf-8")
+    for raw_secret in (
+        "reasonsecret123",
+        "ctxsecret123",
+        "messagesecret123",
+        "notessecret123",
+        "sourcesecret123",
+        "tagsecret123",
+        "metasecret123",
+        "promptsecret123",
+        "responsesecret123",
+    ):
+        assert raw_secret not in raw_text
+
+    listed = client.get("/telemetry/context/feedback?limit=5").json()
+    assert listed["ok"] is True
+    assert listed["total"] == 1
+    assert listed["count"] == 1
+    assert listed["items"][0]["feedback_id"] == item["feedback_id"]
+    assert listed["governance"]["trains_model"] is False
+    assert listed["governance"]["grants_execution_authority"] is False
+
+    context = client.get("/telemetry/context?surface=chat").json()
+    assert context["feedback"]["event_count"] == 1
+    assert context["feedback"]["required_scope"] == "telemetry.context.feedback.write"
 
 
 def test_terminal_telemetry_denies_event_without_actor_scope(monkeypatch, tmp_path: Path) -> None:

@@ -41988,6 +41988,46 @@ Latest validation for Stage 7 assist-context consumption:
   src/telemetry/index.test.ts`
   Result: `passed; 4 passed`
 
+### 2026-05-28 - Stage 7 telemetry context feedback is governed and auditable
+
+Roadmap area: Stage 7 / Telemetry MVP, action-quality feedback for context-aware
+assistance.
+
+Material change:
+
+- Telemetry context now exposes explicit feedback posture on `/telemetry/context`
+  and bounded feedback readback through `/telemetry/context/feedback`.
+- Operators can record context-assistance feedback through
+  `/telemetry/context/feedback` only when the actor has
+  `telemetry.context.feedback.write`.
+- Feedback is redacted before storage, written as explicit operator feedback,
+  and audited through `telemetry.context.feedback_recorded`.
+- The feedback path does not store raw prompt bodies, raw model responses, train
+  a model, write memory, mutate files, start sensing, or grant execution
+  authority.
+- `/telemetry/status` and `/telemetry/context` now advance their next smallest
+  truthful gap to `stage7_context_feedback_quality_review`.
+
+Latest validation for Stage 7 context-feedback readback:
+
+- `python -m pytest tests/test_api_telemetry.py tests/test_api_chat.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short`
+  Result: `passed; 18 passed`
+- `python -m mypy src/francis/telemetry/context.py
+  src/francis/telemetry/status.py src/francis/api/routes/telemetry.py`
+  Result: `passed`
+- `python -m ruff check src/francis/telemetry/context.py
+  src/francis/telemetry/status.py src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/telemetry/context.py
+  src/francis/telemetry/status.py src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
