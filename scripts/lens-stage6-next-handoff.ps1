@@ -3229,6 +3229,67 @@ $RecommendedConcreteAuthorityRequired = [string](
 $RecommendedConcreteAuthorityGranted = [bool](
   Get-PropertyValue -Payload $RecommendedConcreteHandoff -Name 'authority_granted' -Default $AuthorityGranted
 )
+$RecommendedConcreteHostSupervisionAuthorityHandoff = Get-PropertyValue `
+  -Payload $RecommendedConcreteHandoff `
+  -Name 'supervision_authority_first_blocked_requirement_handoff' `
+  -Default ([ordered]@{})
+$RecommendedConcreteHostSupervisionAuthorityOperatorSourceHandoff = [ordered]@{
+  host_supervision_authority_first_blocked_requirement = [string](
+    Get-PropertyValue `
+      -Payload $RecommendedConcreteHandoff `
+      -Name 'supervision_authority_first_blocked_requirement' `
+      -Default ''
+  )
+  host_supervision_authority_first_blocked_requirement_handoff = $RecommendedConcreteHostSupervisionAuthorityHandoff
+}
+$RecommendedConcreteHostSupervisionAuthorityOperatorHandoffObserved = (
+  $Stage6CompletionAuditRecommendedHandoffConsumed -and
+  $RecommendedConcreteHandoffSource -eq 'stage6_remaining_acceptance_system_resident_presence_handoff' -and
+  $RecommendedConcreteNextSlice -eq 'resolve_resident_host_runtime_loop_before_system_resident_claim' -and
+  $RecommendedConcreteNextGap -eq 'resident_host_supervision_authority_readiness_blockers' -and
+  [string](
+    Get-PropertyValue `
+      -Payload $RecommendedConcreteHandoff `
+      -Name 'supervision_authority_first_blocked_requirement' `
+      -Default ''
+  ) -eq 'exact_supervision_authority_approval' -and
+  [string](
+    Get-PropertyValue `
+      -Payload $RecommendedConcreteHostSupervisionAuthorityHandoff `
+      -Name 'next_step' `
+      -Default ''
+  ) -eq 'create_or_select_exact_approved_host_supervision_authority_request' -and
+  [string](
+    Get-PropertyValue `
+      -Payload $RecommendedConcreteHostSupervisionAuthorityHandoff `
+      -Name 'approval_action' `
+      -Default ''
+  ) -eq 'lens.host.supervision_authority' -and
+  [string](
+    Get-PropertyValue `
+      -Payload $RecommendedConcreteHostSupervisionAuthorityHandoff `
+      -Name 'authority_required' `
+      -Default ''
+  ) -eq 'operator_approval' -and
+  -not [bool](
+    Get-PropertyValue `
+      -Payload $RecommendedConcreteHostSupervisionAuthorityHandoff `
+      -Name 'authority_granted' `
+      -Default $true
+  ) -and
+  -not [bool](
+    Get-PropertyValue `
+      -Payload $RecommendedConcreteHostSupervisionAuthorityHandoff `
+      -Name 'would_execute' `
+      -Default $true
+  ) -and
+  -not [bool](
+    Get-PropertyValue `
+      -Payload $RecommendedConcreteHostSupervisionAuthorityHandoff `
+      -Name 'would_mutate' `
+      -Default $true
+  )
+)
 $RecommendedConcreteExecutionHandoffObserved = (
   $Stage6CompletionAuditPersistentSupervisionApiExecutionHandoffObserved -and
   -not [string]::IsNullOrWhiteSpace($RecommendedConcreteNextSlice) -and
@@ -3313,6 +3374,14 @@ if ($Stage6CompletionAuditRuntimeReadbackRequired) {
 ) {
   $RecommendedOperatorHandoff = New-HostSupervisionAuthorityRequestOperatorHandoff `
     -SourceHandoff $RecommendedHandoff `
+    -HostSupervisionAuthorityRequests $HostSupervisionAuthorityRequests `
+    -HostSupervisionAuthorityGrants $HostSupervisionAuthorityGrants `
+    -CompletionAuditJsonPath $ResolvedCompletionAuditJsonPath
+} elseif (
+  $RecommendedConcreteHostSupervisionAuthorityOperatorHandoffObserved
+) {
+  $RecommendedOperatorHandoff = New-HostSupervisionAuthorityRequestOperatorHandoff `
+    -SourceHandoff $RecommendedConcreteHostSupervisionAuthorityOperatorSourceHandoff `
     -HostSupervisionAuthorityRequests $HostSupervisionAuthorityRequests `
     -HostSupervisionAuthorityGrants $HostSupervisionAuthorityGrants `
     -CompletionAuditJsonPath $ResolvedCompletionAuditJsonPath
@@ -3537,6 +3606,7 @@ $Payload = [ordered]@{
   stage6_completion_audit_remaining_acceptance_handoff_observed = $Stage6CompletionAuditRemainingAcceptanceHandoffObserved
   stage6_completion_audit_system_resident_acceptance_handoff_observed = $Stage6CompletionAuditSystemResidentAcceptanceHandoffObserved
   stage6_completion_audit_system_resident_current_acceptance_handoff_observed = $Stage6CompletionAuditSystemResidentCurrentAcceptanceHandoffObserved
+  stage6_completion_audit_system_resident_host_supervision_operator_handoff_observed = $RecommendedConcreteHostSupervisionAuthorityOperatorHandoffObserved
   stage6_completion_audit_reviewed_summon_first_blocker_handoff_observed = $Stage6CompletionAuditReviewedSummonFirstBlockerHandoffObserved
   stage6_completion_audit_reviewed_summon_authority_handoff_observed = $Stage6CompletionAuditReviewedSummonAuthorityHandoffObserved
   stage6_completion_audit_summon_authority_request_bundle_handoff_observed = $Stage6CompletionAuditSummonAuthorityRequestBundleHandoffObserved

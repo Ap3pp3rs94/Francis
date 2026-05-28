@@ -942,6 +942,7 @@ def test_lens_stage6_next_handoff_promotes_system_resident_acceptance_boundary(t
     assert payload["next_smallest_truthful_gap"] == "system_resident_presence_blockers"
     assert payload["stage6_completion_audit_remaining_acceptance_handoff_observed"] is True
     assert payload["stage6_completion_audit_system_resident_acceptance_handoff_observed"] is True
+    assert payload["stage6_completion_audit_system_resident_host_supervision_operator_handoff_observed"] is True
     assert payload["recommended_concrete_handoff_source"] == (
         "stage6_remaining_acceptance_system_resident_presence_handoff"
     )
@@ -970,6 +971,27 @@ def test_lens_stage6_next_handoff_promotes_system_resident_acceptance_boundary(t
     assert concrete_handoff["supervision_authority_first_blocked_requirement_handoff"]["approval_action"] == (
         "lens.host.supervision_authority"
     )
+    assert payload["recommended_operator_handoff"]["source"] == ("host_supervision_authority_readiness_handoff")
+    assert payload["recommended_operator_handoff"]["status"] == "operator_action_available"
+    assert payload["recommended_next_operator_action_requirement"] == "exact_supervision_authority_approval"
+    assert payload["recommended_next_operator_action"]["id"] == "request_host_supervision_authority"
+    assert payload["recommended_next_operator_action"]["route"] == "/lens/host/supervision/authority/request"
+    assert payload["recommended_next_operator_action"]["requests_route"] == "/lens/host/supervision/authority/requests"
+    assert payload["recommended_next_operator_action"]["readiness_route"] == (
+        "/lens/host/supervision/authority/readiness"
+    )
+    assert payload["recommended_next_operator_action"]["approval_action"] == "lens.host.supervision_authority"
+    assert payload["recommended_next_operator_action"]["script_would_execute"] is False
+    assert payload["recommended_next_operator_action"]["script_would_mutate"] is False
+    assert payload["recommended_next_operator_action"]["script_would_request_authority"] is True
+    assert payload["recommended_next_operator_action"]["script_would_grant_authority"] is False
+    assert payload["recommended_next_operator_action"]["script_would_decide_approval"] is False
+    assert payload["recommended_next_operator_command"]["mode"] == "ApiRequest"
+    assert payload["recommended_next_operator_command"]["route"] == "/lens/host/supervision/authority/request"
+    assert payload["recommended_next_operator_command"]["method"] == "POST"
+    assert payload["recommended_next_operator_command"]["requires_confirmation"] is True
+    assert payload["recommended_next_operator_command"]["requires_explicit_operator_opt_in"] is True
+    assert payload["recommended_next_operator_command"]["requires_actor"] is True
 
 
 def test_lens_stage6_next_handoff_prefers_ready_concrete_over_stale_system_resident_handoff(

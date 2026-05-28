@@ -40734,6 +40734,66 @@ Latest validation for system-resident acceptance concrete handoff promotion:
   recommended_concrete_proof_script=scripts/lens-host-runtime-loop-readiness-proof.ps1
   -Mode Status`
 
+### 2026-05-27 - Stage 6 system-resident host-supervision operator handoff
+
+Roadmap area: Stage 6 / Lens MVP, system-resident presence and governed host
+supervision authority handoff.
+
+Material change:
+
+- The Stage 6 next-handoff proof now recognizes when the
+  `stage6_remaining_acceptance_system_resident_presence_handoff` concrete
+  payload already carries the exact host-supervision authority blocker.
+- In that state, the operator handoff now uses the existing
+  `host_supervision_authority_readiness_handoff` machinery instead of falling
+  back to a generic local-script review of `/lens/status`.
+- The handoff can truthfully request, wait on, select, or review an existing
+  host-supervision authority request/grant based on current readback. In status
+  mode it does not approve, grant, execute, mutate, launch, supervise, write
+  memory, or claim resident state.
+- Stage 6 remains active and blocked. The broad closure posture is still
+  `system_resident_presence_blockers`; Stage 7 has not started.
+
+Latest validation for system-resident host-supervision operator handoff:
+
+- PowerShell AST parse of `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 1 file already formatted`
+- `python -m pytest
+  tests\test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_promotes_system_resident_acceptance_boundary
+  tests\test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_prefers_ready_concrete_over_stale_system_resident_handoff
+  tests\test_lens_host_supervision_authority_request_proof_script.py::test_lens_host_supervision_authority_request_proof_consumes_exact_request
+  -q`
+  Result: `passed; 3 passed`
+- `.\scripts\lens-host-supervision-authority-request-proof.ps1 -Mode Status`
+  Result: `passed; ok=true; status=proof_passed;
+  previous_next_smallest_truthful_gap=host_supervision_authority_exact_approval_request;
+  next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing;
+  request_status=approval_requested; pending_grant_status=blocked;
+  grant_status=authority_granted; executed=false; memory_write=false;
+  runtime_files.lens_host_status=false; runtime_files.lens_host_pid=false;
+  runtime_files.lens_host_supervisor_status=false`
+- `.\scripts\lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath
+  .tmp\stage6-completion-audit-after-system-resident-concrete-handoff.json`
+  Result: `passed; ok=true; status=proof_passed;
+  recommended_concrete_handoff_source=stage6_remaining_acceptance_system_resident_presence_handoff;
+  recommended_concrete_next_slice=resolve_resident_host_runtime_loop_before_system_resident_claim;
+  stage6_completion_audit_system_resident_host_supervision_operator_handoff_observed=true;
+  recommended_operator_handoff.source=host_supervision_authority_readiness_handoff;
+  recommended_operator_handoff.status=approved_authority_request_selected;
+  recommended_next_operator_action_requirement=exact_supervision_authority_approval;
+  recommended_next_operator_action.id=select_exact_approved_host_supervision_authority_request;
+  recommended_next_operator_action.script_would_request_authority=false;
+  recommended_next_operator_action.script_would_grant_authority=false;
+  recommended_next_operator_action.script_would_decide_approval=false;
+  recommended_next_operator_action.script_would_execute=false;
+  recommended_next_operator_action.script_would_mutate=false`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
