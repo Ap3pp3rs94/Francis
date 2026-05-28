@@ -1315,8 +1315,7 @@ $Stage6AppliedEnablementResidentClaimBoundaryReadbackObserved = (
 )
 $Stage6PrerequisiteBringupAppliedEnablementReceiptReviewPending = (
   $Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and
-  $Stage6PrerequisiteBringupPlanNextOperatorActionId -eq 'review_persistent_supervision_enablement_receipt' -and
-  -not $Stage6AppliedEnablementResidentClaimBoundaryReadbackObserved
+  $Stage6PrerequisiteBringupPlanNextOperatorActionId -eq 'review_persistent_supervision_enablement_receipt'
 )
 $PersistentSupervisionEnablementTransitionPlanProofSiblingChildProofCount = 3
 $PersistentSupervisionEnablementTransitionPlanProofChildTimeoutSeconds = [Math]::Min(
@@ -3634,6 +3633,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   -not $ReadyToClose -and
   $BlockedCriterionIds -contains 'system_resident_presence' -and
   $Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and
+  -not $Stage6PrerequisiteBringupAppliedEnablementReceiptReviewPending -and
   $ResidentHostProcessSupervisionEvidenceObserved -and
   $ResidentSupervisionPersistenceBoundaryProofObserved -and
   $HostSupervisionAuthorityReadinessEvidenceObserved -and
@@ -7773,6 +7773,8 @@ $Payload = [ordered]@{
     ok = $Stage6PrerequisiteBringupPlanObserved
     missing_prerequisites_readback = $Stage6PrerequisiteBringupPlanMissingPrerequisitesObserved
     applied_enablement_readback = $Stage6PrerequisiteBringupPlanAppliedEnablementObserved
+    applied_enablement_receipt_review_pending = $Stage6PrerequisiteBringupAppliedEnablementReceiptReviewPending
+    applied_enablement_resident_claim_boundary_readback = $Stage6AppliedEnablementResidentClaimBoundaryReadbackObserved
     read_only_governance_readback = $Stage6PrerequisiteBringupPlanReadOnlyGovernanceObserved
     exit_code = [int]$Stage6PrerequisiteBringupPlanResult.exit_code
     evidence = [string[]]@(ConvertTo-StringArray -Value $Stage6PrerequisiteBringupPlan.evidence)
@@ -7784,6 +7786,8 @@ $Payload = [ordered]@{
     missing_required_before_enable = [string[]]@($Stage6PrerequisiteBringupPlanMissingRequiredBeforeEnable)
     required_before_enable_ready = [bool]$Stage6PrerequisiteBringupPlan.required_before_enable_ready
     next_operator_action_requirement = [string]$Stage6PrerequisiteBringupPlan.next_operator_action_requirement
+    recommended_next_slice = [string]$Stage6PrerequisiteBringupPlan.recommended_next_slice
+    recommended_proof_script = [string]$Stage6PrerequisiteBringupPlan.recommended_proof_script
     next_operator_action = $Stage6PrerequisiteBringupPlanNextOperatorAction
     next_operator_command = $Stage6PrerequisiteBringupPlanNextOperatorCommand
     operator_sequence_command_availability = $Stage6PrerequisiteBringupPlanCommandAvailability

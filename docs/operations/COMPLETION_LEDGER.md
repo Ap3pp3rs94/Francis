@@ -40551,6 +40551,67 @@ Latest validation for consumed summon-authority handoff advancement:
   summon_api_launch_on_hotkey_proof.ok=true;
   hotkey_launch_on_press=true; cleanup_errors=[]`
 
+### 2026-05-27 - Stage 6 completion audit honors applied enablement receipt handoff
+
+Roadmap area: Stage 6 / Lens MVP, persistent-supervision execution-boundary
+handoff truthfulness.
+
+Material change:
+
+- The Stage 6 completion audit now lets the applied persistent-supervision
+  enablement receipt-review state win over stale prerequisite-missing child proof
+  projections after the prerequisite bring-up plan reports
+  `persistent_supervision_enablement_applied`.
+- The stale prerequisite guard remains intact for earlier states, but it is now
+  blocked when the bring-up plan's next operator action is the read-only
+  `review_persistent_supervision_enablement_receipt` handoff.
+- The audit payload now exposes whether the applied enablement receipt review is
+  pending and whether resident-claim boundary readback was already observed, so
+  the selector state is visible instead of inferred from the recommended
+  handoff.
+- Stage 6 remains active and blocked. The audit still reports
+  `ready_to_close=false`, `can_close_stage6=false`, and
+  `transition_allowed=false`; Stage 7 has not started.
+
+Latest validation for applied-enablement receipt handoff arbitration:
+
+- PowerShell AST parse of `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 1 file already formatted`
+- `python -m pytest
+  tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_consumes_stage6_prerequisite_bringup_plan_readback
+  tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_readback
+  tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_prefers_closure_handoff_after_resident_claim_boundary
+  -q`
+  Result: `passed; 3 passed`
+- `.\scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -AllowLaunchOnHotkey -ChildProofTimeoutSeconds 120`
+  Result: `passed; ok=true; status=blocked; audit_status=complete;
+  ready_to_close=false; can_close_stage6=false; transition_allowed=false;
+  child_proof_runs=24; child_proof_timeouts=[];
+  next_smallest_truthful_gap=persistent_supervision_execution_boundary;
+  recommended_handoff_source=stage6_prerequisite_bringup_enablement_receipt_review;
+  recommended_next_slice=run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt;
+  recommended_proof_script=scripts/lens-stage6-prerequisite-bringup-plan.ps1
+  -Mode Status; authority_required=none_readback_only;
+  authority_granted=false`
+- `.\scripts\lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath
+  .tmp\stage6-completion-audit-after-applied-enable-receipt-selector.json`
+  Result: `passed; ok=true; status=proof_passed;
+  next_smallest_truthful_gap=persistent_supervision_execution_boundary;
+  recommended_handoff_source=stage6_prerequisite_bringup_enablement_receipt_review;
+  recommended_next_slice=run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt;
+  recommended_proof_script=scripts/lens-stage6-prerequisite-bringup-plan.ps1
+  -Mode Status; authority_required=none_readback_only;
+  authority_granted=false; stage6_completion_audit_handoff_consumed=true;
+  receipt_review_status=receipt_reviewed;
+  resident_claim_boundary_handoff_observed=true`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

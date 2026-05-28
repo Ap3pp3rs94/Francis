@@ -344,8 +344,21 @@ def test_lens_stage6_completion_audit_consumes_stage6_prerequisite_bringup_plan_
         "[string]$Stage6PrerequisiteBringupPlan.current_truthful_gap -eq 'persistent_supervision_execution_boundary'"
     ) in script
     assert "$Stage6AppliedEnablementResidentClaimBoundaryReadbackObserved = (" in script
-    assert "-not $Stage6AppliedEnablementResidentClaimBoundaryReadbackObserved" in script
+    receipt_review_pending_block = script[
+        script.index("$Stage6PrerequisiteBringupAppliedEnablementReceiptReviewPending = (") : script.index(
+            "$PersistentSupervisionEnablementTransitionPlanProofSiblingChildProofCount"
+        )
+    ]
+    assert "-not $Stage6AppliedEnablementResidentClaimBoundaryReadbackObserved" not in receipt_review_pending_block
     assert "stage6_prerequisite_bringup_plan_applied_enablement_readback" in script
+    assert (
+        "applied_enablement_receipt_review_pending = "
+        "$Stage6PrerequisiteBringupAppliedEnablementReceiptReviewPending" in script
+    )
+    assert (
+        "applied_enablement_resident_claim_boundary_readback = "
+        "$Stage6AppliedEnablementResidentClaimBoundaryReadbackObserved" in script
+    )
     assert "'resident_host_process_not_supervised'" in script
     assert "'resident_supervision_not_persistent'" in script
     assert "$Stage6PrerequisiteBringupPlanResidentHostActionObserved = (" in script
@@ -402,6 +415,7 @@ def test_lens_stage6_completion_audit_consumes_stage6_prerequisite_bringup_plan_
     applied_enablement_prerequisite_guard_branch = (
         "$BlockedCriterionIds -contains 'system_resident_presence' -and\n"
         "  $Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and\n"
+        "  -not $Stage6PrerequisiteBringupAppliedEnablementReceiptReviewPending -and\n"
         "  $ResidentHostProcessSupervisionEvidenceObserved -and\n"
         "  $ResidentSupervisionPersistenceBoundaryProofObserved -and\n"
         "  $HostSupervisionAuthorityReadinessEvidenceObserved -and\n"
@@ -1530,8 +1544,7 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
     assert (
         "$Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and\n"
         "  $Stage6PrerequisiteBringupPlanNextOperatorActionId "
-        "-eq 'review_persistent_supervision_enablement_receipt' -and\n"
-        "  -not $Stage6AppliedEnablementResidentClaimBoundaryReadbackObserved\n)" in script
+        "-eq 'review_persistent_supervision_enablement_receipt'\n)" in script
     )
     assert (
         "$NextSmallestTruthfulGap -eq 'persistent_supervision_execution_boundary' -and\n"
