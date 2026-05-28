@@ -5960,6 +5960,7 @@ if ($SystemResidentHostSupervisionAuthorityRequestProofConcreteHandoffObserved) 
   $RecommendedConcreteHandoff['runtime_files'] = $HostSupervisionAuthorityRequestProofRuntimeFiles
 }
 $SystemResidentPersistentSupervisionFirstMissingRequirementConcreteHandoffObserved = (
+  $NextSmallestTruthfulGap -ne 'system_resident_presence_blockers' -and
   $SystemResidentHostSupervisionAuthorityRequestProofConcreteHandoffObserved -and
   $PersistentSupervisionPrerequisitesProofObserved -and
   -not [string]::IsNullOrWhiteSpace($PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable) -and
@@ -5994,18 +5995,38 @@ $PersistentSupervisionFirstMissingTrayConcreteHandoffObserved = (
   [string]$RecommendedConcreteHandoff.next_smallest_truthful_gap -eq 'summon_tray_presence_blocker_boundary' -and
   [bool]$RecommendedConcreteHandoff.consumed_persistent_supervision_prerequisites_proof
 )
-$PersistentSupervisionTrayPrerequisiteRuntimeChainConcreteObserved = (
+$PersistentSupervisionFirstMissingRequirementConcreteHandoffObserved = (
+  $RecommendedConcreteHandoffSource -eq 'persistent_supervision_prerequisites_first_missing_requirement_handoff' -and
+  [string]$RecommendedConcreteHandoff.id -eq $PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable -and
+  [bool]$RecommendedConcreteHandoff.consumed_persistent_supervision_prerequisites_proof
+)
+$PersistentSupervisionFirstMissingRuntimeProofObserved = (
+  (
+    $PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable -eq 'tray_presence' -and
+    $TrayPresenceApiExecutionProofObserved
+  ) -or (
+    $PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable -eq 'global_hotkey_binding' -and
+    $OsBindingApiExecutionProofObserved
+  ) -or (
+    $PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable -eq 'overlay_window' -and
+    $OverlayApiExecutionProofObserved
+  ) -or (
+    $PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable -eq 'summon_binding' -and
+    $SummonApiBoundedExecutionProofObserved
+  )
+)
+$PersistentSupervisionPrerequisiteRuntimeChainConcreteObserved = (
+  $NextSmallestTruthfulGap -ne 'system_resident_presence_blockers' -and
   (
     $NextSmallestTruthfulGap -eq 'persistent_supervision_required_prerequisites_missing' -or
-    $PersistentSupervisionFirstMissingTrayConcreteHandoffObserved
+    $PersistentSupervisionFirstMissingTrayConcreteHandoffObserved -or
+    $PersistentSupervisionFirstMissingRequirementConcreteHandoffObserved
   ) -and
   $PersistentSupervisionPrerequisitesProofObserved -and
-  $PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable -eq 'tray_presence' -and
-  $TrayPresenceApiExecutionProofObserved
+  $PersistentSupervisionFirstMissingRuntimeProofObserved
 )
 if (
-  $NextSmallestTruthfulGap -ne 'system_resident_presence_blockers' -and
-  $PersistentSupervisionTrayPrerequisiteRuntimeChainConcreteObserved -and
+  $PersistentSupervisionPrerequisiteRuntimeChainConcreteObserved -and
   $PersistentSupervisionApiExecutionProofObserved
 ) {
   $RecommendedConcreteHandoffSource = [string]$PersistentSupervisionApiExecutionProof.recommended_handoff_source
@@ -6013,19 +6034,19 @@ if (
   foreach ($Property in @($PersistentSupervisionApiExecutionProof.handoff.PSObject.Properties)) {
     $RecommendedConcreteHandoff[$Property.Name] = $Property.Value
   }
-  $RecommendedConcreteHandoff['consumed_persistent_supervision_prerequisite_first_missing'] = 'tray_presence'
+  $RecommendedConcreteHandoff['consumed_persistent_supervision_prerequisite_first_missing'] = $PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable
   $RecommendedConcreteHandoff['consumed_summon_api_bounded_execution_proof'] = $SummonApiBoundedExecutionProofObserved
   $RecommendedConcreteHandoff['consumed_persistent_supervision_api_execution_proof'] = $PersistentSupervisionApiExecutionProofObserved
   $RecommendedConcreteHandoff['consumed_persistent_supervision_api_next_smallest_truthful_gap'] = [string]$PersistentSupervisionApiExecutionProof.next_smallest_truthful_gap
 } elseif (
-  $PersistentSupervisionTrayPrerequisiteRuntimeChainConcreteObserved -and
+  $PersistentSupervisionPrerequisiteRuntimeChainConcreteObserved -and
   $SummonApiBoundedExecutionProofObserved
 ) {
   $RecommendedConcreteHandoffSource = [string]$SummonApiBoundedExecutionProof.recommended_handoff_source
   $RecommendedConcreteHandoff = [ordered]@{
     status = 'blocked'
     previous_next_smallest_truthful_gap = 'summon_binding_blocker_boundary'
-    consumed_persistent_supervision_prerequisite_first_missing = 'tray_presence'
+    consumed_persistent_supervision_prerequisite_first_missing = $PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable
     consumed_overlay_api_execution_proof = $OverlayApiExecutionProofObserved
     consumed_summon_api_bounded_execution_proof = $SummonApiBoundedExecutionProofObserved
     consumed_summon_api_bounded_next_smallest_truthful_gap = [string]$SummonApiBoundedExecutionProof.next_smallest_truthful_gap
@@ -6067,7 +6088,7 @@ if (
     blockers = [string[]]@($SummonApiBoundedExecutionProofReadinessBlockers)
   }
 } elseif (
-  $PersistentSupervisionTrayPrerequisiteRuntimeChainConcreteObserved -and
+  $PersistentSupervisionPrerequisiteRuntimeChainConcreteObserved -and
   $OverlayApiExecutionProofObserved
 ) {
   $OverlayApiExecutionProofRecommendedHandoff = $OverlayApiExecutionProof.recommended_handoff
@@ -6075,7 +6096,7 @@ if (
   $RecommendedConcreteHandoff = [ordered]@{
     status = 'blocked'
     previous_next_smallest_truthful_gap = 'summon_overlay_window_blocker_boundary'
-    consumed_persistent_supervision_prerequisite_first_missing = 'tray_presence'
+    consumed_persistent_supervision_prerequisite_first_missing = $PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable
     consumed_os_binding_api_execution_proof = $OsBindingApiExecutionProofObserved
     consumed_overlay_api_execution_proof = $OverlayApiExecutionProofObserved
     consumed_overlay_api_next_smallest_truthful_gap = [string]$OverlayApiExecutionProof.next_smallest_truthful_gap
@@ -6123,7 +6144,7 @@ if (
     blockers = [string[]]@($OverlayApiExecutionProofBlockers)
   }
 } elseif (
-  $PersistentSupervisionTrayPrerequisiteRuntimeChainConcreteObserved -and
+  $PersistentSupervisionPrerequisiteRuntimeChainConcreteObserved -and
   $OsBindingApiExecutionProofObserved
 ) {
   $OsBindingApiExecutionProofRecommendedHandoff = $OsBindingApiExecutionProof.recommended_handoff
@@ -6131,7 +6152,7 @@ if (
   $RecommendedConcreteHandoff = [ordered]@{
     status = 'blocked'
     previous_next_smallest_truthful_gap = 'os_level_command_palette_binding'
-    consumed_persistent_supervision_prerequisite_first_missing = 'tray_presence'
+    consumed_persistent_supervision_prerequisite_first_missing = $PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable
     consumed_tray_presence_api_execution_proof = $TrayPresenceApiExecutionProofObserved
     consumed_os_binding_api_execution_proof = $OsBindingApiExecutionProofObserved
     consumed_os_binding_api_next_smallest_truthful_gap = [string]$OsBindingApiExecutionProof.next_smallest_truthful_gap
@@ -6174,13 +6195,13 @@ if (
     would_claim_resident = $false
     blockers = [string[]]@($OsBindingApiExecutionProofBlockers)
   }
-} elseif ($PersistentSupervisionTrayPrerequisiteRuntimeChainConcreteObserved) {
+} elseif ($PersistentSupervisionPrerequisiteRuntimeChainConcreteObserved) {
   $TrayPresenceApiExecutionProofRecommendedHandoff = $TrayPresenceApiExecutionProof.recommended_handoff
   $RecommendedConcreteHandoffSource = [string]$TrayPresenceApiExecutionProof.recommended_handoff_source
   $RecommendedConcreteHandoff = [ordered]@{
     status = 'blocked'
     previous_next_smallest_truthful_gap = 'summon_tray_presence_blocker_boundary'
-    consumed_persistent_supervision_prerequisite_first_missing = 'tray_presence'
+    consumed_persistent_supervision_prerequisite_first_missing = $PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable
     consumed_resident_runtime_api_execution_proof = $ResidentRuntimeApiExecutionProofObserved
     consumed_tray_presence_api_execution_proof = $TrayPresenceApiExecutionProofObserved
     consumed_tray_presence_api_next_smallest_truthful_gap = [string]$TrayPresenceApiExecutionProof.next_smallest_truthful_gap
@@ -6320,7 +6341,9 @@ $Payload = [ordered]@{
   recommended_concrete_authority_granted = $RecommendedConcreteAuthorityGranted
   recommended_concrete_handoff = $RecommendedConcreteHandoff
   persistent_supervision_first_missing_tray_concrete_handoff_observed = $PersistentSupervisionFirstMissingTrayConcreteHandoffObserved
-  persistent_supervision_tray_prerequisite_runtime_chain_concrete_observed = $PersistentSupervisionTrayPrerequisiteRuntimeChainConcreteObserved
+  persistent_supervision_first_missing_requirement_concrete_handoff_observed = $PersistentSupervisionFirstMissingRequirementConcreteHandoffObserved
+  persistent_supervision_first_missing_runtime_proof_observed = $PersistentSupervisionFirstMissingRuntimeProofObserved
+  persistent_supervision_prerequisite_runtime_chain_concrete_observed = $PersistentSupervisionPrerequisiteRuntimeChainConcreteObserved
   system_resident_host_supervision_authority_request_proof_concrete_handoff_observed = $SystemResidentHostSupervisionAuthorityRequestProofConcreteHandoffObserved
   system_resident_persistent_supervision_first_missing_requirement_concrete_handoff_observed = $SystemResidentPersistentSupervisionFirstMissingRequirementConcreteHandoffObserved
   stage6_completion_audit_handoff_consumed_by_closure_readback = $Stage6CompletionAuditHandoffConsumedByClosureReadback

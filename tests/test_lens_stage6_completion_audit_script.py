@@ -1283,7 +1283,7 @@ def test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_
     host_request_proof_concrete_source = (
         "$RecommendedConcreteHandoffSource = 'stage6_system_resident_host_supervision_authority_request_proof_handoff'"
     )
-    runtime_chain_flag = "$PersistentSupervisionTrayPrerequisiteRuntimeChainConcreteObserved = ("
+    runtime_chain_flag = "$PersistentSupervisionPrerequisiteRuntimeChainConcreteObserved = ("
     resident_claim_source = (
         "$RecommendedConcreteHandoffSource = 'persistent_supervision_resident_claim_boundary_handoff'"
     )
@@ -1375,20 +1375,42 @@ def test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_
         "$RecommendedConcreteHandoff['authority_required'] = $Stage6PrerequisiteBringupPlanRecommendedAuthorityRequired"
     ) in script
     assert runtime_chain_flag in script
+    assert "$PersistentSupervisionFirstMissingRuntimeProofObserved = (" in script
     assert "$PersistentSupervisionFirstMissingTrayConcreteHandoffObserved = (" in script
     assert (
         "$RecommendedConcreteHandoffSource -eq 'persistent_supervision_prerequisites_first_missing_requirement_handoff'"
     ) in script
     assert "$PersistentSupervisionFirstMissingTrayConcreteHandoffObserved" in script
+    assert "$PersistentSupervisionFirstMissingRequirementConcreteHandoffObserved" in script
+    assert (
+        "$NextSmallestTruthfulGap -ne 'system_resident_presence_blockers' -and\n"
+        "  $SystemResidentHostSupervisionAuthorityRequestProofConcreteHandoffObserved"
+    ) in script
     assert (
         "persistent_supervision_first_missing_tray_concrete_handoff_observed = "
         "$PersistentSupervisionFirstMissingTrayConcreteHandoffObserved"
+    ) in script
+    assert (
+        "persistent_supervision_prerequisite_runtime_chain_concrete_observed = "
+        "$PersistentSupervisionPrerequisiteRuntimeChainConcreteObserved"
     ) in script
     assert script.index(acceptance_concrete_source) < script.index(host_request_proof_concrete_source)
     assert script.index(host_request_proof_concrete_source) < script.index(runtime_chain_flag)
     assert (
         "$PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable -eq 'tray_presence' -and\n"
-        "  $TrayPresenceApiExecutionProofObserved"
+        "    $TrayPresenceApiExecutionProofObserved"
+    ) in script
+    assert (
+        "$PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable -eq 'global_hotkey_binding' -and\n"
+        "    $OsBindingApiExecutionProofObserved"
+    ) in script
+    assert (
+        "$PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable -eq 'overlay_window' -and\n"
+        "    $OverlayApiExecutionProofObserved"
+    ) in script
+    assert (
+        "$PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable -eq 'summon_binding' -and\n"
+        "    $SummonApiBoundedExecutionProofObserved"
     ) in script
     assert (
         "$RecommendedConcreteHandoffSource = [string]$PersistentSupervisionApiExecutionProof.recommended_handoff_source"
@@ -1406,7 +1428,10 @@ def test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_
         "$RecommendedConcreteHandoffSource = [string]$TrayPresenceApiExecutionProof.recommended_handoff_source"
         in script
     )
-    assert "consumed_persistent_supervision_prerequisite_first_missing = 'tray_presence'" in script
+    assert (
+        "consumed_persistent_supervision_prerequisite_first_missing = "
+        "$PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable"
+    ) in script
     assert (
         "$RecommendedConcreteHandoff['consumed_persistent_supervision_api_execution_proof'] = "
         "$PersistentSupervisionApiExecutionProofObserved"
@@ -1418,8 +1443,8 @@ def test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_
     assert "$ConcreteExecutionHandoffObserved = (" in script
     assert "stage6_completion_audit_concrete_execution_handoff_observed = $ConcreteExecutionHandoffObserved" in script
     assert (
-        "persistent_supervision_tray_prerequisite_runtime_chain_concrete_observed = "
-        "$PersistentSupervisionTrayPrerequisiteRuntimeChainConcreteObserved"
+        "persistent_supervision_prerequisite_runtime_chain_concrete_observed = "
+        "$PersistentSupervisionPrerequisiteRuntimeChainConcreteObserved"
     ) in script
     assert "$SystemResidentAppliedEnablementConcreteHandoffObserved = (" in script
     assert (

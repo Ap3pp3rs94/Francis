@@ -42225,6 +42225,57 @@ Latest validation for Stage 6 summon surface runtime readback consumption:
   tests/test_lens_summon_global_hotkey_binding_blocker_proof_script.py`
   Result: `passed; 2 files already formatted`
 
+### 2026-05-28 - Stage 6 completion audit concrete handoff stops looping back to overlay
+
+Roadmap area: Stage 6 / Lens MVP, completion-audit truthfulness for
+summon-anywhere and system-resident acceptance.
+
+Material change:
+
+- The Stage 6 completion audit no longer lets stale persistent-supervision
+  first-missing prerequisite handoffs override the current system-resident
+  acceptance handoff after summon runtime and governed API execution proofs have
+  already been consumed.
+- The persistent-supervision prerequisite runtime-chain readback now recognizes
+  the current first missing prerequisite across tray, global hotkey, overlay,
+  and summon binding instead of only the older tray-first path.
+- The full completion audit still truthfully reports Stage 6 as blocked:
+  `ready_to_close=false`, `transition_allowed=false`,
+  `stage6_completion_reviewed=true`, and
+  `next_smallest_truthful_gap=system_resident_presence_blockers`.
+- The updated concrete handoff now points at
+  `stage6_system_resident_host_supervision_authority_request_proof_handoff` and
+  `resolve_persistent_supervision_required_prerequisites_without_resident_claim`
+  instead of looping back to overlay-window proof work already consumed by the
+  audit.
+- This does not mark Stage 6 closed and does not start Stage 7.
+
+Latest validation for Stage 6 completion-audit concrete handoff truthfulness:
+
+- `.\scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -AllowLaunchOnHotkey -ChildProofTimeoutSeconds 240`
+  Result: `passed as command; returned blocked/active,
+  ready_to_close=false, transition_allowed=false,
+  stage6_completion_reviewed=true,
+  next_smallest_truthful_gap=system_resident_presence_blockers,
+  consumed_overlay_api_execution_proof=true,
+  consumed_summon_api_bounded_execution_proof=true,
+  consumed_persistent_supervision_api_execution_proof=true,
+  recommended_concrete_handoff_source=stage6_system_resident_host_supervision_authority_request_proof_handoff`
+- PowerShell parser check for
+  `scripts/lens-stage6-completion-audit.ps1`
+  Result: `passed; parser_ok`
+- `python -m pytest tests/test_lens_stage6_completion_audit_script.py -q
+  --tb=short --maxfail=1`
+  Result: `passed; 50 passed, 1 skipped`
+- `python -m ruff check tests/test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests/test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 1 file already formatted`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
