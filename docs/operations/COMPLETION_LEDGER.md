@@ -42325,6 +42325,44 @@ Latest validation for Stage 6 command-palette OS-binding proof readback:
   tests/test_lens_stage6_completion_audit_script.py`
   Result: `passed; 2 files already formatted`
 
+### 2026-05-28 - Stage 6 completion audit review layer is clean but closure remains blocked
+
+Roadmap area: Stage 6 / Lens MVP, completion-audit truthfulness after proof
+consumption.
+
+Material change:
+
+- A fresh full Stage 6 completion audit after commit `31f49e75` returned a
+  complete payload with the new review diagnostics:
+  `stage6_completion_reviewed=true`,
+  `stage6_completion_evidence_reviewed=true`,
+  `stage6_completion_evidence_review_missing=[]`, and
+  `stage6_completion_review_missing=[]`.
+- This removes the prior ambiguity about whether Stage 6 was still blocked by
+  missing audit proof consumption.
+- Stage 6 is still not closed: the same full audit reports
+  `ready_to_close=false`, `can_close_stage6=false`,
+  `transition_allowed=false`, and blocked criteria
+  `summon_anywhere` plus `system_resident_presence`.
+- The next concrete handoff remains
+  `stage6_system_resident_host_supervision_authority_request_proof_handoff`
+  with concrete gap `persistent_supervision_required_prerequisites_missing`.
+- This does not mark Stage 6 closed and does not start Stage 7.
+
+Latest validation for Stage 6 completion-audit review diagnostics:
+
+- `.\scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -AllowLaunchOnHotkey -ChildProofTimeoutSeconds 240`
+  Result: `passed as command; returned blocked/active,
+  ready_to_close=false, can_close_stage6=false,
+  transition_allowed=false, stage6_completion_reviewed=true,
+  stage6_completion_evidence_reviewed=true,
+  stage6_completion_evidence_review_missing=[],
+  stage6_completion_review_missing=[],
+  next_smallest_truthful_gap=system_resident_presence_blockers,
+  recommended_concrete_handoff_source=stage6_system_resident_host_supervision_authority_request_proof_handoff,
+  recommended_concrete_next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
