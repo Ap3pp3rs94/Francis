@@ -41065,6 +41065,54 @@ Latest validation for Stage 6 live runtime projection truthfulness:
   `blocked_criteria=[summon_anywhere, helpful_not_noisy, system_resident_presence]`,
   and `next_smallest_truthful_gap=summon_anywhere_blockers`.
 
+### 2026-05-28 - Stage 6 live summon-anywhere readiness consumes runtime readback
+
+Roadmap area: Stage 6 / Lens MVP, OS-level summon readiness and operator-surface
+truthfulness.
+
+Material change:
+
+- `lens_os_binding_readiness` now treats an active governed OS-binding grant plus
+  live launch-on-hotkey and summon-anywhere runtime readback as an observed
+  OS-level command palette binding.
+- Stage 6 closure readback no longer leaves `summon_anywhere` blocked after the
+  live resident host, tray, overlay, hotkey launch-on-hotkey, and summon runtime
+  readbacks are all present.
+- Stage 6 remains active and blocked. This change does not claim resident
+  autonomy, grant resident-claim authority, start Stage 7, or close the
+  `helpful_not_noisy` and `system_resident_presence` acceptance criteria.
+
+Latest validation for live summon-anywhere readiness:
+
+- Live governed runtime batch renewed the already-approved Stage 6 authority
+  leases and wrote receipts for resident runtime activation, tray presence,
+  overlay window, launch-on-hotkey OS binding, and summon action execution.
+  Local `lens_status(limit=1)` after the code change reported
+  `os_binding_readiness.ready=true`, `os_level_command_palette=true`,
+  `summon_anywhere=true`, `stage6_readiness.ready_total=3`,
+  `blocked_total=2`, `ready_criteria=[summon_anywhere, mode_visibility,
+  pilot_visibility_groundwork]`, `blocked_criteria=[helpful_not_noisy,
+  system_resident_presence]`, and
+  `next_smallest_truthful_gap=resident_surface_operator_experience_proof`.
+- `python -m pytest
+  tests/test_api_lens.py::test_lens_status_promotes_coordinated_surface_runtime_before_summon_binding
+  tests/test_api_lens.py::test_lens_summon_execute_records_summon_anywhere_when_hotkey_launch_runtime_observed
+  tests/test_api_lens_os_binding_authority.py::test_lens_os_binding_launch_on_hotkey_records_authorized_runtime_readback`
+  Result: `passed; 3 passed`
+- `python -m pytest
+  tests/test_api_lens.py::test_lens_summon_execute_records_summon_anywhere_when_hotkey_launch_runtime_observed`
+  Result: `passed; 1 passed`
+- `python -m ruff check src/francis/lens/preflight.py tests/test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/lens/preflight.py
+  tests/test_api_lens.py`
+  Result: `passed; 2 files already formatted`
+- `git diff --check`
+  Result: `passed`
+- `python -m mypy src/francis/lens/preflight.py`
+  Result: `not run to completion; Python 3.13 mypy import was blocked by Windows
+  Application Control policy before type checking started`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

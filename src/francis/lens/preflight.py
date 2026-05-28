@@ -1819,7 +1819,10 @@ def lens_os_binding_readiness(
     overlay_runtime = _dict_value(overlay_preflight, "overlay_runtime")
     overlay_runtime_ready = bool(overlay_runtime.get("ready"))
     required_before_enable = _string_list(summon_gate.get("required_before_enable"))
-    palette_blockers = ["os_level_command_palette_missing"]
+    os_level_command_palette_ready = (
+        authority_granted and bool(hotkey_runtime_ready) and bool(summon_gate.get("summon_anywhere"))
+    )
+    palette_blockers = [] if os_level_command_palette_ready else ["os_level_command_palette_missing"]
     if not bool(summon_gate.get("summon_anywhere")):
         palette_blockers.append("summon_anywhere_missing")
     palette_blockers.extend(_string_list(blocker_groups.get("global_hotkey_binding")))
@@ -1848,7 +1851,7 @@ def lens_os_binding_readiness(
         _os_binding_requirement(
             "os_level_command_palette",
             label="OS-level command palette binding",
-            ready=False,
+            ready=os_level_command_palette_ready,
             blockers=grouped_blockers["palette_binding"],
             route="/lens/os-binding/plan",
             required_before_enable=["global_hotkey_binding", "summon_binding"],
@@ -1962,8 +1965,8 @@ def lens_os_binding_readiness(
         "os_level_command_palette_binding_authority": authority_granted,
         "active_grant_receipt_id": active_grant_receipt_id,
         "authority_grant_consumed": authority_granted,
-        "os_level_command_palette": False,
-        "summon_anywhere": bool(summon_gate.get("summon_anywhere")) and ready,
+        "os_level_command_palette": os_level_command_palette_ready,
+        "summon_anywhere": bool(summon_gate.get("summon_anywhere")) and os_level_command_palette_ready and ready,
         "acceptance_criterion": "summon_anywhere",
         "next_smallest_truthful_gap": "os_level_command_palette_binding",
         "first_blocker_family": first_blocker_family,

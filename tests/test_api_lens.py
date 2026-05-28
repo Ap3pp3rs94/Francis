@@ -11767,6 +11767,36 @@ def test_lens_summon_execute_records_summon_anywhere_when_hotkey_launch_runtime_
     )
 
     client = TestClient(create_app())
+    os_binding_requested = client.post(
+        "/lens/os-binding/authority/request",
+        json={
+            "actor": "test.system.write",
+            "reason": "operator wants governed launch-on-hotkey readback",
+        },
+    )
+    assert os_binding_requested.status_code == 200
+    os_binding_approval_id = str(os_binding_requested.json()["approval_id"])
+    os_binding_decided = client.post(
+        "/approvals/decision",
+        json={
+            "id": os_binding_approval_id,
+            "action": "approve",
+            "actor": "test.approvals.decision",
+            "comment": "approved OS binding authority",
+        },
+    )
+    assert os_binding_decided.status_code == 200
+    os_binding_grant = client.post(
+        "/lens/os-binding/authority",
+        json={
+            "approval_id": os_binding_approval_id,
+            "actor": "test.system.write",
+            "reason": "operator grants governed launch-on-hotkey authority",
+            "lease_seconds": 600,
+        },
+    )
+    assert os_binding_grant.status_code == 200
+
     requested = client.post(
         "/lens/summon/authority/request",
         json={
@@ -11854,6 +11884,12 @@ def test_lens_summon_execute_records_summon_anywhere_when_hotkey_launch_runtime_
     assert status_body["resident_host"]["summon_anywhere"] is True
     assert "summon_binding_missing" not in status_body["resident_host"]["blockers"]
     assert "summon_anywhere_runtime_readback" not in status_body["resident_host"]["blockers"]
+    assert status_body["os_binding_readiness"]["ready"] is True
+    assert status_body["os_binding_readiness"]["os_level_command_palette"] is True
+    assert status_body["os_binding_readiness"]["summon_anywhere"] is True
+    assert status_body["os_binding_readiness"]["blocker_groups"]["palette_binding"] == []
+    assert "summon_anywhere" in status_body["stage6_readiness"]["ready_criteria"]
+    assert "summon_anywhere" not in status_body["stage6_readiness"]["blocked_criteria"]
 
 
 def test_lens_resident_runtime_execute_starts_supervised_resident_host_lease(
