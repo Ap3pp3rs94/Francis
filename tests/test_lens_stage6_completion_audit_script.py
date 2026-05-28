@@ -1095,6 +1095,29 @@ def test_lens_stage6_completion_audit_prefers_closure_handoff_after_resident_cla
     assert script.index(reviewed_summon_source) < script.index(prerequisite_source)
 
 
+def test_lens_stage6_completion_audit_advances_resident_claim_boundary_without_completion_review_gate() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    handoff_selector = script[script.index("$RecommendedHandoffSource = ''") :]
+    reviewed_summon_branch = (
+        "$NextSmallestTruthfulGap -eq 'summon_anywhere_blockers' -and\n"
+        "  -not $ReadyToClose -and\n"
+        "  (\n"
+        "    $SummonAnywhereRuntimeReadbackObserved -or\n"
+        "    $Stage6AppliedEnablementResidentClaimBoundaryReadbackObserved\n"
+        "  ) -and\n"
+        "  $Stage6PrerequisiteBringupPlanAppliedEnablementObserved"
+    )
+    branch_start = handoff_selector.index(reviewed_summon_branch)
+    branch_end = handoff_selector.index(
+        "$Stage6ReviewedSummonHandoffSource = 'stage6_reviewed_summon_anywhere_first_blocker'",
+        branch_start,
+    )
+
+    assert reviewed_summon_branch in handoff_selector
+    assert "$Stage6CompletionReviewed" not in handoff_selector[branch_start:branch_end]
+
+
 def test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_to_acceptance_handoff() -> None:
     script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
 

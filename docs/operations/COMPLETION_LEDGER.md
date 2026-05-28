@@ -41166,6 +41166,46 @@ Latest validation for enablement-receipt handoff truthfulness:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-28 - Stage 6 completion audit advances past reviewed enablement receipt
+
+Roadmap area: Stage 6 / Lens MVP, completion-audit handoff truthfulness.
+
+Material change:
+
+- `scripts/lens-stage6-completion-audit.ps1` no longer requires the broad
+  `stage6_completion_reviewed` flag before advancing an already observed
+  persistent-supervision resident-claim-boundary readback to the next
+  summon-anywhere blocker handoff.
+- The audit can now report the concrete summon authority blocker after it has
+  consumed the applied enablement receipt, resident-claim-boundary proof, and
+  summon-anywhere blocker/family-chain proofs.
+- Stage 6 remains active and blocked. This change does not close Stage 6, start
+  Stage 7, claim system residency, grant summon authority, launch new runtime
+  behavior, write memory, or bypass governance.
+
+Latest validation for completion-audit handoff truthfulness:
+
+- Live `scripts/lens-stage6-completion-audit.ps1 -Mode Status` readback reported
+  `ok=true`, `status=blocked`, `audit_status=complete`,
+  `next_smallest_truthful_gap=summon_anywhere_blockers`,
+  `recommended_handoff_source=stage6_reviewed_summon_anywhere_authority_handoff`,
+  `recommended_next_slice=run_summon_authority_blocker_proof`,
+  `ready_to_close=false`, `stage_state=active`,
+  `ready_criteria=[helpful_not_noisy, mode_visibility,
+  pilot_visibility_groundwork]`, and
+  `blocked_criteria=[summon_anywhere, system_resident_presence]`.
+- `python -m pytest tests/test_lens_stage6_completion_audit_script.py -q --tb=short`
+  Result: `passed; 44 passed, 1 skipped`
+- `python -m pytest
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_advances_resident_claim_boundary_without_completion_review_gate
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_prefers_closure_handoff_after_resident_claim_boundary
+  -q --tb=short`
+  Result: `passed; 2 passed`
+- `python -m ruff check tests/test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 1 file already formatted`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

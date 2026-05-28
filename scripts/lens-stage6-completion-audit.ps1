@@ -4111,7 +4111,6 @@ if (
   $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
 } elseif (
   $NextSmallestTruthfulGap -eq 'summon_anywhere_blockers' -and
-  $Stage6CompletionReviewed -and
   -not $ReadyToClose -and
   (
     $SummonAnywhereRuntimeReadbackObserved -or
