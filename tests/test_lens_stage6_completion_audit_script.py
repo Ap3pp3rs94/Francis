@@ -287,6 +287,18 @@ def test_lens_stage6_completion_audit_projects_persistent_prerequisite_first_mis
     assert "authority_required = [string]$PersistentSupervisionPrerequisitesProof.authority_required" in script
     assert "authority_granted = [bool]$PersistentSupervisionPrerequisitesProof.authority_granted" in script
     assert "-not [bool]$PersistentSupervisionPrerequisitesProof.authority_granted" in script
+    assert "$SystemResidentPersistentSupervisionFirstMissingRequirementConcreteHandoffObserved = (" in script
+    assert (
+        "$RecommendedConcreteHandoffSource = 'persistent_supervision_prerequisites_first_missing_requirement_handoff'"
+    ) in script
+    assert (
+        "$RecommendedConcreteHandoff['consumed_persistent_supervision_prerequisites_proof'] = "
+        "$PersistentSupervisionPrerequisitesProofObserved"
+    ) in script
+    assert (
+        "system_resident_persistent_supervision_first_missing_requirement_concrete_handoff_observed = "
+        "$SystemResidentPersistentSupervisionFirstMissingRequirementConcreteHandoffObserved"
+    ) in script
 
 
 def test_lens_stage6_completion_audit_consumes_stage6_prerequisite_bringup_plan_readback() -> None:

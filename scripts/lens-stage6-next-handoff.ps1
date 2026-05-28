@@ -2324,8 +2324,43 @@ $Stage6CompletionAuditSystemResidentHostSupervisionAuthorityRequestProofConcrete
   [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedConcreteHandoff -Name 'consumed_system_resident_acceptance_handoff' -Default $false) -and
   [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedConcreteHandoff -Name 'consumed_host_supervision_authority_request_proof' -Default $false)
 )
+$Stage6CompletionAuditSystemResidentPersistentSupervisionFirstMissingConcreteObserved = (
+  $Stage6CompletionAuditRecommendedConcreteHandoffSource -eq 'persistent_supervision_prerequisites_first_missing_requirement_handoff' -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedConcreteHandoff -Name 'previous_next_smallest_truthful_gap' -Default '') -eq 'persistent_supervision_required_prerequisites_missing' -and
+  @(
+    'resident_host_process',
+    'tray_presence',
+    'global_hotkey_binding',
+    'overlay_window',
+    'summon_binding'
+  ) -contains [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedConcreteHandoff -Name 'id' -Default '') -and
+  @(
+    'resident_host_process_not_supervised',
+    'resident_supervision_not_persistent',
+    'summon_tray_presence_blocker_boundary',
+    'os_level_command_palette_binding',
+    'summon_overlay_window_blocker_boundary',
+    'summon_anywhere_blockers'
+  ) -contains [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedConcreteHandoff -Name 'next_smallest_truthful_gap' -Default '') -and
+  -not [string]::IsNullOrWhiteSpace(
+    [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedConcreteHandoff -Name 'next_step' -Default '')
+  ) -and
+  -not [string]::IsNullOrWhiteSpace(
+    [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedConcreteHandoff -Name 'proof_script' -Default '')
+  ) -and
+  [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedConcreteHandoff -Name 'authority_required' -Default '') -eq 'resident_host_process_tray_hotkey_overlay_and_summon_prerequisites' -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedConcreteHandoff -Name 'authority_granted' -Default $true) -and
+  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedConcreteHandoff -Name 'read_only_contract' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedConcreteHandoff -Name 'diagnostic_only' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedConcreteHandoff -Name 'would_execute' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedConcreteHandoff -Name 'would_mutate' -Default $true) -and
+  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedConcreteHandoff -Name 'consumed_system_resident_acceptance_handoff' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedConcreteHandoff -Name 'consumed_host_supervision_authority_request_proof' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedConcreteHandoff -Name 'consumed_persistent_supervision_prerequisites_proof' -Default $false)
+)
 $Stage6CompletionAuditSystemResidentAcceptanceSupersededByConcreteHandoff = (
   $Stage6CompletionAuditSystemResidentHostSupervisionAuthorityRequestProofConcreteObserved -or
+  $Stage6CompletionAuditSystemResidentPersistentSupervisionFirstMissingConcreteObserved -or
   (
     $Stage6CompletionAuditRecommendedConcreteHandoffSource -eq 'stage6_prerequisite_bringup_operator_plan_handoff' -and
     [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedConcreteHandoff -Name 'status' -Default '') -eq 'persistent_supervision_enablement_applied' -and
@@ -3628,6 +3663,7 @@ $Payload = [ordered]@{
   stage6_completion_audit_system_resident_acceptance_handoff_observed = $Stage6CompletionAuditSystemResidentAcceptanceHandoffObserved
   stage6_completion_audit_system_resident_current_acceptance_handoff_observed = $Stage6CompletionAuditSystemResidentCurrentAcceptanceHandoffObserved
   stage6_completion_audit_system_resident_host_supervision_request_proof_concrete_handoff_observed = $Stage6CompletionAuditSystemResidentHostSupervisionAuthorityRequestProofConcreteObserved
+  stage6_completion_audit_system_resident_persistent_supervision_first_missing_concrete_handoff_observed = $Stage6CompletionAuditSystemResidentPersistentSupervisionFirstMissingConcreteObserved
   stage6_completion_audit_system_resident_host_supervision_operator_handoff_observed = $RecommendedConcreteHostSupervisionAuthorityOperatorHandoffObserved
   stage6_completion_audit_reviewed_summon_first_blocker_handoff_observed = $Stage6CompletionAuditReviewedSummonFirstBlockerHandoffObserved
   stage6_completion_audit_reviewed_summon_authority_handoff_observed = $Stage6CompletionAuditReviewedSummonAuthorityHandoffObserved

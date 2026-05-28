@@ -5318,6 +5318,35 @@ if ($SystemResidentHostSupervisionAuthorityRequestProofConcreteHandoffObserved) 
   $RecommendedConcreteHandoff['host_supervision_authority_grant_receipt_id'] = [string]$HostSupervisionAuthorityRequestProof.host_supervision_authority_grant_receipt_id
   $RecommendedConcreteHandoff['runtime_files'] = $HostSupervisionAuthorityRequestProofRuntimeFiles
 }
+$SystemResidentPersistentSupervisionFirstMissingRequirementConcreteHandoffObserved = (
+  $SystemResidentHostSupervisionAuthorityRequestProofConcreteHandoffObserved -and
+  $PersistentSupervisionPrerequisitesProofObserved -and
+  -not [string]::IsNullOrWhiteSpace($PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable) -and
+  $Stage6PrerequisiteBringupPlanAllowedFirstMissingRequirements -contains $PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable -and
+  [string]$PersistentSupervisionPrerequisitesFirstMissingRequirementHandoff.id -eq $PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable -and
+  $Stage6PrerequisiteBringupPlanAllowedFirstMissingTruthfulGaps -contains [string]$PersistentSupervisionPrerequisitesFirstMissingRequirementHandoff.next_smallest_truthful_gap -and
+  -not [string]::IsNullOrWhiteSpace([string]$PersistentSupervisionPrerequisitesFirstMissingRequirementHandoff.next_step) -and
+  -not [string]::IsNullOrWhiteSpace([string]$PersistentSupervisionPrerequisitesFirstMissingRequirementHandoff.proof_script) -and
+  [string]$PersistentSupervisionPrerequisitesFirstMissingRequirementHandoff.authority_required -eq 'resident_host_process_tray_hotkey_overlay_and_summon_prerequisites' -and
+  -not [bool]$PersistentSupervisionPrerequisitesFirstMissingRequirementHandoff.authority_granted -and
+  [bool]$PersistentSupervisionPrerequisitesFirstMissingRequirementHandoff.read_only_contract -and
+  [bool]$PersistentSupervisionPrerequisitesFirstMissingRequirementHandoff.diagnostic_only -and
+  -not [bool]$PersistentSupervisionPrerequisitesFirstMissingRequirementHandoff.would_execute -and
+  -not [bool]$PersistentSupervisionPrerequisitesFirstMissingRequirementHandoff.would_mutate
+)
+if ($SystemResidentPersistentSupervisionFirstMissingRequirementConcreteHandoffObserved) {
+  $RecommendedConcreteHandoffSource = 'persistent_supervision_prerequisites_first_missing_requirement_handoff'
+  $RecommendedConcreteHandoff = [ordered]@{}
+  foreach ($Property in @($PersistentSupervisionPrerequisitesFirstMissingRequirementHandoff.PSObject.Properties)) {
+    $RecommendedConcreteHandoff[$Property.Name] = $Property.Value
+  }
+  $RecommendedConcreteHandoff['previous_next_smallest_truthful_gap'] = 'persistent_supervision_required_prerequisites_missing'
+  $RecommendedConcreteHandoff['consumed_system_resident_acceptance_handoff'] = $SystemResidentAcceptanceConcreteHandoffObserved
+  $RecommendedConcreteHandoff['consumed_host_supervision_authority_request_proof'] = $HostSupervisionAuthorityRequestProofObserved
+  $RecommendedConcreteHandoff['consumed_persistent_supervision_prerequisites_proof'] = $PersistentSupervisionPrerequisitesProofObserved
+  $RecommendedConcreteHandoff['first_missing_required_before_enable'] = $PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable
+  $RecommendedConcreteHandoff['missing_required_before_enable'] = [string[]]@($PersistentSupervisionPrerequisitesMissingRequiredBeforeEnable)
+}
 $PersistentSupervisionTrayPrerequisiteRuntimeChainConcreteObserved = (
   $NextSmallestTruthfulGap -eq 'persistent_supervision_required_prerequisites_missing' -and
   $PersistentSupervisionPrerequisitesProofObserved -and
@@ -5641,6 +5670,7 @@ $Payload = [ordered]@{
   recommended_concrete_handoff = $RecommendedConcreteHandoff
   persistent_supervision_tray_prerequisite_runtime_chain_concrete_observed = $PersistentSupervisionTrayPrerequisiteRuntimeChainConcreteObserved
   system_resident_host_supervision_authority_request_proof_concrete_handoff_observed = $SystemResidentHostSupervisionAuthorityRequestProofConcreteHandoffObserved
+  system_resident_persistent_supervision_first_missing_requirement_concrete_handoff_observed = $SystemResidentPersistentSupervisionFirstMissingRequirementConcreteHandoffObserved
   stage6_completion_audit_handoff_consumed_by_closure_readback = $Stage6CompletionAuditHandoffConsumedByClosureReadback
   stage6_completion_audit_concrete_handoff_observed = $ConcreteHandoffObserved
   stage6_completion_audit_concrete_execution_handoff_observed = $ConcreteExecutionHandoffObserved

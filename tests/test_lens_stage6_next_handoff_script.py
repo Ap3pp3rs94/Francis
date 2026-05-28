@@ -139,6 +139,11 @@ def test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback() -> N
     assert "'stage6_system_resident_host_supervision_authority_request_proof_handoff'" in script
     assert "'scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status'" in script
     assert "stage6_completion_audit_system_resident_host_supervision_request_proof_concrete_handoff_observed" in script
+    assert "$Stage6CompletionAuditSystemResidentPersistentSupervisionFirstMissingConcreteObserved = (" in script
+    assert (
+        "stage6_completion_audit_system_resident_persistent_supervision_first_missing_concrete_handoff_observed"
+        in script
+    )
     assert "$Stage6CompletionAuditPersistentSupervisionFirstMissingRequirementHandoffObserved = (" in script
     assert "'persistent_supervision_prerequisites_first_missing_requirement_handoff'" in script
     assert "'resolve_resident_host_process_before_persistent_supervision_enablement'" in script
@@ -1294,6 +1299,81 @@ def test_lens_stage6_next_handoff_preserves_system_resident_host_request_proof_h
     )
     assert payload["recommended_concrete_authority_granted"] is False
     assert payload["stage6_completion_audit_system_resident_host_supervision_operator_handoff_observed"] is False
+
+    first_missing_handoff = {
+        "id": "tray_presence",
+        "family": "tray_presence",
+        "status": "blocked",
+        "blocker": "tray_host_missing",
+        "requirement_state": "stale_or_unverified",
+        "previous_next_smallest_truthful_gap": "persistent_supervision_required_prerequisites_missing",
+        "next_smallest_truthful_gap": "summon_tray_presence_blocker_boundary",
+        "next_step": "resolve_tray_presence_before_persistent_supervision_enablement",
+        "proof_script": "scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status",
+        "route": "/lens/tray",
+        "readiness_route": "/lens/tray/readiness",
+        "acceptance_criterion": "system_resident_presence",
+        "authority_required": "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites",
+        "authority_granted": False,
+        "read_only_contract": True,
+        "diagnostic_only": True,
+        "would_execute": False,
+        "would_mutate": False,
+        "consumed_system_resident_acceptance_handoff": True,
+        "consumed_host_supervision_authority_request_proof": True,
+        "consumed_persistent_supervision_prerequisites_proof": True,
+        "first_missing_required_before_enable": "tray_presence",
+        "missing_required_before_enable": [
+            "tray_presence",
+            "global_hotkey_binding",
+            "overlay_window",
+        ],
+    }
+    first_missing_audit = json.loads(audit_json.read_text(encoding="utf-8"))
+    first_missing_audit["recommended_concrete_handoff_source"] = (
+        "persistent_supervision_prerequisites_first_missing_requirement_handoff"
+    )
+    first_missing_audit["recommended_concrete_handoff"] = first_missing_handoff
+    first_missing_json = tmp_path / "stage6-completion-audit-system-resident-first-missing-concrete.json"
+    first_missing_json.write_text(json.dumps(first_missing_audit), encoding="utf-8")
+
+    first_missing_proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-CompletionAuditJsonPath",
+        str(first_missing_json),
+        env={"FRANCIS_DATA_DIR": str(data_root)},
+    )
+
+    assert first_missing_proc.returncode == 0, first_missing_proc.stderr or first_missing_proc.stdout
+    first_missing_payload = json.loads(first_missing_proc.stdout)
+    assert (
+        first_missing_payload[
+            "stage6_completion_audit_system_resident_persistent_supervision_first_missing_concrete_handoff_observed"
+        ]
+        is True
+    )
+    assert first_missing_payload["recommended_concrete_handoff_source"] == (
+        "persistent_supervision_prerequisites_first_missing_requirement_handoff"
+    )
+    assert first_missing_payload["recommended_concrete_handoff"] == first_missing_handoff
+    assert first_missing_payload["recommended_concrete_next_smallest_truthful_gap"] == (
+        "summon_tray_presence_blocker_boundary"
+    )
+    assert first_missing_payload["recommended_concrete_next_slice"] == (
+        "resolve_tray_presence_before_persistent_supervision_enablement"
+    )
+    assert first_missing_payload["recommended_concrete_proof_script"] == (
+        "scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status"
+    )
+    assert first_missing_payload["recommended_concrete_authority_required"] == (
+        "resident_host_process_tray_hotkey_overlay_and_summon_prerequisites"
+    )
+    assert first_missing_payload["recommended_concrete_authority_granted"] is False
+    assert (
+        first_missing_payload["stage6_completion_audit_system_resident_host_supervision_operator_handoff_observed"]
+        is False
+    )
 
 
 def test_lens_stage6_next_handoff_prefers_first_missing_prerequisite_after_applied_enablement(

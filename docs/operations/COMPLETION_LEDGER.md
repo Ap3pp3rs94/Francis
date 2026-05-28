@@ -40873,6 +40873,79 @@ Latest validation for system-resident host-supervision request proof handoff:
   stage6_completion_audit_system_resident_host_supervision_request_proof_concrete_handoff_observed=true;
   stage6_completion_audit_system_resident_host_supervision_operator_handoff_observed=false`
 
+### 2026-05-28 - Stage 6 system-resident first-missing prerequisite handoff
+
+Roadmap area: Stage 6 / Lens MVP, system-resident presence and persistent
+supervision prerequisite decomposition.
+
+Material change:
+
+- The Stage 6 completion audit now consumes the system-resident
+  host-supervision request proof handoff together with the persistent
+  supervision prerequisites proof.
+- In that state, the audit promotes the concrete handoff to the first missing
+  persistent-supervision prerequisite instead of stopping at the prerequisites
+  wrapper.
+- The current first missing prerequisite is `tray_presence`, with
+  `next_smallest_truthful_gap=summon_tray_presence_blocker_boundary` and
+  `recommended_concrete_proof_script=scripts/lens-summon-tray-presence-blocker-proof.ps1
+  -Mode Status`.
+- The Stage 6 next-handoff proof preserves that first-missing concrete handoff
+  when it consumes a completion-audit JSON payload from the audit.
+- This remains diagnostic/readback only. Stage 6 is still active and blocked;
+  Stage 7 has not started; the path does not grant authority, execute,
+  mutate, write memory, or claim resident presence.
+
+Latest validation for system-resident first-missing prerequisite handoff:
+
+- PowerShell AST parse of `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- PowerShell AST parse of `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed`
+- `python -m ruff check
+  tests\test_lens_stage6_completion_audit_script.py
+  tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests\test_lens_stage6_completion_audit_script.py
+  tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 2 files already formatted`
+- `python -m pytest
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_projects_persistent_prerequisite_first_missing_readback
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_to_acceptance_handoff
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_preserves_system_resident_host_request_proof_handoff
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_prefers_first_missing_prerequisite_after_applied_enablement`
+  Result: `passed; 5 passed`
+- `.\scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -AllowLaunchOnHotkey -ChildProofTimeoutSeconds 120`
+  Result: `passed blocked audit; ok=true; audit_status=complete;
+  ready_to_close=false; can_close_stage6=false; transition_allowed=false;
+  next_smallest_truthful_gap=system_resident_presence_blockers;
+  recommended_concrete_handoff_source=persistent_supervision_prerequisites_first_missing_requirement_handoff;
+  recommended_concrete_next_slice=resolve_tray_presence_before_persistent_supervision_enablement;
+  recommended_concrete_proof_script=scripts/lens-summon-tray-presence-blocker-proof.ps1
+  -Mode Status;
+  recommended_concrete_next_smallest_truthful_gap=summon_tray_presence_blocker_boundary;
+  recommended_concrete_authority_required=resident_host_process_tray_hotkey_overlay_and_summon_prerequisites;
+  recommended_concrete_authority_granted=false;
+  persistent_supervision_first_missing_required_before_enable=tray_presence;
+  system_resident_persistent_supervision_first_missing_requirement_concrete_handoff_observed=true`
+- `.\scripts\lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath
+  .tmp\stage6-completion-audit-after-first-missing-prereq-handoff.json`
+  Result: `passed; ok=true; status=proof_passed;
+  next_smallest_truthful_gap=system_resident_presence_blockers;
+  recommended_concrete_handoff_source=persistent_supervision_prerequisites_first_missing_requirement_handoff;
+  recommended_concrete_next_slice=resolve_tray_presence_before_persistent_supervision_enablement;
+  recommended_concrete_proof_script=scripts/lens-summon-tray-presence-blocker-proof.ps1
+  -Mode Status;
+  recommended_concrete_next_smallest_truthful_gap=summon_tray_presence_blocker_boundary;
+  recommended_concrete_authority_required=resident_host_process_tray_hotkey_overlay_and_summon_prerequisites;
+  recommended_concrete_authority_granted=false;
+  stage6_completion_audit_system_resident_persistent_supervision_first_missing_concrete_handoff_observed=true;
+  stage6_completion_audit_system_resident_host_supervision_operator_handoff_observed=false`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
