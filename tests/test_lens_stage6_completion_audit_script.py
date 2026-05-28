@@ -1022,6 +1022,11 @@ def test_lens_stage6_completion_audit_prefers_closure_handoff_after_resident_cla
     assert reviewed_summon_source in script
     assert reviewed_authority_source in script
     assert "$SummonAnywhereRuntimeReadbackObserved -and" in script
+    assert (
+        "$BlockedCriterionIds -contains 'summon_anywhere' -and\n"
+        "  -not $SummonAnywhereRuntimeReadbackObserved -and\n"
+        "  $Stage6AppliedEnablementResidentClaimBoundaryReadbackObserved"
+    ) in script
     assert "$Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and" in script
     assert "$Stage6ReviewedSummonHandoff = $SummonAnywhereBlockersProofFirstFamilyHandoff" in script
     assert "$Stage6ReviewedSummonHandoff = [ordered]@{" in script

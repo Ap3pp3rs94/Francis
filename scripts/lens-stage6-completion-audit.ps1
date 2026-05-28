@@ -3622,6 +3622,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $Stage6CompletionReviewed -and
   -not $ReadyToClose -and
   $BlockedCriterionIds -contains 'summon_anywhere' -and
+  -not $SummonAnywhereRuntimeReadbackObserved -and
   $Stage6AppliedEnablementResidentClaimBoundaryReadbackObserved -and
   $SummonAnywhereBlockersProofObserved -and
   $SummonAnywhereFamilyChainProofObserved -and

@@ -40498,6 +40498,59 @@ Latest validation for completion-audit launch-on-hotkey consumption:
   hotkey_stop_observed=true; tray_presence_stop_observed=true;
   resident_supervision_stop_observed=true; cleanup_errors=[]`
 
+### 2026-05-27 - Stage 6 completion audit advances past consumed summon authority proof
+
+Roadmap area: Stage 6 / Lens MVP, completion-audit handoff truthfulness after
+launch-on-hotkey runtime readback.
+
+Material change:
+
+- The Stage 6 completion audit no longer lets the applied-enablement
+  summon-anywhere blocker branch win after summon-anywhere has already been
+  consumed through opt-in launch-on-hotkey runtime readback.
+- This keeps `scripts/lens-summon-authority-blocker-proof.ps1` truthful as a
+  read-only authority-boundary proof while preventing the completion audit from
+  recommending that already-consumed proof again.
+- The live opt-in completion audit now advances to
+  `persistent_supervision_required_prerequisites_missing` with the first
+  missing requirement handoff
+  `resolve_tray_presence_before_persistent_supervision_enablement`.
+- Stage 6 still does not close and Stage 7 does not start. The latest audit
+  remains `ready_to_close=false`, `can_close_stage6=false`, and
+  `transition_allowed=false`.
+
+Latest validation for consumed summon-authority handoff advancement:
+
+- PowerShell AST parse of `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 1 file already formatted`
+- `python -m pytest
+  tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_prefers_closure_handoff_after_resident_claim_boundary
+  tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_to_resident_claim_boundary
+  tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_readback
+  -q`
+  Result: `passed; 3 passed`
+- `.\scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -AllowLaunchOnHotkey -ChildProofTimeoutSeconds 120`
+  Result: `passed; ok=true; status=blocked; audit_status=complete;
+  ready_to_close=false; can_close_stage6=false; transition_allowed=false;
+  stage6_completion_reviewed=true;
+  next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing;
+  recommended_handoff_source=persistent_supervision_prerequisites_first_missing_requirement_handoff;
+  recommended_next_slice=resolve_tray_presence_before_persistent_supervision_enablement;
+  recommended_proof_script=scripts/lens-summon-tray-presence-blocker-proof.ps1
+  -Mode Status;
+  authority_required=resident_host_process_tray_hotkey_overlay_and_summon_prerequisites;
+  authority_granted=false; child_proof_failures=[];
+  child_proof_timeouts=[]; allow_launch_on_hotkey=true;
+  summon_api_launch_on_hotkey_proof.status=proof_passed;
+  summon_api_launch_on_hotkey_proof.ok=true;
+  hotkey_launch_on_press=true; cleanup_errors=[]`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
