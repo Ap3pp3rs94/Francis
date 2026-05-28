@@ -42083,12 +42083,19 @@ Material change:
 - The Stage 6 completion audit now consumes those bounded runtime-suppressed
   summon-family readbacks instead of reporting the stale prerequisite or summon
   family-chain proof-readback blockers.
+- The completion audit no longer lets the persistent-supervision API execution
+  handoff override the system-resident acceptance handoff while the top-level
+  next truthful gap is `system_resident_presence_blockers`; the concrete
+  handoff now stays on the first missing runtime prerequisite.
 - Current live audit evidence still reports Stage 6 as blocked:
   `ready_to_close=false`, `transition_allowed=false`,
   `stage6_completion_reviewed=true`,
   `next_smallest_truthful_gap=system_resident_presence_blockers`, ready criteria
   `helpful_not_noisy`, `mode_visibility`, and `pilot_visibility_groundwork`,
   blocked criteria `summon_anywhere` and `system_resident_presence`.
+- The current concrete next step is
+  `resolve_overlay_window_before_persistent_supervision_enablement`, backed by
+  `scripts/lens-summon-overlay-window-blocker-proof.ps1 -Mode Status`.
 - This does not start Stage 7, grant resident-claim authority, grant summon or
   overlay authority, persist a system-resident claim, or mark Stage 6 closed.
 
@@ -42098,7 +42105,10 @@ Latest validation for Stage 6 seeded-runtime proof consumption:
   -AllowLaunchOnHotkey -ChildProofTimeoutSeconds 240`
   Result: `passed as command; returned blocked/active, ready_to_close=false,
   transition_allowed=false, stage6_completion_reviewed=true,
-  next_smallest_truthful_gap=system_resident_presence_blockers`
+  next_smallest_truthful_gap=system_resident_presence_blockers,
+  recommended_concrete_next_slice=resolve_overlay_window_before_persistent_supervision_enablement,
+  recommended_concrete_proof_script=scripts/lens-summon-overlay-window-blocker-proof.ps1
+  -Mode Status`
 - `.\scripts\lens-stage6-checkpoint.ps1 -Mode Status`
   Result: `passed as command; returned blocked/active, ready_to_close=false,
   ready_total=3, blocked_total=2, blocker_total=67,
@@ -42132,6 +42142,11 @@ Latest validation for Stage 6 seeded-runtime proof consumption:
   tests/test_lens_persistent_supervision_prerequisites_proof_script.py -q
   --tb=short --maxfail=1`
   Result: `passed`
+- `python -m pytest
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_to_acceptance_handoff
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_readback
+  -q --tb=short --maxfail=1`
+  Result: `passed; 2 passed`
 - `python -m ruff check tests/test_lens_stage6_completion_audit_script.py
   tests/test_lens_summon_authority_blocker_proof_script.py
   tests/test_lens_summon_anywhere_family_chain_proof_script.py

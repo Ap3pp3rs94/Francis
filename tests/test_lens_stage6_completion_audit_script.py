@@ -1706,6 +1706,7 @@ def test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_read
         "consumed_persistent_supervision_api_execution_proof = $PersistentSupervisionApiExecutionProofObserved"
         in script
     )
+    assert "$NextSmallestTruthfulGap -ne 'system_resident_presence_blockers' -and" in script
     assert "proof_script = 'scripts/lens-stage6-checkpoint.ps1 -Mode Status'" in script
     assert script.index("stage6_remaining_acceptance_blockers_after_summon_runtime_readback") < script.index(
         "stage6_reviewed_summon_anywhere_first_blocker"

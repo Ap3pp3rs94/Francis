@@ -6004,6 +6004,7 @@ $PersistentSupervisionTrayPrerequisiteRuntimeChainConcreteObserved = (
   $TrayPresenceApiExecutionProofObserved
 )
 if (
+  $NextSmallestTruthfulGap -ne 'system_resident_presence_blockers' -and
   $PersistentSupervisionTrayPrerequisiteRuntimeChainConcreteObserved -and
   $PersistentSupervisionApiExecutionProofObserved
 ) {
