@@ -98,6 +98,7 @@ import type {
   WorldStateMissionSummary,
   WorldStateSnapshot,
 } from "./settings";
+import { TelemetryApiError, TelemetryClient, type TelemetryStatusSnapshot } from "./telemetry";
 
 const DEFAULT_API = "http://127.0.0.1:8000";
 
@@ -3847,6 +3848,7 @@ function SystemPanel(props: {
   const operationsClient = useMemo(() => new OperationsClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const reactorClient = useMemo(() => new ReactorClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const lensClient = useMemo(() => new LensClient(resolvedBaseUrl), [resolvedBaseUrl]);
+  const telemetryClient = useMemo(() => new TelemetryClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [infoError, setInfoError] = useState<string | null>(null);
   const [health, setHealth] = useState<SystemHealth | null>(null);
@@ -3882,6 +3884,9 @@ function SystemPanel(props: {
   const [lensStatus, setLensStatus] = useState<LensStatus | null>(null);
   const [lensStatusError, setLensStatusError] = useState<string | null>(null);
   const [lensStatusLoadedAt, setLensStatusLoadedAt] = useState<number | null>(null);
+  const [telemetryStatus, setTelemetryStatus] = useState<TelemetryStatusSnapshot | null>(null);
+  const [telemetryStatusError, setTelemetryStatusError] = useState<string | null>(null);
+  const [telemetryStatusLoadedAt, setTelemetryStatusLoadedAt] = useState<number | null>(null);
   const [lensActionBusy, setLensActionBusy] = useState<
     ""
       | "host_supervision_authority_request"
@@ -4025,6 +4030,14 @@ function SystemPanel(props: {
     return "Lens request failed.";
   }, []);
 
+  const telemetryError = useCallback((err: unknown): string => {
+    if (err instanceof TelemetryApiError) {
+      return `${err.message}${err.status ? ` (HTTP ${err.status})` : ""}`;
+    }
+    if (err instanceof Error) return err.message;
+    return "Telemetry status request failed.";
+  }, []);
+
   const scrollOrbSection = useCallback((sectionId: string) => {
     window.requestAnimationFrame(() => {
       document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -4060,6 +4073,7 @@ function SystemPanel(props: {
         nextReactorProposalReviews,
         nextReactorDeadletters,
         nextLensStatus,
+        nextTelemetryStatus,
       ] =
         await Promise.allSettled([
         client.getSystemInfo(),
@@ -4080,6 +4094,7 @@ function SystemPanel(props: {
         }),
         reactorClient.listDeadletters({ limit: 6 }),
         lensClient.getStatus({ limit: 6 }),
+        telemetryClient.getStatus(),
       ]);
 
       const degradedFeeds: string[] = [];
@@ -4194,6 +4209,15 @@ function SystemPanel(props: {
         degradedFeeds.push("lens status");
       }
 
+      if (nextTelemetryStatus.status === "fulfilled") {
+        setTelemetryStatus(nextTelemetryStatus.value);
+        setTelemetryStatusError(null);
+        setTelemetryStatusLoadedAt(refreshStartedAt);
+      } else {
+        setTelemetryStatusError(telemetryError(nextTelemetryStatus.reason));
+        degradedFeeds.push("telemetry status");
+      }
+
       if (degradedFeeds.length > 0) {
         setRefreshNotice(`Refresh completed with degraded feeds: ${degradedFeeds.join(", ")}.`);
       }
@@ -4213,6 +4237,8 @@ function SystemPanel(props: {
     reactorError,
     reactorReviewRouteFilter,
     settingsError,
+    telemetryClient,
+    telemetryError,
   ]);
 
   const requestLensHostSupervisionAuthority = useCallback(async () => {
@@ -5826,6 +5852,22 @@ function SystemPanel(props: {
   const controlModeId = safeString(controlMode?.id).trim().toLowerCase();
   const telemetry = describeTelemetry(props.settings);
   const continuation = describeContinuation(props.operatorMode);
+  const telemetrySources = telemetryStatus?.sources ?? [];
+  const telemetryObservedAt = telemetryStatus?.ts || telemetryStatusLoadedAt;
+  const telemetryReadbackStatus =
+    safeString(telemetryStatus?.status).trim() || (telemetryStatusError ? "unavailable" : "unloaded");
+  const telemetryReadbackTone = telemetryStatusError
+    ? "blocked"
+    : telemetryStatus?.active
+      ? "running"
+      : telemetryStatus
+        ? "dormant"
+        : "standby";
+  const telemetryReadbackDetail = telemetryStatusError
+    ? `Stage 7 telemetry readback could not refresh: ${telemetryStatusError}`
+    : telemetryStatus
+      ? `${telemetryStatus.active_source_total} of ${telemetryStatus.source_total} telemetry source${telemetryStatus.source_total === 1 ? "" : "s"} active; connector collection is ${telemetryStatus.active ? "active" : "inactive"}.`
+      : "Stage 7 telemetry readback has not loaded yet.";
   const controlTone =
     controlModeId === "pilot"
       ? { bg: "#24160a", border: "#7a541b", color: "#ffd38a" }
@@ -6642,6 +6684,16 @@ function SystemPanel(props: {
       detail: lensStatusError
         ? `Lens status could not refresh: ${lensStatusError}`
         : lensHudHeadline || "Lens readback is available once the backend status contract responds.",
+    },
+    {
+      id: "telemetry-status",
+      label: "Telemetry",
+      observedAt: telemetryObservedAt,
+      error: telemetryStatusError,
+      staleAfterSeconds: 300,
+      actionLabel: "Inspect telemetry",
+      onAction: () => scrollOrbSection("francis-telemetry-status"),
+      detail: telemetryReadbackDetail,
     },
     {
       id: "operations",
@@ -10739,6 +10791,7 @@ function SystemPanel(props: {
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             <span style={badgeStyle(telemetry.tone)}>{telemetry.label}</span>
+            <span style={badgeStyle(telemetryReadbackTone)}>Stage 7 {telemetryReadbackStatus}</span>
             <span style={badgeStyle(continuation.tone)}>{continuation.label}</span>
           </div>
         </div>
@@ -10766,6 +10819,77 @@ function SystemPanel(props: {
         </div>
 
         <div style={{ fontSize: 12, color: THEME.text, marginTop: 10 }}>{telemetry.detail}</div>
+        <div style={{ fontSize: 12, color: telemetryStatusError ? "#ffcf9d" : THEME.text, marginTop: 8 }}>
+          {telemetryReadbackDetail}
+        </div>
+        {telemetryStatus ? (
+          <>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+                gap: 8,
+                marginTop: 10,
+              }}
+            >
+              <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+                <div style={{ fontSize: 11, color: THEME.muted }}>Stage 7 claim</div>
+                <div style={{ fontSize: 13, fontWeight: 700, marginTop: 4 }}>
+                  {safeString(telemetryStatus.claim).trim() || "readback"}
+                </div>
+              </div>
+              <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+                <div style={{ fontSize: 11, color: THEME.muted }}>Active sources</div>
+                <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
+                  {telemetryStatus.active_source_total}/{telemetryStatus.source_total}
+                </div>
+              </div>
+              <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+                <div style={{ fontSize: 11, color: THEME.muted }}>Redaction</div>
+                <div style={{ fontSize: 13, fontWeight: 700, marginTop: 4 }}>
+                  {safeString(telemetryStatus.redaction.status).trim() || "declared"}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+              {telemetrySources.map((source) => (
+                <div
+                  key={source.id}
+                  style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}
+                >
+                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 700 }}>{source.label || source.id}</div>
+                      <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>{source.description}</div>
+                    </div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                      <span style={badgeStyle(source.active ? "running" : "dormant")}>
+                        {source.active ? "active" : "inactive"}
+                      </span>
+                      <span style={badgeStyle(source.status)}>{source.status}</span>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                    scope <code>{source.scope.status}</code>
+                    {" / "}visible <code>{source.visible_indicator ? "true" : "false"}</code>
+                    {" / "}hidden sensing <code>{source.hidden_sensing ? "true" : "false"}</code>
+                    {" / "}raw events <code>{source.retention.stores_raw_events === true ? "true" : "false"}</code>
+                  </div>
+                  {source.blocked_by.length > 0 ? (
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                      {source.blocked_by.map((blocker) => (
+                        <span key={`${source.id}-${blocker}`} style={badgeStyle("blocked")}>
+                          {blocker}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </>
+        ) : null}
         <div style={{ fontSize: 12, color: continuation.tone === "blocked" ? "#ffcf9d" : THEME.muted, marginTop: 6 }}>
           {continuation.detail}
         </div>

@@ -41800,6 +41800,31 @@ Latest validation for Stage 7 start:
   tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
   Result: `passed`
 
+### 2026-05-28 - Stage 7 telemetry status becomes visible in the operator UI
+
+Roadmap area: Stage 7 / Telemetry MVP, visible sensing indicators.
+
+Material change:
+
+- The chat UI now has a typed telemetry client for `/telemetry/status` and the
+  system refresh loop reads the Stage 7 posture alongside Lens, ORB,
+  continuity, reactor, and operations feeds.
+- The existing Telemetry & Continuation card now distinguishes local UI
+  configuration from the backend Stage 7 readback, showing active source counts,
+  the readback claim, redaction posture, and each declared telemetry source.
+- Terminal, git, and IDE diagnostic sources remain visibly inactive and blocked
+  by connector/scope prerequisites. The UI does not claim capture, memory
+  writes, execution authority, or hidden sensing.
+- ORB freshness now includes telemetry status so stale or failed telemetry
+  readback is surfaced before the operator relies on sensing posture.
+
+Latest validation for Stage 7 operator readback:
+
+- `node --test --experimental-strip-types src/telemetry/index.test.ts`
+  Result: `passed; 2 passed`
+- `npm run build` from `apps/chat_ui`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
