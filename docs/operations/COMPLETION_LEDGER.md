@@ -41333,6 +41333,63 @@ Latest validation for command-palette shell-bridge audit consumption:
   tests/test_lens_stage6_completion_audit_script.py`
   Result: `passed; 2 files already formatted`
 
+### 2026-05-28 - Stage 6 completion audit consumes OS-binding blocker proof
+
+Roadmap area: Stage 6 / Lens MVP, OS-level command-palette and summon-anywhere
+blocker proof truthfulness.
+
+Material change:
+
+- `scripts/lens-command-palette-os-binding-proof.ps1` now accepts the live
+  command-palette shell bridge when `summon_anywhere=true` is already present
+  from another governed readback path, while still requiring OS-level
+  command-palette binding to remain blocked.
+- Single-item blocker groups are serialized as arrays so the proof contract is
+  stable when only `os_level_command_palette_missing` remains in the palette
+  blocker group.
+- `scripts/lens-stage6-checkpoint.ps1` and
+  `scripts/lens-stage6-completion-audit.ps1` now consume that proof output
+  without requiring stale command-palette blockers that the live shell bridge no
+  longer reports.
+- Stage 6 remains active and blocked. This does not close Stage 6, start Stage
+  7, register a global hotkey, open an OS-level command palette, grant summon
+  authority, launch a process, write memory, or claim system residency.
+
+Latest validation for OS-binding blocker proof consumption:
+
+- Live `scripts/lens-command-palette-os-binding-proof.ps1 -Mode Status`
+  readback reported `ok=true`, `status=proof_passed`,
+  `os_level_command_palette_binding_observed=true`,
+  `os_binding_candidate_observed=true`,
+  `next_smallest_truthful_gap=os_level_command_palette_binding`,
+  `command_palette.summon_anywhere=true`, and
+  `blocker_groups.palette_binding=[os_level_command_palette_missing]`.
+- Live `scripts/lens-stage6-completion-audit.ps1 -Mode Status` readback after
+  this change reported `exit_code=0`, `ok=true`, `status=blocked`,
+  `audit_status=complete`, `ready_to_close=false`, `stage_state=active`,
+  `next_smallest_truthful_gap=summon_anywhere_blockers`,
+  `recommended_handoff_source=stage6_reviewed_summon_anywhere_authority_handoff`,
+  `ready_criteria=[helpful_not_noisy, mode_visibility,
+  pilot_visibility_groundwork]`, `blocked_criteria=[summon_anywhere,
+  system_resident_presence]`,
+  `command_palette_shell_bridge_readback=true`,
+  `command_palette_os_binding_blockers_proof_readback=true`,
+  `command_palette_os_binding_candidate_readback=true`, and
+  `os_binding_authority_request_readback=true`.
+- `python -m pytest
+  tests/test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority
+  tests/test_lens_command_palette_os_binding_proof_script.py
+  -q --tb=short`
+  Result: `passed; 4 passed`
+- `python -m ruff check tests/test_lens_stage6_checkpoint_script.py
+  tests/test_lens_stage6_completion_audit_script.py
+  tests/test_lens_command_palette_os_binding_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_stage6_checkpoint_script.py
+  tests/test_lens_stage6_completion_audit_script.py
+  tests/test_lens_command_palette_os_binding_proof_script.py`
+  Result: `passed; 3 files already formatted`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

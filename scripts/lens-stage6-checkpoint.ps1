@@ -938,6 +938,7 @@ $CommandPaletteOsBindingCandidateObserved = (
   $CommandPaletteOsBindingCandidateRequiredFamilies -contains 'authority' -and
   $CommandPaletteOsBindingCandidateBlockers -contains 'os_level_command_palette_missing' -and
   $CommandPaletteOsBindingCandidateBlockers -contains 'global_hotkey_binding_disabled' -and
+  $CommandPaletteOsBindingCandidateBlockers -contains 'global_hotkey_registration_disabled' -and
   $CommandPaletteOsBindingCandidateBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
   $CommandPaletteOsBindingCandidateBlockers -contains 'summon_authority_not_granted' -and
   $CommandPaletteOsBindingCandidateBlockers -contains 'hotkey_registration_authority_not_granted' -and
@@ -973,8 +974,6 @@ $CommandPaletteOsBindingObserved = (
   [string](Get-PropertyValue -Payload $CommandPaletteOsBindingPayload -Name 'first_blocker_family' -Default '') -eq 'palette_binding' -and
   [string](Get-PropertyValue -Payload $CommandPaletteOsBindingPayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'os_level_command_palette_binding' -and
   $CommandPaletteOsBindingPaletteBlockers -contains 'os_level_command_palette_missing' -and
-  $CommandPaletteOsBindingPaletteBlockers -contains 'summon_anywhere_missing' -and
-  $CommandPaletteOsBindingPaletteBlockers -contains 'global_hotkey_binding_missing' -and
   $CommandPaletteOsBindingGlobalHotkeyBlockers -contains 'global_hotkey_binding_disabled' -and
   $CommandPaletteOsBindingSummonBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
   $CommandPaletteOsBindingTrayBlockers -contains 'tray_host_disabled' -and

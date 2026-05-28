@@ -39,14 +39,14 @@ def _run_script(*args: str, env: dict[str, str] | None = None) -> subprocess.Com
     )
 
 
-def _write_lens_status(path: Path) -> None:
+def _write_lens_status(path: Path, *, summon_anywhere: bool = False) -> None:
     path.write_text(
         json.dumps(
             {
                 "command_palette": {
                     "status": "readback_ready",
                     "availability": "chat_ui_only",
-                    "summon_anywhere": False,
+                    "summon_anywhere": summon_anywhere,
                     "url_entrypoint_ready": True,
                     "url_entrypoint": {
                         "kind": "lens.command_palette.url_entrypoint",
@@ -56,7 +56,7 @@ def _write_lens_status(path: Path) -> None:
                         "opens_palette_in_chat_ui": True,
                         "requires_running_chat_ui": True,
                         "os_level_command_palette": False,
-                        "summon_anywhere": False,
+                        "summon_anywhere": summon_anywhere,
                         "global_hotkey": False,
                     },
                     "route": "/lens/status",
@@ -340,6 +340,47 @@ def test_lens_command_palette_os_binding_proof_composes_blocked_readbacks(
         "new_sensing_authority": False,
         "mutation_authority_granted": False,
     }
+
+
+def test_lens_command_palette_os_binding_proof_accepts_live_summon_readback(
+    tmp_path: Path,
+) -> None:
+    status_path = tmp_path / "lens-status.json"
+    execution_readiness_path = tmp_path / "execution-readiness.json"
+    _write_lens_status(status_path, summon_anywhere=True)
+    _write_execution_readiness(execution_readiness_path)
+
+    result = _run_script(
+        "-Mode",
+        "Status",
+        "-StatusPath",
+        str(status_path),
+        "-ExecutionReadinessPath",
+        str(execution_readiness_path),
+    )
+
+    assert result.returncode == 0, result.stderr or result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "proof_passed"
+    assert payload["ok"] is True
+    assert payload["os_level_command_palette_binding_observed"] is True
+    assert payload["os_binding_candidate_observed"] is True
+    assert payload["command_palette"]["summon_anywhere"] is True
+    assert payload["command_palette"]["os_level_command_palette"] is False
+    assert payload["blocker_groups"]["palette_binding"] == ["os_level_command_palette_missing"]
+    assert payload["os_binding_candidate"]["blocked_by"] == [
+        "os_level_command_palette_missing",
+        "global_hotkey_binding_disabled",
+        "global_hotkey_registration_disabled",
+        "hotkey_registration_authority_not_granted",
+        "lens_summon_binding_disabled_pending_authority",
+        "summon_authority_not_granted",
+        "local_process_launch_authority_not_granted",
+    ]
+    assert payload["governance"]["os_binding_candidate_boundary_readback"] is True
+    assert payload["governance"]["opens_palette"] is False
+    assert payload["governance"]["hotkey_registration_authority"] is False
+    assert payload["governance"]["summon_authority"] is False
 
 
 def test_lens_command_palette_os_binding_proof_uses_repo_readback_without_api(tmp_path: Path) -> None:

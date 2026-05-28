@@ -355,12 +355,9 @@ $PaletteBridgeObserved = (
     (Get-PropertyValue -Object $PaletteJson -Name "readback_ready") -eq $true -and
     (Get-PropertyValue -Object $PaletteJson -Name "availability") -eq "chat_ui_only" -and
     (Get-PropertyValue -Object $PaletteJson -Name "os_level_command_palette") -eq $false -and
-    (Get-PropertyValue -Object $PaletteJson -Name "summon_anywhere") -eq $false -and
-    (Test-ContainsAll -Actual $PaletteBlockers -Expected @(
-        "os_level_command_palette_missing",
-        "summon_anywhere_missing",
-        "global_hotkey_binding_missing"
-    ))
+    [int](Get-PropertyValue -Object $PaletteJson -Name "command_total" -Default 0) -gt 0 -and
+    (Get-PropertyValue -Object $PaletteJson -Name "next_smallest_truthful_gap") -eq "os_level_command_palette_binding" -and
+    $PaletteBlockers -contains "os_level_command_palette_missing"
 )
 $SummonPreflightObserved = (
     $SummonPreflight.exit_code -eq 0 -and
@@ -435,6 +432,7 @@ $OsBindingCandidateObserved = (
     (Test-ContainsAll -Actual $OsBindingCandidateBlockedBy -Expected @(
         "os_level_command_palette_missing",
         "global_hotkey_binding_disabled",
+        "global_hotkey_registration_disabled",
         "lens_summon_binding_disabled_pending_authority",
         "summon_authority_not_granted",
         "hotkey_registration_authority_not_granted",
@@ -503,12 +501,12 @@ $Payload = [ordered]@{
     first_blocker_family = "palette_binding"
     next_smallest_truthful_gap = "os_level_command_palette_binding"
     blocker_groups = [ordered]@{
-        palette_binding = $PaletteBindingBlockers
-        global_hotkey_binding = $GlobalHotkeyBlockers
-        summon_binding = $SummonBindingBlockers
-        tray_presence = $TrayPresenceBlockers
-        overlay_window = $OverlayWindowBlockers
-        authority = $AuthorityBlockers
+        palette_binding = [string[]]@($PaletteBindingBlockers)
+        global_hotkey_binding = [string[]]@($GlobalHotkeyBlockers)
+        summon_binding = [string[]]@($SummonBindingBlockers)
+        tray_presence = [string[]]@($TrayPresenceBlockers)
+        overlay_window = [string[]]@($OverlayWindowBlockers)
+        authority = [string[]]@($AuthorityBlockers)
     }
     os_binding_candidate = [ordered]@{
         kind = "lens.command_palette.os_binding_candidate"
@@ -563,7 +561,7 @@ $Payload = [ordered]@{
         command_total = Get-PropertyValue -Object $PaletteJson -Name "command_total"
         route = Get-PropertyValue -Object $PaletteJson -Name "route"
         local_surface = Get-PropertyValue -Object $PaletteJson -Name "local_surface"
-        blockers = $PaletteBlockers
+        blockers = [string[]]@($PaletteBlockers)
     }
     summon_preflight = [ordered]@{
         status = Get-PropertyValue -Object $SummonJson -Name "status"

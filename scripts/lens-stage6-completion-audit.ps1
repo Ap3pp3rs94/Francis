@@ -2208,6 +2208,7 @@ $CommandPaletteOsBindingCandidateObserved = (
   $CommandPaletteOsBindingCandidateRequiredFamilies -contains 'authority' -and
   $CommandPaletteOsBindingCandidateBlockers -contains 'os_level_command_palette_missing' -and
   $CommandPaletteOsBindingCandidateBlockers -contains 'global_hotkey_binding_disabled' -and
+  $CommandPaletteOsBindingCandidateBlockers -contains 'global_hotkey_registration_disabled' -and
   $CommandPaletteOsBindingCandidateBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
   $CommandPaletteOsBindingCandidateBlockers -contains 'summon_authority_not_granted' -and
   $CommandPaletteOsBindingCandidateBlockers -contains 'hotkey_registration_authority_not_granted' -and
@@ -2243,8 +2244,6 @@ $CommandPaletteOsBindingObserved = (
   [string]$CommandPaletteOsBindingProof.first_blocker_family -eq 'palette_binding' -and
   [string]$CommandPaletteOsBindingProof.next_smallest_truthful_gap -eq 'os_level_command_palette_binding' -and
   $CommandPaletteOsBindingPaletteBlockers -contains 'os_level_command_palette_missing' -and
-  $CommandPaletteOsBindingPaletteBlockers -contains 'summon_anywhere_missing' -and
-  $CommandPaletteOsBindingPaletteBlockers -contains 'global_hotkey_binding_missing' -and
   $CommandPaletteOsBindingGlobalHotkeyBlockers -contains 'global_hotkey_binding_disabled' -and
   $CommandPaletteOsBindingGlobalHotkeyBlockers -contains 'global_hotkey_registration_disabled' -and
   $CommandPaletteOsBindingGlobalHotkeyBlockers -contains 'hotkey_registration_authority_not_granted' -and
