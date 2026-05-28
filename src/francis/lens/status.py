@@ -1536,6 +1536,12 @@ def _stage6_next_handoff_readback(
     enablement_execution_receipt_gap = _safe_str(
         enablement_execution_receipt_post_plan.get("next_smallest_truthful_gap")
     ).strip()
+    enablement_execution_receipt_resident_claim_authority = bool(
+        enablement_execution_receipts.get("resident_claim_authority")
+    )
+    enablement_execution_receipt_resident_claim_allowed = bool(
+        enablement_execution_receipts.get("resident_claim_allowed")
+    )
     enablement_receipt_review_observed = (
         _safe_str(enablement_execution_receipts.get("kind")).strip()
         == "lens.host.persistent_supervision_enablement_execution.receipts"
@@ -1544,7 +1550,6 @@ def _stage6_next_handoff_readback(
         and enablement_execution_receipt_status in {"service_config_updated", "service_config_already_enabled"}
         and bool(enablement_execution_receipts.get("persistent_supervision_enablement_allowed"))
         and bool(enablement_execution_receipts.get("persistent_supervision_ready"))
-        and not bool(enablement_execution_receipts.get("resident_claim_allowed"))
         and enablement_execution_receipt_gap == "persistent_supervision_execution_boundary"
     )
     enablement_receipt_review_handoff: dict[str, Any] = {}
@@ -1566,7 +1571,9 @@ def _stage6_next_handoff_readback(
             "latest_receipt_status": enablement_execution_receipt_status,
             "post_plan_next_smallest_truthful_gap": enablement_execution_receipt_gap,
             "authority_required": "resident_claim_authority",
-            "authority_granted": False,
+            "authority_granted": enablement_execution_receipt_resident_claim_allowed,
+            "resident_claim_authority": enablement_execution_receipt_resident_claim_authority,
+            "resident_claim_allowed": enablement_execution_receipt_resident_claim_allowed,
             "read_only_contract": True,
             "diagnostic_only": True,
             "would_execute": False,

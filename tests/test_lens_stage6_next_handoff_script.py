@@ -175,6 +175,13 @@ def test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback() -> N
     assert "stage6_completion_audit_prerequisite_bringup_operator_plan_handoff_observed" in script
     assert "$Stage6CompletionAuditPrerequisiteBringupEnablementReceiptHandoffObserved = (" in script
     assert "'stage6_prerequisite_bringup_enablement_receipt_review'" in script
+    assert "$PersistentSupervisionEnablementExecutionReceiptResidentClaimAllowed" in script
+    assert (
+        "Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReceipts "
+        "-Name 'resident_claim_allowed' -Default $true" not in script
+    )
+    assert "resident_claim_authority = $PersistentSupervisionEnablementExecutionReceiptResidentClaimAuthority" in script
+    assert "resident_claim_allowed = $PersistentSupervisionEnablementExecutionReceiptResidentClaimAllowed" in script
     assert "$Stage6CompletionAuditReviewedSummonFirstBlockerTrayPresenceObserved = (" in script
     assert "$Stage6CompletionAuditReviewedSummonFirstBlockerResidentHostObserved = (" in script
     assert (

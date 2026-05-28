@@ -1817,6 +1817,12 @@ if ($PersistentSupervisionEnablementAuthorityHandoffObserved) {
 $PersistentSupervisionEnablementExecutionReceiptStatus = [string](
   Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReceiptLatest -Name 'status' -Default ''
 )
+$PersistentSupervisionEnablementExecutionReceiptResidentClaimAuthority = [bool](
+  Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReceipts -Name 'resident_claim_authority' -Default $false
+)
+$PersistentSupervisionEnablementExecutionReceiptResidentClaimAllowed = [bool](
+  Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReceipts -Name 'resident_claim_allowed' -Default $false
+)
 $PersistentSupervisionEnablementReceiptReviewObserved = (
   $Stage6PrerequisiteBringupPlanAppliedObserved -and
   [string](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReceipts -Name 'kind' -Default '') -eq 'lens.host.persistent_supervision_enablement_execution.receipts' -and
@@ -1825,11 +1831,9 @@ $PersistentSupervisionEnablementReceiptReviewObserved = (
   @('service_config_updated', 'service_config_already_enabled') -contains $PersistentSupervisionEnablementExecutionReceiptStatus -and
   [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReceipts -Name 'persistent_supervision_enablement_allowed' -Default $false) -and
   [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReceipts -Name 'persistent_supervision_ready' -Default $false) -and
-  -not [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReceipts -Name 'resident_claim_allowed' -Default $true) -and
   [string](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReceiptPostPlan -Name 'next_smallest_truthful_gap' -Default '') -eq 'persistent_supervision_execution_boundary' -and
   [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReceiptGovernance -Name 'read_only_contract' -Default $false) -and
   [string](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReceiptGovernance -Name 'next_step' -Default '') -eq 'review_persistent_supervision_execution_receipts_before_resident_claim_boundary' -and
-  -not [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReceiptGovernance -Name 'resident_claim_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReceiptGovernance -Name 'mutation_authority_granted' -Default $true)
 )
 $PersistentSupervisionEnablementReceiptReviewHandoff = [ordered]@{}
@@ -1847,7 +1851,9 @@ if ($PersistentSupervisionEnablementReceiptReviewObserved) {
     latest_receipt_status = $PersistentSupervisionEnablementExecutionReceiptStatus
     post_plan_next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $PersistentSupervisionEnablementExecutionReceiptPostPlan -Name 'next_smallest_truthful_gap' -Default '')
     authority_required = 'resident_claim_authority'
-    authority_granted = $false
+    authority_granted = $PersistentSupervisionEnablementExecutionReceiptResidentClaimAllowed
+    resident_claim_authority = $PersistentSupervisionEnablementExecutionReceiptResidentClaimAuthority
+    resident_claim_allowed = $PersistentSupervisionEnablementExecutionReceiptResidentClaimAllowed
     read_only_contract = $true
     diagnostic_only = $true
     would_execute = $false

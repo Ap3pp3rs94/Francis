@@ -41113,6 +41113,59 @@ Latest validation for live summon-anywhere readiness:
   Result: `not run to completion; Python 3.13 mypy import was blocked by Windows
   Application Control policy before type checking started`
 
+### 2026-05-28 - Stage 6 next-handoff consumes enablement receipt with resident-claim authority active
+
+Roadmap area: Stage 6 / Lens MVP, governed resident supervision handoff
+truthfulness.
+
+Material change:
+
+- Stage 6 next-handoff readback now keeps a persistent-supervision enablement
+  execution receipt visible after resident-claim authority is already leased.
+- The handoff reports the resident-claim authority/readiness booleans instead of
+  treating active resident-claim authority as a reason to fall back to the older
+  prerequisite bring-up plan.
+- Stage 6 remains active and blocked. This change does not close Stage 6, start
+  Stage 7, claim resident presence, write memory, launch runtime processes, or
+  change the `helpful_not_noisy` and `system_resident_presence` acceptance
+  criteria.
+
+Latest validation for enablement-receipt handoff truthfulness:
+
+- Live `scripts/lens-stage6-next-handoff.ps1 -Mode Status` readback reported
+  `ok=true`, `status=proof_passed`,
+  `persistent_supervision_enablement_receipt_review_handoff_observed=true`,
+  `persistent_supervision_resident_claim_boundary_handoff_observed=true`,
+  `recommended_handoff_source=persistent_supervision_resident_claim_boundary_handoff`,
+  and `next_smallest_truthful_gap=stage6_lens_completion_audit`.
+- Local `lens_status(limit=5)` reported
+  `stage6_readiness.status=blocked`, `ready_to_close=false`,
+  `ready_total=2`, `blocked_total=3`,
+  `blocked_criteria=[summon_anywhere, helpful_not_noisy,
+  system_resident_presence]`,
+  `next_handoff_source=persistent_supervision_enablement_receipt_review_handoff`,
+  and
+  `persistent_supervision_enablement_receipt_review_handoff.authority_granted=true`.
+- `python -m pytest
+  tests/test_api_lens.py::test_stage6_next_handoff_promotes_enablement_receipt_review_over_applied_prerequisite_plan
+  tests/test_api_lens.py::test_stage6_next_handoff_preserves_enablement_receipt_review_with_resident_claim_authority
+  -q`
+  Result: `passed; 2 passed`
+- `python -m pytest
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback
+  -q`
+  Result: `passed; 1 passed`
+- `python -m ruff check src/francis/lens/status.py tests/test_api_lens.py
+  tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/lens/status.py
+  tests/test_api_lens.py tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 3 files already formatted`
+- `python -m mypy src/francis/lens/status.py`
+  Result: `passed; no issues found`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

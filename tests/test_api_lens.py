@@ -5962,6 +5962,88 @@ def test_stage6_next_handoff_promotes_enablement_receipt_review_over_applied_pre
     )
 
 
+def test_stage6_next_handoff_preserves_enablement_receipt_review_with_resident_claim_authority() -> None:
+    from francis.lens.status import _stage6_next_handoff_readback
+
+    payload = _stage6_next_handoff_readback(
+        closure_readback={
+            "ready_to_close": False,
+            "next_smallest_truthful_gap": "resident_surface_operator_experience_proof",
+            "blocked_criteria": ["helpful_not_noisy", "system_resident_presence"],
+            "criteria": [],
+        },
+        resident_host={
+            "persistent_supervision_enablement_execution_receipts": {
+                "kind": "lens.host.persistent_supervision_enablement_execution.receipts",
+                "status": "readback_ready",
+                "route": "/lens/host/persistent-supervision/enablement/executions",
+                "readiness_route": "/lens/host/persistent-supervision/enablement/execution/readiness",
+                "execution_route": "/lens/host/persistent-supervision/enablement/execution",
+                "total": 1,
+                "persistent_supervision_enablement_allowed": True,
+                "persistent_supervision_ready": True,
+                "resident_claim_authority": True,
+                "resident_claim_allowed": True,
+                "latest": {
+                    "status": "service_config_already_enabled",
+                    "receipt_id": "lpsee_claim_authority_active",
+                    "post_plan": {
+                        "next_smallest_truthful_gap": "persistent_supervision_execution_boundary",
+                    },
+                },
+            },
+        },
+        prerequisite_bringup={
+            "kind": "lens.stage6.prerequisite_bringup.plan",
+            "status": "persistent_supervision_enablement_applied",
+            "current_truthful_gap": "persistent_supervision_execution_boundary",
+            "recommended_next_slice": "run_stage6_prerequisite_bringup_review_persistent_supervision_enablement_receipt",
+            "recommended_proof_script": "scripts/lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status",
+            "authority_required": "none_readback_only",
+            "authority_granted": False,
+            "would_execute": False,
+            "would_mutate": False,
+            "next_operator_action_requirement": "persistent_supervision_enablement_receipt",
+            "next_operator_action": {
+                "id": "review_persistent_supervision_enablement_receipt",
+                "route": "/lens/host/persistent-supervision/enablement/executions",
+                "method": "GET",
+                "latest_receipt_id": "lpsee_claim_authority_active",
+            },
+            "next_operator_command": {
+                "command": ".\\scripts\\lens-stage6-prerequisite-bringup-plan.ps1 -Mode Status",
+                "mode": "Status",
+                "requires_confirmation": False,
+                "requires_approval_id": False,
+                "requires_operator_approval_decision": False,
+            },
+            "governance": {
+                "read_only_contract": True,
+                "diagnostic_only": True,
+                "requires_explicit_operator_execution": True,
+            },
+        },
+    )
+
+    assert payload["recommended_handoff_source"] == "persistent_supervision_enablement_receipt_review_handoff"
+    assert payload["next_smallest_truthful_gap"] == "persistent_supervision_resident_claim_authority_boundary"
+    assert payload["recommended_next_slice"] == (
+        "review_persistent_supervision_resident_claim_boundary_without_runtime_start"
+    )
+    assert payload["authority_required"] == "resident_claim_authority"
+    assert payload["authority_granted"] is True
+    assert payload["persistent_supervision_enablement_receipt_review_handoff_observed"] is True
+    handoff = payload["persistent_supervision_enablement_receipt_review_handoff"]
+    assert handoff["latest_receipt_id"] == "lpsee_claim_authority_active"
+    assert handoff["authority_granted"] is True
+    assert handoff["resident_claim_authority"] is True
+    assert handoff["resident_claim_allowed"] is True
+    assert handoff["read_only_contract"] is True
+    assert handoff["diagnostic_only"] is True
+    assert handoff["would_execute"] is False
+    assert handoff["would_mutate"] is False
+
+
 def test_stage6_prerequisite_bringup_surface_execute_action_uses_active_authority_grant() -> None:
     from francis.lens.status import (
         _stage6_authority_state,
