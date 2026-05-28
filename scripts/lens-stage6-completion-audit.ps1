@@ -5285,6 +5285,39 @@ if ($SystemResidentAcceptanceConcreteHandoffObserved) {
     $RecommendedConcreteHandoff['readiness_route'] = $SystemResidentRuntimeLoopReadinessRoute
   }
 }
+$HostSupervisionAuthorityRequestProofHandoff = $HostSupervisionAuthorityRequestProof.handoff
+$SystemResidentHostSupervisionAuthorityRequestProofConcreteHandoffObserved = (
+  $SystemResidentAcceptanceConcreteHandoffObserved -and
+  $HostSupervisionAuthorityRequestProofObserved -and
+  [string]$HostSupervisionAuthorityRequestProof.previous_next_smallest_truthful_gap -eq 'host_supervision_authority_exact_approval_request' -and
+  [string]$HostSupervisionAuthorityRequestProof.next_smallest_truthful_gap -eq 'persistent_supervision_required_prerequisites_missing' -and
+  [string]$HostSupervisionAuthorityRequestProof.recommended_next_slice -eq 'resolve_persistent_supervision_required_prerequisites_without_resident_claim' -and
+  [string]$HostSupervisionAuthorityRequestProof.recommended_proof_script -eq 'scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status' -and
+  [string]$HostSupervisionAuthorityRequestProofHandoff.next_smallest_truthful_gap -eq 'persistent_supervision_required_prerequisites_missing' -and
+  [string]$HostSupervisionAuthorityRequestProofHandoff.next_step -eq 'resolve_persistent_supervision_required_prerequisites_without_resident_claim' -and
+  [string]$HostSupervisionAuthorityRequestProofHandoff.proof_script -eq 'scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status' -and
+  [string]$HostSupervisionAuthorityRequestProofHandoff.route -eq '/lens/host/persistent-supervision' -and
+  [string]$HostSupervisionAuthorityRequestProofHandoff.readiness_route -eq '/lens/host/persistent-supervision/enablement' -and
+  [string]$HostSupervisionAuthorityRequestProofHandoff.authority_required -eq 'resident_host_process_tray_hotkey_overlay_summon_prerequisites' -and
+  -not [bool]$HostSupervisionAuthorityRequestProofHandoff.authority_granted -and
+  [bool]$HostSupervisionAuthorityRequestProofHandoff.read_only_contract -and
+  [bool]$HostSupervisionAuthorityRequestProofHandoff.diagnostic_only -and
+  -not [bool]$HostSupervisionAuthorityRequestProofHandoff.would_execute -and
+  -not [bool]$HostSupervisionAuthorityRequestProofHandoff.would_mutate
+)
+if ($SystemResidentHostSupervisionAuthorityRequestProofConcreteHandoffObserved) {
+  $RecommendedConcreteHandoffSource = 'stage6_system_resident_host_supervision_authority_request_proof_handoff'
+  $RecommendedConcreteHandoff = [ordered]@{}
+  foreach ($Property in @($HostSupervisionAuthorityRequestProofHandoff.PSObject.Properties)) {
+    $RecommendedConcreteHandoff[$Property.Name] = $Property.Value
+  }
+  $RecommendedConcreteHandoff['acceptance_criterion'] = 'system_resident_presence'
+  $RecommendedConcreteHandoff['consumed_system_resident_acceptance_handoff'] = $SystemResidentAcceptanceConcreteHandoffObserved
+  $RecommendedConcreteHandoff['consumed_host_supervision_authority_request_proof'] = $HostSupervisionAuthorityRequestProofObserved
+  $RecommendedConcreteHandoff['host_supervision_authority_approval_id'] = [string]$HostSupervisionAuthorityRequestProof.host_supervision_authority_approval_id
+  $RecommendedConcreteHandoff['host_supervision_authority_grant_receipt_id'] = [string]$HostSupervisionAuthorityRequestProof.host_supervision_authority_grant_receipt_id
+  $RecommendedConcreteHandoff['runtime_files'] = $HostSupervisionAuthorityRequestProofRuntimeFiles
+}
 $PersistentSupervisionTrayPrerequisiteRuntimeChainConcreteObserved = (
   $NextSmallestTruthfulGap -eq 'persistent_supervision_required_prerequisites_missing' -and
   $PersistentSupervisionPrerequisitesProofObserved -and
@@ -5607,6 +5640,7 @@ $Payload = [ordered]@{
   recommended_concrete_authority_granted = $RecommendedConcreteAuthorityGranted
   recommended_concrete_handoff = $RecommendedConcreteHandoff
   persistent_supervision_tray_prerequisite_runtime_chain_concrete_observed = $PersistentSupervisionTrayPrerequisiteRuntimeChainConcreteObserved
+  system_resident_host_supervision_authority_request_proof_concrete_handoff_observed = $SystemResidentHostSupervisionAuthorityRequestProofConcreteHandoffObserved
   stage6_completion_audit_handoff_consumed_by_closure_readback = $Stage6CompletionAuditHandoffConsumedByClosureReadback
   stage6_completion_audit_concrete_handoff_observed = $ConcreteHandoffObserved
   stage6_completion_audit_concrete_execution_handoff_observed = $ConcreteExecutionHandoffObserved
@@ -7497,6 +7531,7 @@ $Payload = [ordered]@{
     runtime_files = $HostSupervisionAuthorityRequestProofRuntimeFiles
     blockers = [string[]]@($HostSupervisionAuthorityRequestProofBlockers)
     next_smallest_truthful_gap = [string]$HostSupervisionAuthorityRequestProof.next_smallest_truthful_gap
+    handoff = $HostSupervisionAuthorityRequestProof.handoff
   }
   persistent_supervision_plan = [ordered]@{
     status = if ($PersistentSupervisionPlanObserved) { [string]$PersistentSupervisionPlan.status } else { 'missing_or_failed' }

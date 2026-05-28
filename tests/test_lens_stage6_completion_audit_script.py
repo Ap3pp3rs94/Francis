@@ -1080,6 +1080,9 @@ def test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_
     acceptance_concrete_source = (
         "$RecommendedConcreteHandoffSource = 'stage6_remaining_acceptance_system_resident_presence_handoff'"
     )
+    host_request_proof_concrete_source = (
+        "$RecommendedConcreteHandoffSource = 'stage6_system_resident_host_supervision_authority_request_proof_handoff'"
+    )
     runtime_chain_flag = "$PersistentSupervisionTrayPrerequisiteRuntimeChainConcreteObserved = ("
     resident_claim_source = (
         "$RecommendedConcreteHandoffSource = 'persistent_supervision_resident_claim_boundary_handoff'"
@@ -1130,6 +1133,27 @@ def test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_
     assert "$RecommendedConcreteHandoff['acceptance_criterion'] = 'system_resident_presence'" in script
     assert "$SystemResidentRuntimeLoopRoute = '/lens/host/runtime-loop'" in script
     assert "$SystemResidentRuntimeLoopReadinessRoute = '/lens/host/runtime-loop/readiness'" in script
+    assert "$HostSupervisionAuthorityRequestProofHandoff = $HostSupervisionAuthorityRequestProof.handoff" in script
+    assert "$SystemResidentHostSupervisionAuthorityRequestProofConcreteHandoffObserved = (" in script
+    assert "$HostSupervisionAuthorityRequestProofObserved -and" in script
+    assert (
+        "[string]$HostSupervisionAuthorityRequestProof.recommended_proof_script "
+        "-eq 'scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status'"
+    ) in script
+    assert host_request_proof_concrete_source in script
+    assert (
+        "$RecommendedConcreteHandoff['consumed_system_resident_acceptance_handoff'] = "
+        "$SystemResidentAcceptanceConcreteHandoffObserved"
+    ) in script
+    assert (
+        "$RecommendedConcreteHandoff['consumed_host_supervision_authority_request_proof'] = "
+        "$HostSupervisionAuthorityRequestProofObserved"
+    ) in script
+    assert (
+        "system_resident_host_supervision_authority_request_proof_concrete_handoff_observed = "
+        "$SystemResidentHostSupervisionAuthorityRequestProofConcreteHandoffObserved"
+    ) in script
+    assert "handoff = $HostSupervisionAuthorityRequestProof.handoff" in script
     assert "next_operator_action = $Stage6PrerequisiteBringupPlanNextOperatorAction" in script
     assert "next_operator_command = $Stage6PrerequisiteBringupPlanNextOperatorCommand" in script
     assert "authority_required = [string]$Stage6PrerequisiteBringupPlan.authority_required" in script
@@ -1151,6 +1175,8 @@ def test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_
         "$RecommendedConcreteHandoff['authority_required'] = $Stage6PrerequisiteBringupPlanRecommendedAuthorityRequired"
     ) in script
     assert runtime_chain_flag in script
+    assert script.index(acceptance_concrete_source) < script.index(host_request_proof_concrete_source)
+    assert script.index(host_request_proof_concrete_source) < script.index(runtime_chain_flag)
     assert (
         "$PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable -eq 'tray_presence' -and\n"
         "  $TrayPresenceApiExecutionProofObserved"

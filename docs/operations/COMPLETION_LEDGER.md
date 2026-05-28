@@ -40794,6 +40794,85 @@ Latest validation for system-resident host-supervision operator handoff:
   recommended_next_operator_action.script_would_execute=false;
   recommended_next_operator_action.script_would_mutate=false`
 
+### 2026-05-28 - Stage 6 system-resident host-supervision request proof handoff
+
+Roadmap area: Stage 6 / Lens MVP, system-resident presence and governed
+persistent-supervision prerequisite handoff.
+
+Material change:
+
+- The Stage 6 completion audit now consumes the existing
+  `lens-host-supervision-authority-request-proof.ps1` readback when the
+  system-resident acceptance handoff is active.
+- In that state, the audit promotes the concrete handoff from the older
+  runtime-loop proof to
+  `stage6_system_resident_host_supervision_authority_request_proof_handoff`.
+- The promoted handoff points at
+  `scripts/lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status`
+  with `next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`.
+- The Stage 6 next-handoff proof preserves that promoted handoff instead of
+  collapsing back to the system-resident runtime-loop handoff.
+- This does not close Stage 6, start Stage 7, grant live authority, launch or
+  supervise a host runtime, write memory, mutate live host state, or claim
+  resident presence.
+
+Latest validation for system-resident host-supervision request proof handoff:
+
+- PowerShell AST parse of `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- PowerShell AST parse of `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed`
+- `python -m ruff check
+  tests\test_lens_stage6_completion_audit_script.py
+  tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests\test_lens_stage6_completion_audit_script.py
+  tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 2 files already formatted`
+- `python -m pytest
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_to_acceptance_handoff
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_promotes_system_resident_acceptance_boundary
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_preserves_system_resident_host_request_proof_handoff
+  tests/test_lens_host_supervision_authority_request_proof_script.py::test_lens_host_supervision_authority_request_proof_consumes_exact_request`
+  Result: `passed; 5 passed`
+- `.\scripts\lens-host-supervision-authority-request-proof.ps1 -Mode Status`
+  Result: `passed; ok=true; status=proof_passed;
+  previous_next_smallest_truthful_gap=host_supervision_authority_exact_approval_request;
+  next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing;
+  recommended_next_slice=resolve_persistent_supervision_required_prerequisites_without_resident_claim;
+  recommended_proof_script=scripts/lens-persistent-supervision-prerequisites-proof.ps1
+  -Mode Status; executed=false; supervision_ready=false;
+  resident_claim_allowed=false; memory_write=false`
+- `.\scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -AllowLaunchOnHotkey -ChildProofTimeoutSeconds 120`
+  Result: `passed blocked audit; ok=true; audit_status=complete;
+  ready_to_close=false; can_close_stage6=false; transition_allowed=false;
+  next_smallest_truthful_gap=system_resident_presence_blockers;
+  recommended_concrete_handoff_source=stage6_system_resident_host_supervision_authority_request_proof_handoff;
+  recommended_concrete_next_slice=resolve_persistent_supervision_required_prerequisites_without_resident_claim;
+  recommended_concrete_proof_script=scripts/lens-persistent-supervision-prerequisites-proof.ps1
+  -Mode Status;
+  recommended_concrete_next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing;
+  recommended_concrete_authority_required=resident_host_process_tray_hotkey_overlay_summon_prerequisites;
+  recommended_concrete_authority_granted=false;
+  system_resident_host_supervision_authority_request_proof_concrete_handoff_observed=true`
+- `.\scripts\lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath
+  .tmp\stage6-completion-audit-after-host-request-proof-handoff.json`
+  Result: `passed; ok=true; status=proof_passed;
+  next_smallest_truthful_gap=system_resident_presence_blockers;
+  recommended_concrete_handoff_source=stage6_system_resident_host_supervision_authority_request_proof_handoff;
+  recommended_concrete_next_slice=resolve_persistent_supervision_required_prerequisites_without_resident_claim;
+  recommended_concrete_proof_script=scripts/lens-persistent-supervision-prerequisites-proof.ps1
+  -Mode Status;
+  recommended_concrete_next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing;
+  recommended_concrete_authority_required=resident_host_process_tray_hotkey_overlay_summon_prerequisites;
+  recommended_concrete_authority_granted=false;
+  stage6_completion_audit_system_resident_host_supervision_request_proof_concrete_handoff_observed=true;
+  stage6_completion_audit_system_resident_host_supervision_operator_handoff_observed=false`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
