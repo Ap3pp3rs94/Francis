@@ -41242,6 +41242,60 @@ Latest validation for summon-anywhere live-readback consumption:
   tests/test_lens_stage6_completion_audit_script.py`
   Result: `passed`
 
+### 2026-05-28 - Stage 6 resident-claim readback consumes governed authority
+
+Roadmap area: Stage 6 / Lens MVP, resident surface and system-resident
+acceptance proof truthfulness.
+
+Material change:
+
+- `/lens/resident-surface/activation` now reads the persistent-supervision
+  resident-claim authority readiness audit and exposes resident-claim authority
+  routes, readiness status, blockers, and claim booleans through the activation
+  boundary.
+- `/lens/resident-surface` now mirrors resident-claim readiness and
+  `resident_claim_allowed` from live resident surface runtime plus governed
+  resident-claim authority, instead of hard-coding resident claim false after
+  the resident runtime is proven.
+- `scripts/lens-resident-surface-proof.ps1` now mirrors the live
+  resident-surface claim readback while keeping operator-experience,
+  helpful-not-noisy, execution, tray, overlay, hotkey, service, and memory
+  authority blocked.
+- Stage 6 remains active and blocked. This does not close Stage 6, start Stage
+  7, claim helpful-not-noisy, grant execution authority, install or control a
+  service, write memory, or hide resident-surface blockers.
+
+Latest validation for resident-claim readback truthfulness:
+
+- Live `scripts/lens-stage6-completion-audit.ps1 -Mode Status` readback after
+  this change reported `exit_code=0`, `ok=true`, `status=blocked`,
+  `audit_status=complete`, `ready_to_close=false`, `stage_state=active`,
+  `next_smallest_truthful_gap=command_palette_shell_bridge_readback`,
+  `ready_criteria=[helpful_not_noisy, mode_visibility,
+  pilot_visibility_groundwork]`, and
+  `blocked_criteria=[summon_anywhere, system_resident_presence]`.
+- `python -m pytest
+  tests/test_api_lens.py::test_lens_status_projects_readonly_stage6_contract
+  tests/test_api_lens.py::test_lens_resident_surface_readback_mirrors_claim_authority_without_execution
+  tests/test_api_lens.py::test_lens_status_promotes_live_supervised_resident_host_before_tray
+  tests/test_api_lens.py::test_lens_resident_runtime_execute_starts_supervised_resident_host_lease
+  tests/test_api_lens.py::test_lens_persistent_supervision_resident_claim_authority_is_separate_from_execution_grant
+  -q --tb=short`
+  Result: `passed; 5 passed`
+- `python -m pytest tests/test_lens_resident_surface_proof_script.py -q
+  --tb=short`
+  Result: `passed; 1 passed`
+- `python -m ruff check src/francis/lens/activation.py
+  src/francis/lens/status.py tests/test_api_lens.py
+  tests/test_lens_resident_surface_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/lens/activation.py
+  src/francis/lens/status.py tests/test_api_lens.py
+  tests/test_lens_resident_surface_proof_script.py`
+  Result: `passed; 4 files already formatted`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

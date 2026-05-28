@@ -333,7 +333,6 @@ function Test-ResidentSurfaceReadbackObserved {
     [bool](Get-PropertyValue -Payload $Runtime -Name 'resident_supervised_runtime' -Default $false) -and
     [bool](Get-PropertyValue -Payload $Runtime -Name 'runtime_ready' -Default $false) -and
     [bool](Get-PropertyValue -Payload $SurfacePayload -Name 'resident_surface_ready' -Default $false) -and
-    -not [bool](Get-PropertyValue -Payload $SurfacePayload -Name 'resident_claim_allowed' -Default $true) -and
     -not ($RuntimeBlockers -contains 'resident_surface_runtime_missing') -and
     -not ($RuntimeBlockers -contains 'resident_surface_runtime_not_supervised') -and
     -not ($RuntimeBlockers -contains 'resident_surface_not_resident')
@@ -611,15 +610,11 @@ $ResidentSurfaceContentReadback = (
   [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'contract_status' -Default '') -eq 'readback_ready' -and
   [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'route' -Default '') -eq '/lens/resident-surface' -and
   [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'content_contract_ready' -Default $false) -and
-  -not [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'resident_surface_ready' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'resident_claim_allowed' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'resident_overlay_runtime' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ResidentSurfaceGovernance -Name 'execution_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ResidentSurfaceGovernance -Name 'approval_decision_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ResidentSurfaceGovernance -Name 'memory_write' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ResidentSurfaceGovernance -Name 'overlay_control_authority' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $ResidentSurfaceGovernance -Name 'summon_authority' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $ResidentSurfaceGovernance -Name 'resident_claim_authority' -Default $true)
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfaceGovernance -Name 'summon_authority' -Default $true)
 )
 $ResidentSurfaceForegroundRuntimeReadback = (
   [bool](Get-PropertyValue -Payload $ForegroundSurfaceReadback -Name 'ok' -Default $false) -and
@@ -637,6 +632,16 @@ $ResidentSurfaceForegroundRuntimeReadback = (
 )
 $ResidentSurfaceResidentRuntimeReadback = Test-ResidentSurfaceReadbackObserved -SurfaceReadback $LiveResidentSurfaceReadback
 $ResidentSurfaceRuntimeReadback = $ResidentSurfaceResidentRuntimeReadback -or $ResidentSurfaceForegroundRuntimeReadback
+$ResidentSurfaceClaimAllowed = (
+  $ResidentSurfaceResidentRuntimeReadback -and
+  [bool](Get-PropertyValue -Payload $LiveResidentSurfacePayload -Name 'resident_claim_allowed' -Default $false)
+)
+$ResidentClaimAuthorityReady = (
+  $ResidentSurfaceResidentRuntimeReadback -and
+  [bool](Get-PropertyValue -Payload $LiveResidentSurfacePayload -Name 'resident_claim_authority_ready' -Default $false)
+)
+$ResidentClaimAuthorityReadinessRoute = [string](Get-PropertyValue -Payload $LiveResidentSurfacePayload -Name 'resident_claim_authority_readiness_route' -Default '/lens/host/persistent-supervision/resident-claim/authority/readiness')
+$ResidentClaimAuthorityBlockers = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $LiveResidentSurfacePayload -Name 'resident_claim_authority_blockers' -Default @())
 $AuthorityDenied = (
   -not [bool](Get-PropertyValue -Payload $HostGovernance -Name 'service_install_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $HostGovernance -Name 'service_control_authority' -Default $true) -and
@@ -646,7 +651,6 @@ $AuthorityDenied = (
   -not [bool](Get-PropertyValue -Payload $ResidentSurfaceGovernance -Name 'local_process_launch_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ResidentSurfaceGovernance -Name 'process_supervision_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ResidentSurfaceGovernance -Name 'service_control_authority' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $ResidentSurfaceGovernance -Name 'resident_claim_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $TrayGovernance -Name 'tray_registration_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $TrayGovernance -Name 'tray_icon_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $OverlayGovernance -Name 'overlay_control_authority' -Default $true) -and
@@ -654,7 +658,10 @@ $AuthorityDenied = (
   -not [bool](Get-PropertyValue -Payload $SummonGovernance -Name 'summon_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $SummonGovernance -Name 'hotkey_registration_authority' -Default $true)
 )
-$ResidentClaimBlocked = $HostLifecycleBlocked -and $TrayBlocked -and $OverlayBlocked -and $SummonBlocked -and $AuthorityDenied
+$ResidentClaimBoundaryReady = (
+  ($ResidentSurfaceClaimAllowed -and $ResidentClaimAuthorityReady) -or
+  ($HostLifecycleBlocked -and $TrayBlocked -and $OverlayBlocked -and $SummonBlocked -and $AuthorityDenied)
+)
 
 $Checks = @(
   (New-Check -Id 'resident_surface_content_readback' -Status $(if ($ResidentSurfaceContentReadback) { 'readback_ready' } else { 'failed' }) -Passed $ResidentSurfaceContentReadback -Evidence '/lens/resident-surface?limit=5' -Reason 'Resident surface content must be directly readable through the backend API route before runtime work can claim a surface.')
@@ -666,7 +673,7 @@ $Checks = @(
   (New-Check -Id 'overlay_window_preflight' -Status $(if ($OverlayBlocked) { 'blocked_disabled' } else { 'failed' }) -Passed $OverlayBlocked -Evidence 'scripts/lens-overlay-preflight.ps1 -Mode Status' -Reason 'Overlay window config must be readable, disabled, and blocked.')
   (New-Check -Id 'summon_binding_preflight' -Status $(if ($SummonBlocked) { 'blocked_disabled' } else { 'failed' }) -Passed $SummonBlocked -Evidence 'scripts/lens-summon-preflight.ps1 -Mode Status' -Reason 'Summon binding config must be readable, declared, disabled, and blocked.')
   (New-Check -Id 'authority_boundary' -Status $(if ($AuthorityDenied) { 'blocked' } else { 'unexpected_authority' }) -Passed $AuthorityDenied -Evidence 'preflight.governance' -Reason 'Resident surface proof must not grant service, tray, overlay, hotkey, or summon authority.')
-  (New-Check -Id 'resident_claim_boundary' -Status $(if ($ResidentClaimBlocked) { 'blocked' } else { 'unexpected_claim' }) -Passed $ResidentClaimBlocked -Evidence 'resident surface flags' -Reason 'Resident claim remains blocked until a real resident surface exists.')
+  (New-Check -Id 'resident_claim_boundary' -Status $(if ($ResidentSurfaceClaimAllowed) { 'claim_readback_ready' } elseif ($ResidentClaimBoundaryReady) { 'blocked' } else { 'unexpected_claim' }) -Passed $ResidentClaimBoundaryReady -Evidence 'resident surface flags' -Reason 'Resident claim must either remain blocked or be backed by live resident runtime and resident-claim authority readback.')
 )
 
 $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
@@ -818,8 +825,11 @@ $Payload = [ordered]@{
   resident_surface_contract_status = [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'contract_status' -Default '')
   resident_surface_runtime_status = if ($ResidentSurfaceResidentRuntimeReadback) { [string](Get-PropertyValue -Payload $LiveResidentSurfaceRuntime -Name 'status' -Default '') } else { [string](Get-PropertyValue -Payload $ForegroundSurfaceRuntime -Name 'status' -Default '') }
   resident_surface_route = '/lens/resident-surface'
-  ready_for_lens_resident_claim = $false
-  resident_claim_allowed = $false
+  ready_for_lens_resident_claim = $ResidentSurfaceClaimAllowed
+  resident_claim_allowed = $ResidentSurfaceClaimAllowed
+  resident_claim_authority_ready = $ResidentClaimAuthorityReady
+  resident_claim_authority_readiness_route = $ResidentClaimAuthorityReadinessRoute
+  resident_claim_authority_blockers = $ResidentClaimAuthorityBlockers
   resident_host_process = $ResidentSurfaceResidentRuntimeReadback
   foreground_host_process_observed = [bool](Get-PropertyValue -Payload $ForegroundSurfaceReadback -Name 'foreground_process_observed' -Default $false)
   foreground_host_runtime_completed = [bool](Get-PropertyValue -Payload $ForegroundSurfaceReadback -Name 'foreground_completed' -Default $false)
@@ -844,7 +854,7 @@ $Payload = [ordered]@{
   memory_write = $false
   process_supervision_authority = $false
   service_control_authority = $false
-  resident_claim_authority = $false
+  resident_claim_authority = $ResidentClaimAuthorityReady
   recommended_handoff = $ForegroundRecommendedHandoff
   resident_runtime_authority_grant_readiness_route = [string](Get-PropertyValue -Payload $RuntimeSurfacePayload -Name 'resident_runtime_authority_grant_readiness_route' -Default '/lens/resident-runtime/authority-grant/readiness')
   resident_runtime_authority_grant_handoff_observed = [bool](Get-PropertyValue -Payload $RuntimeSurfacePayload -Name 'resident_runtime_authority_grant_handoff_observed' -Default $false)
@@ -861,6 +871,10 @@ $Payload = [ordered]@{
     resident_surface_foreground_runtime_status = [string](Get-PropertyValue -Payload $ForegroundSurfaceRuntime -Name 'status' -Default '')
     resident_surface_foreground_runtime_observed = [bool](Get-PropertyValue -Payload $ForegroundSurfaceRuntime -Name 'foreground_runtime_observed' -Default $false)
     resident_surface_foreground_runtime_blockers = $ForegroundSurfaceRuntimeBlockers
+    resident_claim_allowed = $ResidentSurfaceClaimAllowed
+    resident_claim_authority_ready = $ResidentClaimAuthorityReady
+    resident_claim_authority_readiness_route = $ResidentClaimAuthorityReadinessRoute
+    resident_claim_authority_blockers = $ResidentClaimAuthorityBlockers
     foreground_runtime_state_path = [string](Get-PropertyValue -Payload $ForegroundSurfaceReadback -Name 'runtime_state_path' -Default '')
     foreground_runtime_running_state = [string](Get-PropertyValue -Payload $ForegroundSurfaceReadback -Name 'running_state_status' -Default '')
     foreground_runtime_final_state = [string](Get-PropertyValue -Payload $ForegroundSurfaceReadback -Name 'final_state_status' -Default '')
@@ -913,6 +927,8 @@ $Payload = [ordered]@{
     api_local_process_launch_authority = $false
     service_install_authority = $false
     service_control_authority = $false
+    resident_claim_authority = $ResidentClaimAuthorityReady
+    resident_claim_allowed = $ResidentSurfaceClaimAllowed
     hotkey_registration_authority = $false
     tray_registration_authority = $false
     tray_icon_authority = $false

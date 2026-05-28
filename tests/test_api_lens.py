@@ -2026,6 +2026,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert resident_surface["foreground_runtime_observed"] is False
     assert resident_surface["resident_surface_ready"] is False
     assert resident_surface["resident_claim_allowed"] is False
+    assert resident_surface["resident_claim_authority_ready"] is False
     assert resident_surface["resident_overlay_runtime"] is False
     assert resident_surface["resident_host"] is False
     assert resident_surface["always_on_top_overlay"] is False
@@ -2051,9 +2052,15 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert resident_surface_runtime["runtime_ready"] is False
     assert resident_surface_runtime["resident_surface_ready"] is False
     assert resident_surface_runtime["resident_claim_allowed"] is False
+    assert resident_surface_runtime["resident_claim_authority_ready"] is False
+    assert resident_surface_runtime["resident_claim_authority_readiness_route"] == (
+        "/lens/host/persistent-supervision/resident-claim/authority/readiness"
+    )
     assert resident_surface_runtime["blockers"] == ["resident_surface_runtime_missing"]
     assert resident_surface_runtime["governance"]["execution_authority"] is False
     assert resident_surface_runtime["governance"]["process_supervision_authority"] is False
+    assert resident_surface_runtime["governance"]["resident_claim_authority"] is False
+    assert resident_surface_runtime["governance"]["resident_claim_allowed"] is False
     surface_sections = {item["id"]: item for item in resident_surface["surface_sections"]}
     assert surface_sections["mode_and_scope"]["route"] == "/system/operator_mode"
     assert surface_sections["hud_summary"]["route"] == "/lens/hud"
@@ -2087,6 +2094,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "hotkey_registration_authority": False,
         "tray_registration_authority": False,
         "resident_claim_authority": False,
+        "resident_claim_allowed": False,
         "mutation_authority_granted": False,
     }
     resident_host = body["resident_host"]
@@ -4126,7 +4134,9 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert resident_surface_activation["boundary_ready"] is True
     assert resident_surface_activation["activation_ready"] is False
     assert resident_surface_activation["resident_surface_ready"] is False
+    assert resident_surface_activation["ready_for_lens_resident_claim"] is False
     assert resident_surface_activation["resident_claim_allowed"] is False
+    assert resident_surface_activation["resident_claim_authority_ready"] is False
     assert resident_surface_activation["execution"]["runtime_preflight_route"] == "/lens/resident-runtime/preflight"
     assert resident_surface_activation["execution"]["runtime_preflight_status"] == "blocked"
     assert resident_surface_activation["execution"]["runtime_policy_route"] == "/lens/resident-runtime/policy"
@@ -4157,7 +4167,30 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         resident_surface_activation["execution"]["runtime_authority_grant_denials_route"]
         == "/lens/resident-runtime/authority-grant/denials"
     )
+    assert (
+        resident_surface_activation["execution"]["resident_claim_authority_readiness_route"]
+        == "/lens/host/persistent-supervision/resident-claim/authority/readiness"
+    )
+    assert (
+        resident_surface_activation["execution"]["resident_claim_authority_request_route"]
+        == "/lens/host/persistent-supervision/resident-claim/authority/request"
+    )
+    assert (
+        resident_surface_activation["execution"]["resident_claim_authority_requests_route"]
+        == "/lens/host/persistent-supervision/resident-claim/authority/requests"
+    )
+    assert (
+        resident_surface_activation["execution"]["resident_claim_authority_grant_route"]
+        == "/lens/host/persistent-supervision/resident-claim/authority"
+    )
+    assert (
+        resident_surface_activation["execution"]["resident_claim_authority_grants_route"]
+        == "/lens/host/persistent-supervision/resident-claim/authority/grants"
+    )
     assert resident_surface_activation["execution"]["runtime_execute_route"] == "/lens/resident-runtime/execute"
+    assert resident_surface_activation["execution"]["resident_claim_authority_readiness_status"] == "blocked"
+    assert resident_surface_activation["execution"]["resident_claim_authority"] is False
+    assert resident_surface_activation["execution"]["resident_claim_allowed"] is False
     assert resident_surface_activation["execution"]["runtime_denial_status"] == "blocked"
     assert resident_surface_activation["execution"]["would_launch_process"] is False
     assert resident_surface_activation["execution"]["would_open_overlay"] is False
@@ -4255,6 +4288,9 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert resident_surface_activation["governance"]["memory_write"] is False
     assert resident_surface_activation["governance"]["resident_runtime_authority_grant_readiness_readback"] is True
     assert resident_surface_activation["governance"]["resident_runtime_authority_grant_handoff_readback"] is True
+    assert resident_surface_activation["governance"]["resident_claim_authority_readiness_readback"] is True
+    assert resident_surface_activation["governance"]["resident_claim_authority"] is False
+    assert resident_surface_activation["governance"]["resident_claim_allowed"] is False
     surface_activation_criterion = _criterion(body, "resident_surface_activation_boundary")
     assert surface_activation_criterion == {
         "id": "resident_surface_activation_boundary",
@@ -5049,6 +5085,69 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
     assert runtime_execute_body["governance"]["memory_write"] is False
     assert runtime_execute_body["governance"]["receipt_write_authority"] is False
     assert runtime_execute_body["governance"]["resident_claim_authority"] is False
+
+
+def test_lens_resident_surface_readback_mirrors_claim_authority_without_execution() -> None:
+    from francis.lens.status import _resident_surface_readback_from_status
+
+    body = _resident_surface_readback_from_status(
+        {
+            "hud": {
+                "runtime": {
+                    "resident_overlay": True,
+                    "always_on_top": True,
+                    "tray_presence": True,
+                    "blockers": [],
+                }
+            },
+            "resident_host": {
+                "process_readback": {
+                    "process_alive": True,
+                    "state_exists": True,
+                    "state_status": "resident_running",
+                    "state_updated_at": "2026-05-28T00:00:00Z",
+                    "runtime_state_path": "data/runtime/lens-host/status.json",
+                    "pid_present": True,
+                    "pid": 1234,
+                    "process_alive_check": "live",
+                },
+                "supervisor_readback": {
+                    "status": "resident_running",
+                    "freshness_status": "fresh",
+                    "resident_supervised_runtime": True,
+                    "fresh_readback": True,
+                },
+                "foreground_session": {"supported": True},
+                "blockers": [],
+            },
+            "resident_surface_activation": {
+                "resident_claim_allowed": True,
+                "resident_claim_authority_ready": True,
+                "resident_claim_authority_readiness": {
+                    "status": "ready",
+                    "authority_granted": True,
+                    "resident_claim_allowed": True,
+                },
+                "resident_claim_authority_blockers": [],
+                "blockers": [],
+            },
+        }
+    )
+
+    assert body["resident_surface_ready"] is True
+    assert body["resident_claim_allowed"] is True
+    assert body["resident_claim_authority_ready"] is True
+    assert body["resident_claim_authority_readiness_route"] == (
+        "/lens/host/persistent-supervision/resident-claim/authority/readiness"
+    )
+    assert body["resident_surface_runtime"]["resident_claim_allowed"] is True
+    assert body["resident_surface_runtime"]["resident_claim_authority_ready"] is True
+    assert body["resident_surface_runtime"]["governance"]["resident_claim_allowed"] is True
+    assert body["resident_surface_runtime"]["governance"]["resident_claim_authority"] is True
+    assert body["governance"]["resident_claim_allowed"] is True
+    assert body["governance"]["resident_claim_authority"] is True
+    assert body["recommended_handoff"]["would_claim_resident"] is False
+    assert body["authority_granted"] is False
 
 
 def test_stage6_next_handoff_promotes_audited_enablement_authority_denial() -> None:
@@ -13313,7 +13412,9 @@ def test_lens_host_activation_readback_tracks_decision_without_execution(monkeyp
     assert resident_surface_activation_body["boundary_ready"] is True
     assert resident_surface_activation_body["activation_ready"] is False
     assert resident_surface_activation_body["resident_surface_ready"] is False
+    assert resident_surface_activation_body["ready_for_lens_resident_claim"] is False
     assert resident_surface_activation_body["resident_claim_allowed"] is False
+    assert resident_surface_activation_body["resident_claim_authority_ready"] is False
     assert resident_surface_activation_body["execution_ready"] is False
     assert resident_surface_activation_body["executed"] is False
     assert resident_surface_activation_body["applied"] is False
@@ -13327,6 +13428,29 @@ def test_lens_host_activation_readback_tracks_decision_without_execution(monkeyp
         == "/lens/resident-runtime/authority-grant/readiness"
     )
     assert resident_surface_activation_body["execution"]["runtime_authority_grant_readiness_status"] == "blocked"
+    assert (
+        resident_surface_activation_body["execution"]["resident_claim_authority_readiness_route"]
+        == "/lens/host/persistent-supervision/resident-claim/authority/readiness"
+    )
+    assert (
+        resident_surface_activation_body["execution"]["resident_claim_authority_request_route"]
+        == "/lens/host/persistent-supervision/resident-claim/authority/request"
+    )
+    assert (
+        resident_surface_activation_body["execution"]["resident_claim_authority_requests_route"]
+        == "/lens/host/persistent-supervision/resident-claim/authority/requests"
+    )
+    assert (
+        resident_surface_activation_body["execution"]["resident_claim_authority_grant_route"]
+        == "/lens/host/persistent-supervision/resident-claim/authority"
+    )
+    assert (
+        resident_surface_activation_body["execution"]["resident_claim_authority_grants_route"]
+        == "/lens/host/persistent-supervision/resident-claim/authority/grants"
+    )
+    assert resident_surface_activation_body["execution"]["resident_claim_authority_readiness_status"] == "blocked"
+    assert resident_surface_activation_body["execution"]["resident_claim_authority"] is False
+    assert resident_surface_activation_body["execution"]["resident_claim_allowed"] is False
     assert resident_surface_activation_body["execution"]["runtime_plan_status"] == "blocked"
     assert resident_surface_activation_body["execution"]["runtime_denial_status"] == (
         "denied_no_resident_runtime_execution_boundary"
@@ -13397,6 +13521,9 @@ def test_lens_host_activation_readback_tracks_decision_without_execution(monkeyp
     assert resident_surface_activation_body["governance"]["memory_write"] is False
     assert resident_surface_activation_body["governance"]["resident_runtime_authority_grant_readiness_readback"] is True
     assert resident_surface_activation_body["governance"]["resident_runtime_authority_grant_handoff_readback"] is True
+    assert resident_surface_activation_body["governance"]["resident_claim_authority_readiness_readback"] is True
+    assert resident_surface_activation_body["governance"]["resident_claim_authority"] is False
+    assert resident_surface_activation_body["governance"]["resident_claim_allowed"] is False
 
     denied_runtime_execution = client.post(
         "/lens/resident-runtime/execute",

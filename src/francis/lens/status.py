@@ -4745,11 +4745,25 @@ def _resident_surface_readback_from_status(status: dict[str, Any]) -> dict[str, 
     resident_runtime_authority_grant_handoff = _as_dict(
         resident_surface_activation.get("resident_runtime_authority_grant_handoff")
     )
+    resident_claim_authority_readiness = _as_dict(resident_surface_activation.get("resident_claim_authority_readiness"))
     hud_runtime = _as_dict(hud.get("runtime"))
     resident_surface_runtime = _resident_surface_runtime_from_host(resident_host)
     foreground_runtime_observed = bool(resident_surface_runtime.get("foreground_runtime_observed"))
     resident_runtime_observed = bool(resident_surface_runtime.get("resident_runtime_observed"))
     resident_surface_ready = bool(resident_surface_runtime.get("resident_surface_ready"))
+    resident_claim_allowed = resident_surface_ready and bool(resident_surface_activation.get("resident_claim_allowed"))
+    resident_claim_authority_ready = bool(resident_surface_activation.get("resident_claim_authority_ready")) or bool(
+        resident_claim_authority_readiness.get("resident_claim_allowed")
+    )
+    resident_surface_runtime["resident_claim_allowed"] = resident_claim_allowed
+    resident_surface_runtime["resident_claim_authority_ready"] = resident_claim_authority_ready
+    resident_surface_runtime["resident_claim_authority_readiness_route"] = (
+        "/lens/host/persistent-supervision/resident-claim/authority/readiness"
+    )
+    resident_surface_runtime_governance = _as_dict(resident_surface_runtime.get("governance"))
+    resident_surface_runtime_governance["resident_claim_authority"] = resident_claim_authority_ready
+    resident_surface_runtime_governance["resident_claim_allowed"] = resident_claim_allowed
+    resident_surface_runtime["governance"] = resident_surface_runtime_governance
     if resident_surface_ready:
         next_smallest_truthful_gap = (
             _safe_str(resident_surface_activation.get("next_smallest_truthful_gap")).strip()
@@ -4793,6 +4807,14 @@ def _resident_surface_readback_from_status(status: dict[str, Any]) -> dict[str, 
         ).strip(),
         "resident_runtime_authority_grant_first_blocked_requirement_handoff": (
             resident_runtime_authority_grant_handoff
+        ),
+        "resident_claim_authority_readiness_route": (
+            "/lens/host/persistent-supervision/resident-claim/authority/readiness"
+        ),
+        "resident_claim_authority_ready": resident_claim_authority_ready,
+        "resident_claim_allowed": resident_claim_allowed,
+        "resident_claim_authority_blockers": _as_list(
+            resident_surface_activation.get("resident_claim_authority_blockers")
         ),
         "read_only_contract": True,
         "diagnostic_only": True,
@@ -4903,7 +4925,7 @@ def _resident_surface_readback_from_status(status: dict[str, Any]) -> dict[str, 
         "foreground_runtime_observed": foreground_runtime_observed,
         "resident_runtime_observed": resident_runtime_observed,
         "resident_surface_ready": resident_surface_ready,
-        "resident_claim_allowed": False,
+        "resident_claim_allowed": resident_claim_allowed,
         "resident_overlay_runtime": bool(hud_runtime.get("resident_overlay")),
         "resident_host": bool(resident_host.get("resident")),
         "always_on_top_overlay": bool(hud_runtime.get("always_on_top")),
@@ -4965,8 +4987,18 @@ def _resident_surface_readback_from_status(status: dict[str, Any]) -> dict[str, 
         "resident_runtime_authority_grant_readiness_route": "/lens/resident-runtime/authority-grant/readiness",
         "resident_runtime_authority_grant_handoff_observed": bool(resident_runtime_authority_grant_handoff),
         "resident_runtime_authority_grant_handoff": resident_runtime_authority_grant_handoff,
+        "resident_claim_authority_readiness_route": (
+            "/lens/host/persistent-supervision/resident-claim/authority/readiness"
+        ),
+        "resident_claim_authority_readiness": resident_claim_authority_readiness,
+        "resident_claim_authority_ready": resident_claim_authority_ready,
+        "resident_claim_authority_blockers": _as_list(
+            resident_surface_activation.get("resident_claim_authority_blockers")
+        ),
         "message": (
-            "Resident surface content is backed by a supervised resident runtime; operator experience proof remains required."
+            "Resident surface content is backed by a supervised resident runtime with governed resident-claim authority; operator experience proof remains required."
+            if resident_surface_ready and resident_claim_allowed
+            else "Resident surface content is backed by a supervised resident runtime; resident-claim and operator experience proof remain required."
             if resident_surface_ready
             else "Resident surface content is readable from backend truth, but no resident runtime or OS surface is active."
         ),
@@ -4984,7 +5016,8 @@ def _resident_surface_readback_from_status(status: dict[str, Any]) -> dict[str, 
             "service_control_authority": False,
             "hotkey_registration_authority": False,
             "tray_registration_authority": False,
-            "resident_claim_authority": False,
+            "resident_claim_authority": resident_claim_authority_ready,
+            "resident_claim_allowed": resident_claim_allowed,
             "mutation_authority_granted": False,
         },
     }

@@ -58,8 +58,17 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
         "resident_runtime_observed" if resident_runtime_readback else "foreground_runtime_observed"
     )
     assert payload["resident_surface_route"] == "/lens/resident-surface"
-    assert payload["ready_for_lens_resident_claim"] is False
-    assert payload["resident_claim_allowed"] is False
+    assert isinstance(payload["resident_claim_allowed"], bool)
+    assert payload["ready_for_lens_resident_claim"] is payload["resident_claim_allowed"]
+    assert isinstance(payload["resident_claim_authority_ready"], bool)
+    assert payload["resident_claim_authority"] is payload["resident_claim_authority_ready"]
+    assert payload["resident_claim_authority_readiness_route"] == (
+        "/lens/host/persistent-supervision/resident-claim/authority/readiness"
+    )
+    assert isinstance(payload["resident_claim_authority_blockers"], list)
+    if payload["resident_claim_allowed"]:
+        assert resident_runtime_readback is True
+        assert payload["resident_claim_authority_ready"] is True
     assert payload["resident_host_process"] is resident_runtime_readback
     assert payload["foreground_host_process_observed"] is True
     assert payload["foreground_host_runtime_completed"] is True
@@ -140,7 +149,9 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
     assert checks["overlay_window_preflight"]["status"] == "blocked_disabled"
     assert checks["summon_binding_preflight"]["status"] == "blocked_disabled"
     assert checks["authority_boundary"]["status"] == "blocked"
-    assert checks["resident_claim_boundary"]["status"] == "blocked"
+    assert checks["resident_claim_boundary"]["status"] == (
+        "claim_readback_ready" if payload["resident_claim_allowed"] else "blocked"
+    )
     assert all(item["passed"] for item in payload["checks"])
 
     proof = payload["proof"]
@@ -161,6 +172,12 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
     assert "resident_surface_runtime_not_supervised" in proof["resident_surface_foreground_runtime_blockers"]
     assert "resident_surface_not_resident" in proof["resident_surface_foreground_runtime_blockers"]
     assert "resident_surface_runtime_missing" not in proof["resident_surface_foreground_runtime_blockers"]
+    assert proof["resident_claim_allowed"] is payload["resident_claim_allowed"]
+    assert proof["resident_claim_authority_ready"] is payload["resident_claim_authority_ready"]
+    assert proof["resident_claim_authority_readiness_route"] == (
+        "/lens/host/persistent-supervision/resident-claim/authority/readiness"
+    )
+    assert proof["resident_claim_authority_blockers"] == payload["resident_claim_authority_blockers"]
     assert proof["foreground_runtime_running_state"] == "foreground_running"
     assert proof["foreground_runtime_final_state"] == "foreground_stopped"
     assert proof["host_lifecycle_status"] == "blocked"
@@ -224,6 +241,8 @@ def test_lens_resident_surface_proof_composes_blocked_surface_without_authority(
         "api_local_process_launch_authority": False,
         "service_install_authority": False,
         "service_control_authority": False,
+        "resident_claim_authority": payload["resident_claim_authority_ready"],
+        "resident_claim_allowed": payload["resident_claim_allowed"],
         "hotkey_registration_authority": False,
         "tray_registration_authority": False,
         "tray_icon_authority": False,

@@ -10976,6 +10976,20 @@ def lens_resident_surface_activation_boundary(
     manifest = lens_host_launch_manifest()
     surface_runtime_blockers = _resident_surface_runtime_blockers_from_manifest(manifest)
     resident_surface_runtime_ready = not surface_runtime_blockers
+    resident_claim_authority_readiness = lens_host_persistent_supervision_resident_claim_authority_readiness_audit(
+        approval_id=safe_approval_id,
+        actor=actor,
+        limit=safe_limit,
+    )
+    resident_claim_authority_allowed = bool(resident_claim_authority_readiness.get("resident_claim_allowed")) and bool(
+        resident_claim_authority_readiness.get("authority_granted")
+    )
+    resident_claim_allowed = resident_surface_runtime_ready and resident_claim_authority_allowed
+    resident_claim_authority_blockers = (
+        []
+        if resident_claim_allowed or not resident_surface_runtime_ready
+        else _str_list(resident_claim_authority_readiness.get("blockers"))
+    )
     surfaces = _as_dict(preflight.get("surfaces"))
     host_surface = _as_dict(surfaces.get("host"))
     summon_surface = _as_dict(surfaces.get("summon"))
@@ -10995,6 +11009,7 @@ def lens_resident_surface_activation_boundary(
             *_str_list(runtime_plan.get("blockers")),
             *_str_list(runtime_denial.get("blockers")),
             *_str_list(execution_denial.get("blockers")),
+            *resident_claim_authority_blockers,
             *surface_runtime_blockers,
         ]
     )
@@ -11112,8 +11127,9 @@ def lens_resident_surface_activation_boundary(
         "boundary_ready": True,
         "activation_ready": False,
         "resident_surface_ready": resident_surface_runtime_ready,
-        "ready_for_lens_resident_claim": False,
-        "resident_claim_allowed": False,
+        "ready_for_lens_resident_claim": resident_claim_allowed,
+        "resident_claim_allowed": resident_claim_allowed,
+        "resident_claim_authority_ready": resident_claim_authority_allowed,
         "execution_ready": False,
         "executed": False,
         "applied": False,
@@ -11137,6 +11153,19 @@ def lens_resident_surface_activation_boundary(
             "runtime_authority_grant_requests_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_REQUESTS_ROUTE,
             "runtime_authority_grants_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_GRANTS_ROUTE,
             "runtime_authority_grant_denials_route": LENS_RESIDENT_RUNTIME_AUTHORITY_GRANT_DENIALS_ROUTE,
+            "resident_claim_authority_readiness_route": (
+                LENS_HOST_PERSISTENT_SUPERVISION_RESIDENT_CLAIM_AUTHORITY_READINESS_ROUTE
+            ),
+            "resident_claim_authority_request_route": (
+                LENS_HOST_PERSISTENT_SUPERVISION_RESIDENT_CLAIM_AUTHORITY_REQUEST_ROUTE
+            ),
+            "resident_claim_authority_requests_route": (
+                LENS_HOST_PERSISTENT_SUPERVISION_RESIDENT_CLAIM_AUTHORITY_REQUESTS_ROUTE
+            ),
+            "resident_claim_authority_grant_route": (LENS_HOST_PERSISTENT_SUPERVISION_RESIDENT_CLAIM_AUTHORITY_ROUTE),
+            "resident_claim_authority_grants_route": (
+                LENS_HOST_PERSISTENT_SUPERVISION_RESIDENT_CLAIM_AUTHORITY_GRANTS_ROUTE
+            ),
             "runtime_plan_route": LENS_RESIDENT_RUNTIME_PLAN_ROUTE,
             "runtime_execute_route": LENS_RESIDENT_RUNTIME_EXECUTE_ROUTE,
             "execute_route": LENS_HOST_ACTIVATION_EXECUTE_ROUTE,
@@ -11147,6 +11176,9 @@ def lens_resident_surface_activation_boundary(
             "runtime_authority_grant_status": _safe_str(runtime_authority_grant.get("status")).strip(),
             "runtime_authority_grant_readiness_status": _safe_str(
                 runtime_authority_grant_readiness.get("status")
+            ).strip(),
+            "resident_claim_authority_readiness_status": _safe_str(
+                resident_claim_authority_readiness.get("status")
             ).strip(),
             "runtime_plan_status": _safe_str(runtime_plan.get("status")).strip(),
             "runtime_denial_status": _safe_str(runtime_denial.get("status")).strip(),
@@ -11164,6 +11196,8 @@ def lens_resident_surface_activation_boundary(
             "would_write_receipt": bool(_as_dict(runtime_denial.get("denial")).get("would_write_receipt")),
             "would_decide_approval": bool(plan_body.get("would_decide_approval")),
             "would_claim_resident": bool(_as_dict(runtime_denial.get("denial")).get("would_claim_resident")),
+            "resident_claim_authority": resident_claim_authority_allowed,
+            "resident_claim_allowed": resident_claim_allowed,
             "runtime_denial_reason": _safe_str(_as_dict(runtime_denial.get("denial")).get("reason")).strip(),
             "denial_reason": _safe_str(denial.get("reason")).strip(),
         },
@@ -11182,6 +11216,8 @@ def lens_resident_surface_activation_boundary(
         "resident_runtime_authority_grant_handoff_observed": bool(runtime_authority_grant_handoff),
         "resident_runtime_authority_grant_handoff": runtime_authority_grant_handoff,
         "resident_runtime_authority_grant": runtime_authority_grant,
+        "resident_claim_authority_readiness": resident_claim_authority_readiness,
+        "resident_claim_authority_blockers": resident_claim_authority_blockers,
         "resident_runtime_plan": runtime_plan,
         "resident_runtime_denial": runtime_denial,
         "components": components,
@@ -11213,6 +11249,9 @@ def lens_resident_surface_activation_boundary(
             "denial_receipt_write_authority": False,
             "resident_runtime_authority_grant_readiness_readback": True,
             "resident_runtime_authority_grant_handoff_readback": bool(runtime_authority_grant_handoff),
+            "resident_claim_authority_readiness_readback": True,
+            "resident_claim_authority": resident_claim_authority_allowed,
+            "resident_claim_allowed": resident_claim_allowed,
             "runtime_mutation_authority_granted": False,
             "next_step": next_gap,
         },
