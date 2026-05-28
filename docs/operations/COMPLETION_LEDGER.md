@@ -40612,6 +40612,56 @@ Latest validation for applied-enablement receipt handoff arbitration:
   receipt_review_status=receipt_reviewed;
   resident_claim_boundary_handoff_observed=true`
 
+### 2026-05-27 - Stage 6 completion audit advances past consumed enablement receipt
+
+Roadmap area: Stage 6 / Lens MVP, persistent-supervision and remaining
+acceptance blocker arbitration.
+
+Material change:
+
+- The completion audit now distinguishes an applied enablement receipt review
+  that is still pending from one already consumed by resident-claim boundary
+  readback.
+- Once the resident-claim boundary readback is observed, the audit no longer
+  loops on `stage6_prerequisite_bringup_enablement_receipt_review` and no longer
+  falls back to stale prerequisite-missing child proof projections.
+- The latest audit advances to the remaining system-resident acceptance blocker:
+  `system_resident_presence_blockers`, with the acceptance handoff naming
+  `resident_host_supervision_authority_readiness_blockers`.
+- Stage 6 remains active and blocked. The audit still reports
+  `ready_to_close=false`, `can_close_stage6=false`, and
+  `transition_allowed=false`; Stage 7 has not started.
+
+Latest validation for consumed receipt-review arbitration:
+
+- PowerShell AST parse of `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 1 file already formatted`
+- `python -m pytest
+  tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_consumes_stage6_prerequisite_bringup_plan_readback
+  tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_readback
+  tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_prefers_closure_handoff_after_resident_claim_boundary
+  -q`
+  Result: `passed; 3 passed`
+- `.\scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -AllowLaunchOnHotkey -ChildProofTimeoutSeconds 120`
+  Result: `passed; ok=true; status=blocked; audit_status=complete;
+  ready_to_close=false; can_close_stage6=false; transition_allowed=false;
+  child_proof_runs=24; child_proof_timeouts=[];
+  applied_enablement_receipt_review_pending=false;
+  applied_enablement_receipt_review_consumed=true;
+  applied_enablement_resident_claim_boundary_readback=true;
+  next_smallest_truthful_gap=system_resident_presence_blockers;
+  recommended_handoff_source=stage6_remaining_acceptance_blockers_after_summon_runtime_readback;
+  recommended_next_slice=review_system_resident_presence_acceptance_blockers_after_summon_runtime_readback;
+  recommended_proof_script=scripts/lens-stage6-checkpoint.ps1 -Mode Status;
+  authority_required=none_readback_only; authority_granted=false;
+  acceptance_criterion_next_smallest_truthful_gap=resident_host_supervision_authority_readiness_blockers`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

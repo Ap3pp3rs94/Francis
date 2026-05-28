@@ -1313,9 +1313,15 @@ $Stage6AppliedEnablementResidentClaimBoundaryReadbackObserved = (
   $PersistentSupervisionResidentClaimBoundaryObserved -and
   [string]$PersistentSupervisionResidentClaimBoundaryProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit'
 )
+$Stage6PrerequisiteBringupAppliedEnablementReceiptReviewConsumed = (
+  $Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and
+  $Stage6PrerequisiteBringupPlanNextOperatorActionId -eq 'review_persistent_supervision_enablement_receipt' -and
+  $Stage6AppliedEnablementResidentClaimBoundaryReadbackObserved
+)
 $Stage6PrerequisiteBringupAppliedEnablementReceiptReviewPending = (
   $Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and
-  $Stage6PrerequisiteBringupPlanNextOperatorActionId -eq 'review_persistent_supervision_enablement_receipt'
+  $Stage6PrerequisiteBringupPlanNextOperatorActionId -eq 'review_persistent_supervision_enablement_receipt' -and
+  -not $Stage6PrerequisiteBringupAppliedEnablementReceiptReviewConsumed
 )
 $PersistentSupervisionEnablementTransitionPlanProofSiblingChildProofCount = 3
 $PersistentSupervisionEnablementTransitionPlanProofChildTimeoutSeconds = [Math]::Min(
@@ -3634,6 +3640,7 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $BlockedCriterionIds -contains 'system_resident_presence' -and
   $Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and
   -not $Stage6PrerequisiteBringupAppliedEnablementReceiptReviewPending -and
+  -not $Stage6PrerequisiteBringupAppliedEnablementReceiptReviewConsumed -and
   $ResidentHostProcessSupervisionEvidenceObserved -and
   $ResidentSupervisionPersistenceBoundaryProofObserved -and
   $HostSupervisionAuthorityReadinessEvidenceObserved -and
@@ -7774,6 +7781,7 @@ $Payload = [ordered]@{
     missing_prerequisites_readback = $Stage6PrerequisiteBringupPlanMissingPrerequisitesObserved
     applied_enablement_readback = $Stage6PrerequisiteBringupPlanAppliedEnablementObserved
     applied_enablement_receipt_review_pending = $Stage6PrerequisiteBringupAppliedEnablementReceiptReviewPending
+    applied_enablement_receipt_review_consumed = $Stage6PrerequisiteBringupAppliedEnablementReceiptReviewConsumed
     applied_enablement_resident_claim_boundary_readback = $Stage6AppliedEnablementResidentClaimBoundaryReadbackObserved
     read_only_governance_readback = $Stage6PrerequisiteBringupPlanReadOnlyGovernanceObserved
     exit_code = [int]$Stage6PrerequisiteBringupPlanResult.exit_code
