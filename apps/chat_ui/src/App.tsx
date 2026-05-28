@@ -138,6 +138,14 @@ type ChatMissionSurface = {
   nextStep?: string;
 };
 
+type ChatTelemetrySurface = {
+  status: string;
+  activeSourceTotal: number;
+  sourceTotal: number;
+  eventCount: number;
+  lines: string[];
+};
+
 type MissionMemoryReceiptLike = {
   id?: string;
   source?: string;
@@ -390,6 +398,24 @@ function chatMissionSurface(message: ChatMessage): ChatMissionSurface | null {
   if (operationId) surface.operationId = operationId;
   if (nextStep) surface.nextStep = nextStep;
   return surface;
+}
+
+function chatTelemetrySurface(message: ChatMessage): ChatTelemetrySurface | null {
+  const meta = isRecord(message.meta) ? message.meta : {};
+  const context = isRecord(meta.telemetry_context) ? meta.telemetry_context : {};
+  if (!context || Object.keys(context).length === 0) return null;
+  const governance = isRecord(context.governance) ? context.governance : {};
+  if (context.hidden_sensing === true || governance.grants_execution_authority === true) return null;
+  const rawLines = Array.isArray(context.prompt_lines) ? context.prompt_lines : [];
+  const lines = rawLines.map((line) => safeString(line).trim()).filter(Boolean).slice(0, 3);
+  const status = safeString(context.status).trim() || safeString(context.source_status).trim() || "telemetry_context";
+  return {
+    status,
+    activeSourceTotal: safeNumber(context.active_source_total, 0),
+    sourceTotal: safeNumber(context.source_total, 0),
+    eventCount: safeNumber(context.event_count, 0),
+    lines,
+  };
 }
 
 function operationMetaString(record: OperationRecord | null | undefined, key: string, fallback = ""): string {
@@ -1952,6 +1978,7 @@ function ChatPanel(props: {
         {props.messages.map((m, idx) => {
           const isUser = m.role === "user";
           const missionSurface = isUser ? null : chatMissionSurface(m);
+          const telemetrySurface = isUser ? null : chatTelemetrySurface(m);
           return (
             <div
               key={`${m.role}-${idx}`}
@@ -2003,6 +2030,39 @@ function ChatPanel(props: {
                   >
                     Open mission flow
                   </button>
+                </div>
+              ) : null}
+              {telemetrySurface ? (
+                <div
+                  style={{
+                    marginTop: 10,
+                    paddingTop: 10,
+                    borderTop: `1px solid ${THEME.panelBorder}`,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 6,
+                  }}
+                >
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                    <span style={badgeStyle(telemetrySurface.status)}>{telemetrySurface.status}</span>
+                    <span style={badgeStyle("read_only")}>read only</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: THEME.muted }}>
+                    telemetry context <code>{telemetrySurface.activeSourceTotal}/{telemetrySurface.sourceTotal}</code>
+                    {" / "}events <code>{telemetrySurface.eventCount}</code>
+                    {" / "}hidden sensing <code>false</code>
+                    {" / "}authority <code>none</code>
+                  </div>
+                  {telemetrySurface.lines.length > 0 ? (
+                    <div style={{ fontSize: 11, color: THEME.muted }}>
+                      {telemetrySurface.lines.map((line, lineIndex) => (
+                        <React.Fragment key={`telemetry-line-${idx}-${lineIndex}`}>
+                          {lineIndex > 0 ? " / " : ""}
+                          <code>{line}</code>
+                        </React.Fragment>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
             </div>

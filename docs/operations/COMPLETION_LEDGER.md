@@ -41946,6 +41946,48 @@ Latest validation for Stage 7 IDE diagnostics readback:
 - `node --test --experimental-strip-types src/telemetry/index.test.ts`
   Result: `passed; 2 passed`
 
+### 2026-05-28 - Stage 7 telemetry context reaches assist surfaces visibly
+
+Roadmap area: Stage 7 / Telemetry MVP, first meaningful work-context awareness.
+
+Material change:
+
+- Telemetry now exposes a compact read-only `/telemetry/context` projection
+  sourced only from existing governed `/telemetry/status` readbacks.
+- Normal `/chat/send` responses now include `telemetry_context` metadata, and
+  LLM prompts receive the same redacted context with explicit instructions that
+  telemetry is untrusted and grants no execution or mutation authority.
+- The chat UI preserves `telemetry_context` metadata and renders a visible
+  read-only context summary under assistant replies, including active-source
+  count, event count, hidden-sensing=false, authority=none, and bounded context
+  lines.
+- The projection redacts terminal, git, and IDE diagnostic summaries before
+  prompt use or UI display; it does not start watchers, widen telemetry
+  collection scope, store raw events, write memory, mutate files, or grant
+  execution authority.
+- `/telemetry/status` now advances its next smallest gap to
+  `stage7_context_awareness_action_quality_feedback`.
+
+Latest validation for Stage 7 assist-context consumption:
+
+- `python -m pytest tests/test_api_telemetry.py tests/test_api_chat.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short`
+  Result: `passed; 16 passed`
+- `python -m mypy src/francis/telemetry/context.py
+  src/francis/telemetry/status.py src/francis/api/routes/telemetry.py
+  src/francis/api/routes/chat.py src/francis/chat/router.py`
+  Result: `passed`
+- `python -m ruff check src/francis/telemetry/context.py
+  src/francis/telemetry/status.py src/francis/api/routes/telemetry.py
+  src/francis/api/routes/chat.py src/francis/chat/router.py
+  tests/test_api_telemetry.py tests/test_api_chat.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `node --test --experimental-strip-types src/chat/index.test.ts
+  src/telemetry/index.test.ts`
+  Result: `passed; 4 passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

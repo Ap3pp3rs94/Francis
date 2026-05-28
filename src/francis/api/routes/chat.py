@@ -15,6 +15,7 @@ from francis.governance.redaction import redact_secret_text
 from francis.missions import runtime as mission_runtime
 from francis.missions import store as mission_store
 from francis.missions.store import MissionCreateRequest
+from francis.telemetry.context import telemetry_context_snapshot
 
 router = APIRouter()
 manager = ConnectionManager()
@@ -399,7 +400,11 @@ def send(payload: ChatIn) -> dict[str, object]:
         mission_reply = _mission_ingress_reply(payload, route="/chat/send", method="POST")
         if mission_reply is not None:
             return mission_reply
-        return {"reply": handle(payload.message, use_llm=payload.use_llm)}
+        telemetry_context = telemetry_context_snapshot(surface="chat")
+        return {
+            "reply": handle(payload.message, use_llm=payload.use_llm, telemetry_context=telemetry_context),
+            "telemetry_context": telemetry_context,
+        }
     except Exception as exc:
         return {"reply": "", "error": str(exc)}
 

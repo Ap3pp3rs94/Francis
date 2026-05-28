@@ -90,6 +90,7 @@ const CHAT_SEND_META_KEYS = [
   "memory_receipt_count",
   "latest_memory_receipt",
   "governance",
+  "telemetry_context",
 ] as const;
 
 function chatResponseMeta(raw: Record<string, unknown>): Record<string, unknown> | undefined {

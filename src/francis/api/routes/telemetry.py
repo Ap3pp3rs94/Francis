@@ -13,6 +13,7 @@ from francis.telemetry.ide_diagnostics import (
     ide_diagnostics_scope_snapshot,
     record_ide_diagnostic_event,
 )
+from francis.telemetry.context import telemetry_context_snapshot
 from francis.telemetry.status import telemetry_status_snapshot
 from francis.telemetry.terminal import (
     TERMINAL_WRITE_SCOPE,
@@ -61,6 +62,11 @@ class IdeDiagnosticEventIn(BaseModel):
 @router.get("/status")
 def status() -> dict[str, Any]:
     return telemetry_status_snapshot()
+
+
+@router.get("/context")
+def context(surface: str = "assist") -> dict[str, Any]:
+    return telemetry_context_snapshot(surface=surface)
 
 
 @router.get("/terminal/scope")

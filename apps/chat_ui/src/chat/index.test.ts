@@ -38,6 +38,19 @@ test("parseChatSendResponse preserves mission ingress metadata for the chat surf
       run_id: "run_chat",
       artifact_dir: "D:/francis/data/artifacts/chat",
     },
+    telemetry_context: {
+      kind: "francis.stage7.telemetry.context",
+      status: "available",
+      active_source_total: 2,
+      source_total: 3,
+      event_count: 1,
+      prompt_lines: ["git: branch main, changed 1", "ide_diagnostics: error, count 2"],
+      hidden_sensing: false,
+      governance: {
+        telemetry_is_untrusted_input: true,
+        grants_execution_authority: false,
+      },
+    },
     governance: {
       gate: "permission_gate",
       reason: "missing_scopes",
@@ -82,6 +95,11 @@ test("parseChatSendResponse preserves mission ingress metadata for the chat surf
   const governance = meta.governance as Record<string, unknown>;
   assert.equal(governance.gate, "permission_gate");
   assert.equal(governance.reason, "missing_scopes");
+
+  const telemetryContext = meta.telemetry_context as Record<string, unknown>;
+  assert.equal(telemetryContext.kind, "francis.stage7.telemetry.context");
+  assert.equal(telemetryContext.active_source_total, 2);
+  assert.deepEqual(telemetryContext.prompt_lines, ["git: branch main, changed 1", "ide_diagnostics: error, count 2"]);
 });
 
 test("parseChatEvent preserves websocket mission ingress metadata", () => {

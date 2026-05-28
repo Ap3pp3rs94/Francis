@@ -187,6 +187,7 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("GET", "/system/web-learning/policy"),
         ("POST", "/system/web-learning/request"),
         ("GET", "/telemetry/status"),
+        ("GET", "/telemetry/context"),
         ("GET", "/telemetry/git/status"),
         ("GET", "/telemetry/ide-diagnostics/scope"),
         ("GET", "/telemetry/ide-diagnostics/events"),

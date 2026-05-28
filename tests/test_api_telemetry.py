@@ -30,7 +30,7 @@ def test_telemetry_status_projects_stage7_readonly_sources(monkeypatch, tmp_path
     }
     assert body["source_total"] == 3
     assert body["active_source_total"] == sum(1 for source in body["sources"] if source["active"])
-    assert body["next_smallest_truthful_gap"] == "stage7_context_awareness_consumed_by_assist_surfaces"
+    assert body["next_smallest_truthful_gap"] == "stage7_context_awareness_action_quality_feedback"
 
     sources = {source["id"]: source for source in body["sources"]}
     assert set(sources) == {"terminal", "git", "ide_diagnostics"}
@@ -89,6 +89,72 @@ def test_telemetry_redaction_uses_governed_redaction() -> None:
     assert redacted["cwd"] == "D:/Francis"
     assert redacted["operator_note"] == "token=[REDACTED:secret]"
     assert redacted["nested"]["api_key"] == "[REDACTED:secret]"
+
+
+def test_telemetry_context_projects_redacted_assist_surface(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps(
+            {
+                "test.telemetry.write": ["telemetry.terminal.write"],
+                "test.telemetry.ide": ["telemetry.ide_diagnostics.write"],
+            }
+        ),
+    )
+
+    client = TestClient(create_app())
+    client.post(
+        "/telemetry/terminal/events",
+        json={
+            "actor": "test.telemetry.write",
+            "reason": "record terminal context token=terminalreasonsecret123",
+            "command": "pytest token=terminalcommandsecret123",
+            "cwd": str(tmp_path),
+            "exit_code": 1,
+            "operation_id": "op_context_terminal",
+        },
+    )
+    client.post(
+        "/telemetry/ide-diagnostics/events",
+        json={
+            "actor": "test.telemetry.ide",
+            "reason": "record IDE context token=idereasonsecret123",
+            "file": "src/francis/password=idefilesecret123.py",
+            "diagnostics": [{"severity": "error", "code": "F821", "message": "token=idemessagesecret123"}],
+            "operation_id": "op_context_ide",
+        },
+    )
+
+    body = client.get("/telemetry/context?surface=chat").json()
+
+    assert body["ok"] is True
+    assert body["kind"] == "francis.stage7.telemetry.context"
+    assert body["surface"] == "chat"
+    assert body["status"] == "available"
+    assert body["visible_indicator"] is True
+    assert body["hidden_sensing"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["governance"]["does_not_expand_collection_scope"] is True
+    assert body["governance"]["telemetry_is_untrusted_input"] is True
+    assert body["next_smallest_truthful_gap"] == "stage7_context_awareness_action_quality_feedback"
+
+    source_ids = {item["source_id"] for item in body["context_items"]}
+    assert "terminal" in source_ids
+    assert "ide_diagnostics" in source_ids
+    assert body["prompt_lines"]
+
+    context_text = json.dumps(body, sort_keys=True)
+    for raw_secret in (
+        "terminalreasonsecret123",
+        "terminalcommandsecret123",
+        "idereasonsecret123",
+        "idefilesecret123",
+        "idemessagesecret123",
+    ):
+        assert raw_secret not in context_text
+    assert "[REDACTED:secret]" in context_text
 
 
 def test_terminal_telemetry_denies_event_without_actor_scope(monkeypatch, tmp_path: Path) -> None:

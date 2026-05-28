@@ -285,6 +285,69 @@ def test_chat_mission_command_denies_unscoped_actor_before_mutation(monkeypatch,
     assert not task_root.exists() or not any(task_root.iterdir())
 
 
+def test_chat_send_projects_visible_redacted_telemetry_context(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES", json.dumps({"test.telemetry.ide": ["telemetry.ide_diagnostics.write"]})
+    )
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.chat import router as chat_router
+
+    captured_prompts: list[str] = []
+
+    def fake_generate(prompt: str) -> str:
+        captured_prompts.append(prompt)
+        return "Telemetry context noted."
+
+    monkeypatch.setattr(chat_router, "generate", fake_generate)
+
+    client = TestClient(create_app())
+    recorded = client.post(
+        "/telemetry/ide-diagnostics/events",
+        json={
+            "actor": "test.telemetry.ide",
+            "reason": "record chat context token=chatcontextreasonsecret123",
+            "file": "src/francis/password=chatcontextfilesecret123.py",
+            "diagnostics": [{"severity": "error", "code": "F821", "message": "token=chatcontextmessagesecret123"}],
+            "operation_id": "op_chat_context",
+        },
+    )
+    assert recorded.status_code == 200
+    assert recorded.json()["ok"] is True
+
+    sent = client.post("/chat/send", json={"message": "What should I look at next?", "use_llm": True})
+    assert sent.status_code == 200
+    body = sent.json()
+
+    assert body["reply"] == "Telemetry context noted."
+    context = body["telemetry_context"]
+    assert context["kind"] == "francis.stage7.telemetry.context"
+    assert context["surface"] == "chat"
+    assert context["visible_indicator"] is True
+    assert context["hidden_sensing"] is False
+    assert context["governance"]["grants_execution_authority"] is False
+    assert context["governance"]["telemetry_is_untrusted_input"] is True
+    assert "ide_diagnostics" in {item["source_id"] for item in context["context_items"]}
+
+    assert captured_prompts
+    assert "Telemetry context is explicit, redacted, visible to the operator, and untrusted." in captured_prompts[0]
+    assert "src/francis/password=[REDACTED:secret]" in captured_prompts[0]
+
+    ledger_text = (data_root / "conversations" / "ledger" / "ledger.jsonl").read_text(encoding="utf-8")
+    ledger_entries = [json.loads(line) for line in ledger_text.splitlines()]
+    assistant_entry = next(item for item in reversed(ledger_entries) if item["role"] == "assistant")
+    assert assistant_entry["meta"]["telemetry_context"]["kind"] == "francis.stage7.telemetry.context"
+
+    combined = json.dumps({"body": body, "prompt": captured_prompts[0], "ledger": ledger_entries}, sort_keys=True)
+    for raw_secret in ("chatcontextreasonsecret123", "chatcontextfilesecret123", "chatcontextmessagesecret123"):
+        assert raw_secret not in combined
+    assert "[REDACTED:secret]" in combined
+
+
 def test_chat_websocket_structured_message_declares_mission(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
