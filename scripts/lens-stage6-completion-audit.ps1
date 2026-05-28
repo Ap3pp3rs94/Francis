@@ -5249,6 +5249,42 @@ if (
     $RecommendedConcreteHandoff['authority_required'] = $Stage6PrerequisiteBringupPlanRecommendedAuthorityRequired
   }
 }
+$SystemResidentAcceptanceConcreteHandoff = $RecommendedHandoff.acceptance_criterion_handoff
+$SystemResidentAcceptanceConcreteHandoffObserved = (
+  $RecommendedHandoffSource -eq 'stage6_remaining_acceptance_blockers_after_summon_runtime_readback' -and
+  [string]$RecommendedHandoff.acceptance_criterion -eq 'system_resident_presence' -and
+  [string]$RecommendedHandoff.acceptance_criterion_next_smallest_truthful_gap -eq 'resident_host_supervision_authority_readiness_blockers' -and
+  [string]$SystemResidentAcceptanceConcreteHandoff.next_smallest_truthful_gap -eq 'resident_host_supervision_authority_readiness_blockers' -and
+  [string]$SystemResidentAcceptanceConcreteHandoff.next_step -eq 'resolve_resident_host_runtime_loop_before_system_resident_claim' -and
+  [bool]$SystemResidentAcceptanceConcreteHandoff.read_only_contract -and
+  [bool]$SystemResidentAcceptanceConcreteHandoff.diagnostic_only -and
+  -not [bool]$SystemResidentAcceptanceConcreteHandoff.would_execute -and
+  -not [bool]$SystemResidentAcceptanceConcreteHandoff.would_mutate
+)
+if ($SystemResidentAcceptanceConcreteHandoffObserved) {
+  $RecommendedConcreteHandoffSource = 'stage6_remaining_acceptance_system_resident_presence_handoff'
+  $RecommendedConcreteHandoff = [ordered]@{}
+  foreach ($Property in @($SystemResidentAcceptanceConcreteHandoff.PSObject.Properties)) {
+    $RecommendedConcreteHandoff[$Property.Name] = $Property.Value
+  }
+  $SystemResidentRuntimeLoopRoute = [string]$SystemResidentAcceptanceConcreteHandoff.runtime_loop_route
+  if ([string]::IsNullOrWhiteSpace($SystemResidentRuntimeLoopRoute)) {
+    $SystemResidentRuntimeLoopRoute = '/lens/host/runtime-loop'
+  }
+  $SystemResidentRuntimeLoopReadinessRoute = [string]$SystemResidentAcceptanceConcreteHandoff.runtime_loop_readiness_route
+  if ([string]::IsNullOrWhiteSpace($SystemResidentRuntimeLoopReadinessRoute)) {
+    $SystemResidentRuntimeLoopReadinessRoute = '/lens/host/runtime-loop/readiness'
+  }
+  $RecommendedConcreteHandoff['previous_next_smallest_truthful_gap'] = $NextSmallestTruthfulGap
+  $RecommendedConcreteHandoff['proof_script'] = 'scripts/lens-host-runtime-loop-readiness-proof.ps1 -Mode Status'
+  $RecommendedConcreteHandoff['acceptance_criterion'] = 'system_resident_presence'
+  if ([string]::IsNullOrWhiteSpace([string]$RecommendedConcreteHandoff.route)) {
+    $RecommendedConcreteHandoff['route'] = $SystemResidentRuntimeLoopRoute
+  }
+  if ([string]::IsNullOrWhiteSpace([string]$RecommendedConcreteHandoff.readiness_route)) {
+    $RecommendedConcreteHandoff['readiness_route'] = $SystemResidentRuntimeLoopReadinessRoute
+  }
+}
 $PersistentSupervisionTrayPrerequisiteRuntimeChainConcreteObserved = (
   $NextSmallestTruthfulGap -eq 'persistent_supervision_required_prerequisites_missing' -and
   $PersistentSupervisionPrerequisitesProofObserved -and
@@ -5475,6 +5511,7 @@ if (
 $SystemResidentAppliedEnablementConcreteHandoffObserved = (
   $RecommendedHandoffSource -eq 'stage6_remaining_acceptance_blockers_after_summon_runtime_readback' -and
   [string]$RecommendedHandoff.acceptance_criterion -eq 'system_resident_presence' -and
+  -not $SystemResidentAcceptanceConcreteHandoffObserved -and
   $Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and
   $PersistentSupervisionResidentClaimBoundaryObserved
 )

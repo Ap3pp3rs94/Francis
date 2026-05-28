@@ -1072,11 +1072,14 @@ def test_lens_stage6_completion_audit_prefers_closure_handoff_after_resident_cla
     assert script.index(reviewed_summon_source) < script.index(prerequisite_source)
 
 
-def test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_to_resident_claim_boundary() -> None:
+def test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_to_acceptance_handoff() -> None:
     script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
 
     broad_source = "$RecommendedHandoffSource = 'stage6_remaining_acceptance_blockers_after_summon_runtime_readback'"
     concrete_source = "$RecommendedConcreteHandoffSource = 'stage6_prerequisite_bringup_operator_plan_handoff'"
+    acceptance_concrete_source = (
+        "$RecommendedConcreteHandoffSource = 'stage6_remaining_acceptance_system_resident_presence_handoff'"
+    )
     runtime_chain_flag = "$PersistentSupervisionTrayPrerequisiteRuntimeChainConcreteObserved = ("
     resident_claim_source = (
         "$RecommendedConcreteHandoffSource = 'persistent_supervision_resident_claim_boundary_handoff'"
@@ -1105,6 +1108,28 @@ def test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_
     assert "$RemainingAcceptanceCriterionReadback.PSObject.Properties['handoff']" in script
     assert "acceptance_criterion_next_smallest_truthful_gap = $RemainingAcceptanceCriterionNextGap" in script
     assert "acceptance_criterion_handoff = $RemainingAcceptanceCriterionHandoff" in script
+    assert "$SystemResidentAcceptanceConcreteHandoff = $RecommendedHandoff.acceptance_criterion_handoff" in script
+    assert "$SystemResidentAcceptanceConcreteHandoffObserved = (" in script
+    assert (
+        "[string]$RecommendedHandoff.acceptance_criterion_next_smallest_truthful_gap "
+        "-eq 'resident_host_supervision_authority_readiness_blockers'"
+    ) in script
+    assert (
+        "[string]$SystemResidentAcceptanceConcreteHandoff.next_smallest_truthful_gap "
+        "-eq 'resident_host_supervision_authority_readiness_blockers'"
+    ) in script
+    assert (
+        "[string]$SystemResidentAcceptanceConcreteHandoff.next_step "
+        "-eq 'resolve_resident_host_runtime_loop_before_system_resident_claim'"
+    ) in script
+    assert acceptance_concrete_source in script
+    assert (
+        "$RecommendedConcreteHandoff['proof_script'] = "
+        "'scripts/lens-host-runtime-loop-readiness-proof.ps1 -Mode Status'"
+    ) in script
+    assert "$RecommendedConcreteHandoff['acceptance_criterion'] = 'system_resident_presence'" in script
+    assert "$SystemResidentRuntimeLoopRoute = '/lens/host/runtime-loop'" in script
+    assert "$SystemResidentRuntimeLoopReadinessRoute = '/lens/host/runtime-loop/readiness'" in script
     assert "next_operator_action = $Stage6PrerequisiteBringupPlanNextOperatorAction" in script
     assert "next_operator_command = $Stage6PrerequisiteBringupPlanNextOperatorCommand" in script
     assert "authority_required = [string]$Stage6PrerequisiteBringupPlan.authority_required" in script
@@ -1165,13 +1190,15 @@ def test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_
     assert (
         "$RecommendedHandoffSource -eq 'stage6_remaining_acceptance_blockers_after_summon_runtime_readback' -and\n"
         "  [string]$RecommendedHandoff.acceptance_criterion -eq 'system_resident_presence' -and\n"
+        "  -not $SystemResidentAcceptanceConcreteHandoffObserved -and\n"
         "  $Stage6PrerequisiteBringupPlanAppliedEnablementObserved -and\n"
         "  $PersistentSupervisionResidentClaimBoundaryObserved"
     ) in script
     assert "$Stage6CompletionAuditHandoffConsumedByClosureReadback -or" in script
     assert "$SystemResidentAppliedEnablementConcreteHandoffObserved" in script
     assert script.index(broad_source) < script.index(concrete_source)
-    assert script.index(concrete_source) < script.index(runtime_chain_flag)
+    assert script.index(concrete_source) < script.index(acceptance_concrete_source)
+    assert script.index(acceptance_concrete_source) < script.index(runtime_chain_flag)
     assert script.index(runtime_chain_flag) < script.index(resident_claim_source)
     assert script.index(concrete_source) < script.index(resident_claim_source)
 

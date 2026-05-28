@@ -40662,6 +40662,78 @@ Latest validation for consumed receipt-review arbitration:
   authority_required=none_readback_only; authority_granted=false;
   acceptance_criterion_next_smallest_truthful_gap=resident_host_supervision_authority_readiness_blockers`
 
+### 2026-05-27 - Stage 6 completion audit promotes system-resident acceptance handoff
+
+Roadmap area: Stage 6 / Lens MVP, completion-audit handoff truthfulness and
+system-resident presence acceptance.
+
+Material change:
+
+- The Stage 6 completion audit now consumes the nested
+  `acceptance_criterion_handoff` from the remaining system-resident acceptance
+  blocker instead of letting the older applied-enablement resident-claim fallback
+  overwrite the concrete next action.
+- The broad Stage 6 audit posture remains unchanged:
+  `system_resident_presence_blockers` is still the next smallest truthful gap,
+  and `summon_anywhere` plus `system_resident_presence` remain blocked.
+- The concrete handoff is now
+  `stage6_remaining_acceptance_system_resident_presence_handoff`, with
+  `recommended_concrete_next_slice=resolve_resident_host_runtime_loop_before_system_resident_claim`
+  and
+  `recommended_concrete_proof_script=scripts/lens-host-runtime-loop-readiness-proof.ps1 -Mode Status`.
+- Stage 6 remains active and blocked. The audit still reports
+  `ready_to_close=false`, `can_close_stage6=false`, and
+  `transition_allowed=false`; Stage 7 has not started.
+
+Latest validation for system-resident acceptance concrete handoff promotion:
+
+- PowerShell AST parse of `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `python -m ruff check tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests\test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 1 file already formatted`
+- `python -m pytest
+  tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_to_acceptance_handoff
+  tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_consumes_stage6_prerequisite_bringup_plan_readback
+  tests\test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_can_opt_into_launch_on_hotkey_runtime_readback
+  -q`
+  Result: `passed; 3 passed`
+- `.\scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -AllowLaunchOnHotkey -ChildProofTimeoutSeconds 120`
+  Result: `passed; ok=true; status=blocked; audit_status=complete;
+  ready_to_close=false; can_close_stage6=false; transition_allowed=false;
+  child_proof_runs=24; child_proof_timeouts=[];
+  next_smallest_truthful_gap=system_resident_presence_blockers;
+  recommended_handoff_source=stage6_remaining_acceptance_blockers_after_summon_runtime_readback;
+  recommended_next_slice=review_system_resident_presence_acceptance_blockers_after_summon_runtime_readback;
+  recommended_concrete_handoff_source=stage6_remaining_acceptance_system_resident_presence_handoff;
+  recommended_concrete_next_slice=resolve_resident_host_runtime_loop_before_system_resident_claim;
+  recommended_concrete_proof_script=scripts/lens-host-runtime-loop-readiness-proof.ps1
+  -Mode Status;
+  recommended_concrete_next_smallest_truthful_gap=resident_host_supervision_authority_readiness_blockers;
+  recommended_concrete_authority_required=resident_runtime_execution_authority;
+  recommended_concrete_authority_granted=false`
+- `.\scripts\lens-host-runtime-loop-readiness-proof.ps1 -Mode Status`
+  Result: `passed; ok=true; status=proof_passed;
+  runtime_loop_next_smallest_truthful_gap=resident_host_supervision_authority_readiness_blockers;
+  next_smallest_truthful_gap=host_supervision_authority_exact_approval_request;
+  runtime_loop_readiness_observed=true;
+  host_supervision_authority_readiness_observed=true;
+  side_effects_denied=true`
+- `.\scripts\lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath
+  .tmp\stage6-completion-audit-after-system-resident-concrete-handoff.json`
+  Result: `passed; ok=true; status=proof_passed;
+  next_smallest_truthful_gap=system_resident_presence_blockers;
+  recommended_handoff_source=stage6_remaining_acceptance_blockers_after_summon_runtime_readback;
+  recommended_next_slice=review_system_resident_presence_acceptance_blockers_after_summon_runtime_readback;
+  recommended_concrete_handoff_source=stage6_remaining_acceptance_system_resident_presence_handoff;
+  recommended_concrete_next_slice=resolve_resident_host_runtime_loop_before_system_resident_claim;
+  recommended_concrete_proof_script=scripts/lens-host-runtime-loop-readiness-proof.ps1
+  -Mode Status`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
