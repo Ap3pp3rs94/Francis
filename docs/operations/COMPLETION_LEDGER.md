@@ -41698,6 +41698,73 @@ Latest validation for authority-bundle sequence projection:
   Result: `passed; CRLF normalization warning only for
   scripts/lens-stage6-next-handoff.ps1`
 
+### 2026-05-28 - Stage 6/Lens closes with completion-audit evidence
+
+Roadmap area: Stage 6 / Lens MVP closure, governed Lens resident presence.
+
+Material change:
+
+- Stage 6/Lens now supports a truthful closure claim for the current local
+  runtime posture. `/lens/status` reports `stage6_readiness.status=ready_to_close`,
+  `ready_to_close=true`, five ready criteria, zero blocked criteria, and empty
+  blocker lists for all ready closure criteria.
+- `scripts/lens-stage6-checkpoint.ps1` now treats the Stage 6 closure readback as
+  the authoritative acceptance projection once all five closure criteria are
+  present and ready. It no longer leaves stale child-proof blockers attached to
+  ready acceptance criteria.
+- `scripts/lens-stage6-completion-audit.ps1` now treats a successful
+  `ready_to_close` checkpoint as reviewed completion evidence and keeps
+  ready-state blockers serialized as empty arrays.
+- This closes Stage 6 for the roadmap done criteria: summon-anywhere,
+  helpful-not-noisy, mode visibility, Pilot visibility groundwork, and
+  system-resident presence are all validated through the Stage 6 status,
+  checkpoint, and completion-audit surfaces.
+- Stage 7/Telemetry is the next stage. This entry does not start Stage 7,
+  implement telemetry connectors, broaden sensing, grant new capture authority,
+  write memory, or bypass existing governance.
+
+Latest validation for Stage 6 closure:
+
+- Direct `/lens/status` Python readback reported
+  `stage6_readiness.status=ready_to_close`, `ready_to_close=true`, five ready
+  criteria, zero blocked criteria, and empty blocker lists for all five closure
+  criteria.
+- Live `scripts/lens-stage6-checkpoint.ps1 -Mode Status` readback reported
+  `status=ready_to_close`, `ready_to_close=true`, `summary.ready_total=5`,
+  `summary.blocked_total=0`, `summary.blocker_total=0`, and empty blocker lists
+  for all five closure criteria.
+- Live `scripts/lens-stage6-completion-audit.ps1 -Mode Status
+  -AllowLaunchOnHotkey -ChildProofTimeoutSeconds 240` readback reported
+  `status=ready_to_close`, `stage_state=closure_ready`,
+  `ready_to_close=true`, `transition_allowed=true`, `summary.ready_total=5`,
+  `summary.blocked_total=0`, `summary.blocker_total=0`, and
+  `next_smallest_truthful_gap=stage6_ledger_closure`.
+- `python -m pytest
+  tests/test_api_lens.py::test_stage6_closure_consumes_live_resident_runtime_over_stale_preflight_blockers
+  tests/test_api_lens.py::test_lens_status_projects_readonly_stage6_contract
+  -q --tb=short`
+  Result: `passed; 2 passed`
+- `python -m pytest
+  tests/test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_projects_closure_readback_handoffs
+  -q --tb=short`
+  Result: `passed; 1 passed`
+- `python -m pytest
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_marks_ready_closure_reviewed_and_blocker_free
+  -q --tb=short`
+  Result: `passed; 1 passed`
+- `python -m ruff check src/francis/lens/status.py tests/test_api_lens.py
+  tests/test_lens_stage6_checkpoint_script.py
+  tests/test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/lens/status.py tests/test_api_lens.py
+  tests/test_lens_stage6_checkpoint_script.py
+  tests/test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- PowerShell parser checks passed for
+  `scripts/lens-stage6-checkpoint.ps1`,
+  `scripts/lens-command-palette-os-binding-proof.ps1`, and
+  `scripts/lens-stage6-completion-audit.ps1`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

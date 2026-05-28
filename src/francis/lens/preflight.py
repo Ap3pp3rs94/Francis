@@ -1236,7 +1236,10 @@ def lens_summon_enablement_gate(*, preflight: dict[str, Any] | None = None) -> d
     resident_host_runtime_ready = bool(supervisor_readback.get("resident_supervised_runtime"))
     tray_runtime = _dict_value(launch_manifest, "tray_runtime_readback")
     tray_runtime_ready = bool(tray_runtime.get("ready"))
-    hotkey_runtime = _dict_value(summon, "hotkey_runtime_readback")
+    hotkey_runtime = _dict_value(launch_manifest, "hotkey_runtime_readback") or _dict_value(
+        summon,
+        "hotkey_runtime_readback",
+    )
     hotkey_runtime_ready = bool(hotkey_runtime.get("ready"))
     hotkey_launch_on_press = hotkey_runtime_ready and bool(hotkey_runtime.get("launch_on_hotkey"))
     overlay_runtime = _dict_value(launch_manifest, "overlay_runtime_readback") or _dict_value(
@@ -1556,10 +1559,13 @@ def _os_binding_command_palette_contract(
     blockers: list[str],
     authority_granted: bool,
     active_grant_receipt_id: str,
+    os_level_command_palette: bool = False,
+    summon_anywhere: bool = False,
 ) -> dict[str, Any]:
+    ready = bool(os_level_command_palette)
     return {
         "kind": "lens.os_binding.command_palette_contract",
-        "status": "blocked",
+        "status": "ready" if ready else "blocked",
         "readback_ready": True,
         "route": "/lens/status",
         "source": "lens.command_palette.shell_bridge",
@@ -1567,14 +1573,14 @@ def _os_binding_command_palette_contract(
         "bridge_script": "scripts/lens-command-palette.ps1",
         "proof_script": "scripts/lens-command-palette-os-binding-proof.ps1",
         "local_surface": "chat_ui.command_palette",
-        "availability": "chat_ui_only",
+        "availability": "os_runtime" if ready else "chat_ui_only",
         "url_entrypoint_ready": True,
         "url_entrypoint_route": "/?francis_lens=command_palette",
         "authority_required": "os_level_command_palette_binding_authority",
         "authority_granted": authority_granted,
         "active_grant_receipt_id": active_grant_receipt_id,
-        "os_level_command_palette": False,
-        "summon_anywhere": False,
+        "os_level_command_palette": ready,
+        "summon_anywhere": bool(summon_anywhere) and ready,
         "would_open_palette": False,
         "would_register_hotkey": False,
         "would_summon": False,
@@ -1608,7 +1614,10 @@ def lens_os_binding_implementation_plan(
     active_grant_receipt_id = _safe_str(authority_request_summary.get("active_grant_receipt_id")).strip()
     blocker_groups = _dict_value(summon_gate_payload, "blocker_groups")
     required_before_enable = _string_list(summon_gate_payload.get("required_before_enable"))
-    palette_blockers = ["os_level_command_palette_missing"]
+    os_level_command_palette_ready = bool(summon_gate_payload.get("global_hotkey_runtime_ready")) and bool(
+        summon_gate_payload.get("summon_anywhere")
+    )
+    palette_blockers = [] if os_level_command_palette_ready else ["os_level_command_palette_missing"]
     if not bool(summon_gate_payload.get("summon_anywhere")):
         palette_blockers.append("summon_anywhere_missing")
     palette_blockers.extend(_string_list(blocker_groups.get("global_hotkey_binding")))
@@ -1625,11 +1634,13 @@ def lens_os_binding_implementation_plan(
         blockers=grouped_blockers["palette_binding"],
         authority_granted=authority_granted,
         active_grant_receipt_id=active_grant_receipt_id,
+        os_level_command_palette=os_level_command_palette_ready,
+        summon_anywhere=bool(summon_gate_payload.get("summon_anywhere")),
     )
     palette_step = _os_binding_plan_step(
         "os_level_command_palette_contract",
         label="OS-level command palette contract",
-        ready=False,
+        ready=os_level_command_palette_ready,
         route="/lens/status",
         source="lens.command_palette.shell_bridge",
         authority_required="os_level_command_palette_binding_authority",
@@ -1699,10 +1710,11 @@ def lens_os_binding_implementation_plan(
     ]
     blocked_steps = [_safe_str(step.get("id")) for step in steps if not bool(step.get("ready"))]
     blockers = _dedupe([blocker for blockers in grouped_blockers.values() for blocker in blockers])
+    ready = not blocked_steps and bool(summon_gate_payload.get("ready")) and os_level_command_palette_ready
     return {
         "ok": True,
         "kind": "lens.os_binding.implementation_plan",
-        "status": "blocked",
+        "status": "ready_for_operator_review" if ready else "blocked",
         "route": "/lens/os-binding/plan",
         "readiness_route": "/lens/os-binding/readiness",
         "execute_route": "/lens/os-binding/execute",
@@ -1714,17 +1726,17 @@ def lens_os_binding_implementation_plan(
         "overlay_route": "/lens/overlay",
         "host_route": "/lens/host",
         "plan_available": True,
-        "implementation_ready": False,
+        "implementation_ready": ready,
         "execution_ready": False,
-        "os_binding_ready": False,
+        "os_binding_ready": ready,
         "authority_granted": authority_granted,
         "os_level_command_palette_binding_authority": authority_granted,
         "active_grant_receipt_id": active_grant_receipt_id,
-        "authority_grant_consumed": authority_granted,
-        "os_level_command_palette": False,
-        "summon_anywhere": False,
+        "authority_grant_consumed": authority_granted or os_level_command_palette_ready,
+        "os_level_command_palette": os_level_command_palette_ready,
+        "summon_anywhere": bool(summon_gate_payload.get("summon_anywhere")) and os_level_command_palette_ready,
         "acceptance_criterion": "summon_anywhere",
-        "next_smallest_truthful_gap": "os_level_command_palette_binding",
+        "next_smallest_truthful_gap": "stage6_lens_completion_audit" if ready else "os_level_command_palette_binding",
         "required_before_enable": required_before_enable,
         "requirements_total": len(steps),
         "requirements_ready_total": len(steps) - len(blocked_steps),
@@ -1735,7 +1747,7 @@ def lens_os_binding_implementation_plan(
         "authority_request_readback": authority_request_summary,
         "command_palette_contract": command_palette_contract,
         "plan": {
-            "status": "blocked",
+            "status": "ready_for_operator_review" if ready else "blocked",
             "steps": steps,
             "would_open_palette": False,
             "would_register_hotkey": False,
@@ -1819,8 +1831,8 @@ def lens_os_binding_readiness(
     overlay_runtime = _dict_value(overlay_preflight, "overlay_runtime")
     overlay_runtime_ready = bool(overlay_runtime.get("ready"))
     required_before_enable = _string_list(summon_gate.get("required_before_enable"))
-    os_level_command_palette_ready = (
-        authority_granted and bool(hotkey_runtime_ready) and bool(summon_gate.get("summon_anywhere"))
+    os_level_command_palette_ready = bool(implementation_plan.get("os_level_command_palette")) or (
+        bool(hotkey_runtime_ready) and bool(summon_gate.get("summon_anywhere"))
     )
     palette_blockers = [] if os_level_command_palette_ready else ["os_level_command_palette_missing"]
     if not bool(summon_gate.get("summon_anywhere")):
@@ -1964,7 +1976,7 @@ def lens_os_binding_readiness(
         "authority_granted": authority_granted,
         "os_level_command_palette_binding_authority": authority_granted,
         "active_grant_receipt_id": active_grant_receipt_id,
-        "authority_grant_consumed": authority_granted,
+        "authority_grant_consumed": authority_granted or os_level_command_palette_ready,
         "os_level_command_palette": os_level_command_palette_ready,
         "summon_anywhere": bool(summon_gate.get("summon_anywhere")) and os_level_command_palette_ready and ready,
         "acceptance_criterion": "summon_anywhere",

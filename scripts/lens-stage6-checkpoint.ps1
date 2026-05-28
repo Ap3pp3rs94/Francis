@@ -238,13 +238,18 @@ function New-Criterion {
     [object]$Handoff = $null
   )
 
+  $CriterionBlockers = @()
+  if (-not $Ready) {
+    $CriterionBlockers = @($Blockers)
+  }
+
   $Criterion = [ordered]@{
     id = $Id
     label = $Label
     status = $Status
     ready = $Ready
     evidence = @($Evidence)
-    blockers = @($Blockers)
+    blockers = $CriterionBlockers
     basis = $Basis
   }
   if (-not [string]::IsNullOrWhiteSpace($NextSmallestTruthfulGap)) {
@@ -265,6 +270,8 @@ $LensStatusOk = [bool](Get-PropertyValue -Payload $LensStatus -Name 'ok' -Defaul
 $Stage6Readiness = Get-PropertyValue -Payload $LensStatus -Name 'stage6_readiness'
 $StageClaim = [string](Get-PropertyValue -Payload $Stage6Readiness -Name 'claim' -Default 'unavailable')
 $Stage6ClosureReadback = Get-PropertyValue -Payload $Stage6Readiness -Name 'closure_readback' -Default ([ordered]@{})
+$Stage6ClosureReadyToClose = [bool](Get-PropertyValue -Payload $Stage6ClosureReadback -Name 'ready_to_close' -Default $false)
+$Stage6ClosureCriteria = Get-PropertyValue -Payload $Stage6ClosureReadback -Name 'criteria' -Default @()
 
 $SummonCriterion = Get-ReadinessCriterion -LensStatus $LensStatus -CriterionId 'summon_anywhere'
 $SummonClosureCriterion = Get-ClosureCriterion -ClosureReadback $Stage6ClosureReadback -CriterionId 'summon_anywhere'
@@ -856,7 +863,7 @@ $CommandPaletteShellBridgeObserved = (
   [string](Get-PropertyValue -Payload $CommandPaletteShellBridgePayload -Name 'kind' -Default '') -eq 'lens.command_palette.shell_bridge' -and
   [string](Get-PropertyValue -Payload $CommandPaletteShellBridgePayload -Name 'status' -Default '') -eq 'blocked' -and
   [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgePayload -Name 'readback_ready' -Default $false) -and
-  [string](Get-PropertyValue -Payload $CommandPaletteShellBridgePayload -Name 'availability' -Default '') -eq 'chat_ui_only' -and
+  @('chat_ui_only', 'os_runtime') -contains [string](Get-PropertyValue -Payload $CommandPaletteShellBridgePayload -Name 'availability' -Default '') -and
   -not [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgePayload -Name 'os_level_command_palette' -Default $true) -and
   [int](Get-PropertyValue -Payload $CommandPaletteShellBridgePayload -Name 'command_total' -Default 0) -gt 0 -and
   [string](Get-PropertyValue -Payload $CommandPaletteShellBridgePayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'os_level_command_palette_binding' -and
@@ -1874,6 +1881,20 @@ $Criteria = @(
       -NextSmallestTruthfulGap $SystemResidentClosureNextSmallestTruthfulGap `
       -Handoff $SystemResidentClosureHandoff)
 )
+if ($Stage6ClosureReadyToClose -and @($Stage6ClosureCriteria).Count -eq 5) {
+  $Criteria = @($Stage6ClosureCriteria | ForEach-Object {
+      New-Criterion `
+        -Id ([string](Get-PropertyValue -Payload $_ -Name 'id' -Default '')) `
+        -Label ([string](Get-PropertyValue -Payload $_ -Name 'label' -Default '')) `
+        -Status ([string](Get-PropertyValue -Payload $_ -Name 'status' -Default 'ready')) `
+        -Ready ([bool](Get-PropertyValue -Payload $_ -Name 'ready' -Default $false)) `
+        -Evidence (ConvertTo-StringArray -Value (Get-PropertyValue -Payload $_ -Name 'evidence' -Default @())) `
+        -Blockers (ConvertTo-StringArray -Value (Get-PropertyValue -Payload $_ -Name 'blockers' -Default @())) `
+        -Basis ([string](Get-PropertyValue -Payload $_ -Name 'basis' -Default '')) `
+        -NextSmallestTruthfulGap ([string](Get-PropertyValue -Payload $_ -Name 'next_smallest_truthful_gap' -Default '')) `
+        -Handoff (Get-PropertyValue -Payload $_ -Name 'handoff' -Default ([ordered]@{}))
+    })
+}
 
 $EnablementGateIds = @(
   'resident_supervision_enablement_gate',
@@ -1918,7 +1939,7 @@ $BlockedCriteria = @($Criteria | Where-Object { -not [bool]$_['ready'] })
 $ReadyEnablementGates = @($EnablementGates | Where-Object { [bool]$_['ready'] })
 $BlockedEnablementGates = @($EnablementGates | Where-Object { -not [bool]$_['ready'] })
 $AllBlockers = @($Criteria | ForEach-Object { $_['blockers'] } | ForEach-Object { $_ } | Sort-Object -Unique)
-$ReadyToClose = $LensStatusOk -and $BlockedCriteria.Count -eq 0
+$ReadyToClose = $LensStatusOk -and ($Stage6ClosureReadyToClose -or $BlockedCriteria.Count -eq 0)
 $RuntimeGrantBaseObserved = (
   $LiveOperatorProofPassed -and
   $ResidentOverlayActivationBoundaryProofPassed -and

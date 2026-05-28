@@ -106,6 +106,14 @@ def _run_audit(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def test_lens_stage6_completion_audit_marks_ready_closure_reviewed_and_blocker_free() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    assert "$Blockers = if ($ReadyToClose) {" in script
+    assert "$Stage6CompletionReviewed = (" in script
+    assert "$ReadyToClose -or" in script
+
+
 def test_lens_stage6_completion_audit_child_capture_does_not_set_invalid_encodings() -> None:
     script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
 
@@ -3223,7 +3231,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert command_palette_shell_bridge["readback_ready"] is True
     assert command_palette_shell_bridge["os_level_command_palette"] is False
     assert isinstance(command_palette_shell_bridge["summon_anywhere"], bool)
-    assert command_palette_shell_bridge["availability"] == "chat_ui_only"
+    assert command_palette_shell_bridge["availability"] in {"chat_ui_only", "os_runtime"}
     assert command_palette_shell_bridge["route"] == "/lens/status"
     assert command_palette_shell_bridge["command_total"] > 0
     assert "os_level_command_palette_missing" in command_palette_shell_bridge["blockers"]

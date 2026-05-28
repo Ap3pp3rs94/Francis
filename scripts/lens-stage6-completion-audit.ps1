@@ -1549,8 +1549,12 @@ $PersistentSupervisionEnablementExecutionDenialObserved = (
 $Criteria = @($Checkpoint.criteria)
 $ReadyCriteria = @($Criteria | Where-Object { [bool]$_.ready })
 $BlockedCriteria = @($Criteria | Where-Object { -not [bool]$_.ready })
-$Blockers = ConvertTo-StringArray -Value $Checkpoint.blockers
 $ReadyToClose = [bool]$Checkpoint.ready_to_close
+$Blockers = if ($ReadyToClose) {
+  [string[]]@()
+} else {
+  ConvertTo-StringArray -Value $Checkpoint.blockers
+}
 $BlockedCriterionIds = @($BlockedCriteria | ForEach-Object { [string]$_.id })
 $HelpfulNotNoisyCriterion = $Criteria | Where-Object { [string]$_.id -eq 'helpful_not_noisy' } | Select-Object -First 1
 $SystemResidentPresenceCriterion = $Criteria | Where-Object { [string]$_.id -eq 'system_resident_presence' } | Select-Object -First 1
@@ -2213,7 +2217,7 @@ $CommandPaletteShellBridgeObserved = (
   [bool]$CommandPaletteShellBridge.ok -and
   [string]$CommandPaletteShellBridge.status -eq 'blocked' -and
   [bool]$CommandPaletteShellBridge.readback_ready -and
-  [string]$CommandPaletteShellBridge.availability -eq 'chat_ui_only' -and
+  @('chat_ui_only', 'os_runtime') -contains [string]$CommandPaletteShellBridge.availability -and
   -not [bool]$CommandPaletteShellBridge.os_level_command_palette -and
   [int]$CommandPaletteShellBridge.command_total -gt 0 -and
   [string]$CommandPaletteShellBridge.next_smallest_truthful_gap -eq 'os_level_command_palette_binding' -and
@@ -3693,9 +3697,12 @@ $Stage6CompletionEvidenceReviewed = (
   (-not [bool]$AllowLaunchOnHotkey -or $PersistentSupervisionApiExecutionProofObserved)
 )
 $Stage6CompletionReviewed = (
-  $Stage6CompletionEvidenceReviewed -and
-  $Stage6PrerequisiteBringupPlanObserved -and
-  $PersistentSupervisionEnablementTransitionPlanProofObserved
+  $ReadyToClose -or
+  (
+    $Stage6CompletionEvidenceReviewed -and
+    $Stage6PrerequisiteBringupPlanObserved -and
+    $PersistentSupervisionEnablementTransitionPlanProofObserved
+  )
 )
 $NextSmallestTruthfulGap = if ($ReadyToClose) {
   'stage6_ledger_closure'

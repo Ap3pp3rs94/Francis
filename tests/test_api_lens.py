@@ -1791,6 +1791,7 @@ def test_lens_status_projects_readonly_stage6_contract(monkeypatch, tmp_path: Pa
         "would_execute": False,
         "would_mutate": False,
     }
+
     assert closure_criteria["mode_visibility"]["ready"] is True
     assert closure_criteria["pilot_visibility_groundwork"]["ready"] is True
     assert closure_criteria["system_resident_presence"]["ready"] is False
@@ -5148,6 +5149,79 @@ def test_lens_resident_surface_readback_mirrors_claim_authority_without_executio
     assert body["governance"]["resident_claim_authority"] is True
     assert body["recommended_handoff"]["would_claim_resident"] is False
     assert body["authority_granted"] is False
+
+
+def test_stage6_closure_consumes_live_resident_runtime_over_stale_preflight_blockers() -> None:
+    from francis.lens.status import _stage6_closure_readback
+
+    closure = _stage6_closure_readback(
+        mode={"id": "assist", "label": "Assist"},
+        hud={
+            "runtime": {
+                "status": "resident_overlay_runtime",
+                "resident_overlay": True,
+                "tray_presence": True,
+                "global_hotkey": True,
+                "blockers": [],
+            }
+        },
+        resident_host={
+            "resident": True,
+            "process_supervision": True,
+            "resident_supervised_runtime": True,
+            "tray_presence": True,
+            "global_hotkey": True,
+            "overlay_window": True,
+            "summon_anywhere": True,
+            "blockers": ["lens_host_persistent_supervision_prerequisites_pending"],
+            "runtime_loop_readiness": {
+                "next_smallest_truthful_gap": "resident_host_supervision_authority_readiness_blockers"
+            },
+        },
+        command_palette={"availability": "os_runtime", "summon_anywhere": True},
+        pilot_indicator={"status": "visible"},
+        os_binding_readiness={"ready": True, "blockers": []},
+        summon_enablement_gate={"ready": True, "summon_anywhere": True, "blockers": []},
+        tray_enablement_gate={
+            "ready": False,
+            "tray_presence": False,
+            "blockers": ["tray_host_disabled", "tray_host_missing"],
+        },
+        overlay_enablement_gate={
+            "ready": False,
+            "overlay_window": False,
+            "blockers": ["overlay_window_disabled", "overlay_window_missing"],
+        },
+        resident_surface_activation={
+            "resident_surface_ready": True,
+            "operator_experience_proof": False,
+            "resident_claim_allowed": True,
+            "blockers": [
+                "operator_experience_proof_missing",
+                "tray_host_missing",
+                "overlay_window_missing",
+            ],
+        },
+    )
+
+    assert closure["status"] == "ready_to_close"
+    assert closure["ready_to_close"] is True
+    assert closure["ready_total"] == 5
+    assert closure["blocked_total"] == 0
+    assert closure["ready_criteria"] == [
+        "summon_anywhere",
+        "helpful_not_noisy",
+        "mode_visibility",
+        "pilot_visibility_groundwork",
+        "system_resident_presence",
+    ]
+    criteria = {item["id"]: item for item in closure["criteria"]}
+    assert criteria["summon_anywhere"]["ready"] is True
+    assert criteria["summon_anywhere"]["blockers"] == []
+    assert criteria["helpful_not_noisy"]["ready"] is True
+    assert criteria["helpful_not_noisy"]["blockers"] == []
+    assert criteria["system_resident_presence"]["ready"] is True
+    assert criteria["system_resident_presence"]["blockers"] == []
 
 
 def test_stage6_next_handoff_promotes_audited_enablement_authority_denial() -> None:

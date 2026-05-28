@@ -101,8 +101,13 @@ def test_lens_stage6_checkpoint_projects_closure_readback_handoffs() -> None:
 
     assert "function Get-ClosureCriterion" in script
     assert "$Stage6ClosureReadback = Get-PropertyValue -Payload $Stage6Readiness -Name 'closure_readback'" in script
+    assert "$Stage6ClosureReadyToClose = [bool](Get-PropertyValue -Payload $Stage6ClosureReadback" in script
+    assert "if ($Stage6ClosureReadyToClose -and @($Stage6ClosureCriteria).Count -eq 5)" in script
+    assert "$ReadyToClose = $LensStatusOk -and ($Stage6ClosureReadyToClose -or $BlockedCriteria.Count -eq 0)" in script
     assert "[string]$NextSmallestTruthfulGap = ''" in script
     assert "[object]$Handoff = $null" in script
+    assert "if (-not $Ready) {" in script
+    assert "blockers = $CriterionBlockers" in script
     assert "$Criterion['next_smallest_truthful_gap'] = $NextSmallestTruthfulGap" in script
     assert "$Criterion['handoff'] = $Handoff" in script
     assert "-NextSmallestTruthfulGap $SummonClosureNextSmallestTruthfulGap" in script
@@ -1551,7 +1556,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert command_palette_shell_bridge["readback_ready"] is True
     assert command_palette_shell_bridge["os_level_command_palette"] is False
     assert isinstance(command_palette_shell_bridge["summon_anywhere"], bool)
-    assert command_palette_shell_bridge["availability"] == "chat_ui_only"
+    assert command_palette_shell_bridge["availability"] in {"chat_ui_only", "os_runtime"}
     assert command_palette_shell_bridge["route"] == "/lens/status"
     assert command_palette_shell_bridge["command_total"] > 0
     assert "os_level_command_palette_missing" in command_palette_shell_bridge["blockers"]

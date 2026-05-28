@@ -39,13 +39,13 @@ def _run_script(*args: str, env: dict[str, str] | None = None) -> subprocess.Com
     )
 
 
-def _write_lens_status(path: Path, *, summon_anywhere: bool = False) -> None:
+def _write_lens_status(path: Path, *, summon_anywhere: bool = False, availability: str = "chat_ui_only") -> None:
     path.write_text(
         json.dumps(
             {
                 "command_palette": {
                     "status": "readback_ready",
-                    "availability": "chat_ui_only",
+                    "availability": availability,
                     "summon_anywhere": summon_anywhere,
                     "url_entrypoint_ready": True,
                     "url_entrypoint": {
@@ -81,7 +81,41 @@ def _write_lens_status(path: Path, *, summon_anywhere: bool = False) -> None:
     )
 
 
-def _write_execution_readiness(path: Path) -> None:
+def _write_execution_readiness(path: Path, *, post_authority: bool = False) -> None:
+    blocked_requirements = (
+        [
+            "system_write_permission",
+            "summon_binding",
+            "resident_host",
+            "tray_presence",
+            "overlay_window",
+        ]
+        if post_authority
+        else [
+            "global_hotkey_binding",
+            "summon_binding",
+            "resident_host",
+            "tray_presence",
+            "overlay_window",
+        ]
+    )
+    blockers = (
+        [
+            "lens_overlay_window_not_implemented",
+            "lens_tray_presence_disabled_pending_authority",
+            "os_binding_execution_boundary_not_implemented",
+            "os_level_command_palette_missing",
+            "resident_host_process_missing",
+            "summon_binding_missing",
+            "system_write_scope_not_ready",
+        ]
+        if post_authority
+        else [
+            "os_binding_execution_boundary_not_implemented",
+            "global_hotkey_binding_missing",
+            "summon_binding_missing",
+        ]
+    )
     path.write_text(
         json.dumps(
             {
@@ -92,27 +126,17 @@ def _write_execution_readiness(path: Path) -> None:
                 "denials_route": "/lens/os-binding/denials",
                 "ready": False,
                 "execution_ready": False,
-                "os_level_command_palette": False,
+                "os_level_command_palette": post_authority,
                 "summon_anywhere": False,
                 "denial_boundary_observed": True,
                 "denial_receipt_readback_ready": True,
-                "blocked_requirements": [
-                    "global_hotkey_binding",
-                    "summon_binding",
-                    "resident_host",
-                    "tray_presence",
-                    "overlay_window",
-                ],
-                "blockers": [
-                    "os_binding_execution_boundary_not_implemented",
-                    "global_hotkey_binding_missing",
-                    "summon_binding_missing",
-                ],
+                "blocked_requirements": blocked_requirements,
+                "blockers": blockers,
                 "next_smallest_truthful_gap": "os_binding_command_palette_execution_boundary",
                 "governance": {
                     "read_only_contract": True,
-                    "authority_granted": True,
-                    "os_level_command_palette_binding_authority": True,
+                    "authority_granted": post_authority,
+                    "os_level_command_palette_binding_authority": post_authority,
                     "execution_authority": False,
                     "approval_decision_authority": False,
                     "memory_write": False,
@@ -277,7 +301,7 @@ def test_lens_command_palette_os_binding_proof_composes_blocked_readbacks(
 
     command_palette = payload["command_palette"]
     assert command_palette["status"] == "blocked"
-    assert command_palette["availability"] == "chat_ui_only"
+    assert command_palette["availability"] in {"chat_ui_only", "os_runtime"}
     assert command_palette["os_level_command_palette"] is False
     assert command_palette["summon_anywhere"] is False
     assert command_palette["url_entrypoint_ready"] is True
@@ -340,6 +364,31 @@ def test_lens_command_palette_os_binding_proof_composes_blocked_readbacks(
         "new_sensing_authority": False,
         "mutation_authority_granted": False,
     }
+
+
+def test_lens_command_palette_os_binding_accepts_os_runtime_shell_bridge(tmp_path: Path) -> None:
+    status_path = tmp_path / "status.json"
+    execution_readiness_path = tmp_path / "execution-readiness.json"
+    _write_lens_status(status_path, summon_anywhere=True, availability="os_runtime")
+    _write_execution_readiness(execution_readiness_path, post_authority=True)
+
+    result = _run_script(
+        "-Mode",
+        "Status",
+        "-StatusPath",
+        str(status_path),
+        "-ExecutionReadinessPath",
+        str(execution_readiness_path),
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is True
+    assert payload["command_palette"]["availability"] == "os_runtime"
+    checks = {check["name"]: check for check in payload["checks"]}
+    assert checks["command_palette_shell_bridge"]["passed"] is True
+    assert checks["os_binding_execution_readiness"]["passed"] is True
+    assert payload["execution_readiness"]["os_level_command_palette"] is True
 
 
 def test_lens_command_palette_os_binding_proof_accepts_live_summon_readback(

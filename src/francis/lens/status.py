@@ -2823,42 +2823,85 @@ def _stage6_closure_readback(
         _safe_str(pilot_indicator.get("status")).strip() or _safe_str(pilot_indicator.get("route")).strip()
     )
     os_binding_ready = bool(os_binding_readiness.get("ready"))
+    hud_runtime_blockers = _stage6_blockers(hud_runtime.get("blockers"))
+    resident_surface_ready = bool(resident_surface_activation.get("resident_surface_ready"))
+    resident_claim_allowed = bool(resident_surface_activation.get("resident_claim_allowed"))
+    resident_overlay_ready = bool(hud_runtime.get("resident_overlay")) and not hud_runtime_blockers
+    tray_presence_ready = (
+        bool(tray_enablement_gate.get("tray_presence"))
+        or bool(resident_host.get("tray_presence"))
+        or bool(hud_runtime.get("tray_presence"))
+    )
+    overlay_window_ready = (
+        bool(overlay_enablement_gate.get("overlay_window"))
+        or bool(resident_host.get("overlay_window"))
+        or bool(hud_runtime.get("resident_overlay"))
+    )
+    summon_anywhere_ready = (
+        bool(summon_enablement_gate.get("summon_anywhere"))
+        or bool(resident_host.get("summon_anywhere"))
+        or bool(command_palette.get("summon_anywhere"))
+    )
+    operator_experience_proof = bool(resident_surface_activation.get("operator_experience_proof")) or (
+        resident_surface_ready
+        and resident_claim_allowed
+        and resident_overlay_ready
+        and _safe_str(command_palette.get("availability")).strip() in {"chat_ui_only", "os_runtime"}
+    )
     summon_ready = (
         bool(command_palette.get("summon_anywhere")) and bool(summon_enablement_gate.get("ready")) and os_binding_ready
     )
-    helpful_ready = bool(resident_surface_activation.get("resident_surface_ready")) and bool(
-        resident_surface_activation.get("operator_experience_proof")
-    )
+    helpful_ready = resident_surface_ready and operator_experience_proof
     system_resident_ready = (
         bool(resident_host.get("resident"))
         and bool(hud_runtime.get("resident_overlay"))
         and os_binding_ready
-        and bool(summon_enablement_gate.get("summon_anywhere"))
-        and bool(tray_enablement_gate.get("tray_presence"))
-        and bool(overlay_enablement_gate.get("overlay_window"))
-        and bool(resident_surface_activation.get("resident_claim_allowed"))
+        and summon_anywhere_ready
+        and tray_presence_ready
+        and overlay_window_ready
+        and resident_claim_allowed
     )
-    summon_blockers = _stage6_blockers(
-        ["summon_anywhere_missing"] if not summon_ready else [],
-        os_binding_readiness.get("blockers"),
-        resident_host.get("blockers"),
-        summon_enablement_gate.get("blockers"),
+    summon_blockers = (
+        []
+        if summon_ready
+        else _stage6_blockers(
+            ["summon_anywhere_missing"],
+            os_binding_readiness.get("blockers"),
+            resident_host.get("blockers"),
+            summon_enablement_gate.get("blockers"),
+        )
     )
-    helpful_blockers = _stage6_blockers(
-        resident_surface_activation.get("blockers"),
-        hud_runtime.get("blockers"),
-        ["operator_experience_proof_missing"]
-        if not bool(resident_surface_activation.get("operator_experience_proof"))
-        else [],
+    helpful_blockers = (
+        []
+        if helpful_ready
+        else _stage6_blockers(
+            ["resident_surface_runtime_missing"] if not resident_surface_ready else [],
+            ["resident_claim_authority_not_granted"] if resident_surface_ready and not resident_claim_allowed else [],
+            ["resident_overlay_runtime_missing"] if not resident_overlay_ready else [],
+            ["operator_experience_proof_missing"] if not operator_experience_proof else [],
+            hud_runtime_blockers,
+            resident_surface_activation.get("blockers"),
+        )
     )
-    system_blockers = _stage6_blockers(
-        resident_host.get("blockers"),
-        hud_runtime.get("blockers"),
-        os_binding_readiness.get("blockers"),
-        summon_enablement_gate.get("blockers"),
-        tray_enablement_gate.get("blockers"),
-        overlay_enablement_gate.get("blockers"),
-        resident_surface_activation.get("blockers"),
+    system_blockers = (
+        []
+        if system_resident_ready
+        else _stage6_blockers(
+            ["resident_host_process_missing"] if not bool(resident_host.get("resident")) else [],
+            ["resident_overlay_runtime_missing"] if not bool(hud_runtime.get("resident_overlay")) else [],
+            ["os_level_command_palette_missing"] if not os_binding_ready else [],
+            ["summon_anywhere_missing"] if not summon_anywhere_ready else [],
+            ["tray_host_missing"] if not tray_presence_ready else [],
+            ["overlay_window_missing"] if not overlay_window_ready else [],
+            ["resident_claim_authority_not_granted"] if not resident_claim_allowed else [],
+            resident_host.get("blockers"),
+            hud_runtime_blockers,
+            os_binding_readiness.get("blockers"),
+            summon_enablement_gate.get("blockers"),
+            tray_enablement_gate.get("blockers"),
+            overlay_enablement_gate.get("blockers"),
+            resident_surface_activation.get("blockers"),
+        )
     )
     summon_next_gap = (
         _safe_str(summon_enablement_gate.get("next_smallest_truthful_gap")).strip()

@@ -353,7 +353,7 @@ $PaletteBridgeObserved = (
     (Get-PropertyValue -Object $PaletteJson -Name "kind") -eq "lens.command_palette.shell_bridge" -and
     (Get-PropertyValue -Object $PaletteJson -Name "status") -eq "blocked" -and
     (Get-PropertyValue -Object $PaletteJson -Name "readback_ready") -eq $true -and
-    (Get-PropertyValue -Object $PaletteJson -Name "availability") -eq "chat_ui_only" -and
+    @("chat_ui_only", "os_runtime") -contains (Get-PropertyValue -Object $PaletteJson -Name "availability") -and
     (Get-PropertyValue -Object $PaletteJson -Name "os_level_command_palette") -eq $false -and
     [int](Get-PropertyValue -Object $PaletteJson -Name "command_total" -Default 0) -gt 0 -and
     (Get-PropertyValue -Object $PaletteJson -Name "next_smallest_truthful_gap") -eq "os_level_command_palette_binding" -and
@@ -439,7 +439,7 @@ $OsBindingCandidateObserved = (
         "local_process_launch_authority_not_granted"
     ))
 )
-$ExecutionReadinessObserved = (
+$ExecutionReadinessCommonObserved = (
     $ExecutionReadinessRequired -and
     $null -ne $ExecutionReadiness -and
     $ExecutionReadiness.ok -eq $true -and
@@ -450,16 +450,29 @@ $ExecutionReadinessObserved = (
     (Get-PropertyValue -Object $ExecutionReadinessJson -Name "denials_route") -eq "/lens/os-binding/denials" -and
     (Get-PropertyValue -Object $ExecutionReadinessJson -Name "ready") -eq $false -and
     (Get-PropertyValue -Object $ExecutionReadinessJson -Name "execution_ready") -eq $false -and
-    (Get-PropertyValue -Object $ExecutionReadinessJson -Name "os_level_command_palette" -Default $false) -eq $false -and
     (Get-PropertyValue -Object $ExecutionReadinessJson -Name "summon_anywhere" -Default $false) -eq $false -and
-    $ExecutionReadinessBlockedRequirements -contains "global_hotkey_binding" -and
-    $ExecutionReadinessBlockedRequirements -contains "summon_binding" -and
     $ExecutionReadinessBlockers -contains "os_binding_execution_boundary_not_implemented" -and
     (Get-PropertyValue -Object $ExecutionReadinessGovernance -Name "read_only_contract") -eq $true -and
     (Get-PropertyValue -Object $ExecutionReadinessGovernance -Name "execution_authority") -eq $false -and
     (Get-PropertyValue -Object $ExecutionReadinessGovernance -Name "approval_decision_authority") -eq $false -and
     (Get-PropertyValue -Object $ExecutionReadinessGovernance -Name "memory_write") -eq $false
 )
+$ExecutionReadinessPreAuthorityObserved = (
+    $ExecutionReadinessCommonObserved -and
+    (Get-PropertyValue -Object $ExecutionReadinessJson -Name "os_level_command_palette" -Default $false) -eq $false -and
+    $ExecutionReadinessBlockedRequirements -contains "global_hotkey_binding" -and
+    $ExecutionReadinessBlockedRequirements -contains "summon_binding"
+)
+$ExecutionReadinessPostAuthorityObserved = (
+    $ExecutionReadinessCommonObserved -and
+    (Get-PropertyValue -Object $ExecutionReadinessJson -Name "os_level_command_palette" -Default $false) -eq $true -and
+    $ExecutionReadinessBlockedRequirements -contains "system_write_permission" -and
+    $ExecutionReadinessBlockedRequirements -contains "summon_binding" -and
+    $ExecutionReadinessBlockedRequirements -contains "resident_host" -and
+    (Get-PropertyValue -Object $ExecutionReadinessGovernance -Name "authority_granted" -Default $false) -eq $true -and
+    (Get-PropertyValue -Object $ExecutionReadinessGovernance -Name "os_level_command_palette_binding_authority" -Default $false) -eq $true
+)
+$ExecutionReadinessObserved = $ExecutionReadinessPreAuthorityObserved -or $ExecutionReadinessPostAuthorityObserved
 $ExecutionReadinessSatisfied = if ($ExecutionReadinessRequired) { $ExecutionReadinessObserved } else { $true }
 
 $Checks = @(
