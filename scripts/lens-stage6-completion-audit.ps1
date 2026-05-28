@@ -267,6 +267,7 @@ $Stage6PrerequisiteBringupPlanScript = Join-Path $PSScriptRoot 'lens-stage6-prer
 $SummonAnywhereBlockersProofScript = Join-Path $PSScriptRoot 'lens-summon-anywhere-blockers-proof.ps1'
 $SummonTrayPresenceBlockerProofScript = Join-Path $PSScriptRoot 'lens-summon-tray-presence-blocker-proof.ps1'
 $SummonOverlayWindowBlockerProofScript = Join-Path $PSScriptRoot 'lens-summon-overlay-window-blocker-proof.ps1'
+$SummonGlobalHotkeyBindingBlockerProofScript = Join-Path $PSScriptRoot 'lens-summon-global-hotkey-binding-blocker-proof.ps1'
 $SummonResidentHostBlockerProofScript = Join-Path $PSScriptRoot 'lens-summon-resident-host-blocker-proof.ps1'
 $SummonAuthorityBlockerProofScript = Join-Path $PSScriptRoot 'lens-summon-authority-blocker-proof.ps1'
 $SummonAnywhereFamilyChainProofScript = Join-Path $PSScriptRoot 'lens-summon-anywhere-family-chain-proof.ps1'
@@ -354,6 +355,23 @@ if ([string]$SummonTrayPresenceBlockerProof.next_smallest_truthful_gap -eq 'summ
     -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 120))
 }
 $SummonOverlayWindowBlockerProof = $SummonOverlayWindowBlockerProofResult.payload
+$SummonGlobalHotkeyBindingBlockerProofResult = [ordered]@{
+  exit_code = 0
+  payload = $null
+  output = ''
+  error = ''
+  timed_out = $false
+  timeout_seconds = 0
+  duration_ms = 0
+}
+if ([string]$SummonOverlayWindowBlockerProof.next_smallest_truthful_gap -eq 'summon_global_hotkey_binding_blocker_boundary') {
+  $SummonGlobalHotkeyBindingBlockerProofResult = Invoke-JsonScript `
+    -PowerShellPath $PowerShell.Source `
+    -ScriptPath $SummonGlobalHotkeyBindingBlockerProofScript `
+    -ScriptArgs @('-Mode', 'Status') `
+    -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 120))
+}
+$SummonGlobalHotkeyBindingBlockerProof = $SummonGlobalHotkeyBindingBlockerProofResult.payload
 $SummonAuthorityBlockerProofResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonAuthorityBlockerProofScript -ScriptArgs @(
   '-Mode', 'Status'
 ) -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 240))
@@ -1458,6 +1476,7 @@ $ChildProofRuns = @(
   New-ChildProofRunSummary -Name 'summon_anywhere_blockers' -Result $SummonAnywhereBlockersProofResult
   New-ChildProofRunSummary -Name 'summon_tray_presence_blocker' -Result $SummonTrayPresenceBlockerProofResult
   New-ChildProofRunSummary -Name 'summon_overlay_window_blocker' -Result $SummonOverlayWindowBlockerProofResult
+  New-ChildProofRunSummary -Name 'summon_global_hotkey_binding_blocker' -Result $SummonGlobalHotkeyBindingBlockerProofResult
   New-ChildProofRunSummary -Name 'summon_authority_blocker' -Result $SummonAuthorityBlockerProofResult
   New-ChildProofRunSummary -Name 'summon_anywhere_family_chain' -Result $SummonAnywhereFamilyChainProofResult
   New-ChildProofRunSummary -Name 'resident_host_runtime_boundary' -Result $ResidentHostRuntimeBoundaryProofResult
@@ -2542,6 +2561,103 @@ $SummonOverlayWindowBlockerProofObserved = (
   -not [bool]$SummonOverlayWindowBlockerProofGovernance.resident_claim_authority -and
   -not [bool]$SummonOverlayWindowBlockerProofGovernance.mutation_authority_granted
 )
+$SummonGlobalHotkeyBindingBlockerProofGovernance = $SummonGlobalHotkeyBindingBlockerProof.governance
+$SummonGlobalHotkeyBindingBlockerProofRecommendedHandoff = $SummonGlobalHotkeyBindingBlockerProof.recommended_handoff
+$SummonGlobalHotkeyBindingBlockerProofBlockers = ConvertTo-StringArray -Value (
+  $SummonGlobalHotkeyBindingBlockerProof.summon_global_hotkey_binding_blockers
+)
+$SummonGlobalHotkeyBindingBlockerProofRuntimeBlockers = ConvertTo-StringArray -Value (
+  $SummonGlobalHotkeyBindingBlockerProof.resident_runtime_hotkey_summon_blockers
+)
+$SummonGlobalHotkeyBindingBlockerProofBindingRuntimeObserved = [bool](
+  $SummonGlobalHotkeyBindingBlockerProof.summon_binding_runtime_readback_observed
+)
+$SummonGlobalHotkeyBindingBlockerProofResolvedToAuthority = [bool](
+  $SummonGlobalHotkeyBindingBlockerProof.summon_binding_resolved_to_authority_handoff
+)
+$SummonGlobalHotkeyBindingBlockerProofSummonBindingPathObserved = (
+  -not $SummonGlobalHotkeyBindingBlockerProofBindingRuntimeObserved -and
+  -not $SummonGlobalHotkeyBindingBlockerProofResolvedToAuthority -and
+  [string]$SummonGlobalHotkeyBindingBlockerProof.next_summon_blocker_family -eq 'summon_binding' -and
+  [string]$SummonGlobalHotkeyBindingBlockerProof.next_smallest_truthful_gap -eq 'summon_binding_blocker_boundary' -and
+  [string]$SummonGlobalHotkeyBindingBlockerProof.recommended_handoff_source -eq 'summon_global_hotkey_binding_handoff' -and
+  [string]$SummonGlobalHotkeyBindingBlockerProof.recommended_next_slice -eq 'run_summon_binding_blocker_proof' -and
+  [string]$SummonGlobalHotkeyBindingBlockerProof.recommended_proof_script -eq 'scripts/lens-summon-binding-blocker-proof.ps1 -Mode Status' -and
+  [string]$SummonGlobalHotkeyBindingBlockerProof.authority_required -eq 'summon_authority'
+)
+$SummonGlobalHotkeyBindingBlockerProofAuthorityPathObserved = (
+  $SummonGlobalHotkeyBindingBlockerProofBindingRuntimeObserved -and
+  $SummonGlobalHotkeyBindingBlockerProofResolvedToAuthority -and
+  [string]$SummonGlobalHotkeyBindingBlockerProof.next_summon_blocker_family -eq 'authority' -and
+  [string]$SummonGlobalHotkeyBindingBlockerProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
+  [string]$SummonGlobalHotkeyBindingBlockerProof.recommended_handoff_source -eq 'summon_authority_handoff_after_summon_binding_runtime_readback' -and
+  [string]$SummonGlobalHotkeyBindingBlockerProof.recommended_next_slice -eq 'run_summon_authority_blocker_proof' -and
+  [string]$SummonGlobalHotkeyBindingBlockerProof.recommended_proof_script -eq 'scripts/lens-summon-authority-blocker-proof.ps1 -Mode Status' -and
+  [string]$SummonGlobalHotkeyBindingBlockerProof.authority_required -eq 'summon_hotkey_overlay_and_process_authority'
+)
+$SummonGlobalHotkeyBindingBlockerProofHandoffObserved = (
+  $SummonGlobalHotkeyBindingBlockerProofSummonBindingPathObserved -or
+  $SummonGlobalHotkeyBindingBlockerProofAuthorityPathObserved
+)
+$SummonGlobalHotkeyBindingBlockerProofObserved = (
+  $SummonOverlayWindowBlockerProofObserved -and
+  [int]$SummonGlobalHotkeyBindingBlockerProofResult.exit_code -eq 0 -and
+  [bool]$SummonGlobalHotkeyBindingBlockerProof.ok -and
+  [string]$SummonGlobalHotkeyBindingBlockerProof.kind -eq 'lens.summon_global_hotkey_binding_blocker.proof' -and
+  [string]$SummonGlobalHotkeyBindingBlockerProof.status -eq 'proof_passed' -and
+  [string]$SummonGlobalHotkeyBindingBlockerProof.acceptance_criterion -eq 'summon_anywhere' -and
+  [string]$SummonGlobalHotkeyBindingBlockerProof.previous_summon_blocker_family -eq 'overlay_window' -and
+  [string]$SummonGlobalHotkeyBindingBlockerProof.summon_global_hotkey_binding_blocker_family -eq 'global_hotkey_binding' -and
+  [string]$SummonGlobalHotkeyBindingBlockerProof.fourth_summon_blocker_family -eq 'global_hotkey_binding' -and
+  [string]$SummonGlobalHotkeyBindingBlockerProof.summon_next_smallest_truthful_gap -eq 'summon_anywhere_blockers' -and
+  $SummonGlobalHotkeyBindingBlockerProofHandoffObserved -and
+  -not [bool]$SummonGlobalHotkeyBindingBlockerProof.authority_granted -and
+  [bool]$SummonGlobalHotkeyBindingBlockerProof.summon_global_hotkey_family_observed -and
+  [bool]$SummonGlobalHotkeyBindingBlockerProof.previous_overlay_window_contract_observed -and
+  [bool]$SummonGlobalHotkeyBindingBlockerProof.previous_overlay_window_contract_readback_observed -and
+  [bool]$SummonGlobalHotkeyBindingBlockerProof.hotkey_summon_boundary_observed -and
+  [bool]$SummonGlobalHotkeyBindingBlockerProof.handoff_aligned -and
+  [bool]$SummonGlobalHotkeyBindingBlockerProof.side_effects_denied -and
+  $SummonGlobalHotkeyBindingBlockerProofBlockers -contains 'global_hotkey_binding_disabled' -and
+  $SummonGlobalHotkeyBindingBlockerProofBlockers -contains 'global_hotkey_registration_disabled' -and
+  $SummonGlobalHotkeyBindingBlockerProofBlockers -contains 'hotkey_registration_authority_not_granted' -and
+  $SummonGlobalHotkeyBindingBlockerProofRuntimeBlockers -contains 'global_hotkey_binding_disabled' -and
+  $SummonGlobalHotkeyBindingBlockerProofRuntimeBlockers -contains 'global_hotkey_registration_disabled' -and
+  $SummonGlobalHotkeyBindingBlockerProofRuntimeBlockers -contains 'hotkey_registration_authority_not_granted' -and
+  $SummonGlobalHotkeyBindingBlockerProofRuntimeBlockers -contains 'summon_authority_not_granted' -and
+  [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.diagnostic_only -and
+  [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.wraps_summon_anywhere_blockers_proof -and
+  -not [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.wraps_summon_overlay_window_blocker_proof -and
+  [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.uses_overlay_window_family_contract_readback -and
+  [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.overlay_window_contract_readback -and
+  [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.wraps_resident_runtime_hotkey_summon_boundary_proof -and
+  [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.summon_preflight_readback -and
+  [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.wrapped_resident_runtime_execution_authority -and
+  [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.read_only_contract -and
+  -not [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.approval_request_write -and
+  -not [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.product_execution_authority -and
+  -not [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.execution_authority -and
+  -not [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.approval_decision_authority -and
+  -not [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.resident_runtime_execution_authority -and
+  -not [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.local_process_launch_authority -and
+  -not [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.process_supervision_authority -and
+  -not [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.process_restart_authority -and
+  -not [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.service_install_authority -and
+  -not [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.service_control_authority -and
+  -not [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.tray_registration_authority -and
+  -not [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.tray_icon_authority -and
+  -not [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.notification_authority -and
+  -not [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.hotkey_registration_authority -and
+  -not [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.overlay_control_authority -and
+  -not [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.window_management_authority -and
+  -not [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.capture_authority -and
+  -not [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.new_sensing_authority -and
+  -not [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.summon_authority -and
+  -not [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.memory_write -and
+  -not [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.receipt_write_authority -and
+  -not [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.resident_claim_authority -and
+  -not [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.mutation_authority_granted
+)
 $SummonAnywhereBlockersProofSummonBindingBoundaryObserved = (
   (
     -not $SummonAnywhereBlockersProofSummonBindingRuntimeObserved -and
@@ -3564,6 +3680,7 @@ $Stage6CompletionEvidenceReviewed = (
   $SummonAnywhereBlockersProofObserved -and
   (-not $SummonAnywhereBlockersProofFirstFamilyTrayObserved -or $SummonTrayPresenceBlockerProofObserved) -and
   (-not $SummonTrayPresenceBlockerProofObserved -or $SummonOverlayWindowBlockerProofObserved) -and
+  (-not $SummonOverlayWindowBlockerProofObserved -or $SummonGlobalHotkeyBindingBlockerProofObserved) -and
   $CheckpointSummonEnablementGateHandoffObserved -and
   $SummonAuthorityBlockerProofObserved -and
   $SummonAnywhereFamilyChainProofObserved -and
@@ -3809,6 +3926,14 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $Stage6PrerequisiteBringupAppliedEnablementReceiptReviewPending
 ) {
   [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap
+} elseif (
+  $Stage6CompletionReviewed -and
+  -not $ReadyToClose -and
+  $BlockedCriterionIds -contains 'summon_anywhere' -and
+  -not $SummonAnywhereRuntimeReadbackObserved -and
+  $SummonGlobalHotkeyBindingBlockerProofObserved
+) {
+  [string]$SummonGlobalHotkeyBindingBlockerProof.next_smallest_truthful_gap
 } elseif (
   $Stage6CompletionReviewed -and
   -not $ReadyToClose -and
@@ -4129,6 +4254,60 @@ $Stage6CompletionAuditHandoffConsumedByClosureReadback = (
   $Stage6PrerequisiteBringupPlanObserved
 )
 if (
+  $SummonGlobalHotkeyBindingBlockerProofObserved -and
+  $NextSmallestTruthfulGap -eq [string]$SummonGlobalHotkeyBindingBlockerProof.next_smallest_truthful_gap
+) {
+  $RecommendedHandoffSource = 'stage6_reviewed_summon_global_hotkey_binding_blocker_handoff'
+  $RecommendedHandoff = [ordered]@{
+    status = 'blocked'
+    previous_next_smallest_truthful_gap = 'summon_global_hotkey_binding_blocker_boundary'
+    consumed_summon_anywhere_next_smallest_truthful_gap = [string]$SummonAnywhereBlockersProof.next_smallest_truthful_gap
+    consumed_tray_presence_next_smallest_truthful_gap = [string]$SummonTrayPresenceBlockerProof.next_smallest_truthful_gap
+    consumed_overlay_window_next_smallest_truthful_gap = [string]$SummonOverlayWindowBlockerProof.next_smallest_truthful_gap
+    consumed_global_hotkey_binding_next_smallest_truthful_gap = (
+      [string]$SummonGlobalHotkeyBindingBlockerProof.next_smallest_truthful_gap
+    )
+    next_smallest_truthful_gap = [string]$SummonGlobalHotkeyBindingBlockerProof.next_smallest_truthful_gap
+    next_step = [string]$SummonGlobalHotkeyBindingBlockerProof.recommended_next_slice
+    proof_script = [string]$SummonGlobalHotkeyBindingBlockerProof.recommended_proof_script
+    route = [string]$SummonGlobalHotkeyBindingBlockerProof.recommended_route
+    readiness_route = [string]$SummonGlobalHotkeyBindingBlockerProof.recommended_readiness_route
+    acceptance_criterion = 'summon_anywhere'
+    first_blocker_family = [string]$SummonAnywhereBlockersProof.first_blocker_family
+    first_blocker_family_handoff = $SummonAnywhereBlockersProofFirstFamilyHandoff
+    tray_presence_handoff = $SummonTrayPresenceBlockerProofRecommendedHandoff
+    overlay_window_handoff = $SummonOverlayWindowBlockerProofRecommendedHandoff
+    global_hotkey_binding_handoff = $SummonGlobalHotkeyBindingBlockerProofRecommendedHandoff
+    hotkey_summon_boundary_observed = [bool]$SummonGlobalHotkeyBindingBlockerProof.hotkey_summon_boundary_observed
+    previous_overlay_window_contract_readback_observed = (
+      [bool]$SummonGlobalHotkeyBindingBlockerProof.previous_overlay_window_contract_readback_observed
+    )
+    summon_binding_runtime_readback_observed = (
+      [bool]$SummonGlobalHotkeyBindingBlockerProof.summon_binding_runtime_readback_observed
+    )
+    summon_binding_resolved_to_authority_handoff = (
+      [bool]$SummonGlobalHotkeyBindingBlockerProof.summon_binding_resolved_to_authority_handoff
+    )
+    blocker_families = [string[]]@(ConvertTo-StringArray -Value $SummonAnywhereBlockersProof.blocked_families)
+    blocked_family_handoffs = @($SummonAnywhereBlockersProofFamilyHandoffs)
+    authority_required = [string]$SummonGlobalHotkeyBindingBlockerProof.authority_required
+    authority_granted = $false
+    read_only_contract = $true
+    diagnostic_only = $true
+    would_execute = $false
+    would_mutate = $false
+    would_register_tray = $false
+    would_register_hotkey = $false
+    would_control_overlay = $false
+    would_summon = $false
+    would_write_memory = $false
+    would_claim_resident = $false
+    blockers = [string[]]@($SummonGlobalHotkeyBindingBlockerProofRuntimeBlockers)
+  }
+  $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
+  $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
+  $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
+} elseif (
   $NextSmallestTruthfulGap -eq 'summon_global_hotkey_binding_blocker_boundary' -and
   $SummonOverlayWindowBlockerProofObserved
 ) {
@@ -7542,6 +7721,105 @@ $Payload = [ordered]@{
       mutation_authority_granted = $false
     }
   }
+  summon_global_hotkey_binding_blocker_proof = [ordered]@{
+    status = if ($SummonGlobalHotkeyBindingBlockerProofObserved) {
+      [string]$SummonGlobalHotkeyBindingBlockerProof.status
+    } elseif ([int]$SummonGlobalHotkeyBindingBlockerProofResult.timeout_seconds -eq 0) {
+      'not_applicable'
+    } else {
+      'missing_or_failed'
+    }
+    ok = $SummonGlobalHotkeyBindingBlockerProofObserved
+    exit_code = [int]$SummonGlobalHotkeyBindingBlockerProofResult.exit_code
+    kind = [string]$SummonGlobalHotkeyBindingBlockerProof.kind
+    evidence = [string[]]@(ConvertTo-StringArray -Value $SummonGlobalHotkeyBindingBlockerProof.evidence)
+    acceptance_criterion = [string]$SummonGlobalHotkeyBindingBlockerProof.acceptance_criterion
+    previous_summon_blocker_family = [string]$SummonGlobalHotkeyBindingBlockerProof.previous_summon_blocker_family
+    summon_global_hotkey_binding_blocker_family = (
+      [string]$SummonGlobalHotkeyBindingBlockerProof.summon_global_hotkey_binding_blocker_family
+    )
+    fourth_summon_blocker_family = [string]$SummonGlobalHotkeyBindingBlockerProof.fourth_summon_blocker_family
+    next_summon_blocker_family = [string]$SummonGlobalHotkeyBindingBlockerProof.next_summon_blocker_family
+    summon_next_smallest_truthful_gap = [string]$SummonGlobalHotkeyBindingBlockerProof.summon_next_smallest_truthful_gap
+    resident_runtime_next_smallest_truthful_gap = (
+      [string]$SummonGlobalHotkeyBindingBlockerProof.resident_runtime_next_smallest_truthful_gap
+    )
+    next_smallest_truthful_gap = [string]$SummonGlobalHotkeyBindingBlockerProof.next_smallest_truthful_gap
+    recommended_handoff_source = [string]$SummonGlobalHotkeyBindingBlockerProof.recommended_handoff_source
+    recommended_next_slice = [string]$SummonGlobalHotkeyBindingBlockerProof.recommended_next_slice
+    recommended_proof_script = [string]$SummonGlobalHotkeyBindingBlockerProof.recommended_proof_script
+    recommended_route = [string]$SummonGlobalHotkeyBindingBlockerProof.recommended_route
+    recommended_readiness_route = [string]$SummonGlobalHotkeyBindingBlockerProof.recommended_readiness_route
+    recommended_handoff = $SummonGlobalHotkeyBindingBlockerProofRecommendedHandoff
+    authority_required = [string]$SummonGlobalHotkeyBindingBlockerProof.authority_required
+    authority_granted = [bool]$SummonGlobalHotkeyBindingBlockerProof.authority_granted
+    summon_binding_runtime_readback_observed = (
+      [bool]$SummonGlobalHotkeyBindingBlockerProof.summon_binding_runtime_readback_observed
+    )
+    summon_binding_resolved_to_authority_handoff = (
+      [bool]$SummonGlobalHotkeyBindingBlockerProof.summon_binding_resolved_to_authority_handoff
+    )
+    summon_global_hotkey_family_observed = [bool]$SummonGlobalHotkeyBindingBlockerProof.summon_global_hotkey_family_observed
+    previous_overlay_window_contract_observed = (
+      [bool]$SummonGlobalHotkeyBindingBlockerProof.previous_overlay_window_contract_observed
+    )
+    previous_overlay_window_contract_readback_observed = (
+      [bool]$SummonGlobalHotkeyBindingBlockerProof.previous_overlay_window_contract_readback_observed
+    )
+    hotkey_summon_boundary_observed = [bool]$SummonGlobalHotkeyBindingBlockerProof.hotkey_summon_boundary_observed
+    handoff_aligned = [bool]$SummonGlobalHotkeyBindingBlockerProof.handoff_aligned
+    side_effects_denied = [bool]$SummonGlobalHotkeyBindingBlockerProof.side_effects_denied
+    summon_global_hotkey_binding_blockers = [string[]]@($SummonGlobalHotkeyBindingBlockerProofBlockers)
+    resident_runtime_hotkey_summon_blockers = [string[]]@($SummonGlobalHotkeyBindingBlockerProofRuntimeBlockers)
+    previous_overlay_handoff = $SummonGlobalHotkeyBindingBlockerProof.previous_overlay_handoff
+    hotkey_summon_boundary = $SummonGlobalHotkeyBindingBlockerProof.hotkey_summon_boundary
+    governance = [ordered]@{
+      diagnostic_only = [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.diagnostic_only
+      wraps_summon_anywhere_blockers_proof = (
+        [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.wraps_summon_anywhere_blockers_proof
+      )
+      wraps_summon_overlay_window_blocker_proof = (
+        [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.wraps_summon_overlay_window_blocker_proof
+      )
+      uses_overlay_window_family_contract_readback = (
+        [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.uses_overlay_window_family_contract_readback
+      )
+      overlay_window_contract_readback = (
+        [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.overlay_window_contract_readback
+      )
+      wraps_resident_runtime_hotkey_summon_boundary_proof = (
+        [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.wraps_resident_runtime_hotkey_summon_boundary_proof
+      )
+      summon_preflight_readback = [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.summon_preflight_readback
+      wrapped_resident_runtime_execution_authority = (
+        [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.wrapped_resident_runtime_execution_authority
+      )
+      read_only_contract = [bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.read_only_contract
+      approval_request_write = $false
+      resident_runtime_execution_authority = $false
+      product_execution_authority = $false
+      execution_authority = $false
+      approval_decision_authority = $false
+      local_process_launch_authority = $false
+      process_supervision_authority = $false
+      process_restart_authority = $false
+      service_install_authority = $false
+      service_control_authority = $false
+      tray_registration_authority = $false
+      tray_icon_authority = $false
+      notification_authority = $false
+      hotkey_registration_authority = $false
+      overlay_control_authority = $false
+      window_management_authority = $false
+      capture_authority = $false
+      new_sensing_authority = $false
+      summon_authority = $false
+      memory_write = $false
+      receipt_write_authority = $false
+      resident_claim_authority = $false
+      mutation_authority_granted = $false
+    }
+  }
   summon_resident_host_blocker_proof = [ordered]@{
     status = if ($SummonResidentHostBlockerProofObserved) { [string]$SummonResidentHostBlockerProof.status } else { 'missing_or_failed' }
     ok = $SummonResidentHostBlockerProofObserved
@@ -8532,6 +8810,7 @@ $Payload = [ordered]@{
     summon_anywhere_first_blocker_family_handoff_readback = $SummonAnywhereBlockersProofFirstFamilyHandoffObserved
     summon_tray_presence_blocker_proof_readback = $SummonTrayPresenceBlockerProofObserved
     summon_overlay_window_blocker_proof_readback = $SummonOverlayWindowBlockerProofObserved
+    summon_global_hotkey_binding_blocker_proof_readback = $SummonGlobalHotkeyBindingBlockerProofObserved
     summon_resident_host_blocker_proof_readback = $SummonResidentHostBlockerProofObserved
     summon_resident_host_process_supervision_handoff_readback = [bool]$SummonResidentHostBlockerProof.resident_host_process_supervision_handoff_observed
     resident_host_runtime_boundary_proof_readback = $ResidentHostRuntimeBoundaryProofObserved

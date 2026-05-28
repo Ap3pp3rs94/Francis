@@ -41523,6 +41523,56 @@ Latest validation for overlay blocker proof consumption:
   Result: `passed; CRLF conversion notice only for
   scripts/lens-stage6-completion-audit.ps1`
 
+### 2026-05-28 - Stage 6 completion audit consumes global-hotkey blocker proof
+
+Roadmap area: Stage 6 / Lens MVP, summon-anywhere blocker readback.
+
+Material change:
+
+- `scripts/lens-stage6-completion-audit.ps1` now runs and consumes
+  `scripts/lens-summon-global-hotkey-binding-blocker-proof.ps1` when the
+  audited summon-anywhere blocker chain has advanced through overlay to
+  `summon_global_hotkey_binding_blocker_boundary`.
+- The audit payload now exposes `summon_global_hotkey_binding_blocker_proof`
+  plus `governance.summon_global_hotkey_binding_blocker_proof_readback`.
+- When the global-hotkey blocker proof passes, the audit consumes the
+  read-only hotkey-summon boundary and advances to the proof's bounded handoff.
+  In the latest local readback, summon binding runtime was already observed, so
+  the audit moved to `stage6_lens_completion_audit` and recommended
+  `scripts/lens-summon-authority-blocker-proof.ps1 -Mode Status`.
+- Stage 6 remains active and blocked. This does not claim summon-anywhere is
+  ready, does not register a global hotkey, does not control an overlay, does
+  not write memory, and does not start Stage 7.
+
+Latest validation for global-hotkey blocker proof consumption:
+
+- Live `scripts/lens-stage6-completion-audit.ps1 -Mode Status
+  -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2
+  -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3
+  -ChildProofTimeoutSeconds 120` readback reported `status=blocked`,
+  `stage_state=active`, `ready_to_close=false`,
+  `next_smallest_truthful_gap=stage6_lens_completion_audit`,
+  `recommended_handoff_source=stage6_reviewed_summon_global_hotkey_binding_blocker_handoff`,
+  `recommended_next_slice=run_summon_authority_blocker_proof`,
+  `recommended_proof_script=scripts/lens-summon-authority-blocker-proof.ps1 -Mode Status`,
+  `summon_overlay_window_blocker_proof.ok=true`,
+  `summon_global_hotkey_binding_blocker_proof.ok=true`,
+  `summon_global_hotkey_binding_blocker_proof.next_smallest_truthful_gap=stage6_lens_completion_audit`,
+  and `governance.summon_global_hotkey_binding_blocker_proof_readback=true`.
+- `python -m pytest
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_consumes_overlay_window_blocker_readback
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_consumes_global_hotkey_binding_blocker_readback
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_outer_timeout_covers_serial_child_budget
+  -q --tb=short`
+  Result: `passed; 3 passed`
+- `python -m pytest tests/test_lens_summon_global_hotkey_binding_blocker_proof_script.py
+  tests/test_lens_summon_binding_blocker_proof_script.py -q --tb=short`
+  Result: `passed; 5 passed`
+- `pwsh -NoProfile -Command '$script = Get-Content -Raw
+  scripts\lens-stage6-completion-audit.ps1; $null =
+  [scriptblock]::Create($script); "parse-ok"'`
+  Result: `passed; parse-ok`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

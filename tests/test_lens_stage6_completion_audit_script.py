@@ -67,6 +67,7 @@ def _expected_audit_child_proof_timeouts(child_timeout_seconds: int) -> dict[str
         "summon_anywhere_blockers": child_timeout_seconds,
         "summon_tray_presence_blocker": max(child_timeout_seconds, 120),
         "summon_overlay_window_blocker": max(child_timeout_seconds, 120),
+        "summon_global_hotkey_binding_blocker": max(child_timeout_seconds, 120),
         "summon_authority_blocker": _family_chain_child_timeout_seconds(child_timeout_seconds),
         "summon_anywhere_family_chain": _family_chain_wrapper_timeout_seconds(child_timeout_seconds),
         "resident_host_runtime_boundary": child_timeout_seconds,
@@ -296,6 +297,39 @@ def test_lens_stage6_completion_audit_consumes_overlay_window_blocker_readback()
     assert "$RecommendedHandoffSource = 'stage6_reviewed_summon_overlay_window_blocker_handoff'" in script
     assert "summon_overlay_window_blocker_proof = [ordered]@{" in script
     assert "summon_overlay_window_blocker_proof_readback = $SummonOverlayWindowBlockerProofObserved" in script
+
+
+def test_lens_stage6_completion_audit_consumes_global_hotkey_binding_blocker_readback() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    assert "$SummonGlobalHotkeyBindingBlockerProofScript" in script
+    assert "lens-summon-global-hotkey-binding-blocker-proof.ps1" in script
+    assert (
+        "[string]$SummonOverlayWindowBlockerProof.next_smallest_truthful_gap "
+        "-eq 'summon_global_hotkey_binding_blocker_boundary'"
+    ) in script
+    assert "New-ChildProofRunSummary -Name 'summon_global_hotkey_binding_blocker'" in script
+    assert "$SummonGlobalHotkeyBindingBlockerProofObserved = (" in script
+    assert (
+        "[string]$SummonGlobalHotkeyBindingBlockerProof.kind -eq 'lens.summon_global_hotkey_binding_blocker.proof'"
+    ) in script
+    assert (
+        "[string]$SummonGlobalHotkeyBindingBlockerProof.next_smallest_truthful_gap "
+        "-eq 'summon_binding_blocker_boundary'"
+    ) in script
+    assert (
+        "[string]$SummonGlobalHotkeyBindingBlockerProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit'"
+    ) in script
+    assert "[bool]$SummonGlobalHotkeyBindingBlockerProof.hotkey_summon_boundary_observed" in script
+    assert "[bool]$SummonGlobalHotkeyBindingBlockerProofGovernance.read_only_contract" in script
+    assert (
+        "-not $SummonOverlayWindowBlockerProofObserved -or $SummonGlobalHotkeyBindingBlockerProofObserved"
+    ) in script
+    assert "$RecommendedHandoffSource = 'stage6_reviewed_summon_global_hotkey_binding_blocker_handoff'" in script
+    assert "summon_global_hotkey_binding_blocker_proof = [ordered]@{" in script
+    assert (
+        "summon_global_hotkey_binding_blocker_proof_readback = $SummonGlobalHotkeyBindingBlockerProofObserved"
+    ) in script
 
 
 def test_lens_stage6_completion_audit_outer_timeout_covers_serial_child_budget() -> None:
@@ -1867,6 +1901,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "summon_anywhere_blockers",
         "summon_tray_presence_blocker",
         "summon_overlay_window_blocker",
+        "summon_global_hotkey_binding_blocker",
         "summon_authority_blocker",
         "summon_anywhere_family_chain",
         "resident_host_runtime_boundary",
