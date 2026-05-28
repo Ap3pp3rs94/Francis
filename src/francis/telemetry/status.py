@@ -163,6 +163,8 @@ def _event_count(source: dict[str, Any]) -> int:
     if not isinstance(retention, dict):
         return 0
     value = retention.get("event_count")
+    if value is None:
+        return 0
     try:
         return max(0, int(value))
     except Exception:
