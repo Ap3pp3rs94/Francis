@@ -41206,6 +41206,42 @@ Latest validation for completion-audit handoff truthfulness:
 - `python -m ruff format --check tests/test_lens_stage6_completion_audit_script.py`
   Result: `passed; 1 file already formatted`
 
+### 2026-05-28 - Stage 6 summon-anywhere proof consumes live runtime readiness
+
+Roadmap area: Stage 6 / Lens MVP, summon-anywhere acceptance proof truthfulness.
+
+Material change:
+
+- `scripts/lens-summon-anywhere-blockers-proof.ps1` now consumes live
+  `summon_enablement_gate`, `os_binding_readiness`, and summon runtime readback
+  when they prove `summon_anywhere=true` and `os_level_summon=true`.
+- Static summon preflight blockers remain available as diagnostic inventory, but
+  they no longer stay active as the recommended handoff after live
+  summon-anywhere readiness has been observed.
+- `scripts/lens-stage6-completion-audit.ps1` now accepts that live-readback
+  branch as valid summon-anywhere evidence.
+- Stage 6 remains active and blocked. This does not claim helpful-not-noisy,
+  system resident presence, resident claim, memory write, persistent service
+  control, or Stage 7 readiness.
+
+Latest validation for summon-anywhere live-readback consumption:
+
+- Live bounded runtime readback before this ledger update produced
+  `execute_lens_summon_action(... allow_launch=True)` with
+  `summon_anywhere=true`, `os_level_summon=true`,
+  `next_smallest_truthful_gap=stage6_lens_completion_audit`, and
+  `lens_summon_enablement_gate.status=ready_for_operator_review`.
+- `python -m pytest tests/test_lens_summon_anywhere_blockers_proof_script.py -q --tb=short`
+  Result: `passed; 8 passed`
+- `python -m pytest
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_accepts_live_summon_anywhere_readback_branch
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_accepts_consumed_authority_handoff_evidence
+  -q --tb=short`
+  Result: `passed; 2 passed`
+- `python -m ruff check tests/test_lens_summon_anywhere_blockers_proof_script.py
+  tests/test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

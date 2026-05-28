@@ -221,6 +221,45 @@ def _write_lens_status_with_supervised_resident_host_and_live_surface_readbacks(
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
+def _write_lens_status_with_live_summon_anywhere_readback(path: Path) -> None:
+    _write_lens_status_with_supervised_resident_host_and_live_surface_readbacks(path)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    summon_runtime = payload["resident_host"]["summon_runtime_readback"]
+    summon_runtime["summon_anywhere"] = True
+    summon_runtime["os_level_summon"] = True
+    payload["resident_host"]["launch_manifest"]["summon_runtime_readback"] = summon_runtime
+    payload["summon_enablement_gate"] = {
+        "status": "ready_for_operator_review",
+        "ready": True,
+        "summon_anywhere": True,
+        "summon_anywhere_runtime_ready": True,
+        "next_smallest_truthful_gap": "summon_anywhere_blockers",
+        "blockers": [],
+    }
+    payload["os_binding_readiness"] = {
+        "status": "ready",
+        "ready": True,
+        "blockers": [],
+        "next_smallest_truthful_gap": "stage6_lens_completion_audit",
+    }
+    payload["stage6_readiness"]["ready_criteria"] = ["summon_anywhere"]
+    payload["stage6_readiness"]["closure_readback"] = {
+        "kind": "lens.stage6.closure_readback",
+        "status": "blocked",
+        "ready_to_close": False,
+        "criteria": [
+            {
+                "id": "summon_anywhere",
+                "status": "ready",
+                "ready": True,
+                "next_smallest_truthful_gap": "",
+                "handoff": {},
+            }
+        ],
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
 def _write_lens_status_with_approved_os_binding_request_without_authority(path: Path) -> None:
     _write_lens_status(path)
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -654,6 +693,68 @@ def test_lens_summon_anywhere_blockers_proof_consumes_live_surface_runtime_readb
     assert all(item["passed"] for item in payload["checks"])
 
 
+def test_lens_summon_anywhere_blockers_proof_consumes_live_summon_anywhere_readback(
+    tmp_path: Path,
+) -> None:
+    status_path = tmp_path / "lens-status.json"
+    _write_lens_status_with_live_summon_anywhere_readback(status_path)
+
+    proc = _run_proof("-Mode", "Status", "-StatusPath", str(status_path))
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "proof_passed"
+    assert payload["ok"] is True
+    assert payload["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert payload["consumed_live_summon_anywhere_readback"] is True
+    assert payload["blocked_families"] == []
+    assert payload["blocked_family_handoffs"] == []
+    assert payload["first_blocker_family"] == ""
+    assert payload["recommended_handoff_source"] == "live_summon_anywhere_readback_handoff"
+    assert payload["recommended_next_slice"] == "run_stage6_lens_completion_audit_after_live_summon_anywhere_readback"
+    assert payload["recommended_proof_script"] == "scripts/lens-stage6-completion-audit.ps1 -Mode Status"
+    assert payload["recommended_authority_required"] == "none_readback_only"
+    assert payload["recommended_authority_granted"] is False
+    assert payload["recommended_concrete_handoff_source"] == "live_summon_anywhere_readback_handoff"
+    assert payload["recommended_concrete_next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert payload["recommended_handoff"]["consumed_live_summon_anywhere_readback"] is True
+
+    live_readback = payload["live_summon_anywhere_readback"]
+    assert live_readback["summon_gate_ready"] is True
+    assert live_readback["os_binding_readiness_ready"] is True
+    assert live_readback["summon_runtime_readback_ready"] is True
+    assert live_readback["stage6_closure_ready"] is True
+    assert live_readback["summon_runtime_summon_anywhere"] is True
+    assert live_readback["summon_runtime_os_level_summon"] is True
+
+    assert payload["blockers"] != []
+    assert payload["live_summon_anywhere_suppressed_blockers"]["authority"] == [
+        "summon_authority_not_granted",
+        "hotkey_registration_authority_not_granted",
+        "overlay_control_authority_not_granted",
+    ]
+    assert payload["blocker_groups"] == {
+        "resident_host": [],
+        "tray_presence": [],
+        "overlay_window": [],
+        "global_hotkey_binding": [],
+        "summon_binding": [],
+        "authority": [],
+    }
+
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["first_blocker_family_handoff"]["status"] == "live_readback_consumed"
+    assert checks["live_summon_anywhere_readback"]["status"] == "readback_consumed"
+    assert all(item["passed"] for item in payload["checks"])
+
+    governance = payload["governance"]
+    assert governance["live_summon_anywhere_readback_consumed"] is True
+    assert governance["read_only_contract"] is True
+    assert governance["execution_authority"] is False
+    assert governance["summon_authority"] is False
+    assert governance["hotkey_registration_authority"] is False
+
+
 def test_lens_summon_anywhere_blockers_proof_projects_closure_completion_handoff(
     tmp_path: Path,
 ) -> None:
@@ -818,6 +919,7 @@ def test_lens_summon_anywhere_blockers_proof_accepts_approved_request_without_au
         "wraps_lens_status": True,
         "read_only_contract": True,
         "os_binding_authority_request_readback": True,
+        "live_summon_anywhere_readback_consumed": False,
         "first_blocker_family_handoff_readback": True,
         "first_blocker_family_completion_audit_handoff_readback": False,
         "stage6_prerequisite_bringup_plan_readback": False,

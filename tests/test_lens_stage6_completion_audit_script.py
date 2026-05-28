@@ -223,6 +223,31 @@ def test_lens_stage6_completion_audit_accepts_consumed_authority_handoff_evidenc
     assert "os_binding_authority_evidence_readback" in script
 
 
+def test_lens_stage6_completion_audit_accepts_live_summon_anywhere_readback_branch() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    assert "$SummonAnywhereBlockersProofBlockedPathObserved = (" in script
+    assert (
+        "$SummonAnywhereBlockersProofLiveReadback = $SummonAnywhereBlockersProof.live_summon_anywhere_readback"
+        in script
+    )
+    assert "$SummonAnywhereBlockersProofLiveReadbackObserved = (" in script
+    assert "[bool]$SummonAnywhereBlockersProof.consumed_live_summon_anywhere_readback" in script
+    assert "[bool]$SummonAnywhereBlockersProofLiveReadback.summon_gate_ready" in script
+    assert "[bool]$SummonAnywhereBlockersProofLiveReadback.os_binding_readiness_ready" in script
+    assert "[bool]$SummonAnywhereBlockersProofLiveReadback.summon_runtime_readback_ready" in script
+    assert "[bool]$SummonAnywhereBlockersProofLiveReadback.summon_runtime_summon_anywhere" in script
+    assert "[bool]$SummonAnywhereBlockersProofLiveReadback.summon_runtime_os_level_summon" in script
+    assert (
+        "[string]$SummonAnywhereBlockersProof.recommended_handoff_source -eq 'live_summon_anywhere_readback_handoff'"
+        in script
+    )
+    assert "@($SummonAnywhereBlockersProofFamilies).Count -eq 0" in script
+    assert "[bool]$SummonAnywhereBlockersProofGovernance.live_summon_anywhere_readback_consumed" in script
+    assert "$SummonAnywhereBlockersProofBlockedPathObserved -or" in script
+    assert "$SummonAnywhereBlockersProofLiveReadbackObserved" in script
+
+
 def test_lens_stage6_completion_audit_outer_timeout_covers_serial_child_budget() -> None:
     expected_minimum = sum(_expected_audit_child_proof_timeouts(_AUDIT_CHILD_PROOF_TIMEOUT_SECONDS).values())
 

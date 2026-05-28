@@ -2307,6 +2307,7 @@ $OsBindingAuthorityRequestReadbackObserved = (
 $SummonAnywhereBlockersProofGroups = $SummonAnywhereBlockersProof.blocker_groups
 $SummonAnywhereBlockersProofGovernance = $SummonAnywhereBlockersProof.governance
 $SummonAnywhereBlockersProofAuthorityRequestReadback = $SummonAnywhereBlockersProof.os_binding_authority_request_readback
+$SummonAnywhereBlockersProofLiveReadback = $SummonAnywhereBlockersProof.live_summon_anywhere_readback
 $SummonAnywhereBlockersProofFamilies = ConvertTo-StringArray -Value $SummonAnywhereBlockersProof.blocked_families
 $SummonAnywhereBlockersProofResidentHostBlockers = ConvertTo-StringArray -Value $SummonAnywhereBlockersProofGroups.resident_host
 $SummonAnywhereBlockersProofTrayBlockers = ConvertTo-StringArray -Value $SummonAnywhereBlockersProofGroups.tray_presence
@@ -2416,7 +2417,7 @@ $SummonAnywhereBlockersProofSummonBindingBoundaryObserved = (
     $SummonAnywhereBlockersProofSuppressedSummonBindingBlockers -contains 'summon_authority_not_granted'
   )
 )
-$SummonAnywhereBlockersProofObserved = (
+$SummonAnywhereBlockersProofBlockedPathObserved = (
   [int]$SummonAnywhereBlockersProofResult.exit_code -eq 0 -and
   [bool]$SummonAnywhereBlockersProof.ok -and
   [string]$SummonAnywhereBlockersProof.kind -eq 'lens.summon_anywhere_blockers.proof' -and
@@ -2472,6 +2473,49 @@ $SummonAnywhereBlockersProofObserved = (
   -not [bool]$SummonAnywhereBlockersProofGovernance.hotkey_registration_authority -and
   -not [bool]$SummonAnywhereBlockersProofGovernance.resident_claim_authority -and
   -not [bool]$SummonAnywhereBlockersProofGovernance.mutation_authority_granted
+)
+$SummonAnywhereBlockersProofLiveReadbackObserved = (
+  [int]$SummonAnywhereBlockersProofResult.exit_code -eq 0 -and
+  [bool]$SummonAnywhereBlockersProof.ok -and
+  [string]$SummonAnywhereBlockersProof.kind -eq 'lens.summon_anywhere_blockers.proof' -and
+  [string]$SummonAnywhereBlockersProof.status -eq 'proof_passed' -and
+  [string]$SummonAnywhereBlockersProof.acceptance_criterion -eq 'summon_anywhere' -and
+  [string]$SummonAnywhereBlockersProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
+  [bool]$SummonAnywhereBlockersProof.consumed_live_summon_anywhere_readback -and
+  [bool]$SummonAnywhereBlockersProofLiveReadback.summon_gate_ready -and
+  [bool]$SummonAnywhereBlockersProofLiveReadback.os_binding_readiness_ready -and
+  [bool]$SummonAnywhereBlockersProofLiveReadback.summon_runtime_readback_ready -and
+  [bool]$SummonAnywhereBlockersProofLiveReadback.summon_enablement_gate_ready -and
+  [bool]$SummonAnywhereBlockersProofLiveReadback.summon_enablement_gate_summon_anywhere -and
+  [bool]$SummonAnywhereBlockersProofLiveReadback.os_binding_ready -and
+  [bool]$SummonAnywhereBlockersProofLiveReadback.summon_runtime_summon_anywhere -and
+  [bool]$SummonAnywhereBlockersProofLiveReadback.summon_runtime_os_level_summon -and
+  [string]$SummonAnywhereBlockersProof.recommended_handoff_source -eq 'live_summon_anywhere_readback_handoff' -and
+  [string]$SummonAnywhereBlockersProof.recommended_next_slice -eq 'run_stage6_lens_completion_audit_after_live_summon_anywhere_readback' -and
+  [string]$SummonAnywhereBlockersProof.recommended_proof_script -eq 'scripts/lens-stage6-completion-audit.ps1 -Mode Status' -and
+  [string]$SummonAnywhereBlockersProof.recommended_concrete_handoff_source -eq 'live_summon_anywhere_readback_handoff' -and
+  @($SummonAnywhereBlockersProofFamilies).Count -eq 0 -and
+  @($SummonAnywhereBlockersProof.blocked_family_handoffs).Count -eq 0 -and
+  [bool]$SummonAnywhereBlockersProofGovernance.live_summon_anywhere_readback_consumed -and
+  [bool]$SummonAnywhereBlockersProofGovernance.diagnostic_only -and
+  [bool]$SummonAnywhereBlockersProofGovernance.wraps_summon_preflight -and
+  [bool]$SummonAnywhereBlockersProofGovernance.wraps_lens_status -and
+  [bool]$SummonAnywhereBlockersProofGovernance.read_only_contract -and
+  -not [bool]$SummonAnywhereBlockersProofGovernance.approval_request_write -and
+  -not [bool]$SummonAnywhereBlockersProofGovernance.product_execution_authority -and
+  -not [bool]$SummonAnywhereBlockersProofGovernance.execution_authority -and
+  -not [bool]$SummonAnywhereBlockersProofGovernance.approval_decision_authority -and
+  -not [bool]$SummonAnywhereBlockersProofGovernance.memory_write -and
+  -not [bool]$SummonAnywhereBlockersProofGovernance.overlay_control_authority -and
+  -not [bool]$SummonAnywhereBlockersProofGovernance.summon_authority -and
+  -not [bool]$SummonAnywhereBlockersProofGovernance.local_process_launch_authority -and
+  -not [bool]$SummonAnywhereBlockersProofGovernance.hotkey_registration_authority -and
+  -not [bool]$SummonAnywhereBlockersProofGovernance.resident_claim_authority -and
+  -not [bool]$SummonAnywhereBlockersProofGovernance.mutation_authority_granted
+)
+$SummonAnywhereBlockersProofObserved = (
+  $SummonAnywhereBlockersProofBlockedPathObserved -or
+  $SummonAnywhereBlockersProofLiveReadbackObserved
 )
 $SummonAuthorityBlockerProofGovernance = $SummonAuthorityBlockerProof.governance
 $SummonAuthorityBoundary = $SummonAuthorityBlockerProof.summon_authority_boundary
