@@ -41015,6 +41015,56 @@ Latest validation for resident-supervision proof timeout floors:
   recommended_handoff_source=stage6_helpful_not_noisy_runtime_authority_readiness_handoff;
   recommended_next_slice=create_or_select_exact_approved_resident_runtime_execution_authority_request`
 
+### 2026-05-28 - Stage 6 live runtime projection stops stale resident-host claims
+
+Roadmap area: Stage 6 / Lens MVP, operator-surface truthfulness and
+system-resident runtime readback.
+
+Material change:
+
+- `/lens/status` now threads one host launch manifest through the HUD, command
+  palette, and resident-host surfaces, so those surfaces project the same live
+  runtime readback instead of separately preserving stale placeholder claims.
+- A supervised resident host process now projects as
+  `resident_runtime_observed` with `resident=true` and
+  `process_supervision=true`; it no longer appears in Stage 6 readiness as
+  `resident_host_runtime.status=not_implemented`.
+- Live tray, hotkey, overlay, and summon runtime readbacks now clear only their
+  matching projection fields and blockers. Expired or missing surfaces still
+  remain blocked, and the command palette distinguishes resident-host readback
+  from OS-level palette/summon surfaces.
+- Stage 6 remains active and blocked. Stage 7 has not started. This change does
+  not grant authority, launch durable surfaces, write memory, claim resident
+  presence, or close Stage 6.
+
+Latest validation for Stage 6 live runtime projection truthfulness:
+
+- `python -m pytest
+  tests/test_api_lens.py::test_lens_status_projects_readonly_stage6_contract
+  tests/test_api_lens.py::test_lens_status_promotes_live_supervised_resident_host_before_tray
+  tests/test_api_lens.py::test_lens_status_rejects_fresh_supervised_runtime_with_dead_supervisor_pid
+  tests/test_api_lens.py::test_lens_status_promotes_live_tray_runtime_before_hotkey
+  tests/test_api_lens.py::test_lens_status_promotes_coordinated_surface_runtime_before_summon_binding
+  tests/test_api_lens.py::test_lens_summon_execute_records_bounded_handoff_without_summon_anywhere_claim
+  tests/test_api_lens.py::test_lens_summon_execute_records_summon_anywhere_when_hotkey_launch_runtime_observed`
+  Result: `passed; 7 passed`
+- `python -m ruff check src/francis/lens/status.py tests/test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/lens/status.py
+  tests/test_api_lens.py`
+  Result: `passed; 2 files already formatted`
+- `python -m mypy src/francis/lens/status.py`
+  Result: `passed; no issues found`
+- `git diff --check`
+  Result: `passed`
+- Local `lens_status(limit=1)` live readback after the patch reported:
+  `resident_host.status=resident_runtime_observed`, `resident=true`,
+  `process_supervision=true`, `tray_presence=false`, `global_hotkey=false`,
+  `overlay_window=false`, `summon_anywhere=false`, `stage6_readiness.status=blocked`,
+  `ready_to_close=false`, `ready_total=2`, `blocked_total=3`,
+  `blocked_criteria=[summon_anywhere, helpful_not_noisy, system_resident_presence]`,
+  and `next_smallest_truthful_gap=summon_anywhere_blockers`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -298,26 +298,78 @@ def _badge(label: str, value: Any, *, severity: str = "neutral") -> dict[str, An
     return {"label": label, "value": value, "severity": severity}
 
 
-def _hud_runtime_surface() -> dict[str, Any]:
+def _runtime_projection_from_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
+    process = _as_dict(manifest.get("process_readback"))
+    supervisor = _as_dict(manifest.get("supervisor_readback"))
+    tray = _as_dict(manifest.get("tray_runtime_readback"))
+    hotkey = _as_dict(manifest.get("hotkey_runtime_readback"))
+    overlay = _as_dict(manifest.get("overlay_runtime_readback"))
+    summon = _as_dict(manifest.get("summon_runtime_readback"))
+    process_alive = bool(process.get("process_alive"))
+    process_status = _safe_str(process.get("state_status")).strip()
+    resident_host = (
+        process_alive and process_status == "resident_running" and bool(supervisor.get("resident_supervised_runtime"))
+    )
+    tray_ready = bool(tray.get("ready"))
+    hotkey_ready = bool(hotkey.get("ready"))
+    overlay_ready = bool(overlay.get("ready"))
+    summon_ready = bool(summon.get("ready"))
+    summon_anywhere = bool(summon.get("summon_anywhere")) and bool(summon.get("os_level_summon"))
+    return {
+        "process_alive": process_alive,
+        "process_status": process_status,
+        "resident_host": resident_host,
+        "process_supervision": bool(supervisor.get("resident_supervised_runtime")),
+        "tray_presence": tray_ready,
+        "global_hotkey": hotkey_ready,
+        "hotkey_launch_on_press": hotkey_ready and bool(hotkey.get("launch_on_hotkey")),
+        "overlay_window": overlay_ready,
+        "always_on_top": overlay_ready and bool(overlay.get("always_on_top")),
+        "summon_binding": summon_ready,
+        "summon_anywhere": summon_anywhere,
+    }
+
+
+def _has_observed_runtime_projection(runtime: dict[str, Any]) -> bool:
+    return any(
+        bool(runtime.get(key))
+        for key in [
+            "resident_host",
+            "tray_presence",
+            "global_hotkey",
+            "overlay_window",
+            "summon_binding",
+            "summon_anywhere",
+        ]
+    )
+
+
+def _hud_runtime_surface(*, launch_manifest: dict[str, Any] | None = None) -> dict[str, Any]:
+    launch_manifest = launch_manifest if isinstance(launch_manifest, dict) else lens_host_launch_manifest()
+    runtime = _runtime_projection_from_manifest(launch_manifest)
     blockers = [
-        "resident_overlay_runtime_missing",
-        "global_hotkey_binding_missing",
-        "tray_host_missing",
-        "always_on_top_window_missing",
+        *(["resident_overlay_runtime_missing"] if not runtime["overlay_window"] else []),
+        *(["global_hotkey_binding_missing"] if not runtime["global_hotkey"] else []),
+        *(["tray_host_missing"] if not runtime["tray_presence"] else []),
+        *(["always_on_top_window_missing"] if not runtime["always_on_top"] else []),
     ]
     return {
-        "status": "readback_only",
-        "claim": "chat_ui_hud_readback_only",
-        "surface": "chat_ui.system_orb",
+        "status": "resident_overlay_runtime" if runtime["overlay_window"] else "readback_only",
+        "claim": "resident_overlay_runtime_readback" if runtime["overlay_window"] else "chat_ui_hud_readback_only",
+        "surface": "lens.overlay_window" if runtime["overlay_window"] else "chat_ui.system_orb",
         "route": "/lens/hud",
-        "window_host": "chat_ui",
-        "resident_overlay": False,
-        "always_on_top": False,
-        "global_hotkey": False,
-        "tray_presence": False,
-        "os_level": False,
+        "window_host": "lens-overlay" if runtime["overlay_window"] else "chat_ui",
+        "resident_overlay": runtime["overlay_window"],
+        "always_on_top": runtime["always_on_top"],
+        "global_hotkey": runtime["global_hotkey"],
+        "tray_presence": runtime["tray_presence"],
+        "os_level": runtime["global_hotkey"] or runtime["overlay_window"] or runtime["tray_presence"],
         "blockers": blockers,
-        "message": "HUD readback exists through chat UI; resident OS overlay runtime is not implemented here.",
+        "message": (
+            "Resident Lens overlay runtime is visible through local runtime readback."
+            if runtime["overlay_window"]
+            else "HUD readback exists through chat UI; resident OS overlay runtime is not implemented here."
+        ),
         "governance": {
             "read_only_contract": True,
             "execution_authority": False,
@@ -332,8 +384,14 @@ def _hud_runtime_surface() -> dict[str, Any]:
     }
 
 
-def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, Any], limit: int = 5) -> dict[str, Any]:
-    launch_manifest = lens_host_launch_manifest()
+def _resident_host_surface(
+    *,
+    hud: dict[str, Any],
+    command_palette: dict[str, Any],
+    limit: int = 5,
+    launch_manifest: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    launch_manifest = launch_manifest if isinstance(launch_manifest, dict) else lens_host_launch_manifest()
     runtime_implementation_plan = lens_host_runtime_implementation_plan(manifest=launch_manifest)
     runtime_loop_contract = lens_host_runtime_loop_contract(
         manifest=launch_manifest,
@@ -442,22 +500,39 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
     supervisor_readback = _as_dict(launch_manifest.get("supervisor_readback"))
     supervision_readiness = _as_dict(launch_manifest.get("supervision_readiness"))
     process_alive = bool(process_readback.get("process_alive"))
+    process_status = _safe_str(process_readback.get("state_status")).strip()
+    resident_supervised_runtime = (
+        process_alive
+        and process_status == "resident_running"
+        and bool(supervisor_readback.get("resident_supervised_runtime"))
+    )
     tray_runtime_ready = bool(tray_runtime_readback.get("ready"))
     hotkey_runtime_ready = bool(hotkey_runtime_readback.get("ready"))
     overlay_runtime_ready = bool(overlay_runtime_readback.get("ready"))
+    summon_runtime_readback = _as_dict(launch_manifest.get("summon_runtime_readback"))
+    summon_runtime_ready = bool(summon_runtime_readback.get("ready"))
+    summon_anywhere_ready = bool(summon_runtime_readback.get("summon_anywhere")) and bool(
+        summon_runtime_readback.get("os_level_summon")
+    )
+    command_palette_binding_ready = hotkey_runtime_ready
     service_blocked_reason = (
         _safe_str(service_plan.get("blocked_reason")).strip()
         or _safe_str(service_install.get("blocked_reason")).strip()
         or "lens_host_persistent_supervision_prerequisites_pending"
     )
     blockers = [service_blocked_reason]
+    if not resident_supervised_runtime and process_alive:
+        blockers.append("resident_host_process_not_supervised")
     if not tray_runtime_ready:
         blockers.append("tray_host_missing")
     if not hotkey_runtime_ready:
         blockers.append("global_hotkey_binding_missing")
     if not overlay_runtime_ready:
         blockers.extend(["always_on_top_window_missing", "overlay_window_missing"])
-    blockers.append("summon_binding_missing")
+    if not summon_runtime_ready:
+        blockers.append("summon_binding_missing")
+    elif not summon_anywhere_ready:
+        blockers.append("summon_anywhere_runtime_readback")
     if not process_alive:
         blockers.insert(1, "resident_host_process_missing")
     if not status_runner_present:
@@ -533,16 +608,22 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         {
             "id": "command_palette_bridge",
             "label": "Native command palette bridge",
-            "status": "missing",
+            "status": "running" if command_palette_binding_ready else "missing",
             "required_for": ["os_level_command_palette"],
         },
     ]
     return {
         "ok": True,
         "kind": "lens.resident_host",
-        "status": "not_implemented",
+        "status": (
+            "resident_runtime_observed"
+            if resident_supervised_runtime
+            else "runtime_process_observed"
+            if process_alive
+            else "not_implemented"
+        ),
         "contract_status": "readback_ready",
-        "availability": "backend_readback_only",
+        "availability": "resident_runtime" if resident_supervised_runtime else "backend_readback_only",
         "route": "/lens/host",
         "activation_request_route": _safe_str(activation_request.get("route")).strip(),
         "activation_request": activation_request,
@@ -755,21 +836,27 @@ def _resident_host_surface(*, hud: dict[str, Any], command_palette: dict[str, An
         "fresh_resident_runtime_candidate_supervised": bool(
             supervisor_readback.get("fresh_resident_runtime_candidate_supervised")
         ),
-        "resident_supervised_runtime": False,
+        "resident_supervised_runtime": resident_supervised_runtime,
         "supervision_readiness": supervision_readiness,
         "foreground_session": _as_dict(launch_manifest.get("foreground_session")),
-        "resident": False,
-        "process_supervision": False,
+        "resident": resident_supervised_runtime,
+        "process_supervision": resident_supervised_runtime,
         "startup_integration": False,
         "tray_presence": tray_runtime_ready,
         "global_hotkey": hotkey_runtime_ready,
         "always_on_top_overlay": overlay_runtime_ready,
         "overlay_window": overlay_runtime_ready,
-        "command_palette_binding": False,
-        "summon_anywhere": False,
+        "command_palette_binding": command_palette_binding_ready,
+        "summon_anywhere": summon_anywhere_ready,
         "components": components,
         "blockers": blockers,
-        "message": "Resident Lens host is not implemented; this route preserves the launch and readiness contract only.",
+        "message": (
+            "Resident Lens host is supervised and visible through local runtime readback."
+            if resident_supervised_runtime
+            else "Resident Lens host runtime is visible but not yet supervised as a resident surface."
+            if process_alive
+            else "Resident Lens host is not implemented; this route preserves the launch and readiness contract only."
+        ),
         "governance": {
             "read_only_contract": True,
             "execution_authority": False,
@@ -794,6 +881,7 @@ def _hud_surface(
     incidents: dict[str, Any],
     missions: dict[str, Any],
     reactor: dict[str, Any],
+    launch_manifest: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     pending_approvals = _safe_int(approvals.get("pending_count"))
     active_incidents = _safe_int(_as_dict(incidents.get("observer_counts")).get("active"))
@@ -811,7 +899,7 @@ def _hud_surface(
         _badge("incidents", active_incidents, severity="attention" if active_incidents else "neutral"),
         _badge("reactor review", review_queue_total, severity="attention" if review_queue_total else "neutral"),
     ]
-    runtime = _hud_runtime_surface()
+    runtime = _hud_runtime_surface(launch_manifest=launch_manifest)
 
     return {
         "status": "attention" if pending_approvals or active_incidents or review_queue_total else "ready",
@@ -883,8 +971,25 @@ def _palette_command(
     }
 
 
-def _command_palette_surface(*, approvals: dict[str, Any]) -> dict[str, Any]:
+def _command_palette_surface(
+    *,
+    approvals: dict[str, Any],
+    launch_manifest: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     pending_approvals = _safe_int(approvals.get("pending_count"))
+    runtime = _runtime_projection_from_manifest(
+        launch_manifest if isinstance(launch_manifest, dict) else lens_host_launch_manifest()
+    )
+    runtime_observed = _has_observed_runtime_projection(runtime)
+    surface_runtime_observed = any(
+        bool(runtime.get(key))
+        for key in [
+            "tray_presence",
+            "global_hotkey",
+            "overlay_window",
+            "summon_anywhere",
+        ]
+    )
     url_entrypoint = {
         "kind": "lens.command_palette.url_entrypoint",
         "status": "ready",
@@ -896,17 +1001,27 @@ def _command_palette_surface(*, approvals: dict[str, Any]) -> dict[str, Any]:
         "local_surface": "chat_ui.command_palette",
         "opens_palette_in_chat_ui": True,
         "requires_running_chat_ui": True,
-        "os_level_command_palette": False,
-        "summon_anywhere": False,
-        "global_hotkey": False,
-        "tray_presence": False,
-        "overlay_window": False,
+        "os_level_command_palette": runtime["global_hotkey"],
+        "summon_anywhere": runtime["summon_anywhere"],
+        "global_hotkey": runtime["global_hotkey"],
+        "tray_presence": runtime["tray_presence"],
+        "overlay_window": runtime["overlay_window"],
         "execution_authority": False,
         "approval_decision_authority": False,
         "memory_write": False,
         "message": (
-            "A running chat UI can open the command palette from this URL intent; "
-            "global hotkey, tray, overlay, and summon-anywhere are still blocked."
+            "A running chat UI can open the command palette from this URL intent; live runtime readback "
+            "also observes OS-level Lens surfaces."
+            if surface_runtime_observed
+            else (
+                "A running chat UI can open the command palette from this URL intent; resident host runtime "
+                "is observed, but OS-level palette surfaces remain blocked."
+            )
+            if runtime_observed
+            else (
+                "A running chat UI can open the command palette from this URL intent; "
+                "global hotkey, tray, overlay, and summon-anywhere are still blocked."
+            )
         ),
     }
     commands = [
@@ -1184,13 +1299,19 @@ def _command_palette_surface(*, approvals: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "status": "readback_ready",
-        "availability": "chat_ui_only",
-        "summon_anywhere": False,
+        "availability": "os_runtime" if runtime["global_hotkey"] else "chat_ui_only",
+        "summon_anywhere": runtime["summon_anywhere"],
         "url_entrypoint_ready": True,
         "url_entrypoint": url_entrypoint,
         "message": (
-            "Palette command readback and chat-UI URL entrypoint exist; OS-wide summon, global hotkey, "
-            "tray, and overlay binding are not implemented here."
+            "Palette command readback and chat-UI URL entrypoint exist with live OS surface readback."
+            if surface_runtime_observed
+            else "Palette command readback and chat-UI URL entrypoint exist with resident host runtime readback only."
+            if runtime_observed
+            else (
+                "Palette command readback and chat-UI URL entrypoint exist; OS-wide summon, global hotkey, "
+                "tray, and overlay binding are not implemented here."
+            )
         ),
         "route": "/lens/status",
         "local_surface": "chat_ui.command_palette",
@@ -3085,14 +3206,16 @@ def _stage6_readiness(
         "criteria": [
             {
                 "id": "resident_host_runtime",
-                "status": "not_implemented",
+                "status": _safe_str(resident_host.get("status")).strip()
+                or ("resident_runtime_observed" if bool(resident_host.get("resident")) else "not_implemented"),
                 "evidence": ["/lens/host", "/lens/status"],
                 "resident": bool(resident_host.get("resident")),
+                "process_supervision": bool(resident_host.get("process_supervision")),
                 "blockers": _as_list(resident_host.get("blockers")),
             },
             {
                 "id": "hud_layer_runtime",
-                "status": "readback_only",
+                "status": _safe_str(hud_runtime.get("status")).strip() or "readback_only",
                 "evidence": ["/lens/hud", "/lens/status"],
                 "resident_overlay": bool(hud_runtime.get("resident_overlay")),
                 "blockers": _as_list(hud_runtime.get("blockers")),
@@ -3102,6 +3225,8 @@ def _stage6_readiness(
                 "status": "readback_ready" if _as_list(command_palette.get("commands")) else "missing",
                 "evidence": ["/lens/status"],
                 "command_count": _safe_int(command_palette.get("command_total")),
+                "availability": _safe_str(command_palette.get("availability")).strip(),
+                "summon_anywhere": bool(command_palette.get("summon_anywhere")),
                 "url_entrypoint_ready": bool(command_palette.get("url_entrypoint_ready")),
                 "url_entrypoint": _as_dict(command_palette.get("url_entrypoint")),
             },
@@ -4966,6 +5091,7 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
         "focus": _as_dict(operator.get("focus")),
         "backlog": _as_dict(operator.get("backlog")),
     }
+    launch_manifest = lens_host_launch_manifest()
     hud = _hud_surface(
         mode=mode,
         scope=scope,
@@ -4973,9 +5099,15 @@ def lens_status(*, limit: int = 5) -> dict[str, Any]:
         incidents=incidents,
         missions=missions,
         reactor=reactor,
+        launch_manifest=launch_manifest,
     )
-    command_palette = _command_palette_surface(approvals=approvals)
-    resident_host = _resident_host_surface(hud=hud, command_palette=command_palette, limit=safe_limit)
+    command_palette = _command_palette_surface(approvals=approvals, launch_manifest=launch_manifest)
+    resident_host = _resident_host_surface(
+        hud=hud,
+        command_palette=command_palette,
+        limit=safe_limit,
+        launch_manifest=launch_manifest,
+    )
     preflight = lens_preflight()
     os_binding_authority_requests = lens_os_binding_authority_request_readback(limit=safe_limit)
     os_binding_readiness = lens_os_binding_readiness(

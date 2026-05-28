@@ -9779,11 +9779,16 @@ def test_lens_status_promotes_coordinated_surface_runtime_before_summon_binding(
     assert response.status_code == 200
     body = response.json()
     resident_host = body["resident_host"]
+    assert resident_host["status"] == "resident_runtime_observed"
+    assert resident_host["availability"] == "resident_runtime"
+    assert resident_host["resident"] is True
+    assert resident_host["process_supervision"] is True
     assert resident_host["tray_runtime_readback"]["ready"] is True
     assert resident_host["hotkey_runtime_readback"]["ready"] is True
     assert resident_host["hotkey_runtime_readback"]["hotkey_bound"] is True
     assert resident_host["overlay_runtime_readback"]["ready"] is True
     assert resident_host["overlay_runtime_readback"]["overlay_window_visible"] is True
+    assert resident_host["command_palette_binding"] is True
 
     persistent_plan = resident_host["persistent_supervision_plan"]
     assert persistent_plan["missing_required_before_enable"] == ["summon_binding"]
@@ -9812,6 +9817,8 @@ def test_lens_status_promotes_coordinated_surface_runtime_before_summon_binding(
     assert overlay_dependency["overlay_runtime_window_visible"] is True
     assert overlay_dependency["overlay_runtime_always_on_top"] is True
     assert overlay_dependency["overlay_runtime_pid"] == surface_pid
+    components = {item["id"]: item for item in resident_host["components"]}
+    assert components["command_palette_bridge"]["status"] == "running"
 
     handoff = persistent_plan["first_missing_requirement_handoff"]
     assert handoff["id"] == "summon_binding"
@@ -9838,6 +9845,34 @@ def test_lens_status_promotes_coordinated_surface_runtime_before_summon_binding(
     assert manifest_body["governance"]["execution_authority"] is False
     assert manifest_body["governance"]["service_control_authority"] is False
     assert manifest_body["governance"]["mutation_authority_granted"] is False
+
+    hud_runtime = body["hud"]["runtime"]
+    assert hud_runtime["status"] == "resident_overlay_runtime"
+    assert hud_runtime["resident_overlay"] is True
+    assert hud_runtime["always_on_top"] is True
+    assert hud_runtime["global_hotkey"] is True
+    assert hud_runtime["tray_presence"] is True
+    assert hud_runtime["os_level"] is True
+    assert hud_runtime["blockers"] == []
+
+    command_palette = body["command_palette"]
+    assert command_palette["availability"] == "os_runtime"
+    assert command_palette["summon_anywhere"] is False
+    assert command_palette["url_entrypoint"]["os_level_command_palette"] is True
+    assert command_palette["url_entrypoint"]["global_hotkey"] is True
+    assert command_palette["url_entrypoint"]["tray_presence"] is True
+    assert command_palette["url_entrypoint"]["overlay_window"] is True
+    assert command_palette["url_entrypoint"]["summon_anywhere"] is False
+
+    resident_runtime_criterion = _criterion(body, "resident_host_runtime")
+    assert resident_runtime_criterion["status"] == "resident_runtime_observed"
+    assert resident_runtime_criterion["resident"] is True
+    assert resident_runtime_criterion["process_supervision"] is True
+    hud_runtime_criterion = _criterion(body, "hud_layer_runtime")
+    assert hud_runtime_criterion["status"] == "resident_overlay_runtime"
+    command_palette_criterion = _criterion(body, "command_palette_commands")
+    assert command_palette_criterion["availability"] == "os_runtime"
+    assert command_palette_criterion["summon_anywhere"] is False
 
 
 def test_lens_status_surfaces_pending_approval_without_decision_authority(monkeypatch, tmp_path: Path) -> None:
@@ -11809,6 +11844,16 @@ def test_lens_summon_execute_records_summon_anywhere_when_hotkey_launch_runtime_
     assert summon_readiness_body["summon_anywhere_runtime_ready"] is True
     assert summon_readiness_body["hotkey_launch_on_press"] is True
     assert "summon_anywhere_runtime_readback" not in summon_readiness_body["blockers"]
+
+    status = client.get("/lens/status?limit=1")
+    assert status.status_code == 200
+    status_body = status.json()
+    assert status_body["command_palette"]["availability"] == "os_runtime"
+    assert status_body["command_palette"]["summon_anywhere"] is True
+    assert status_body["command_palette"]["url_entrypoint"]["summon_anywhere"] is True
+    assert status_body["resident_host"]["summon_anywhere"] is True
+    assert "summon_binding_missing" not in status_body["resident_host"]["blockers"]
+    assert "summon_anywhere_runtime_readback" not in status_body["resident_host"]["blockers"]
 
 
 def test_lens_resident_runtime_execute_starts_supervised_resident_host_lease(
