@@ -264,6 +264,34 @@ function Test-StringArrayExact {
   return $true
 }
 
+function Test-StringArraySubset {
+  param(
+    [string[]]$Actual,
+    [string[]]$Allowed
+  )
+
+  foreach ($Item in @($Actual)) {
+    if (@($Allowed) -notcontains [string]$Item) {
+      return $false
+    }
+  }
+  return $true
+}
+
+function Test-StringArrayContainsAll {
+  param(
+    [string[]]$Actual,
+    [string[]]$Required
+  )
+
+  foreach ($Item in @($Required)) {
+    if (@($Actual) -notcontains [string]$Item) {
+      return $false
+    }
+  }
+  return $true
+}
+
 function Get-DependencyById {
   param(
     [AllowNull()]
@@ -598,14 +626,14 @@ $PlanFirstMissingRequirementHandoff = Get-PropertyValue -Payload $Plan -Name 'fi
 $EnablementFirstMissingRequirementHandoff = Get-PropertyValue -Payload $Enablement -Name 'first_missing_requirement_handoff' -Default ([ordered]@{})
 $ExpectedFirstMissingRequiredBeforeEnable = ''
 if (@($EnablementMissing).Count -gt 0) {
-  $ExpectedFirstMissingRequiredBeforeEnable = [string]$EnablementMissing[0]
+  $ExpectedFirstMissingRequiredBeforeEnable = [string](@($EnablementMissing)[0])
 }
-$MissingRequirementsInExpectedContract = $true
-foreach ($Requirement in @($PlanMissing + $EnablementMissing)) {
-  if (@($ExpectedPrerequisites) -notcontains [string]$Requirement) {
-    $MissingRequirementsInExpectedContract = $false
-  }
-}
+$PlanMissingRequirementsInExpectedContract = Test-StringArraySubset -Actual $PlanMissing -Allowed $ExpectedPrerequisites
+$EnablementMissingRequirementsInExpectedContract = (
+  @($EnablementMissing).Count -ge 1 -and
+  (Test-StringArraySubset -Actual $EnablementMissing -Allowed $ExpectedPrerequisites)
+)
+$PlanCoversEnablementMissingRequirements = Test-StringArrayContainsAll -Actual $PlanMissing -Required $EnablementMissing
 
 $PlanRouteReadbackObserved = (
   [int]$RouteResult.exit_code -eq 0 -and
@@ -629,26 +657,39 @@ $RequiredBeforeEnableObserved = (
   (Test-StringArrayExact -Actual $EnablementRequired -Expected $ExpectedPrerequisites)
 )
 $MissingRequiredBeforeEnableObserved = (
-  (Test-StringArrayExact -Actual $PlanMissing -Expected $EnablementMissing) -and
-  $MissingRequirementsInExpectedContract
+  $PlanMissingRequirementsInExpectedContract -and
+  $EnablementMissingRequirementsInExpectedContract -and
+  $PlanCoversEnablementMissingRequirements
+)
+$EnablementFirstMissingRequirementObserved = (
+  -not [string]::IsNullOrWhiteSpace($ExpectedFirstMissingRequiredBeforeEnable) -and
+  $EnablementFirstMissingRequiredBeforeEnable -eq $ExpectedFirstMissingRequiredBeforeEnable -and
+  [string](Get-PropertyValue -Payload $EnablementFirstMissingRequirementHandoff -Name 'id' -Default '') -eq $ExpectedFirstMissingRequiredBeforeEnable -and
+  [string](Get-PropertyValue -Payload $EnablementFirstMissingRequirementHandoff -Name 'route' -Default '') -eq [string]$ExpectedDependencyRoutes[$ExpectedFirstMissingRequiredBeforeEnable] -and
+  [bool](Get-PropertyValue -Payload $EnablementFirstMissingRequirementHandoff -Name 'read_only_contract' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $EnablementFirstMissingRequirementHandoff -Name 'diagnostic_only' -Default $false) -and
+  -not [bool](Get-PropertyValue -Payload $EnablementFirstMissingRequirementHandoff -Name 'would_execute' -Default $true) -and
+  -not [bool](Get-PropertyValue -Payload $EnablementFirstMissingRequirementHandoff -Name 'would_mutate' -Default $true)
+)
+$PlanFirstMissingRequirementObserved = (
+  (
+    $PlanFirstMissingRequiredBeforeEnable -eq $ExpectedFirstMissingRequiredBeforeEnable -and
+    [string](Get-PropertyValue -Payload $PlanFirstMissingRequirementHandoff -Name 'id' -Default '') -eq $ExpectedFirstMissingRequiredBeforeEnable -and
+    [string](Get-PropertyValue -Payload $PlanFirstMissingRequirementHandoff -Name 'route' -Default '') -eq [string]$ExpectedDependencyRoutes[$ExpectedFirstMissingRequiredBeforeEnable] -and
+    -not [string]::IsNullOrWhiteSpace([string](Get-PropertyValue -Payload $PlanFirstMissingRequirementHandoff -Name 'next_smallest_truthful_gap' -Default '')) -and
+    [string](Get-PropertyValue -Payload $PlanFirstMissingRequirementHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq [string](Get-PropertyValue -Payload $EnablementFirstMissingRequirementHandoff -Name 'next_smallest_truthful_gap' -Default '') -and
+    [bool](Get-PropertyValue -Payload $PlanFirstMissingRequirementHandoff -Name 'read_only_contract' -Default $false) -and
+    [bool](Get-PropertyValue -Payload $PlanFirstMissingRequirementHandoff -Name 'diagnostic_only' -Default $false) -and
+    -not [bool](Get-PropertyValue -Payload $PlanFirstMissingRequirementHandoff -Name 'would_execute' -Default $true) -and
+    -not [bool](Get-PropertyValue -Payload $PlanFirstMissingRequirementHandoff -Name 'would_mutate' -Default $true)
+  ) -or (
+    $PlanCoversEnablementMissingRequirements -and
+    $EnablementFirstMissingRequirementObserved
+  )
 )
 $FirstMissingRequirementObserved = (
-  $PlanFirstMissingRequiredBeforeEnable -eq $ExpectedFirstMissingRequiredBeforeEnable -and
-  $EnablementFirstMissingRequiredBeforeEnable -eq $ExpectedFirstMissingRequiredBeforeEnable -and
-  [string](Get-PropertyValue -Payload $PlanFirstMissingRequirementHandoff -Name 'id' -Default '') -eq $ExpectedFirstMissingRequiredBeforeEnable -and
-  [string](Get-PropertyValue -Payload $EnablementFirstMissingRequirementHandoff -Name 'id' -Default '') -eq $ExpectedFirstMissingRequiredBeforeEnable -and
-  [string](Get-PropertyValue -Payload $PlanFirstMissingRequirementHandoff -Name 'route' -Default '') -eq [string]$ExpectedDependencyRoutes[$ExpectedFirstMissingRequiredBeforeEnable] -and
-  [string](Get-PropertyValue -Payload $EnablementFirstMissingRequirementHandoff -Name 'route' -Default '') -eq [string]$ExpectedDependencyRoutes[$ExpectedFirstMissingRequiredBeforeEnable] -and
-  -not [string]::IsNullOrWhiteSpace([string](Get-PropertyValue -Payload $PlanFirstMissingRequirementHandoff -Name 'next_smallest_truthful_gap' -Default '')) -and
-  [string](Get-PropertyValue -Payload $PlanFirstMissingRequirementHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq [string](Get-PropertyValue -Payload $EnablementFirstMissingRequirementHandoff -Name 'next_smallest_truthful_gap' -Default '') -and
-  [bool](Get-PropertyValue -Payload $PlanFirstMissingRequirementHandoff -Name 'read_only_contract' -Default $false) -and
-  [bool](Get-PropertyValue -Payload $EnablementFirstMissingRequirementHandoff -Name 'read_only_contract' -Default $false) -and
-  [bool](Get-PropertyValue -Payload $PlanFirstMissingRequirementHandoff -Name 'diagnostic_only' -Default $false) -and
-  [bool](Get-PropertyValue -Payload $EnablementFirstMissingRequirementHandoff -Name 'diagnostic_only' -Default $false) -and
-  -not [bool](Get-PropertyValue -Payload $PlanFirstMissingRequirementHandoff -Name 'would_execute' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $EnablementFirstMissingRequirementHandoff -Name 'would_execute' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $PlanFirstMissingRequirementHandoff -Name 'would_mutate' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $EnablementFirstMissingRequirementHandoff -Name 'would_mutate' -Default $true)
+  $PlanFirstMissingRequirementObserved -and
+  $EnablementFirstMissingRequirementObserved
 )
 $RequiredPrerequisiteGuardObserved = (
   [int]$RouteResult.exit_code -eq 0 -and
@@ -831,7 +872,7 @@ $Checks = @(
   (New-Check -Id 'persistent_supervision_plan_route_readback' -Status $(if ($PlanRouteReadbackObserved) { 'blocked_readback_ready' } else { 'missing_or_unexpected' }) -Passed $PlanRouteReadbackObserved -Evidence '/lens/host/persistent-supervision' -Reason 'The persistent-supervision plan route must remain blocked and readable before any enablement claim.'),
   (New-Check -Id 'persistent_supervision_enablement_route_readback' -Status $(if ($EnablementRouteReadbackObserved) { 'blocked_readback_ready' } else { 'missing_or_unexpected' }) -Passed $EnablementRouteReadbackObserved -Evidence '/lens/host/persistent-supervision/enablement' -Reason 'The enablement preflight must remain blocked and non-mutating.'),
   (New-Check -Id 'required_before_enable_readback' -Status $(if ($RequiredBeforeEnableObserved) { 'prerequisites_projected' } else { 'missing_or_unexpected' }) -Passed $RequiredBeforeEnableObserved -Evidence 'required_before_enable on plan and enablement routes' -Reason 'The operator-visible contract must expose every prerequisite required before persistent supervision can be enabled.'),
-  (New-Check -Id 'missing_required_before_enable_readback' -Status $(if ($MissingRequiredBeforeEnableObserved) { 'missing_prerequisites_projected' } else { 'missing_or_unexpected' }) -Passed $MissingRequiredBeforeEnableObserved -Evidence 'missing_required_before_enable on plan and enablement routes' -Reason 'The route must show that every prerequisite is still missing in the current disabled posture.'),
+  (New-Check -Id 'missing_required_before_enable_readback' -Status $(if ($MissingRequiredBeforeEnableObserved) { 'missing_prerequisites_projected' } else { 'missing_or_unexpected' }) -Passed $MissingRequiredBeforeEnableObserved -Evidence 'missing_required_before_enable on plan and enablement routes' -Reason 'The route must show a non-empty bounded missing-prerequisite set in the expected contract, including partially advanced seeded-runtime postures.'),
   (New-Check -Id 'first_missing_requirement_handoff' -Status $(if ($FirstMissingRequirementObserved) { 'first_missing_requirement_bound' } else { 'missing_or_unexpected' }) -Passed $FirstMissingRequirementObserved -Evidence 'first_missing_requirement_handoff on plan and enablement routes' -Reason 'The route must name the first concrete prerequisite to resolve before persistent supervision enablement.'),
   (New-Check -Id 'required_before_enable_readiness_guard' -Status $(if ($RequiredPrerequisiteGuardObserved) { 'prerequisite_guard_blocks_enablement' } else { 'missing_or_unexpected' }) -Passed $RequiredPrerequisiteGuardObserved -Evidence 'synthetic manifest projection of otherwise-ready persistent supervision routes' -Reason 'If authority and enablement toggles are otherwise ready, missing resident-host, tray, hotkey, overlay, and summon surfaces must still block persistent supervision.'),
   (New-Check -Id 'enablement_dependency_readback' -Status $(if ($DependenciesObserved) { 'dependency_routes_bound' } else { 'missing_or_unexpected' }) -Passed $DependenciesObserved -Evidence 'enablement_dependency_readback on plan and enablement routes' -Reason 'Each prerequisite must name a concrete readback route and blocker.'),
@@ -869,6 +910,9 @@ $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
   required_before_enable_observed = $RequiredBeforeEnableObserved
   missing_required_before_enable_observed = $MissingRequiredBeforeEnableObserved
   first_missing_requirement_observed = $FirstMissingRequirementObserved
+  plan_first_missing_requirement_observed = $PlanFirstMissingRequirementObserved
+  enablement_first_missing_requirement_observed = $EnablementFirstMissingRequirementObserved
+  plan_covers_enablement_missing_requirements = $PlanCoversEnablementMissingRequirements
   required_before_enable_guard_observed = $RequiredPrerequisiteGuardObserved
   dependency_readback_observed = $DependenciesObserved
   summon_family_contract_observed = $SummonFamilyContractObserved

@@ -2,7 +2,9 @@ param(
   [ValidateSet('Status')]
   [string]$Mode = 'Status',
 
-  [string]$DataDir = ''
+  [string]$DataDir = '',
+
+  [string]$StatusPath = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -159,7 +161,11 @@ if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
   $ChildDataRoot = [System.IO.Path]::GetFullPath($DataDir)
 }
 
-$SummonResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonBlockersScript -ScriptArgs @('-Mode', 'Status') -DataRoot $ChildDataRoot
+$SummonArgs = @('-Mode', 'Status')
+if (-not [string]::IsNullOrWhiteSpace($StatusPath)) {
+  $SummonArgs += @('-StatusPath', $StatusPath)
+}
+$SummonResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonBlockersScript -ScriptArgs $SummonArgs -DataRoot $ChildDataRoot
 $SummonPayload = $SummonResult.payload
 $SummonBlockerGroups = Get-PropertyValue -Payload $SummonPayload -Name 'blocker_groups'
 $SummonBlockedFamilies = ConvertTo-StringArray -Value (
@@ -180,6 +186,7 @@ $SummonAuthorityBlockers = ConvertTo-StringArray -Value (
 $SummonGovernance = Get-PropertyValue -Payload $SummonPayload -Name 'governance'
 $SurfaceRuntimeReadbackObserved = Get-PropertyValue -Payload $SummonPayload -Name 'surface_runtime_readback_observed' -Default ([ordered]@{})
 $SurfaceRuntimeSuppressedBlockers = Get-PropertyValue -Payload $SummonPayload -Name 'surface_runtime_suppressed_blockers' -Default ([ordered]@{})
+$GlobalHotkeyRuntimeObserved = [bool](Get-PropertyValue -Payload $SurfaceRuntimeReadbackObserved -Name 'global_hotkey_binding' -Default $false)
 $SummonBindingRuntimeObserved = [bool](Get-PropertyValue -Payload $SurfaceRuntimeReadbackObserved -Name 'summon_binding' -Default $false)
 $SummonBindingSuppressedBlockers = ConvertTo-StringArray -Value (
   Get-PropertyValue -Payload $SurfaceRuntimeSuppressedBlockers -Name 'summon_binding' -Default @()
@@ -220,10 +227,19 @@ $RequiredDirectAuthorityBlockers = @(
 $SummonBindingFamilyIndex = [array]::IndexOf([string[]]@($SummonBlockedFamilies), 'summon_binding')
 $GlobalHotkeyFamilyIndex = [array]::IndexOf([string[]]@($SummonBlockedFamilies), 'global_hotkey_binding')
 $SummonAuthorityFamilyIndex = [array]::IndexOf([string[]]@($SummonBlockedFamilies), 'authority')
+$AuthorityFamilyFollowsObservedChain = (
+  $SummonAuthorityFamilyIndex -ge 0 -and
+  $SummonAuthorityFamilyIndex -eq (@($SummonBlockedFamilies).Count - 1)
+)
+$GlobalHotkeyFamilyAccountedFor = (
+  $GlobalHotkeyFamilyIndex -ge 0 -or
+  $GlobalHotkeyRuntimeObserved
+)
 $SummonBindingResolvedByRuntimeReadbackObserved = (
   $SummonBindingRuntimeObserved -and
-  $GlobalHotkeyFamilyIndex -ge 0 -and
-  $SummonAuthorityFamilyIndex -eq ($GlobalHotkeyFamilyIndex + 1) -and
+  $SummonBindingFamilyIndex -lt 0 -and
+  $GlobalHotkeyFamilyAccountedFor -and
+  $AuthorityFamilyFollowsObservedChain -and
   [string](Get-PropertyValue -Payload $AuthorityFamilyHandoff -Name 'id' -Default '') -eq 'authority' -and
   ($RequiredAuthorityBlockers | Where-Object { $AuthorityFamilyBlockers -notcontains $_ }).Count -eq 0
 )

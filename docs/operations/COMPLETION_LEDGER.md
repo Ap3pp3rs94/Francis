@@ -42064,6 +42064,88 @@ Latest validation for Stage 7 context-feedback quality review:
   tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
   Result: `passed`
 
+### 2026-05-28 - Stage 6 audit consumes seeded runtime readbacks but remains blocked
+
+Roadmap area: Stage 6 / Lens MVP, completion audit truthfulness for system
+resident presence and summon-anywhere proof consumption.
+
+Material change:
+
+- The persistent-supervision prerequisite proof now accepts bounded
+  seeded-runtime partial progress instead of requiring the disabled posture where
+  every prerequisite remains missing.
+- The prerequisite proof fixes the PowerShell scalar-unrolling cast that turned
+  a single missing prerequisite such as `overlay_window` into `o`.
+- The summon authority and summon-anywhere family-chain proofs now consume
+  surface runtime readbacks where resident host, tray, hotkey, and summon
+  binding are already observed, leaving `overlay_window` plus `authority` as the
+  remaining summon families.
+- The Stage 6 completion audit now consumes those bounded runtime-suppressed
+  summon-family readbacks instead of reporting the stale prerequisite or summon
+  family-chain proof-readback blockers.
+- Current live audit evidence still reports Stage 6 as blocked:
+  `ready_to_close=false`, `transition_allowed=false`,
+  `stage6_completion_reviewed=true`,
+  `next_smallest_truthful_gap=system_resident_presence_blockers`, ready criteria
+  `helpful_not_noisy`, `mode_visibility`, and `pilot_visibility_groundwork`,
+  blocked criteria `summon_anywhere` and `system_resident_presence`.
+- This does not start Stage 7, grant resident-claim authority, grant summon or
+  overlay authority, persist a system-resident claim, or mark Stage 6 closed.
+
+Latest validation for Stage 6 seeded-runtime proof consumption:
+
+- `.\scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -AllowLaunchOnHotkey -ChildProofTimeoutSeconds 240`
+  Result: `passed as command; returned blocked/active, ready_to_close=false,
+  transition_allowed=false, stage6_completion_reviewed=true,
+  next_smallest_truthful_gap=system_resident_presence_blockers`
+- `.\scripts\lens-stage6-checkpoint.ps1 -Mode Status`
+  Result: `passed as command; returned blocked/active, ready_to_close=false,
+  ready_total=3, blocked_total=2, blocker_total=67,
+  next_smallest_truthful_gap=stage6_lens_completion_audit`
+- `.\scripts\lens-stage6-next-handoff.ps1 -Mode Status`
+  Result: `passed as command; returned proof_passed,
+  next_smallest_truthful_gap=stage6_lens_completion_audit, recommended proof
+  scripts/lens-stage6-completion-audit.ps1 -Mode Status`
+- `.\scripts\lens-persistent-supervision-prerequisites-proof.ps1 -Mode Status
+  -DataDir D:\Francis\data -SeededRuntimeReadbackAllowed
+  -ChildProofTimeoutSeconds 240`
+  Result: `passed; proof_passed with first_missing_required_before_enable
+  overlay_window`
+- `.\scripts\lens-summon-authority-blocker-proof.ps1 -Mode Status -DataDir
+  D:\Francis\data`
+  Result: `passed; proof_passed with summon_binding_resolved_by_runtime_readback`
+- `.\scripts\lens-summon-anywhere-family-chain-proof.ps1 -Mode Status -DataDir
+  D:\Francis\data -ChildProofTimeoutSeconds 240`
+  Result: `passed; proof_passed with blocked_families overlay_window,
+  authority`
+- PowerShell parser check for
+  `scripts/lens-persistent-supervision-prerequisites-proof.ps1`,
+  `scripts/lens-stage6-completion-audit.ps1`,
+  `scripts/lens-summon-anywhere-family-chain-proof.ps1`, and
+  `scripts/lens-summon-authority-blocker-proof.ps1`
+  Result: `passed; parser_ok`
+- `python -m pytest
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_observes_summon_family_chain_authority_gates
+  tests/test_lens_summon_authority_blocker_proof_script.py
+  tests/test_lens_summon_anywhere_family_chain_proof_script.py
+  tests/test_lens_persistent_supervision_prerequisites_proof_script.py -q
+  --tb=short --maxfail=1`
+  Result: `passed`
+- `python -m ruff check tests/test_lens_stage6_completion_audit_script.py
+  tests/test_lens_summon_authority_blocker_proof_script.py
+  tests/test_lens_summon_anywhere_family_chain_proof_script.py
+  tests/test_lens_persistent_supervision_prerequisites_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests/test_lens_stage6_completion_audit_script.py
+  tests/test_lens_summon_authority_blocker_proof_script.py
+  tests/test_lens_summon_anywhere_family_chain_proof_script.py
+  tests/test_lens_persistent_supervision_prerequisites_proof_script.py`
+  Result: `passed; 4 files already formatted`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

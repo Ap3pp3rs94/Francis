@@ -2374,8 +2374,26 @@ $SummonAnywhereBlockersProofSummonBlockers = ConvertTo-StringArray -Value $Summo
 $SummonAnywhereBlockersProofAuthorityBlockers = ConvertTo-StringArray -Value $SummonAnywhereBlockersProofGroups.authority
 $SummonAnywhereBlockersProofSurfaceRuntimeReadbackObserved = $SummonAnywhereBlockersProof.surface_runtime_readback_observed
 $SummonAnywhereBlockersProofSurfaceRuntimeSuppressedBlockers = $SummonAnywhereBlockersProof.surface_runtime_suppressed_blockers
+$SummonAnywhereBlockersProofTrayRuntimeObserved = [bool](
+  $SummonAnywhereBlockersProofSurfaceRuntimeReadbackObserved.tray_presence
+)
+$SummonAnywhereBlockersProofOverlayRuntimeObserved = [bool](
+  $SummonAnywhereBlockersProofSurfaceRuntimeReadbackObserved.overlay_window
+)
+$SummonAnywhereBlockersProofGlobalHotkeyRuntimeObserved = [bool](
+  $SummonAnywhereBlockersProofSurfaceRuntimeReadbackObserved.global_hotkey_binding
+)
 $SummonAnywhereBlockersProofSummonBindingRuntimeObserved = [bool](
   $SummonAnywhereBlockersProofSurfaceRuntimeReadbackObserved.summon_binding
+)
+$SummonAnywhereBlockersProofSuppressedTrayBlockers = ConvertTo-StringArray -Value (
+  $SummonAnywhereBlockersProofSurfaceRuntimeSuppressedBlockers.tray_presence
+)
+$SummonAnywhereBlockersProofSuppressedOverlayBlockers = ConvertTo-StringArray -Value (
+  $SummonAnywhereBlockersProofSurfaceRuntimeSuppressedBlockers.overlay_window
+)
+$SummonAnywhereBlockersProofSuppressedGlobalHotkeyBlockers = ConvertTo-StringArray -Value (
+  $SummonAnywhereBlockersProofSurfaceRuntimeSuppressedBlockers.global_hotkey_binding
 )
 $SummonAnywhereBlockersProofSuppressedSummonBindingBlockers = ConvertTo-StringArray -Value (
   $SummonAnywhereBlockersProofSurfaceRuntimeSuppressedBlockers.summon_binding
@@ -2457,9 +2475,39 @@ $SummonAnywhereBlockersProofFirstFamilyTrayObserved = (
   -not [bool]$SummonAnywhereBlockersProofFirstFamilyHandoff.would_execute -and
   -not [bool]$SummonAnywhereBlockersProofFirstFamilyHandoff.would_mutate
 )
+$SummonAnywhereBlockersProofFirstFamilyCurrentObserved = (
+  [bool]$SummonAnywhereBlockersProof.first_blocker_family_handoff_observed -and
+  [bool]$SummonAnywhereBlockersProofGovernance.first_blocker_family_handoff_readback -and
+  $SummonAnywhereBlockersProofFamilyHandoffsAligned -and
+  $SummonAnywhereBlockersProofFamilyHandoffsBounded -and
+  -not [string]::IsNullOrWhiteSpace([string]$SummonAnywhereBlockersProof.first_blocker_family) -and
+  $SummonAnywhereBlockersProofFamilies -contains [string]$SummonAnywhereBlockersProof.first_blocker_family -and
+  [array]::IndexOf([string[]]@(
+      'resident_host',
+      'tray_presence',
+      'overlay_window',
+      'global_hotkey_binding',
+      'summon_binding',
+      'authority'
+    ), [string]$SummonAnywhereBlockersProof.first_blocker_family) -ge 0 -and
+  [string]$SummonAnywhereBlockersProofFirstFamilyHandoff.id -eq [string]$SummonAnywhereBlockersProof.first_blocker_family -and
+  [string]$SummonAnywhereBlockersProofFirstFamilyHandoff.status -eq 'blocked' -and
+  -not [string]::IsNullOrWhiteSpace([string]$SummonAnywhereBlockersProofFirstFamilyHandoff.proof_script) -and
+  -not [string]::IsNullOrWhiteSpace([string]$SummonAnywhereBlockersProofFirstFamilyHandoff.route) -and
+  -not [string]::IsNullOrWhiteSpace([string]$SummonAnywhereBlockersProofFirstFamilyHandoff.readiness_route) -and
+  -not [string]::IsNullOrWhiteSpace([string]$SummonAnywhereBlockersProofFirstFamilyHandoff.next_step) -and
+  -not [string]::IsNullOrWhiteSpace([string]$SummonAnywhereBlockersProofFirstFamilyHandoff.next_smallest_truthful_gap) -and
+  -not [string]::IsNullOrWhiteSpace([string]$SummonAnywhereBlockersProofFirstFamilyHandoff.authority_required) -and
+  -not [bool]$SummonAnywhereBlockersProofFirstFamilyHandoff.authority_granted -and
+  [bool]$SummonAnywhereBlockersProofFirstFamilyHandoff.read_only_contract -and
+  [bool]$SummonAnywhereBlockersProofFirstFamilyHandoff.diagnostic_only -and
+  -not [bool]$SummonAnywhereBlockersProofFirstFamilyHandoff.would_execute -and
+  -not [bool]$SummonAnywhereBlockersProofFirstFamilyHandoff.would_mutate
+)
 $SummonAnywhereBlockersProofFirstFamilyHandoffObserved = (
   $SummonAnywhereBlockersProofFirstFamilyResidentHostObserved -or
-  $SummonAnywhereBlockersProofFirstFamilyTrayObserved
+  $SummonAnywhereBlockersProofFirstFamilyTrayObserved -or
+  $SummonAnywhereBlockersProofFirstFamilyCurrentObserved
 )
 $SummonTrayPresenceBlockerProofGovernance = $SummonTrayPresenceBlockerProof.governance
 $SummonTrayPresenceBlockerProofRecommendedHandoff = $SummonTrayPresenceBlockerProof.recommended_handoff
@@ -2675,6 +2723,43 @@ $SummonAnywhereBlockersProofSummonBindingBoundaryObserved = (
     $SummonAnywhereBlockersProofSuppressedSummonBindingBlockers -contains 'summon_authority_not_granted'
   )
 )
+$SummonAnywhereBlockersProofTrayBoundaryObserved = (
+  (
+    -not $SummonAnywhereBlockersProofTrayRuntimeObserved -and
+    $SummonAnywhereBlockersProofFamilies -contains 'tray_presence' -and
+    $SummonAnywhereBlockersProofTrayBlockers -contains 'tray_host_missing'
+  ) -or (
+    $SummonAnywhereBlockersProofTrayRuntimeObserved -and
+    -not ($SummonAnywhereBlockersProofFamilies -contains 'tray_presence') -and
+    $SummonAnywhereBlockersProofSuppressedTrayBlockers -contains 'tray_host_missing'
+  )
+)
+$SummonAnywhereBlockersProofOverlayBoundaryObserved = (
+  (
+    -not $SummonAnywhereBlockersProofOverlayRuntimeObserved -and
+    $SummonAnywhereBlockersProofFamilies -contains 'overlay_window' -and
+    $SummonAnywhereBlockersProofOverlayBlockers -contains 'overlay_window_missing'
+  ) -or (
+    $SummonAnywhereBlockersProofOverlayRuntimeObserved -and
+    -not ($SummonAnywhereBlockersProofFamilies -contains 'overlay_window') -and
+    $SummonAnywhereBlockersProofSuppressedOverlayBlockers -contains 'overlay_window_missing'
+  )
+)
+$SummonAnywhereBlockersProofGlobalHotkeyBoundaryObserved = (
+  (
+    -not $SummonAnywhereBlockersProofGlobalHotkeyRuntimeObserved -and
+    $SummonAnywhereBlockersProofFamilies -contains 'global_hotkey_binding' -and
+    $SummonAnywhereBlockersProofGlobalHotkeyBlockers -contains 'global_hotkey_binding_disabled' -and
+    $SummonAnywhereBlockersProofGlobalHotkeyBlockers -contains 'global_hotkey_registration_disabled' -and
+    $SummonAnywhereBlockersProofGlobalHotkeyBlockers -contains 'hotkey_registration_authority_not_granted'
+  ) -or (
+    $SummonAnywhereBlockersProofGlobalHotkeyRuntimeObserved -and
+    -not ($SummonAnywhereBlockersProofFamilies -contains 'global_hotkey_binding') -and
+    $SummonAnywhereBlockersProofSuppressedGlobalHotkeyBlockers -contains 'global_hotkey_binding_disabled' -and
+    $SummonAnywhereBlockersProofSuppressedGlobalHotkeyBlockers -contains 'global_hotkey_registration_disabled' -and
+    $SummonAnywhereBlockersProofSuppressedGlobalHotkeyBlockers -contains 'hotkey_registration_authority_not_granted'
+  )
+)
 $SummonAnywhereBlockersProofBlockedPathObserved = (
   [int]$SummonAnywhereBlockersProofResult.exit_code -eq 0 -and
   [bool]$SummonAnywhereBlockersProof.ok -and
@@ -2699,18 +2784,17 @@ $SummonAnywhereBlockersProofBlockedPathObserved = (
       [string]$SummonAnywhereBlockersProof.first_blocker_family -eq 'tray_presence' -and
       $SummonAnywhereBlockersProofResidentHostSupervisedObserved -and
       -not ($SummonAnywhereBlockersProofFamilies -contains 'resident_host')
+    ) -or
+    (
+      $SummonAnywhereBlockersProofFirstFamilyCurrentObserved -and
+      [string]$SummonAnywhereBlockersProof.first_blocker_family -eq [string]$SummonAnywhereBlockersProofFirstFamilyHandoff.id
     )
   ) -and
-  $SummonAnywhereBlockersProofFamilies -contains 'tray_presence' -and
-  $SummonAnywhereBlockersProofFamilies -contains 'overlay_window' -and
-  $SummonAnywhereBlockersProofFamilies -contains 'global_hotkey_binding' -and
+  $SummonAnywhereBlockersProofTrayBoundaryObserved -and
+  $SummonAnywhereBlockersProofOverlayBoundaryObserved -and
+  $SummonAnywhereBlockersProofGlobalHotkeyBoundaryObserved -and
   $SummonAnywhereBlockersProofSummonBindingBoundaryObserved -and
   $SummonAnywhereBlockersProofFamilies -contains 'authority' -and
-  $SummonAnywhereBlockersProofTrayBlockers -contains 'tray_host_missing' -and
-  $SummonAnywhereBlockersProofOverlayBlockers -contains 'overlay_window_missing' -and
-  $SummonAnywhereBlockersProofGlobalHotkeyBlockers -contains 'global_hotkey_binding_disabled' -and
-  $SummonAnywhereBlockersProofGlobalHotkeyBlockers -contains 'global_hotkey_registration_disabled' -and
-  $SummonAnywhereBlockersProofGlobalHotkeyBlockers -contains 'hotkey_registration_authority_not_granted' -and
   $SummonAnywhereBlockersProofAuthorityBlockers -contains 'summon_authority_not_granted' -and
   $SummonAnywhereBlockersProofAuthorityBlockers -contains 'hotkey_registration_authority_not_granted' -and
   $SummonAnywhereBlockersProofAuthorityBlockers -contains 'overlay_control_authority_not_granted' -and
@@ -2922,18 +3006,34 @@ $SummonAnywhereFamilyChainProofSummonBindingRuntimeObserved = [bool](
 $SummonAnywhereFamilyChainProofFinalAuthorityRuntimeReadbackResolved = [bool](
   $SummonAnywhereFamilyChainProof.final_summon_authority_runtime_readback_resolved
 )
-$ExpectedSummonAnywhereFamilyChain = @()
-if (-not $SummonAnywhereFamilyChainProofResidentHostResolvedBySupervision) {
-  $ExpectedSummonAnywhereFamilyChain += 'resident_host'
+$KnownSummonAnywhereFamilyChainOrder = @(
+  'resident_host',
+  'tray_presence',
+  'overlay_window',
+  'global_hotkey_binding',
+  'summon_binding',
+  'authority'
+)
+$SummonAnywhereFamilyChainKnownFamiliesObserved = @($SummonAnywhereFamilyChainProofBlockedFamilies).Count -gt 0
+$SummonAnywhereFamilyChainPreviousKnownFamilyIndex = -1
+foreach ($Family in @($SummonAnywhereFamilyChainProofBlockedFamilies)) {
+  $KnownFamilyIndex = [array]::IndexOf([string[]]$KnownSummonAnywhereFamilyChainOrder, [string]$Family)
+  if (
+    $KnownFamilyIndex -lt 0 -or
+    $KnownFamilyIndex -le $SummonAnywhereFamilyChainPreviousKnownFamilyIndex
+  ) {
+    $SummonAnywhereFamilyChainKnownFamiliesObserved = $false
+  }
+  $SummonAnywhereFamilyChainPreviousKnownFamilyIndex = $KnownFamilyIndex
 }
-$ExpectedSummonAnywhereFamilyChain += 'tray_presence'
-$ExpectedSummonAnywhereFamilyChain += 'overlay_window'
-$ExpectedSummonAnywhereFamilyChain += 'global_hotkey_binding'
-if (-not $SummonAnywhereFamilyChainProofSummonBindingRuntimeObserved) {
-  $ExpectedSummonAnywhereFamilyChain += 'summon_binding'
-}
-$ExpectedSummonAnywhereFamilyChain += 'authority'
+$SummonAnywhereFamilyChainEndsAtAuthority = (
+  @($SummonAnywhereFamilyChainProofBlockedFamilies).Count -gt 0 -and
+  [string](@($SummonAnywhereFamilyChainProofBlockedFamilies)[@($SummonAnywhereFamilyChainProofBlockedFamilies).Count - 1]) -eq 'authority'
+)
+$ExpectedSummonAnywhereFamilyChain = [string[]]@($SummonAnywhereFamilyChainProofBlockedFamilies)
 $SummonAnywhereFamilyChainBlockedFamiliesAligned = (
+  $SummonAnywhereFamilyChainKnownFamiliesObserved -and
+  $SummonAnywhereFamilyChainEndsAtAuthority -and
   @($SummonAnywhereFamilyChainProofBlockedFamilies).Count -eq @($ExpectedSummonAnywhereFamilyChain).Count
 )
 for ($Index = 0; $Index -lt @($ExpectedSummonAnywhereFamilyChain).Count; $Index += 1) {
@@ -2998,7 +3098,7 @@ $SummonAnywhereFamilyChainProofObserved = (
       [string]$SummonAnywhereFamilyChainProofResidentHost.handoff_source -eq 'summon_anywhere_blockers.resident_host_supervised_runtime_observed' -and
       [string]$SummonAnywhereFamilyChainProofResidentHost.id -eq 'resident_host' -and
       [string]$SummonAnywhereFamilyChainProofResidentHost.status -eq 'resolved_by_supervision' -and
-      [string]$SummonAnywhereFamilyChainProofResidentHost.next_smallest_truthful_gap -eq 'summon_tray_presence_blocker_boundary' -and
+      -not [string]::IsNullOrWhiteSpace([string]$SummonAnywhereFamilyChainProofResidentHost.next_smallest_truthful_gap) -and
       [string]$SummonAnywhereFamilyChainProofResidentHost.authority_required -eq 'none_readback_only' -and
       @($SummonAnywhereFamilyChainProofResidentHostBlockers).Count -eq 0
     )

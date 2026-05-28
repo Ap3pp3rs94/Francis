@@ -61,6 +61,121 @@ def _write_summon_binding_runtime_readback(data_root: Path) -> None:
     )
 
 
+def _write_lens_status_with_overlay_missing_surface_readbacks(path: Path) -> None:
+    readbacks = {
+        "tray_runtime_readback": {
+            "ready": True,
+            "status": "running",
+            "requirement_state": "ready",
+            "blocker": "",
+        },
+        "hotkey_runtime_readback": {
+            "ready": True,
+            "status": "running",
+            "global_hotkey": "Ctrl+Alt+Space",
+            "expected_global_hotkey": "Ctrl+Alt+Space",
+            "binding_scope": "global",
+            "expected_binding_scope": "global",
+            "launch_on_hotkey": True,
+            "requirement_state": "bound",
+            "blocker": "",
+        },
+        "summon_runtime_readback": {
+            "ready": True,
+            "status": "observed",
+            "global_hotkey": "Ctrl+Alt+Space",
+            "expected_global_hotkey": "Ctrl+Alt+Space",
+            "binding_scope": "global",
+            "expected_binding_scope": "global",
+            "bounded_handoff_ready": True,
+            "local_open_ready": True,
+            "summon_anywhere": False,
+            "os_level_summon": False,
+            "requirement_state": "bounded_handoff_observed",
+            "blocker": "",
+        },
+    }
+    payload = {
+        "ok": True,
+        "kind": "lens.status",
+        "os_binding_authority_requests": {
+            "ok": True,
+            "kind": "lens.os_binding.command_palette_binding_authority.request_readback",
+            "status": "none",
+            "route": "/lens/os-binding/authority/requests",
+            "authority_route": "/lens/os-binding/authority",
+            "request_route": "/lens/os-binding/authority/request",
+            "readiness_route": "/lens/os-binding/readiness",
+            "plan_route": "/lens/os-binding/plan",
+            "authority_required": "os_level_command_palette_binding_authority",
+            "pending_count": 0,
+            "approved_count": 0,
+            "rejected_count": 0,
+            "emergency_count": 0,
+            "total_count": 0,
+            "authority_granted": False,
+            "os_level_command_palette_binding_authority": False,
+            "os_level_command_palette": False,
+            "summon_anywhere": False,
+            "opens_palette": False,
+            "registers_hotkey": False,
+            "launches_process": False,
+            "controls_overlay": False,
+            "governance": {
+                "read_only_contract": True,
+                "approval_request_write": False,
+                "execution_authority": False,
+                "approval_decision_authority": False,
+                "memory_write": False,
+                "resident_claim_authority": False,
+            },
+        },
+        "resident_host": {
+            "process_readback": {
+                "status": "process_observed",
+                "state_status": "resident_running",
+                "process_alive": True,
+            },
+            "supervision_gate": {
+                "resident_supervised_runtime": True,
+                "resident_host_supervised": True,
+                "fresh_supervisor_readback": True,
+                "supervisor_readback": {
+                    "status": "resident_supervising",
+                    "fresh_readback": True,
+                    "observed_process_alive": True,
+                    "observed_pid_matches_host_process": True,
+                },
+            },
+            "launch_manifest": readbacks,
+            **readbacks,
+        },
+        "summon_enablement_gate": {"ready": False, "summon_anywhere": False},
+        "os_binding_readiness": {"ready": False},
+        "stage6_readiness": {
+            "criteria": [
+                {
+                    "id": "os_binding_readiness",
+                    "authority_request_readback_status": "none",
+                    "authority_request_readback_ready": True,
+                    "authority_route": "/lens/os-binding/authority",
+                    "authority_request_route": "/lens/os-binding/authority/request",
+                    "authority_requests_route": "/lens/os-binding/authority/requests",
+                    "evidence": [
+                        "/lens/os-binding/readiness",
+                        "/lens/os-binding/authority/requests",
+                        "/lens/os-binding/authority/request",
+                        "/lens/status",
+                    ],
+                }
+            ],
+            "ready_criteria": [],
+            "closure_readback": {"criteria": []},
+        },
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
 def test_lens_summon_anywhere_family_chain_requires_child_authority_readbacks() -> None:
     script = (_repo_root() / "scripts" / "lens-summon-anywhere-family-chain-proof.ps1").read_text(encoding="utf-8")
 
@@ -364,3 +479,62 @@ def test_lens_summon_anywhere_family_chain_accepts_resolved_summon_binding_runti
     assert governance["execution_authority"] is False
     assert governance["summon_authority"] is False
     assert governance["mutation_authority_granted"] is False
+
+
+def test_lens_summon_anywhere_family_chain_accepts_overlay_remaining_after_surface_runtime_readback(
+    tmp_path: Path,
+) -> None:
+    status_path = tmp_path / "lens-status.json"
+    _write_lens_status_with_overlay_missing_surface_readbacks(status_path)
+
+    proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-StatusPath",
+        str(status_path),
+        "-ChildProofTimeoutSeconds",
+        "240",
+    )
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload["kind"] == "lens.summon_anywhere_family_chain.proof"
+    assert payload["status"] == "proof_passed"
+    assert payload["ok"] is True
+    assert payload["blocked_families"] == ["overlay_window", "authority"]
+    assert [item["id"] for item in payload["blocked_family_handoffs"]] == payload["blocked_families"]
+    assert payload["first_blocker_family"] == "overlay_window"
+    assert payload["family_chain_observed"] is True
+    assert payload["resident_host_family_handoff_observed"] is True
+    assert payload["resident_host_family_resolved_by_supervision"] is True
+    assert payload["resident_host_supervised_runtime_observed"] is True
+    assert payload["final_summon_authority_handoff_observed"] is True
+    assert payload["final_summon_authority_contract_readback_observed"] is True
+    assert payload["final_summon_authority_runtime_readback_resolved"] is True
+    assert payload["summon_binding_runtime_readback_observed"] is True
+    assert payload["all_summon_blocker_families_consumed"] is True
+    assert payload["handoff_aligned"] is True
+    assert payload["side_effects_denied"] is True
+
+    resident_host = payload["resident_host"]
+    assert resident_host["handoff_source"] == "summon_anywhere_blockers.resident_host_supervised_runtime_observed"
+    assert resident_host["status"] == "resolved_by_supervision"
+    assert resident_host["blockers"] == []
+
+    final_authority = payload["final_authority"]
+    assert final_authority["previous_summon_blocker_family"] == "global_hotkey_binding"
+    assert final_authority["summon_authority_blocker_family"] == "authority"
+    assert final_authority["all_summon_blocker_families_consumed"] is True
+    assert final_authority["summon_binding_runtime_readback_observed"] is True
+    assert final_authority["summon_binding_resolved_by_runtime_readback"] is True
+    assert final_authority["previous_binding_handoff"]["status"] == "runtime_readback_resolved"
+    assert final_authority["previous_binding_handoff"]["side_effects_denied"] is True
+
+    checks = {item["id"]: item for item in payload["checks"]}
+    assert checks["summon_anywhere_family_chain"]["status"] == "family_chain_projected"
+    assert checks["resident_host_family_handoff"]["status"] == "current_family_contract_ready"
+    assert checks["final_summon_authority_handoff"]["status"] == "final_family_consumed"
+    assert checks["final_summon_authority_contract_readback"]["status"] == "final_runtime_readback_resolved"
+    assert checks["handoff_alignment"]["status"] == "handoff_aligned"
+    assert checks["side_effects_denied"]["status"] == "diagnostic_bounded"
+    assert all(item["passed"] for item in payload["checks"])

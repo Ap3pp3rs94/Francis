@@ -64,6 +64,13 @@ def test_lens_persistent_supervision_prerequisites_uses_summon_family_contract_r
         in script
     )
     assert "skipped_resident_host_process_ready" in script
+    assert "function Test-StringArraySubset" in script
+    assert "function Test-StringArrayContainsAll" in script
+    assert "$ExpectedFirstMissingRequiredBeforeEnable = [string](@($EnablementMissing)[0])" in script
+    assert "$PlanCoversEnablementMissingRequirements" in script
+    assert "$EnablementFirstMissingRequirementObserved" in script
+    assert "$PlanFirstMissingRequirementObserved" in script
+    assert "including partially advanced seeded-runtime postures" in script
 
 
 def test_lens_persistent_supervision_prerequisites_align_to_summon_family_contract(
