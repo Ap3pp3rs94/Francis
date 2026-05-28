@@ -30,7 +30,7 @@ def test_telemetry_status_projects_stage7_readonly_sources(monkeypatch, tmp_path
     }
     assert body["source_total"] == 3
     assert body["active_source_total"] == sum(1 for source in body["sources"] if source["active"])
-    assert body["next_smallest_truthful_gap"] == "stage7_context_feedback_quality_review"
+    assert body["next_smallest_truthful_gap"] == "stage7_context_feedback_operator_surface"
 
     sources = {source["id"]: source for source in body["sources"]}
     assert set(sources) == {"terminal", "git", "ide_diagnostics"}
@@ -141,8 +141,9 @@ def test_telemetry_context_projects_redacted_assist_surface(monkeypatch, tmp_pat
     assert body["feedback"]["event_count"] == 0
     assert body["feedback"]["write_route"] == "/telemetry/context/feedback"
     assert body["feedback"]["read_route"] == "/telemetry/context/feedback"
+    assert body["feedback"]["review_route"] == "/telemetry/context/feedback/review"
     assert body["feedback"]["required_scope"] == "telemetry.context.feedback.write"
-    assert body["next_smallest_truthful_gap"] == "stage7_context_feedback_quality_review"
+    assert body["next_smallest_truthful_gap"] == "stage7_context_feedback_operator_surface"
 
     source_ids = {item["source_id"] for item in body["context_items"]}
     assert "terminal" in source_ids
@@ -188,6 +189,34 @@ def test_telemetry_context_feedback_denies_event_without_actor_scope(monkeypatch
     assert body["governance"]["gate"] == "permission_gate"
     assert body["governance"]["required_scope"] == "telemetry.context.feedback.write"
     assert body["governance"]["reason"] == "missing_scopes"
+    assert not data_root.exists()
+
+
+def test_telemetry_context_feedback_review_is_empty_without_events(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    client = TestClient(create_app())
+    response = client.get("/telemetry/context/feedback/review")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "francis.stage7.telemetry.context_feedback_review"
+    assert body["status"] == "empty"
+    assert body["reviewed_event_count"] == 0
+    assert body["total"] == 0
+    assert body["rating_counts"] == {"useful": 0, "not_useful": 0, "neutral": 0}
+    assert body["quality_signals"] == ["no_explicit_context_feedback_recorded"]
+    assert body["latest_feedback"] == {}
+    assert body["governance"]["read_only"] is True
+    assert body["governance"]["on_request_only"] is True
+    assert body["governance"]["uses_explicit_operator_feedback_only"] is True
+    assert body["governance"]["stores_prompt_body"] is False
+    assert body["governance"]["stores_model_response"] is False
+    assert body["governance"]["trains_model"] is False
+    assert body["governance"]["grants_execution_authority"] is False
+    assert body["governance"]["grants_memory_write_authority"] is False
     assert not data_root.exists()
 
 
@@ -275,6 +304,95 @@ def test_telemetry_context_feedback_records_redacted_explicit_feedback(monkeypat
     context = client.get("/telemetry/context?surface=chat").json()
     assert context["feedback"]["event_count"] == 1
     assert context["feedback"]["required_scope"] == "telemetry.context.feedback.write"
+    assert context["feedback"]["review_route"] == "/telemetry/context/feedback/review"
+
+
+def test_telemetry_context_feedback_review_summarizes_explicit_quality_signals(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({"test.telemetry.feedback": ["telemetry.context.feedback.write"]}),
+    )
+
+    client = TestClient(create_app())
+    for payload in (
+        {
+            "actor": "test.telemetry.feedback",
+            "reason": "record useful feedback token=usefulreasonsecret123",
+            "context_id": "tel_ctx_useful",
+            "surface": "chat",
+            "rating": "useful",
+            "notes": "helped because terminal context was relevant token=notessecret123",
+            "source_ids": ["terminal", "git"],
+            "tags": ["stage7", "accurate"],
+            "meta": {"prompt_body": "do not store prompt token=promptsecret123"},
+        },
+        {
+            "actor": "test.telemetry.feedback",
+            "reason": "record miss",
+            "context_id": "tel_ctx_miss",
+            "surface": "chat",
+            "rating": "not_useful",
+            "notes": "missed IDE diagnostic",
+            "source_ids": ["ide_diagnostics"],
+            "tags": ["missing"],
+            "meta": {"model_response": "do not store response token=responsesecret123"},
+        },
+        {
+            "actor": "test.telemetry.feedback",
+            "reason": "record neutral",
+            "context_id": "tel_ctx_neutral",
+            "surface": "chat",
+            "rating": "unexpected",
+            "notes": "neutral",
+            "source_ids": ["terminal"],
+            "tags": ["stage7"],
+        },
+    ):
+        response = client.post("/telemetry/context/feedback", json=payload)
+        assert response.status_code == 200
+        assert response.json()["ok"] is True
+
+    body = client.get("/telemetry/context/feedback/review?limit=10").json()
+
+    assert body["ok"] is True
+    assert body["kind"] == "francis.stage7.telemetry.context_feedback_review"
+    assert body["status"] == "review_ready"
+    assert body["capture_mode"] == "explicit_operator_feedback_review"
+    assert body["reviewed_event_count"] == 3
+    assert body["total"] == 3
+    assert body["truncated"] is False
+    assert body["rating_counts"] == {"useful": 1, "not_useful": 1, "neutral": 1}
+    assert body["source_counts"]["terminal"] == 2
+    assert body["source_counts"]["git"] == 1
+    assert body["source_counts"]["ide_diagnostics"] == 1
+    assert body["tag_counts"]["stage7"] == 2
+    assert body["quality_signals"] == [
+        "operator_reported_useful_context",
+        "operator_reported_context_misses",
+        "operator_reported_neutral_context",
+    ]
+    assert body["latest_feedback"]["context_id"] == "tel_ctx_neutral"
+    assert body["latest_feedback"]["rating"] == "neutral"
+    assert "notes" not in body["latest_feedback"]
+    assert "meta" not in body["latest_feedback"]
+    assert body["stores_prompt_body"] is False
+    assert body["stores_model_response"] is False
+    assert body["trains_model"] is False
+    assert body["writes_memory"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["governance"]["read_only"] is True
+    assert body["governance"]["uses_explicit_operator_feedback_only"] is True
+    assert body["next_smallest_truthful_gap"] == "stage7_context_feedback_operator_surface"
+
+    review_text = json.dumps(body, sort_keys=True)
+    for raw_secret in ("usefulreasonsecret123", "notessecret123", "promptsecret123", "responsesecret123"):
+        assert raw_secret not in review_text
 
 
 def test_terminal_telemetry_denies_event_without_actor_scope(monkeypatch, tmp_path: Path) -> None:

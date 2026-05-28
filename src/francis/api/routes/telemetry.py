@@ -9,6 +9,7 @@ from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPer
 from francis.telemetry.context import (
     TELEMETRY_CONTEXT_FEEDBACK_WRITE_SCOPE,
     record_telemetry_context_feedback,
+    telemetry_context_feedback_review,
     telemetry_context_feedback_snapshot,
     telemetry_context_snapshot,
 )
@@ -91,6 +92,11 @@ def context(surface: str = "assist") -> dict[str, Any]:
 @router.get("/context/feedback")
 def context_feedback(limit: int = 20) -> dict[str, Any]:
     return telemetry_context_feedback_snapshot(limit=limit)
+
+
+@router.get("/context/feedback/review")
+def context_feedback_review(limit: int = 100) -> dict[str, Any]:
+    return telemetry_context_feedback_review(limit=limit)
 
 
 @router.get("/terminal/scope")

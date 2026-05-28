@@ -13,6 +13,7 @@ from francis.telemetry.status import STAGE7_TELEMETRY_STAGE, redact_telemetry_va
 TELEMETRY_CONTEXT_KIND = "francis.stage7.telemetry.context"
 TELEMETRY_CONTEXT_FEEDBACK_KIND = "francis.stage7.telemetry.context_feedback"
 TELEMETRY_CONTEXT_FEEDBACK_EVENTS_KIND = "francis.stage7.telemetry.context_feedback_events"
+TELEMETRY_CONTEXT_FEEDBACK_REVIEW_KIND = "francis.stage7.telemetry.context_feedback_review"
 TELEMETRY_CONTEXT_FEEDBACK_WRITE_SCOPE = "telemetry.context.feedback.write"
 _MAX_CONTEXT_ITEMS = 12
 _MAX_PATHS = 5
@@ -53,6 +54,7 @@ def telemetry_context_snapshot(*, surface: Any = "assist") -> dict[str, Any]:
             "event_count": feedback_count,
             "write_route": "/telemetry/context/feedback",
             "read_route": "/telemetry/context/feedback",
+            "review_route": "/telemetry/context/feedback/review",
             "required_scope": TELEMETRY_CONTEXT_FEEDBACK_WRITE_SCOPE,
         },
         "grants_execution_authority": False,
@@ -68,7 +70,7 @@ def telemetry_context_snapshot(*, surface: Any = "assist") -> dict[str, Any]:
             "grants_execution_authority": False,
             "grants_memory_write_authority": False,
         },
-        "next_smallest_truthful_gap": "stage7_context_feedback_quality_review",
+        "next_smallest_truthful_gap": "stage7_context_feedback_operator_surface",
     }
 
 
@@ -162,6 +164,62 @@ def telemetry_context_feedback_snapshot(*, limit: int = 20) -> dict[str, Any]:
             "grants_execution_authority": False,
             "grants_memory_write_authority": False,
         },
+    }
+
+
+def telemetry_context_feedback_review(*, limit: int = 100) -> dict[str, Any]:
+    safe_limit = _safe_limit(limit)
+    items = read_telemetry_context_feedback(limit=safe_limit)
+    rating_counts = {"useful": 0, "not_useful": 0, "neutral": 0}
+    source_counts: dict[str, int] = {}
+    tag_counts: dict[str, int] = {}
+    for item in items:
+        rating = _safe_rating(item.get("rating"))
+        rating_counts[rating] += 1
+        for source_id in _safe_text_list(item.get("source_ids"), limit=_MAX_CONTEXT_ITEMS):
+            source_counts[source_id] = source_counts.get(source_id, 0) + 1
+        for tag in _safe_text_list(item.get("tags"), limit=_MAX_TAGS):
+            tag_counts[tag] = tag_counts.get(tag, 0) + 1
+
+    total = telemetry_context_feedback_count()
+    return {
+        "ok": True,
+        "kind": TELEMETRY_CONTEXT_FEEDBACK_REVIEW_KIND,
+        "stage": STAGE7_TELEMETRY_STAGE,
+        "source_id": "telemetry_context",
+        "status": "review_ready" if items else "empty",
+        "capture_mode": "explicit_operator_feedback_review",
+        "reviewed_event_count": len(items),
+        "total": total,
+        "limit": safe_limit,
+        "truncated": total > len(items),
+        "rating_counts": rating_counts,
+        "source_counts": _bounded_count_map(source_counts, limit=_MAX_CONTEXT_ITEMS),
+        "tag_counts": _bounded_count_map(tag_counts, limit=_MAX_TAGS),
+        "quality_signals": _feedback_quality_signals(rating_counts, reviewed_event_count=len(items)),
+        "latest_feedback": _feedback_review_item(items[-1]) if items else {},
+        "redacted": True,
+        "hidden_sensing": False,
+        "stores_prompt_body": False,
+        "stores_model_response": False,
+        "trains_model": False,
+        "writes_memory": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "on_request_only": True,
+            "capture_mode": "explicit_operator_feedback",
+            "uses_explicit_operator_feedback_only": True,
+            "redacted_before_storage": True,
+            "telemetry_is_untrusted_input": True,
+            "stores_prompt_body": False,
+            "stores_model_response": False,
+            "trains_model": False,
+            "grants_execution_authority": False,
+            "grants_memory_write_authority": False,
+        },
+        "next_smallest_truthful_gap": "stage7_context_feedback_operator_surface",
     }
 
 
@@ -338,6 +396,39 @@ def _changed_paths(value: Any) -> list[dict[str, str]]:
             continue
         paths.append({"status": _redact_text(record.get("status")).strip(), "path": path})
     return paths
+
+
+def _feedback_review_item(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "feedback_id": _redact_text(item.get("feedback_id")),
+        "context_id": _redact_text(item.get("context_id")),
+        "surface": _redact_text(item.get("surface")),
+        "rating": _safe_rating(item.get("rating")),
+        "source_ids": _safe_text_list(item.get("source_ids"), limit=_MAX_CONTEXT_ITEMS),
+        "tags": _safe_text_list(item.get("tags"), limit=_MAX_TAGS),
+        "recorded_ts": _safe_int(item.get("recorded_ts"), 0),
+    }
+
+
+def _feedback_quality_signals(rating_counts: dict[str, int], *, reviewed_event_count: int) -> list[str]:
+    if reviewed_event_count <= 0:
+        return ["no_explicit_context_feedback_recorded"]
+    signals: list[str] = []
+    if rating_counts["useful"] > 0:
+        signals.append("operator_reported_useful_context")
+    if rating_counts["not_useful"] > 0:
+        signals.append("operator_reported_context_misses")
+    if rating_counts["neutral"] > 0:
+        signals.append("operator_reported_neutral_context")
+    return signals
+
+
+def _bounded_count_map(counts: dict[str, int], *, limit: int) -> dict[str, int]:
+    return {
+        key: count
+        for key, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:limit]
+        if key and count > 0
+    }
 
 
 def _feedback_path() -> Path:

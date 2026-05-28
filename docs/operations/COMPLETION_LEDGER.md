@@ -42028,6 +42028,42 @@ Latest validation for Stage 7 context-feedback readback:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-28 - Stage 7 telemetry context feedback quality review is read-only
+
+Roadmap area: Stage 7 / Telemetry MVP, action-quality feedback for
+context-aware assistance.
+
+Material change:
+
+- Telemetry context feedback now has a read-only review endpoint at
+  `/telemetry/context/feedback/review`.
+- The review summarizes only explicit operator feedback already recorded through
+  the governed feedback path, including bounded rating, source, tag, latest
+  feedback, and quality-signal readbacks.
+- The review does not model-score assistance quality, train a model, store raw
+  prompt bodies or raw model responses, write memory, mutate files, start
+  sensing, or grant execution authority.
+- `/telemetry/status` and `/telemetry/context` now advance their next smallest
+  truthful gap to `stage7_context_feedback_operator_surface`.
+
+Latest validation for Stage 7 context-feedback quality review:
+
+- `python -m pytest tests/test_api_telemetry.py tests/test_api_chat.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short`
+  Result: `passed; 20 passed`
+- `python -m mypy src/francis/telemetry/context.py
+  src/francis/telemetry/status.py src/francis/api/routes/telemetry.py`
+  Result: `passed`
+- `python -m ruff check src/francis/telemetry/context.py
+  src/francis/telemetry/status.py src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/telemetry/context.py
+  src/francis/telemetry/status.py src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
