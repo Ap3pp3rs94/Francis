@@ -266,6 +266,7 @@ $PersistentSupervisionApiExecutionProofScript = Join-Path $PSScriptRoot 'lens-pe
 $Stage6PrerequisiteBringupPlanScript = Join-Path $PSScriptRoot 'lens-stage6-prerequisite-bringup-plan.ps1'
 $SummonAnywhereBlockersProofScript = Join-Path $PSScriptRoot 'lens-summon-anywhere-blockers-proof.ps1'
 $SummonTrayPresenceBlockerProofScript = Join-Path $PSScriptRoot 'lens-summon-tray-presence-blocker-proof.ps1'
+$SummonOverlayWindowBlockerProofScript = Join-Path $PSScriptRoot 'lens-summon-overlay-window-blocker-proof.ps1'
 $SummonResidentHostBlockerProofScript = Join-Path $PSScriptRoot 'lens-summon-resident-host-blocker-proof.ps1'
 $SummonAuthorityBlockerProofScript = Join-Path $PSScriptRoot 'lens-summon-authority-blocker-proof.ps1'
 $SummonAnywhereFamilyChainProofScript = Join-Path $PSScriptRoot 'lens-summon-anywhere-family-chain-proof.ps1'
@@ -336,6 +337,23 @@ if ([string]$SummonAnywhereBlockersProof.first_blocker_family -eq 'tray_presence
     -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 120))
 }
 $SummonTrayPresenceBlockerProof = $SummonTrayPresenceBlockerProofResult.payload
+$SummonOverlayWindowBlockerProofResult = [ordered]@{
+  exit_code = 0
+  payload = $null
+  output = ''
+  error = ''
+  timed_out = $false
+  timeout_seconds = 0
+  duration_ms = 0
+}
+if ([string]$SummonTrayPresenceBlockerProof.next_smallest_truthful_gap -eq 'summon_overlay_window_blocker_boundary') {
+  $SummonOverlayWindowBlockerProofResult = Invoke-JsonScript `
+    -PowerShellPath $PowerShell.Source `
+    -ScriptPath $SummonOverlayWindowBlockerProofScript `
+    -ScriptArgs @('-Mode', 'Status') `
+    -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 120))
+}
+$SummonOverlayWindowBlockerProof = $SummonOverlayWindowBlockerProofResult.payload
 $SummonAuthorityBlockerProofResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonAuthorityBlockerProofScript -ScriptArgs @(
   '-Mode', 'Status'
 ) -TimeoutSeconds ([Math]::Max($ChildProofTimeoutSeconds, 240))
@@ -1439,6 +1457,7 @@ $PersistentSupervisionEnablementTransitionPlanProofObserved = (
 $ChildProofRuns = @(
   New-ChildProofRunSummary -Name 'summon_anywhere_blockers' -Result $SummonAnywhereBlockersProofResult
   New-ChildProofRunSummary -Name 'summon_tray_presence_blocker' -Result $SummonTrayPresenceBlockerProofResult
+  New-ChildProofRunSummary -Name 'summon_overlay_window_blocker' -Result $SummonOverlayWindowBlockerProofResult
   New-ChildProofRunSummary -Name 'summon_authority_blocker' -Result $SummonAuthorityBlockerProofResult
   New-ChildProofRunSummary -Name 'summon_anywhere_family_chain' -Result $SummonAnywhereFamilyChainProofResult
   New-ChildProofRunSummary -Name 'resident_host_runtime_boundary' -Result $ResidentHostRuntimeBoundaryProofResult
@@ -2469,6 +2488,60 @@ $SummonTrayPresenceBlockerProofObserved = (
   -not [bool]$SummonTrayPresenceBlockerProofGovernance.resident_claim_authority -and
   -not [bool]$SummonTrayPresenceBlockerProofGovernance.mutation_authority_granted
 )
+$SummonOverlayWindowBlockerProofGovernance = $SummonOverlayWindowBlockerProof.governance
+$SummonOverlayWindowBlockerProofRecommendedHandoff = $SummonOverlayWindowBlockerProof.recommended_handoff
+$SummonOverlayWindowBlockerProofBlockers = ConvertTo-StringArray -Value (
+  $SummonOverlayWindowBlockerProof.summon_overlay_window_blockers
+)
+$SummonOverlayWindowBlockerProofRuntimeBlockers = ConvertTo-StringArray -Value (
+  $SummonOverlayWindowBlockerProof.resident_runtime_overlay_window_blockers
+)
+$SummonOverlayWindowBlockerProofObserved = (
+  $SummonTrayPresenceBlockerProofObserved -and
+  [int]$SummonOverlayWindowBlockerProofResult.exit_code -eq 0 -and
+  [bool]$SummonOverlayWindowBlockerProof.ok -and
+  [string]$SummonOverlayWindowBlockerProof.kind -eq 'lens.summon_overlay_window_blocker.proof' -and
+  [string]$SummonOverlayWindowBlockerProof.status -eq 'proof_passed' -and
+  [string]$SummonOverlayWindowBlockerProof.acceptance_criterion -eq 'summon_anywhere' -and
+  [string]$SummonOverlayWindowBlockerProof.previous_summon_blocker_family -eq 'tray_presence' -and
+  [string]$SummonOverlayWindowBlockerProof.summon_overlay_window_blocker_family -eq 'overlay_window' -and
+  [string]$SummonOverlayWindowBlockerProof.next_summon_blocker_family -eq 'global_hotkey_binding' -and
+  [string]$SummonOverlayWindowBlockerProof.summon_next_smallest_truthful_gap -eq 'summon_anywhere_blockers' -and
+  [string]$SummonOverlayWindowBlockerProof.next_smallest_truthful_gap -eq 'summon_global_hotkey_binding_blocker_boundary' -and
+  [string]$SummonOverlayWindowBlockerProof.recommended_handoff_source -eq 'summon_overlay_window_handoff' -and
+  [string]$SummonOverlayWindowBlockerProof.recommended_next_slice -eq 'run_global_hotkey_binding_blocker_proof' -and
+  [string]$SummonOverlayWindowBlockerProof.recommended_proof_script -eq 'scripts/lens-summon-global-hotkey-binding-blocker-proof.ps1 -Mode Status' -and
+  [string]$SummonOverlayWindowBlockerProof.authority_required -eq 'hotkey_registration_authority' -and
+  -not [bool]$SummonOverlayWindowBlockerProof.authority_granted -and
+  [bool]$SummonOverlayWindowBlockerProof.summon_overlay_family_observed -and
+  [bool]$SummonOverlayWindowBlockerProof.previous_tray_presence_contract_observed -and
+  [bool]$SummonOverlayWindowBlockerProof.previous_tray_presence_contract_readback_observed -and
+  [bool]$SummonOverlayWindowBlockerProof.overlay_window_boundary_observed -and
+  [bool]$SummonOverlayWindowBlockerProof.handoff_aligned -and
+  [bool]$SummonOverlayWindowBlockerProof.side_effects_denied -and
+  $SummonOverlayWindowBlockerProofBlockers -contains 'overlay_window_missing' -and
+  [bool]$SummonOverlayWindowBlockerProofGovernance.diagnostic_only -and
+  [bool]$SummonOverlayWindowBlockerProofGovernance.wraps_summon_anywhere_blockers_proof -and
+  [bool]$SummonOverlayWindowBlockerProofGovernance.uses_tray_presence_family_contract_readback -and
+  [bool]$SummonOverlayWindowBlockerProofGovernance.tray_presence_contract_readback -and
+  [bool]$SummonOverlayWindowBlockerProofGovernance.wraps_resident_runtime_overlay_window_boundary_proof -and
+  [bool]$SummonOverlayWindowBlockerProofGovernance.overlay_preflight_readback -and
+  [bool]$SummonOverlayWindowBlockerProofGovernance.read_only_contract -and
+  -not [bool]$SummonOverlayWindowBlockerProofGovernance.approval_request_write -and
+  -not [bool]$SummonOverlayWindowBlockerProofGovernance.product_execution_authority -and
+  -not [bool]$SummonOverlayWindowBlockerProofGovernance.execution_authority -and
+  -not [bool]$SummonOverlayWindowBlockerProofGovernance.approval_decision_authority -and
+  -not [bool]$SummonOverlayWindowBlockerProofGovernance.overlay_control_authority -and
+  -not [bool]$SummonOverlayWindowBlockerProofGovernance.window_management_authority -and
+  -not [bool]$SummonOverlayWindowBlockerProofGovernance.capture_authority -and
+  -not [bool]$SummonOverlayWindowBlockerProofGovernance.new_sensing_authority -and
+  -not [bool]$SummonOverlayWindowBlockerProofGovernance.hotkey_registration_authority -and
+  -not [bool]$SummonOverlayWindowBlockerProofGovernance.summon_authority -and
+  -not [bool]$SummonOverlayWindowBlockerProofGovernance.memory_write -and
+  -not [bool]$SummonOverlayWindowBlockerProofGovernance.receipt_write_authority -and
+  -not [bool]$SummonOverlayWindowBlockerProofGovernance.resident_claim_authority -and
+  -not [bool]$SummonOverlayWindowBlockerProofGovernance.mutation_authority_granted
+)
 $SummonAnywhereBlockersProofSummonBindingBoundaryObserved = (
   (
     -not $SummonAnywhereBlockersProofSummonBindingRuntimeObserved -and
@@ -3490,6 +3563,7 @@ $Stage6CompletionEvidenceReviewed = (
   $OsBindingAuthorityEvidenceObserved -and
   $SummonAnywhereBlockersProofObserved -and
   (-not $SummonAnywhereBlockersProofFirstFamilyTrayObserved -or $SummonTrayPresenceBlockerProofObserved) -and
+  (-not $SummonTrayPresenceBlockerProofObserved -or $SummonOverlayWindowBlockerProofObserved) -and
   $CheckpointSummonEnablementGateHandoffObserved -and
   $SummonAuthorityBlockerProofObserved -and
   $SummonAnywhereFamilyChainProofObserved -and
@@ -3735,6 +3809,14 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   $Stage6PrerequisiteBringupAppliedEnablementReceiptReviewPending
 ) {
   [string]$Stage6PrerequisiteBringupPlan.current_truthful_gap
+} elseif (
+  $Stage6CompletionReviewed -and
+  -not $ReadyToClose -and
+  $BlockedCriterionIds -contains 'summon_anywhere' -and
+  -not $SummonAnywhereRuntimeReadbackObserved -and
+  $SummonOverlayWindowBlockerProofObserved
+) {
+  [string]$SummonOverlayWindowBlockerProof.next_smallest_truthful_gap
 } elseif (
   $Stage6CompletionReviewed -and
   -not $ReadyToClose -and
@@ -4047,6 +4129,50 @@ $Stage6CompletionAuditHandoffConsumedByClosureReadback = (
   $Stage6PrerequisiteBringupPlanObserved
 )
 if (
+  $NextSmallestTruthfulGap -eq 'summon_global_hotkey_binding_blocker_boundary' -and
+  $SummonOverlayWindowBlockerProofObserved
+) {
+  $RecommendedHandoffSource = 'stage6_reviewed_summon_overlay_window_blocker_handoff'
+  $RecommendedHandoff = [ordered]@{
+    status = 'blocked'
+    previous_next_smallest_truthful_gap = 'summon_overlay_window_blocker_boundary'
+    consumed_summon_anywhere_next_smallest_truthful_gap = [string]$SummonAnywhereBlockersProof.next_smallest_truthful_gap
+    consumed_tray_presence_next_smallest_truthful_gap = [string]$SummonTrayPresenceBlockerProof.next_smallest_truthful_gap
+    consumed_overlay_window_next_smallest_truthful_gap = [string]$SummonOverlayWindowBlockerProof.next_smallest_truthful_gap
+    next_smallest_truthful_gap = [string]$SummonOverlayWindowBlockerProof.next_smallest_truthful_gap
+    next_step = [string]$SummonOverlayWindowBlockerProof.recommended_next_slice
+    proof_script = [string]$SummonOverlayWindowBlockerProof.recommended_proof_script
+    route = [string]$SummonOverlayWindowBlockerProof.recommended_route
+    readiness_route = [string]$SummonOverlayWindowBlockerProof.recommended_readiness_route
+    acceptance_criterion = 'summon_anywhere'
+    first_blocker_family = [string]$SummonAnywhereBlockersProof.first_blocker_family
+    first_blocker_family_handoff = $SummonAnywhereBlockersProofFirstFamilyHandoff
+    tray_presence_handoff = $SummonTrayPresenceBlockerProofRecommendedHandoff
+    overlay_window_handoff = $SummonOverlayWindowBlockerProofRecommendedHandoff
+    overlay_window_boundary_observed = [bool]$SummonOverlayWindowBlockerProof.overlay_window_boundary_observed
+    previous_tray_presence_contract_readback_observed = (
+      [bool]$SummonOverlayWindowBlockerProof.previous_tray_presence_contract_readback_observed
+    )
+    blocker_families = [string[]]@(ConvertTo-StringArray -Value $SummonAnywhereBlockersProof.blocked_families)
+    blocked_family_handoffs = @($SummonAnywhereBlockersProofFamilyHandoffs)
+    authority_required = [string]$SummonOverlayWindowBlockerProof.authority_required
+    authority_granted = $false
+    read_only_contract = $true
+    diagnostic_only = $true
+    would_execute = $false
+    would_mutate = $false
+    would_register_tray = $false
+    would_register_hotkey = $false
+    would_control_overlay = $false
+    would_summon = $false
+    would_write_memory = $false
+    would_claim_resident = $false
+    blockers = [string[]]@($SummonOverlayWindowBlockerProofRuntimeBlockers)
+  }
+  $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
+  $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
+  $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
+} elseif (
   $NextSmallestTruthfulGap -eq 'summon_overlay_window_blocker_boundary' -and
   $SummonTrayPresenceBlockerProofObserved
 ) {
@@ -7337,6 +7463,85 @@ $Payload = [ordered]@{
       mutation_authority_granted = $false
     }
   }
+  summon_overlay_window_blocker_proof = [ordered]@{
+    status = if ($SummonOverlayWindowBlockerProofObserved) {
+      [string]$SummonOverlayWindowBlockerProof.status
+    } elseif ([int]$SummonOverlayWindowBlockerProofResult.timeout_seconds -eq 0) {
+      'not_applicable'
+    } else {
+      'missing_or_failed'
+    }
+    ok = $SummonOverlayWindowBlockerProofObserved
+    exit_code = [int]$SummonOverlayWindowBlockerProofResult.exit_code
+    kind = [string]$SummonOverlayWindowBlockerProof.kind
+    evidence = [string[]]@(ConvertTo-StringArray -Value $SummonOverlayWindowBlockerProof.evidence)
+    acceptance_criterion = [string]$SummonOverlayWindowBlockerProof.acceptance_criterion
+    previous_summon_blocker_family = [string]$SummonOverlayWindowBlockerProof.previous_summon_blocker_family
+    summon_overlay_window_blocker_family = [string]$SummonOverlayWindowBlockerProof.summon_overlay_window_blocker_family
+    third_summon_blocker_family = [string]$SummonOverlayWindowBlockerProof.third_summon_blocker_family
+    next_summon_blocker_family = [string]$SummonOverlayWindowBlockerProof.next_summon_blocker_family
+    summon_next_smallest_truthful_gap = [string]$SummonOverlayWindowBlockerProof.summon_next_smallest_truthful_gap
+    next_smallest_truthful_gap = [string]$SummonOverlayWindowBlockerProof.next_smallest_truthful_gap
+    recommended_handoff_source = [string]$SummonOverlayWindowBlockerProof.recommended_handoff_source
+    recommended_next_slice = [string]$SummonOverlayWindowBlockerProof.recommended_next_slice
+    recommended_proof_script = [string]$SummonOverlayWindowBlockerProof.recommended_proof_script
+    recommended_route = [string]$SummonOverlayWindowBlockerProof.recommended_route
+    recommended_readiness_route = [string]$SummonOverlayWindowBlockerProof.recommended_readiness_route
+    recommended_handoff = $SummonOverlayWindowBlockerProofRecommendedHandoff
+    authority_required = [string]$SummonOverlayWindowBlockerProof.authority_required
+    authority_granted = [bool]$SummonOverlayWindowBlockerProof.authority_granted
+    summon_overlay_family_observed = [bool]$SummonOverlayWindowBlockerProof.summon_overlay_family_observed
+    previous_tray_presence_contract_observed = [bool]$SummonOverlayWindowBlockerProof.previous_tray_presence_contract_observed
+    previous_tray_presence_contract_readback_observed = (
+      [bool]$SummonOverlayWindowBlockerProof.previous_tray_presence_contract_readback_observed
+    )
+    overlay_window_boundary_observed = [bool]$SummonOverlayWindowBlockerProof.overlay_window_boundary_observed
+    handoff_aligned = [bool]$SummonOverlayWindowBlockerProof.handoff_aligned
+    side_effects_denied = [bool]$SummonOverlayWindowBlockerProof.side_effects_denied
+    summon_overlay_window_blockers = [string[]]@($SummonOverlayWindowBlockerProofBlockers)
+    resident_runtime_overlay_window_blockers = [string[]]@($SummonOverlayWindowBlockerProofRuntimeBlockers)
+    previous_tray_presence_contract = $SummonOverlayWindowBlockerProof.previous_tray_presence_contract
+    overlay_window_boundary = $SummonOverlayWindowBlockerProof.overlay_window_boundary
+    governance = [ordered]@{
+      diagnostic_only = [bool]$SummonOverlayWindowBlockerProofGovernance.diagnostic_only
+      wraps_summon_anywhere_blockers_proof = [bool]$SummonOverlayWindowBlockerProofGovernance.wraps_summon_anywhere_blockers_proof
+      wraps_summon_tray_presence_blocker_proof = (
+        [bool]$SummonOverlayWindowBlockerProofGovernance.wraps_summon_tray_presence_blocker_proof
+      )
+      uses_tray_presence_family_contract_readback = (
+        [bool]$SummonOverlayWindowBlockerProofGovernance.uses_tray_presence_family_contract_readback
+      )
+      tray_presence_contract_readback = [bool]$SummonOverlayWindowBlockerProofGovernance.tray_presence_contract_readback
+      wraps_resident_runtime_overlay_window_boundary_proof = (
+        [bool]$SummonOverlayWindowBlockerProofGovernance.wraps_resident_runtime_overlay_window_boundary_proof
+      )
+      overlay_preflight_readback = [bool]$SummonOverlayWindowBlockerProofGovernance.overlay_preflight_readback
+      read_only_contract = [bool]$SummonOverlayWindowBlockerProofGovernance.read_only_contract
+      approval_request_write = $false
+      resident_runtime_execution_authority = $false
+      product_execution_authority = $false
+      execution_authority = $false
+      approval_decision_authority = $false
+      local_process_launch_authority = $false
+      process_supervision_authority = $false
+      process_restart_authority = $false
+      service_install_authority = $false
+      service_control_authority = $false
+      tray_registration_authority = $false
+      tray_icon_authority = $false
+      notification_authority = $false
+      hotkey_registration_authority = $false
+      overlay_control_authority = $false
+      window_management_authority = $false
+      capture_authority = $false
+      new_sensing_authority = $false
+      summon_authority = $false
+      memory_write = $false
+      receipt_write_authority = $false
+      resident_claim_authority = $false
+      mutation_authority_granted = $false
+    }
+  }
   summon_resident_host_blocker_proof = [ordered]@{
     status = if ($SummonResidentHostBlockerProofObserved) { [string]$SummonResidentHostBlockerProof.status } else { 'missing_or_failed' }
     ok = $SummonResidentHostBlockerProofObserved
@@ -8326,6 +8531,7 @@ $Payload = [ordered]@{
     summon_anywhere_blockers_proof_readback = $SummonAnywhereBlockersProofObserved
     summon_anywhere_first_blocker_family_handoff_readback = $SummonAnywhereBlockersProofFirstFamilyHandoffObserved
     summon_tray_presence_blocker_proof_readback = $SummonTrayPresenceBlockerProofObserved
+    summon_overlay_window_blocker_proof_readback = $SummonOverlayWindowBlockerProofObserved
     summon_resident_host_blocker_proof_readback = $SummonResidentHostBlockerProofObserved
     summon_resident_host_process_supervision_handoff_readback = [bool]$SummonResidentHostBlockerProof.resident_host_process_supervision_handoff_observed
     resident_host_runtime_boundary_proof_readback = $ResidentHostRuntimeBoundaryProofObserved

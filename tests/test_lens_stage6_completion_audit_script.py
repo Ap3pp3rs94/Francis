@@ -66,6 +66,7 @@ def _expected_audit_child_proof_timeouts(child_timeout_seconds: int) -> dict[str
     return {
         "summon_anywhere_blockers": child_timeout_seconds,
         "summon_tray_presence_blocker": max(child_timeout_seconds, 120),
+        "summon_overlay_window_blocker": max(child_timeout_seconds, 120),
         "summon_authority_blocker": _family_chain_child_timeout_seconds(child_timeout_seconds),
         "summon_anywhere_family_chain": _family_chain_wrapper_timeout_seconds(child_timeout_seconds),
         "resident_host_runtime_boundary": child_timeout_seconds,
@@ -271,6 +272,30 @@ def test_lens_stage6_completion_audit_consumes_tray_presence_blocker_readback() 
     assert "$RecommendedHandoffSource = 'stage6_reviewed_summon_tray_presence_blocker_handoff'" in script
     assert "summon_tray_presence_blocker_proof = [ordered]@{" in script
     assert "summon_tray_presence_blocker_proof_readback = $SummonTrayPresenceBlockerProofObserved" in script
+
+
+def test_lens_stage6_completion_audit_consumes_overlay_window_blocker_readback() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    assert "$SummonOverlayWindowBlockerProofScript" in script
+    assert "lens-summon-overlay-window-blocker-proof.ps1" in script
+    assert (
+        "[string]$SummonTrayPresenceBlockerProof.next_smallest_truthful_gap "
+        "-eq 'summon_overlay_window_blocker_boundary'"
+    ) in script
+    assert "New-ChildProofRunSummary -Name 'summon_overlay_window_blocker'" in script
+    assert "$SummonOverlayWindowBlockerProofObserved = (" in script
+    assert "[string]$SummonOverlayWindowBlockerProof.kind -eq 'lens.summon_overlay_window_blocker.proof'" in script
+    assert (
+        "[string]$SummonOverlayWindowBlockerProof.next_smallest_truthful_gap "
+        "-eq 'summon_global_hotkey_binding_blocker_boundary'"
+    ) in script
+    assert "[bool]$SummonOverlayWindowBlockerProof.overlay_window_boundary_observed" in script
+    assert "[bool]$SummonOverlayWindowBlockerProofGovernance.read_only_contract" in script
+    assert "-not $SummonTrayPresenceBlockerProofObserved -or $SummonOverlayWindowBlockerProofObserved" in script
+    assert "$RecommendedHandoffSource = 'stage6_reviewed_summon_overlay_window_blocker_handoff'" in script
+    assert "summon_overlay_window_blocker_proof = [ordered]@{" in script
+    assert "summon_overlay_window_blocker_proof_readback = $SummonOverlayWindowBlockerProofObserved" in script
 
 
 def test_lens_stage6_completion_audit_outer_timeout_covers_serial_child_budget() -> None:
@@ -1841,6 +1866,7 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert set(child_proof_runs) == {
         "summon_anywhere_blockers",
         "summon_tray_presence_blocker",
+        "summon_overlay_window_blocker",
         "summon_authority_blocker",
         "summon_anywhere_family_chain",
         "resident_host_runtime_boundary",
