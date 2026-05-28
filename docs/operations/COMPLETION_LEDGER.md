@@ -41659,6 +41659,45 @@ Latest validation for current authority handoff compatibility:
   tests/test_lens_stage6_next_handoff_script.py`
   Result: `passed; 2 files already formatted`
 
+### 2026-05-28 - Stage 6 summon authority bundle sequence is inspectable
+
+Roadmap area: Stage 6 / Lens MVP, governed summon-anywhere authority handoff.
+
+Material change:
+
+- `scripts/lens-stage6-next-handoff.ps1` now exposes a read-only
+  `authority_bundle_sequence` for the current summon-anywhere authority bundle:
+  global hotkey binding authority, overlay window authority, summon binding
+  authority, then explicit launch-on-hotkey runtime readback.
+- The sequence marks exactly one eligible step, tracks active grant receipts,
+  approved approval IDs, pending approval IDs, and keeps future steps visible
+  without making them actionable.
+- When all three authority grants are active, the final handoff remains an
+  explicit operator opt-in runtime readback through
+  `scripts/lens-summon-api-execution-proof.ps1 -Mode Status -AllowLaunchOnHotkey`.
+- This does not request authority, grant authority, decide approvals, write
+  memory, claim resident status, start Stage 7, or execute the runtime readback
+  by itself.
+
+Latest validation for authority-bundle sequence projection:
+
+- `pwsh -NoProfile -Command '$script = Get-Content -Raw
+  scripts\lens-stage6-next-handoff.ps1; $null =
+  [scriptblock]::Create($script); "handoff-parse-ok"'`
+  Result: `passed; handoff-parse-ok`
+- `python -m ruff check tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 1 file already formatted`
+- `python -m pytest
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_reviewed_summon_authority_handoff
+  -q --tb=short`
+  Result: `passed; 2 passed`
+- `git diff --check`
+  Result: `passed; CRLF normalization warning only for
+  scripts/lens-stage6-next-handoff.ps1`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

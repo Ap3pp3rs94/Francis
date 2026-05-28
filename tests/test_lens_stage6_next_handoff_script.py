@@ -552,6 +552,22 @@ def test_lens_stage6_next_handoff_consumes_reviewed_summon_authority_handoff(tmp
     )
     assert current_payload["recommended_operator_handoff"]["status"] == "authority_request_required"
     assert current_payload["recommended_next_operator_action"]["id"] == "request_global_hotkey_binding_authority"
+    current_sequence = current_payload["recommended_operator_handoff"]["authority_bundle_sequence"]
+    assert current_payload["recommended_operator_handoff"]["authority_bundle_next_step_index"] == 0
+    assert current_payload["recommended_operator_handoff"]["authority_bundle_complete"] is False
+    assert [step["id"] for step in current_sequence] == [
+        "global_hotkey_binding",
+        "overlay_window",
+        "summon_binding",
+        "launch_on_hotkey_runtime_readback",
+    ]
+    assert current_sequence[0]["status"] == "authority_request_required"
+    assert current_sequence[0]["eligible_now"] is True
+    assert current_sequence[0]["action_id"] == "request_global_hotkey_binding_authority"
+    assert current_sequence[1]["eligible_now"] is False
+    assert current_sequence[2]["eligible_now"] is False
+    assert current_sequence[3]["status"] == "blocked_by_authority_sequence"
+    assert current_sequence[3]["eligible_now"] is False
 
     created_ts = int(datetime.now(UTC).timestamp())
     approved_hotkey_approval_id = "approved-hotkey-authority-test"
@@ -577,7 +593,7 @@ def test_lens_stage6_next_handoff_consumes_reviewed_summon_authority_handoff(tmp
         "-Mode",
         "Status",
         "-CompletionAuditJsonPath",
-        str(audit_json),
+        str(current_audit_json),
         env={"FRANCIS_DATA_DIR": str(data_root)},
     )
 
@@ -676,7 +692,7 @@ def test_lens_stage6_next_handoff_consumes_reviewed_summon_authority_handoff(tmp
         "-Mode",
         "Status",
         "-CompletionAuditJsonPath",
-        str(audit_json),
+        str(current_audit_json),
         env={"FRANCIS_DATA_DIR": str(data_root)},
     )
 
@@ -689,11 +705,279 @@ def test_lens_stage6_next_handoff_consumes_reviewed_summon_authority_handoff(tmp
     assert hotkey_granted_payload["recommended_operator_handoff"]["active_grant_receipts"] == {
         "global_hotkey_binding": hotkey_grant_receipt_id
     }
+    hotkey_sequence = hotkey_granted_payload["recommended_operator_handoff"]["authority_bundle_sequence"]
+    assert hotkey_granted_payload["recommended_operator_handoff"]["authority_bundle_next_step_index"] == 1
+    assert hotkey_granted_payload["recommended_operator_handoff"]["authority_bundle_complete"] is False
+    assert hotkey_sequence[0]["status"] == "authority_grant_receipt_active"
+    assert hotkey_sequence[0]["active_grant_receipt_id"] == hotkey_grant_receipt_id
+    assert hotkey_sequence[0]["eligible_now"] is False
+    assert hotkey_sequence[1]["status"] == "authority_request_required"
+    assert hotkey_sequence[1]["eligible_now"] is True
+    assert hotkey_sequence[1]["action_id"] == "request_overlay_window_authority"
     assert hotkey_granted_payload["recommended_next_operator_action_requirement"] == (
         "exact_overlay_window_authority_approval"
     )
     assert hotkey_granted_payload["recommended_next_operator_action"]["id"] == "request_overlay_window_authority"
     assert hotkey_granted_payload["recommended_next_operator_action"]["route"] == "/lens/overlay/authority/request"
+
+    approved_overlay_approval_id = "approved-overlay-authority-test"
+    write_json(
+        data_root / "approvals" / "approved" / f"{approved_overlay_approval_id}.json",
+        {
+            "id": approved_overlay_approval_id,
+            "ts": created_ts,
+            "action": "lens.overlay.window_authority",
+            "reason": "test approved overlay window authority",
+            "payload": {
+                "actor": "test.system.write",
+                "route": "/lens/overlay/authority/request",
+            },
+            "status": "approved",
+            "decision": "approve",
+            "decision_actor": "test.approvals.decision",
+            "decided_ts": created_ts,
+        },
+    )
+
+    overlay_approved_proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-CompletionAuditJsonPath",
+        str(current_audit_json),
+        env={"FRANCIS_DATA_DIR": str(data_root)},
+    )
+
+    assert overlay_approved_proc.returncode == 0, overlay_approved_proc.stderr or overlay_approved_proc.stdout
+    overlay_approved_payload = json.loads(overlay_approved_proc.stdout)
+    assert overlay_approved_payload["stage6_completion_audit_summon_authority_request_bundle_handoff_observed"] is True
+    assert overlay_approved_payload["recommended_operator_handoff"]["source"] == (
+        "summon_anywhere_authority_request_bundle_handoff"
+    )
+    assert overlay_approved_payload["recommended_operator_handoff"]["status"] == "authority_grant_required"
+    assert overlay_approved_payload["recommended_operator_handoff"]["active_grant_receipts"] == {
+        "global_hotkey_binding": hotkey_grant_receipt_id
+    }
+    overlay_approved_sequence = overlay_approved_payload["recommended_operator_handoff"]["authority_bundle_sequence"]
+    assert overlay_approved_payload["recommended_operator_handoff"]["authority_bundle_next_step_index"] == 1
+    assert overlay_approved_payload["recommended_operator_handoff"]["authority_bundle_complete"] is False
+    assert overlay_approved_sequence[1]["status"] == "authority_grant_required"
+    assert overlay_approved_sequence[1]["eligible_now"] is True
+    assert overlay_approved_sequence[1]["action_id"] == "grant_overlay_window_authority"
+    assert overlay_approved_sequence[1]["approved_approval_id"] == approved_overlay_approval_id
+    assert overlay_approved_payload["recommended_next_operator_action_requirement"] == (
+        "exact_overlay_window_authority_approval"
+    )
+    assert overlay_approved_payload["recommended_next_operator_action"]["id"] == "grant_overlay_window_authority"
+    assert overlay_approved_payload["recommended_next_operator_action"]["route"] == "/lens/overlay/authority"
+    assert overlay_approved_payload["recommended_next_operator_action"]["approved_approval_id"] == (
+        approved_overlay_approval_id
+    )
+    assert overlay_approved_payload["recommended_next_operator_action"]["script_would_request_authority"] is False
+    assert overlay_approved_payload["recommended_next_operator_action"]["script_would_grant_authority"] is True
+    assert overlay_approved_payload["recommended_next_operator_action"]["script_would_decide_approval"] is False
+
+    overlay_grant_receipt_id = "active-overlay-authority-grant-test"
+    write_json(
+        data_root / "lens" / "overlay_window_authority_grants" / f"{overlay_grant_receipt_id}.json",
+        {
+            "kind": "lens.overlay.window_authority.grant_receipt",
+            "receipt_id": overlay_grant_receipt_id,
+            "ts": created_ts,
+            "status": "authority_granted",
+            "approval_id": approved_overlay_approval_id,
+            "actor": "test.system.write",
+            "route": "/lens/overlay/authority",
+            "authority_route": "/lens/overlay/authority",
+            "request_route": "/lens/overlay/authority/request",
+            "requests_route": "/lens/overlay/authority/requests",
+            "grants_route": "/lens/overlay/authority/grants",
+            "execute_route": "/lens/overlay/execute",
+            "lease_seconds": 3600,
+            "expires_ts": created_ts + 3600,
+            "authority_granted": True,
+            "overlay_window_authority": True,
+            "overlay_control_authority": True,
+            "window_management_authority": True,
+        },
+    )
+
+    overlay_granted_proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-CompletionAuditJsonPath",
+        str(current_audit_json),
+        env={"FRANCIS_DATA_DIR": str(data_root)},
+    )
+
+    assert overlay_granted_proc.returncode == 0, overlay_granted_proc.stderr or overlay_granted_proc.stdout
+    overlay_granted_payload = json.loads(overlay_granted_proc.stdout)
+    assert overlay_granted_payload["recommended_operator_handoff"]["source"] == (
+        "summon_anywhere_authority_request_bundle_handoff"
+    )
+    assert overlay_granted_payload["recommended_operator_handoff"]["status"] == "authority_request_required"
+    assert overlay_granted_payload["recommended_operator_handoff"]["active_grant_receipts"] == {
+        "global_hotkey_binding": hotkey_grant_receipt_id,
+        "overlay_window": overlay_grant_receipt_id,
+    }
+    overlay_granted_sequence = overlay_granted_payload["recommended_operator_handoff"]["authority_bundle_sequence"]
+    assert overlay_granted_payload["recommended_operator_handoff"]["authority_bundle_next_step_index"] == 2
+    assert overlay_granted_payload["recommended_operator_handoff"]["authority_bundle_complete"] is False
+    assert overlay_granted_sequence[1]["status"] == "authority_grant_receipt_active"
+    assert overlay_granted_sequence[1]["active_grant_receipt_id"] == overlay_grant_receipt_id
+    assert overlay_granted_sequence[2]["status"] == "authority_request_required"
+    assert overlay_granted_sequence[2]["eligible_now"] is True
+    assert overlay_granted_sequence[2]["action_id"] == "request_summon_binding_authority"
+    assert overlay_granted_payload["recommended_next_operator_action_requirement"] == (
+        "exact_summon_binding_authority_approval"
+    )
+    assert overlay_granted_payload["recommended_next_operator_action"]["id"] == "request_summon_binding_authority"
+    assert overlay_granted_payload["recommended_next_operator_action"]["route"] == "/lens/summon/authority/request"
+
+    approved_summon_approval_id = "approved-summon-authority-test"
+    write_json(
+        data_root / "approvals" / "approved" / f"{approved_summon_approval_id}.json",
+        {
+            "id": approved_summon_approval_id,
+            "ts": created_ts,
+            "action": "lens.summon.action_authority",
+            "reason": "test approved summon binding authority",
+            "payload": {
+                "actor": "test.system.write",
+                "route": "/lens/summon/authority/request",
+            },
+            "status": "approved",
+            "decision": "approve",
+            "decision_actor": "test.approvals.decision",
+            "decided_ts": created_ts,
+        },
+    )
+
+    summon_approved_proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-CompletionAuditJsonPath",
+        str(current_audit_json),
+        env={"FRANCIS_DATA_DIR": str(data_root)},
+    )
+
+    assert summon_approved_proc.returncode == 0, summon_approved_proc.stderr or summon_approved_proc.stdout
+    summon_approved_payload = json.loads(summon_approved_proc.stdout)
+    assert summon_approved_payload["recommended_operator_handoff"]["source"] == (
+        "summon_anywhere_authority_request_bundle_handoff"
+    )
+    assert summon_approved_payload["recommended_operator_handoff"]["status"] == "authority_grant_required"
+    assert summon_approved_payload["recommended_operator_handoff"]["active_grant_receipts"] == {
+        "global_hotkey_binding": hotkey_grant_receipt_id,
+        "overlay_window": overlay_grant_receipt_id,
+    }
+    summon_approved_sequence = summon_approved_payload["recommended_operator_handoff"]["authority_bundle_sequence"]
+    assert summon_approved_payload["recommended_operator_handoff"]["authority_bundle_next_step_index"] == 2
+    assert summon_approved_payload["recommended_operator_handoff"]["authority_bundle_complete"] is False
+    assert summon_approved_sequence[2]["status"] == "authority_grant_required"
+    assert summon_approved_sequence[2]["eligible_now"] is True
+    assert summon_approved_sequence[2]["action_id"] == "grant_summon_binding_authority"
+    assert summon_approved_sequence[2]["approved_approval_id"] == approved_summon_approval_id
+    assert summon_approved_payload["recommended_next_operator_action_requirement"] == (
+        "exact_summon_binding_authority_approval"
+    )
+    assert summon_approved_payload["recommended_next_operator_action"]["id"] == "grant_summon_binding_authority"
+    assert summon_approved_payload["recommended_next_operator_action"]["route"] == "/lens/summon/authority"
+    assert summon_approved_payload["recommended_next_operator_action"]["approved_approval_id"] == (
+        approved_summon_approval_id
+    )
+    assert summon_approved_payload["recommended_next_operator_action"]["script_would_request_authority"] is False
+    assert summon_approved_payload["recommended_next_operator_action"]["script_would_grant_authority"] is True
+    assert summon_approved_payload["recommended_next_operator_action"]["script_would_decide_approval"] is False
+
+    summon_grant_receipt_id = "active-summon-authority-grant-test"
+    write_json(
+        data_root / "lens" / "summon_action_authority_grants" / f"{summon_grant_receipt_id}.json",
+        {
+            "kind": "lens.summon.action_authority.grant_receipt",
+            "receipt_id": summon_grant_receipt_id,
+            "ts": created_ts,
+            "status": "authority_granted",
+            "approval_id": approved_summon_approval_id,
+            "actor": "test.system.write",
+            "route": "/lens/summon/authority",
+            "authority_route": "/lens/summon/authority",
+            "request_route": "/lens/summon/authority/request",
+            "requests_route": "/lens/summon/authority/requests",
+            "grants_route": "/lens/summon/authority/grants",
+            "execute_route": "/lens/summon/execute",
+            "lease_seconds": 3600,
+            "expires_ts": created_ts + 3600,
+            "authority_granted": True,
+            "summon_action_authority": True,
+            "summon_authority": True,
+            "summon_anywhere_authority": True,
+            "bounded_local_open_handoff_authority": True,
+            "local_process_launch_authority": True,
+        },
+    )
+
+    summon_granted_proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-CompletionAuditJsonPath",
+        str(current_audit_json),
+        env={"FRANCIS_DATA_DIR": str(data_root)},
+    )
+
+    assert summon_granted_proc.returncode == 0, summon_granted_proc.stderr or summon_granted_proc.stdout
+    summon_granted_payload = json.loads(summon_granted_proc.stdout)
+    assert summon_granted_payload["stage6_completion_audit_summon_authority_request_bundle_handoff_observed"] is True
+    assert summon_granted_payload["recommended_operator_handoff"]["source"] == (
+        "summon_anywhere_authority_request_bundle_handoff"
+    )
+    assert summon_granted_payload["recommended_operator_handoff"]["status"] == (
+        "authority_grants_ready_for_launch_on_hotkey_runtime_readback"
+    )
+    assert summon_granted_payload["recommended_operator_handoff"]["active_grant_receipts"] == {
+        "global_hotkey_binding": hotkey_grant_receipt_id,
+        "overlay_window": overlay_grant_receipt_id,
+        "summon_binding": summon_grant_receipt_id,
+    }
+    summon_granted_sequence = summon_granted_payload["recommended_operator_handoff"]["authority_bundle_sequence"]
+    assert summon_granted_payload["recommended_operator_handoff"]["authority_bundle_next_step_index"] == 3
+    assert summon_granted_payload["recommended_operator_handoff"]["authority_bundle_complete"] is True
+    assert summon_granted_sequence[2]["status"] == "authority_grant_receipt_active"
+    assert summon_granted_sequence[2]["active_grant_receipt_id"] == summon_grant_receipt_id
+    assert summon_granted_sequence[3]["status"] == "operator_opt_in_required"
+    assert summon_granted_sequence[3]["eligible_now"] is True
+    assert summon_granted_sequence[3]["action_id"] == "run_summon_api_launch_on_hotkey_proof_for_runtime_readback"
+    assert summon_granted_sequence[3]["would_execute"] is True
+    assert summon_granted_sequence[3]["would_mutate"] is True
+    assert summon_granted_sequence[3]["would_launch_process"] is True
+    assert summon_granted_payload["recommended_next_operator_action_requirement"] == (
+        "launch_on_hotkey_runtime_readback"
+    )
+    assert summon_granted_payload["recommended_next_operator_action"]["id"] == (
+        "run_summon_api_launch_on_hotkey_proof_for_runtime_readback"
+    )
+    assert summon_granted_payload["recommended_next_operator_action"]["proof_script"] == (
+        "scripts/lens-summon-api-execution-proof.ps1 -Mode Status -AllowLaunchOnHotkey"
+    )
+    assert summon_granted_payload["recommended_next_operator_action"]["script_would_execute"] is True
+    assert summon_granted_payload["recommended_next_operator_action"]["script_would_mutate"] is True
+    assert summon_granted_payload["recommended_next_operator_action"]["script_would_launch_process"] is True
+    assert summon_granted_payload["recommended_next_operator_action"]["script_would_request_authority"] is False
+    assert summon_granted_payload["recommended_next_operator_action"]["script_would_grant_authority"] is False
+    assert summon_granted_payload["recommended_next_operator_action"]["script_would_decide_approval"] is False
+    assert summon_granted_payload["recommended_next_operator_command"] == {
+        "command": ".\\scripts\\lens-summon-api-execution-proof.ps1 -Mode Status -AllowLaunchOnHotkey",
+        "mode": "Status",
+        "requires_confirmation": False,
+        "requires_explicit_operator_opt_in": True,
+        "requires_actor": False,
+        "requires_approval_id": False,
+        "requires_operator_approval_decision": False,
+    }
+    assert summon_granted_payload["recommended_operator_handoff"]["approval_request_write_if_run"] is False
+    assert summon_granted_payload["recommended_operator_handoff"]["authority_grant_receipt_write_if_run"] is False
+    assert summon_granted_payload["recommended_operator_handoff"]["approval_decision_authority"] is False
+    assert summon_granted_payload["recommended_operator_handoff"]["would_execute"] is True
+    assert summon_granted_payload["recommended_operator_handoff"]["would_mutate"] is True
 
 
 def test_lens_stage6_next_handoff_preserves_completion_audit_concrete_handoff(tmp_path: Path) -> None:

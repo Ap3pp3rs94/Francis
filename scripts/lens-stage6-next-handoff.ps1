@@ -1132,12 +1132,127 @@ function New-SummonAnywhereAuthorityRequestBundleOperatorHandoff {
     break
   }
 
+  $AuthorityBundleSequence = @()
+  $AuthorityBundleCurrentStepIndex = -1
+  $AuthorityBundleStepIndex = 0
+  foreach ($Definition in $Definitions) {
+    $StepReadback = Get-PropertyValue -Payload $Definition -Name 'readback' -Default ([ordered]@{})
+    $StepId = [string](Get-PropertyValue -Payload $Definition -Name 'id' -Default '')
+    $StepRequirement = [string](Get-PropertyValue -Payload $Definition -Name 'requirement' -Default '')
+    $StepRequestActionId = [string](Get-PropertyValue -Payload $Definition -Name 'request_action_id' -Default '')
+    $StepAwaitActionId = [string](Get-PropertyValue -Payload $Definition -Name 'await_action_id' -Default '')
+    $StepGrantActionId = [string](Get-PropertyValue -Payload $Definition -Name 'grant_action_id' -Default '')
+    $StepReviewActionId = [string](Get-PropertyValue -Payload $Definition -Name 'review_action_id' -Default '')
+    $StepActiveReceiptId = Get-AuthorityGrantActiveReceiptId -Readback $StepReadback
+    $StepApprovedApprovalId = Get-ApprovalReadbackLatestApprovedId -Readback $StepReadback
+    $StepPendingApprovalId = Get-ApprovalReadbackLatestPendingId -Readback $StepReadback
+    $StepActionId = $StepRequestActionId
+    $StepStatus = 'authority_request_required'
+    if (-not [string]::IsNullOrWhiteSpace($StepActiveReceiptId)) {
+      $StepActionId = $StepReviewActionId
+      $StepStatus = 'authority_grant_receipt_active'
+    } elseif (-not [string]::IsNullOrWhiteSpace($StepApprovedApprovalId)) {
+      $StepActionId = $StepGrantActionId
+      $StepStatus = 'authority_grant_required'
+    } elseif (-not [string]::IsNullOrWhiteSpace($StepPendingApprovalId)) {
+      $StepActionId = $StepAwaitActionId
+      $StepStatus = 'operator_approval_decision_required'
+    }
+
+    $StepEligibleNow = (
+      $null -ne $CurrentDefinition -and
+      $StepId -eq [string](Get-PropertyValue -Payload $CurrentDefinition -Name 'id' -Default '')
+    )
+    if ($StepEligibleNow) {
+      $AuthorityBundleCurrentStepIndex = $AuthorityBundleStepIndex
+    }
+
+    $AuthorityBundleSequence += [ordered]@{
+      index = $AuthorityBundleStepIndex
+      id = $StepId
+      requirement = $StepRequirement
+      status = $StepStatus
+      eligible_now = $StepEligibleNow
+      action_id = $StepActionId
+      request_action_id = $StepRequestActionId
+      await_action_id = $StepAwaitActionId
+      grant_action_id = $StepGrantActionId
+      review_action_id = $StepReviewActionId
+      route = [string](Get-PropertyValue -Payload $StepReadback -Name 'request_route' -Default (
+          Get-PropertyValue -Payload $Definition -Name 'request_route' -Default ''
+        ))
+      requests_route = [string](Get-PropertyValue -Payload $StepReadback -Name 'route' -Default (
+          Get-PropertyValue -Payload $Definition -Name 'requests_route' -Default ''
+        ))
+      grant_route = [string](Get-PropertyValue -Payload $StepReadback -Name 'authority_route' -Default (
+          Get-PropertyValue -Payload $Definition -Name 'grant_route' -Default ''
+        ))
+      grants_route = [string](Get-PropertyValue -Payload $StepReadback -Name 'grants_route' -Default (
+          Get-PropertyValue -Payload $Definition -Name 'grants_route' -Default ''
+        ))
+      execute_route = [string](Get-PropertyValue -Payload $StepReadback -Name 'execute_route' -Default (
+          Get-PropertyValue -Payload $Definition -Name 'execute_route' -Default ''
+        ))
+      readiness_route = [string](Get-PropertyValue -Payload $Definition -Name 'readiness_route' -Default '/lens/summon/readiness')
+      approval_action = [string](Get-PropertyValue -Payload $StepReadback -Name 'action' -Default (
+          Get-PropertyValue -Payload $Definition -Name 'approval_action' -Default ''
+        ))
+      authority_required = [string](Get-PropertyValue -Payload $Definition -Name 'authority_required' -Default '')
+      active_grant_receipt_id = $StepActiveReceiptId
+      approved_approval_id = $StepApprovedApprovalId
+      pending_approval_id = $StepPendingApprovalId
+      approval_request_write_if_run = ($StepEligibleNow -and $StepStatus -eq 'authority_request_required')
+      authority_grant_receipt_write_if_run = ($StepEligibleNow -and $StepStatus -eq 'authority_grant_required')
+      approval_decision_authority = $false
+      would_execute = $false
+      would_mutate = $false
+      would_request_authority = ($StepEligibleNow -and $StepStatus -eq 'authority_request_required')
+      would_grant_authority = ($StepEligibleNow -and $StepStatus -eq 'authority_grant_required')
+      would_decide_approval = $false
+    }
+    $AuthorityBundleStepIndex += 1
+  }
+
+  $RuntimeReadbackStepIndex = $AuthorityBundleSequence.Count
+  $RuntimeReadbackEligibleNow = $null -eq $CurrentDefinition
+  $AuthorityBundleNextStepIndex = if ($RuntimeReadbackEligibleNow) {
+    $RuntimeReadbackStepIndex
+  } else {
+    $AuthorityBundleCurrentStepIndex
+  }
+  $AuthorityBundleSequence += [ordered]@{
+    index = $RuntimeReadbackStepIndex
+    id = 'launch_on_hotkey_runtime_readback'
+    requirement = 'launch_on_hotkey_runtime_readback'
+    status = if ($RuntimeReadbackEligibleNow) { 'operator_opt_in_required' } else { 'blocked_by_authority_sequence' }
+    eligible_now = $RuntimeReadbackEligibleNow
+    action_id = 'run_summon_api_launch_on_hotkey_proof_for_runtime_readback'
+    route = '/lens/summon/execute'
+    readiness_route = '/lens/summon/readiness'
+    method = 'LOCAL_SCRIPT'
+    proof_script = 'scripts/lens-summon-api-execution-proof.ps1 -Mode Status -AllowLaunchOnHotkey'
+    requires_explicit_operator_opt_in = $true
+    active_grant_receipts = $ActiveGrantReceipts
+    approval_request_write_if_run = $false
+    authority_grant_receipt_write_if_run = $false
+    approval_decision_authority = $false
+    would_execute = $RuntimeReadbackEligibleNow
+    would_mutate = $RuntimeReadbackEligibleNow
+    would_launch_process = $RuntimeReadbackEligibleNow
+    would_request_authority = $false
+    would_grant_authority = $false
+    would_decide_approval = $false
+  }
+
   if ($null -eq $CurrentDefinition) {
     return [ordered]@{
       source = 'summon_anywhere_authority_request_bundle_handoff'
       status = 'authority_grants_ready_for_launch_on_hotkey_runtime_readback'
       next_operator_action_requirement = 'launch_on_hotkey_runtime_readback'
       active_grant_receipts = $ActiveGrantReceipts
+      authority_bundle_sequence = [object[]]@($AuthorityBundleSequence)
+      authority_bundle_next_step_index = $AuthorityBundleNextStepIndex
+      authority_bundle_complete = $true
       next_operator_action = [ordered]@{
         id = 'run_summon_api_launch_on_hotkey_proof_for_runtime_readback'
         route = '/lens/summon/execute'
@@ -1236,6 +1351,9 @@ function New-SummonAnywhereAuthorityRequestBundleOperatorHandoff {
       status = 'authority_grant_required'
       next_operator_action_requirement = "exact_${Requirement}_authority_approval"
       active_grant_receipts = $ActiveGrantReceipts
+      authority_bundle_sequence = [object[]]@($AuthorityBundleSequence)
+      authority_bundle_next_step_index = $AuthorityBundleNextStepIndex
+      authority_bundle_complete = $false
       current_requirement = $Requirement
       current_authority_required = $AuthorityRequired
       next_operator_action = [ordered]@{
@@ -1326,6 +1444,9 @@ function New-SummonAnywhereAuthorityRequestBundleOperatorHandoff {
       status = 'operator_approval_decision_required'
       next_operator_action_requirement = "exact_${Requirement}_authority_approval"
       active_grant_receipts = $ActiveGrantReceipts
+      authority_bundle_sequence = [object[]]@($AuthorityBundleSequence)
+      authority_bundle_next_step_index = $AuthorityBundleNextStepIndex
+      authority_bundle_complete = $false
       current_requirement = $Requirement
       current_authority_required = $AuthorityRequired
       next_operator_action = [ordered]@{
@@ -1399,6 +1520,9 @@ function New-SummonAnywhereAuthorityRequestBundleOperatorHandoff {
     status = 'authority_request_required'
     next_operator_action_requirement = "exact_${Requirement}_authority_approval"
     active_grant_receipts = $ActiveGrantReceipts
+    authority_bundle_sequence = [object[]]@($AuthorityBundleSequence)
+    authority_bundle_next_step_index = $AuthorityBundleNextStepIndex
+    authority_bundle_complete = $false
     current_requirement = $Requirement
     current_authority_required = $AuthorityRequired
     next_operator_action = [ordered]@{
