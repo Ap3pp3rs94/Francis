@@ -3931,6 +3931,19 @@ $NextSmallestTruthfulGap = if ($ReadyToClose) {
   -not $ReadyToClose -and
   $BlockedCriterionIds -contains 'summon_anywhere' -and
   -not $SummonAnywhereRuntimeReadbackObserved -and
+  $SummonGlobalHotkeyBindingBlockerProofObserved -and
+  $SummonAuthorityBlockerProofObserved -and
+  [bool]$SummonAuthorityBlockerProof.all_summon_blocker_families_consumed -and
+  [bool]$SummonAnywhereFamilyChainProof.all_summon_blocker_families_consumed -and
+  -not [bool]$SummonAuthorityBlockerProof.authority_granted -and
+  [string]$SummonAuthorityBlockerProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit'
+) {
+  'summon_authority_blocker_boundary'
+} elseif (
+  $Stage6CompletionReviewed -and
+  -not $ReadyToClose -and
+  $BlockedCriterionIds -contains 'summon_anywhere' -and
+  -not $SummonAnywhereRuntimeReadbackObserved -and
   $SummonGlobalHotkeyBindingBlockerProofObserved
 ) {
   [string]$SummonGlobalHotkeyBindingBlockerProof.next_smallest_truthful_gap
@@ -4254,6 +4267,60 @@ $Stage6CompletionAuditHandoffConsumedByClosureReadback = (
   $Stage6PrerequisiteBringupPlanObserved
 )
 if (
+  $NextSmallestTruthfulGap -eq 'summon_authority_blocker_boundary' -and
+  $SummonGlobalHotkeyBindingBlockerProofObserved -and
+  $SummonAuthorityBlockerProofObserved
+) {
+  $RecommendedHandoffSource = 'stage6_reviewed_summon_global_hotkey_binding_authority_handoff'
+  $RecommendedHandoff = [ordered]@{
+    status = 'blocked'
+    previous_next_smallest_truthful_gap = 'stage6_lens_completion_audit'
+    consumed_summon_anywhere_next_smallest_truthful_gap = [string]$SummonAnywhereBlockersProof.next_smallest_truthful_gap
+    consumed_family_chain_next_smallest_truthful_gap = [string]$SummonAnywhereFamilyChainProof.next_smallest_truthful_gap
+    consumed_global_hotkey_binding_next_smallest_truthful_gap = (
+      [string]$SummonGlobalHotkeyBindingBlockerProof.next_smallest_truthful_gap
+    )
+    consumed_summon_authority_next_smallest_truthful_gap = [string]$SummonAuthorityBlockerProof.next_smallest_truthful_gap
+    next_smallest_truthful_gap = 'summon_authority_blocker_boundary'
+    next_step = 'run_summon_authority_blocker_proof'
+    proof_script = 'scripts/lens-summon-authority-blocker-proof.ps1 -Mode Status'
+    route = '/lens/summon'
+    readiness_route = '/lens/summon/readiness'
+    acceptance_criterion = 'summon_anywhere'
+    first_blocker_family = [string]$SummonAnywhereFamilyChainProof.first_blocker_family
+    global_hotkey_binding_handoff = $SummonGlobalHotkeyBindingBlockerProofRecommendedHandoff
+    final_authority = $SummonAnywhereFamilyChainProofFinalAuthority
+    authority_boundary = $SummonAuthorityBoundary
+    summon_binding_runtime_readback_observed = (
+      [bool]$SummonGlobalHotkeyBindingBlockerProof.summon_binding_runtime_readback_observed
+    )
+    summon_binding_resolved_to_authority_handoff = (
+      [bool]$SummonGlobalHotkeyBindingBlockerProof.summon_binding_resolved_to_authority_handoff
+    )
+    all_summon_blocker_families_consumed = [bool]$SummonAuthorityBlockerProof.all_summon_blocker_families_consumed
+    blocker_families = [string[]]@($SummonAnywhereFamilyChainProofBlockedFamilies)
+    blocked_family_handoffs = @($SummonAnywhereBlockersProofFamilyHandoffs)
+    authority_required = [string]$SummonAuthorityBlockerProof.authority_required
+    authority_granted = $false
+    read_only_contract = $true
+    diagnostic_only = $true
+    would_execute = $false
+    would_mutate = $false
+    would_supervise_process = $false
+    would_restart_process = $false
+    would_install_service = $false
+    would_start_service = $false
+    would_register_hotkey = $false
+    would_control_overlay = $false
+    would_summon = $false
+    would_write_memory = $false
+    would_decide_approval = $false
+    blockers = [string[]]@($SummonAuthorityBlockers)
+  }
+  $RecommendedNextSlice = [string]$RecommendedHandoff.next_step
+  $RecommendedProofScript = [string]$RecommendedHandoff.proof_script
+  $RecommendedAuthorityRequired = [string]$RecommendedHandoff.authority_required
+} elseif (
   $SummonGlobalHotkeyBindingBlockerProofObserved -and
   $NextSmallestTruthfulGap -eq [string]$SummonGlobalHotkeyBindingBlockerProof.next_smallest_truthful_gap
 ) {

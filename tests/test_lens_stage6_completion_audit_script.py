@@ -332,6 +332,28 @@ def test_lens_stage6_completion_audit_consumes_global_hotkey_binding_blocker_rea
     ) in script
 
 
+def test_lens_stage6_completion_audit_consumes_authority_handoff_after_global_hotkey_readback() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    assert "$SummonGlobalHotkeyBindingBlockerProofObserved -and" in script
+    assert "$SummonAuthorityBlockerProofObserved -and" in script
+    assert "[bool]$SummonAuthorityBlockerProof.all_summon_blocker_families_consumed" in script
+    assert (
+        "[string]$SummonAuthorityBlockerProof.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit'" in script
+    )
+    assert "'summon_authority_blocker_boundary'" in script
+    assert "$NextSmallestTruthfulGap -eq 'summon_authority_blocker_boundary'" in script
+    assert "$RecommendedHandoffSource = 'stage6_reviewed_summon_global_hotkey_binding_authority_handoff'" in script
+    assert "consumed_global_hotkey_binding_next_smallest_truthful_gap" in script
+    assert "consumed_summon_authority_next_smallest_truthful_gap" in script
+    assert "next_step = 'run_summon_authority_blocker_proof'" in script
+    assert "proof_script = 'scripts/lens-summon-authority-blocker-proof.ps1 -Mode Status'" in script
+    assert "authority_required = [string]$SummonAuthorityBlockerProof.authority_required" in script
+    assert (
+        "all_summon_blocker_families_consumed = [bool]$SummonAuthorityBlockerProof.all_summon_blocker_families_consumed"
+    ) in script
+
+
 def test_lens_stage6_completion_audit_outer_timeout_covers_serial_child_budget() -> None:
     expected_minimum = sum(_expected_audit_child_proof_timeouts(_AUDIT_CHILD_PROOF_TIMEOUT_SECONDS).values())
 

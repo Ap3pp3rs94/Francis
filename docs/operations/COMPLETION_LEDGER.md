@@ -41573,6 +41573,52 @@ Latest validation for global-hotkey blocker proof consumption:
   [scriptblock]::Create($script); "parse-ok"'`
   Result: `passed; parse-ok`
 
+### 2026-05-28 - Stage 6 completion audit projects authority blocker boundary
+
+Roadmap area: Stage 6 / Lens MVP, summon-anywhere blocker readback.
+
+Material change:
+
+- `scripts/lens-stage6-completion-audit.ps1` now consumes the already-observed
+  global-hotkey handoff plus `summon_authority_blocker_proof` and projects the
+  concrete `summon_authority_blocker_boundary` instead of leaving the operator
+  at the generic `stage6_lens_completion_audit` loop.
+- The recommended handoff source is now
+  `stage6_reviewed_summon_global_hotkey_binding_authority_handoff` when the
+  authority proof is observed after global-hotkey readback.
+- Stage 6 remains active and blocked. This does not grant summon, hotkey,
+  overlay, process, service, memory, or approval-decision authority, and does
+  not start Stage 7.
+
+Latest validation for authority-boundary projection:
+
+- Live `scripts/lens-stage6-completion-audit.ps1 -Mode Status
+  -StartupTimeoutSeconds 5 -HostLaunchRunSeconds 2
+  -ResidentSurfaceForegroundRunSeconds 5 -SupervisorRunSeconds 3
+  -ChildProofTimeoutSeconds 120` readback reported `status=blocked`,
+  `stage_state=active`, `ready_to_close=false`,
+  `next_smallest_truthful_gap=summon_authority_blocker_boundary`,
+  `recommended_handoff_source=stage6_reviewed_summon_global_hotkey_binding_authority_handoff`,
+  `recommended_next_slice=run_summon_authority_blocker_proof`,
+  `recommended_proof_script=scripts/lens-summon-authority-blocker-proof.ps1 -Mode Status`,
+  `summon_global_hotkey_binding_blocker_proof.ok=true`,
+  `summon_authority_blocker_proof.ok=true`,
+  `summon_authority_blocker_proof.next_smallest_truthful_gap=stage6_lens_completion_audit`,
+  and `governance.summon_authority_blocker_proof_readback=true`.
+- `python -m pytest
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_consumes_global_hotkey_binding_blocker_readback
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_consumes_authority_handoff_after_global_hotkey_readback
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_outer_timeout_covers_serial_child_budget
+  -q --tb=short`
+  Result: `passed; 3 passed`
+- `python -m pytest tests/test_lens_summon_authority_blocker_proof_script.py
+  -q --tb=short`
+  Result: `passed; 3 passed`
+- `pwsh -NoProfile -Command '$script = Get-Content -Raw
+  scripts\lens-stage6-completion-audit.ps1; $null =
+  [scriptblock]::Create($script); "parse-ok"'`
+  Result: `passed; parse-ok`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
