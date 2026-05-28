@@ -42276,6 +42276,55 @@ Latest validation for Stage 6 completion-audit concrete handoff truthfulness:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-28 - Stage 6 command-palette OS-binding proof accepts current execution prerequisites
+
+Roadmap area: Stage 6 / Lens MVP, completion-audit truthfulness for
+summon-anywhere and OS command-palette binding.
+
+Material change:
+
+- `scripts/lens-command-palette-os-binding-proof.ps1` now accepts the current
+  live read-only execution-readiness shape where the OS command-palette runtime
+  readback has advanced, authority is still not granted, and the route
+  truthfully reports broader execution prerequisites such as system write,
+  OS-binding grant, summon binding, resident host, tray presence, and overlay
+  window.
+- `scripts/lens-stage6-completion-audit.ps1` now exposes
+  `stage6_completion_evidence_review`,
+  `stage6_completion_evidence_review_missing`,
+  `stage6_completion_review_requirements`, and
+  `stage6_completion_review_missing` so future blocked completion-audit runs
+  identify the exact false review component instead of requiring child-log
+  inference.
+- The full completion audit was rerun but interrupted before it returned a
+  final payload, so this entry does not claim Stage 6 closure.
+- This does not grant OS-binding authority, open the command palette, launch
+  runtime surfaces, write memory, mutate service configuration, mark Stage 6
+  closed, or start Stage 7.
+
+Latest validation for Stage 6 command-palette OS-binding proof readback:
+
+- `.\scripts\lens-command-palette-os-binding-proof.ps1 -Mode Status`
+  Result: `proof_passed; ok=true;
+  os_binding_execution_readiness_observed=true;
+  next_smallest_truthful_gap=os_level_command_palette_binding`
+- PowerShell parser check for
+  `scripts/lens-command-palette-os-binding-proof.ps1` and
+  `scripts/lens-stage6-completion-audit.ps1`
+  Result: `passed; parser_ok`
+- `python -m pytest tests/test_lens_command_palette_os_binding_proof_script.py
+  tests/test_lens_stage6_completion_audit_script.py -q --tb=short
+  --maxfail=1`
+  Result: `passed`
+- `python -m ruff check
+  tests/test_lens_command_palette_os_binding_proof_script.py
+  tests/test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests/test_lens_command_palette_os_binding_proof_script.py
+  tests/test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 2 files already formatted`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

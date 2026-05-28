@@ -472,7 +472,26 @@ $ExecutionReadinessPostAuthorityObserved = (
     (Get-PropertyValue -Object $ExecutionReadinessGovernance -Name "authority_granted" -Default $false) -eq $true -and
     (Get-PropertyValue -Object $ExecutionReadinessGovernance -Name "os_level_command_palette_binding_authority" -Default $false) -eq $true
 )
-$ExecutionReadinessObserved = $ExecutionReadinessPreAuthorityObserved -or $ExecutionReadinessPostAuthorityObserved
+$ExecutionReadinessRuntimePrerequisitesObserved = (
+    $ExecutionReadinessCommonObserved -and
+    (Get-PropertyValue -Object $ExecutionReadinessJson -Name "os_level_command_palette" -Default $false) -eq $true -and
+    $ExecutionReadinessBlockedRequirements -contains "system_write_permission" -and
+    $ExecutionReadinessBlockedRequirements -contains "os_binding_authority_grant" -and
+    $ExecutionReadinessBlockedRequirements -contains "summon_binding" -and
+    $ExecutionReadinessBlockedRequirements -contains "resident_host" -and
+    $ExecutionReadinessBlockedRequirements -contains "tray_presence" -and
+    $ExecutionReadinessBlockedRequirements -contains "overlay_window" -and
+    $ExecutionReadinessBlockers -contains "os_level_command_palette_binding_authority_not_granted" -and
+    $ExecutionReadinessBlockers -contains "lens_host_persistent_supervision_prerequisites_pending" -and
+    $ExecutionReadinessBlockers -contains "overlay_window_missing" -and
+    (Get-PropertyValue -Object $ExecutionReadinessGovernance -Name "authority_granted" -Default $false) -eq $false -and
+    (Get-PropertyValue -Object $ExecutionReadinessGovernance -Name "os_level_command_palette_binding_authority" -Default $false) -eq $false
+)
+$ExecutionReadinessObserved = (
+    $ExecutionReadinessPreAuthorityObserved -or
+    $ExecutionReadinessPostAuthorityObserved -or
+    $ExecutionReadinessRuntimePrerequisitesObserved
+)
 $ExecutionReadinessSatisfied = if ($ExecutionReadinessRequired) { $ExecutionReadinessObserved } else { $true }
 
 $Checks = @(

@@ -227,9 +227,12 @@ def test_lens_stage6_completion_audit_accepts_consumed_authority_handoff_evidenc
     assert "$OsBindingAuthorityEvidenceObserved = (" in script
     assert "$OsBindingAuthorityRequestReadbackObserved -or" in script
     assert "$OsBindingApiExecutionProofObserved" in script
-    assert "$Stage6CompletionEvidenceReviewed = (" in script
-    assert "$HostSupervisionAuthorityReadinessEvidenceObserved -and" in script
-    assert "$OsBindingAuthorityEvidenceObserved -and" in script
+    assert "$Stage6CompletionEvidenceReview = [ordered]@{" in script
+    assert (
+        "host_supervision_authority_readiness_evidence = $HostSupervisionAuthorityReadinessEvidenceObserved" in script
+    )
+    assert "os_binding_authority_evidence = $OsBindingAuthorityEvidenceObserved" in script
+    assert "$Stage6CompletionEvidenceReviewed = @($Stage6CompletionEvidenceReviewMissing).Count -eq 0" in script
     assert "resident_host_supervision_authority_readiness_evidence_readback" in script
     assert "os_binding_authority_evidence_readback" in script
 
@@ -2005,6 +2008,17 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
         "stage6_lens_completion_audit",
     }
     assert payload["stage6_completion_reviewed"] is True
+    assert payload["stage6_completion_evidence_reviewed"] is True
+    assert payload["stage6_completion_evidence_review_missing"] == []
+    assert payload["stage6_completion_review_missing"] == []
+    evidence_review = payload["stage6_completion_evidence_review"]
+    assert evidence_review["command_palette_os_binding_blocker_proof"] is True
+    assert evidence_review["summon_anywhere_family_chain_proof"] is True
+    assert evidence_review["persistent_supervision_api_execution_proof"] is True
+    review_requirements = payload["stage6_completion_review_requirements"]
+    assert review_requirements["stage6_completion_evidence_reviewed"] is True
+    assert review_requirements["stage6_prerequisite_bringup_plan"] is True
+    assert review_requirements["persistent_supervision_enablement_transition_plan"] is True
     assert payload["next_smallest_truthful_gap"] == "persistent_supervision_required_prerequisites_missing"
     assert payload["recommended_handoff_source"] == "stage6_prerequisite_bringup_operator_plan"
     assert payload["recommended_next_slice"] == "run_stage6_prerequisite_bringup_request_next_for_resident_host_process"
@@ -4252,6 +4266,8 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert governance["diagnostic_only"] is True
     assert governance["checkpoint_readback"] is True
     assert governance["child_proof_timeout_readback"] is True
+    assert governance["stage6_completion_evidence_review_readback"] is True
+    assert governance["stage6_completion_review_requirements_readback"] is True
     assert governance["process_supervision_authority_boundary_readback"] is True
     assert governance["resident_host_process_supervision_blocker_proof_readback"] is True
     assert governance["resident_host_process_handoff_consumed"] is True

@@ -3770,32 +3770,38 @@ $Stage6AcceptanceNextGap = if ($BlockedCriterionIds -contains 'summon_anywhere' 
 } else {
   ''
 }
-$Stage6CompletionEvidenceReviewed = (
-  $ResidentRuntimeResidentClaimBoundaryObserved -and
-  $PersistentSupervisionResidentClaimBoundaryObserved -and
-  $ResidentHostProcessSupervisionEvidenceObserved -and
-  $ResidentSupervisionPersistenceBoundaryProofObserved -and
-  $HostSupervisionAuthorityReadinessEvidenceObserved -and
-  $HostSupervisionAuthorityRequestProofObserved -and
-  $PersistentSupervisionPrerequisitesProofObserved -and
-  $CommandPaletteShellBridgeObserved -and
-  $CommandPaletteOsBindingObserved -and
-  $OsBindingAuthorityEvidenceObserved -and
-  $SummonAnywhereBlockersProofObserved -and
-  (-not $SummonAnywhereBlockersProofFirstFamilyTrayObserved -or $SummonTrayPresenceBlockerProofObserved) -and
-  (-not $SummonTrayPresenceBlockerProofObserved -or $SummonOverlayWindowBlockerProofObserved) -and
-  (-not $SummonOverlayWindowBlockerProofObserved -or $SummonGlobalHotkeyBindingBlockerProofObserved) -and
-  $CheckpointSummonEnablementGateHandoffObserved -and
-  $SummonAuthorityBlockerProofObserved -and
-  $SummonAnywhereFamilyChainProofObserved -and
-  (-not [bool]$AllowLaunchOnHotkey -or $SummonApiLaunchOnHotkeyProofObserved) -and
-  (-not [bool]$AllowLaunchOnHotkey -or $ResidentRuntimeApiExecutionProofObserved) -and
-  (-not [bool]$AllowLaunchOnHotkey -or $TrayPresenceApiExecutionProofObserved) -and
-  (-not [bool]$AllowLaunchOnHotkey -or $OsBindingApiExecutionProofObserved) -and
-  (-not [bool]$AllowLaunchOnHotkey -or $OverlayApiExecutionProofObserved) -and
-  (-not [bool]$AllowLaunchOnHotkey -or $SummonApiBoundedExecutionProofObserved) -and
-  (-not [bool]$AllowLaunchOnHotkey -or $PersistentSupervisionApiExecutionProofObserved)
+$Stage6CompletionEvidenceReview = [ordered]@{
+  resident_runtime_resident_claim_boundary = $ResidentRuntimeResidentClaimBoundaryObserved
+  persistent_supervision_resident_claim_boundary = $PersistentSupervisionResidentClaimBoundaryObserved
+  resident_host_process_supervision_evidence = $ResidentHostProcessSupervisionEvidenceObserved
+  resident_supervision_persistence_boundary_proof = $ResidentSupervisionPersistenceBoundaryProofObserved
+  host_supervision_authority_readiness_evidence = $HostSupervisionAuthorityReadinessEvidenceObserved
+  host_supervision_authority_request_proof = $HostSupervisionAuthorityRequestProofObserved
+  persistent_supervision_prerequisites_proof = $PersistentSupervisionPrerequisitesProofObserved
+  command_palette_shell_bridge = $CommandPaletteShellBridgeObserved
+  command_palette_os_binding_blocker_proof = $CommandPaletteOsBindingObserved
+  os_binding_authority_evidence = $OsBindingAuthorityEvidenceObserved
+  summon_anywhere_blockers_proof = $SummonAnywhereBlockersProofObserved
+  summon_tray_presence_blocker_proof = (-not $SummonAnywhereBlockersProofFirstFamilyTrayObserved -or $SummonTrayPresenceBlockerProofObserved)
+  summon_overlay_window_blocker_proof = (-not $SummonTrayPresenceBlockerProofObserved -or $SummonOverlayWindowBlockerProofObserved)
+  summon_global_hotkey_binding_blocker_proof = (-not $SummonOverlayWindowBlockerProofObserved -or $SummonGlobalHotkeyBindingBlockerProofObserved)
+  checkpoint_summon_enablement_gate_handoff = $CheckpointSummonEnablementGateHandoffObserved
+  summon_authority_blocker_proof = $SummonAuthorityBlockerProofObserved
+  summon_anywhere_family_chain_proof = $SummonAnywhereFamilyChainProofObserved
+  summon_api_launch_on_hotkey_proof = (-not [bool]$AllowLaunchOnHotkey -or $SummonApiLaunchOnHotkeyProofObserved)
+  resident_runtime_api_execution_proof = (-not [bool]$AllowLaunchOnHotkey -or $ResidentRuntimeApiExecutionProofObserved)
+  tray_presence_api_execution_proof = (-not [bool]$AllowLaunchOnHotkey -or $TrayPresenceApiExecutionProofObserved)
+  os_binding_api_execution_proof = (-not [bool]$AllowLaunchOnHotkey -or $OsBindingApiExecutionProofObserved)
+  overlay_api_execution_proof = (-not [bool]$AllowLaunchOnHotkey -or $OverlayApiExecutionProofObserved)
+  summon_api_bounded_execution_proof = (-not [bool]$AllowLaunchOnHotkey -or $SummonApiBoundedExecutionProofObserved)
+  persistent_supervision_api_execution_proof = (-not [bool]$AllowLaunchOnHotkey -or $PersistentSupervisionApiExecutionProofObserved)
+}
+$Stage6CompletionEvidenceReviewMissing = [string[]]@(
+  $Stage6CompletionEvidenceReview.GetEnumerator() |
+    Where-Object { -not [bool]$_.Value } |
+    ForEach-Object { [string]$_.Key }
 )
+$Stage6CompletionEvidenceReviewed = @($Stage6CompletionEvidenceReviewMissing).Count -eq 0
 $Stage6CompletionReviewed = (
   $ReadyToClose -or
   (
@@ -3803,6 +3809,16 @@ $Stage6CompletionReviewed = (
     $Stage6PrerequisiteBringupPlanObserved -and
     $PersistentSupervisionEnablementTransitionPlanProofObserved
   )
+)
+$Stage6CompletionReviewRequirements = [ordered]@{
+  stage6_completion_evidence_reviewed = $Stage6CompletionEvidenceReviewed
+  stage6_prerequisite_bringup_plan = $Stage6PrerequisiteBringupPlanObserved
+  persistent_supervision_enablement_transition_plan = $PersistentSupervisionEnablementTransitionPlanProofObserved
+}
+$Stage6CompletionReviewMissing = [string[]]@(
+  $Stage6CompletionReviewRequirements.GetEnumerator() |
+    Where-Object { -not [bool]$_.Value } |
+    ForEach-Object { [string]$_.Key }
 )
 $NextSmallestTruthfulGap = if ($ReadyToClose) {
   'stage6_ledger_closure'
@@ -6454,6 +6470,11 @@ $Payload = [ordered]@{
   }
   checkpoint_next_smallest_truthful_gap = [string]$Checkpoint.next_smallest_truthful_gap
   stage6_completion_reviewed = $Stage6CompletionReviewed
+  stage6_completion_evidence_reviewed = $Stage6CompletionEvidenceReviewed
+  stage6_completion_evidence_review = $Stage6CompletionEvidenceReview
+  stage6_completion_evidence_review_missing = [string[]]@($Stage6CompletionEvidenceReviewMissing)
+  stage6_completion_review_requirements = $Stage6CompletionReviewRequirements
+  stage6_completion_review_missing = [string[]]@($Stage6CompletionReviewMissing)
   remaining_stage6_acceptance_blockers = [string[]]@($BlockedCriterionIds)
   summon_anywhere_blocker_groups = $SummonAnywhereBlockerGroups
   summon_anywhere_blocked_families = [string[]]@($SummonAnywhereBlockedFamilies)
@@ -8968,6 +8989,8 @@ $Payload = [ordered]@{
     launch_on_hotkey_runtime_readback_opt_in = [bool]$AllowLaunchOnHotkey
     checkpoint_readback = $true
     child_proof_timeout_readback = $true
+    stage6_completion_evidence_review_readback = $Stage6CompletionEvidenceReviewed
+    stage6_completion_review_requirements_readback = $Stage6CompletionReviewed
     process_supervision_authority_boundary_readback = $ProcessSupervisionBoundaryObserved
     resident_host_process_supervision_blocker_proof_readback = $ResidentHostProcessSupervisionBlockerProofReadbackObserved
     fresh_resident_supervised_runtime_readback = $FreshResidentSupervisedRuntimeReadbackObserved

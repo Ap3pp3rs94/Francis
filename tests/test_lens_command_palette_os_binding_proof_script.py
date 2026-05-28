@@ -150,6 +150,73 @@ def _write_execution_readiness(path: Path, *, post_authority: bool = False) -> N
     )
 
 
+def _write_runtime_execution_readiness(path: Path) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "kind": "lens.os_binding.command_palette_binding.execution_readiness",
+                "status": "blocked",
+                "route": "/lens/os-binding/execution/readiness",
+                "execute_route": "/lens/os-binding/execute",
+                "denials_route": "/lens/os-binding/denials",
+                "ready": False,
+                "execution_ready": False,
+                "os_level_command_palette": True,
+                "summon_anywhere": False,
+                "denial_boundary_observed": True,
+                "denial_receipt_readback_ready": True,
+                "blocked_requirements": [
+                    "system_write_permission",
+                    "os_binding_authority_grant",
+                    "summon_binding",
+                    "resident_host",
+                    "tray_presence",
+                    "overlay_window",
+                ],
+                "blockers": [
+                    "capture_authority_not_granted",
+                    "hotkey_registration_authority_not_granted",
+                    "lens_host_persistent_supervision_prerequisites_pending",
+                    "lens_overlay_window_not_implemented",
+                    "lens_tray_presence_disabled_pending_authority",
+                    "local_process_launch_authority_not_granted",
+                    "notification_authority_not_granted",
+                    "os_binding_execution_boundary_not_implemented",
+                    "os_level_command_palette_binding_authority_not_granted",
+                    "os_level_command_palette_missing",
+                    "overlay_control_authority_not_granted",
+                    "overlay_window_disabled",
+                    "overlay_window_missing",
+                    "receipt_write_authority_not_granted",
+                    "service_control_authority_not_granted",
+                    "summon_anywhere_missing",
+                    "summon_binding_missing",
+                    "system_write_scope_not_ready",
+                    "tray_host_disabled",
+                    "tray_host_missing",
+                    "tray_icon_authority_not_granted",
+                    "tray_icon_disabled",
+                    "tray_registration_authority_not_granted",
+                    "window_management_authority_not_granted",
+                ],
+                "next_smallest_truthful_gap": "os_binding_execution_prerequisites",
+                "governance": {
+                    "read_only_contract": True,
+                    "authority_granted": False,
+                    "os_level_command_palette_binding_authority": False,
+                    "execution_authority": False,
+                    "approval_decision_authority": False,
+                    "memory_write": False,
+                    "hotkey_registration_authority": False,
+                    "summon_authority": False,
+                    "local_process_launch_authority": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 def test_lens_command_palette_os_binding_proof_composes_blocked_readbacks(
     tmp_path: Path,
 ) -> None:
@@ -389,6 +456,44 @@ def test_lens_command_palette_os_binding_accepts_os_runtime_shell_bridge(tmp_pat
     assert checks["command_palette_shell_bridge"]["passed"] is True
     assert checks["os_binding_execution_readiness"]["passed"] is True
     assert payload["execution_readiness"]["os_level_command_palette"] is True
+
+
+def test_lens_command_palette_os_binding_accepts_broad_runtime_execution_prerequisites(
+    tmp_path: Path,
+) -> None:
+    status_path = tmp_path / "status.json"
+    execution_readiness_path = tmp_path / "execution-readiness.json"
+    _write_lens_status(status_path, summon_anywhere=True, availability="os_runtime")
+    _write_runtime_execution_readiness(execution_readiness_path)
+
+    result = _run_script(
+        "-Mode",
+        "Status",
+        "-StatusPath",
+        str(status_path),
+        "-ExecutionReadinessPath",
+        str(execution_readiness_path),
+    )
+
+    assert result.returncode == 0, result.stderr or result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "proof_passed"
+    assert payload["ok"] is True
+    assert payload["os_binding_execution_readiness_observed"] is True
+
+    execution_readiness = payload["execution_readiness"]
+    assert execution_readiness["os_level_command_palette"] is True
+    assert execution_readiness["next_smallest_truthful_gap"] == "os_binding_execution_prerequisites"
+    assert "os_binding_authority_grant" in execution_readiness["blocked_requirements"]
+    assert "lens_host_persistent_supervision_prerequisites_pending" in execution_readiness["blockers"]
+    assert "overlay_window_missing" in execution_readiness["blockers"]
+
+    checks = {check["name"]: check for check in payload["checks"]}
+    assert checks["os_binding_execution_readiness"]["passed"] is True
+    assert checks["os_binding_execution_readiness"]["status"] == "blocked_readback_ready"
+    assert payload["governance"]["wraps_os_binding_execution_readiness"] is True
+    assert payload["governance"]["execution_authority"] is False
+    assert payload["governance"]["opens_palette"] is False
 
 
 def test_lens_command_palette_os_binding_proof_accepts_live_summon_readback(
