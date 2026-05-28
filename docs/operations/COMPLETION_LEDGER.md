@@ -40946,6 +40946,75 @@ Latest validation for system-resident first-missing prerequisite handoff:
   stage6_completion_audit_system_resident_persistent_supervision_first_missing_concrete_handoff_observed=true;
   stage6_completion_audit_system_resident_host_supervision_operator_handoff_observed=false`
 
+### 2026-05-28 - Stage 6 completion audit floors resident-supervision proof timeouts
+
+Roadmap area: Stage 6 / Lens MVP, completion-audit reliability and
+operator-facing handoff truthfulness.
+
+Material change:
+
+- The Stage 6 completion audit now gives the slow resident supervision proof
+  pair a 240-second minimum timeout even when an operator requests a lower
+  `-ChildProofTimeoutSeconds` budget.
+- The floored children are `process_supervision_boundary` and
+  `resident_host_process_supervision_blocker`. This removes a false blocker
+  where a 120-second audit request could report
+  `resident_host_process_supervision_handoff` solely because the resident-host
+  process supervision readback exceeded the wrapper budget.
+- The audit also preserves the stronger concrete handoff chain when a
+  persistent-supervision first-missing `tray_presence` handoff has already been
+  backed by runtime child proofs. The current live audit did not land on that
+  tray path; it truthfully advanced to the helpful-not-noisy runtime authority
+  handoff.
+- Stage 6 remains active and blocked. Stage 7 has not started. This change does
+  not grant authority, keep a resident process alive, claim resident presence,
+  write memory, or close Stage 6.
+
+Latest validation for resident-supervision proof timeout floors:
+
+- PowerShell AST parse of `scripts\lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- PowerShell AST parse of `scripts\lens-stage6-next-handoff.ps1`
+  Result: `passed`
+- `python -m ruff check
+  tests\test_lens_stage6_completion_audit_script.py
+  tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests\test_lens_stage6_completion_audit_script.py
+  tests\test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 2 files already formatted`
+- `python -m pytest
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_accepts_fresh_supervised_runtime_after_bringup
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_to_acceptance_handoff
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback`
+  Result: `passed; 3 passed`
+- `.\scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -AllowLaunchOnHotkey -ChildProofTimeoutSeconds 240`
+  Result: `passed blocked audit; ok=true; audit_status=complete;
+  child_proof_timeouts=[]; ready_to_close=false; can_close_stage6=false;
+  transition_allowed=false; next_smallest_truthful_gap=resident_surface_runtime_not_supervised;
+  recommended_handoff_source=stage6_helpful_not_noisy_runtime_authority_readiness_handoff;
+  recommended_next_slice=create_or_select_exact_approved_resident_runtime_execution_authority_request`
+- `.\scripts\lens-stage6-next-handoff.ps1 -Mode Status
+  -CompletionAuditJsonPath
+  .tmp\stage6-completion-audit-after-tray-runtime-concrete-handoff-240.json`
+  Result: `passed; ok=true; status=proof_passed;
+  next_smallest_truthful_gap=resident_surface_runtime_not_supervised;
+  recommended_handoff_source=stage6_helpful_not_noisy_runtime_authority_readiness_handoff;
+  recommended_concrete_handoff_source=stage6_helpful_not_noisy_runtime_authority_readiness_handoff;
+  recommended_concrete_next_slice=create_or_select_exact_approved_resident_runtime_execution_authority_request`
+- `.\scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -AllowLaunchOnHotkey -ChildProofTimeoutSeconds 120`
+  Result: `passed blocked audit after timeout floors; ok=true;
+  audit_status=complete; child_proof_timeouts=[]; process_supervision_boundary.timeout_seconds=240;
+  process_supervision_boundary.timed_out=false;
+  resident_host_process_supervision_blocker.timeout_seconds=240;
+  resident_host_process_supervision_blocker.timed_out=false;
+  next_smallest_truthful_gap=resident_surface_runtime_not_supervised;
+  recommended_handoff_source=stage6_helpful_not_noisy_runtime_authority_readiness_handoff;
+  recommended_next_slice=create_or_select_exact_approved_resident_runtime_execution_authority_request`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

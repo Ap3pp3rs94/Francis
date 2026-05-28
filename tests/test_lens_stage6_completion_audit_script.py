@@ -68,8 +68,8 @@ def _expected_audit_child_proof_timeouts(child_timeout_seconds: int) -> dict[str
         "summon_authority_blocker": _family_chain_child_timeout_seconds(child_timeout_seconds),
         "summon_anywhere_family_chain": _family_chain_wrapper_timeout_seconds(child_timeout_seconds),
         "resident_host_runtime_boundary": child_timeout_seconds,
-        "process_supervision_boundary": child_timeout_seconds,
-        "resident_host_process_supervision_blocker": child_timeout_seconds,
+        "process_supervision_boundary": max(child_timeout_seconds, 240),
+        "resident_host_process_supervision_blocker": max(child_timeout_seconds, 240),
         "summon_resident_host_blocker": _summon_resident_host_blocker_timeout_seconds(child_timeout_seconds),
         "resident_supervision_persistence_boundary": min(child_timeout_seconds, 240),
         "host_supervision_authority_request": child_timeout_seconds,
@@ -168,6 +168,9 @@ def test_lens_stage6_completion_audit_accepts_fresh_supervised_runtime_after_bri
     assert "[bool]$HostSupervisorReadback.observed_process_alive" in script
     assert "[bool]$HostSupervisorReadback.observed_pid_matches_host_process" in script
     assert "$ResidentHostProcessSupervisionEvidenceObserved = (" in script
+    assert "$ProcessSupervisionBoundaryChildTimeoutSeconds = [Math]::Max($ChildProofTimeoutSeconds, 240)" in script
+    assert "'-ChildProofTimeoutSeconds', [string]$ProcessSupervisionBoundaryChildTimeoutSeconds" in script
+    assert ") -TimeoutSeconds $ProcessSupervisionBoundaryChildTimeoutSeconds" in script
     assert "$ResidentHostProcessSupervisionBlockerProofObserved -or" in script
     assert "$FreshResidentSupervisedRuntimeReadbackObserved" in script
     assert "resident_host_process_handoff_observed = $EarlyFreshResidentSupervisedRuntimeReadbackObserved" in script
@@ -176,6 +179,14 @@ def test_lens_stage6_completion_audit_accepts_fresh_supervised_runtime_after_bri
         "handoff_consumed = ($EarlyFreshResidentSupervisedRuntimeReadbackObserved -and "
         "$ProcessSupervisionBoundaryObserved)"
     ) in script
+    assert (
+        "$ResidentHostProcessSupervisionBlockerProofChildTimeoutSeconds = [Math]::Max($ChildProofTimeoutSeconds, 240)"
+        in script
+    )
+    assert (
+        "'-ChildProofTimeoutSeconds', [string]$ResidentHostProcessSupervisionBlockerProofChildTimeoutSeconds" in script
+    )
+    assert ") -TimeoutSeconds $ResidentHostProcessSupervisionBlockerProofChildTimeoutSeconds" in script
     assert "$ResidentHostProcessSupervisionBlockerProofReadbackObserved = (" in script
     assert (
         "$ResidentHostProcessSupervisionBlockerProofObserved -or "
@@ -1187,6 +1198,15 @@ def test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_
         "$RecommendedConcreteHandoff['authority_required'] = $Stage6PrerequisiteBringupPlanRecommendedAuthorityRequired"
     ) in script
     assert runtime_chain_flag in script
+    assert "$PersistentSupervisionFirstMissingTrayConcreteHandoffObserved = (" in script
+    assert (
+        "$RecommendedConcreteHandoffSource -eq 'persistent_supervision_prerequisites_first_missing_requirement_handoff'"
+    ) in script
+    assert "$PersistentSupervisionFirstMissingTrayConcreteHandoffObserved" in script
+    assert (
+        "persistent_supervision_first_missing_tray_concrete_handoff_observed = "
+        "$PersistentSupervisionFirstMissingTrayConcreteHandoffObserved"
+    ) in script
     assert script.index(acceptance_concrete_source) < script.index(host_request_proof_concrete_source)
     assert script.index(host_request_proof_concrete_source) < script.index(runtime_chain_flag)
     assert (

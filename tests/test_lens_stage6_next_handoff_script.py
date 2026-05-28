@@ -120,6 +120,16 @@ def test_lens_stage6_next_handoff_uses_explicit_completion_audit_readback() -> N
     assert "'api_persistent_supervision_execution_handoff'" in script
     assert "'run_stage6_lens_completion_audit_after_persistent_supervision_api_execution'" in script
     assert "stage6_completion_audit_persistent_supervision_api_execution_concrete_handoff_observed" in script
+    assert "$Stage6CompletionAuditPersistentSupervisionTrayPrerequisiteRuntimeConcreteHandoffObserved = (" in script
+    assert "'api_tray_presence_execution_global_hotkey_handoff'" in script
+    assert "'api_os_binding_execution_overlay_window_handoff'" in script
+    assert "'api_overlay_execution_summon_binding_handoff'" in script
+    assert "'api_summon_to_persistent_supervision_execution_handoff'" in script
+    assert (
+        "stage6_completion_audit_persistent_supervision_tray_prerequisite_runtime_concrete_handoff_observed" in script
+    )
+    assert "$Stage6CompletionAuditSystemResidentAcceptanceSupersededByConcreteHandoff = (" in script
+    assert "$Stage6CompletionAuditPersistentSupervisionTrayPrerequisiteRuntimeConcreteHandoffObserved -or" in script
     assert "$Stage6CompletionAuditPersistentSupervisionResidentClaimBoundaryHandoffObserved = (" in script
     assert "'persistent_supervision_execution_authority_handoff'" in script
     assert "'stage6_persistent_supervision_api_execution_resident_claim_boundary'" in script

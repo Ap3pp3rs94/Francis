@@ -478,14 +478,15 @@ $ResidentHostRuntimeBoundaryProofObserved = (
   [string]$ResidentHostRuntimeBoundaryProofRecommendedHandoff.authority_required -eq 'process_supervision_authority' -and
   -not [bool]$ResidentHostRuntimeBoundaryProofRecommendedHandoff.authority_granted
 )
+$ProcessSupervisionBoundaryChildTimeoutSeconds = [Math]::Max($ChildProofTimeoutSeconds, 240)
 $ProcessSupervisionBoundaryResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $ProcessSupervisionBoundaryScript -ScriptArgs @(
   '-Mode', 'Status',
   '-StartupTimeoutSeconds', [string]$ChildStartupTimeoutSeconds,
   '-ForegroundRunSeconds', '2',
   '-HostLaunchRunSeconds', [string]$ChildHostLaunchRunSeconds,
   '-SupervisorRunSeconds', [string]$SupervisorRunSeconds,
-  '-ChildProofTimeoutSeconds', [string]$ChildProofTimeoutSeconds
-)
+  '-ChildProofTimeoutSeconds', [string]$ProcessSupervisionBoundaryChildTimeoutSeconds
+) -TimeoutSeconds $ProcessSupervisionBoundaryChildTimeoutSeconds
 $ProcessSupervisionBoundary = $ProcessSupervisionBoundaryResult.payload
 $ProcessSupervisionBoundaryBlockers = ConvertTo-StringArray -Value $ProcessSupervisionBoundary.blockers
 $ProcessSupervisionBoundaryObserved = (
@@ -518,6 +519,7 @@ $ProcessSupervisionBoundaryObserved = (
   [bool]$ProcessSupervisionBoundary.service_activation_plan_observed
 )
 $ResidentHostProcessSupervisionBlockerProofSkippedForFreshRuntime = $EarlyFreshResidentSupervisedRuntimeReadbackObserved
+$ResidentHostProcessSupervisionBlockerProofChildTimeoutSeconds = [Math]::Max($ChildProofTimeoutSeconds, 240)
 $ResidentHostProcessSupervisionBlockerProofResult = [ordered]@{
   exit_code = 0
   payload = [ordered]@{
@@ -556,7 +558,7 @@ $ResidentHostProcessSupervisionBlockerProofResult = [ordered]@{
   output = ''
   error = ''
   timed_out = $false
-  timeout_seconds = $ChildProofTimeoutSeconds
+  timeout_seconds = $ResidentHostProcessSupervisionBlockerProofChildTimeoutSeconds
   duration_ms = 0
 }
 if (-not $ResidentHostProcessSupervisionBlockerProofSkippedForFreshRuntime) {
@@ -566,8 +568,8 @@ if (-not $ResidentHostProcessSupervisionBlockerProofSkippedForFreshRuntime) {
     '-ForegroundRunSeconds', '2',
     '-HostLaunchRunSeconds', [string]$ChildHostLaunchRunSeconds,
     '-SupervisorRunSeconds', [string]$SupervisorRunSeconds,
-    '-ChildProofTimeoutSeconds', [string]$ChildProofTimeoutSeconds
-  )
+    '-ChildProofTimeoutSeconds', [string]$ResidentHostProcessSupervisionBlockerProofChildTimeoutSeconds
+  ) -TimeoutSeconds $ResidentHostProcessSupervisionBlockerProofChildTimeoutSeconds
 }
 $ResidentHostProcessSupervisionBlockerProof = $ResidentHostProcessSupervisionBlockerProofResult.payload
 $ResidentHostProcessSupervisionBlockerProofBlockers = ConvertTo-StringArray -Value $ResidentHostProcessSupervisionBlockerProof.blockers
@@ -5347,8 +5349,17 @@ if ($SystemResidentPersistentSupervisionFirstMissingRequirementConcreteHandoffOb
   $RecommendedConcreteHandoff['first_missing_required_before_enable'] = $PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable
   $RecommendedConcreteHandoff['missing_required_before_enable'] = [string[]]@($PersistentSupervisionPrerequisitesMissingRequiredBeforeEnable)
 }
+$PersistentSupervisionFirstMissingTrayConcreteHandoffObserved = (
+  $RecommendedConcreteHandoffSource -eq 'persistent_supervision_prerequisites_first_missing_requirement_handoff' -and
+  [string]$RecommendedConcreteHandoff.id -eq 'tray_presence' -and
+  [string]$RecommendedConcreteHandoff.next_smallest_truthful_gap -eq 'summon_tray_presence_blocker_boundary' -and
+  [bool]$RecommendedConcreteHandoff.consumed_persistent_supervision_prerequisites_proof
+)
 $PersistentSupervisionTrayPrerequisiteRuntimeChainConcreteObserved = (
-  $NextSmallestTruthfulGap -eq 'persistent_supervision_required_prerequisites_missing' -and
+  (
+    $NextSmallestTruthfulGap -eq 'persistent_supervision_required_prerequisites_missing' -or
+    $PersistentSupervisionFirstMissingTrayConcreteHandoffObserved
+  ) -and
   $PersistentSupervisionPrerequisitesProofObserved -and
   $PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable -eq 'tray_presence' -and
   $TrayPresenceApiExecutionProofObserved
@@ -5668,6 +5679,7 @@ $Payload = [ordered]@{
   recommended_concrete_authority_required = $RecommendedConcreteAuthorityRequired
   recommended_concrete_authority_granted = $RecommendedConcreteAuthorityGranted
   recommended_concrete_handoff = $RecommendedConcreteHandoff
+  persistent_supervision_first_missing_tray_concrete_handoff_observed = $PersistentSupervisionFirstMissingTrayConcreteHandoffObserved
   persistent_supervision_tray_prerequisite_runtime_chain_concrete_observed = $PersistentSupervisionTrayPrerequisiteRuntimeChainConcreteObserved
   system_resident_host_supervision_authority_request_proof_concrete_handoff_observed = $SystemResidentHostSupervisionAuthorityRequestProofConcreteHandoffObserved
   system_resident_persistent_supervision_first_missing_requirement_concrete_handoff_observed = $SystemResidentPersistentSupervisionFirstMissingRequirementConcreteHandoffObserved
