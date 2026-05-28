@@ -563,8 +563,11 @@ def test_lens_stage6_completion_audit_consumes_stage6_prerequisite_bringup_plan_
     assert "$PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable -eq 'resident_host_process'" in script
     assert (
         "$Stage6CompletionReviewed = (\n"
-        "  $Stage6CompletionEvidenceReviewed -and\n"
-        "  $Stage6PrerequisiteBringupPlanObserved -and"
+        "  $ReadyToClose -or\n"
+        "  (\n"
+        "    $Stage6CompletionEvidenceReviewed -and\n"
+        "    $Stage6PrerequisiteBringupPlanObserved -and\n"
+        "    $PersistentSupervisionEnablementTransitionPlanProofObserved"
     ) in script
     assert "stage6_prerequisite_bringup_plan_readback" in script
     assert "$NextSmallestTruthfulGap -eq 'summon_anywhere_blockers'" in script
