@@ -519,6 +519,40 @@ def test_lens_stage6_next_handoff_consumes_reviewed_summon_authority_handoff(tmp
         "summon_authority_request_bundle_ready"
     )
 
+    current_audit_json = tmp_path / "stage6-completion-audit-current-reviewed-summon-authority.json"
+    current_audit_payload = json.loads(audit_json.read_text(encoding="utf-8"))
+    current_audit_payload["next_smallest_truthful_gap"] = "summon_authority_blocker_boundary"
+    current_audit_payload["recommended_handoff_source"] = (
+        "stage6_reviewed_summon_global_hotkey_binding_authority_handoff"
+    )
+    current_audit_payload["recommended_handoff"]["consumed_global_hotkey_binding_next_smallest_truthful_gap"] = (
+        "stage6_lens_completion_audit"
+    )
+    current_audit_payload["recommended_handoff"]["active_blocker_family"] = "authority"
+    write_json(current_audit_json, current_audit_payload)
+
+    current_proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-CompletionAuditJsonPath",
+        str(current_audit_json),
+        env={"FRANCIS_DATA_DIR": str(data_root)},
+    )
+
+    assert current_proc.returncode == 0, current_proc.stderr or current_proc.stdout
+    current_payload = json.loads(current_proc.stdout)
+    assert current_payload["recommended_handoff_source"] == (
+        "stage6_reviewed_summon_global_hotkey_binding_authority_handoff"
+    )
+    assert current_payload["next_smallest_truthful_gap"] == "summon_authority_blocker_boundary"
+    assert current_payload["stage6_completion_audit_reviewed_summon_authority_handoff_observed"] is True
+    assert current_payload["stage6_completion_audit_summon_authority_request_bundle_handoff_observed"] is True
+    assert current_payload["recommended_operator_handoff"]["source"] == (
+        "summon_anywhere_authority_request_bundle_handoff"
+    )
+    assert current_payload["recommended_operator_handoff"]["status"] == "authority_request_required"
+    assert current_payload["recommended_next_operator_action"]["id"] == "request_global_hotkey_binding_authority"
+
     created_ts = int(datetime.now(UTC).timestamp())
     approved_hotkey_approval_id = "approved-hotkey-authority-test"
     write_json(

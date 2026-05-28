@@ -2435,6 +2435,24 @@ $Stage6CompletionAuditReviewedSummonFirstBlockerTrayPresenceObserved = (
 $Stage6CompletionAuditReviewedSummonActiveBlockerFamily = [string](
   Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'active_blocker_family' -Default ''
 )
+$Stage6CompletionAuditRecommendedHandoffSource = [string](
+  Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_handoff_source' -Default ''
+)
+$Stage6CompletionAuditNextSmallestTruthfulGap = [string](
+  Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'next_smallest_truthful_gap' -Default ''
+)
+$Stage6CompletionAuditReviewedSummonSourceObserved = @(
+  'stage6_reviewed_summon_anywhere_first_blocker',
+  'stage6_reviewed_summon_anywhere_authority_handoff',
+  'stage6_reviewed_summon_global_hotkey_binding_authority_handoff'
+) -contains $Stage6CompletionAuditRecommendedHandoffSource
+$Stage6CompletionAuditReviewedSummonGapObserved = (
+  $Stage6CompletionAuditNextSmallestTruthfulGap -eq 'summon_anywhere_blockers' -or
+  (
+    $Stage6CompletionAuditRecommendedHandoffSource -eq 'stage6_reviewed_summon_global_hotkey_binding_authority_handoff' -and
+    $Stage6CompletionAuditNextSmallestTruthfulGap -eq 'summon_authority_blocker_boundary'
+  )
+)
 $Stage6CompletionAuditReviewedSummonAuthorityHandoffObserved = (
   $Stage6CompletionAuditReviewedSummonActiveBlockerFamily -eq 'authority' -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'summon_authority_blocker_boundary' -and
@@ -2446,11 +2464,8 @@ $Stage6CompletionAuditReviewedSummonAuthorityHandoffObserved = (
 )
 $Stage6CompletionAuditReviewedSummonFirstBlockerHandoffObserved = (
   $Stage6CompletionAuditReadbackObserved -and
-  @(
-    'stage6_reviewed_summon_anywhere_first_blocker',
-    'stage6_reviewed_summon_anywhere_authority_handoff'
-  ) -contains [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_handoff_source' -Default '') -and
-  [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'next_smallest_truthful_gap' -Default '') -eq 'summon_anywhere_blockers' -and
+  $Stage6CompletionAuditReviewedSummonSourceObserved -and
+  $Stage6CompletionAuditReviewedSummonGapObserved -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_next_slice' -Default '') -eq [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'next_step' -Default '') -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'recommended_proof_script' -Default '') -eq [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'proof_script' -Default '') -and
   [string](Get-PropertyValue -Payload $Stage6CompletionAudit -Name 'authority_required' -Default '') -eq [string](Get-PropertyValue -Payload $Stage6CompletionAuditRecommendedHandoff -Name 'authority_required' -Default '') -and

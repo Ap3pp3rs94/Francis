@@ -4288,6 +4288,8 @@ if (
     readiness_route = '/lens/summon/readiness'
     acceptance_criterion = 'summon_anywhere'
     first_blocker_family = [string]$SummonAnywhereFamilyChainProof.first_blocker_family
+    active_blocker_family = 'authority'
+    final_blocker_family = 'authority'
     global_hotkey_binding_handoff = $SummonGlobalHotkeyBindingBlockerProofRecommendedHandoff
     final_authority = $SummonAnywhereFamilyChainProofFinalAuthority
     authority_boundary = $SummonAuthorityBoundary

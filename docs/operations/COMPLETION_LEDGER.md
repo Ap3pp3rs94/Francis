@@ -41619,6 +41619,46 @@ Latest validation for authority-boundary projection:
   [scriptblock]::Create($script); "parse-ok"'`
   Result: `passed; parse-ok`
 
+### 2026-05-28 - Stage 6 next handoff accepts current summon authority source
+
+Roadmap area: Stage 6 / Lens MVP, governed summon-anywhere authority handoff.
+
+Material change:
+
+- `scripts/lens-stage6-completion-audit.ps1` now includes
+  `active_blocker_family=authority` and `final_blocker_family=authority` in the
+  current global-hotkey-to-authority handoff.
+- `scripts/lens-stage6-next-handoff.ps1` now recognizes
+  `stage6_reviewed_summon_global_hotkey_binding_authority_handoff` at
+  `summon_authority_blocker_boundary` as a reviewed summon-authority handoff.
+- The existing governed summon-anywhere authority request bundle path is reused;
+  this does not grant authority, decide approvals, execute the summon, or write
+  memory.
+
+Latest validation for current authority handoff compatibility:
+
+- `python -m pytest
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_consumes_authority_handoff_after_global_hotkey_readback
+  -q --tb=short`
+  Result: `passed; 1 passed`
+- `python -m pytest
+  tests/test_lens_stage6_next_handoff_script.py::test_lens_stage6_next_handoff_consumes_reviewed_summon_authority_handoff
+  -q --tb=short`
+  Result: `passed; 1 passed`
+- `pwsh -NoProfile -Command '$script = Get-Content -Raw
+  scripts\lens-stage6-completion-audit.ps1; $null =
+  [scriptblock]::Create($script); "completion-parse-ok"; $handoff =
+  Get-Content -Raw scripts\lens-stage6-next-handoff.ps1; $null =
+  [scriptblock]::Create($handoff); "handoff-parse-ok"'`
+  Result: `passed; completion-parse-ok; handoff-parse-ok`
+- `python -m ruff check tests/test_lens_stage6_completion_audit_script.py
+  tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests/test_lens_stage6_completion_audit_script.py
+  tests/test_lens_stage6_next_handoff_script.py`
+  Result: `passed; 2 files already formatted`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
