@@ -41765,6 +41765,41 @@ Latest validation for Stage 6 closure:
   `scripts/lens-command-palette-os-binding-proof.ps1`, and
   `scripts/lens-stage6-completion-audit.ps1`.
 
+### 2026-05-28 - Stage 7 telemetry posture contract starts read-only
+
+Roadmap area: Stage 7 / Telemetry MVP, governed work-context sensing.
+
+Material change:
+
+- Stage 7 now has a first API readback at `/telemetry/status` that declares the
+  telemetry MVP posture without starting hidden collection or granting new
+  authority.
+- The status readback enumerates the planned terminal connector, git watcher,
+  and IDE diagnostics connector as `not_connected`, inactive, denied by default,
+  and blocked on explicit connector configuration plus operator scope grants.
+- The readback exposes visible sensing, redaction, retention, and governance
+  posture so the operator UI and future connector work can distinguish actual
+  sensing from a readiness contract.
+- The telemetry redaction helper uses the governed redaction path for telemetry
+  values before display or storage. This entry does not implement terminal
+  capture, git watching, IDE diagnostics collection, memory writes, or execution
+  authority.
+
+Latest validation for Stage 7 start:
+
+- `python -m pytest tests/test_api_telemetry.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short`
+  Result: `passed; 3 passed`
+- `python -m ruff check src/francis/telemetry/status.py
+  src/francis/api/routes/telemetry.py src/francis/api/app.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/telemetry/status.py
+  src/francis/api/routes/telemetry.py src/francis/api/app.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

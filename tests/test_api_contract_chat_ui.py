@@ -186,5 +186,6 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("GET", "/system/web_learning/policy"),
         ("GET", "/system/web-learning/policy"),
         ("POST", "/system/web-learning/request"),
+        ("GET", "/telemetry/status"),
     ]
     _assert_has_endpoints(routes, endpoints)
