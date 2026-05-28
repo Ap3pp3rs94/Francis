@@ -41296,6 +41296,43 @@ Latest validation for resident-claim readback truthfulness:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-28 - Stage 6 completion audit consumes command-palette shell bridge
+
+Roadmap area: Stage 6 / Lens MVP, summon-anywhere command-palette bridge
+readback truthfulness.
+
+Material change:
+
+- `scripts/lens-stage6-checkpoint.ps1` and
+  `scripts/lens-stage6-completion-audit.ps1` now accept the command-palette
+  shell bridge when it is readback-ready, chat-UI-only, non-mutating, and still
+  blocked on OS-level command-palette binding.
+- The audit no longer rejects the shell bridge solely because another live path
+  already reports `summon_anywhere=true`; that boolean is now mirrored as live
+  readback instead of being treated as a permanent blocker expectation.
+- Stage 6 remains active and blocked. This does not close Stage 6, start Stage
+  7, open a command palette, register a hotkey, grant summon authority, launch a
+  process, write memory, or claim system residency.
+
+Latest validation for command-palette shell-bridge audit consumption:
+
+- Live `scripts/lens-stage6-completion-audit.ps1 -Mode Status` readback after
+  this change reported `exit_code=0`, `ok=true`, `status=blocked`,
+  `audit_status=complete`, `ready_to_close=false`, `stage_state=active`,
+  `next_smallest_truthful_gap=command_palette_os_binding_blocker_proof`,
+  `command_palette_shell_bridge_readback=true`, and
+  `command_palette_os_binding_blockers_proof_readback=false`.
+- `python -m pytest
+  tests/test_lens_stage6_checkpoint_script.py::test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority
+  -q --tb=short`
+  Result: `passed; 1 passed`
+- `python -m ruff check tests/test_lens_stage6_checkpoint_script.py
+  tests/test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_stage6_checkpoint_script.py
+  tests/test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 2 files already formatted`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

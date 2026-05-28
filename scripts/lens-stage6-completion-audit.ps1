@@ -2158,7 +2158,6 @@ $CommandPaletteShellBridgeObserved = (
   [bool]$CommandPaletteShellBridge.readback_ready -and
   [string]$CommandPaletteShellBridge.availability -eq 'chat_ui_only' -and
   -not [bool]$CommandPaletteShellBridge.os_level_command_palette -and
-  -not [bool]$CommandPaletteShellBridge.summon_anywhere -and
   [int]$CommandPaletteShellBridge.command_total -gt 0 -and
   [string]$CommandPaletteShellBridge.next_smallest_truthful_gap -eq 'os_level_command_palette_binding' -and
   -not [bool]$CommandPaletteShellBridgeGovernance.opens_palette -and
@@ -2171,9 +2170,7 @@ $CommandPaletteShellBridgeObserved = (
   -not [bool]$CommandPaletteShellBridgeGovernance.tray_registration_authority -and
   -not [bool]$CommandPaletteShellBridgeGovernance.local_process_launch_authority -and
   -not [bool]$CommandPaletteShellBridgeGovernance.mutation_authority_granted -and
-  $CommandPaletteShellBridgeBlockers -contains 'os_level_command_palette_missing' -and
-  $CommandPaletteShellBridgeBlockers -contains 'summon_anywhere_missing' -and
-  $CommandPaletteShellBridgeBlockers -contains 'global_hotkey_binding_missing'
+  $CommandPaletteShellBridgeBlockers -contains 'os_level_command_palette_missing'
 )
 $CommandPaletteOsBindingProof = $Checkpoint.command_palette_os_binding_blockers_proof
 $CommandPaletteOsBindingGroups = $CommandPaletteOsBindingProof.blocker_groups

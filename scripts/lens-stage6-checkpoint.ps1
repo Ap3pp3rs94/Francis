@@ -854,10 +854,12 @@ $CommandPaletteShellBridgeGovernance = Get-PropertyValue -Payload $CommandPalett
 $CommandPaletteShellBridgeObserved = (
   $CommandPaletteShellBridgeExitCode -eq 0 -and
   [string](Get-PropertyValue -Payload $CommandPaletteShellBridgePayload -Name 'kind' -Default '') -eq 'lens.command_palette.shell_bridge' -and
+  [string](Get-PropertyValue -Payload $CommandPaletteShellBridgePayload -Name 'status' -Default '') -eq 'blocked' -and
   [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgePayload -Name 'readback_ready' -Default $false) -and
   [string](Get-PropertyValue -Payload $CommandPaletteShellBridgePayload -Name 'availability' -Default '') -eq 'chat_ui_only' -and
   -not [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgePayload -Name 'os_level_command_palette' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgePayload -Name 'summon_anywhere' -Default $true) -and
+  [int](Get-PropertyValue -Payload $CommandPaletteShellBridgePayload -Name 'command_total' -Default 0) -gt 0 -and
+  [string](Get-PropertyValue -Payload $CommandPaletteShellBridgePayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'os_level_command_palette_binding' -and
   -not [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgeGovernance -Name 'opens_palette' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgeGovernance -Name 'execution_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgeGovernance -Name 'approval_decision_authority' -Default $true) -and
@@ -868,9 +870,7 @@ $CommandPaletteShellBridgeObserved = (
   -not [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgeGovernance -Name 'tray_registration_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgeGovernance -Name 'local_process_launch_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $CommandPaletteShellBridgeGovernance -Name 'mutation_authority_granted' -Default $true) -and
-  $CommandPaletteShellBridgeBlockers -contains 'os_level_command_palette_missing' -and
-  $CommandPaletteShellBridgeBlockers -contains 'summon_anywhere_missing' -and
-  $CommandPaletteShellBridgeBlockers -contains 'global_hotkey_binding_missing'
+  $CommandPaletteShellBridgeBlockers -contains 'os_level_command_palette_missing'
 )
 $CommandPaletteOsBindingProof = if ($CommandPaletteOsBindingProofResult.Count -gt 0) { $CommandPaletteOsBindingProofResult[-1] } else { $null }
 $CommandPaletteOsBindingExitCode = -1
