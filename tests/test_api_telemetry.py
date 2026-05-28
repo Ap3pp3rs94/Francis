@@ -9,7 +9,7 @@ from francis.api.app import create_app
 from francis.telemetry.status import redact_telemetry_value
 
 
-def test_telemetry_status_projects_stage7_readonly_baseline(monkeypatch, tmp_path: Path) -> None:
+def test_telemetry_status_projects_stage7_readonly_sources(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
 
@@ -21,24 +21,31 @@ def test_telemetry_status_projects_stage7_readonly_baseline(monkeypatch, tmp_pat
     assert body["ok"] is True
     assert body["kind"] == "francis.stage7.telemetry.status"
     assert body["stage"] == "Stage 7 / Telemetry MVP"
-    assert body["status"] == "inactive"
-    assert body["active"] is False
-    assert body["claim"] == "telemetry_posture_contract_only"
+    assert body["status"] in {"active", "inactive"}
+    assert body["active"] is (body["active_source_total"] > 0)
+    assert body["claim"] in {
+        "telemetry_posture_contract_only",
+        "explicit_telemetry_readback_available",
+        "explicit_telemetry_events_recorded",
+    }
     assert body["source_total"] == 3
-    assert body["active_source_total"] == 0
+    assert body["active_source_total"] == sum(1 for source in body["sources"] if source["active"])
     assert body["next_smallest_truthful_gap"] == "stage7_terminal_connector_scope_contract"
 
     sources = {source["id"]: source for source in body["sources"]}
     assert set(sources) == {"terminal", "git", "ide_diagnostics"}
     assert sources["terminal"]["status"] == "write_scope_required"
+    assert sources["terminal"]["active"] is False
     assert sources["terminal"]["retention"]["event_count"] == 0
     assert sources["terminal"]["routes"]["record"] == "/telemetry/terminal/events"
+    assert sources["git"]["routes"]["status"] == "/telemetry/git/status"
+    assert sources["git"]["hidden_sensing"] is False
+    assert sources["git"]["authority"]["execution_authority"] is False
+    assert sources["ide_diagnostics"]["active"] is False
     for source in sources.values():
-        assert source["active"] is False
         assert source["visible_indicator"] is True
         assert source["hidden_sensing"] is False
         assert source["scope"]["denied_by_default"] is True
-        assert source["signals"] == []
         assert source["retention"]["stores_raw_events"] is False
         assert source["redaction"]["redact_before_storage"] is True
         assert source["authority"]["telemetry_collection"] is False
@@ -47,7 +54,18 @@ def test_telemetry_status_projects_stage7_readonly_baseline(monkeypatch, tmp_pat
 
     assert body["redaction"]["stores_raw_secret_values"] is False
     assert body["retention"]["stores_raw_events"] is False
-    assert body["sensing"]["status"] == "inactive"
+    if body["active"] and body["retention"]["event_count"] == 0:
+        assert body["claim"] == "explicit_telemetry_readback_available"
+        assert body["retention"]["status"] == "read_only_snapshot"
+        assert body["sensing"]["status"] == "explicit_readback_available"
+    elif body["retention"]["event_count"] > 0:
+        assert body["claim"] == "explicit_telemetry_events_recorded"
+        assert body["retention"]["status"] == "bounded_redacted_events"
+        assert body["sensing"]["status"] == "explicit_events_recorded"
+    else:
+        assert body["claim"] == "telemetry_posture_contract_only"
+        assert body["retention"]["status"] == "none"
+        assert body["sensing"]["status"] == "inactive"
     assert body["sensing"]["hidden_sensing"] is False
     assert body["governance"]["read_only_contract"] is True
     assert body["governance"]["telemetry_collection"] is False
@@ -162,8 +180,11 @@ def test_terminal_telemetry_records_redacted_explicit_command_event(monkeypatch,
     status = client.get("/telemetry/status").json()
     sources = {source["id"]: source for source in status["sources"]}
     assert status["active"] is True
-    assert status["active_source_total"] == 1
+    assert status["claim"] == "explicit_telemetry_events_recorded"
+    assert status["active_source_total"] >= 1
+    assert status["retention"]["status"] == "bounded_redacted_events"
     assert status["retention"]["event_count"] == 1
+    assert status["sensing"]["status"] == "explicit_events_recorded"
     assert sources["terminal"]["active"] is True
     assert sources["terminal"]["status"] == "explicit_events_recorded"
     assert sources["terminal"]["signals"] == ["command_outcome"]
@@ -187,3 +208,38 @@ def test_terminal_scope_projects_permission_without_recording(monkeypatch, tmp_p
     assert body["governance"]["grants_execution_authority"] is False
     assert body["event_count"] == 0
     assert not data_root.exists()
+
+
+def test_git_telemetry_status_is_readonly_snapshot(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    client = TestClient(create_app())
+    body = client.get("/telemetry/git/status?limit=5").json()
+
+    assert body["ok"] is True
+    assert body["kind"] == "francis.stage7.telemetry.git_status"
+    assert body["source_id"] == "git"
+    assert body["capture_mode"] == "explicit_git_status_snapshot"
+    assert body["watch_mode"] == "on_request_snapshot"
+    assert body["hidden_sensing"] is False
+    assert body["visible_indicator"] is True
+    assert body["stores_raw_events"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["governance"]["background_watcher"] is False
+    assert body["governance"]["git_fetch"] is False
+    assert body["governance"]["git_pull"] is False
+    assert body["governance"]["git_push"] is False
+    assert isinstance(body["changed_paths"], list)
+    assert len(body["changed_paths"]) <= 5
+    assert body["changed_count"] >= len(body["changed_paths"])
+    assert not data_root.exists()
+
+    status = client.get("/telemetry/status").json()
+    sources = {source["id"]: source for source in status["sources"]}
+    assert sources["git"]["routes"]["status"] == "/telemetry/git/status"
+    if body["active"]:
+        assert sources["git"]["active"] is True
+        assert sources["git"]["status"] == "snapshot_ready"
+        assert sources["git"]["latest_snapshot"]["branch"] == body["branch"]

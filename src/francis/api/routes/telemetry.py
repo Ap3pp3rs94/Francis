@@ -6,6 +6,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
+from francis.telemetry.git import git_status_snapshot
 from francis.telemetry.status import telemetry_status_snapshot
 from francis.telemetry.terminal import (
     TERMINAL_WRITE_SCOPE,
@@ -50,6 +51,11 @@ def terminal_scope(actor: str = "") -> dict[str, Any]:
 @router.get("/terminal/events")
 def terminal_events(limit: int = 20) -> dict[str, Any]:
     return terminal_events_snapshot(limit=limit)
+
+
+@router.get("/git/status")
+def git_status(limit: int = 50) -> dict[str, Any]:
+    return git_status_snapshot(limit=limit)
 
 
 @router.post("/terminal/events")

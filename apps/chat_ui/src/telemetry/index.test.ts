@@ -30,17 +30,17 @@ function installFetch(handler: FetchHandler): () => void {
   };
 }
 
-test("parseTelemetryStatus preserves inactive Stage 7 source truth", () => {
+test("parseTelemetryStatus preserves Stage 7 source readback truth", () => {
   const status = parseTelemetryStatus({
     ok: true,
     kind: "francis.stage7.telemetry.status",
     stage: "Stage 7 / Telemetry MVP",
-    status: "inactive",
-    active: false,
-    claim: "telemetry_posture_contract_only",
+    status: "active",
+    active: true,
+    claim: "explicit_telemetry_readback_available",
     ts: 123,
     source_total: 3,
-    active_source_total: 0,
+    active_source_total: 1,
     sources: [
       {
         id: "terminal",
@@ -78,17 +78,53 @@ test("parseTelemetryStatus preserves inactive Stage 7 source truth", () => {
           record: "/telemetry/terminal/events",
         },
       },
+      {
+        id: "git",
+        label: "Git watcher",
+        description: "Repository state and file-change activity, once explicitly scoped.",
+        status: "snapshot_ready",
+        active: true,
+        visible_indicator: true,
+        hidden_sensing: false,
+        scope: {
+          status: "repo_root_only",
+          allowed_paths: ["D:/Francis"],
+          allowed_processes: ["git status"],
+          denied_by_default: true,
+        },
+        redaction: { redact_before_storage: true },
+        retention: { stores_raw_events: false },
+        signals: ["branch", "dirty_state"],
+        expected_signals: ["branch"],
+        blocked_by: [],
+        authority: { git_watch: false, execution_authority: false },
+        latest_snapshot: {
+          branch: "main",
+          head: "abcdef123456",
+          upstream: "origin/main",
+          ahead: 0,
+          behind: 0,
+          dirty: true,
+          changed_count: 1,
+          changed_paths: [{ status: "M", path: "src/francis/telemetry/git.py" }],
+          ts: 123,
+        },
+        routes: {
+          status: "/telemetry/git/status",
+        },
+      },
     ],
     redaction: { status: "ready" },
-    retention: { stores_raw_events: false },
-    sensing: { hidden_sensing: false },
+    retention: { status: "read_only_snapshot", stores_raw_events: false, event_count: 0 },
+    sensing: { status: "explicit_readback_available", hidden_sensing: false },
     governance: { read_only_contract: true, telemetry_collection: false },
     next_smallest_truthful_gap: "stage7_terminal_connector_scope_contract",
   });
 
   assert.equal(status.kind, "francis.stage7.telemetry.status");
-  assert.equal(status.active, false);
-  assert.equal(status.active_source_total, 0);
+  assert.equal(status.active, true);
+  assert.equal(status.active_source_total, 1);
+  assert.equal(status.claim, "explicit_telemetry_readback_available");
   assert.equal(status.sources[0]?.id, "terminal");
   assert.equal(status.sources[0]?.active, false);
   assert.equal(status.sources[0]?.visible_indicator, true);
@@ -98,6 +134,10 @@ test("parseTelemetryStatus preserves inactive Stage 7 source truth", () => {
   assert.equal(status.sources[0]?.latest_event?.event_id, "tel_terminal_123");
   assert.equal(status.sources[0]?.latest_event?.operation_id, "op_terminal");
   assert.equal(status.sources[0]?.routes.record, "/telemetry/terminal/events");
+  assert.equal(status.sources[1]?.latest_snapshot?.branch, "main");
+  assert.equal(status.sources[1]?.latest_snapshot?.dirty, true);
+  assert.equal(status.sources[1]?.latest_snapshot?.changed_paths[0]?.path, "src/francis/telemetry/git.py");
+  assert.equal(status.sources[1]?.routes.status, "/telemetry/git/status");
   assert.equal(status.governance.telemetry_collection, false);
 });
 

@@ -41868,6 +41868,49 @@ Latest validation for Stage 7 terminal connector start:
 - `npm run build` from `apps/chat_ui`
   Result: `passed`
 
+### 2026-05-28 - Stage 7 git telemetry exposes explicit repo snapshots
+
+Roadmap area: Stage 7 / Telemetry MVP, git watcher.
+
+Material change:
+
+- Git telemetry now exposes a read-only `/telemetry/git/status` snapshot for the
+  Francis repository. The route reports branch, short head, upstream, ahead /
+  behind counts, dirty state, and bounded changed path metadata.
+- The snapshot is on-request only. It does not start a background watcher, run
+  `git fetch`, `git pull`, `git push`, mutate files, write telemetry history, or
+  grant execution authority.
+- `/telemetry/status` now folds the git source into the visible Stage 7 posture
+  with `latest_snapshot`, route metadata, and explicit non-hidden-sensing
+  governance. Snapshot-only activity is reported as readback availability, not
+  recorded telemetry events.
+- The chat UI telemetry source card now displays git branch, head, dirty state,
+  changed count, and upstream when a snapshot is available.
+
+Latest validation for Stage 7 git snapshot readback:
+
+- `python -m pytest tests/test_api_telemetry.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short`
+  Result: `passed; 7 passed`
+- `python -m mypy src/francis/telemetry/git.py
+  src/francis/telemetry/status.py src/francis/api/routes/telemetry.py`
+  Result: `passed`
+- `python -m ruff check src/francis/telemetry/git.py
+  src/francis/telemetry/status.py src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/telemetry/git.py
+  src/francis/telemetry/status.py src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `node --test --experimental-strip-types src/telemetry/index.test.ts`
+  Result: `passed; 2 passed`
+- `npm run test` from `apps/chat_ui`
+  Result: `passed; 109 passed`
+- `npm run build` from `apps/chat_ui`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

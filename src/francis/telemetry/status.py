@@ -52,8 +52,15 @@ def telemetry_status_snapshot() -> dict[str, Any]:
 
     sources = [_inactive_source(definition) for definition in _SOURCE_DEFINITIONS]
     sources = [_apply_terminal_source_readback(source) for source in sources]
+    sources = [_apply_git_source_readback(source) for source in sources]
     active_source_total = sum(1 for source in sources if source["active"])
+    event_count = sum(_event_count(source) for source in sources)
     active = active_source_total > 0
+    active_claim = "telemetry_posture_contract_only"
+    if event_count > 0:
+        active_claim = "explicit_telemetry_events_recorded"
+    elif active:
+        active_claim = "explicit_telemetry_readback_available"
 
     return {
         "ok": True,
@@ -61,7 +68,7 @@ def telemetry_status_snapshot() -> dict[str, Any]:
         "stage": STAGE7_TELEMETRY_STAGE,
         "status": "active" if active else "inactive",
         "active": active,
-        "claim": "telemetry_posture_contract_only" if not active else "explicit_telemetry_events_recorded",
+        "claim": active_claim,
         "ts": _now_s(),
         "source_total": len(sources),
         "active_source_total": active_source_total,
@@ -74,14 +81,14 @@ def telemetry_status_snapshot() -> dict[str, Any]:
             "stores_raw_secret_values": False,
         },
         "retention": {
-            "status": "bounded_redacted_events" if active else "none",
+            "status": _retention_status(active=active, event_count=event_count),
             "stores_raw_events": False,
-            "event_count": sum(_event_count(source) for source in sources),
+            "event_count": event_count,
             "raw_terminal_retention": "none",
             "raw_ide_retention": "none",
         },
         "sensing": {
-            "status": "explicit_events_recorded" if active else "inactive",
+            "status": _sensing_status(active=active, event_count=event_count),
             "visible_indicator": True,
             "hidden_sensing": False,
             "active_source_total": active_source_total,
@@ -158,6 +165,24 @@ def _apply_terminal_source_readback(source: dict[str, Any]) -> dict[str, Any]:
     return updated
 
 
+def _apply_git_source_readback(source: dict[str, Any]) -> dict[str, Any]:
+    if source.get("id") != "git":
+        return source
+    from francis.telemetry.git import git_source_snapshot
+
+    readback = git_source_snapshot()
+    updated = dict(source)
+    updated["status"] = readback["status"]
+    updated["active"] = readback["active"]
+    updated["blocked_by"] = readback["blocked_by"]
+    updated["signals"] = readback["signals"]
+    updated["retention"] = readback["retention"]
+    updated["scope"] = readback["scope"]
+    updated["latest_snapshot"] = readback["latest_snapshot"]
+    updated["routes"] = readback["routes"]
+    return updated
+
+
 def _event_count(source: dict[str, Any]) -> int:
     retention = source.get("retention")
     if not isinstance(retention, dict):
@@ -169,6 +194,22 @@ def _event_count(source: dict[str, Any]) -> int:
         return max(0, int(value))
     except Exception:
         return 0
+
+
+def _retention_status(*, active: bool, event_count: int) -> str:
+    if event_count > 0:
+        return "bounded_redacted_events"
+    if active:
+        return "read_only_snapshot"
+    return "none"
+
+
+def _sensing_status(*, active: bool, event_count: int) -> str:
+    if event_count > 0:
+        return "explicit_events_recorded"
+    if active:
+        return "explicit_readback_available"
+    return "inactive"
 
 
 def _now_s() -> int:

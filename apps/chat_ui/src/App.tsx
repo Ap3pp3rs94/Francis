@@ -10897,6 +10897,23 @@ function SystemPanel(props: {
                       ) : null}
                     </div>
                   ) : null}
+                  {source.latest_snapshot ? (
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                      branch <code>{source.latest_snapshot.branch || "unknown"}</code>
+                      {source.latest_snapshot.head ? (
+                        <>
+                          {" / "}head <code>{source.latest_snapshot.head}</code>
+                        </>
+                      ) : null}
+                      {" / "}dirty <code>{source.latest_snapshot.dirty ? "true" : "false"}</code>
+                      {" / "}changed <code>{source.latest_snapshot.changed_count}</code>
+                      {source.latest_snapshot.upstream ? (
+                        <>
+                          {" / "}upstream <code>{source.latest_snapshot.upstream}</code>
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {source.blocked_by.length > 0 ? (
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
                       {source.blocked_by.map((blocker) => (

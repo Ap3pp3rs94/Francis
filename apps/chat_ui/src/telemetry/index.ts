@@ -19,6 +19,7 @@ export type TelemetrySourceStatus = {
   blocked_by: string[];
   authority: Record<string, boolean>;
   latest_event?: TelemetryTerminalEventSummary | null;
+  latest_snapshot?: TelemetryGitSnapshotSummary | null;
   routes: Record<string, string>;
 };
 
@@ -33,6 +34,18 @@ export type TelemetryTerminalEventSummary = {
   trace_id: string;
   run_id: string;
   artifact_dir: string;
+};
+
+export type TelemetryGitSnapshotSummary = {
+  branch: string;
+  head: string;
+  upstream: string;
+  ahead: number;
+  behind: number;
+  dirty: boolean;
+  changed_count: number;
+  changed_paths: Array<{ status: string; path: string }>;
+  ts?: number;
 };
 
 export type TelemetryStatusSnapshot = {
@@ -155,6 +168,7 @@ function parseTelemetrySource(value: unknown): TelemetrySourceStatus | null {
     blocked_by: safeStringArray(value.blocked_by),
     authority: booleanRecord(value.authority),
     latest_event: parseTerminalEventSummary(value.latest_event),
+    latest_snapshot: parseGitSnapshotSummary(value.latest_snapshot),
     routes: stringRecord(value.routes),
   };
 }
@@ -199,6 +213,31 @@ function parseTerminalEventSummary(value: unknown): TelemetryTerminalEventSummar
     trace_id: safeString(value.trace_id, ""),
     run_id: safeString(value.run_id, ""),
     artifact_dir: safeString(value.artifact_dir, ""),
+  };
+}
+
+function parseGitSnapshotSummary(value: unknown): TelemetryGitSnapshotSummary | null {
+  if (!isRecord(value)) return null;
+  return {
+    branch: safeString(value.branch, ""),
+    head: safeString(value.head, ""),
+    upstream: safeString(value.upstream, ""),
+    ahead: safeNumber(value.ahead, 0),
+    behind: safeNumber(value.behind, 0),
+    dirty: safeBoolean(value.dirty, false),
+    changed_count: safeNumber(value.changed_count, 0),
+    changed_paths: Array.isArray(value.changed_paths)
+      ? value.changed_paths.map(parseGitChangedPath).filter((item): item is { status: string; path: string } => item !== null)
+      : [],
+    ts: safeNumberOrUndefined(value.ts),
+  };
+}
+
+function parseGitChangedPath(value: unknown): { status: string; path: string } | null {
+  if (!isRecord(value)) return null;
+  return {
+    status: safeString(value.status, ""),
+    path: safeString(value.path, ""),
   };
 }
 
