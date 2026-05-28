@@ -10875,7 +10875,28 @@ function SystemPanel(props: {
                     {" / "}visible <code>{source.visible_indicator ? "true" : "false"}</code>
                     {" / "}hidden sensing <code>{source.hidden_sensing ? "true" : "false"}</code>
                     {" / "}raw events <code>{source.retention.stores_raw_events === true ? "true" : "false"}</code>
+                    {" / "}events <code>{safeNumber(source.retention.event_count, 0)}</code>
                   </div>
+                  {source.latest_event ? (
+                    <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                      latest <code>{source.latest_event.event_id || "event"}</code>
+                      {typeof source.latest_event.exit_code === "number" ? (
+                        <>
+                          {" / "}exit <code>{source.latest_event.exit_code}</code>
+                        </>
+                      ) : null}
+                      {source.latest_event.operation_id ? (
+                        <>
+                          {" / "}operation <code>{source.latest_event.operation_id}</code>
+                        </>
+                      ) : null}
+                      {source.latest_event.artifact_dir ? (
+                        <>
+                          {" / "}artifact <code>{source.latest_event.artifact_dir}</code>
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {source.blocked_by.length > 0 ? (
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
                       {source.blocked_by.map((blocker) => (

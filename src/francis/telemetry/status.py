@@ -51,15 +51,17 @@ def telemetry_status_snapshot() -> dict[str, Any]:
     """Return the Stage 7 telemetry posture without starting any sensing."""
 
     sources = [_inactive_source(definition) for definition in _SOURCE_DEFINITIONS]
+    sources = [_apply_terminal_source_readback(source) for source in sources]
     active_source_total = sum(1 for source in sources if source["active"])
+    active = active_source_total > 0
 
     return {
         "ok": True,
         "kind": STAGE7_STATUS_KIND,
         "stage": STAGE7_TELEMETRY_STAGE,
-        "status": "inactive",
-        "active": False,
-        "claim": "telemetry_posture_contract_only",
+        "status": "active" if active else "inactive",
+        "active": active,
+        "claim": "telemetry_posture_contract_only" if not active else "explicit_telemetry_events_recorded",
         "ts": _now_s(),
         "source_total": len(sources),
         "active_source_total": active_source_total,
@@ -72,14 +74,14 @@ def telemetry_status_snapshot() -> dict[str, Any]:
             "stores_raw_secret_values": False,
         },
         "retention": {
-            "status": "none",
+            "status": "bounded_redacted_events" if active else "none",
             "stores_raw_events": False,
-            "event_count": 0,
+            "event_count": sum(_event_count(source) for source in sources),
             "raw_terminal_retention": "none",
             "raw_ide_retention": "none",
         },
         "sensing": {
-            "status": "inactive",
+            "status": "explicit_events_recorded" if active else "inactive",
             "visible_indicator": True,
             "hidden_sensing": False,
             "active_source_total": active_source_total,
@@ -136,6 +138,35 @@ def _inactive_source(definition: dict[str, Any]) -> dict[str, Any]:
         "blocked_by": list(definition["blocked_by"]),
         "authority": authority,
     }
+
+
+def _apply_terminal_source_readback(source: dict[str, Any]) -> dict[str, Any]:
+    if source.get("id") != "terminal":
+        return source
+    from francis.telemetry.terminal import terminal_source_snapshot
+
+    readback = terminal_source_snapshot()
+    updated = dict(source)
+    updated["status"] = readback["status"]
+    updated["active"] = readback["active"]
+    updated["blocked_by"] = readback["blocked_by"]
+    updated["signals"] = readback["signals"]
+    updated["retention"] = readback["retention"]
+    updated["scope"] = readback["scope"]
+    updated["latest_event"] = readback["latest_event"]
+    updated["routes"] = readback["routes"]
+    return updated
+
+
+def _event_count(source: dict[str, Any]) -> int:
+    retention = source.get("retention")
+    if not isinstance(retention, dict):
+        return 0
+    value = retention.get("event_count")
+    try:
+        return max(0, int(value))
+    except Exception:
+        return 0
 
 
 def _now_s() -> int:

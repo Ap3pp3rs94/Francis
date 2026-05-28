@@ -41825,6 +41825,49 @@ Latest validation for Stage 7 operator readback:
 - `npm run build` from `apps/chat_ui`
   Result: `passed`
 
+### 2026-05-28 - Stage 7 terminal telemetry records explicit outcomes only
+
+Roadmap area: Stage 7 / Telemetry MVP, terminal connector.
+
+Material change:
+
+- Terminal telemetry now has a governed outcome recorder behind
+  `/telemetry/terminal/events`. The route requires the narrow
+  `telemetry.terminal.write` actor scope before any event is stored.
+- The terminal source remains denied by default and explicitly does not tail
+  terminals, capture stdout/stderr, execute commands, write memory, or grant
+  approval authority. It stores only redacted command outcome metadata and
+  optional receipt/reference handles supplied by a governed caller.
+- `/telemetry/terminal/scope` exposes the terminal write posture without writing
+  state, and `/telemetry/terminal/events` returns bounded redacted event
+  history.
+- `/telemetry/status` now folds in terminal event count and latest explicit
+  outcome summary so the operator can distinguish no events, explicit recorded
+  outcomes, and hidden capture claims.
+- The chat UI telemetry source card now shows per-source event counts and the
+  latest explicit terminal outcome reference when one exists.
+
+Latest validation for Stage 7 terminal connector start:
+
+- `python -m pytest tests/test_api_telemetry.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short`
+  Result: `passed; 6 passed`
+- `python -m ruff check src/francis/telemetry/terminal.py
+  src/francis/telemetry/status.py src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/telemetry/terminal.py
+  src/francis/telemetry/status.py src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `node --test --experimental-strip-types src/telemetry/index.test.ts`
+  Result: `passed; 2 passed`
+- `npm run test` from `apps/chat_ui`
+  Result: `passed; 109 passed`
+- `npm run build` from `apps/chat_ui`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

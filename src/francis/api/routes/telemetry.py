@@ -3,12 +3,117 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter
+from pydantic import BaseModel, Field
 
+from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.telemetry.status import telemetry_status_snapshot
+from francis.telemetry.terminal import (
+    TERMINAL_WRITE_SCOPE,
+    record_terminal_event,
+    terminal_events_snapshot,
+    terminal_scope_snapshot,
+)
 
 router = APIRouter()
+
+
+class TerminalEventIn(BaseModel):
+    actor: str | None = None
+    reason: str = ""
+    command: str = ""
+    cwd: str | None = None
+    shell: str | None = None
+    exit_code: int | None = None
+    duration_ms: int | None = None
+    started_ts: int | float | None = None
+    completed_ts: int | float | None = None
+    operation_id: str | None = None
+    approval_id: str | None = None
+    trace_id: str | None = None
+    run_id: str | None = None
+    artifact_dir: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    meta: dict[str, Any] = Field(default_factory=dict)
 
 
 @router.get("/status")
 def status() -> dict[str, Any]:
     return telemetry_status_snapshot()
+
+
+@router.get("/terminal/scope")
+def terminal_scope(actor: str = "") -> dict[str, Any]:
+    permission = _terminal_write_permission(actor, route="/telemetry/terminal/events", method="POST")
+    return terminal_scope_snapshot(actor=actor, permission=_permission_projection(permission))
+
+
+@router.get("/terminal/events")
+def terminal_events(limit: int = 20) -> dict[str, Any]:
+    return terminal_events_snapshot(limit=limit)
+
+
+@router.post("/terminal/events")
+def terminal_event(payload: TerminalEventIn) -> dict[str, Any]:
+    permission = _terminal_write_permission(payload.actor, route="/telemetry/terminal/events", method="POST")
+    if not permission.allowed:
+        return _permission_denied(permission)
+    item = record_terminal_event(
+        actor=payload.actor,
+        reason=payload.reason,
+        command=payload.command,
+        cwd=payload.cwd,
+        shell=payload.shell,
+        exit_code=payload.exit_code,
+        duration_ms=payload.duration_ms,
+        started_ts=payload.started_ts,
+        completed_ts=payload.completed_ts,
+        operation_id=payload.operation_id,
+        approval_id=payload.approval_id,
+        trace_id=payload.trace_id,
+        run_id=payload.run_id,
+        artifact_dir=payload.artifact_dir,
+        tags=payload.tags,
+        meta=payload.meta,
+    )
+    return {
+        "ok": True,
+        "kind": "francis.stage7.telemetry.terminal_event.recorded",
+        "status": "recorded",
+        "source_id": "terminal",
+        "item": item,
+        "governance": {
+            "gate": "permission_gate",
+            "required_scope": TERMINAL_WRITE_SCOPE,
+            "redacted_before_storage": True,
+            "stores_stdout_stderr": False,
+            "grants_execution_authority": False,
+            "grants_memory_write_authority": False,
+        },
+    }
+
+
+def _terminal_write_permission(actor: Any, *, route: str, method: str) -> ApiPermissionDecision:
+    return ApiPermissionGate.from_env().check(
+        actor_id=actor,
+        required_scopes=[TERMINAL_WRITE_SCOPE],
+        route=route,
+        method=method,
+    )
+
+
+def _permission_denied(decision: ApiPermissionDecision) -> dict[str, object]:
+    return {
+        "ok": False,
+        "status": "denied",
+        "error": "api_permission_denied",
+        "governance": {
+            "gate": "permission_gate",
+            "reason": decision.reason,
+            "next_step": "configure_telemetry_write_actor_scope_before_recording_terminal_events",
+            "evidence": decision.evidence,
+        },
+    }
+
+
+def _permission_projection(decision: ApiPermissionDecision) -> dict[str, Any]:
+    return {"allowed": decision.allowed, "reason": decision.reason, "evidence": decision.evidence}

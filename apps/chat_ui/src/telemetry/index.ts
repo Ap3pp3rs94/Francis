@@ -18,6 +18,21 @@ export type TelemetrySourceStatus = {
   expected_signals: string[];
   blocked_by: string[];
   authority: Record<string, boolean>;
+  latest_event?: TelemetryTerminalEventSummary | null;
+  routes: Record<string, string>;
+};
+
+export type TelemetryTerminalEventSummary = {
+  event_id: string;
+  recorded_ts?: number;
+  exit_code?: number | null;
+  cwd: string;
+  command: string;
+  operation_id: string;
+  approval_id: string;
+  trace_id: string;
+  run_id: string;
+  artifact_dir: string;
 };
 
 export type TelemetryStatusSnapshot = {
@@ -139,6 +154,8 @@ function parseTelemetrySource(value: unknown): TelemetrySourceStatus | null {
     expected_signals: safeStringArray(value.expected_signals),
     blocked_by: safeStringArray(value.blocked_by),
     authority: booleanRecord(value.authority),
+    latest_event: parseTerminalEventSummary(value.latest_event),
+    routes: stringRecord(value.routes),
   };
 }
 
@@ -157,6 +174,32 @@ function booleanRecord(value: unknown): Record<string, boolean> {
     out[key] = safeBoolean(raw, false);
   }
   return out;
+}
+
+function stringRecord(value: unknown): Record<string, string> {
+  if (!isRecord(value)) return {};
+  const out: Record<string, string> = {};
+  for (const [key, raw] of Object.entries(value)) {
+    const text = safeString(raw, "").trim();
+    if (text) out[key] = text;
+  }
+  return out;
+}
+
+function parseTerminalEventSummary(value: unknown): TelemetryTerminalEventSummary | null {
+  if (!isRecord(value)) return null;
+  return {
+    event_id: safeString(value.event_id, ""),
+    recorded_ts: safeNumberOrUndefined(value.recorded_ts),
+    exit_code: value.exit_code === null ? null : safeNumberOrUndefined(value.exit_code),
+    cwd: safeString(value.cwd, ""),
+    command: safeString(value.command, ""),
+    operation_id: safeString(value.operation_id, ""),
+    approval_id: safeString(value.approval_id, ""),
+    trace_id: safeString(value.trace_id, ""),
+    run_id: safeString(value.run_id, ""),
+    artifact_dir: safeString(value.artifact_dir, ""),
+  };
 }
 
 function safeString(value: unknown, fallback = ""): string {

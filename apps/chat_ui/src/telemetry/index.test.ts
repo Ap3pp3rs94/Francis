@@ -62,6 +62,21 @@ test("parseTelemetryStatus preserves inactive Stage 7 source truth", () => {
         expected_signals: ["command", "cwd"],
         blocked_by: ["connector_not_configured", "operator_scope_not_granted"],
         authority: { telemetry_collection: false, execution_authority: false },
+        latest_event: {
+          event_id: "tel_terminal_123",
+          recorded_ts: 123,
+          exit_code: 0,
+          cwd: "D:/Francis",
+          command: "echo [REDACTED:secret]",
+          operation_id: "op_terminal",
+          approval_id: "apr_terminal",
+          trace_id: "trace_terminal",
+          run_id: "run_terminal",
+          artifact_dir: "supervised_exec/apr_terminal",
+        },
+        routes: {
+          record: "/telemetry/terminal/events",
+        },
       },
     ],
     redaction: { status: "ready" },
@@ -80,6 +95,9 @@ test("parseTelemetryStatus preserves inactive Stage 7 source truth", () => {
   assert.equal(status.sources[0]?.hidden_sensing, false);
   assert.equal(status.sources[0]?.scope.status, "not_granted");
   assert.deepEqual(status.sources[0]?.blocked_by, ["connector_not_configured", "operator_scope_not_granted"]);
+  assert.equal(status.sources[0]?.latest_event?.event_id, "tel_terminal_123");
+  assert.equal(status.sources[0]?.latest_event?.operation_id, "op_terminal");
+  assert.equal(status.sources[0]?.routes.record, "/telemetry/terminal/events");
   assert.equal(status.governance.telemetry_collection, false);
 });
 
