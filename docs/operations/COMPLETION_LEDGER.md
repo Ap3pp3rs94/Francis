@@ -41390,6 +41390,32 @@ Latest validation for OS-binding blocker proof consumption:
   tests/test_lens_command_palette_os_binding_proof_script.py`
   Result: `passed; 3 files already formatted`
 
+### 2026-05-28 - Stage 6 resident-claim blocker readback keeps array shape
+
+Roadmap area: Stage 6 / Lens MVP, resident-surface proof contract stability.
+
+Material change:
+
+- `scripts/lens-resident-surface-proof.ps1` now emits
+  `resident_claim_authority_blockers` as a string array even when the list is
+  empty, preventing Windows PowerShell from serializing the empty blocker set as
+  `{}`.
+- Stage 6 remains active and blocked. This does not change authority, execute
+  resident-claim behavior, or close any remaining Stage 6 acceptance criterion.
+
+Latest validation for resident-claim blocker array readback:
+
+- `python -m pytest tests/test_lens_resident_surface_proof_script.py
+  tests/test_lens_command_palette_os_binding_proof_script.py -q --tb=short`
+  Result: `passed; 4 passed`
+- `python -m ruff check tests/test_lens_resident_surface_proof_script.py
+  tests/test_lens_command_palette_os_binding_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests/test_lens_resident_surface_proof_script.py
+  tests/test_lens_command_palette_os_binding_proof_script.py`
+  Result: `passed; 2 files already formatted`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
