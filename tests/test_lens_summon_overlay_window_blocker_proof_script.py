@@ -41,6 +41,10 @@ def test_lens_summon_overlay_window_uses_tray_presence_contract_readback() -> No
     script = (_repo_root() / "scripts" / "lens-summon-overlay-window-blocker-proof.ps1").read_text(encoding="utf-8")
 
     assert "blocked_family_handoffs[tray_presence]" in script
+    assert "$SummonOverlayFamilyRuntimeReadbackObserved" in script
+    assert "$TrayPresenceRuntimeReadbackObserved" in script
+    assert "summon_anywhere_blockers.surface_runtime_readback_observed" in script
+    assert "'-StatusPath', $StatusPath" in script
     assert "$TrayPresenceBridgeScript" not in script
     assert "ScriptPath $TrayPresenceBridgeScript" not in script
 

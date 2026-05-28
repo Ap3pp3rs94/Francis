@@ -2,7 +2,9 @@ param(
   [ValidateSet('Status')]
   [string]$Mode = 'Status',
 
-  [string]$DataDir = ''
+  [string]$DataDir = '',
+
+  [string]$StatusPath = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -159,7 +161,11 @@ if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
   $ChildDataRoot = [System.IO.Path]::GetFullPath($DataDir)
 }
 
-$SummonResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonBlockersScript -ScriptArgs @('-Mode', 'Status') -DataRoot $ChildDataRoot
+$SummonArgs = @('-Mode', 'Status')
+if (-not [string]::IsNullOrWhiteSpace($StatusPath)) {
+  $SummonArgs += @('-StatusPath', $StatusPath)
+}
+$SummonResult = Invoke-JsonScript -PowerShellPath $PowerShell.Source -ScriptPath $SummonBlockersScript -ScriptArgs $SummonArgs -DataRoot $ChildDataRoot
 $SummonPayload = $SummonResult.payload
 $SummonBlockerGroups = Get-PropertyValue -Payload $SummonPayload -Name 'blocker_groups'
 $SummonBlockedFamilies = ConvertTo-StringArray -Value (
@@ -169,6 +175,12 @@ $SummonFamilyHandoffs = Get-PropertyValue -Payload $SummonPayload -Name 'blocked
 $TrayPresenceFamilyHandoff = Get-HandoffById -Handoffs $SummonFamilyHandoffs -Id 'tray_presence'
 $TrayPresenceFamilyBlockers = ConvertTo-StringArray -Value (
   Get-PropertyValue -Payload $TrayPresenceFamilyHandoff -Name 'blockers' -Default @()
+)
+$SummonSurfaceRuntimeReadbackObserved = Get-PropertyValue -Payload $SummonPayload -Name 'surface_runtime_readback_observed' -Default ([ordered]@{})
+$SummonSurfaceRuntimeSuppressedBlockers = Get-PropertyValue -Payload $SummonPayload -Name 'surface_runtime_suppressed_blockers' -Default ([ordered]@{})
+$TrayPresenceRuntimeObserved = [bool](Get-PropertyValue -Payload $SummonSurfaceRuntimeReadbackObserved -Name 'tray_presence' -Default $false)
+$TrayPresenceRuntimeSuppressedBlockers = ConvertTo-StringArray -Value (
+  Get-PropertyValue -Payload $SummonSurfaceRuntimeSuppressedBlockers -Name 'tray_presence' -Default @()
 )
 $SummonOverlayBlockers = ConvertTo-StringArray -Value (
   Get-PropertyValue -Payload $SummonBlockerGroups -Name 'overlay_window' -Default @()
@@ -190,7 +202,7 @@ $OverlayBoundaryBlockers = ConvertTo-StringArray -Value (
   Get-PropertyValue -Payload $OverlayBoundaryPayload -Name 'blockers' -Default @()
 )
 
-$SummonOverlayFamilyObserved = (
+$SummonOverlayFamilyObservedLegacy = (
   [int]$SummonResult.exit_code -eq 0 -and
   [string](Get-PropertyValue -Payload $SummonPayload -Name 'kind' -Default '') -eq 'lens.summon_anywhere_blockers.proof' -and
   [string](Get-PropertyValue -Payload $SummonPayload -Name 'status' -Default '') -eq 'proof_passed' -and
@@ -200,7 +212,23 @@ $SummonOverlayFamilyObserved = (
   $OverlayWindowFamilyIndex -eq ($TrayPresenceFamilyIndex + 1) -and
   $SummonOverlayBlockers -contains 'overlay_window_missing'
 )
-$TrayPresenceContractReadbackObserved = (
+$SummonOverlayFamilyRuntimeReadbackObserved = (
+  [int]$SummonResult.exit_code -eq 0 -and
+  [string](Get-PropertyValue -Payload $SummonPayload -Name 'kind' -Default '') -eq 'lens.summon_anywhere_blockers.proof' -and
+  [string](Get-PropertyValue -Payload $SummonPayload -Name 'status' -Default '') -eq 'proof_passed' -and
+  [string](Get-PropertyValue -Payload $SummonPayload -Name 'acceptance_criterion' -Default '') -eq 'summon_anywhere' -and
+  [string](Get-PropertyValue -Payload $SummonPayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'summon_anywhere_blockers' -and
+  $TrayPresenceRuntimeObserved -and
+  -not ($SummonBlockedFamilies -contains 'tray_presence') -and
+  $OverlayWindowFamilyIndex -eq 0 -and
+  [string](Get-PropertyValue -Payload $SummonPayload -Name 'first_blocker_family' -Default '') -eq 'overlay_window' -and
+  $SummonOverlayBlockers -contains 'overlay_window_missing'
+)
+$SummonOverlayFamilyObserved = (
+  $SummonOverlayFamilyObservedLegacy -or
+  $SummonOverlayFamilyRuntimeReadbackObserved
+)
+$TrayPresenceContractReadbackObservedLegacy = (
   [string](Get-PropertyValue -Payload $TrayPresenceFamilyHandoff -Name 'id' -Default '') -eq 'tray_presence' -and
   [string](Get-PropertyValue -Payload $TrayPresenceFamilyHandoff -Name 'status' -Default '') -eq 'blocked' -and
   [string](Get-PropertyValue -Payload $TrayPresenceFamilyHandoff -Name 'proof_script' -Default '') -eq 'scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status' -and
@@ -213,6 +241,15 @@ $TrayPresenceContractReadbackObserved = (
   -not [bool](Get-PropertyValue -Payload $TrayPresenceFamilyHandoff -Name 'would_execute' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $TrayPresenceFamilyHandoff -Name 'would_mutate' -Default $true) -and
   $TrayPresenceFamilyBlockers -contains 'tray_host_missing'
+)
+$TrayPresenceRuntimeReadbackObserved = (
+  $TrayPresenceRuntimeObserved -and
+  -not ($SummonBlockedFamilies -contains 'tray_presence') -and
+  $TrayPresenceRuntimeSuppressedBlockers -contains 'tray_host_missing'
+)
+$TrayPresenceContractReadbackObserved = (
+  $TrayPresenceContractReadbackObservedLegacy -or
+  $TrayPresenceRuntimeReadbackObserved
 )
 $OverlayBoundaryObserved = (
   [int]$OverlayBoundaryResult.exit_code -eq 0 -and
@@ -322,26 +359,26 @@ $Payload = [ordered]@{
   previous_tray_presence_contract_observed = $TrayPresenceContractReadbackObserved
   previous_tray_presence_contract_readback_observed = $TrayPresenceContractReadbackObserved
   previous_tray_presence_contract = [ordered]@{
-    source = 'summon_anywhere_blockers.blocked_family_handoffs'
-    status = 'contract_projected'
-    contract_status = [string](Get-PropertyValue -Payload $TrayPresenceFamilyHandoff -Name 'status' -Default 'missing')
-    proof_script = [string](Get-PropertyValue -Payload $TrayPresenceFamilyHandoff -Name 'proof_script' -Default '')
+    source = $(if ($TrayPresenceRuntimeReadbackObserved) { 'summon_anywhere_blockers.surface_runtime_readback_observed' } else { 'summon_anywhere_blockers.blocked_family_handoffs' })
+    status = $(if ($TrayPresenceRuntimeReadbackObserved) { 'runtime_readback_resolved' } else { 'contract_projected' })
+    contract_status = $(if ($TrayPresenceRuntimeReadbackObserved) { 'resolved' } else { [string](Get-PropertyValue -Payload $TrayPresenceFamilyHandoff -Name 'status' -Default 'missing') })
+    proof_script = $(if ($TrayPresenceRuntimeReadbackObserved) { 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status' } else { [string](Get-PropertyValue -Payload $TrayPresenceFamilyHandoff -Name 'proof_script' -Default '') })
     previous_summon_blocker_family = 'resident_host'
-    summon_tray_presence_blocker_family = [string](Get-PropertyValue -Payload $TrayPresenceFamilyHandoff -Name 'id' -Default '')
+    summon_tray_presence_blocker_family = $(if ($TrayPresenceRuntimeReadbackObserved) { 'tray_presence' } else { [string](Get-PropertyValue -Payload $TrayPresenceFamilyHandoff -Name 'id' -Default '') })
     next_summon_blocker_family = 'overlay_window'
     summon_next_smallest_truthful_gap = 'summon_anywhere_blockers'
-    next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $TrayPresenceFamilyHandoff -Name 'next_smallest_truthful_gap' -Default '')
-    route = [string](Get-PropertyValue -Payload $TrayPresenceFamilyHandoff -Name 'route' -Default '')
-    readiness_route = [string](Get-PropertyValue -Payload $TrayPresenceFamilyHandoff -Name 'readiness_route' -Default '')
-    authority_required = [string](Get-PropertyValue -Payload $TrayPresenceFamilyHandoff -Name 'authority_required' -Default '')
-    authority_granted = [bool](Get-PropertyValue -Payload $TrayPresenceFamilyHandoff -Name 'authority_granted' -Default $false)
-    read_only_contract = [bool](Get-PropertyValue -Payload $TrayPresenceFamilyHandoff -Name 'read_only_contract' -Default $false)
-    diagnostic_only = [bool](Get-PropertyValue -Payload $TrayPresenceFamilyHandoff -Name 'diagnostic_only' -Default $false)
-    would_execute = [bool](Get-PropertyValue -Payload $TrayPresenceFamilyHandoff -Name 'would_execute' -Default $false)
-    would_mutate = [bool](Get-PropertyValue -Payload $TrayPresenceFamilyHandoff -Name 'would_mutate' -Default $false)
+    next_smallest_truthful_gap = $(if ($TrayPresenceRuntimeReadbackObserved) { 'summon_overlay_window_blocker_boundary' } else { [string](Get-PropertyValue -Payload $TrayPresenceFamilyHandoff -Name 'next_smallest_truthful_gap' -Default '') })
+    route = $(if ($TrayPresenceRuntimeReadbackObserved) { '/lens/tray' } else { [string](Get-PropertyValue -Payload $TrayPresenceFamilyHandoff -Name 'route' -Default '') })
+    readiness_route = $(if ($TrayPresenceRuntimeReadbackObserved) { '/lens/tray/readiness' } else { [string](Get-PropertyValue -Payload $TrayPresenceFamilyHandoff -Name 'readiness_route' -Default '') })
+    authority_required = $(if ($TrayPresenceRuntimeReadbackObserved) { 'none_runtime_readback' } else { [string](Get-PropertyValue -Payload $TrayPresenceFamilyHandoff -Name 'authority_required' -Default '') })
+    authority_granted = $(if ($TrayPresenceRuntimeReadbackObserved) { $false } else { [bool](Get-PropertyValue -Payload $TrayPresenceFamilyHandoff -Name 'authority_granted' -Default $false) })
+    read_only_contract = $(if ($TrayPresenceRuntimeReadbackObserved) { $true } else { [bool](Get-PropertyValue -Payload $TrayPresenceFamilyHandoff -Name 'read_only_contract' -Default $false) })
+    diagnostic_only = $(if ($TrayPresenceRuntimeReadbackObserved) { $true } else { [bool](Get-PropertyValue -Payload $TrayPresenceFamilyHandoff -Name 'diagnostic_only' -Default $false) })
+    would_execute = $(if ($TrayPresenceRuntimeReadbackObserved) { $false } else { [bool](Get-PropertyValue -Payload $TrayPresenceFamilyHandoff -Name 'would_execute' -Default $false) })
+    would_mutate = $(if ($TrayPresenceRuntimeReadbackObserved) { $false } else { [bool](Get-PropertyValue -Payload $TrayPresenceFamilyHandoff -Name 'would_mutate' -Default $false) })
     handoff_aligned = $TrayPresenceContractReadbackObserved
     side_effects_denied = $TrayPresenceContractReadbackObserved
-    blockers = [string[]]@($TrayPresenceFamilyBlockers)
+    blockers = [string[]]@($(if ($TrayPresenceRuntimeReadbackObserved) { $TrayPresenceRuntimeSuppressedBlockers } else { $TrayPresenceFamilyBlockers }))
   }
   overlay_window_boundary_observed = $OverlayBoundaryObserved
   handoff_aligned = $HandoffAligned

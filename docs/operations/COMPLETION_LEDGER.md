@@ -42161,6 +42161,70 @@ Latest validation for Stage 6 seeded-runtime proof consumption:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-28 - Stage 6 summon surface runtime readbacks consume overlay and hotkey handoffs
+
+Roadmap area: Stage 6 / Lens MVP, summon-anywhere and system-resident
+acceptance proof consumption.
+
+Material change:
+
+- The overlay-window blocker proof now consumes the aggregate summon runtime
+  readback when tray presence is already observed and suppressed from the
+  blocked family chain.
+- The global-hotkey blocker proof now consumes aggregate summon runtime
+  readbacks when global hotkey and summon binding are already observed and
+  suppressed from the blocked family chain, then hands forward to the authority
+  blocker without granting authority.
+- Both proof paths preserve read-only, diagnostic-only behavior and add no
+  summon, hotkey, overlay, process, service, resident-claim, or memory-write
+  authority.
+- The full Stage 6 completion audit now consumes the updated summon-family
+  readbacks and still truthfully reports Stage 6 as blocked, with
+  `ready_to_close=false`, `transition_allowed=false`,
+  `stage6_completion_reviewed=true`, and
+  `next_smallest_truthful_gap=system_resident_presence_blockers`.
+- The remaining acceptance blockers are still `summon_anywhere` and
+  `system_resident_presence`; the concrete next slice remains
+  `resolve_overlay_window_before_persistent_supervision_enablement`, backed by
+  `scripts/lens-summon-overlay-window-blocker-proof.ps1 -Mode Status`.
+- This does not mark Stage 6 closed and does not start Stage 7.
+
+Latest validation for Stage 6 summon surface runtime readback consumption:
+
+- `.\scripts\lens-summon-overlay-window-blocker-proof.ps1 -Mode Status`
+  Result: `passed; proof_passed, next_smallest_truthful_gap=summon_global_hotkey_binding_blocker_boundary`
+- `.\scripts\lens-summon-global-hotkey-binding-blocker-proof.ps1 -Mode Status`
+  Result: `passed; proof_passed, next_smallest_truthful_gap=stage6_lens_completion_audit,
+  summon_binding_resolved_to_authority_handoff=true`
+- `.\scripts\lens-summon-authority-blocker-proof.ps1 -Mode Status`
+  Result: `passed; proof_passed, next_smallest_truthful_gap=stage6_lens_completion_audit`
+- `.\scripts\lens-summon-anywhere-family-chain-proof.ps1 -Mode Status`
+  Result: `passed; proof_passed, blocked_families=overlay_window,authority,
+  all_summon_blocker_families_consumed=true`
+- `.\scripts\lens-stage6-completion-audit.ps1 -Mode Status
+  -AllowLaunchOnHotkey -ChildProofTimeoutSeconds 240`
+  Result: `passed as command; returned blocked/active,
+  ready_to_close=false, transition_allowed=false,
+  stage6_completion_reviewed=true,
+  next_smallest_truthful_gap=system_resident_presence_blockers,
+  recommended_concrete_next_slice=resolve_overlay_window_before_persistent_supervision_enablement`
+- PowerShell parser check for
+  `scripts/lens-summon-overlay-window-blocker-proof.ps1` and
+  `scripts/lens-summon-global-hotkey-binding-blocker-proof.ps1`
+  Result: `passed; parser_ok`
+- `python -m pytest tests/test_lens_summon_overlay_window_blocker_proof_script.py
+  tests/test_lens_summon_global_hotkey_binding_blocker_proof_script.py -q
+  --tb=short --maxfail=1`
+  Result: `passed`
+- `python -m ruff check
+  tests/test_lens_summon_overlay_window_blocker_proof_script.py
+  tests/test_lens_summon_global_hotkey_binding_blocker_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests/test_lens_summon_overlay_window_blocker_proof_script.py
+  tests/test_lens_summon_global_hotkey_binding_blocker_proof_script.py`
+  Result: `passed; 2 files already formatted`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
