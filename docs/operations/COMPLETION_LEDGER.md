@@ -43520,6 +43520,47 @@ Latest validation for Stage 6 summon preflight live-hotkey readback:
   tests/test_lens_summon_tray_presence_blocker_proof_script.py`
   Result: `passed; 2 files already formatted`
 
+### 2026-05-29 - Stage 6 completion audit consumes current delegated summon readbacks
+
+Roadmap area: Stage 6 / Lens MVP, completion-audit truthfulness for delegated
+development authority and current runtime readbacks.
+
+Material change:
+
+- `scripts/lens-stage6-completion-audit.ps1` now consumes the current
+  delegated-development summon posture instead of requiring stale authority
+  denial blockers after those authorities have already been granted in
+  `config/runtime/lens/summon.json`.
+- The completion audit now handles PowerShell scalar-unrolling safely for
+  summon blocker family arrays by indexing through `@(...)` before string
+  casts.
+- The completion audit now accepts aggregate summon-anywhere, summon-authority,
+  and family-chain proofs where tray, global hotkey, and summon binding have
+  live runtime readbacks and only `overlay_window` remains as the current
+  summon blocker family.
+- This change only corrects audit consumption and test contracts. It does not
+  grant new authority, launch resident surfaces, mark Stage 6 closed, write
+  memory, or create stage-closure receipts.
+
+Latest validation for Stage 6 completion-audit delegated summon readbacks:
+
+- PowerShell parser validation for
+  `scripts/lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `python -m pytest tests/test_lens_stage6_completion_audit_script.py -q
+  --tb=short --maxfail=1`
+  Result: `passed; 50 passed, 1 skipped`
+- `python -m ruff check tests/test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 1 file already formatted`
+- Live `scripts/lens-stage6-completion-audit.ps1 -Mode Status
+  -AllowLaunchOnHotkey -ChildProofTimeoutSeconds 240`
+  Result: `blocked; ready_to_close=false; transition_allowed=false;
+  stage6_completion_reviewed=true; next_smallest_truthful_gap=
+  resident_surface_runtime_not_supervised; ready_total=2; blocked_total=3;
+  blocker_total=69`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

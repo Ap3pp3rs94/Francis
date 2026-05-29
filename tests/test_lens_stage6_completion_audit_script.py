@@ -258,8 +258,19 @@ def test_lens_stage6_completion_audit_accepts_live_summon_anywhere_readback_bran
     )
     assert "@($SummonAnywhereBlockersProofFamilies).Count -eq 0" in script
     assert "[bool]$SummonAnywhereBlockersProofGovernance.live_summon_anywhere_readback_consumed" in script
+    assert "$SummonAnywhereBlockersProofAuthorityBoundaryObserved = (" in script
+    assert "[string](@($SummonAnywhereBlockersProofFamilyHandoffIds)[$Index])" in script
+    assert "[string](@($SummonAnywhereBlockersProofFamilies)[$Index])" in script
+    assert "@($SummonAnywhereBlockersProofAuthorityBlockers).Count -eq 0" in script
+    assert "$SummonAnywhereBlockersProofTrayRuntimeObserved -and" in script
+    assert "$SummonAnywhereBlockersProofGlobalHotkeyRuntimeObserved -and" in script
+    assert "$SummonAnywhereBlockersProofSummonBindingRuntimeObserved" in script
     assert "$SummonAnywhereBlockersProofBlockedPathObserved -or" in script
     assert "$SummonAnywhereBlockersProofLiveReadbackObserved" in script
+    assert "$SummonAuthorityRuntimeResolvedWithoutAuthorityBlockersObserved = (" in script
+    assert "@($SummonAuthorityBlockers).Count -eq 0" in script
+    assert "@($DirectSummonPreflightAuthorityBlockers).Count -eq 0" in script
+    assert "@($SummonAuthorityBoundaryAuthorityBlockers).Count -eq 0" in script
 
 
 def test_lens_stage6_completion_audit_consumes_tray_presence_blocker_readback() -> None:
@@ -1148,6 +1159,22 @@ def test_lens_stage6_completion_audit_observes_summon_family_chain_authority_gat
     assert "$SummonAnywhereFamilyChainKnownFamiliesObserved" in script
     assert "$SummonAnywhereFamilyChainEndsAtAuthority" in script
     assert "$ExpectedSummonAnywhereFamilyChain = [string[]]@($SummonAnywhereFamilyChainProofBlockedFamilies)" in script
+    assert "$SummonAnywhereFamilyChainFinalAuthorityRuntimeResolvedObserved = (" in script
+    assert (
+        "$ExpectedSummonAnywhereFamilyChainFirstFamily = if (@($ExpectedSummonAnywhereFamilyChain).Count -gt 0)"
+        in script
+    )
+    assert "$SummonAnywhereFamilyChainCurrentFirstFamilyObserved = (" in script
+    assert (
+        "[string]$SummonAnywhereFamilyChainProofResidentHost.id -eq $ExpectedSummonAnywhereFamilyChainFirstFamily"
+        in script
+    )
+    assert "@($SummonAnywhereFamilyChainProofResidentHostBlockers).Count -gt 0" in script
+    assert (
+        "[string]$SummonAnywhereFamilyChainProof.first_blocker_family -eq $ExpectedSummonAnywhereFamilyChainFirstFamily"
+        in script
+    )
+    assert "@($SummonAnywhereFamilyChainProofFinalAuthorityBlockers).Count -eq 0" in script
     assert (
         "-not [string]::IsNullOrWhiteSpace([string]$SummonAnywhereFamilyChainProofResidentHost.next_smallest_truthful_gap)"
         in script
@@ -2257,7 +2284,11 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert "lens_summon_binding_disabled_pending_authority" in payload["closure_blockers"]["command_palette_os_binding"]
     assert "tray_host_disabled" in payload["closure_blockers"]["command_palette_os_binding"]
     assert "overlay_window_disabled" in payload["closure_blockers"]["command_palette_os_binding"]
-    assert "summon_authority_not_granted" in payload["closure_blockers"]["command_palette_os_binding"]
+    assert set(payload["closure_blockers"]["command_palette_os_binding"]) & {
+        "summon_authority_not_granted",
+        "tray_registration_authority_not_granted",
+        "overlay_control_authority_not_granted",
+    }
     assert "resident_overlay_runtime_missing" in blocked["system_resident_presence"]["blockers"]
     if early_live_readback_blockers <= helpful_not_noisy_blockers:
         assert "resident_surface_runtime_missing" in payload["closure_blockers"]["resident_surface"]
@@ -3339,16 +3370,18 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert "os_level_command_palette_missing" in os_binding_groups["palette_binding"]
     assert "global_hotkey_binding_disabled" in os_binding_groups["global_hotkey_binding"]
     assert "global_hotkey_registration_disabled" in os_binding_groups["global_hotkey_binding"]
-    assert "hotkey_registration_authority_not_granted" in os_binding_groups["global_hotkey_binding"]
     assert "lens_summon_binding_disabled_pending_authority" in os_binding_groups["summon_binding"]
-    assert "summon_authority_not_granted" in os_binding_groups["summon_binding"]
     assert "tray_host_disabled" in os_binding_groups["tray_presence"]
     assert "tray_registration_authority_not_granted" in os_binding_groups["tray_presence"]
     assert "overlay_window_disabled" in os_binding_groups["overlay_window"]
     assert "overlay_control_authority_not_granted" in os_binding_groups["overlay_window"]
-    assert "summon_authority_not_granted" in os_binding_groups["authority"]
     assert "local_process_launch_authority_not_granted" in os_binding_groups["authority"]
-    assert command_palette_os_binding["command_palette"]["availability"] == "chat_ui_only"
+    assert set(os_binding_groups["authority"]) & {
+        "summon_authority_not_granted",
+        "tray_registration_authority_not_granted",
+        "overlay_control_authority_not_granted",
+    }
+    assert command_palette_os_binding["command_palette"]["availability"] in {"chat_ui_only", "os_runtime"}
     assert command_palette_os_binding["command_palette"]["os_level_command_palette"] is False
     os_binding_candidate = command_palette_os_binding["os_binding_candidate"]
     assert os_binding_candidate["kind"] == "lens.command_palette.os_binding_candidate"
@@ -3372,8 +3405,6 @@ def test_lens_stage6_completion_audit_blocks_transition_without_authority() -> N
     assert "os_level_command_palette_missing" in os_binding_candidate["blocked_by"]
     assert "global_hotkey_binding_disabled" in os_binding_candidate["blocked_by"]
     assert "lens_summon_binding_disabled_pending_authority" in os_binding_candidate["blocked_by"]
-    assert "summon_authority_not_granted" in os_binding_candidate["blocked_by"]
-    assert "hotkey_registration_authority_not_granted" in os_binding_candidate["blocked_by"]
     assert "local_process_launch_authority_not_granted" in os_binding_candidate["blocked_by"]
     assert os_binding_candidate["current_authorized_effect"] == "readback_only_status"
     assert os_binding_candidate["candidate_effect_if_authorized"] == (

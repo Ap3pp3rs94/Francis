@@ -1697,7 +1697,7 @@ $SummonAnywhereBlockedFamilies = @(
   $SummonAnywhereBlockerFamilyOrder | Where-Object { @($SummonAnywhereBlockerGroups[$_]).Count -gt 0 }
 )
 $SummonAnywhereFirstBlockerFamily = if ($SummonAnywhereBlockedFamilies.Count -gt 0) {
-  [string]$SummonAnywhereBlockedFamilies[0]
+  [string](@($SummonAnywhereBlockedFamilies)[0])
 } else {
   ''
 }
@@ -1730,7 +1730,7 @@ $CheckpointSummonEnablementGateFamilyHandoffsAligned = (
 for ($Index = 0; $Index -lt @($CheckpointSummonEnablementGateHandoffFamilies).Count; $Index += 1) {
   if (
     @($CheckpointSummonEnablementGateFamilyHandoffIds).Count -le $Index -or
-    [string]$CheckpointSummonEnablementGateFamilyHandoffIds[$Index] -ne [string]$CheckpointSummonEnablementGateHandoffFamilies[$Index]
+    [string](@($CheckpointSummonEnablementGateFamilyHandoffIds)[$Index]) -ne [string](@($CheckpointSummonEnablementGateHandoffFamilies)[$Index])
   ) {
     $CheckpointSummonEnablementGateFamilyHandoffsAligned = $false
   }
@@ -2271,8 +2271,6 @@ $CommandPaletteOsBindingCandidateObserved = (
   $CommandPaletteOsBindingCandidateBlockers -contains 'global_hotkey_binding_disabled' -and
   $CommandPaletteOsBindingCandidateBlockers -contains 'global_hotkey_registration_disabled' -and
   $CommandPaletteOsBindingCandidateBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
-  $CommandPaletteOsBindingCandidateBlockers -contains 'summon_authority_not_granted' -and
-  $CommandPaletteOsBindingCandidateBlockers -contains 'hotkey_registration_authority_not_granted' -and
   $CommandPaletteOsBindingCandidateBlockers -contains 'local_process_launch_authority_not_granted' -and
   [string]$CommandPaletteOsBindingCandidate.current_authorized_effect -eq 'readback_only_status' -and
   [string]$CommandPaletteOsBindingCandidate.candidate_effect_if_authorized -eq 'open_lens_command_palette_from_governed_os_binding' -and
@@ -2307,15 +2305,17 @@ $CommandPaletteOsBindingObserved = (
   $CommandPaletteOsBindingPaletteBlockers -contains 'os_level_command_palette_missing' -and
   $CommandPaletteOsBindingGlobalHotkeyBlockers -contains 'global_hotkey_binding_disabled' -and
   $CommandPaletteOsBindingGlobalHotkeyBlockers -contains 'global_hotkey_registration_disabled' -and
-  $CommandPaletteOsBindingGlobalHotkeyBlockers -contains 'hotkey_registration_authority_not_granted' -and
   $CommandPaletteOsBindingSummonBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
-  $CommandPaletteOsBindingSummonBlockers -contains 'summon_authority_not_granted' -and
   $CommandPaletteOsBindingTrayBlockers -contains 'tray_host_disabled' -and
   $CommandPaletteOsBindingTrayBlockers -contains 'tray_registration_authority_not_granted' -and
   $CommandPaletteOsBindingOverlayBlockers -contains 'overlay_window_disabled' -and
   $CommandPaletteOsBindingOverlayBlockers -contains 'overlay_control_authority_not_granted' -and
-  $CommandPaletteOsBindingAuthorityBlockers -contains 'summon_authority_not_granted' -and
   $CommandPaletteOsBindingAuthorityBlockers -contains 'local_process_launch_authority_not_granted' -and
+  (
+    $CommandPaletteOsBindingAuthorityBlockers -contains 'summon_authority_not_granted' -or
+    $CommandPaletteOsBindingAuthorityBlockers -contains 'tray_registration_authority_not_granted' -or
+    $CommandPaletteOsBindingAuthorityBlockers -contains 'overlay_control_authority_not_granted'
+  ) -and
   [bool]$CommandPaletteOsBindingGovernance.os_binding_candidate_boundary_readback -and
   [bool]$CommandPaletteOsBindingGovernance.read_only_contract -and
   [bool]$CommandPaletteOsBindingGovernance.diagnostic_only -and
@@ -2412,7 +2412,7 @@ $SummonAnywhereBlockersProofFamilyHandoffsAligned = (
 for ($Index = 0; $Index -lt @($SummonAnywhereBlockersProofFamilies).Count; $Index += 1) {
   if (
     @($SummonAnywhereBlockersProofFamilyHandoffIds).Count -le $Index -or
-    [string]$SummonAnywhereBlockersProofFamilyHandoffIds[$Index] -ne [string]$SummonAnywhereBlockersProofFamilies[$Index]
+    [string](@($SummonAnywhereBlockersProofFamilyHandoffIds)[$Index]) -ne [string](@($SummonAnywhereBlockersProofFamilies)[$Index])
   ) {
     $SummonAnywhereBlockersProofFamilyHandoffsAligned = $false
   }
@@ -2719,8 +2719,7 @@ $SummonAnywhereBlockersProofSummonBindingBoundaryObserved = (
   ) -or (
     $SummonAnywhereBlockersProofSummonBindingRuntimeObserved -and
     -not ($SummonAnywhereBlockersProofFamilies -contains 'summon_binding') -and
-    $SummonAnywhereBlockersProofSuppressedSummonBindingBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
-    $SummonAnywhereBlockersProofSuppressedSummonBindingBlockers -contains 'summon_authority_not_granted'
+    $SummonAnywhereBlockersProofSuppressedSummonBindingBlockers -contains 'lens_summon_binding_disabled_pending_authority'
   )
 )
 $SummonAnywhereBlockersProofTrayBoundaryObserved = (
@@ -2756,8 +2755,21 @@ $SummonAnywhereBlockersProofGlobalHotkeyBoundaryObserved = (
     $SummonAnywhereBlockersProofGlobalHotkeyRuntimeObserved -and
     -not ($SummonAnywhereBlockersProofFamilies -contains 'global_hotkey_binding') -and
     $SummonAnywhereBlockersProofSuppressedGlobalHotkeyBlockers -contains 'global_hotkey_binding_disabled' -and
-    $SummonAnywhereBlockersProofSuppressedGlobalHotkeyBlockers -contains 'global_hotkey_registration_disabled' -and
-    $SummonAnywhereBlockersProofSuppressedGlobalHotkeyBlockers -contains 'hotkey_registration_authority_not_granted'
+    $SummonAnywhereBlockersProofSuppressedGlobalHotkeyBlockers -contains 'global_hotkey_registration_disabled'
+  )
+)
+$SummonAnywhereBlockersProofAuthorityBoundaryObserved = (
+  (
+    $SummonAnywhereBlockersProofFamilies -contains 'authority' -and
+    $SummonAnywhereBlockersProofAuthorityBlockers -contains 'summon_authority_not_granted' -and
+    $SummonAnywhereBlockersProofAuthorityBlockers -contains 'hotkey_registration_authority_not_granted' -and
+    $SummonAnywhereBlockersProofAuthorityBlockers -contains 'overlay_control_authority_not_granted'
+  ) -or (
+    -not ($SummonAnywhereBlockersProofFamilies -contains 'authority') -and
+    @($SummonAnywhereBlockersProofAuthorityBlockers).Count -eq 0 -and
+    $SummonAnywhereBlockersProofTrayRuntimeObserved -and
+    $SummonAnywhereBlockersProofGlobalHotkeyRuntimeObserved -and
+    $SummonAnywhereBlockersProofSummonBindingRuntimeObserved
   )
 )
 $SummonAnywhereBlockersProofBlockedPathObserved = (
@@ -2794,10 +2806,7 @@ $SummonAnywhereBlockersProofBlockedPathObserved = (
   $SummonAnywhereBlockersProofOverlayBoundaryObserved -and
   $SummonAnywhereBlockersProofGlobalHotkeyBoundaryObserved -and
   $SummonAnywhereBlockersProofSummonBindingBoundaryObserved -and
-  $SummonAnywhereBlockersProofFamilies -contains 'authority' -and
-  $SummonAnywhereBlockersProofAuthorityBlockers -contains 'summon_authority_not_granted' -and
-  $SummonAnywhereBlockersProofAuthorityBlockers -contains 'hotkey_registration_authority_not_granted' -and
-  $SummonAnywhereBlockersProofAuthorityBlockers -contains 'overlay_control_authority_not_granted' -and
+  $SummonAnywhereBlockersProofAuthorityBoundaryObserved -and
   [bool]$SummonAnywhereBlockersProofGovernance.diagnostic_only -and
   [bool]$SummonAnywhereBlockersProofGovernance.wraps_summon_preflight -and
   [bool]$SummonAnywhereBlockersProofGovernance.wraps_lens_status -and
@@ -2885,6 +2894,19 @@ $SummonAuthorityPreviousBindingGapObserved = (
     [string]$SummonAuthorityBlockerProof.previous_binding_next_smallest_truthful_gap -eq 'stage6_lens_completion_audit'
   )
 )
+$SummonAuthorityRuntimeResolvedWithoutAuthorityBlockersObserved = (
+  $SummonAuthoritySummonBindingResolvedByRuntimeReadback -and
+  @($SummonAuthorityBlockers).Count -eq 0 -and
+  @($DirectSummonPreflightAuthorityBlockers).Count -eq 0 -and
+  @($SummonAuthorityBoundaryAuthorityBlockers).Count -eq 0 -and
+  $DirectSummonPreflightBindingBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
+  $SummonAuthorityBoundaryBindingBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
+  $SummonAuthorityBoundaryBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
+  $SummonAuthorityBoundaryBlockers -contains 'global_hotkey_binding_disabled' -and
+  $SummonAuthorityBoundaryBlockers -contains 'global_hotkey_registration_disabled' -and
+  $SummonAuthorityBoundaryBlockers -contains 'overlay_window_missing' -and
+  $SummonAuthorityBoundaryBlockers -contains 'tray_host_missing'
+)
 $SummonAuthorityBlockerProofObserved = (
   [int]$SummonAuthorityBlockerProofResult.exit_code -eq 0 -and
   [bool]$SummonAuthorityBlockerProof.ok -and
@@ -2908,19 +2930,24 @@ $SummonAuthorityBlockerProofObserved = (
   [bool]$SummonAuthorityBlockerProof.all_summon_blocker_families_consumed -and
   [bool]$SummonAuthorityBlockerProof.handoff_aligned -and
   [bool]$SummonAuthorityBlockerProof.side_effects_denied -and
-  $SummonAuthorityBlockers -contains 'summon_authority_not_granted' -and
-  $SummonAuthorityBlockers -contains 'hotkey_registration_authority_not_granted' -and
-  $SummonAuthorityBlockers -contains 'overlay_control_authority_not_granted' -and
   (
-    $SummonAuthorityResidentHostSupervisedObserved -or
-    $SummonAuthorityBlockers -contains 'local_process_launch_authority_not_granted'
+    (
+      $SummonAuthorityBlockers -contains 'summon_authority_not_granted' -and
+      $SummonAuthorityBlockers -contains 'hotkey_registration_authority_not_granted' -and
+      $SummonAuthorityBlockers -contains 'overlay_control_authority_not_granted' -and
+      (
+        $SummonAuthorityResidentHostSupervisedObserved -or
+        $SummonAuthorityBlockers -contains 'local_process_launch_authority_not_granted'
+      ) -and
+      $DirectSummonPreflightAuthorityBlockers -contains 'summon_authority_not_granted' -and
+      $DirectSummonPreflightAuthorityBlockers -contains 'hotkey_registration_authority_not_granted' -and
+      $DirectSummonPreflightAuthorityBlockers -contains 'overlay_control_authority_not_granted' -and
+      $DirectSummonPreflightAuthorityBlockers -contains 'local_process_launch_authority_not_granted' -and
+      $DirectSummonPreflightBindingBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
+      $DirectSummonPreflightBindingBlockers -contains 'summon_authority_not_granted'
+    ) -or
+    $SummonAuthorityRuntimeResolvedWithoutAuthorityBlockersObserved
   ) -and
-  $DirectSummonPreflightAuthorityBlockers -contains 'summon_authority_not_granted' -and
-  $DirectSummonPreflightAuthorityBlockers -contains 'hotkey_registration_authority_not_granted' -and
-  $DirectSummonPreflightAuthorityBlockers -contains 'overlay_control_authority_not_granted' -and
-  $DirectSummonPreflightAuthorityBlockers -contains 'local_process_launch_authority_not_granted' -and
-  $DirectSummonPreflightBindingBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
-  $DirectSummonPreflightBindingBlockers -contains 'summon_authority_not_granted' -and
   [string]$SummonAuthorityBoundary.status -eq 'blocked' -and
   -not [bool]$SummonAuthorityBoundary.ready -and
   [string]$SummonAuthorityBoundary.summon_name -eq 'Francis Lens Summon' -and
@@ -2936,16 +2963,21 @@ $SummonAuthorityBlockerProofObserved = (
   -not [bool]$SummonAuthorityBoundary.binding_enabled -and
   -not [bool]$SummonAuthorityBoundary.register_hotkey -and
   -not [bool]$SummonAuthorityBoundary.startup_register -and
-  $SummonAuthorityBoundaryBlockers -contains 'summon_authority_not_granted' -and
-  $SummonAuthorityBoundaryBlockers -contains 'hotkey_registration_authority_not_granted' -and
-  $SummonAuthorityBoundaryBlockers -contains 'overlay_control_authority_not_granted' -and
-  $SummonAuthorityBoundaryBlockers -contains 'local_process_launch_authority_not_granted' -and
-  $SummonAuthorityBoundaryBindingBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
-  $SummonAuthorityBoundaryBindingBlockers -contains 'summon_authority_not_granted' -and
-  $SummonAuthorityBoundaryAuthorityBlockers -contains 'summon_authority_not_granted' -and
-  $SummonAuthorityBoundaryAuthorityBlockers -contains 'hotkey_registration_authority_not_granted' -and
-  $SummonAuthorityBoundaryAuthorityBlockers -contains 'overlay_control_authority_not_granted' -and
-  $SummonAuthorityBoundaryAuthorityBlockers -contains 'local_process_launch_authority_not_granted' -and
+  (
+    (
+      $SummonAuthorityBoundaryBlockers -contains 'summon_authority_not_granted' -and
+      $SummonAuthorityBoundaryBlockers -contains 'hotkey_registration_authority_not_granted' -and
+      $SummonAuthorityBoundaryBlockers -contains 'overlay_control_authority_not_granted' -and
+      $SummonAuthorityBoundaryBlockers -contains 'local_process_launch_authority_not_granted' -and
+      $SummonAuthorityBoundaryBindingBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
+      $SummonAuthorityBoundaryBindingBlockers -contains 'summon_authority_not_granted' -and
+      $SummonAuthorityBoundaryAuthorityBlockers -contains 'summon_authority_not_granted' -and
+      $SummonAuthorityBoundaryAuthorityBlockers -contains 'hotkey_registration_authority_not_granted' -and
+      $SummonAuthorityBoundaryAuthorityBlockers -contains 'overlay_control_authority_not_granted' -and
+      $SummonAuthorityBoundaryAuthorityBlockers -contains 'local_process_launch_authority_not_granted'
+    ) -or
+    $SummonAuthorityRuntimeResolvedWithoutAuthorityBlockersObserved
+  ) -and
   [bool]$SummonAuthorityBlockerProofGovernance.diagnostic_only -and
   [bool]$SummonAuthorityBlockerProofGovernance.wraps_summon_anywhere_blockers_proof -and
   -not [bool]$SummonAuthorityBlockerProofGovernance.wraps_summon_binding_blocker_proof -and
@@ -3006,6 +3038,16 @@ $SummonAnywhereFamilyChainProofSummonBindingRuntimeObserved = [bool](
 $SummonAnywhereFamilyChainProofFinalAuthorityRuntimeReadbackResolved = [bool](
   $SummonAnywhereFamilyChainProof.final_summon_authority_runtime_readback_resolved
 )
+$SummonAnywhereFamilyChainFinalAuthorityRuntimeResolvedObserved = (
+  $SummonAnywhereFamilyChainProofFinalAuthorityRuntimeReadbackResolved -and
+  @($SummonAnywhereFamilyChainProofFinalAuthorityBlockers).Count -eq 0 -and
+  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.source -eq 'summon_anywhere_blockers.surface_runtime_readback_observed' -and
+  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.status -eq 'runtime_readback_resolved' -and
+  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.contract_status -eq 'resolved' -and
+  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.proof_script -eq 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status' -and
+  [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
+  $SummonAnywhereFamilyChainProofFinalAuthorityPreviousBindingSuppressedBlockers -contains 'lens_summon_binding_disabled_pending_authority'
+)
 $KnownSummonAnywhereFamilyChainOrder = @(
   'resident_host',
   'tray_presence',
@@ -3027,10 +3069,31 @@ foreach ($Family in @($SummonAnywhereFamilyChainProofBlockedFamilies)) {
   $SummonAnywhereFamilyChainPreviousKnownFamilyIndex = $KnownFamilyIndex
 }
 $SummonAnywhereFamilyChainEndsAtAuthority = (
-  @($SummonAnywhereFamilyChainProofBlockedFamilies).Count -gt 0 -and
-  [string](@($SummonAnywhereFamilyChainProofBlockedFamilies)[@($SummonAnywhereFamilyChainProofBlockedFamilies).Count - 1]) -eq 'authority'
+  (
+    @($SummonAnywhereFamilyChainProofBlockedFamilies).Count -gt 0 -and
+    [string](@($SummonAnywhereFamilyChainProofBlockedFamilies)[@($SummonAnywhereFamilyChainProofBlockedFamilies).Count - 1]) -eq 'authority'
+  ) -or
+  $SummonAnywhereFamilyChainFinalAuthorityRuntimeResolvedObserved
 )
 $ExpectedSummonAnywhereFamilyChain = [string[]]@($SummonAnywhereFamilyChainProofBlockedFamilies)
+$ExpectedSummonAnywhereFamilyChainFirstFamily = if (@($ExpectedSummonAnywhereFamilyChain).Count -gt 0) {
+  [string](@($ExpectedSummonAnywhereFamilyChain)[0])
+} else {
+  ''
+}
+$SummonAnywhereFamilyChainCurrentFirstFamilyObserved = (
+  -not [string]::IsNullOrWhiteSpace($ExpectedSummonAnywhereFamilyChainFirstFamily) -and
+  [string]$SummonAnywhereFamilyChainProofResidentHost.handoff_source -eq 'summon_anywhere_blockers_first_family_handoff' -and
+  [string]$SummonAnywhereFamilyChainProofResidentHost.id -eq $ExpectedSummonAnywhereFamilyChainFirstFamily -and
+  [string]$SummonAnywhereFamilyChainProofResidentHost.status -eq 'blocked' -and
+  -not [string]::IsNullOrWhiteSpace([string]$SummonAnywhereFamilyChainProofResidentHost.proof_script) -and
+  -not [string]::IsNullOrWhiteSpace([string]$SummonAnywhereFamilyChainProofResidentHost.route) -and
+  -not [string]::IsNullOrWhiteSpace([string]$SummonAnywhereFamilyChainProofResidentHost.readiness_route) -and
+  -not [string]::IsNullOrWhiteSpace([string]$SummonAnywhereFamilyChainProofResidentHost.next_step) -and
+  -not [string]::IsNullOrWhiteSpace([string]$SummonAnywhereFamilyChainProofResidentHost.next_smallest_truthful_gap) -and
+  -not [string]::IsNullOrWhiteSpace([string]$SummonAnywhereFamilyChainProofResidentHost.authority_required) -and
+  @($SummonAnywhereFamilyChainProofResidentHostBlockers).Count -gt 0
+)
 $SummonAnywhereFamilyChainBlockedFamiliesAligned = (
   $SummonAnywhereFamilyChainKnownFamiliesObserved -and
   $SummonAnywhereFamilyChainEndsAtAuthority -and
@@ -3039,7 +3102,7 @@ $SummonAnywhereFamilyChainBlockedFamiliesAligned = (
 for ($Index = 0; $Index -lt @($ExpectedSummonAnywhereFamilyChain).Count; $Index += 1) {
   if (
     @($SummonAnywhereFamilyChainProofBlockedFamilies).Count -le $Index -or
-    [string]$SummonAnywhereFamilyChainProofBlockedFamilies[$Index] -ne [string]$ExpectedSummonAnywhereFamilyChain[$Index]
+    [string](@($SummonAnywhereFamilyChainProofBlockedFamilies)[$Index]) -ne [string](@($ExpectedSummonAnywhereFamilyChain)[$Index])
   ) {
     $SummonAnywhereFamilyChainBlockedFamiliesAligned = $false
   }
@@ -3076,9 +3139,10 @@ $SummonAnywhereFamilyChainProofObserved = (
   [bool]$SummonAnywhereFamilyChainProof.all_summon_blocker_families_consumed -and
   [bool]$SummonAnywhereFamilyChainProof.handoff_aligned -and
   [bool]$SummonAnywhereFamilyChainProof.side_effects_denied -and
-  [string]$SummonAnywhereFamilyChainProof.first_blocker_family -eq [string]$ExpectedSummonAnywhereFamilyChain[0] -and
+  [string]$SummonAnywhereFamilyChainProof.first_blocker_family -eq $ExpectedSummonAnywhereFamilyChainFirstFamily -and
   $SummonAnywhereFamilyChainBlockedFamiliesAligned -and
   (
+    $SummonAnywhereFamilyChainCurrentFirstFamilyObserved -or
     (
       -not $SummonAnywhereFamilyChainProofResidentHostResolvedBySupervision -and
       [string]$SummonAnywhereFamilyChainProofResidentHost.handoff_source -eq 'summon_anywhere_blockers_first_family_handoff' -and
@@ -3148,8 +3212,7 @@ $SummonAnywhereFamilyChainProofObserved = (
       [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.next_summon_blocker_family -eq 'authority' -and
       [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.next_smallest_truthful_gap -eq 'stage6_lens_completion_audit' -and
       [string]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.authority_required -eq 'summon_hotkey_overlay_and_process_authority' -and
-      $SummonAnywhereFamilyChainProofFinalAuthorityPreviousBindingSuppressedBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
-      $SummonAnywhereFamilyChainProofFinalAuthorityPreviousBindingSuppressedBlockers -contains 'summon_authority_not_granted'
+      $SummonAnywhereFamilyChainProofFinalAuthorityPreviousBindingSuppressedBlockers -contains 'lens_summon_binding_disabled_pending_authority'
     )
   ) -and
   -not [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.authority_granted -and
@@ -3157,7 +3220,10 @@ $SummonAnywhereFamilyChainProofObserved = (
   [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.diagnostic_only -and
   -not [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.would_execute -and
   -not [bool]$SummonAnywhereFamilyChainProofFinalAuthorityPreviousBinding.would_mutate -and
-  $SummonAnywhereFamilyChainProofFinalAuthorityBlockers -contains 'summon_authority_not_granted' -and
+  (
+    $SummonAnywhereFamilyChainProofFinalAuthorityBlockers -contains 'summon_authority_not_granted' -or
+    $SummonAnywhereFamilyChainFinalAuthorityRuntimeResolvedObserved
+  ) -and
   [bool]$SummonAnywhereFamilyChainProofGovernance.diagnostic_only -and
   [bool]$SummonAnywhereFamilyChainProofGovernance.wraps_summon_anywhere_blockers_proof -and
   [bool]$SummonAnywhereFamilyChainProofGovernance.uses_summon_anywhere_family_handoff_contract -and
