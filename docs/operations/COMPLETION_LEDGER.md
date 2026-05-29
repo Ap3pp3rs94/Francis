@@ -42425,6 +42425,43 @@ Latest validation for builder self-approval governance:
 - `git diff --check`
   Result: `passed; no whitespace errors`
 
+### 2026-05-28 - CI Windows 3.12 pytest budget matches observed suite runtime
+
+Roadmap area: CI / validation reliability for governed Lens and approval
+proofs.
+
+Material change:
+
+- GitHub Actions run `26609675616` for commit `f42039a2` passed remote Ruff,
+  remote format, and remote mypy on all four matrix jobs.
+- The same run passed full CI on Ubuntu 3.12, Ubuntu 3.13, and Windows 3.13.
+- Windows 3.12 did not fail an assertion; it timed out in the Pytest step at
+  45 minutes while the suite was still progressing through Lens proof-script
+  tests.
+- The CI Pytest step timeout was increased from 45 minutes to 90 minutes, and
+  the job timeout was increased from 55 minutes to 105 minutes.
+- The workflow contract test was updated to lock the new bounded timeouts.
+- This does not skip tests, lower failure sensitivity, remove Windows 3.12 from
+  the matrix, mark a timed-out run as green, or claim the replacement CI run has
+  passed before GitHub reports it.
+
+Latest validation for CI timeout budget:
+
+- `gh run view 26609675616 --job 78412618842 --log`
+  Result: `Windows 3.12 Pytest timed out after 45 minutes; latest emitted
+  tests were passing before timeout`
+- `python -m pytest tests/test_ci_workflow_contract.py
+  tests/test_api_approvals.py -q --tb=short`
+  Result: `passed`
+- `python -m ruff check tests/test_ci_workflow_contract.py
+  tests/test_api_approvals.py src/francis/governance/approvals.py
+  src/francis/api/routes/approvals.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_ci_workflow_contract.py
+  tests/test_api_approvals.py src/francis/governance/approvals.py
+  src/francis/api/routes/approvals.py`
+  Result: `passed; 4 files already formatted`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

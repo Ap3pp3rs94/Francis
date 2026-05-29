@@ -13,7 +13,7 @@ concurrency:
 jobs:
   test:
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 55
+    timeout-minutes: 105
     env:
       UV_PYTHON: ${{ matrix.python-version }}
     strategy:
@@ -53,5 +53,5 @@ jobs:
         run: uv run -m mypy src
 
       - name: Pytest
-        timeout-minutes: 45
+        timeout-minutes: 90
         run: uv run -m pytest -vv --maxfail=1 --durations=25 --durations-min=1
