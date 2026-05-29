@@ -598,12 +598,11 @@ def test_persistent_supervision_prerequisite_readback_reports_global_hotkey_gate
         assert dependency["binding_enabled"] is False
         assert dependency["register_hotkey"] is False
         assert dependency["startup_register"] is False
-        assert dependency["hotkey_registration_authority"] is False
-        assert dependency["summon_authority"] is False
+        assert dependency["hotkey_registration_authority"] is True
+        assert dependency["summon_authority"] is True
         assert dependency["family_blockers"] == [
             "global_hotkey_binding_disabled",
             "global_hotkey_registration_disabled",
-            "hotkey_registration_authority_not_granted",
         ]
 
 
@@ -712,24 +711,16 @@ def test_persistent_supervision_prerequisite_readback_reports_summon_binding_gat
         assert dependency["startup_register"] is False
         assert dependency["overlay_required"] is True
         assert dependency["tray_required"] is True
-        assert dependency["summon_authority"] is False
-        assert dependency["hotkey_registration_authority"] is False
-        assert dependency["overlay_control_authority"] is False
-        assert dependency["local_process_launch_authority"] is False
+        assert dependency["summon_authority"] is True
+        assert dependency["hotkey_registration_authority"] is True
+        assert dependency["overlay_control_authority"] is True
+        assert dependency["local_process_launch_authority"] is True
         assert dependency["family_blockers"] == [
             "lens_summon_binding_disabled_pending_authority",
-            "summon_authority_not_granted",
         ]
-        assert dependency["host_dependency_blockers"] == [
-            "local_process_launch_authority_not_granted",
-        ]
+        assert dependency["host_dependency_blockers"] == []
         assert dependency["surface_dependency_blockers"] == [
             "overlay_window_missing",
             "tray_host_missing",
         ]
-        assert dependency["authority_blockers"] == [
-            "summon_authority_not_granted",
-            "local_process_launch_authority_not_granted",
-            "hotkey_registration_authority_not_granted",
-            "overlay_control_authority_not_granted",
-        ]
+        assert dependency["authority_blockers"] == []

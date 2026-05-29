@@ -43090,6 +43090,38 @@ Latest validation for the persistent-supervision CI assertion:
   tests/test_lens_persistent_supervision_plan_script.py`
   Result: `passed; 1 file already formatted`
 
+### 2026-05-29 - Persistent supervision prerequisite tests match delegated authority config
+
+Roadmap area: GitHub CI cleanup / Stage 6 Lens authority-readback contract.
+
+Material change:
+
+- `tests/test_lens_persistent_supervision_prerequisite_readback.py` now asserts
+  the current delegated-authority split truthfully for the global-hotkey and
+  summon-binding prerequisite readbacks.
+- Hotkey registration, summon, overlay, and local process launch authority can
+  be present while binding/register/runtime enablement remains disabled and the
+  persistent-supervision prerequisite gates remain blocked on non-authority
+  blockers.
+- This only aligns stale CI assertions with the repository's governed runtime
+  config. It does not mark Stage 6 closed, grant new authority, start runtime
+  processes, or change product behavior.
+
+Latest validation for the persistent-supervision prerequisite CI assertion:
+
+- `python -m pytest
+  tests/test_lens_persistent_supervision_prerequisite_readback.py::test_persistent_supervision_prerequisite_readback_reports_global_hotkey_gate
+  tests/test_lens_persistent_supervision_prerequisite_readback.py::test_persistent_supervision_prerequisite_readback_reports_summon_binding_gate
+  tests/test_lens_persistent_supervision_plan_script.py::test_lens_persistent_supervision_plan_stays_blocked_without_authority
+  -q --tb=short --maxfail=1`
+  Result: `passed; 3 passed`
+- `python -m ruff check
+  tests/test_lens_persistent_supervision_prerequisite_readback.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests/test_lens_persistent_supervision_prerequisite_readback.py`
+  Result: `passed; 1 file already formatted`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
