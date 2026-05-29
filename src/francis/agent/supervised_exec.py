@@ -19,7 +19,20 @@ from francis.governance.redaction import (
 )
 from francis.kernel.paths import data_dir, repo_root
 
-_SAFE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,191}$")
+_SAFE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,191}$")
+_ARTIFACT_FILENAMES = frozenset(
+    {
+        "denied.json",
+        "error.json",
+        "mismatch.json",
+        "pending.json",
+        "plan.json",
+        "request.json",
+        "result.json",
+        "stderr.txt",
+        "stdout.txt",
+    }
+)
 _FORBIDDEN_COMMAND_TOKENS = (
     "\x00",
     "\n",
@@ -109,6 +122,13 @@ def _artifact_path(path: Path) -> Path:
     return candidate
 
 
+def _artifact_file_path(path: Path) -> Path:
+    candidate = _artifact_path(path)
+    if candidate.name not in _ARTIFACT_FILENAMES:
+        raise ValueError("artifact_filename_not_allowed")
+    return candidate
+
+
 def _ensure_artifact_dir(path: Path) -> Path:
     target = _artifact_path(path)
     target.mkdir(parents=True, exist_ok=True)
@@ -121,13 +141,13 @@ def _display_safe_json_text(obj: Any) -> str:
 
 
 def _write_json(path: Path, obj: Any) -> None:
-    target = _artifact_path(path)
+    target = _artifact_file_path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(_display_safe_json_text(obj), encoding="utf-8")
 
 
 def _write_redacted_text(path: Path, value: str) -> None:
-    target = _artifact_path(path)
+    target = _artifact_file_path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(redact_secret_text(value or ""), encoding="utf-8")
 
@@ -233,6 +253,23 @@ def _normalize_string_list(value: Any) -> list[str]:
         if text:
             out.append(text)
     return out
+
+
+def _command_artifact_metadata(*, user_command: str, command_args: list[str], cwd: str) -> dict[str, Any]:
+    raw_parts = shlex.split(user_command, posix=os.name != "nt") if user_command else []
+    requested_executable = Path(raw_parts[0]).name.lower() if raw_parts else ""
+    execution_executable = Path(command_args[0]).name.lower() if command_args else ""
+    cwd_path = Path(cwd)
+    return {
+        "command_preview": redact_secret_text(user_command),
+        "requested_executable": requested_executable,
+        "execution_executable": execution_executable,
+        "argument_count": max(0, len(raw_parts) - 1),
+        "execution_argument_count": max(0, len(command_args) - 1),
+        "cwd_validated": True,
+        "cwd_policy": "allowed_root_checked",
+        "cwd_name": redact_secret_text(cwd_path.name),
+    }
 
 
 def _approval_payload(
@@ -503,8 +540,7 @@ def run_supervised_exec(inputs: dict[str, Any], objective: str) -> dict[str, Any
             "kind": "supervised_exec.plan",
             "approval_id": approval_id,
             "objective": objective,
-            "user_command": user_command,
-            "cwd": cwd,
+            "command": _command_artifact_metadata(user_command=user_command, command_args=command_args, cwd=cwd),
             "timeout_sec": timeout_sec,
             "expected_artifacts": expected_artifacts,
             "prechecks": prechecks,
@@ -532,9 +568,7 @@ def run_supervised_exec(inputs: dict[str, Any], objective: str) -> dict[str, Any
                 "kind": "supervised_exec.run_result",
                 "approval_id": approval_id,
                 "objective": objective,
-                "cmd": user_command,
-                "argv": command_args,
-                "cwd": cwd,
+                "command": _command_artifact_metadata(user_command=user_command, command_args=command_args, cwd=cwd),
                 "timeout_sec": timeout_sec,
                 "elapsed_sec": dt,
                 "exit_code": int(proc.returncode),
@@ -557,8 +591,7 @@ def run_supervised_exec(inputs: dict[str, Any], objective: str) -> dict[str, Any
                 "kind": "supervised_exec.run_result",
                 "approval_id": approval_id,
                 "objective": objective,
-                "cmd": user_command,
-                "cwd": cwd,
+                "command": _command_artifact_metadata(user_command=user_command, command_args=command_args, cwd=cwd),
                 "timeout_sec": timeout_sec,
                 "elapsed_sec": dt,
                 "exit_code": None,

@@ -191,6 +191,101 @@ def test_supervised_exec_artifact_writers_reject_paths_outside_artifact_root(
     assert "[REDACTED:secret]" in stdout_text
 
 
+def test_api_supervised_exec_rejects_storage_unsafe_approval_ids(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _allow_supervised_exec(monkeypatch)
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    for approval_id in ("../x", "a/b", "a\\b", "a:b"):
+        response = client.post(
+            "/operations/supervised-exec/run",
+            json={
+                "objective": "test",
+                "user_command": "echo hello",
+                "cwd": str(tmp_path),
+                "approval_id": approval_id,
+                "actor": _SUPERVISED_ACTOR,
+            },
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["ok"] is False
+        assert body["status"] == "invalid"
+        assert body["error"] == "invalid_approval_id"
+
+    assert not (data_root / "artifacts" / "supervised_exec").exists()
+
+
+def test_api_supervised_exec_artifacts_store_redacted_command_metadata(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _allow_supervised_exec(monkeypatch)
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.governance import approvals
+
+    client = TestClient(create_app())
+    raw_secret = "directsupervisedsecret123"
+    command = f"echo password={raw_secret}"
+
+    requested = client.post(
+        "/operations/supervised-exec/run",
+        json={
+            "objective": "test",
+            "user_command": command,
+            "cwd": str(tmp_path),
+            "actor": _SUPERVISED_ACTOR,
+        },
+    )
+    assert requested.status_code == 200
+    approval_id = str(requested.json()["approval_id"])
+
+    approved = approvals.decide(approval_id, "approve")
+    assert approved["ok"] is True
+
+    executed = client.post(
+        "/operations/supervised-exec/run",
+        json={
+            "objective": "test",
+            "user_command": command,
+            "cwd": str(tmp_path),
+            "approval_id": approval_id,
+            "actor": _SUPERVISED_ACTOR,
+        },
+    )
+    assert executed.status_code == 200
+    body = executed.json()
+    assert body["ok"] is True
+
+    art = Path(str(body["artifact_dir"]))
+    artifact_text = "\n".join(
+        (art / name).read_text(encoding="utf-8")
+        for name in ("request.json", "plan.json", "result.json", "stdout.txt", "stderr.txt")
+    )
+    assert raw_secret not in artifact_text
+    assert "password=[REDACTED:secret]" in artifact_text
+
+    plan = json.loads((art / "plan.json").read_text(encoding="utf-8"))
+    result = json.loads((art / "result.json").read_text(encoding="utf-8"))
+    for payload in (plan, result):
+        assert "user_command" not in payload
+        assert "cmd" not in payload
+        assert "argv" not in payload
+        assert "cwd" not in payload
+        assert payload["command"]["command_preview"] == "echo password=[REDACTED:secret]"
+        assert payload["command"]["requested_executable"] == "echo"
+        assert payload["command"]["cwd_policy"] == "allowed_root_checked"
+
+
 def test_api_supervised_exec_rejects_approval_payload_mismatch(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

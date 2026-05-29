@@ -42825,6 +42825,10 @@ Material change:
   helper.
 - Stored supervised-exec artifacts continue to be redacted display artifacts;
   approval comparison still uses sealed approval payloads.
+- Supervised-exec approval/artifact ids no longer allow `:` in filesystem
+  storage handles.
+- `plan.json` and `result.json` now persist bounded redacted command metadata
+  instead of raw `user_command`, `cmd`, `argv`, or `cwd` fields.
 
 Latest validation for supervised-exec artifact path and storage hardening:
 
@@ -42834,12 +42838,19 @@ Latest validation for supervised-exec artifact path and storage hardening:
   tests/test_api_supervised_exec.py::test_api_supervised_exec_rejects_cwd_outside_allowed_roots
   -q --tb=short --maxfail=1`
   Result: `passed; 3 passed`
+- `python -m pytest
+  tests/test_api_supervised_exec.py::test_api_supervised_exec_rejects_storage_unsafe_approval_ids
+  tests/test_api_supervised_exec.py::test_api_supervised_exec_artifacts_store_redacted_command_metadata
+  tests/test_api_supervised_exec.py::test_api_supervised_exec_flow
+  tests/test_paths_data_dir.py::test_supervised_exec_and_approvals_respect_data_dir_env
+  -q --tb=short --maxfail=1`
+  Result: `passed; 4 passed`
 - `python -m ruff check src/francis/agent/supervised_exec.py
-  tests/test_api_supervised_exec.py`
+  tests/test_api_supervised_exec.py tests/test_paths_data_dir.py`
   Result: `passed`
 - `python -m ruff format --check src/francis/agent/supervised_exec.py
-  tests/test_api_supervised_exec.py`
-  Result: `passed; 2 files already formatted`
+  tests/test_api_supervised_exec.py tests/test_paths_data_dir.py`
+  Result: `passed; 3 files already formatted`
 - `python -m mypy src/francis/agent/supervised_exec.py`
   Result: `passed`
 
