@@ -42689,6 +42689,33 @@ Latest validation for mission runtime sanitized error contract:
   tests/test_api_security_boundaries.py`
   Result: `passed; 2 files already formatted`
 
+### 2026-05-28 - Unused Paramiko dependency removed from security extra
+
+Roadmap area: GitHub security cleanup / dependency governance.
+
+Material change:
+
+- The unused direct `paramiko` dependency was removed from the `security`
+  optional extra.
+- `uv.lock` no longer contains `paramiko` or the SSH-only transitive packages
+  that were present only because of it: `bcrypt`, `invoke`, and `pynacl`.
+- This addresses Dependabot alert 75 for `paramiko`
+  (`GHSA-r374-rxx8-8654` / `CVE-2026-44405`) by removing unused dependency
+  exposure rather than waiting on a patched release that GitHub reports as not
+  currently available.
+
+Latest validation for dependency cleanup:
+
+- `C:\Users\Ap3pp\.local\bin\uv.exe lock --check`
+  Result: `passed`
+- `python -m pytest tests/test_security_dependency_contract.py
+  -q --tb=short --maxfail=1`
+  Result: `passed; 1 passed`
+- `python -m ruff check tests/test_security_dependency_contract.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_security_dependency_contract.py`
+  Result: `passed; 1 file already formatted`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
