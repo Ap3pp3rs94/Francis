@@ -531,8 +531,10 @@ def test_mission_run_once_reports_failed_status_for_runtime_errors(monkeypatch, 
     body = run_once.json()
     assert body["ok"] is False
     assert body["status"] == "failed"
-    assert body["error"] == "queue run exploded"
-    assert body["errors"][0]["error"] == "queue run exploded"
+    assert body["error"] == "internal_api_error"
+    assert body["errors"][0]["error"] == "internal_api_error"
+    assert "queue run exploded" not in json.dumps(body, sort_keys=True)
+    assert "traceback" not in json.dumps(body, sort_keys=True).lower()
     assert body["request"]["actor"] == "tests"
     assert body["request"]["limit"] == 10
     assert body["request"]["note"] == "runtime token=[REDACTED:secret]"

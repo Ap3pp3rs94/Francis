@@ -42660,6 +42660,35 @@ Latest validation for full operator delegation:
   tests/test_api_approvals.py`
   Result: `passed; 2 files already formatted`
 
+### 2026-05-28 - Mission runtime failure contract follows sanitized API errors
+
+Roadmap area: API security hardening / governed mission execution surfaces.
+
+Material change:
+
+- `tests/test_api_missions.py::test_mission_run_once_reports_failed_status_for_runtime_errors`
+  now asserts the sanitized API boundary contract introduced by the
+  code-scanning security hardening work.
+- Mission queue runtime exceptions remain logged internally, but the API
+  response exposes only the stable `internal_api_error` code and does not return
+  raw exception text or traceback content.
+- This resolves the CI mismatch where the mission test still expected the raw
+  `queue run exploded` exception string after stack-trace exposure hardening.
+
+Latest validation for mission runtime sanitized error contract:
+
+- `python -m pytest
+  tests/test_api_missions.py::test_mission_run_once_reports_failed_status_for_runtime_errors
+  tests/test_api_security_boundaries.py::test_api_boundary_returns_stable_error_code_without_exception_text
+  -q --tb=short --maxfail=1`
+  Result: `passed; 2 passed`
+- `python -m ruff check tests/test_api_missions.py
+  tests/test_api_security_boundaries.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_api_missions.py
+  tests/test_api_security_boundaries.py`
+  Result: `passed; 2 files already formatted`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
