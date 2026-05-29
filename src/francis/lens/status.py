@@ -2825,8 +2825,35 @@ def _stage6_closure_readback(
     )
     os_binding_ready = bool(os_binding_readiness.get("ready"))
     hud_runtime_blockers = _stage6_blockers(hud_runtime.get("blockers"))
-    resident_surface_ready = bool(resident_surface_activation.get("resident_surface_ready"))
+    resident_surface_runtime = _resident_surface_runtime_from_host(resident_host)
+    resident_surface_runtime_blockers = _stage6_blockers(resident_surface_runtime.get("blockers"))
+    resident_surface_runtime_observed = bool(resident_surface_runtime.get("foreground_runtime_observed")) or bool(
+        resident_surface_runtime.get("resident_runtime_observed")
+    )
+    resident_surface_ready = bool(resident_surface_activation.get("resident_surface_ready")) or bool(
+        resident_surface_runtime.get("resident_surface_ready")
+    )
     resident_claim_allowed = bool(resident_surface_activation.get("resident_claim_allowed"))
+    stale_runtime_blockers = {
+        "resident_surface_runtime_missing",
+        "resident_surface_runtime_not_supervised",
+        "resident_surface_not_resident",
+        "resident_host_process_missing",
+        "resident_host_process_not_supervised",
+        "resident_supervision_disabled",
+    }
+    observed_runtime_blockers = {"resident_surface_runtime_missing"}
+
+    def _filter_closure_blockers(blockers: list[str]) -> list[str]:
+        suppressed = stale_runtime_blockers if resident_surface_ready else observed_runtime_blockers
+        if not resident_surface_ready and not resident_surface_runtime_observed:
+            return blockers
+        return [blocker for blocker in blockers if blocker not in suppressed]
+
+    resident_host_blockers_for_closure = _filter_closure_blockers(_stage6_blockers(resident_host.get("blockers")))
+    resident_surface_blockers_for_closure = _filter_closure_blockers(
+        _stage6_blockers(resident_surface_activation.get("blockers"), resident_surface_runtime_blockers)
+    )
     resident_overlay_ready = bool(hud_runtime.get("resident_overlay")) and not hud_runtime_blockers
     tray_presence_ready = (
         bool(tray_enablement_gate.get("tray_presence"))
@@ -2868,7 +2895,7 @@ def _stage6_closure_readback(
         else _stage6_blockers(
             ["summon_anywhere_missing"],
             os_binding_readiness.get("blockers"),
-            resident_host.get("blockers"),
+            resident_host_blockers_for_closure,
             summon_enablement_gate.get("blockers"),
         )
     )
@@ -2881,7 +2908,7 @@ def _stage6_closure_readback(
             ["resident_overlay_runtime_missing"] if not resident_overlay_ready else [],
             ["operator_experience_proof_missing"] if not operator_experience_proof else [],
             hud_runtime_blockers,
-            resident_surface_activation.get("blockers"),
+            resident_surface_blockers_for_closure,
         )
     )
     system_blockers = (
@@ -2895,13 +2922,13 @@ def _stage6_closure_readback(
             ["tray_host_missing"] if not tray_presence_ready else [],
             ["overlay_window_missing"] if not overlay_window_ready else [],
             ["resident_claim_authority_not_granted"] if not resident_claim_allowed else [],
-            resident_host.get("blockers"),
+            resident_host_blockers_for_closure,
             hud_runtime_blockers,
             os_binding_readiness.get("blockers"),
             summon_enablement_gate.get("blockers"),
             tray_enablement_gate.get("blockers"),
             overlay_enablement_gate.get("blockers"),
-            resident_surface_activation.get("blockers"),
+            resident_surface_blockers_for_closure,
         )
     )
     summon_next_gap = (

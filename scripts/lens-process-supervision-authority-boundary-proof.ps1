@@ -605,6 +605,15 @@ $ResidentSurfaceRuntimeStatus = [string](Get-PropertyValue -Payload $ResidentSur
 $ResidentSurfaceNextSmallestTruthfulGap = [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'next_smallest_truthful_gap' -Default '')
 $ResidentSurfaceRecommendedNextSlice = [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'recommended_next_slice' -Default '')
 $ResidentSurfaceAuthorityRequired = [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'authority_required' -Default '')
+$ResidentSurfaceResidentClaimReadbackBounded = (
+  (
+    -not [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'resident_claim_allowed' -Default $true) -and
+    -not [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'resident_claim_authority' -Default $false)
+  ) -or (
+    [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'resident_claim_allowed' -Default $false) -and
+    [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'resident_claim_authority' -Default $false)
+  )
+)
 $HostSupervisionGovernance = Get-PropertyValue -Payload $HostSupervisionPayload -Name 'governance'
 $HostSupervisionProof = Get-PropertyValue -Payload $HostSupervisionPayload -Name 'proof'
 $ServicePlanBlockedBy = ConvertTo-StringArray -Value (Get-PropertyValue -Payload $HostSupervisionProof -Name 'service_plan_blocked_by' -Default @())
@@ -659,12 +668,12 @@ $ResidentSurfaceResidentRuntimeProofObserved = (
   $ResidentSurfaceRuntimeStatus -eq 'resident_runtime_observed' -and
   [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'resident_surface_ready' -Default $false) -and
   [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'resident_host_process' -Default $false) -and
-  -not [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'resident_claim_allowed' -Default $true) -and
+  $ResidentSurfaceResidentClaimReadbackBounded -and
   -not [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'execution_authority' -Default $false) -and
   -not [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'approval_decision_authority' -Default $false) -and
   -not [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'memory_write' -Default $false) -and
   -not [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'service_control_authority' -Default $false) -and
-  -not [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'resident_claim_authority' -Default $false)
+  -not [bool](Get-PropertyValue -Payload $ResidentSurfaceRecommendedHandoff -Name 'would_claim_resident' -Default $true)
 )
 $ResidentSurfaceRuntimeProofObserved = $ResidentSurfaceForegroundRuntimeProofObserved -or $ResidentSurfaceResidentRuntimeProofObserved
 $ResidentSurfaceProcessSupervisionHandoffObserved = (
@@ -864,6 +873,7 @@ $Payload = [ordered]@{
   resident_surface_next_smallest_truthful_gap = [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'next_smallest_truthful_gap' -Default '')
   resident_surface_authority_required = [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'authority_required' -Default '')
   resident_surface_authority_granted = [bool](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'authority_granted' -Default $false)
+  resident_surface_resident_claim_readback_bounded = $ResidentSurfaceResidentClaimReadbackBounded
   resident_surface_recommended_handoff_source = [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'recommended_handoff_source' -Default '')
   resident_surface_recommended_next_slice = [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'recommended_next_slice' -Default '')
   resident_surface_recommended_proof_script = [string](Get-PropertyValue -Payload $ResidentSurfacePayload -Name 'recommended_proof_script' -Default '')

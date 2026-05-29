@@ -120,6 +120,43 @@ function Get-ProcessAlive {
   }
 }
 
+function Test-OverlayRuntimeProcess {
+  param([int]$ProcessId)
+
+  if ($ProcessId -le 0) {
+    return $false
+  }
+  if (-not (Get-ProcessAlive -ProcessId $ProcessId)) {
+    return $false
+  }
+  if (-not ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT)) {
+    return $false
+  }
+  try {
+    $Process = Get-CimInstance Win32_Process -Filter "ProcessId = $ProcessId" -ErrorAction Stop
+  } catch {
+    return $false
+  }
+  if ($null -eq $Process) {
+    return $false
+  }
+  $CommandLine = [string]$Process.CommandLine
+  return (
+    $CommandLine -like '*lens-overlay-window.ps1*' -and
+    $CommandLine -like '*-Mode Run*'
+  )
+}
+
+function Stop-OverlayRuntimeProcess {
+  param([int]$ProcessId)
+
+  if (Test-OverlayRuntimeProcess -ProcessId $ProcessId) {
+    Stop-Process -Id $ProcessId -Force -ErrorAction Stop
+    return $true
+  }
+  return $false
+}
+
 function Get-OverlayConfig {
   $ConfigPath = Join-Path $RepoRoot 'config\runtime\lens\overlay.json'
   $Config = Read-JsonFile -Path $ConfigPath
@@ -175,7 +212,13 @@ function Write-OverlayState {
       mutation_authority_granted = $OverlayWindowVisible
     }
   }
-  $Payload | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $StatusPath -Encoding UTF8
+  $TempPath = Join-Path $RuntimeRoot ("status.{0}.tmp" -f ([Guid]::NewGuid().ToString('N')))
+  try {
+    $Payload | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $TempPath -Encoding UTF8
+    Move-Item -LiteralPath $TempPath -Destination $StatusPath -Force
+  } finally {
+    Remove-Item -LiteralPath $TempPath -Force -ErrorAction SilentlyContinue
+  }
 }
 
 function Get-OverlayRuntimeReadback {
@@ -208,6 +251,7 @@ function Get-OverlayRuntimeReadback {
     (Get-StringProperty -Payload $Status -Name 'overlay_name' -Default '') -eq $Config.overlay_name -and
     (Get-StringProperty -Payload $Status -Name 'overlay_scope' -Default '') -eq $Config.overlay_scope
   )
+  $RuntimeProcessAlive = Test-OverlayRuntimeProcess -ProcessId $RuntimePid
   $ProcessAlive = if ($StatusClaimsRunningOverlay) { Get-ProcessAlive -ProcessId $RuntimePid } else { $false }
   $OverlayVisible = $ProcessAlive -and (Get-BoolProperty -Payload $Status -Name 'overlay_window_visible' -Default $false)
   $AlwaysOnTop = $OverlayVisible -and (Get-BoolProperty -Payload $Status -Name 'always_on_top' -Default $false)
@@ -232,6 +276,7 @@ function Get-OverlayRuntimeReadback {
   return [ordered]@{
     ready = $Ready
     process_alive = $ProcessAlive
+    runtime_process_alive = $RuntimeProcessAlive
     overlay_window_visible = $OverlayVisible
     always_on_top = $AlwaysOnTop
     pid = $RuntimePid
@@ -372,8 +417,8 @@ if ($Mode -eq 'Status') {
 if ($Mode -eq 'Stop') {
   $Readback = Get-OverlayRuntimeReadback -Root $DataRoot
   $RuntimePidToStop = [int]$Readback.pid
-  if ([bool]$Readback.process_alive -and $RuntimePidToStop -gt 0) {
-    Stop-Process -Id $RuntimePidToStop -Force -ErrorAction Stop
+  if ($RuntimePidToStop -gt 0) {
+    Stop-OverlayRuntimeProcess -ProcessId $RuntimePidToStop | Out-Null
   }
   Write-OverlayState -Root $DataRoot -Status 'overlay_stopped' -OverlayWindowVisible $false -AlwaysOnTop $false -Message 'Francis Lens overlay window stopped by operator command.'
   Remove-Item -LiteralPath (Join-Path $DataRoot 'runtime\lens-overlay\lens-overlay.pid') -Force -ErrorAction SilentlyContinue
@@ -394,6 +439,10 @@ $Existing = Get-OverlayRuntimeReadback -Root $DataRoot
 if ([bool]$Existing.ready) {
   New-StatusPayload -Root $DataRoot -ModeName $ModeName -StatusOverride 'already_running' | ConvertTo-Json -Depth 8
   exit 0
+}
+if ([bool]$Existing.runtime_process_alive -and [int]$Existing.pid -gt 0) {
+  Stop-OverlayRuntimeProcess -ProcessId ([int]$Existing.pid) | Out-Null
+  Remove-Item -LiteralPath (Join-Path $DataRoot 'runtime\lens-overlay\lens-overlay.pid') -Force -ErrorAction SilentlyContinue
 }
 
 $PowerShell = Get-Command powershell -ErrorAction SilentlyContinue
@@ -427,6 +476,11 @@ do {
 } while ([DateTimeOffset]::UtcNow -lt $Deadline)
 
 $Payload = New-StatusPayload -Root $DataRoot -ModeName $ModeName -StatusOverride 'start_timeout'
+$TimedOut = Get-OverlayRuntimeReadback -Root $DataRoot
+if ([bool]$TimedOut.runtime_process_alive -and [int]$TimedOut.pid -gt 0) {
+  Stop-OverlayRuntimeProcess -ProcessId ([int]$TimedOut.pid) | Out-Null
+  Remove-Item -LiteralPath (Join-Path $DataRoot 'runtime\lens-overlay\lens-overlay.pid') -Force -ErrorAction SilentlyContinue
+}
 $Payload.ok = $false
 $Payload.error = 'lens_overlay_window_start_timeout'
 $Payload.message = 'Lens overlay window did not report a live always-on-top window before the startup timeout.'

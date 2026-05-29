@@ -232,7 +232,10 @@ def test_lens_stage6_completion_audit_accepts_consumed_authority_handoff_evidenc
         "host_supervision_authority_readiness_evidence = $HostSupervisionAuthorityReadinessEvidenceObserved" in script
     )
     assert "os_binding_authority_evidence = $OsBindingAuthorityEvidenceObserved" in script
-    assert "$Stage6CompletionEvidenceReviewed = @($Stage6CompletionEvidenceReviewMissing).Count -eq 0" in script
+    assert "$Stage6ClosureReadbackObserved = (" in script
+    assert "stage6_closure_readback = $Stage6ClosureReadbackObserved" in script
+    assert "$Stage6CompletionEvidenceReviewed = $Stage6ClosureReadbackObserved -or" in script
+    assert "stage6_prerequisite_bringup_plan = ($Stage6ClosureReadbackObserved -or" in script
     assert "resident_host_supervision_authority_readiness_evidence_readback" in script
     assert "os_binding_authority_evidence_readback" in script
 
@@ -1180,9 +1183,16 @@ def test_lens_stage6_completion_audit_observes_summon_family_chain_authority_gat
         in script
     )
     assert "$SummonAnywhereBlockersProofFirstFamilyCurrentObserved" in script
+    assert "$SummonAnywhereBlockersProofDelegatedAuthorityBoundaryObserved = (" in script
+    assert "@($SummonAnywhereBlockersProofAuthorityBlockers).Count -eq 0" in script
+    assert "$SummonAnywhereBlockersProofDelegatedAuthorityBoundaryObserved" in script
     assert "$SummonAnywhereBlockersProofTrayBoundaryObserved" in script
     assert "$SummonAnywhereBlockersProofOverlayBoundaryObserved" in script
     assert "$SummonAnywhereBlockersProofGlobalHotkeyBoundaryObserved" in script
+    assert (
+        "$SummonAnywhereBlockersProofGlobalHotkeyBlockers -contains 'hotkey_registration_authority_not_granted' -or"
+        in script
+    )
     assert (
         "[string]$SummonAnywhereFamilyChainProof.recommended_handoff_source -eq "
         "'summon_anywhere_family_chain_completion_audit_handoff'"
@@ -1300,6 +1310,26 @@ def test_lens_stage6_completion_audit_advances_resident_claim_boundary_without_c
 
     assert reviewed_summon_branch in handoff_selector
     assert "$Stage6CompletionReviewed" not in handoff_selector[branch_start:branch_end]
+
+
+def test_lens_stage6_completion_audit_accepts_current_checkpoint_summon_family_handoff() -> None:
+    script = (_repo_root() / "scripts" / "lens-stage6-completion-audit.ps1").read_text(encoding="utf-8")
+
+    assert "$CheckpointSummonEnablementGateLegacyResidentFirstFamilyHandoffObserved = (" in script
+    assert "$CheckpointSummonEnablementGateDelegatedResidentFirstFamilyHandoffObserved = (" in script
+    assert "$CheckpointSummonEnablementGateCurrentFirstFamilyHandoffObserved = (" in script
+    assert "$CheckpointSummonEnablementGateFirstFamilyHandoffObserved = (" in script
+    assert "$CheckpointSummonEnablementGateFirstFamily -ne 'resident_host'" in script
+    assert "$SummonAnywhereBlockerFamilyOrder -contains $CheckpointSummonEnablementGateFirstFamily" in script
+    assert (
+        "$CheckpointSummonEnablementGateHandoffFamilies -contains $CheckpointSummonEnablementGateFirstFamily"
+    ) in script
+    assert "$CheckpointSummonEnablementGateLegacyCoreHandoffObserved -or" in script
+    assert "$CheckpointSummonEnablementGateCurrentCoreHandoffObserved" in script
+    assert "$CheckpointSummonEnablementGateFirstFamilyHandoffObserved -and" in script
+    assert "@($CheckpointSummonEnablementGateAuthorityBlockers).Count -gt 0 -or" in script
+    assert "checkpoint_summon_enablement_gate_delegated_resident_first_family_handoff_observed" in script
+    assert "checkpoint_summon_enablement_gate_current_first_family_handoff_observed" in script
 
 
 def test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_to_acceptance_handoff() -> None:

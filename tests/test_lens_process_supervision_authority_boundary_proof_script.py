@@ -573,6 +573,10 @@ def test_lens_process_supervision_boundary_consumes_active_authority_readback(tm
     cached_resident_surface = tmp_path / "resident-surface-proof.json"
     cached_host_supervision = tmp_path / "host-supervision-proof.json"
     _write_cached_resident_surface_resident_runtime_proof(cached_resident_surface)
+    resident_surface_payload = json.loads(cached_resident_surface.read_text(encoding="utf-8"))
+    resident_surface_payload["resident_claim_allowed"] = True
+    resident_surface_payload["resident_claim_authority"] = True
+    cached_resident_surface.write_text(json.dumps(resident_surface_payload), encoding="utf-8")
     _write_cached_host_supervision_proof(cached_host_supervision)
     _write_active_authority_receipts(data_root)
 
@@ -612,6 +616,7 @@ def test_lens_process_supervision_boundary_consumes_active_authority_readback(tm
     assert payload["resident_surface_resident_runtime_proof_observed"] is True
     assert payload["resident_surface_runtime_supervision_handoff_observed"] is True
     assert payload["resident_surface_operator_experience_handoff_observed"] is True
+    assert payload["resident_surface_resident_claim_readback_bounded"] is True
     assert payload["resident_surface_next_smallest_truthful_gap"] == "resident_surface_operator_experience_proof"
     assert payload["resident_surface_authority_required"] == "operator_experience_proof"
     assert payload["resident_surface_recommended_next_slice"] == (

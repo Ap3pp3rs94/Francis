@@ -219,3 +219,15 @@ def test_lens_resident_host_process_supervision_blocker_consumes_handoff(tmp_pat
         "resident_claim_authority": False,
         "mutation_authority_granted": False,
     }
+
+
+def test_lens_resident_host_process_supervision_blocker_accepts_delegated_authority_contract() -> None:
+    script = (_repo_root() / "scripts" / "lens-resident-host-process-supervision-blocker-proof.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    assert "$ProcessBoundaryDelegatedAuthorityObserved" in script
+    assert "'resident_runtime_execution_and_host_supervision_authority'" in script
+    assert "process_supervision_delegated_authority_observed = $ProcessBoundaryDelegatedAuthorityObserved" in script
+    assert "whether process supervision is still denied or delegated authority is already present" in script
+    assert "read delegated process-supervision authority" in script

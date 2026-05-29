@@ -404,7 +404,7 @@ $RuntimeHandoffObserved = (
   [string](Get-PropertyValue -Payload $RuntimePayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'resident_host_process_not_supervised' -and
   [string](Get-PropertyValue -Payload $RuntimePayload -Name 'resident_host_process_blocker' -Default '') -eq 'resident_host_process_not_supervised'
 )
-$ProcessBoundaryObserved = (
+$ProcessBoundaryDeniedObserved = (
   [int](Get-PropertyValue -Payload $ProcessResult -Name 'exit_code' -Default -1) -eq 0 -and
   [string](Get-PropertyValue -Payload $ProcessPayload -Name 'kind' -Default '') -eq 'lens.process_supervision_authority_boundary.proof' -and
   [string](Get-PropertyValue -Payload $ProcessPayload -Name 'status' -Default '') -eq 'proof_passed' -and
@@ -422,17 +422,41 @@ $ProcessBoundaryObserved = (
   [bool](Get-PropertyValue -Payload $ProcessPayload -Name 'service_activation_plan_observed' -Default $false) -and
   [string](Get-PropertyValue -Payload $ProcessPayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'stage6_lens_completion_audit'
 )
+$ProcessBoundaryDelegatedAuthorityObserved = (
+  [int](Get-PropertyValue -Payload $ProcessResult -Name 'exit_code' -Default -1) -eq 0 -and
+  [string](Get-PropertyValue -Payload $ProcessPayload -Name 'kind' -Default '') -eq 'lens.process_supervision_authority_boundary.proof' -and
+  [string](Get-PropertyValue -Payload $ProcessPayload -Name 'status' -Default '') -eq 'proof_passed' -and
+  [string](Get-PropertyValue -Payload $ProcessPayload -Name 'authority_required' -Default '') -eq 'resident_runtime_execution_and_host_supervision_authority' -and
+  [bool](Get-PropertyValue -Payload $ProcessPayload -Name 'authority_granted' -Default $false) -and
+  [string](Get-PropertyValue -Payload $ProcessPayload -Name 'process_supervision_authority_required' -Default '') -eq 'process_supervision_authority' -and
+  [bool](Get-PropertyValue -Payload $ProcessPayload -Name 'process_supervision_authority_granted' -Default $false) -and
+  [string](Get-PropertyValue -Payload $ProcessPayload -Name 'process_restart_authority_required' -Default '') -eq 'process_restart_authority' -and
+  [bool](Get-PropertyValue -Payload $ProcessPayload -Name 'process_restart_authority_granted' -Default $false) -and
+  [string](Get-PropertyValue -Payload $ProcessPayload -Name 'service_install_authority_required' -Default '') -eq 'service_install_authority' -and
+  -not [bool](Get-PropertyValue -Payload $ProcessPayload -Name 'service_install_authority_granted' -Default $true) -and
+  [string](Get-PropertyValue -Payload $ProcessPayload -Name 'service_control_authority_required' -Default '') -eq 'service_control_authority' -and
+  -not [bool](Get-PropertyValue -Payload $ProcessPayload -Name 'service_control_authority_granted' -Default $true) -and
+  [bool](Get-PropertyValue -Payload $ProcessPayload -Name 'process_supervision_boundary_observed' -Default $false) -and
+  [bool](Get-PropertyValue -Payload $ProcessPayload -Name 'service_activation_plan_observed' -Default $false) -and
+  [string](Get-PropertyValue -Payload $ProcessPayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'stage6_lens_completion_audit'
+)
+$ProcessBoundaryObserved = $ProcessBoundaryDeniedObserved -or $ProcessBoundaryDelegatedAuthorityObserved
 $HandoffConsumed = (
   $RuntimeHandoffObserved -and
   $ProcessBoundaryObserved -and
   $RuntimeBlockers -contains 'resident_host_process_not_supervised' -and
   $ProcessBlockers -contains 'resident_host_process_not_supervised' -and
-  $ProcessBlockers -contains 'process_supervision_authority_not_granted' -and
-  $ProcessBlockers -contains 'process_restart_authority_not_granted' -and
+  (
+    $ProcessBoundaryDelegatedAuthorityObserved -or
+    (
+      $ProcessBlockers -contains 'process_supervision_authority_not_granted' -and
+      $ProcessBlockers -contains 'process_restart_authority_not_granted'
+    )
+  ) -and
   $ProcessBlockers -contains 'service_install_authority_not_granted' -and
   $ProcessBlockers -contains 'service_control_authority_not_granted'
 )
-$AuthorityDenied = (
+$AuthorityBounded = (
   [bool](Get-PropertyValue -Payload $RuntimeGovernance -Name 'diagnostic_only' -Default $false) -and
   [bool](Get-PropertyValue -Payload $ProcessGovernance -Name 'diagnostic_only' -Default $false) -and
   [bool](Get-PropertyValue -Payload $RuntimeGovernance -Name 'bounded_local_process_launch' -Default $false) -and
@@ -442,8 +466,14 @@ $AuthorityDenied = (
   -not [bool](Get-PropertyValue -Payload $ProcessGovernance -Name 'execution_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ProcessGovernance -Name 'approval_decision_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ProcessGovernance -Name 'memory_write' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $ProcessGovernance -Name 'process_supervision_authority' -Default $true) -and
-  -not [bool](Get-PropertyValue -Payload $ProcessGovernance -Name 'process_restart_authority' -Default $true) -and
+  (
+    $ProcessBoundaryDelegatedAuthorityObserved -or
+    -not [bool](Get-PropertyValue -Payload $ProcessGovernance -Name 'process_supervision_authority' -Default $true)
+  ) -and
+  (
+    $ProcessBoundaryDelegatedAuthorityObserved -or
+    -not [bool](Get-PropertyValue -Payload $ProcessGovernance -Name 'process_restart_authority' -Default $true)
+  ) -and
   -not [bool](Get-PropertyValue -Payload $ProcessGovernance -Name 'service_install_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ProcessGovernance -Name 'service_control_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $ProcessGovernance -Name 'overlay_control_authority' -Default $true) -and
@@ -456,9 +486,9 @@ $AuthorityDenied = (
 $Checks = @(
   (New-Check -Id 'host_supervision_cache' -Status $(if ($HostSupervisionCacheObserved) { 'cache_written' } else { 'missing_or_unexpected' }) -Passed $HostSupervisionCacheObserved -Evidence 'scripts/lens-host-supervision-proof.ps1 -Mode Status' -Reason 'The composed process-supervision proof must reuse one host-supervision readback across both child boundaries instead of proving the same bounded host launch twice.'),
   (New-Check -Id 'resident_host_process_handoff' -Status $(if ($RuntimeHandoffObserved) { 'process_blocker_handoff_observed' } else { 'missing_or_unexpected' }) -Passed $RuntimeHandoffObserved -Evidence 'scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status' -Reason 'The resident-host runtime boundary must hand off to resident_host_process_not_supervised.'),
-  (New-Check -Id 'process_supervision_boundary' -Status $(if ($ProcessBoundaryObserved) { 'process_supervision_blocked' } else { 'missing_or_unexpected' }) -Passed $ProcessBoundaryObserved -Evidence 'scripts/lens-process-supervision-authority-boundary-proof.ps1 -Mode Status' -Reason 'The process-supervision authority boundary must consume the unsupervised process blocker and return to Stage 6 completion audit.'),
+  (New-Check -Id 'process_supervision_boundary' -Status $(if ($ProcessBoundaryDelegatedAuthorityObserved) { 'delegated_authority_observed' } elseif ($ProcessBoundaryObserved) { 'process_supervision_blocked' } else { 'missing_or_unexpected' }) -Passed $ProcessBoundaryObserved -Evidence 'scripts/lens-process-supervision-authority-boundary-proof.ps1 -Mode Status' -Reason 'The process-supervision authority boundary must consume the resident-process blocker and return to Stage 6 completion audit, whether process supervision is still denied or delegated authority is already present.'),
   (New-Check -Id 'handoff_consumed' -Status $(if ($HandoffConsumed) { 'blocker_consumed' } else { 'handoff_mismatch' }) -Passed $HandoffConsumed -Evidence 'resident-host runtime blockers + process-supervision blockers' -Reason 'The same unsupervised resident-host process blocker must be preserved across both proof payloads.'),
-  (New-Check -Id 'authority_denied' -Status $(if ($AuthorityDenied) { 'diagnostic_bounded' } else { 'unexpected_authority' }) -Passed $AuthorityDenied -Evidence 'runtime boundary governance + process-supervision governance' -Reason 'The composed proof may launch bounded diagnostics but must not grant product execution, process supervision, restart, service, summon, memory, approval, capture, sensing, or mutation authority.')
+  (New-Check -Id 'authority_denied' -Status $(if ($AuthorityBounded) { 'diagnostic_bounded' } else { 'unexpected_authority' }) -Passed $AuthorityBounded -Evidence 'runtime boundary governance + process-supervision governance' -Reason 'The composed proof may launch bounded diagnostics and read delegated process-supervision authority, but must not grant product execution, service, summon, memory, approval, capture, sensing, or mutation authority.')
 )
 
 $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
@@ -467,11 +497,15 @@ $BlockerBag += @($RuntimeBlockers)
 $BlockerBag += @($ProcessBlockers)
 $BlockerBag += @(
   'resident_host_process_not_supervised',
-  'process_supervision_authority_not_granted',
-  'process_restart_authority_not_granted',
   'service_install_authority_not_granted',
   'service_control_authority_not_granted'
 )
+if (-not $ProcessBoundaryDelegatedAuthorityObserved) {
+  $BlockerBag += @(
+    'process_supervision_authority_not_granted',
+    'process_restart_authority_not_granted'
+  )
+}
 $AllBlockers = [string[]]@($BlockerBag | Sort-Object -Unique)
 
 $Payload = [ordered]@{
@@ -526,8 +560,9 @@ $Payload = [ordered]@{
   }
   resident_host_process_handoff_observed = $RuntimeHandoffObserved
   process_supervision_boundary_observed = $ProcessBoundaryObserved
+  process_supervision_delegated_authority_observed = $ProcessBoundaryDelegatedAuthorityObserved
   handoff_consumed = $HandoffConsumed
-  authority_denied = $AuthorityDenied
+  authority_denied = $AuthorityBounded
   host_supervision_cache_observed = $HostSupervisionCacheObserved
   runtime_boundary_cached_host_supervision_proof = [bool](Get-PropertyValue -Payload $RuntimePayload -Name 'cached_host_supervision_proof' -Default $false)
   process_boundary_cached_host_supervision_proof = [bool](Get-PropertyValue -Payload $ProcessPayload -Name 'cached_host_supervision_proof' -Default $false)

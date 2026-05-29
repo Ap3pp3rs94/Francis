@@ -12415,6 +12415,15 @@ def test_lens_resident_runtime_execute_starts_supervised_resident_host_lease(
     assert status_execution_receipts_criterion["service_control_authority"] is False
     assert status_execution_receipts_criterion["memory_write"] is False
     assert status_execution_receipts_criterion["resident_claim_authority"] is False
+    closure_criteria = {item["id"]: item for item in status_body["stage6_readiness"]["closure_readback"]["criteria"]}
+    helpful_criterion = closure_criteria["helpful_not_noisy"]
+    assert "resident_surface_runtime_missing" not in helpful_criterion["blockers"]
+    assert "resident_surface_runtime_not_supervised" not in helpful_criterion["blockers"]
+    assert "resident_claim_authority_not_granted" in helpful_criterion["blockers"]
+    assert "operator_experience_proof_missing" in helpful_criterion["blockers"]
+    system_criterion = closure_criteria["system_resident_presence"]
+    assert "resident_surface_runtime_missing" not in system_criterion["blockers"]
+    assert "resident_host_process_not_supervised" not in system_criterion["blockers"]
     next_handoff = status_body["stage6_readiness"]["next_handoff"]
     assert next_handoff["next_smallest_truthful_gap"] == "summon_tray_presence_blocker_boundary"
     assert next_handoff["recommended_first_missing_handoff_source"] == (

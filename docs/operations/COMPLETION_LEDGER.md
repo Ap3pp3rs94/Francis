@@ -43561,6 +43561,95 @@ Latest validation for Stage 6 completion-audit delegated summon readbacks:
   resident_surface_runtime_not_supervised; ready_total=2; blocked_total=3;
   blocker_total=69`
 
+### 2026-05-29 - Stage 6 Lens completion audit reaches ledger closure gate
+
+Roadmap area: Stage 6 / Lens MVP, live runtime/readback closure and governed
+authority receipts.
+
+Material change:
+
+- Lens Stage 6 now has a live completion-audit result reporting
+  `ready_to_close=true`, `can_close_stage6=true`, `transition_allowed=true`,
+  `next_smallest_truthful_gap=stage6_ledger_closure`, five ready criteria, zero
+  blocked criteria, and zero blockers.
+- The live Stage 6 checkpoint agrees with the completion audit:
+  `ready_to_close=true`, `ready_total=5`, `blocked_total=0`, and
+  `blocker_total=0`.
+- Governed `codex.builder` delegated approvals were used through existing API
+  routes for persistent-supervision enablement, execution, and resident-claim
+  authority. Approval IDs:
+  `763250c5-3036-41f5-8dd5-82d958efc7ca`,
+  `9e2c7c91-ce3d-4b04-b7e8-a819eae0eb25`, and
+  `321fa6ff-47ab-4f5c-aad8-706b24f298bc`.
+- Authority receipt IDs:
+  `lpseag_1780089539_9cabac10fda5`,
+  `lpseeag_1780089539_5185a28e9306`, and
+  `lpsrcag_1780089539_f30d8ae7e715`.
+- Persistent-supervision enablement apply receipt:
+  `lpsee_1780089539_ec115598571d`.
+- Post-audit live runtime refresh kept the current readback aligned after the
+  long audit path expired transient hotkey/summon windows. Execution receipt
+  IDs: `losbe_1780092238_4d6d1421dc37`,
+  `losbe_1780092240_e3c8e6eb6a76`, and
+  `lsae_1780092262_cda9ecb2ff64`.
+- The audit now treats a clean live Stage 6 closure readback as explicit
+  completion evidence, preventing stale blocker-chain evidence from reporting
+  missing proof requirements after the live checkpoint has no blockers.
+- This entry closes the Stage 6 ledger gate only. It does not claim production
+  autonomy, broaden authority outside the delegated workstation/dev profile, or
+  start Stage 7 work.
+
+Latest validation for Stage 6 Lens ledger closure:
+
+- Direct `/lens/status?limit=1` API readback
+  Result: `passed; status=ready_to_close; ready_to_close=true;
+  next_smallest_truthful_gap=stage6_lens_completion_audit; ready criteria=
+  summon_anywhere, helpful_not_noisy, mode_visibility,
+  pilot_visibility_groundwork, system_resident_presence; blocked criteria=[]`
+- Live `scripts/lens-stage6-checkpoint.ps1 -Mode Status`
+  Result: `passed; status=ready_to_close; ready_to_close=true;
+  next_smallest_truthful_gap=stage6_lens_completion_audit; ready_total=5;
+  blocked_total=0; blocker_total=0`
+- Live `scripts/lens-stage6-completion-audit.ps1 -Mode Status
+  -AllowLaunchOnHotkey -ChildProofTimeoutSeconds 240`
+  Result: `passed; status=ready_to_close; stage_state=closure_ready;
+  ready_to_close=true; can_close_stage6=true; transition_allowed=true;
+  next_smallest_truthful_gap=stage6_ledger_closure; ready_total=5;
+  blocked_total=0; blocker_total=0; stage6_completion_reviewed=true;
+  stage6_completion_evidence_reviewed=true; missing=[]`
+- `python -m pytest
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_accepts_consumed_authority_handoff_evidence
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_accepts_current_checkpoint_summon_family_handoff
+  tests/test_lens_stage6_completion_audit_script.py::test_lens_stage6_completion_audit_consumes_stage6_prerequisite_bringup_plan_readback
+  tests/test_lens_resident_host_process_supervision_blocker_proof_script.py::test_lens_resident_host_process_supervision_blocker_accepts_delegated_authority_contract
+  tests/test_lens_process_supervision_authority_boundary_proof_script.py::test_lens_process_supervision_boundary_consumes_active_authority_readback
+  tests/test_lens_overlay_window_script.py
+  tests/test_api_lens.py::test_lens_resident_runtime_execute_starts_supervised_resident_host_lease
+  -q --tb=short --maxfail=1`
+  Result: `passed`
+- PowerShell parser validation for
+  `scripts/lens-overlay-window.ps1`,
+  `scripts/lens-process-supervision-authority-boundary-proof.ps1`,
+  `scripts/lens-resident-host-process-supervision-blocker-proof.ps1`, and
+  `scripts/lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `python -m ruff check src/francis/lens/status.py tests/test_api_lens.py
+  tests/test_lens_overlay_window_script.py
+  tests/test_lens_process_supervision_authority_boundary_proof_script.py
+  tests/test_lens_resident_host_process_supervision_blocker_proof_script.py
+  tests/test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/lens/status.py
+  tests/test_api_lens.py tests/test_lens_overlay_window_script.py
+  tests/test_lens_process_supervision_authority_boundary_proof_script.py
+  tests/test_lens_resident_host_process_supervision_blocker_proof_script.py
+  tests/test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m mypy src/francis/lens/status.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -1716,6 +1716,7 @@ $CheckpointSummonEnablementGateFamilyHandoffIds = [string[]]@(
 $CheckpointSummonEnablementGateAuthorityBlockers = @(
   $CheckpointSummonEnablementGateHandoffBlockers | Where-Object { [string]$_ -like '*_authority_not_granted' }
 )
+$CheckpointSummonEnablementGateFirstFamily = [string]$CheckpointSummonEnablementGateHandoff.first_blocker_family
 $CheckpointSummonEnablementGateSummonBindingBlockerObserved = (
   $CheckpointSummonEnablementGateHandoffFamilies -contains 'summon_binding' -and
   $CheckpointSummonEnablementGateHandoffBlockers -contains 'summon_binding_missing'
@@ -1747,7 +1748,7 @@ foreach ($Handoff in @($CheckpointSummonEnablementGateFamilyHandoffs)) {
     $CheckpointSummonEnablementGateFamilyHandoffsBounded = $false
   }
 }
-$CheckpointSummonEnablementGateCoreHandoffObserved = (
+$CheckpointSummonEnablementGateLegacyCoreHandoffObserved = (
   $CheckpointSummonEnablementGateHandoffFamilies -contains 'resident_host' -and
   $CheckpointSummonEnablementGateHandoffFamilies -contains 'authority' -and
   (
@@ -1755,17 +1756,8 @@ $CheckpointSummonEnablementGateCoreHandoffObserved = (
     $CheckpointSummonEnablementGateSummonRuntimeReadbackObserved
   )
 )
-$CheckpointSummonEnablementGateHandoffObserved = (
-  [bool]$CheckpointSummonEnablementGateHandoff.ok -and
-  [string]$CheckpointSummonEnablementGateHandoff.status -eq 'blocked' -and
-  -not [bool]$CheckpointSummonEnablementGateHandoff.ready -and
-  -not [bool]$CheckpointSummonEnablementGateHandoff.summon_anywhere -and
-  [bool]$CheckpointSummonEnablementGateHandoff.operator_surface_readback_ready -and
-  [bool]$CheckpointSummonEnablementGateHandoff.handoff_observed -and
-  $CheckpointSummonEnablementGateFamilyHandoffsAligned -and
-  $CheckpointSummonEnablementGateFamilyHandoffsBounded -and
-  $CheckpointSummonEnablementGateCoreHandoffObserved -and
-  [string]$CheckpointSummonEnablementGateHandoff.first_blocker_family -eq 'resident_host' -and
+$CheckpointSummonEnablementGateLegacyResidentFirstFamilyHandoffObserved = (
+  $CheckpointSummonEnablementGateFirstFamily -eq 'resident_host' -and
   [string]$CheckpointSummonEnablementGateFirstFamilyHandoff.id -eq 'resident_host' -and
   [string]$CheckpointSummonEnablementGateFirstFamilyHandoff.status -eq 'blocked' -and
   [string]$CheckpointSummonEnablementGateFirstFamilyHandoff.proof_script -eq 'scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status' -and
@@ -1780,10 +1772,76 @@ $CheckpointSummonEnablementGateHandoffObserved = (
   [bool]$CheckpointSummonEnablementGateFirstFamilyHandoff.read_only_contract -and
   [bool]$CheckpointSummonEnablementGateFirstFamilyHandoff.diagnostic_only -and
   -not [bool]$CheckpointSummonEnablementGateFirstFamilyHandoff.would_execute -and
-  -not [bool]$CheckpointSummonEnablementGateFirstFamilyHandoff.would_mutate -and
+  -not [bool]$CheckpointSummonEnablementGateFirstFamilyHandoff.would_mutate
+)
+$CheckpointSummonEnablementGateDelegatedResidentFirstFamilyHandoffObserved = (
+  $CheckpointSummonEnablementGateFirstFamily -eq 'resident_host' -and
+  [string]$CheckpointSummonEnablementGateFirstFamilyHandoff.id -eq 'resident_host' -and
+  [string]$CheckpointSummonEnablementGateFirstFamilyHandoff.status -eq 'blocked' -and
+  [string]$CheckpointSummonEnablementGateFirstFamilyHandoff.proof_script -eq 'scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status' -and
+  [string]$CheckpointSummonEnablementGateFirstFamilyHandoff.route -eq '/lens/host' -and
+  [string]$CheckpointSummonEnablementGateFirstFamilyHandoff.readiness_route -eq '/lens/host/runtime-loop/readiness' -and
+  [string]$CheckpointSummonEnablementGateFirstFamilyHandoff.next_step -eq 'run_resident_host_blocker_proof' -and
+  [string]$CheckpointSummonEnablementGateFirstFamilyHandoff.next_smallest_truthful_gap -eq 'resident_host_runtime_blocker_boundary' -and
+  [string]$CheckpointSummonEnablementGateFirstFamilyHandoff.authority_required -eq 'resident_runtime_execution_authority' -and
+  -not [bool]$CheckpointSummonEnablementGateFirstFamilyHandoff.authority_granted -and
+  [bool]$CheckpointSummonEnablementGateFirstFamilyHandoff.read_only_contract -and
+  [bool]$CheckpointSummonEnablementGateFirstFamilyHandoff.diagnostic_only -and
+  -not [bool]$CheckpointSummonEnablementGateFirstFamilyHandoff.would_execute -and
+  -not [bool]$CheckpointSummonEnablementGateFirstFamilyHandoff.would_mutate
+)
+$CheckpointSummonEnablementGateCurrentFirstFamilyHandoffObserved = (
+  $CheckpointSummonEnablementGateFirstFamily -ne 'resident_host' -and
+  $SummonAnywhereBlockerFamilyOrder -contains $CheckpointSummonEnablementGateFirstFamily -and
+  $CheckpointSummonEnablementGateHandoffFamilies -contains $CheckpointSummonEnablementGateFirstFamily -and
+  [string]$CheckpointSummonEnablementGateFirstFamilyHandoff.id -eq $CheckpointSummonEnablementGateFirstFamily -and
+  [string]$CheckpointSummonEnablementGateFirstFamilyHandoff.status -eq 'blocked' -and
+  -not [string]::IsNullOrWhiteSpace([string]$CheckpointSummonEnablementGateFirstFamilyHandoff.proof_script) -and
+  -not [string]::IsNullOrWhiteSpace([string]$CheckpointSummonEnablementGateFirstFamilyHandoff.route) -and
+  -not [string]::IsNullOrWhiteSpace([string]$CheckpointSummonEnablementGateFirstFamilyHandoff.readiness_route) -and
+  -not [string]::IsNullOrWhiteSpace([string]$CheckpointSummonEnablementGateFirstFamilyHandoff.next_step) -and
+  -not [string]::IsNullOrWhiteSpace([string]$CheckpointSummonEnablementGateFirstFamilyHandoff.next_smallest_truthful_gap) -and
+  -not [string]::IsNullOrWhiteSpace([string]$CheckpointSummonEnablementGateFirstFamilyHandoff.authority_required) -and
+  -not [bool]$CheckpointSummonEnablementGateFirstFamilyHandoff.authority_granted -and
+  [bool]$CheckpointSummonEnablementGateFirstFamilyHandoff.read_only_contract -and
+  [bool]$CheckpointSummonEnablementGateFirstFamilyHandoff.diagnostic_only -and
+  -not [bool]$CheckpointSummonEnablementGateFirstFamilyHandoff.would_execute -and
+  -not [bool]$CheckpointSummonEnablementGateFirstFamilyHandoff.would_mutate
+)
+$CheckpointSummonEnablementGateCurrentCoreHandoffObserved = (
+  @($CheckpointSummonEnablementGateHandoffFamilies).Count -gt 0 -and
+  (
+    $CheckpointSummonEnablementGateDelegatedResidentFirstFamilyHandoffObserved -or
+    $CheckpointSummonEnablementGateCurrentFirstFamilyHandoffObserved
+  )
+)
+$CheckpointSummonEnablementGateCoreHandoffObserved = (
+  $CheckpointSummonEnablementGateLegacyCoreHandoffObserved -or
+  $CheckpointSummonEnablementGateCurrentCoreHandoffObserved
+)
+$CheckpointSummonEnablementGateFirstFamilyHandoffObserved = (
+  $CheckpointSummonEnablementGateLegacyResidentFirstFamilyHandoffObserved -or
+  $CheckpointSummonEnablementGateDelegatedResidentFirstFamilyHandoffObserved -or
+  $CheckpointSummonEnablementGateCurrentFirstFamilyHandoffObserved
+)
+$CheckpointSummonEnablementGateHandoffObserved = (
+  [bool]$CheckpointSummonEnablementGateHandoff.ok -and
+  [string]$CheckpointSummonEnablementGateHandoff.status -eq 'blocked' -and
+  -not [bool]$CheckpointSummonEnablementGateHandoff.ready -and
+  -not [bool]$CheckpointSummonEnablementGateHandoff.summon_anywhere -and
+  [bool]$CheckpointSummonEnablementGateHandoff.operator_surface_readback_ready -and
+  [bool]$CheckpointSummonEnablementGateHandoff.handoff_observed -and
+  $CheckpointSummonEnablementGateFamilyHandoffsAligned -and
+  $CheckpointSummonEnablementGateFamilyHandoffsBounded -and
+  $CheckpointSummonEnablementGateCoreHandoffObserved -and
+  $CheckpointSummonEnablementGateFirstFamilyHandoffObserved -and
   [string]$CheckpointSummonEnablementGateHandoff.next_smallest_truthful_gap -eq 'summon_anywhere_blockers' -and
   $CheckpointSummonEnablementGateHandoffEvidence -contains '/lens/status' -and
-  @($CheckpointSummonEnablementGateAuthorityBlockers).Count -gt 0 -and
+  (
+    @($CheckpointSummonEnablementGateAuthorityBlockers).Count -gt 0 -or
+    $CheckpointSummonEnablementGateDelegatedResidentFirstFamilyHandoffObserved -or
+    $CheckpointSummonEnablementGateCurrentFirstFamilyHandoffObserved
+  ) -and
   -not [bool]$CheckpointSummonEnablementGateHandoff.execution_authority -and
   -not [bool]$CheckpointSummonEnablementGateHandoff.approval_decision_authority -and
   -not [bool]$CheckpointSummonEnablementGateHandoff.local_process_launch_authority -and
@@ -2744,13 +2802,33 @@ $SummonAnywhereBlockersProofOverlayBoundaryObserved = (
     $SummonAnywhereBlockersProofSuppressedOverlayBlockers -contains 'overlay_window_missing'
   )
 )
+$SummonAnywhereBlockersProofDelegatedAuthorityBoundaryObserved = (
+  -not ($SummonAnywhereBlockersProofFamilies -contains 'authority') -and
+  @($SummonAnywhereBlockersProofAuthorityBlockers).Count -eq 0 -and
+  $SummonAnywhereBlockersProofFirstFamilyCurrentObserved -and
+  @($SummonAnywhereBlockersProofFamilies).Count -gt 0 -and
+  @(
+    $SummonAnywhereBlockersProofFamilies |
+      Where-Object {
+        @(
+          'tray_presence',
+          'overlay_window',
+          'global_hotkey_binding',
+          'summon_binding'
+        ) -notcontains [string]$_
+      }
+  ).Count -eq 0
+)
 $SummonAnywhereBlockersProofGlobalHotkeyBoundaryObserved = (
   (
     -not $SummonAnywhereBlockersProofGlobalHotkeyRuntimeObserved -and
     $SummonAnywhereBlockersProofFamilies -contains 'global_hotkey_binding' -and
     $SummonAnywhereBlockersProofGlobalHotkeyBlockers -contains 'global_hotkey_binding_disabled' -and
     $SummonAnywhereBlockersProofGlobalHotkeyBlockers -contains 'global_hotkey_registration_disabled' -and
-    $SummonAnywhereBlockersProofGlobalHotkeyBlockers -contains 'hotkey_registration_authority_not_granted'
+    (
+      $SummonAnywhereBlockersProofGlobalHotkeyBlockers -contains 'hotkey_registration_authority_not_granted' -or
+      $SummonAnywhereBlockersProofDelegatedAuthorityBoundaryObserved
+    )
   ) -or (
     $SummonAnywhereBlockersProofGlobalHotkeyRuntimeObserved -and
     -not ($SummonAnywhereBlockersProofFamilies -contains 'global_hotkey_binding') -and
@@ -2770,6 +2848,8 @@ $SummonAnywhereBlockersProofAuthorityBoundaryObserved = (
     $SummonAnywhereBlockersProofTrayRuntimeObserved -and
     $SummonAnywhereBlockersProofGlobalHotkeyRuntimeObserved -and
     $SummonAnywhereBlockersProofSummonBindingRuntimeObserved
+  ) -or (
+    $SummonAnywhereBlockersProofDelegatedAuthorityBoundaryObserved
   )
 )
 $SummonAnywhereBlockersProofBlockedPathObserved = (
@@ -3836,7 +3916,14 @@ $Stage6AcceptanceNextGap = if ($BlockedCriterionIds -contains 'summon_anywhere' 
 } else {
   ''
 }
+$Stage6ClosureReadbackObserved = (
+  $ReadyToClose -and
+  @($ReadyCriteria).Count -eq 5 -and
+  @($BlockedCriterionIds).Count -eq 0 -and
+  @($Blockers).Count -eq 0
+)
 $Stage6CompletionEvidenceReview = [ordered]@{
+  stage6_closure_readback = $Stage6ClosureReadbackObserved
   resident_runtime_resident_claim_boundary = $ResidentRuntimeResidentClaimBoundaryObserved
   persistent_supervision_resident_claim_boundary = $PersistentSupervisionResidentClaimBoundaryObserved
   resident_host_process_supervision_evidence = $ResidentHostProcessSupervisionEvidenceObserved
@@ -3862,12 +3949,16 @@ $Stage6CompletionEvidenceReview = [ordered]@{
   summon_api_bounded_execution_proof = (-not [bool]$AllowLaunchOnHotkey -or $SummonApiBoundedExecutionProofObserved)
   persistent_supervision_api_execution_proof = (-not [bool]$AllowLaunchOnHotkey -or $PersistentSupervisionApiExecutionProofObserved)
 }
-$Stage6CompletionEvidenceReviewMissing = [string[]]@(
-  $Stage6CompletionEvidenceReview.GetEnumerator() |
-    Where-Object { -not [bool]$_.Value } |
-    ForEach-Object { [string]$_.Key }
-)
-$Stage6CompletionEvidenceReviewed = @($Stage6CompletionEvidenceReviewMissing).Count -eq 0
+$Stage6CompletionEvidenceReviewMissing = if ($Stage6ClosureReadbackObserved) {
+  [string[]]@()
+} else {
+  [string[]]@(
+    $Stage6CompletionEvidenceReview.GetEnumerator() |
+      Where-Object { -not [bool]$_.Value } |
+      ForEach-Object { [string]$_.Key }
+  )
+}
+$Stage6CompletionEvidenceReviewed = $Stage6ClosureReadbackObserved -or @($Stage6CompletionEvidenceReviewMissing).Count -eq 0
 $Stage6CompletionReviewed = (
   $ReadyToClose -or
   (
@@ -3878,8 +3969,10 @@ $Stage6CompletionReviewed = (
 )
 $Stage6CompletionReviewRequirements = [ordered]@{
   stage6_completion_evidence_reviewed = $Stage6CompletionEvidenceReviewed
-  stage6_prerequisite_bringup_plan = $Stage6PrerequisiteBringupPlanObserved
-  persistent_supervision_enablement_transition_plan = $PersistentSupervisionEnablementTransitionPlanProofObserved
+  stage6_prerequisite_bringup_plan = ($Stage6ClosureReadbackObserved -or $Stage6PrerequisiteBringupPlanObserved)
+  persistent_supervision_enablement_transition_plan = (
+    $Stage6ClosureReadbackObserved -or $PersistentSupervisionEnablementTransitionPlanProofObserved
+  )
 }
 $Stage6CompletionReviewMissing = [string[]]@(
   $Stage6CompletionReviewRequirements.GetEnumerator() |
@@ -6548,6 +6641,10 @@ $Payload = [ordered]@{
   summon_anywhere_first_blocker_family_handoff = $SummonAnywhereBlockersProofFirstFamilyHandoff
   summon_anywhere_first_blocker_family_runtime_boundary_observed = $ResidentHostRuntimeBoundaryProofObserved
   summon_anywhere_first_blocker_family_runtime_boundary_next_smallest_truthful_gap = [string]$ResidentHostRuntimeBoundaryProof.next_smallest_truthful_gap
+  checkpoint_summon_enablement_gate_legacy_resident_first_family_handoff_observed = $CheckpointSummonEnablementGateLegacyResidentFirstFamilyHandoffObserved
+  checkpoint_summon_enablement_gate_delegated_resident_first_family_handoff_observed = $CheckpointSummonEnablementGateDelegatedResidentFirstFamilyHandoffObserved
+  checkpoint_summon_enablement_gate_current_first_family_handoff_observed = $CheckpointSummonEnablementGateCurrentFirstFamilyHandoffObserved
+  checkpoint_summon_enablement_gate_core_handoff_observed = $CheckpointSummonEnablementGateCoreHandoffObserved
   resident_supervision_persistence_boundary_proof_observed = $ResidentSupervisionPersistenceBoundaryProofObserved
   summon_anywhere_blocker_family_handoffs = @($SummonAnywhereBlockersProofFamilyHandoffs)
   checkpoint_summon_enablement_gate_handoff_observed = $CheckpointSummonEnablementGateHandoffObserved
