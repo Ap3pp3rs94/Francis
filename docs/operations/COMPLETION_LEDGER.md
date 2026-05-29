@@ -42893,6 +42893,42 @@ Latest validation for Forge collection path hardening:
 - `python -m mypy src/francis/api/routes/forge.py`
   Result: `passed`
 
+### 2026-05-28 - Artifact and plugin path handles use explicit root resolution
+
+Roadmap area: GitHub security cleanup / API path boundary hardening.
+
+Material change:
+
+- Artifact inspection handles now reject control characters, resolve relative
+  handles under `data/artifacts`, normalize with `realpath`, and verify the
+  resolved path remains under the artifact root before filesystem inspection.
+- Plugin generated/artifact path resolution now follows the same pattern:
+  reject control characters, resolve root-relative handles under the expected
+  plugin root, normalize with `realpath`, and verify containment before use.
+- This does not expand plugin execution, artifact inspection, or approval
+  authority.
+
+Latest validation for artifact/plugin path handle hardening:
+
+- `python -m pytest
+  tests/test_api_artifacts.py::test_artifact_inspect_rejects_paths_outside_artifact_root
+  tests/test_api_security_boundaries.py::test_plugin_runtime_paths_reject_registry_traversal
+  -q --tb=short --maxfail=1`
+  Result: `passed; 2 passed`
+- `python -m ruff check src/francis/api/routes/artifacts.py
+  src/francis/api/routes/plugins.py tests/test_api_artifacts.py
+  tests/test_api_security_boundaries.py`
+  Result: `passed`
+- `python -m ruff format src/francis/api/routes/plugins.py`
+  Result: `passed; 1 file reformatted`
+- `python -m ruff format --check src/francis/api/routes/artifacts.py
+  src/francis/api/routes/plugins.py tests/test_api_artifacts.py
+  tests/test_api_security_boundaries.py`
+  Result: `passed; 4 files already formatted`
+- `python -m mypy src/francis/api/routes/artifacts.py
+  src/francis/api/routes/plugins.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

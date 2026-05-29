@@ -202,9 +202,9 @@ def _resolve_under(root: Path, raw: str | Path, *, relative_to_root: bool = True
     if not text or any(ch in text for ch in ("\x00", "\n", "\r")):
         return None
     root_resolved = _real_path(root)
-    candidate = Path(text).expanduser()
-    if relative_to_root and not candidate.is_absolute():
-        candidate = root_resolved / candidate
+    candidate = text
+    if relative_to_root and not os.path.isabs(candidate):
+        candidate = os.path.join(os.fspath(root_resolved), candidate)
     try:
         resolved = _real_path(candidate)
     except OSError:

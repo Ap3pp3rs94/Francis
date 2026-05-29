@@ -56,7 +56,11 @@ _ORIGIN_RECEIPT_PLAN_NUMBER_FIELDS = ("plan_step_count", "plan_checkpoint_count"
 
 
 def _artifact_root() -> Path:
-    return Path(os.path.realpath(data_dir() / "artifacts"))
+    return _real_path(data_dir() / "artifacts")
+
+
+def _real_path(value: str | Path) -> Path:
+    return Path(os.path.realpath(os.fspath(value)))
 
 
 def _display_path(path: Path) -> str:
@@ -95,9 +99,7 @@ def _safe_nonnegative_int(value: object) -> int | None:
 
 def _is_under(root: Path, target: Path) -> bool:
     try:
-        resolved_root = Path(os.path.realpath(root))
-        resolved_target = Path(os.path.realpath(target))
-        return resolved_target.is_relative_to(resolved_root)
+        return _real_path(target).is_relative_to(_real_path(root))
     except OSError:
         return False
 
@@ -106,13 +108,13 @@ def _resolve_artifact_handle(raw: str) -> tuple[Path | None, str]:
     cleaned = raw.strip()
     if not cleaned:
         return None, "artifact_dir_required"
+    if any(ch in cleaned for ch in ("\x00", "\n", "\r")):
+        return None, "artifact_path_invalid"
 
     root = _artifact_root()
-    candidate = Path(cleaned).expanduser()
-    if not candidate.is_absolute():
-        candidate = root / candidate
+    candidate = cleaned if os.path.isabs(cleaned) else os.path.join(os.fspath(root), cleaned)
     try:
-        resolved = Path(os.path.realpath(candidate))
+        resolved = _real_path(candidate)
     except OSError:
         return None, "artifact_path_invalid"
     if not _is_under(root, resolved):

@@ -84,3 +84,10 @@ def test_plugin_runtime_paths_reject_registry_traversal(monkeypatch, tmp_path: P
     runtime = body["item"]["runtime"]
     assert runtime["artifact_exists"] is False
     assert runtime["spec_exists"] is False
+
+    from francis.api.routes import plugins
+
+    plugin_root = data_root / "plugins"
+    assert plugins._resolve_under(plugin_root, "../outside") is None
+    assert plugins._resolve_under(plugin_root, str(tmp_path / "outside")) is None
+    assert plugins._resolve_under(plugin_root, "bad\x00path") is None

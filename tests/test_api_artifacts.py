@@ -250,6 +250,18 @@ def test_artifact_inspect_rejects_paths_outside_artifact_root(monkeypatch, tmp_p
     assert body["retryable"] is False
     assert "data/artifacts" in body["recovery_hint"]
 
+    traversal = client.get("/artifacts/inspect", params={"artifact_dir": "../outside.txt"})
+    assert traversal.status_code == 200
+    traversal_body = traversal.json()
+    assert traversal_body["ok"] is False
+    assert traversal_body["error"] == "artifact_outside_data_root"
+
+    invalid = client.get("/artifacts/inspect", params={"artifact_dir": "bad\x00handle"})
+    assert invalid.status_code == 200
+    invalid_body = invalid.json()
+    assert invalid_body["ok"] is False
+    assert invalid_body["error"] == "artifact_path_invalid"
+
 
 def test_artifact_inspect_reports_missing_handles_without_creating_state(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
