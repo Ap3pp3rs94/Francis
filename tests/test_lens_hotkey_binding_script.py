@@ -207,9 +207,8 @@ def test_lens_hotkey_binding_start_refuses_default_blocked_config(tmp_path: Path
     assert "lens_summon_binding_disabled_pending_authority" in payload["blockers"]
     assert "global_hotkey_binding_disabled" in payload["blockers"]
     assert "global_hotkey_registration_disabled" in payload["blockers"]
-    assert "hotkey_registration_authority_not_granted" in payload["blockers"]
     assert payload["required_authorities"] == ["hotkey_registration_authority"]
-    assert payload["missing_authorities"] == ["hotkey_registration_authority_not_granted"]
+    assert payload["missing_authorities"] == []
     assert payload["would_register_hotkey"] is False
     assert payload["would_launch_process"] is False
     assert payload["governance"]["hotkey_registration_authority"] is False
@@ -235,7 +234,8 @@ def test_lens_hotkey_binding_run_refuses_default_blocked_config(tmp_path: Path) 
     assert payload["status"] == "blocked_by_config"
     assert payload["error"] == "lens_hotkey_binding_run_blocked_by_config"
     assert payload["global_hotkey_binding"] is False
-    assert "hotkey_registration_authority_not_granted" in payload["blockers"]
+    assert "global_hotkey_registration_disabled" in payload["blockers"]
+    assert payload["missing_authorities"] == []
     assert payload["would_register_hotkey"] is False
     assert payload["would_launch_process"] is False
     assert payload["governance"]["hotkey_registration_authority"] is False

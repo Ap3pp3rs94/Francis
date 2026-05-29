@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 
@@ -116,3 +117,67 @@ def test_executor_syncs_mission_transition_from_loop_mission_alias(monkeypatch, 
     transitions = [item for item in history if item.get("event") == "linked_task_transition"]
     assert [item["details"]["note"] for item in transitions] == ["task_started", "task_finished"]
     assert transitions[-1]["details"]["task_id"] == record.task_id
+
+
+def test_executor_capability_exceptions_are_publicly_sanitized(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from francis.agent import executor
+    from francis.agent.delegation import DelegationRequest, create_delegation, read_audit
+
+    def failing_capability(_inputs: dict[str, object], _objective: str) -> dict[str, object]:
+        raise RuntimeError("executor traceback token=executor-secret")
+
+    monkeypatch.setitem(executor.CAPABILITY_ALLOWLIST, "test.executor.failure", failing_capability)
+
+    record, err = create_delegation(
+        DelegationRequest(
+            requester_id="test.executor.failure",
+            capability="test.executor.failure",
+            objective="Sanitize executor capability failures",
+            inputs={"ticket": "EXEC-FAIL-1"},
+            priority=5,
+            ttl_sec=900,
+        )
+    )
+    assert err is None
+    assert record is not None
+
+    executed = executor.execute_task(record.task_id, worker_id="test.executor.failure")
+
+    assert executed["status"] == "failed"
+    assert executed["status_reason"] == "capability_internal_error"
+    assert executed["result"]["ok"] is False
+    assert executed["result"]["data"]["error"] == "capability_internal_error"
+    public_text = json.dumps(executed, sort_keys=True)
+    assert "executor-secret" not in public_text
+    assert "RuntimeError" not in public_text
+    assert "traceback" not in public_text.lower()
+
+    finished = [
+        item
+        for item in read_audit(record.task_id)
+        if item.get("event") == "status_updated" and item.get("details", {}).get("to") == "failed"
+    ][-1]
+    assert finished["details"]["reason"] == "capability_internal_error"
+    assert "executor-secret" not in json.dumps(finished, sort_keys=True)
+
+
+def test_executor_plugin_wrappers_return_stable_error_codes(monkeypatch) -> None:
+    from francis.agent import executor
+    from francis.api.routes import plugins as plugin_routes
+
+    def fail_list_plugins(*_args, **_kwargs):
+        raise RuntimeError("plugin route traceback token=plugin-secret")
+
+    monkeypatch.setattr(plugin_routes, "list_plugins", fail_list_plugins)
+
+    result = executor._cap_plugin_list({}, "Sanitize plugin wrapper failure")
+
+    assert result["ok"] is False
+    assert result["error"] == "plugin_runtime_error"
+    result_text = json.dumps(result, sort_keys=True)
+    assert "plugin-secret" not in result_text
+    assert "RuntimeError" not in result_text
+    assert "traceback" not in result_text.lower()

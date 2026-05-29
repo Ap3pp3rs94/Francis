@@ -29,6 +29,12 @@ CAPABILITY_ALLOWLIST: dict[str, Callable[[dict[str, Any], str], dict[str, Any]]]
 
 __all__ = ["ExecutionResult", "Executor", "main"]
 
+CAPABILITY_INTERNAL_ERROR = "capability_internal_error"
+FILE_PREVIEW_ERROR = "file_preview_error"
+JSON_SUMMARY_ERROR = "json_summary_error"
+PLAN_REVISION_ERROR = "plan_revision_error"
+PLUGIN_RUNTIME_ERROR = "plugin_runtime_error"
+
 
 class CapabilityError(RuntimeError):
     pass
@@ -54,6 +60,20 @@ def _safe_str(value: Any) -> str:
         return str(value)
     except Exception:
         return ""
+
+
+def _log_executor_exception(
+    *,
+    event: str,
+    capability: str = "",
+    task_id: str = "",
+) -> None:
+    logger.exception(
+        "Executor internal exception event=%s capability=%s task_id=%s",
+        event,
+        capability or "-",
+        task_id or "-",
+    )
 
 
 def _new_trace_id() -> str:
@@ -328,14 +348,14 @@ def _register_capabilities() -> None:
     CAPABILITY_ALLOWLIST.setdefault("plugin.reload", _cap_plugin_reload)
     try:
         from . import supervised_exec
-    except Exception as exc:
-        logger.error("Failed to load supervised_exec capability: %s", exc)
+    except Exception:
+        _log_executor_exception(event="capability_register", capability="codex.supervised_exec")
     else:
         CAPABILITY_ALLOWLIST.setdefault("codex.supervised_exec", supervised_exec.run_supervised_exec)
     try:
         from . import git_push
-    except Exception as exc:
-        logger.error("Failed to load git.push capability: %s", exc)
+    except Exception:
+        _log_executor_exception(event="capability_register", capability="git.push")
     else:
         CAPABILITY_ALLOWLIST.setdefault("git.push", git_push.run_git_push)
 
@@ -367,8 +387,9 @@ def _preview_text_file(path: Path, *, max_bytes: int, max_lines: int) -> tuple[i
         lines = text.splitlines()
         preview = "\n".join(lines[: max(0, int(max_lines))])
         return len(preview.splitlines()), preview
-    except Exception as exc:
-        return 0, f"[error reading file] {exc}"
+    except Exception:
+        _log_executor_exception(event="file_preview")
+        return 0, f"[error reading file] {FILE_PREVIEW_ERROR}"
 
 
 def _summarize_json_file(path: Path) -> dict[str, Any]:
@@ -387,9 +408,10 @@ def _summarize_json_file(path: Path) -> dict[str, Any]:
         else:
             item["kind"] = "json.scalar"
             item["type"] = type(obj).__name__
-    except Exception as exc:
+    except Exception:
+        _log_executor_exception(event="json_summary")
         item["kind"] = "json.error"
-        item["error"] = str(exc)
+        item["error"] = JSON_SUMMARY_ERROR
     return item
 
 
@@ -573,8 +595,9 @@ def _cap_plugin_list(inputs: dict[str, Any], objective: str) -> dict[str, Any]:
             result["objective"] = objective
             return result
         return {"kind": "plugin.list.result", "ok": False, "error": "unexpected_result_type", "objective": objective}
-    except Exception as exc:
-        return {"kind": "plugin.list.result", "ok": False, "error": str(exc), "objective": objective}
+    except Exception:
+        _log_executor_exception(event="plugin.list", capability="plugin.list")
+        return {"kind": "plugin.list.result", "ok": False, "error": PLUGIN_RUNTIME_ERROR, "objective": objective}
 
 
 def _cap_plugin_get(inputs: dict[str, Any], objective: str) -> dict[str, Any]:
@@ -591,8 +614,9 @@ def _cap_plugin_get(inputs: dict[str, Any], objective: str) -> dict[str, Any]:
             result["objective"] = objective
             return result
         return {"kind": "plugin.get.result", "ok": False, "error": "unexpected_result_type", "objective": objective}
-    except Exception as exc:
-        return {"kind": "plugin.get.result", "ok": False, "error": str(exc), "objective": objective}
+    except Exception:
+        _log_executor_exception(event="plugin.get", capability="plugin.get")
+        return {"kind": "plugin.get.result", "ok": False, "error": PLUGIN_RUNTIME_ERROR, "objective": objective}
 
 
 def _cap_plugin_enable(inputs: dict[str, Any], objective: str) -> dict[str, Any]:
@@ -614,8 +638,9 @@ def _cap_plugin_enable(inputs: dict[str, Any], objective: str) -> dict[str, Any]
             result["objective"] = objective
             return result
         return {"kind": "plugin.enable.result", "ok": False, "error": "unexpected_result_type", "objective": objective}
-    except Exception as exc:
-        return {"kind": "plugin.enable.result", "ok": False, "error": str(exc), "objective": objective}
+    except Exception:
+        _log_executor_exception(event="plugin.enable", capability="plugin.enable")
+        return {"kind": "plugin.enable.result", "ok": False, "error": PLUGIN_RUNTIME_ERROR, "objective": objective}
 
 
 def _cap_plugin_disable(inputs: dict[str, Any], objective: str) -> dict[str, Any]:
@@ -637,8 +662,9 @@ def _cap_plugin_disable(inputs: dict[str, Any], objective: str) -> dict[str, Any
             result["objective"] = objective
             return result
         return {"kind": "plugin.disable.result", "ok": False, "error": "unexpected_result_type", "objective": objective}
-    except Exception as exc:
-        return {"kind": "plugin.disable.result", "ok": False, "error": str(exc), "objective": objective}
+    except Exception:
+        _log_executor_exception(event="plugin.disable", capability="plugin.disable")
+        return {"kind": "plugin.disable.result", "ok": False, "error": PLUGIN_RUNTIME_ERROR, "objective": objective}
 
 
 def _cap_plugin_install(inputs: dict[str, Any], objective: str) -> dict[str, Any]:
@@ -674,8 +700,9 @@ def _cap_plugin_install(inputs: dict[str, Any], objective: str) -> dict[str, Any
             result["objective"] = objective
             return result
         return {"kind": "plugin.install.result", "ok": False, "error": "unexpected_result_type", "objective": objective}
-    except Exception as exc:
-        return {"kind": "plugin.install.result", "ok": False, "error": str(exc), "objective": objective}
+    except Exception:
+        _log_executor_exception(event="plugin.install", capability="plugin.install")
+        return {"kind": "plugin.install.result", "ok": False, "error": PLUGIN_RUNTIME_ERROR, "objective": objective}
 
 
 def _cap_plugin_uninstall(inputs: dict[str, Any], objective: str) -> dict[str, Any]:
@@ -703,8 +730,9 @@ def _cap_plugin_uninstall(inputs: dict[str, Any], objective: str) -> dict[str, A
             "error": "unexpected_result_type",
             "objective": objective,
         }
-    except Exception as exc:
-        return {"kind": "plugin.uninstall.result", "ok": False, "error": str(exc), "objective": objective}
+    except Exception:
+        _log_executor_exception(event="plugin.uninstall", capability="plugin.uninstall")
+        return {"kind": "plugin.uninstall.result", "ok": False, "error": PLUGIN_RUNTIME_ERROR, "objective": objective}
 
 
 def _cap_plugin_run(inputs: dict[str, Any], objective: str) -> dict[str, Any]:
@@ -736,8 +764,9 @@ def _cap_plugin_run(inputs: dict[str, Any], objective: str) -> dict[str, Any]:
             result["objective"] = objective
             return result
         return {"kind": "plugin.run.result", "ok": False, "error": "unexpected_result_type", "objective": objective}
-    except Exception as exc:
-        return {"kind": "plugin.run.result", "ok": False, "error": str(exc), "objective": objective}
+    except Exception:
+        _log_executor_exception(event="plugin.run", capability="plugin.run")
+        return {"kind": "plugin.run.result", "ok": False, "error": PLUGIN_RUNTIME_ERROR, "objective": objective}
 
 
 def _cap_plugin_tool_run(inputs: dict[str, Any], objective: str) -> dict[str, Any]:
@@ -772,8 +801,9 @@ def _cap_plugin_tool_run(inputs: dict[str, Any], objective: str) -> dict[str, An
             "error": "unexpected_result_type",
             "objective": objective,
         }
-    except Exception as exc:
-        return {"kind": "plugin.tool.run.result", "ok": False, "error": str(exc), "objective": objective}
+    except Exception:
+        _log_executor_exception(event="plugin.tool.run", capability="plugin.tool.run")
+        return {"kind": "plugin.tool.run.result", "ok": False, "error": PLUGIN_RUNTIME_ERROR, "objective": objective}
 
 
 def _cap_plugin_reload(inputs: dict[str, Any], objective: str) -> dict[str, Any]:
@@ -788,8 +818,9 @@ def _cap_plugin_reload(inputs: dict[str, Any], objective: str) -> dict[str, Any]
             result["objective"] = objective
             return result
         return {"kind": "plugin.reload.result", "ok": False, "error": "unexpected_result_type", "objective": objective}
-    except Exception as exc:
-        return {"kind": "plugin.reload.result", "ok": False, "error": str(exc), "objective": objective}
+    except Exception:
+        _log_executor_exception(event="plugin.reload", capability="plugin.reload")
+        return {"kind": "plugin.reload.result", "ok": False, "error": PLUGIN_RUNTIME_ERROR, "objective": objective}
 
 
 def _is_expired(task: dict[str, Any]) -> bool:
@@ -881,9 +912,10 @@ def execute_task(task_id: str, worker_id: str) -> dict[str, Any]:
     status_reason: str | None = None
     try:
         payload = run_capability(capability, dict(inputs), objective)
-    except Exception as exc:
+    except Exception:
+        _log_executor_exception(event="capability_run", capability=capability, task_id=task_id)
         ok = False
-        status_reason = f"{type(exc).__name__}: {exc}"
+        status_reason = CAPABILITY_INTERNAL_ERROR
         payload = {"kind": "error", "capability": capability, "objective": objective, "error": status_reason}
     if ok and isinstance(payload, dict) and payload.get("ok") is False:
         ok = False
@@ -903,8 +935,10 @@ def execute_task(task_id: str, worker_id: str) -> dict[str, Any]:
                 revised = revise_plan(plan_from_dict(raw_plan), status_reason or "execution_failed")
                 if isinstance(payload, dict):
                     payload["plan_revision"] = revised.to_dict()
-        except Exception as exc:
-            logger.error("Plan revision failed: %s", exc)
+        except Exception:
+            _log_executor_exception(event="plan_revision", capability=capability, task_id=task_id)
+            if isinstance(payload, dict):
+                payload["plan_revision_error"] = PLAN_REVISION_ERROR
     task["result"] = {
         "kind": "task.result",
         "task_id": task_id,

@@ -43015,6 +43015,52 @@ Latest validation for Lens exception-response sanitization:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-28 - Executor exception payloads use stable public error codes
+
+Roadmap area: GitHub security cleanup / execution and CI hardening.
+
+Material change:
+
+- Agent executor capability failures, plugin wrapper failures, file preview
+  failures, JSON summary failures, and plan revision failures now log internal
+  exceptions server-side and return stable public error codes.
+- Operation, mission, chat, and reactor surfaces that consume executor results
+  no longer need to receive Python exception type/text from executor failure
+  payloads.
+- Lens hotkey script tests now match the current delegated-authority runtime
+  config: default start/run remains blocked by disabled binding/register flags,
+  while `hotkey_registration_authority` is no longer missing in the repository
+  config.
+- This does not grant any new executor, plugin, Lens, hotkey, summon, overlay,
+  or workflow authority.
+
+Latest validation for executor exception-response sanitization and hotkey CI
+alignment:
+
+- `python -m pytest
+  tests/unit/test_executor_audit_references.py::test_executor_capability_exceptions_are_publicly_sanitized
+  tests/unit/test_executor_audit_references.py::test_executor_plugin_wrappers_return_stable_error_codes
+  tests/test_lens_hotkey_binding_script.py::test_lens_hotkey_binding_start_refuses_default_blocked_config
+  tests/test_lens_hotkey_binding_script.py::test_lens_hotkey_binding_run_refuses_default_blocked_config
+  -q --tb=short --maxfail=1`
+  Result: `passed; 4 passed`
+- `python -m pytest tests/unit/test_executor_audit_references.py
+  tests/test_lens_hotkey_binding_script.py
+  tests/test_api_operations.py::test_operations_plugin_run_action_executes
+  tests/test_api_missions.py::test_mission_advance_surfaces_failed_operation_recovery_handoff
+  tests/test_api_chat.py::test_chat_mission_command_declares_queued_mission_with_loop_context
+  tests/unit/test_reactor_event_queue.py::test_reactor_dispatch_sanitizes_operator_posture_snapshot_errors
+  -q --tb=short --maxfail=1`
+  Result: `passed; 17 passed`
+- `python -m ruff check src/francis/agent/executor.py
+  tests/unit/test_executor_audit_references.py tests/test_lens_hotkey_binding_script.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/agent/executor.py
+  tests/unit/test_executor_audit_references.py tests/test_lens_hotkey_binding_script.py`
+  Result: `passed; 3 files already formatted`
+- `python -m mypy src/francis/agent/executor.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
