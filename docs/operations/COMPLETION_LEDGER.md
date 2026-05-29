@@ -42531,6 +42531,50 @@ Latest validation for delegated Stage 6 Lens authority:
   src/francis/api/routes/approvals.py tests/test_api_approvals.py`
   Result: `passed; 3 files already formatted`
 
+### 2026-05-28 - Stage 6 OS-binding proof accepts delegated-authority posture
+
+Roadmap area: Stage 6 / Lens MVP, command-palette OS-binding proof contract
+after delegated Lens authority grants.
+
+Material change:
+
+- GitHub Actions run `26613555785` for commit `84ff42eb` failed in pytest on
+  all matrix jobs at
+  `tests/test_lens_command_palette_os_binding_proof_script.py::test_lens_command_palette_os_binding_proof_composes_blocked_readbacks`.
+- The failure was not a timeout. Ruff and mypy had already passed remotely.
+- Root cause: after delegated Stage 6 Lens authority grants, the repo-level
+  summon preflight no longer reports `summon_authority_not_granted` and
+  `hotkey_registration_authority_not_granted`, but the OS-binding proof still
+  required those old pre-authority blockers.
+- `scripts/lens-command-palette-os-binding-proof.ps1` now accepts the
+  post-authority blocked posture while still requiring the core command-palette,
+  global-hotkey, and summon-binding blockers and preserving read-only/no-open
+  governance.
+- The targeted proof tests now assert the current post-authority blocker shape.
+- This does not open the command palette, launch a process, register a hotkey,
+  write memory, grant new authority, or mark Stage 6 closed.
+
+Latest validation for delegated-authority OS-binding proof posture:
+
+- `python -m pytest tests/test_lens_command_palette_os_binding_proof_script.py
+  -q --tb=short --maxfail=1`
+  Result: `passed`
+- `python -m pytest tests/test_api_approvals.py
+  tests/test_lens_command_palette_os_binding_proof_script.py -q --tb=short
+  --maxfail=1`
+  Result: `passed`
+- PowerShell parser check for
+  `scripts/lens-command-palette-os-binding-proof.ps1`
+  Result: `passed; parser_ok`
+- `python -m ruff check
+  tests/test_lens_command_palette_os_binding_proof_script.py
+  tests/test_api_approvals.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests/test_lens_command_palette_os_binding_proof_script.py
+  tests/test_api_approvals.py`
+  Result: `passed; 2 files already formatted`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

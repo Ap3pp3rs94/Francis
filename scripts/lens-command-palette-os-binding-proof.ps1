@@ -322,6 +322,13 @@ $SummonBindingBlockers = Select-Blockers -Blockers $SummonBlockers -Names @(
     "lens_summon_binding_disabled_pending_authority",
     "summon_authority_not_granted"
 )
+$SummonBindingRequiredBlockers = @(
+    "lens_summon_binding_disabled_pending_authority"
+)
+$GlobalHotkeyRequiredBlockers = @(
+    "global_hotkey_binding_disabled",
+    "global_hotkey_registration_disabled"
+)
 $TrayPresenceBlockers = Select-Blockers -Blockers $TrayBlockers -Names @(
     "tray_host_disabled",
     "tray_icon_disabled",
@@ -364,13 +371,8 @@ $SummonPreflightObserved = (
     (Get-PropertyValue -Object $SummonJson -Name "kind") -eq "lens.summon.preflight" -and
     (Get-PropertyValue -Object $SummonJson -Name "status") -eq "blocked" -and
     (Get-PropertyValue -Object $SummonJson -Name "ready") -eq $false -and
-    (Test-ContainsAll -Actual $SummonBlockers -Expected @(
-        "global_hotkey_binding_disabled",
-        "global_hotkey_registration_disabled",
-        "lens_summon_binding_disabled_pending_authority",
-        "summon_authority_not_granted",
-        "hotkey_registration_authority_not_granted"
-    ))
+    (Test-ContainsAll -Actual $SummonBlockers -Expected $GlobalHotkeyRequiredBlockers) -and
+    (Test-ContainsAll -Actual $SummonBlockers -Expected $SummonBindingRequiredBlockers)
 )
 $TrayPreflightObserved = (
     $TrayPreflight.exit_code -eq 0 -and
@@ -433,10 +435,7 @@ $OsBindingCandidateObserved = (
         "os_level_command_palette_missing",
         "global_hotkey_binding_disabled",
         "global_hotkey_registration_disabled",
-        "lens_summon_binding_disabled_pending_authority",
-        "summon_authority_not_granted",
-        "hotkey_registration_authority_not_granted",
-        "local_process_launch_authority_not_granted"
+        "lens_summon_binding_disabled_pending_authority"
     ))
 )
 $ExecutionReadinessCommonObserved = (

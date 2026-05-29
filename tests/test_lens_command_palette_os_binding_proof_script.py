@@ -270,11 +270,9 @@ def test_lens_command_palette_os_binding_proof_composes_blocked_readbacks(
     assert blocker_groups["global_hotkey_binding"] == [
         "global_hotkey_binding_disabled",
         "global_hotkey_registration_disabled",
-        "hotkey_registration_authority_not_granted",
     ]
     assert blocker_groups["summon_binding"] == [
         "lens_summon_binding_disabled_pending_authority",
-        "summon_authority_not_granted",
     ]
     assert blocker_groups["tray_presence"] == [
         "tray_host_disabled",
@@ -287,10 +285,8 @@ def test_lens_command_palette_os_binding_proof_composes_blocked_readbacks(
         "overlay_control_authority_not_granted",
     ]
     assert blocker_groups["authority"] == [
-        "summon_authority_not_granted",
-        "hotkey_registration_authority_not_granted",
-        "local_process_launch_authority_not_granted",
         "tray_registration_authority_not_granted",
+        "local_process_launch_authority_not_granted",
         "overlay_control_authority_not_granted",
     ]
 
@@ -323,9 +319,7 @@ def test_lens_command_palette_os_binding_proof_composes_blocked_readbacks(
         "global_hotkey_binding_missing",
         "global_hotkey_binding_disabled",
         "global_hotkey_registration_disabled",
-        "hotkey_registration_authority_not_granted",
         "lens_summon_binding_disabled_pending_authority",
-        "summon_authority_not_granted",
         "local_process_launch_authority_not_granted",
     ]
     assert os_binding_candidate["current_authorized_effect"] == "readback_only_status"
@@ -526,9 +520,7 @@ def test_lens_command_palette_os_binding_proof_accepts_live_summon_readback(
         "os_level_command_palette_missing",
         "global_hotkey_binding_disabled",
         "global_hotkey_registration_disabled",
-        "hotkey_registration_authority_not_granted",
         "lens_summon_binding_disabled_pending_authority",
-        "summon_authority_not_granted",
         "local_process_launch_authority_not_granted",
     ]
     assert payload["governance"]["os_binding_candidate_boundary_readback"] is True
