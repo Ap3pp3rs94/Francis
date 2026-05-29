@@ -21,6 +21,7 @@ from francis.lens.host_manifest import (
     lens_host_supervision_authority_preflight,
     lens_host_supervision_gate,
 )
+from francis.lens.errors import lens_error_code
 from francis.lens.preflight import (
     lens_overlay_enablement_gate,
     lens_preflight,
@@ -1948,7 +1949,7 @@ def _operator_posture_readiness() -> dict[str, Any]:
         return {
             "ready": False,
             "status": "unavailable",
-            "reason": _safe_str(exc),
+            "reason": lens_error_code(exc, surface="operator_posture"),
             "control_mode": {},
             "posture": {},
         }
@@ -2188,7 +2189,7 @@ def _run_bounded_lens_host_activation(*, run_seconds: Any) -> dict[str, Any]:
             "status": "launch_failed",
             "run_seconds": safe_run_seconds,
             "blockers": ["lens_host_activation_launch_failed"],
-            "error": _redact_free_text(str(exc)),
+            "error": lens_error_code(exc, surface="lens_host_activation_launch"),
             "script": "scripts/lens-host.ps1",
         }
 
@@ -2270,7 +2271,7 @@ def _run_bounded_lens_host_supervision_once(*, run_seconds: Any) -> dict[str, An
             "status": "supervision_launch_failed",
             "run_seconds": safe_run_seconds,
             "blockers": ["lens_host_supervision_execution_failed"],
-            "error": _redact_free_text(str(exc)),
+            "error": lens_error_code(exc, surface="lens_host_supervision_execution"),
             "script": "scripts/lens-host-supervisor.ps1",
         }
 
@@ -2360,7 +2361,7 @@ def _run_lens_host_resident_supervision_action(*, mode: str, run_seconds: Any = 
             "status": "resident_supervision_action_failed",
             "script_mode": script_mode,
             "blockers": ["lens_host_resident_supervision_action_failed"],
-            "error": _redact_free_text(str(exc)),
+            "error": lens_error_code(exc, surface="lens_host_resident_supervision_action"),
             "script": "scripts/lens-host-supervisor.ps1",
         }
 

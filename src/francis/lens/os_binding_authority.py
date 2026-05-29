@@ -14,6 +14,7 @@ from francis.governance.approvals import list_requests, request as create_approv
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.redaction import redact_governed_display_value, redact_secret_text
 from francis.kernel.paths import data_dir, repo_root
+from francis.lens.errors import lens_error_code
 from francis.lens.preflight import lens_os_binding_implementation_plan, lens_os_binding_readiness
 
 LENS_OS_BINDING_AUTHORITY_SCOPE = "system.write"
@@ -1203,7 +1204,7 @@ def _run_lens_os_binding_hotkey_action(
             "status": "hotkey_binding_launch_failed",
             "script_mode": script_mode,
             "blockers": ["lens_hotkey_binding_execution_failed"],
-            "error": _redact_free_text(str(exc)),
+            "error": lens_error_code(exc, surface="lens_hotkey_binding_execution"),
             "script": "scripts/lens-hotkey-binding.ps1",
         }
 

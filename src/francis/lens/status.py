@@ -52,6 +52,7 @@ from francis.lens.activation import (
     lens_resident_runtime_activation_plan,
     lens_resident_surface_activation_boundary,
 )
+from francis.lens.errors import lens_error_code
 from francis.lens.host_manifest import (
     lens_host_launch_manifest,
     lens_host_persistent_supervision_enablement_preflight,
@@ -171,7 +172,7 @@ def _approval_surface(*, limit: int) -> dict[str, Any]:
             "pending_count": 0,
             "items": [],
             "route": "/approvals/list?status=pending",
-            "error": _safe_str(exc),
+            "error": lens_error_code(exc, surface="approvals"),
         }
 
     items = [_approval_item(item) for item in pending[:limit] if isinstance(item, dict)]
@@ -191,7 +192,7 @@ def _operator_surface() -> dict[str, Any]:
     except Exception as exc:
         return {
             "available": False,
-            "error": _safe_str(exc),
+            "error": lens_error_code(exc, surface="operator"),
             "control_mode": {},
             "available_modes": [],
             "focus": {},
@@ -240,7 +241,7 @@ def _incident_surface(*, limit: int, reactor: dict[str, Any]) -> dict[str, Any]:
             "focus": [],
             "anomaly": {},
         }
-        readiness = {"status": "unavailable", "error": _safe_str(exc)}
+        readiness = {"status": "unavailable", "error": lens_error_code(exc, surface="incident")}
 
     reactor_attention = _as_dict(reactor.get("attention"))
     reactor_review_total = _safe_int(reactor.get("review_queue_total"))
@@ -287,7 +288,7 @@ def _reactor_surface(*, limit: int) -> dict[str, Any]:
             "ok": False,
             "status": "unavailable",
             "kind": "reactor.operator_visibility.summary",
-            "error": _safe_str(exc),
+            "error": lens_error_code(exc, surface="reactor"),
             "attention": {},
             "readback_surfaces": {},
             "governance": {},

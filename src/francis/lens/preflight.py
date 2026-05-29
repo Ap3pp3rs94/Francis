@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from francis.lens.errors import lens_error_code
 from francis.kernel.paths import data_dir, repo_root
 from francis.lens.host_manifest import _process_alive_readback, lens_host_launch_manifest
 
@@ -70,7 +71,7 @@ def _read_config(relative_path: str) -> tuple[dict[str, Any], bool, str]:
             return {}, False, ""
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        return {}, True, str(exc)
+        return {}, True, lens_error_code(exc, code="lens_config_read_error", surface=relative_path)
     return (payload if isinstance(payload, dict) else {}), True, "" if isinstance(payload, dict) else "not_json_object"
 
 

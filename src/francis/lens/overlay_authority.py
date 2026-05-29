@@ -14,6 +14,7 @@ from francis.governance.approvals import list_requests, request as create_approv
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.redaction import redact_governed_display_value, redact_secret_text
 from francis.kernel.paths import data_dir, repo_root
+from francis.lens.errors import lens_error_code
 from francis.lens.host_manifest import lens_host_launch_manifest, lens_host_persistent_supervision_plan
 from francis.lens.preflight import lens_overlay_enablement_gate
 
@@ -908,7 +909,7 @@ def _run_lens_overlay_window_action(*, mode: str, run_seconds: int) -> dict[str,
             "status": "overlay_window_launch_failed",
             "script_mode": script_mode,
             "blockers": ["lens_overlay_window_execution_failed"],
-            "error": _redact_free_text(str(exc)),
+            "error": lens_error_code(exc, surface="lens_overlay_window_execution"),
             "script": "scripts/lens-overlay-window.ps1",
         }
 

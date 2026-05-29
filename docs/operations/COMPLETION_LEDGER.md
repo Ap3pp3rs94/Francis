@@ -42968,6 +42968,53 @@ Latest validation for non-Lens API error response sanitization:
   src/francis/api/routes/missions.py src/francis/api/routes/operations.py`
   Result: `no matches`
 
+### 2026-05-28 - Lens helper errors stop returning exception text
+
+Roadmap area: GitHub security cleanup / Lens API boundary hardening.
+
+Material change:
+
+- Lens helper surfaces now log internal exceptions server-side and return stable
+  public error codes instead of raw Python exception text.
+- `/lens/status`, `/lens/preflight`, Lens host activation/supervision runner
+  helpers, and Lens tray/hotkey/overlay/summon runner helpers no longer expose
+  `str(exc)` in readback payloads.
+- This is readback/error projection hardening only; it does not grant Lens
+  authority, change Stage 6 closure status, or alter execution permissions.
+
+Latest validation for Lens exception-response sanitization:
+
+- `python -m pytest
+  tests/test_api_security_boundaries.py::test_lens_status_sanitizes_helper_exception_readbacks
+  tests/test_api_security_boundaries.py::test_lens_preflight_config_read_errors_do_not_expose_exception_text
+  tests/test_api_security_boundaries.py::test_lens_runner_os_errors_do_not_expose_exception_text
+  -q --tb=short --maxfail=1`
+  Result: `passed; 3 passed`
+- `python -m pytest tests/test_api_security_boundaries.py
+  tests/test_api_lens.py::test_lens_status_projects_readonly_stage6_contract
+  -q --tb=short --maxfail=1`
+  Result: `passed; 9 passed`
+- `python -m ruff check src/francis/lens/errors.py
+  src/francis/lens/status.py src/francis/lens/preflight.py
+  src/francis/lens/activation.py src/francis/lens/os_binding_authority.py
+  src/francis/lens/summon_authority.py src/francis/lens/overlay_authority.py
+  src/francis/lens/tray_authority.py tests/test_api_security_boundaries.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/lens/errors.py
+  src/francis/lens/status.py src/francis/lens/preflight.py
+  src/francis/lens/activation.py src/francis/lens/os_binding_authority.py
+  src/francis/lens/summon_authority.py src/francis/lens/overlay_authority.py
+  src/francis/lens/tray_authority.py tests/test_api_security_boundaries.py`
+  Result: `passed; 9 files already formatted`
+- `python -m mypy src/francis/lens/errors.py src/francis/lens/status.py
+  src/francis/lens/preflight.py src/francis/lens/activation.py
+  src/francis/lens/os_binding_authority.py
+  src/francis/lens/summon_authority.py src/francis/lens/overlay_authority.py
+  src/francis/lens/tray_authority.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
