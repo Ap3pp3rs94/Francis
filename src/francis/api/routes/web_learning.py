@@ -13,10 +13,11 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import Response
 
 from francis.governance import approvals as approval_store
+from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.redaction import (
     redact_governed_display_value,
     redact_governed_metadata,
@@ -26,6 +27,7 @@ from francis.governance.redaction import (
 from francis.kernel.paths import data_dir
 
 router = APIRouter()
+_WEB_LEARNING_WRITE_SCOPE = "web_learning.write"
 _TRUE_VALUES = {"1", "true", "t", "yes", "y", "on"}
 _FALSE_VALUES = {"0", "false", "f", "no", "n", "off"}
 _ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._:-]{1,127}$")
@@ -363,6 +365,49 @@ def _approval_id_from_payload(payload: dict[str, Any]) -> str:
     if isinstance(meta, dict):
         return _safe_str(meta.get("approval_id")).strip()
     return ""
+
+
+def _web_learning_write_actor(payload: dict[str, Any]) -> str:
+    return (
+        _safe_str(payload.get("request_actor")).strip()
+        or _safe_str(payload.get("api_actor")).strip()
+        or _safe_str(payload.get("actor")).strip()
+        or "api"
+    )
+
+
+def _web_learning_write_permission(actor: Any, *, route: str, method: str) -> ApiPermissionDecision:
+    return ApiPermissionGate.from_env().check(
+        actor_id=actor,
+        required_scopes=[_WEB_LEARNING_WRITE_SCOPE],
+        route=route,
+        method=method,
+    )
+
+
+def _permission_denied(decision: ApiPermissionDecision) -> dict[str, object]:
+    return {
+        "ok": False,
+        "status": "denied",
+        "error": "api_permission_denied",
+        "governance": {
+            "gate": "permission_gate",
+            "reason": decision.reason,
+            "next_step": "configure_actor_scope_before_mutating_web_learning",
+            "evidence": decision.evidence,
+        },
+    }
+
+
+def _write_permission_denial(payload: dict[str, Any], request: Request) -> dict[str, object] | None:
+    decision = _web_learning_write_permission(
+        _web_learning_write_actor(payload),
+        route=request.url.path,
+        method=request.method,
+    )
+    if decision.allowed:
+        return None
+    return _permission_denied(decision)
 
 
 def _normalize_approval_value(value: Any) -> Any:
@@ -1642,8 +1687,10 @@ def list_quarantine(
 @router.post("/request")
 @router.post("/learn")
 @router.post("/enqueue")
-def request_learn(payload: dict[str, Any]) -> dict[str, Any]:
+def request_learn(payload: dict[str, Any], request: Request) -> dict[str, Any]:
     try:
+        if denial := _write_permission_denial(payload, request):
+            return denial
         return _request_learn(payload)
     except Exception as exc:
         return {"ok": False, "error": api_error_message(exc)}
@@ -1652,8 +1699,10 @@ def request_learn(payload: dict[str, Any]) -> dict[str, Any]:
 @router.post("/enabled")
 @router.post("/toggle")
 @router.post("/config")
-def set_enabled(payload: dict[str, Any]) -> dict[str, Any]:
+def set_enabled(payload: dict[str, Any], request: Request) -> dict[str, Any]:
     try:
+        if denial := _write_permission_denial(payload, request):
+            return denial
         return _set_enabled(payload)
     except Exception as exc:
         return {"ok": False, "error": api_error_message(exc)}
@@ -1661,8 +1710,10 @@ def set_enabled(payload: dict[str, Any]) -> dict[str, Any]:
 
 @router.post("/quarantine/decide")
 @router.post("/quarantine/resolve")
-def decide_quarantine_payload(payload: dict[str, Any]) -> dict[str, Any]:
+def decide_quarantine_payload(payload: dict[str, Any], request: Request) -> dict[str, Any]:
     try:
+        if denial := _write_permission_denial(payload, request):
+            return denial
         return _decide_quarantine("", payload)
     except Exception as exc:
         return {"ok": False, "error": api_error_message(exc)}
@@ -1670,8 +1721,10 @@ def decide_quarantine_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
 @router.post("/quarantine/{item_id}/decide")
 @router.post("/quarantine/{item_id}")
-def decide_quarantine(item_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+def decide_quarantine(item_id: str, payload: dict[str, Any], request: Request) -> dict[str, Any]:
     try:
+        if denial := _write_permission_denial(payload, request):
+            return denial
         return _decide_quarantine(item_id, payload)
     except Exception as exc:
         return {"ok": False, "error": api_error_message(exc)}

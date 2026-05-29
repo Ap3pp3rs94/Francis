@@ -94,6 +94,46 @@ def test_web_learning_lifecycle_and_quarantine(monkeypatch, tmp_path: Path) -> N
     assert any(str(item.get("kind")) in {"ingest", "fetch_end", "fetch_start"} for item in event_items)
 
 
+def test_web_learning_request_denies_unscoped_write_before_force_or_persistence(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    denied = client.post(
+        "/web_learning/request",
+        json={
+            "url": "https://example.org/poison",
+            "request_actor": "unscoped.web.learning.writer",
+            "actor": "operator:poison",
+            "reason": "unscoped_force_attempt",
+            "meta": {"force": True},
+        },
+    )
+
+    assert denied.status_code == 200
+    body = denied.json()
+    assert body["ok"] is False
+    assert body["status"] == "denied"
+    assert body["error"] == "api_permission_denied"
+    assert body["governance"]["gate"] == "permission_gate"
+    assert body["governance"]["reason"] == "missing_scopes"
+    assert body["governance"]["next_step"] == "configure_actor_scope_before_mutating_web_learning"
+    assert body["governance"]["evidence"]["actor_present"] is True
+    assert body["governance"]["evidence"]["required_scope_count"] == 1
+
+    registry_path = data_root / "web_learning" / "_registry.json"
+    assert not registry_path.exists()
+
+    records = client.get("/web_learning/records?search=poison")
+    assert records.status_code == 200
+    assert records.json()["total"] == 0
+
+
 def test_web_learning_exports_aliases_and_registry(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

@@ -43664,8 +43664,7 @@ Material change:
   current governance maturity.
 - The matrix intentionally marks current non-uniform surfaces as documented
   gaps instead of claiming they are fixed, including attachment upload,
-  federation registry writes, industrial registry writes, and web-learning
-  policy routes.
+  federation registry writes and industrial registry writes.
 - Added a contract test that fails when any non-GET route lacks matrix coverage.
 
 Latest validation for API mutating-route authority matrix:
@@ -43749,6 +43748,42 @@ Latest validation for explanation write gating:
   tests/test_api_mutating_route_authority_matrix.py tests/conftest.py`
   Result: `passed`
 - `python -m mypy src/francis/api/routes/explanation.py
+  src/francis/api/mutation_authority_matrix.py`
+  Result: `passed`
+
+### 2026-05-29 - Web-learning mutations require API actor scope before policy or force
+
+Roadmap area: Phase 2 / P3_GOVERNANCE -> P2_IDENTITY -> P7_EXECUTION,
+bounded learning/action governance.
+
+Material change:
+
+- `POST /web_learning/request`, `/learn`, `/enqueue`, `/enabled`, `/toggle`,
+  `/config`, and quarantine decision routes now require an API actor with
+  `web_learning.write` before web-learning registry mutation.
+- The same gate applies to dash and system aliases through the shared router.
+- API actor scope is checked before route-specific approval logic and before
+  honoring `meta.force`; the existing exact-approval and quarantine policy
+  behavior remains the second layer.
+- Denied writes return `api_permission_denied` with bounded governance evidence
+  and do not create `data/web_learning/_registry.json`.
+- The mutating-route authority matrix now reports web-learning writes as
+  `permission_and_policy_gated` instead of policy-gated without API scope.
+
+Latest validation for web-learning write gating:
+
+- `python -m pytest tests/test_api_web_learning.py
+  tests/test_api_mutating_route_authority_matrix.py -q --tb=short --maxfail=1`
+  Result: `passed; 12 passed`
+- `python -m ruff check src/francis/api/routes/web_learning.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_web_learning.py
+  tests/test_api_mutating_route_authority_matrix.py tests/conftest.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/web_learning.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_web_learning.py
+  tests/test_api_mutating_route_authority_matrix.py tests/conftest.py`
+  Result: `passed`
+- `python -m mypy src/francis/api/routes/web_learning.py
   src/francis/api/mutation_authority_matrix.py`
   Result: `passed`
 
