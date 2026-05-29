@@ -71,6 +71,11 @@ def test_lens_persistent_supervision_prerequisites_uses_summon_family_contract_r
     assert "$EnablementFirstMissingRequirementObserved" in script
     assert "$PlanFirstMissingRequirementObserved" in script
     assert "including partially advanced seeded-runtime postures" in script
+    denied_keys_block = script[
+        script.index("$DeniedKeys = @(") : script.index("$PlanGovernance =", script.index("$DeniedKeys = @("))
+    ]
+    assert "'local_process_launch_authority'" not in denied_keys_block
+    assert "with delegated local process launch" in script
 
 
 def test_lens_persistent_supervision_prerequisites_align_to_summon_family_contract(

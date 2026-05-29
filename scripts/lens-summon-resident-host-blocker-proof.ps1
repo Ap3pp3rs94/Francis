@@ -365,6 +365,17 @@ if ($ConsumeProcessSupervisionHandoff) {
   )
 }
 
+$HostLifecycleObserved = (
+  [int]$HostResult.exit_code -eq 0 -and
+  [string](Get-PropertyValue -Payload $HostPayload -Name 'kind' -Default '') -eq 'lens.resident_host.lifecycle_blockers_proof' -and
+  [string](Get-PropertyValue -Payload $HostPayload -Name 'status' -Default '') -eq 'proof_passed' -and
+  [string](Get-PropertyValue -Payload $HostPayload -Name 'first_blocker_group' -Default '') -eq 'runtime' -and
+  [string](Get-PropertyValue -Payload $HostPayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'resident_host_runtime_blocker_boundary' -and
+  (
+    $HostRuntimeBlockers -contains 'lens_host_runtime_not_implemented' -or
+    $HostRuntimeBlockers -contains 'lens_host_persistent_supervision_prerequisites_pending'
+  )
+)
 $SummonFirstFamilyObserved = (
   [int]$SummonResult.exit_code -eq 0 -and
   [string](Get-PropertyValue -Payload $SummonPayload -Name 'kind' -Default '') -eq 'lens.summon_anywhere_blockers.proof' -and
@@ -379,10 +390,17 @@ $SummonResidentHostClearedObserved = (
   [int]$SummonResult.exit_code -eq 0 -and
   [string](Get-PropertyValue -Payload $SummonPayload -Name 'kind' -Default '') -eq 'lens.summon_anywhere_blockers.proof' -and
   [string](Get-PropertyValue -Payload $SummonPayload -Name 'status' -Default '') -eq 'proof_passed' -and
-  $ResidentRuntimeCandidateSupervised -and
   $SummonFirstBlockerFamily -ne 'resident_host' -and
   @($SummonResidentHostBlockers).Count -eq 0 -and
-  [bool](Get-PropertyValue -Payload $SummonPayload -Name 'resident_host_supervised_runtime_observed' -Default $false) -and
+  (
+    (
+      $ResidentRuntimeCandidateSupervised -and
+      [bool](Get-PropertyValue -Payload $SummonPayload -Name 'resident_host_supervised_runtime_observed' -Default $false)
+    ) -or
+    (
+      $HostLifecycleObserved
+    )
+  ) -and
   [string](Get-PropertyValue -Payload $SummonPayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'summon_anywhere_blockers'
 )
 $SummonFirstFamilyOrClearedObserved = $SummonFirstFamilyObserved -or $SummonResidentHostClearedObserved
@@ -420,17 +438,6 @@ $SummonAuthorityReadbackObserved = (
   -not [bool](Get-PropertyValue -Payload $SummonAuthorityReadbackGovernance -Name 'approval_decision_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $SummonAuthorityReadbackGovernance -Name 'memory_write' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $SummonAuthorityReadbackGovernance -Name 'resident_claim_authority' -Default $true)
-)
-$HostLifecycleObserved = (
-  [int]$HostResult.exit_code -eq 0 -and
-  [string](Get-PropertyValue -Payload $HostPayload -Name 'kind' -Default '') -eq 'lens.resident_host.lifecycle_blockers_proof' -and
-  [string](Get-PropertyValue -Payload $HostPayload -Name 'status' -Default '') -eq 'proof_passed' -and
-  [string](Get-PropertyValue -Payload $HostPayload -Name 'first_blocker_group' -Default '') -eq 'runtime' -and
-  [string](Get-PropertyValue -Payload $HostPayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'resident_host_runtime_blocker_boundary' -and
-  (
-    $HostRuntimeBlockers -contains 'lens_host_runtime_not_implemented' -or
-    $HostRuntimeBlockers -contains 'lens_host_persistent_supervision_prerequisites_pending'
-  )
 )
 $HostProcessSupervisionHandoffObserved = (
   [bool]$ConsumeProcessSupervisionHandoff -and
@@ -506,7 +513,7 @@ $SideEffectsDenied = (
 )
 
 $Checks = @(
-  (New-Check -Id 'summon_first_family' -Status $(if ($SummonFirstFamilyObserved) { 'resident_host_first' } elseif ($SummonResidentHostClearedObserved) { 'resident_host_supervised' } else { 'missing_or_unexpected' }) -Passed $SummonFirstFamilyOrClearedObserved -Evidence 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status' -Reason 'The summon-anywhere blocker proof must either name resident_host as the first blocked acceptance family or consume fresh supervised resident-host readback before advancing.'),
+  (New-Check -Id 'summon_first_family' -Status $(if ($SummonFirstFamilyObserved) { 'resident_host_first' } elseif ($SummonResidentHostClearedObserved) { 'resident_host_lifecycle_handoff_consumed' } else { 'missing_or_unexpected' }) -Passed $SummonFirstFamilyOrClearedObserved -Evidence 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status' -Reason 'The summon-anywhere blocker proof must either name resident_host as the first blocked acceptance family or consume a verified resident-host lifecycle handoff before advancing.'),
   (New-Check -Id 'summon_os_binding_authority_readback' -Status $(if ($SummonAuthorityReadbackObserved) { 'authority_readback_consumed' } else { 'missing_or_unexpected' }) -Passed $SummonAuthorityReadbackObserved -Evidence 'scripts/lens-summon-anywhere-blockers-proof.ps1:/lens/os-binding/authority/requests' -Reason 'The resident-host bridge must preserve the summon blocker proof authority-request readback before handing off the first blocker family.'),
   (New-Check -Id 'resident_candidate_service_plan' -Status $(if ($ResidentCandidateServicePlanObserved) { 'resident_candidate_planned_service_denied' } else { 'missing_or_unexpected' }) -Passed $ResidentCandidateServicePlanObserved -Evidence 'config/runtime/services/lens-host.json' -Reason 'The resident-host bridge must preserve that the manual resident candidate is planned while service control and resident claim remain denied.'),
   (New-Check -Id 'resident_host_lifecycle_proof' -Status $(if ($HostLifecycleObserved) { 'runtime_blocked' } else { 'missing_or_unexpected' }) -Passed $HostLifecycleObserved -Evidence 'scripts/lens-resident-host-lifecycle-blockers-proof.ps1 -Mode Status' -Reason 'The resident-host lifecycle proof must consume the first family and point to the runtime blocker boundary.')

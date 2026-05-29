@@ -85,6 +85,10 @@ def _write_active_os_binding_grant(data_dir: Path) -> None:
 
 
 def test_lens_summon_resident_host_blocker_proof_aligns_handoff(tmp_path: Path) -> None:
+    script = (_repo_root() / "scripts" / "lens-summon-resident-host-blocker-proof.ps1").read_text(encoding="utf-8")
+    assert "resident_host_lifecycle_handoff_consumed" in script
+    assert "consume a verified resident-host lifecycle handoff before advancing" in script
+
     proc = _run_proof(
         "-Mode",
         "Status",
@@ -116,7 +120,7 @@ def test_lens_summon_resident_host_blocker_proof_aligns_handoff(tmp_path: Path) 
     assert payload["resident_runtime_candidate_supervised"] is False
     assert payload["resident_candidate_supervision_gap"] == "resident_candidate_not_supervised"
     assert payload["resident_runtime_candidate_script"] == "scripts/lens-host.ps1 -Mode Resident"
-    assert payload["first_summon_blocker_family"] == "resident_host"
+    assert payload["first_summon_blocker_family"] == "tray_presence"
     assert payload["summon_next_smallest_truthful_gap"] == "summon_anywhere_blockers"
     assert payload["summon_os_binding_authority_request_readback_observed"] is True
     assert payload["resident_host_lifecycle_next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
@@ -134,6 +138,7 @@ def test_lens_summon_resident_host_blocker_proof_aligns_handoff(tmp_path: Path) 
     assert payload["authority_required"] == "none_new_stage6_completion_audit"
     assert payload["authority_granted"] is False
     assert payload["summon_first_family_observed"] is True
+    assert payload["summon_resident_host_cleared_observed"] is True
     assert payload["resident_host_lifecycle_observed"] is True
     assert payload["consume_process_supervision_handoff"] is True
     assert payload["resident_host_process_supervision_handoff_observed"] is True
@@ -165,7 +170,7 @@ def test_lens_summon_resident_host_blocker_proof_aligns_handoff(tmp_path: Path) 
     assert authority_readback["governance"]["memory_write"] is False
     assert authority_readback["governance"]["resident_claim_authority"] is False
 
-    assert payload["summon_resident_host_blockers"] == ["local_process_launch_authority_not_granted"]
+    assert payload["summon_resident_host_blockers"] == []
     assert payload["resident_host_runtime_blockers"] == ["lens_host_persistent_supervision_prerequisites_pending"]
     assert isinstance(payload["resident_host_process_readback_blockers"], list)
     assert "resident_host_process_not_supervised" in payload["resident_host_process_supervision_blockers"]
@@ -229,7 +234,7 @@ def test_lens_summon_resident_host_blocker_proof_aligns_handoff(tmp_path: Path) 
     ]
 
     checks = {item["id"]: item for item in payload["checks"]}
-    assert checks["summon_first_family"]["status"] == "resident_host_first"
+    assert checks["summon_first_family"]["status"] == "resident_host_lifecycle_handoff_consumed"
     assert checks["summon_os_binding_authority_readback"]["status"] == "authority_readback_consumed"
     assert checks["resident_candidate_service_plan"]["status"] == "resident_candidate_planned_service_denied"
     assert checks["resident_host_lifecycle_proof"]["status"] == "runtime_blocked"

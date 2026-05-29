@@ -43122,6 +43122,60 @@ Latest validation for the persistent-supervision prerequisite CI assertion:
   tests/test_lens_persistent_supervision_prerequisite_readback.py`
   Result: `passed; 1 file already formatted`
 
+### 2026-05-29 - Stage 6 proof chain consumes delegated authority readbacks
+
+Roadmap area: GitHub CI cleanup / Stage 6 Lens proof-readback contract.
+
+Material change:
+
+- `scripts/lens-summon-anywhere-blockers-proof.ps1` now accepts the current
+  delegated-authority posture where authority blockers are absent but
+  summon-anywhere can still be blocked by remaining bounded runtime/surface
+  readbacks.
+- The summon-anywhere blocker proof now validates known preflight blockers,
+  fixes the PowerShell array-index cast in family projection comparison, and
+  hands off to the Stage 6 completion audit when no blocker family remains.
+- `scripts/lens-summon-resident-host-blocker-proof.ps1` now evaluates the
+  resident-host lifecycle proof before using that lifecycle readback to consume
+  a resident-host blocker family that has already advanced.
+- `scripts/lens-persistent-supervision-prerequisites-proof.ps1` continues to
+  deny product/API execution and governance authority while allowing the one
+  bounded delegated local-process diagnostic proof needed for readback.
+- This is a CI/proof-consumption correction only. It does not mark Stage 6
+  closed, grant new authority, start product runtime, or replace the live Stage
+  6 completion audit gate.
+
+Latest validation for the delegated-authority proof chain:
+
+- `python -m pytest
+  tests/test_lens_summon_anywhere_blockers_proof_script.py
+  tests/test_lens_summon_resident_host_blocker_proof_script.py
+  tests/test_lens_resident_host_runtime_boundary_proof_script.py::test_lens_resident_host_runtime_boundary_consumes_handoff_without_authority
+  tests/test_lens_persistent_supervision_prerequisites_proof_script.py::test_lens_persistent_supervision_prerequisites_align_to_summon_family_contract
+  -q --tb=short --maxfail=1`
+  Result: `passed`
+- `python -m pytest
+  tests/test_lens_persistent_supervision_prerequisites_proof_script.py
+  tests/test_lens_summon_resident_host_blocker_proof_script.py
+  tests/test_lens_summon_anywhere_blockers_proof_script.py
+  -q --tb=short --maxfail=1`
+  Result: `passed; 11 passed`
+- PowerShell parser validation for
+  `scripts/lens-summon-anywhere-blockers-proof.ps1`,
+  `scripts/lens-summon-resident-host-blocker-proof.ps1`, and
+  `scripts/lens-persistent-supervision-prerequisites-proof.ps1`
+  Result: `passed`
+- `python -m ruff check
+  tests/test_lens_summon_anywhere_blockers_proof_script.py
+  tests/test_lens_summon_resident_host_blocker_proof_script.py
+  tests/test_lens_persistent_supervision_prerequisites_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests/test_lens_summon_anywhere_blockers_proof_script.py
+  tests/test_lens_summon_resident_host_blocker_proof_script.py
+  tests/test_lens_persistent_supervision_prerequisites_proof_script.py`
+  Result: `passed; 3 files already formatted`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

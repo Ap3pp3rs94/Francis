@@ -587,6 +587,34 @@ $Stage6BlockedFamilies = [string[]]@(
   }
 )
 
+$KnownSummonPreflightBlockers = [string[]]@(
+  'lens_host_runtime_not_implemented',
+  'lens_host_persistent_supervision_prerequisites_pending',
+  'resident_host_process_missing',
+  'resident_host_process_not_supervised',
+  'local_process_launch_authority_not_granted',
+  'summon_authority_not_granted',
+  'hotkey_registration_authority_not_granted',
+  'overlay_control_authority_not_granted',
+  'tray_host_missing',
+  'overlay_window_missing',
+  'global_hotkey_binding_disabled',
+  'global_hotkey_registration_disabled',
+  'lens_summon_binding_not_implemented',
+  'lens_summon_binding_disabled_pending_authority'
+)
+$UnknownSummonPreflightBlockers = [string[]]@(
+  $SummonPreflightBlockers | Where-Object { @($KnownSummonPreflightBlockers) -notcontains [string]$_ }
+)
+$SummonPreflightLegacyAuthorityBlockersObserved = (
+  $SummonPreflightBlockers -contains 'summon_authority_not_granted' -and
+  $SummonPreflightBlockers -contains 'hotkey_registration_authority_not_granted'
+)
+$SummonPreflightCurrentBlockedPostureObserved = (
+  @($SummonPreflightBlockers).Count -gt 0 -and
+  @($UnknownSummonPreflightBlockers).Count -eq 0
+)
+
 $SummonPreflightObserved = (
   [int]$SummonPreflightResult.exit_code -eq 0 -and
   [string](Get-PropertyValue -Payload $SummonPreflightPayload -Name 'kind' -Default '') -eq 'lens.summon.preflight' -and
@@ -597,11 +625,13 @@ $SummonPreflightObserved = (
   [string](Get-PropertyValue -Payload $SummonPreflightPayload -Name 'global_hotkey' -Default '') -ne '' -and
   $SummonPreflightBlockers -contains 'global_hotkey_binding_disabled' -and
   $SummonPreflightBlockers -contains 'global_hotkey_registration_disabled' -and
-  $SummonPreflightBlockers -contains 'summon_authority_not_granted' -and
-  $SummonPreflightBlockers -contains 'hotkey_registration_authority_not_granted'
+  (
+    $SummonPreflightLegacyAuthorityBlockersObserved -or
+    $SummonPreflightCurrentBlockedPostureObserved
+  )
 )
 $Stage6ExpectedBlockedFamilies = [string[]]@(
-  if (-not $ResidentHostSupervisedRuntimeObserved) {
+  if (-not $ResidentHostSupervisedRuntimeObserved -and @($ResidentHostBlockers).Count -gt 0) {
     'resident_host'
   }
   if (-not $TrayPresenceRuntimeObserved -and @($TrayPresenceBlockers).Count -gt 0) {
@@ -625,7 +655,7 @@ for ($Index = 0; $Index -lt @($Stage6ExpectedBlockedFamilies).Count; $Index++) {
   if (-not $Stage6FamilyProjectionObserved) {
     break
   }
-  if ([string]$Stage6BlockedFamilies[$Index] -ne [string]$Stage6ExpectedBlockedFamilies[$Index]) {
+  if ([string](@($Stage6BlockedFamilies)[$Index]) -ne [string](@($Stage6ExpectedBlockedFamilies)[$Index])) {
     $Stage6FamilyProjectionObserved = $false
   }
 }
@@ -755,6 +785,11 @@ $FirstBlockerFamilyHandoffObserved = (
   [string](Get-PropertyValue -Payload $FirstBlockerFamilyHandoff -Name 'authority_required' -Default '') -eq [string](Get-PropertyValue -Payload $ExpectedFirstBlockerFamilyHandoff -Name 'authority_required' -Default '') -and
   $AllFamilyHandoffsBounded
 )
+$NoBlockedFamilyHandoffObserved = (
+  @($Stage6BlockedFamilies).Count -eq 0 -and
+  @($Stage6BlockerFamilyHandoffs).Count -eq 0 -and
+  $Stage6FamilyProjectionObserved
+)
 $FirstBlockerFamilyCompletionAuditHandoffObserved = (
   -not $ResidentHostSupervisedRuntimeObserved -and
   [bool](Get-PropertyValue -Payload $LensStatusRead -Name 'ok' -Default $false) -and
@@ -789,6 +824,25 @@ if ($ConsumedLiveSummonAnywhereReadback) {
     os_binding_readiness_ready = $OsBindingRuntimeReady
     summon_runtime_readback_ready = $SummonAnywhereRuntimeReadbackObserved
     stage6_closure_ready = $SummonAnywhereClosureReady
+    authority_required = 'none_readback_only'
+    authority_granted = $false
+    read_only_contract = $true
+    diagnostic_only = $true
+    would_execute = $false
+    would_mutate = $false
+  }
+}
+$NoBlockedFamilyHandoff = [ordered]@{}
+if ($NoBlockedFamilyHandoffObserved) {
+  $NoBlockedFamilyHandoff = [ordered]@{
+    status = 'no_blocker_family_remaining'
+    previous_next_smallest_truthful_gap = 'summon_anywhere_blockers'
+    next_smallest_truthful_gap = 'stage6_lens_completion_audit'
+    next_step = 'run_stage6_lens_completion_audit_after_no_summon_blocker_families'
+    proof_script = 'scripts/lens-stage6-completion-audit.ps1 -Mode Status'
+    route = '/lens/summon'
+    readiness_route = '/lens/summon/readiness'
+    acceptance_criterion = 'summon_anywhere'
     authority_required = 'none_readback_only'
     authority_granted = $false
     read_only_contract = $true
@@ -862,6 +916,17 @@ if ($Stage6PrerequisiteBringupPlanObserved) {
   }
 }
 
+if ($NoBlockedFamilyHandoffObserved -and -not $ConsumedLiveSummonAnywhereReadback) {
+  $RecommendedHandoffSource = 'no_blocker_family_handoff'
+  $RecommendedNextSlice = [string]$NoBlockedFamilyHandoff.next_step
+  $RecommendedProofScript = [string]$NoBlockedFamilyHandoff.proof_script
+  $RecommendedRoute = [string]$NoBlockedFamilyHandoff.route
+  $RecommendedReadinessRoute = [string]$NoBlockedFamilyHandoff.readiness_route
+  $RecommendedAuthorityRequired = [string]$NoBlockedFamilyHandoff.authority_required
+  $RecommendedAuthorityGranted = [bool]$NoBlockedFamilyHandoff.authority_granted
+  $RecommendedHandoff = $NoBlockedFamilyHandoff
+}
+
 if ($ConsumedLiveSummonAnywhereReadback) {
   $RecommendedHandoffSource = 'live_summon_anywhere_readback_handoff'
   $RecommendedNextSlice = [string]$LiveSummonAnywhereReadbackHandoff.next_step
@@ -888,7 +953,7 @@ $RecommendedConcreteAuthorityGranted = [bool](Get-PropertyValue -Payload $Recomm
 $Checks = @(
   (New-Check -Id 'summon_preflight_readback' -Status $(if ($SummonPreflightObserved) { 'blocked_readback_ready' } else { 'missing_or_unexpected' }) -Passed $SummonPreflightObserved -Evidence 'scripts/lens-summon-preflight.ps1 -Mode Status' -Reason 'The direct summon preflight must name summon-anywhere as blocked and point to summon_anywhere_blockers.'),
   (New-Check -Id 'stage6_family_projection' -Status $(if ($Stage6FamilyProjectionObserved) { 'blocked_families_projected' } else { 'missing_or_unexpected' }) -Passed $Stage6FamilyProjectionObserved -Evidence 'summon preflight blockers projected into Stage 6 acceptance families' -Reason 'The handoff proof must expose the same blocker-family shape used by the Stage 6 completion audit.'),
-  (New-Check -Id 'first_blocker_family_handoff' -Status $(if ($ConsumedLiveSummonAnywhereReadback) { 'live_readback_consumed' } elseif ($FirstBlockerFamilyHandoffObserved) { 'handoff_ready' } else { 'missing_or_unexpected' }) -Passed $($FirstBlockerFamilyHandoffObserved -or $ConsumedLiveSummonAnywhereReadback) -Evidence 'summon first blocker family to resident-host proof script' -Reason 'The aggregate summon-anywhere blocker proof must hand the first blocked acceptance family to its bounded proof, unless live summon-anywhere readback has already consumed that blocker path.'),
+  (New-Check -Id 'first_blocker_family_handoff' -Status $(if ($ConsumedLiveSummonAnywhereReadback) { 'live_readback_consumed' } elseif ($NoBlockedFamilyHandoffObserved) { 'no_blocker_family_remaining' } elseif ($FirstBlockerFamilyHandoffObserved) { 'handoff_ready' } else { 'missing_or_unexpected' }) -Passed $($FirstBlockerFamilyHandoffObserved -or $NoBlockedFamilyHandoffObserved -or $ConsumedLiveSummonAnywhereReadback) -Evidence 'summon first blocker family to resident-host proof script' -Reason 'The aggregate summon-anywhere blocker proof must hand the first blocked acceptance family to its bounded proof, unless live summon-anywhere readback or an empty blocker-family projection has already consumed that blocker path.'),
   (New-Check -Id 'summon_side_effects_denied' -Status $(if ($SideEffectsDenied) { 'diagnostic_bounded' } else { 'unexpected_authority' }) -Passed $SideEffectsDenied -Evidence 'lens.summon.preflight.governance' -Reason 'The proof must not grant summon, hotkey, overlay, process, memory, capture, sensing, approval-decision, or execution authority.'),
   (New-Check -Id 'os_binding_authority_request_readback' -Status $(if ($OsBindingAuthorityRequestReadbackObserved) { 'readback_ready' } else { 'missing_or_unexpected' }) -Passed $OsBindingAuthorityRequestReadbackObserved -Evidence '/lens/status:/lens/os-binding/authority/requests' -Reason 'The summon-anywhere blocker proof must consume OS-binding authority request readback before treating command-palette authority visibility as audited.'),
   (New-Check -Id 'surface_runtime_readback' -Status $(if ($TrayPresenceRuntimeObserved -or $GlobalHotkeyRuntimeObserved -or $OverlayWindowRuntimeObserved -or $SummonBindingRuntimeObserved) { 'readback_consumed' } else { 'not_present' }) -Passed $true -Evidence '/lens/status resident_host.*_runtime_readback' -Reason 'Live surface runtime readback may suppress stale static preflight surface blockers, while authority blockers stay separate.'),
@@ -899,6 +964,8 @@ $Checks = @(
 
 $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
 $ProofNextSmallestTruthfulGap = if ($ConsumedLiveSummonAnywhereReadback) {
+  'stage6_lens_completion_audit'
+} elseif ($NoBlockedFamilyHandoffObserved) {
   'stage6_lens_completion_audit'
 } else {
   'summon_anywhere_blockers'
@@ -937,6 +1004,8 @@ $Payload = [ordered]@{
   os_binding_authority_request_readback_observed = $OsBindingAuthorityRequestReadbackObserved
   consumed_live_summon_anywhere_readback = $ConsumedLiveSummonAnywhereReadback
   live_summon_anywhere_readback_handoff = $LiveSummonAnywhereReadbackHandoff
+  no_blocker_family_handoff_observed = $NoBlockedFamilyHandoffObserved
+  no_blocker_family_handoff = $NoBlockedFamilyHandoff
   live_summon_anywhere_readback = [ordered]@{
     summon_gate_ready = $SummonAnywhereGateReady
     os_binding_readiness_ready = $OsBindingRuntimeReady

@@ -842,7 +842,6 @@ $DeniedKeys = @(
   'execution_authority',
   'approval_decision_authority',
   'memory_write',
-  'local_process_launch_authority',
   'process_supervision_authority',
   'process_restart_authority',
   'service_install_authority',
@@ -879,7 +878,7 @@ $Checks = @(
   (New-Check -Id 'summon_family_contract_alignment' -Status $(if ($SummonFamilyContractObserved) { 'family_contract_aligned' } else { 'missing_or_unexpected' }) -Passed $SummonFamilyContractObserved -Evidence 'enablement_dependency_readback family fields on plan and enablement routes' -Reason 'Persistent-supervision prerequisites must align with the summon-family taxonomy without rerunning the full summon family-chain proof.'),
   (New-Check -Id 'first_missing_requirement_proof_consumed' -Status $(if ($FirstMissingRequirementProofObserved) { 'proof_consumed' } else { 'missing_or_unexpected' }) -Passed $FirstMissingRequirementProofObserved -Evidence 'scripts/lens-resident-host-runtime-boundary-proof.ps1 -Mode Status' -Reason 'The advertised first missing resident-host prerequisite must be consumed by the bounded runtime boundary proof.'),
   (New-Check -Id 'lens_status_operator_readback' -Status $(if ($StatusReadbackObserved) { 'operator_readback_ready' } else { 'missing_or_unexpected' }) -Passed $StatusReadbackObserved -Evidence '/lens/status resident_host persistent-supervision readback' -Reason 'The operator status payload must carry the same persistent-supervision plan and enablement readback.'),
-  (New-Check -Id 'side_effects_denied' -Status $(if ($SideEffectsDenied) { 'diagnostic_bounded' } else { 'unexpected_authority' }) -Passed $SideEffectsDenied -Evidence 'route governance + dependency readback + first missing proof governance + proof data root' -Reason 'This proof may consume one bounded diagnostic host-runtime proof but must not mutate service config, write memory, claim residence, or grant product/API execution, process, service, tray, hotkey, overlay, summon, approval, or resident authority.')
+  (New-Check -Id 'side_effects_denied' -Status $(if ($SideEffectsDenied) { 'diagnostic_bounded' } else { 'unexpected_authority' }) -Passed $SideEffectsDenied -Evidence 'route governance + dependency readback + first missing proof governance + proof data root' -Reason 'This proof may consume one bounded diagnostic host-runtime proof with delegated local process launch, but must not mutate service config, write memory, claim residence, or grant product/API execution, process supervision, service, tray, hotkey, overlay, summon, approval, or resident authority.')
 )
 $ProofPassed = -not @($Checks | Where-Object { -not [bool]$_['passed'] })
 
