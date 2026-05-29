@@ -223,7 +223,8 @@ def test_lens_summon_preflight_consumes_live_hotkey_runtime_readback(tmp_path: P
     assert hotkey_dependency["runtime_blocker"] == ""
     assert hotkey_dependency["ready"] is False
     assert "global_hotkey_binding_disabled" in hotkey_dependency["blockers"]
-    assert "hotkey_registration_authority_not_granted" in hotkey_dependency["blockers"]
+    assert "global_hotkey_registration_disabled" in hotkey_dependency["blockers"]
+    assert "hotkey_registration_authority_not_granted" not in hotkey_dependency["blockers"]
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["hotkey_runtime"]["status"] == "bound"
     assert payload["ready"] is False
@@ -266,12 +267,8 @@ def test_lens_summon_preflight_refuses_bind_actions() -> None:
         "overlay_control_authority",
         "local_process_launch_authority",
     ]
-    assert action_gate["missing_authorities"] == [
-        "summon_authority_not_granted",
-        "hotkey_registration_authority_not_granted",
-        "overlay_control_authority_not_granted",
-        "local_process_launch_authority_not_granted",
-    ]
+    assert action_gate["missing_authorities"] == []
+    assert action_gate["blocker_groups"]["authority"] == []
     assert action_gate["binding_execution_attempted"] is False
     assert action_gate["launch_execution_attempted"] is False
     assert action_gate["would_register_hotkey"] is False

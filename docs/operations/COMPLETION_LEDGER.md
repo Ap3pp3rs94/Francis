@@ -43437,6 +43437,35 @@ readbacks:
   tests/test_lens_summon_anywhere_family_chain_proof_script.py`
   Result: `passed; 8 files already formatted`
 
+### 2026-05-29 - Stage 6 summon preflight live-hotkey readback matches delegated authority
+
+Roadmap area: Stage 6 Lens MVP / summon-anywhere preflight proof readbacks
+under delegated development authority.
+
+Material change:
+
+- `tests/test_lens_summon_preflight_script.py` now expects the live hotkey
+  runtime readback to report the current disabled registration blocker
+  (`global_hotkey_registration_disabled`) without duplicating
+  `hotkey_registration_authority_not_granted` after delegated authority has
+  already been applied in `config/runtime/lens/summon.json`.
+- The same test file now expects bind-action denial to remain policy/readiness
+  gated without reporting missing authorities when those authorities are
+  already present in the delegated development config.
+- This is a CI/test contract correction only. It does not grant summon,
+  hotkey, overlay, local-process, memory, approval-decision, receipt, sensing,
+  capture, or resident-claim authority and does not mark Stage 6 closed.
+
+Latest validation for Stage 6 summon preflight live-hotkey readback:
+
+- `python -m pytest tests/test_lens_summon_preflight_script.py -q
+  --tb=short --maxfail=1`
+  Result: `passed; 3 passed`
+- `python -m ruff check tests/test_lens_summon_preflight_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_summon_preflight_script.py`
+  Result: `passed; 1 file already formatted`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
