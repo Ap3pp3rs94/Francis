@@ -43664,8 +43664,8 @@ Material change:
   current governance maturity.
 - The matrix intentionally marks current non-uniform surfaces as documented
   gaps instead of claiming they are fixed, including attachment upload,
-  federation registry writes, explanation records, industrial registry writes,
-  and web-learning policy routes.
+  federation registry writes, industrial registry writes, and web-learning
+  policy routes.
 - Added a contract test that fails when any non-GET route lacks matrix coverage.
 
 Latest validation for API mutating-route authority matrix:
@@ -43715,6 +43715,40 @@ Latest validation for memory timeline write gating:
   tests/test_api_mutating_route_authority_matrix.py tests/conftest.py`
   Result: `passed`
 - `python -m mypy src/francis/api/routes/memory_timeline.py
+  src/francis/api/mutation_authority_matrix.py`
+  Result: `passed`
+
+### 2026-05-29 - Explanation records require explicit API actor scope
+
+Roadmap area: Phase 2 / P3_GOVERNANCE -> P2_IDENTITY -> P9_OBSERVABILITY,
+trace/audit record governance.
+
+Material change:
+
+- `POST /explanations/record`, `POST /explanations/create`,
+  `POST /explanation/record`, and `POST /explanation/create` now require an
+  API actor with `explanation.write` before any explanation registry load/save.
+- The write actor is resolved from `request_actor`, `api_actor`, or `actor`, so
+  record content can remain distinct from the API caller identity.
+- Denied writes return `api_permission_denied` with bounded governance evidence
+  and do not create `data/explanations/_registry.json`.
+- The mutating-route authority matrix now reports explanation writes as
+  `permission_gated` instead of a documented gap.
+
+Latest validation for explanation write gating:
+
+- `python -m pytest tests/test_api_explanation.py
+  tests/test_api_mutating_route_authority_matrix.py -q --tb=short --maxfail=1`
+  Result: `passed; 8 passed`
+- `python -m ruff check src/francis/api/routes/explanation.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_explanation.py
+  tests/test_api_mutating_route_authority_matrix.py tests/conftest.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/explanation.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_explanation.py
+  tests/test_api_mutating_route_authority_matrix.py tests/conftest.py`
+  Result: `passed`
+- `python -m mypy src/francis/api/routes/explanation.py
   src/francis/api/mutation_authority_matrix.py`
   Result: `passed`
 

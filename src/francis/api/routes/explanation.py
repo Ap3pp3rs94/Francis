@@ -13,13 +13,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import Response
 
+from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.operation_redaction import redact_operation_text
 from francis.kernel.paths import data_dir
 
 router = APIRouter()
+_EXPLANATION_WRITE_SCOPE = "explanation.write"
 _ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._:-]{1,127}$")
 _CURRENT_TASK_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "operation_status": ("operation_status", "operationStatus"),
@@ -195,6 +197,37 @@ def _first_text(sources: tuple[Any, ...], aliases: tuple[str, ...]) -> str:
             if value:
                 return value
     return ""
+
+
+def _explanation_write_actor(payload: dict[str, Any]) -> str:
+    return (
+        _safe_str(payload.get("request_actor")).strip()
+        or _safe_str(payload.get("api_actor")).strip()
+        or _safe_str(payload.get("actor")).strip()
+    )
+
+
+def _explanation_write_permission(actor: Any, *, route: str, method: str) -> ApiPermissionDecision:
+    return ApiPermissionGate.from_env().check(
+        actor_id=actor,
+        required_scopes=[_EXPLANATION_WRITE_SCOPE],
+        route=route,
+        method=method,
+    )
+
+
+def _permission_denied(decision: ApiPermissionDecision) -> dict[str, object]:
+    return {
+        "ok": False,
+        "status": "denied",
+        "error": "api_permission_denied",
+        "governance": {
+            "gate": "permission_gate",
+            "reason": decision.reason,
+            "next_step": "configure_actor_scope_before_writing_explanations",
+            "evidence": decision.evidence,
+        },
+    }
 
 
 def _reference_handles(*sources: Any) -> dict[str, str]:
@@ -903,8 +936,16 @@ def export_explanations(
 
 @router.post("/record")
 @router.post("/create")
-def record_explanation(payload: dict[str, Any]) -> dict[str, Any]:
+def record_explanation(payload: dict[str, Any], request: Request) -> dict[str, Any]:
     try:
+        permission = _explanation_write_permission(
+            _explanation_write_actor(payload),
+            route=request.url.path,
+            method=request.method,
+        )
+        if not permission.allowed:
+            return _permission_denied(permission)
+
         requested_id = _safe_str(payload.get("id")).strip()
         title = _safe_str(payload.get("title")).strip()
         kind = _safe_str(payload.get("kind")).strip() or "audit"

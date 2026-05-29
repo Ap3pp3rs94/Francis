@@ -86,6 +86,13 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
     assert memory["governance_maturity"] == "permission_gated"
     assert "permission_gate" in memory["denial_behavior"]
 
+    explanation = entries["/explanations/record"]
+    assert explanation["family"] == "explanation"
+    assert explanation["required_actor"] == "payload.request_actor, payload.api_actor, or payload.actor"
+    assert explanation["required_scope"] == "explanation.write"
+    assert explanation["governance_maturity"] == "permission_gated"
+    assert "permission_gate" in explanation["denial_behavior"]
+
     read_batch = entries["/operations/get_many"]
     assert read_batch["family"] == "operations_read_batch"
     assert read_batch["required_actor"] == "none"

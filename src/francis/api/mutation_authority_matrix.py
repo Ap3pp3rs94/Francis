@@ -176,12 +176,12 @@ _RULES: tuple[AuthorityRule, ...] = (
     AuthorityRule(
         family="explanation",
         prefixes=("/explanations", "/explanation"),
-        required_actor="payload.actor where provided",
-        required_scope="documented_gap: no explanation.write ApiPermissionGate scope enforced",
-        approval_requirement="not_required_currently",
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="explanation.write",
+        approval_requirement="not_required_currently; explicit API actor scope required",
         receipt_behavior="explanation registry record",
-        denial_behavior="validation or sanitized error; not generic permission_gate",
-        governance_maturity="documented_gap",
+        denial_behavior="api_permission_denied via permission_gate before registry load/save",
+        governance_maturity="permission_gated",
     ),
     AuthorityRule(
         family="memory_timeline",

@@ -5,6 +5,8 @@ import io
 import json
 from pathlib import Path
 
+_EXPLANATION_WRITE_ACTOR = "test.explanation.write"
+
 
 def test_explanations_list_get_export_and_filters(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
@@ -26,6 +28,7 @@ def test_explanations_list_get_export_and_filters(monkeypatch, tmp_path: Path) -
         "/explanations/record",
         json={
             "id": "exp-alpha",
+            "request_actor": _EXPLANATION_WRITE_ACTOR,
             "ts": 1_700_000_001,
             "kind": "decision",
             "severity": "warning",
@@ -55,6 +58,7 @@ def test_explanations_list_get_export_and_filters(monkeypatch, tmp_path: Path) -
         "/explanations/record",
         json={
             "id": "exp-beta",
+            "request_actor": _EXPLANATION_WRITE_ACTOR,
             "ts": 1_700_000_002,
             "kind": "audit",
             "severity": "info",
@@ -71,6 +75,7 @@ def test_explanations_list_get_export_and_filters(monkeypatch, tmp_path: Path) -
         "/explanations/record",
         json={
             "id": "exp-gamma",
+            "request_actor": _EXPLANATION_WRITE_ACTOR,
             "ts": 1_700_000_003,
             "kind": "decision",
             "severity": "error",
@@ -160,6 +165,46 @@ def test_explanations_list_get_export_and_filters(monkeypatch, tmp_path: Path) -
     assert rows[0]["operation_id"] == "tsk-gamma"
 
 
+def test_explanations_record_denies_unscoped_write_without_persisting(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    denied = client.post(
+        "/explanations/record",
+        json={
+            "id": "exp-denied-unscoped",
+            "request_actor": "unscoped.explanation.writer",
+            "kind": "audit",
+            "summary": "This explanation should not be stored.",
+            "content": {"poison": "do_not_store_explanation"},
+        },
+    )
+
+    assert denied.status_code == 200
+    body = denied.json()
+    assert body["ok"] is False
+    assert body["status"] == "denied"
+    assert body["error"] == "api_permission_denied"
+    assert body["governance"]["gate"] == "permission_gate"
+    assert body["governance"]["reason"] == "missing_scopes"
+    assert body["governance"]["next_step"] == "configure_actor_scope_before_writing_explanations"
+    assert body["governance"]["evidence"]["actor_present"] is True
+    assert body["governance"]["evidence"]["required_scope_count"] == 1
+
+    registry_path = data_root / "explanations" / "_registry.json"
+    assert not registry_path.exists()
+
+    listed = client.get("/explanations/list?search=do_not_store_explanation")
+    assert listed.status_code == 200
+    assert listed.json()["total"] == 0
+
+
 def test_explanations_promote_structured_receipt_references(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
@@ -174,6 +219,7 @@ def test_explanations_promote_structured_receipt_references(monkeypatch, tmp_pat
         "/explanations/record",
         json={
             "id": "exp-references",
+            "request_actor": _EXPLANATION_WRITE_ACTOR,
             "ts": 1_700_000_010,
             "kind": "audit",
             "severity": "info",
@@ -267,6 +313,7 @@ def test_explanations_preserve_current_task_receipt_identity(monkeypatch, tmp_pa
         "/explanations/record",
         json={
             "id": "exp-current-task",
+            "request_actor": _EXPLANATION_WRITE_ACTOR,
             "ts": 1_700_000_020,
             "kind": "audit",
             "severity": "info",
@@ -427,6 +474,7 @@ def test_explanations_promote_handoff_receipt_references(monkeypatch, tmp_path: 
         "/explanations/record",
         json={
             "id": "exp-handoff",
+            "request_actor": _EXPLANATION_WRITE_ACTOR,
             "ts": 1_700_000_030,
             "kind": "audit",
             "severity": "info",
@@ -520,6 +568,7 @@ def test_explanation_prefix_compatibility_and_persistence(monkeypatch, tmp_path:
         "/explanation/record",
         json={
             "id": "exp-singular",
+            "request_actor": _EXPLANATION_WRITE_ACTOR,
             "kind": "audit",
             "severity": "info",
             "title": "Singular write",
@@ -540,6 +589,7 @@ def test_explanation_prefix_compatibility_and_persistence(monkeypatch, tmp_path:
         "/explanations/create",
         json={
             "id": "exp-plural",
+            "request_actor": _EXPLANATION_WRITE_ACTOR,
             "kind": "decision",
             "severity": "warning",
             "title": "Plural write",
