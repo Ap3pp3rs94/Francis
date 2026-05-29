@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from typing import Any
 
@@ -15,6 +16,8 @@ from francis.world_state.operator_mode import snapshot as operator_mode_snapshot
 
 _MISSIONS_WRITE_SCOPE = "missions.write"
 _OPERATIONS_RUN_SCOPE = "operations.run"
+_INTERNAL_API_ERROR = "internal_api_error"
+_LOG = logging.getLogger("francis.reactor.dispatch")
 _SAFE_RECORD_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,191}$")
 _CLASSIFICATION_SOURCES = frozenset(
     {
@@ -95,7 +98,8 @@ def _posture_block(action_label: str) -> str:
     try:
         operator_state = operator_mode_snapshot()
     except Exception as exc:
-        return f"Execution is blocked until operator posture can be verified: {exc}"
+        _LOG.exception("Reactor operator posture snapshot failed", exc_info=(type(exc), exc, exc.__traceback__))
+        return f"Execution is blocked until operator posture can be verified: {_INTERNAL_API_ERROR}"
 
     if not bool(operator_state.get("ok")):
         return "Execution is blocked until operator posture can be verified."

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from francis.api.app import create_app
+from francis.telemetry import git as telemetry_git
 from francis.telemetry.status import redact_telemetry_value
 
 
@@ -665,3 +667,27 @@ def test_git_telemetry_status_is_readonly_snapshot(monkeypatch, tmp_path: Path) 
         assert sources["git"]["active"] is True
         assert sources["git"]["status"] == "snapshot_ready"
         assert sources["git"]["latest_snapshot"]["branch"] == body["branch"]
+
+
+def test_git_telemetry_status_sanitizes_snapshot_exceptions(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    def fail_git(*_: object, **__: object) -> subprocess.CompletedProcess[str]:
+        raise RuntimeError("raw git status secret token=gitexceptionsecret123")
+
+    monkeypatch.setattr(telemetry_git.subprocess, "run", fail_git)
+
+    client = TestClient(create_app())
+    body = client.get("/telemetry/git/status?limit=5").json()
+
+    assert body["ok"] is True
+    assert body["status"] == "unavailable"
+    assert body["active"] is False
+    assert body["error"] == "internal_api_error"
+
+    response_text = json.dumps(body, sort_keys=True)
+    assert "gitexceptionsecret123" not in response_text
+    assert "raw git status secret" not in response_text
+    assert "RuntimeError" not in response_text
+    assert "Traceback" not in response_text

@@ -42774,6 +42774,40 @@ Latest validation for operator posture sanitization:
 - `python -m mypy src/francis/api/routes/_operator_posture.py`
   Result: `passed`
 
+### 2026-05-28 - Telemetry and reactor helper errors stop returning exception text
+
+Roadmap area: GitHub security cleanup / API boundary hardening.
+
+Material change:
+
+- Git telemetry command failures now log exception details internally while the
+  `/telemetry/git/status` payload exposes only the stable
+  `internal_api_error` code.
+- Reactor dispatch posture snapshot failures now log exception details
+  internally while dispatch receipts expose only the stable
+  `internal_api_error` code in the blocked posture message.
+- The change keeps telemetry read-only and keeps reactor dispatch blocked; it
+  does not grant execution authority, mutation authority, or stage closure.
+
+Latest validation for helper-level exception sanitization:
+
+- `python -m pytest
+  tests/test_api_telemetry.py::test_git_telemetry_status_sanitizes_snapshot_exceptions
+  tests/unit/test_reactor_event_queue.py::test_reactor_dispatch_sanitizes_operator_posture_snapshot_errors
+  -q --tb=short --maxfail=1`
+  Result: `passed; 2 passed`
+- `python -m ruff check src/francis/telemetry/git.py
+  src/francis/reactor/dispatch.py tests/test_api_telemetry.py
+  tests/unit/test_reactor_event_queue.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/telemetry/git.py
+  src/francis/reactor/dispatch.py tests/test_api_telemetry.py
+  tests/unit/test_reactor_event_queue.py`
+  Result: `passed; 4 files already formatted`
+- `python -m mypy src/francis/telemetry/git.py
+  src/francis/reactor/dispatch.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

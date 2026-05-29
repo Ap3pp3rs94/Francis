@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 import time
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +10,8 @@ from francis.kernel.paths import repo_root
 from francis.telemetry.status import STAGE7_TELEMETRY_STAGE, redact_telemetry_value
 
 GIT_STATUS_KIND = "francis.stage7.telemetry.git_status"
+_INTERNAL_API_ERROR = "internal_api_error"
+_LOG = logging.getLogger("francis.telemetry.git")
 _GIT_TIMEOUT_SECONDS = 5
 _MAX_CHANGED_PATHS = 50
 
@@ -141,7 +144,8 @@ def _git(args: list[str], *, cwd: Path) -> dict[str, Any]:
             check=False,
         )
     except Exception as exc:
-        return {"ok": False, "stdout": "", "stderr": "", "error": _redact_text(exc)}
+        _LOG.exception("Git telemetry snapshot command failed", exc_info=(type(exc), exc, exc.__traceback__))
+        return {"ok": False, "stdout": "", "stderr": "", "error": _INTERNAL_API_ERROR}
 
     return {
         "ok": completed.returncode == 0,

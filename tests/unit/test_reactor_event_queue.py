@@ -1693,6 +1693,55 @@ def test_reactor_dispatch_engine_blocks_mission_tick_without_missions_scope(monk
     assert stored_mission.status == mission_store.MissionStatus.QUEUED
 
 
+def test_reactor_dispatch_sanitizes_operator_posture_snapshot_errors(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    actor = "test.reactor.mission_tick"
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps({actor: ["missions.write"]}))
+
+    def fail_operator_snapshot() -> dict[str, object]:
+        raise RuntimeError("raw posture secret token=reactorposturesecret123")
+
+    monkeypatch.setattr(reactor_dispatch, "operator_mode_snapshot", fail_operator_snapshot)
+
+    created_event = enqueue_event(
+        {
+            "trigger_source": "mission_queue",
+            "summary": "Reactor posture failures must not leak exception text.",
+            "mode": "pilot",
+            "action_class": "mission_tick",
+            "max_actions": 1,
+        }
+    )
+    event_id = str(created_event["event_id"])
+
+    dispatched = record_dispatch_attempt(
+        event_id,
+        {"actor": actor, "reason": "attempt mission tick with broken posture readback"},
+    )
+
+    assert dispatched["ok"] is True
+    event = dispatched["event"]
+    assert event["status"] == "dispatch_blocked"
+    assert event["stable_state"] == "operator_posture_blocks_execution"
+    execution_receipt = event["latest_dispatch_execution_receipt"]
+    assert execution_receipt["status"] == "blocked"
+    assert execution_receipt["outcome"] == "operator_posture_blocks_execution"
+    assert execution_receipt["gate"] == "operator_posture"
+    assert (
+        execution_receipt["message"]
+        == "Execution is blocked until operator posture can be verified: internal_api_error"
+    )
+    assert execution_receipt["execution_started"] is False
+    assert execution_receipt["dispatch_applied"] is False
+
+    response_text = json.dumps(dispatched, sort_keys=True)
+    assert "reactorposturesecret123" not in response_text
+    assert "raw posture secret" not in response_text
+    assert "RuntimeError" not in response_text
+    assert "Traceback" not in response_text
+
+
 def test_reactor_failed_operation_dispatch_schedules_retry_then_deadletters(
     monkeypatch,
     tmp_path: Path,
