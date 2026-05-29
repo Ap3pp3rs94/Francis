@@ -42843,6 +42843,38 @@ Latest validation for supervised-exec artifact path and storage hardening:
 - `python -m mypy src/francis/agent/supervised_exec.py`
   Result: `passed`
 
+### 2026-05-28 - Forge collection paths are root-checked before file I/O
+
+Roadmap area: GitHub security cleanup / Forge proposal governance.
+
+Material change:
+
+- Forge artifact collections are now allowlisted before collection path
+  resolution.
+- Proposal, validation, promotion, and proposal-review record paths are built
+  through a shared root-checked collection path helper.
+- Collection reads and writes resolve real paths and reject traversal outside
+  the expected collection root before any file operation.
+- Proposal decision receipts and proposal updates now use the same checked
+  collection path helpers.
+
+Latest validation for Forge collection path hardening:
+
+- `python -m pytest
+  tests/test_api_forge.py::test_forge_collection_readback_bounds_record_ids_and_traversal_paths
+  tests/test_api_forge.py::test_forge_proposal_decision_receipts_without_promotion
+  tests/test_api_forge.py::test_forge_proposal_and_promotion_readback
+  -q --tb=short --maxfail=1`
+  Result: `passed; 3 passed`
+- `python -m ruff check src/francis/api/routes/forge.py
+  tests/test_api_forge.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/forge.py
+  tests/test_api_forge.py`
+  Result: `passed; 2 files already formatted`
+- `python -m mypy src/francis/api/routes/forge.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

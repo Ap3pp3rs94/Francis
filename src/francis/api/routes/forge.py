@@ -20,6 +20,7 @@ from francis.kernel.paths import data_dir, repo_root
 router = APIRouter()
 
 _SAFE_RECORD_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,191}$")
+_COLLECTIONS = {"proposals", "validations", "promotions", "proposal_reviews"}
 _FORGE_WRITE_SCOPE = "plugins.write"
 _RISK_ORDER = {"readonly": 0, "normal": 1, "critical": 2, "safety_critical": 3}
 _PROPOSAL_DECISIONS = {
@@ -62,59 +63,99 @@ def _now_s() -> int:
     return int(time.time())
 
 
-def _atomic_write_json(path: Path, obj: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
+def _real_path(value: str | Path) -> Path:
+    return Path(os.path.realpath(os.fspath(value)))
+
+
+def _safe_record_id(value: Any) -> str:
+    record_id = _safe_str(value).strip()
+    return record_id if _SAFE_RECORD_ID_RE.match(record_id) else ""
+
+
+def _atomic_write_json(path: Path, obj: dict[str, Any], *, collection: str) -> bool:
+    resolved_path = _collection_path(collection, path)
+    if resolved_path is None:
+        return False
+    resolved_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = resolved_path.with_suffix(resolved_path.suffix + ".tmp")
     tmp.write_text(json.dumps(obj, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
-    os.replace(tmp, path)
+    os.replace(tmp, resolved_path)
+    return True
 
 
 def _artifact_root() -> Path:
-    return Path(os.path.realpath(data_dir() / "artifacts" / "plugins"))
+    return _real_path(data_dir() / "artifacts" / "plugins")
 
 
 def _collection_dir(collection: str) -> Path:
-    return _artifact_root() / collection
+    if collection not in _COLLECTIONS:
+        raise ValueError("invalid collection")
+    return _real_path(_artifact_root() / collection)
 
 
 def _registry_path() -> Path:
     return data_dir() / "plugins" / "_registry.json"
 
 
-def _generated_plugin_dir(plugin_id: str) -> Path:
-    return Path(os.path.realpath(repo_root() / "plugins" / "generated" / plugin_id))
-
-
 def _is_under(root: Path, target: Path) -> bool:
     try:
-        Path(os.path.realpath(target)).relative_to(Path(os.path.realpath(root)))
+        _real_path(target).relative_to(_real_path(root))
         return True
     except Exception:
         return False
+
+
+def _collection_path(collection: str, path: str | Path) -> Path | None:
+    try:
+        root = _collection_dir(collection)
+        resolved = _real_path(path)
+    except Exception:
+        return None
+    if not _is_under(root, resolved):
+        return None
+    if resolved.suffix != ".json" or not _safe_record_id(resolved.stem):
+        return None
+    return resolved
+
+
+def _collection_record_path(collection: str, record_id: str) -> Path | None:
+    safe_id = _safe_record_id(record_id)
+    if not safe_id:
+        return None
+    try:
+        root = _collection_dir(collection)
+    except ValueError:
+        return None
+    return _collection_path(collection, root / f"{safe_id}.json")
 
 
 def _resolve_generated_plugin_dir(plugin_id: str, generated_dir: str = "") -> Path | None:
     text = _safe_str(generated_dir).strip() or plugin_id
     if not text or any(ch in text for ch in ("\x00", "\n", "\r")):
         return None
-    root = Path(os.path.realpath(repo_root() / "plugins" / "generated"))
+    root = _real_path(repo_root() / "plugins" / "generated")
     candidate = Path(text).expanduser()
     if not candidate.is_absolute():
         candidate = root / candidate
-    resolved = Path(os.path.realpath(candidate))
+    resolved = _real_path(candidate)
     return resolved if _is_under(root, resolved) else None
 
 
 def _record_id(item: dict[str, Any], collection: str, path: Path) -> str:
+    candidates: tuple[Any, ...]
     if collection == "proposals":
-        return _safe_str(item.get("proposal_id")).strip() or path.stem
-    if collection == "validations":
-        return _safe_str(item.get("validation_id")).strip() or path.stem
-    if collection == "promotions":
-        return _safe_str(item.get("receipt_id")).strip() or path.stem
-    if collection == "proposal_reviews":
-        return _safe_str(item.get("receipt_id")).strip() or path.stem
-    return path.stem
+        candidates = (item.get("proposal_id"), path.stem)
+    elif collection == "validations":
+        candidates = (item.get("validation_id"), path.stem)
+    elif collection in {"promotions", "proposal_reviews"}:
+        candidates = (item.get("receipt_id"), path.stem)
+    else:
+        candidates = (path.stem,)
+    for candidate in candidates:
+        safe_id = _safe_record_id(candidate)
+        if safe_id:
+            return safe_id
+    return ""
 
 
 def _record_ts(item: dict[str, Any], collection: str, path: Path) -> int:
@@ -137,18 +178,23 @@ def _record_ts(item: dict[str, Any], collection: str, path: Path) -> int:
 
 
 def _read_json_record(path: Path, collection: str) -> dict[str, Any] | None:
+    resolved_path = _collection_path(collection, path)
+    if resolved_path is None:
+        return None
     try:
-        raw = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+        raw = json.loads(resolved_path.read_text(encoding="utf-8", errors="replace"))
     except Exception:
         return None
     if not isinstance(raw, dict):
         return None
     redacted = redact_governed_display_value(raw)
     item = redacted if isinstance(redacted, dict) else {}
-    item["id"] = _record_id(item, collection, path)
-    item["artifact_path"] = redact_secret_text(str(path))
+    item["id"] = _record_id(item, collection, resolved_path)
+    if not item["id"]:
+        return None
+    item["artifact_path"] = redact_secret_text(str(resolved_path))
     try:
-        item["relative_path"] = redact_secret_text(path.relative_to(_artifact_root()).as_posix())
+        item["relative_path"] = redact_secret_text(resolved_path.relative_to(_artifact_root()).as_posix())
     except ValueError:
         item["relative_path"] = ""
     if collection == "proposals":
@@ -162,9 +208,12 @@ def _proposal_quality_analysis(item: dict[str, Any]) -> dict[str, Any]:
     return redacted if isinstance(redacted, dict) else {}
 
 
-def _read_raw_record(path: Path) -> dict[str, Any] | None:
+def _read_raw_record(path: Path, collection: str) -> dict[str, Any] | None:
+    resolved_path = _collection_path(collection, path)
+    if resolved_path is None:
+        return None
     try:
-        raw = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+        raw = json.loads(resolved_path.read_text(encoding="utf-8", errors="replace"))
     except Exception:
         return None
     return raw if isinstance(raw, dict) else None
@@ -197,14 +246,13 @@ def _registry_plugins() -> dict[str, Any]:
 
 
 def _read_proposal(proposal_id: str) -> dict[str, Any]:
-    resolved_id = _safe_str(proposal_id).strip()
-    if not resolved_id or not _SAFE_RECORD_ID_RE.match(resolved_id):
+    resolved_id = _safe_record_id(proposal_id)
+    if not resolved_id:
         return {}
-    root = _collection_dir("proposals")
-    path = root / f"{resolved_id}.json"
-    if not _is_under(root, path) or not path.exists() or not path.is_file():
+    path = _collection_record_path("proposals", resolved_id)
+    if path is None or not path.exists() or not path.is_file():
         return {}
-    proposal = _read_raw_record(path)
+    proposal = _read_raw_record(path, "proposals")
     return proposal if isinstance(proposal, dict) else {}
 
 
@@ -322,22 +370,23 @@ def _records(collection: str) -> list[dict[str, Any]]:
     if not root.exists() or not root.is_dir():
         return []
 
-    items: list[dict[str, Any]] = []
+    items: list[tuple[dict[str, Any], int]] = []
     for path in sorted(root.glob("*.json")):
-        if not path.is_file() or not _is_under(root, path):
+        resolved_path = _collection_path(collection, path)
+        if resolved_path is None or not resolved_path.is_file():
             continue
-        item = _read_json_record(path, collection)
+        item = _read_json_record(resolved_path, collection)
         if item is not None:
-            items.append(item)
+            items.append((item, _record_ts(item, collection, resolved_path)))
 
     items.sort(
-        key=lambda item: (
-            _record_ts(item, collection, Path(_safe_str(item.get("artifact_path")))),
-            _safe_str(item.get("id")),
+        key=lambda entry: (
+            entry[1],
+            _safe_str(entry[0].get("id")),
         ),
         reverse=True,
     )
-    return items
+    return [item for item, _ts in items]
 
 
 def _matches(
@@ -391,15 +440,15 @@ def _list_collection(
 
 
 def _get_collection(collection: str, id: str) -> dict[str, Any]:
-    record_id = _safe_str(id).strip()
-    if not record_id:
+    raw_record_id = _safe_str(id).strip()
+    if not raw_record_id:
         return {"ok": False, "error": "id_required", "item": None}
-    if not _SAFE_RECORD_ID_RE.match(record_id):
+    record_id = _safe_record_id(raw_record_id)
+    if not record_id:
         return {"ok": False, "error": "invalid_id", "item": None}
 
-    root = _collection_dir(collection)
-    path = root / f"{record_id}.json"
-    if not _is_under(root, path):
+    path = _collection_record_path(collection, record_id)
+    if path is None:
         return {"ok": False, "error": "invalid_id", "item": None}
     if not path.exists() or not path.is_file():
         return {"ok": False, "error": "not_found", "item": None}
@@ -548,10 +597,11 @@ def decide_proposal(payload: ProposalDecisionIn, request: Request) -> dict[str, 
     if not permission.allowed:
         return _permission_denied(permission)
 
-    proposal_id = _safe_str(payload.id).strip()
-    if not proposal_id:
+    raw_proposal_id = _safe_str(payload.id).strip()
+    if not raw_proposal_id:
         return {"ok": False, "applied": False, "error": "id_required", "item": None}
-    if not _SAFE_RECORD_ID_RE.match(proposal_id):
+    proposal_id = _safe_record_id(raw_proposal_id)
+    if not proposal_id:
         return {"ok": False, "applied": False, "error": "invalid_id", "item": None}
 
     action = _safe_str(payload.action).strip().lower()
@@ -565,21 +615,22 @@ def decide_proposal(payload: ProposalDecisionIn, request: Request) -> dict[str, 
             "item": None,
         }
 
-    proposal_root = _collection_dir("proposals")
-    proposal_path = proposal_root / f"{proposal_id}.json"
-    if not _is_under(proposal_root, proposal_path):
+    proposal_path = _collection_record_path("proposals", proposal_id)
+    if proposal_path is None:
         return {"ok": False, "applied": False, "error": "invalid_id", "item": None}
     if not proposal_path.exists() or not proposal_path.is_file():
         return {"ok": False, "applied": False, "error": "not_found", "item": None}
 
-    proposal = _read_raw_record(proposal_path)
+    proposal = _read_raw_record(proposal_path, "proposals")
     if proposal is None:
         return {"ok": False, "applied": False, "error": "unreadable_record", "item": None}
 
     previous_status = _safe_str(proposal.get("status")).strip() or "unknown"
     decided_ts = _now_s()
     receipt_id = _proposal_receipt_id(proposal_id, decided_ts)
-    receipt_path = _collection_dir("proposal_reviews") / f"{receipt_id}.json"
+    receipt_path = _collection_record_path("proposal_reviews", receipt_id)
+    if receipt_path is None:
+        return {"ok": False, "applied": False, "error": "invalid_receipt_id", "item": None}
     receipt = {
         "kind": "plugin.proposal.review.receipt",
         "receipt_id": receipt_id,
@@ -635,8 +686,10 @@ def decide_proposal(payload: ProposalDecisionIn, request: Request) -> dict[str, 
 
     redacted_proposal = redact_governed_display_value(proposal)
     proposal_out = redacted_proposal if isinstance(redacted_proposal, dict) else {}
-    _atomic_write_json(receipt_path, receipt_out)
-    _atomic_write_json(proposal_path, proposal_out)
+    if not _atomic_write_json(receipt_path, receipt_out, collection="proposal_reviews"):
+        return {"ok": False, "applied": False, "error": "invalid_receipt_path", "item": None}
+    if not _atomic_write_json(proposal_path, proposal_out, collection="proposals"):
+        return {"ok": False, "applied": False, "error": "invalid_id", "item": None}
     item = _read_json_record(proposal_path, "proposals") or proposal_out
 
     return {

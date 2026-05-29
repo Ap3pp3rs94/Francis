@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 _PLUGIN_ACTOR = "test.plugins.write"
@@ -266,6 +267,88 @@ def test_forge_proposal_and_promotion_readback(monkeypatch, tmp_path: Path) -> N
     assert invalid.status_code == 200
     assert invalid.json()["ok"] is False
     assert invalid.json()["error"] == "invalid_id"
+
+
+def test_forge_collection_readback_bounds_record_ids_and_traversal_paths(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    proposal_root = data_root / "artifacts" / "plugins" / "proposals"
+    proposal_root.mkdir(parents=True)
+    stored_proposal = proposal_root / "safe_proposal.json"
+    outside_proposal = tmp_path / "outside_proposal.json"
+    outside_proposal.write_text(
+        json.dumps(
+            {
+                "kind": "plugin.proposal",
+                "proposal_id": "outside_proposal",
+                "plugin_id": "outside.plugin",
+                "status": "approved",
+            }
+        ),
+        encoding="utf-8",
+    )
+    stored_proposal.write_text(
+        json.dumps(
+            {
+                "kind": "plugin.proposal",
+                "proposal_id": "../outside_proposal",
+                "plugin_id": "forge.path.cleanup",
+                "status": "staged",
+                "created_ts": 1,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import forge
+
+    assert forge._collection_record_path("proposals", "../outside_proposal") is None
+    assert forge._collection_path("proposals", outside_proposal) is None
+    assert forge._collection_record_path("proposals", "safe_proposal") == stored_proposal.resolve()
+
+    client = TestClient(create_app())
+
+    listed = client.get("/forge/proposals/list")
+    assert listed.status_code == 200
+    listed_body = listed.json()
+    assert listed_body["total"] == 1
+    listed_item = listed_body["items"][0]
+    assert listed_item["id"] == "safe_proposal"
+    assert listed_item["relative_path"] == "proposals/safe_proposal.json"
+    assert "outside.plugin" not in str(listed_body)
+
+    traversal_get = client.get("/forge/proposals/get", params={"id": "../outside_proposal"})
+    assert traversal_get.status_code == 200
+    assert traversal_get.json()["ok"] is False
+    assert traversal_get.json()["error"] == "invalid_id"
+
+    outside_get = client.get("/forge/proposals/get", params={"id": "outside_proposal"})
+    assert outside_get.status_code == 200
+    assert outside_get.json()["ok"] is False
+    assert outside_get.json()["error"] == "not_found"
+
+    safe_get = client.get("/forge/proposals/get", params={"id": "safe_proposal"})
+    assert safe_get.status_code == 200
+    safe_get_body = safe_get.json()
+    assert safe_get_body["ok"] is True
+    assert safe_get_body["item"]["id"] == "safe_proposal"
+
+    traversal_decision = client.post(
+        "/forge/proposals/decision",
+        json={
+            "id": "../outside_proposal",
+            "action": "approve",
+            "actor": _PLUGIN_ACTOR,
+            "reason": "must not resolve outside collection root",
+        },
+    )
+    assert traversal_decision.status_code == 200
+    assert traversal_decision.json()["ok"] is False
+    assert traversal_decision.json()["error"] == "invalid_id"
 
 
 def test_forge_proposal_decision_receipts_without_promotion(monkeypatch, tmp_path: Path) -> None:
