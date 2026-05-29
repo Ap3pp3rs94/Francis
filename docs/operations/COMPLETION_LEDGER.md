@@ -43650,6 +43650,41 @@ Latest validation for Stage 6 Lens ledger closure:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-29 - API mutating-route authority matrix is inspectable
+
+Roadmap area: Phase 2 / P3_GOVERNANCE -> P2_IDENTITY -> P7_EXECUTION,
+ORB Core route authority and denial visibility.
+
+Material change:
+
+- Added a read-only `/system/mutating-route-authority-matrix` projection that
+  enumerates every current FastAPI `POST`, `PUT`, `PATCH`, and `DELETE` route.
+- Each matrix entry states method, path, route family, required actor,
+  required scope, approval requirement, receipt behavior, denial behavior, and
+  current governance maturity.
+- The matrix intentionally marks current non-uniform surfaces as documented
+  gaps instead of claiming they are fixed, including attachment upload,
+  memory timeline writes, federation registry writes, explanation records,
+  industrial registry writes, and web-learning policy routes.
+- Added a contract test that fails when any non-GET route lacks matrix coverage.
+
+Latest validation for API mutating-route authority matrix:
+
+- `python -m pytest tests/test_api_mutating_route_authority_matrix.py
+  -q --tb=short --maxfail=1`
+  Result: `passed; 2 passed`
+- `python -m ruff check src/francis/api/mutation_authority_matrix.py
+  src/francis/api/routes/system.py
+  tests/test_api_mutating_route_authority_matrix.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/mutation_authority_matrix.py
+  src/francis/api/routes/system.py
+  tests/test_api_mutating_route_authority_matrix.py`
+  Result: `passed`
+- `python -m mypy src/francis/api/mutation_authority_matrix.py
+  src/francis/api/routes/system.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

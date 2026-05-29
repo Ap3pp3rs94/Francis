@@ -16,6 +16,7 @@ from typing import Any
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
+from francis.api.mutation_authority_matrix import build_mutating_route_authority_matrix
 from francis.api.routes._operator_posture import posture_write_guard
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.redaction import redact_governed_metadata, redact_secret_text
@@ -449,6 +450,11 @@ def status() -> dict[str, object]:
         return payload
     except Exception as exc:
         return {"ok": False, "status": "error", "error": api_error_message(exc)}
+
+
+@router.get("/mutating-route-authority-matrix")
+def mutating_route_authority_matrix(request: Request) -> dict[str, Any]:
+    return build_mutating_route_authority_matrix(request.app.routes)
 
 
 @router.get("/stack")
