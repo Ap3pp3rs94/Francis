@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from francis.api.errors import api_error_message
+from francis.api.errors import api_error_code, log_api_exception
 from typing import Any
 
 from fastapi import APIRouter, Request
@@ -1382,7 +1382,8 @@ def create_mission(request: Request, payload: MissionCreateIn) -> dict[str, obje
             "message": "created",
         }
     except Exception as exc:
-        return {"ok": False, "error": api_error_message(exc)}
+        log_api_exception(exc, route="missions.create")
+        return {"ok": False, "error": api_error_code()}
 
 
 @router.get("/list")
@@ -1396,7 +1397,8 @@ def list_missions(limit: int = 200, status: str | None = None) -> dict[str, obje
             items.append(_serialize_mission(record, queue_item if isinstance(queue_item, dict) else None))
         return {"items": items, "total": len(records), "limit": safe_limit}
     except Exception as exc:
-        return {"items": [], "total": 0, "limit": 0, "error": api_error_message(exc)}
+        log_api_exception(exc, route="missions.list")
+        return {"items": [], "total": 0, "limit": 0, "error": api_error_code()}
 
 
 @router.get("/queue")
@@ -1416,7 +1418,8 @@ def mission_queue(limit: int = 50, include_terminal: bool = False) -> dict[str, 
             "deadletter": deadletter,
         }
     except Exception as exc:
-        return {"ok": False, "items": [], "total": 0, "failed": [], "deadletter": [], "error": api_error_message(exc)}
+        log_api_exception(exc, route="missions.queue")
+        return {"ok": False, "items": [], "total": 0, "failed": [], "deadletter": [], "error": api_error_code()}
 
 
 @router.post("/tick")
@@ -1456,7 +1459,8 @@ def tick_missions(request: Request, payload: MissionTickManyIn) -> dict[str, obj
             "errors": errors,
         }
     except Exception as exc:
-        return {"ok": False, "items": [], "total": 0, "applied": 0, "errors": [{"error": api_error_message(exc)}]}
+        log_api_exception(exc, route="missions.recover")
+        return {"ok": False, "items": [], "total": 0, "applied": 0, "errors": [{"error": api_error_code()}]}
 
 
 @router.post("/run_once")
@@ -1516,7 +1520,8 @@ def run_queue_once(request: Request, payload: MissionRunOnceIn) -> dict[str, obj
             item.update(projection_cache[mission_id])
         return result
     except Exception as exc:
-        error = api_error_message(exc)
+        log_api_exception(exc, route="missions.run_once")
+        error = api_error_code()
         return {
             "ok": False,
             "items": [],
@@ -1549,7 +1554,8 @@ def get_mission(mission_id: str) -> dict[str, object]:
             **detail,
         }
     except Exception as exc:
-        return {"ok": False, "error": api_error_message(exc)}
+        log_api_exception(exc, route="missions.get")
+        return {"ok": False, "error": api_error_code()}
 
 
 @router.patch("/{mission_id}")
@@ -1588,7 +1594,8 @@ def patch_mission(mission_id: str, request: Request, payload: MissionPatchIn) ->
             "message": "updated",
         }
     except Exception as exc:
-        return {"ok": False, "error": api_error_message(exc)}
+        log_api_exception(exc, route="missions.patch")
+        return {"ok": False, "error": api_error_code()}
 
 
 @router.post("/{mission_id}/tick")
@@ -1617,7 +1624,8 @@ def tick_mission(mission_id: str, request: Request, payload: MissionTickIn) -> d
             "message": "ticked" if applied else "no_change",
         }
     except Exception as exc:
-        return {"ok": False, "applied": False, "error": api_error_message(exc)}
+        log_api_exception(exc, route="missions.tick")
+        return {"ok": False, "applied": False, "error": api_error_code()}
 
 
 @router.post("/{mission_id}/deadletter")
@@ -1647,7 +1655,8 @@ def deadletter_mission(mission_id: str, request: Request, payload: MissionDeadle
             "message": "deadlettered",
         }
     except Exception as exc:
-        return {"ok": False, "error": api_error_message(exc)}
+        log_api_exception(exc, route="missions.deadletter")
+        return {"ok": False, "error": api_error_code()}
 
 
 @router.post("/{mission_id}/replace")
@@ -1705,7 +1714,8 @@ def replace_mission(mission_id: str, request: Request, payload: MissionReplaceIn
             "message": "replacement_declared",
         }
     except Exception as exc:
-        return {"ok": False, "error": api_error_message(exc)}
+        log_api_exception(exc, route="missions.replace")
+        return {"ok": False, "error": api_error_code()}
 
 
 @router.post("/{mission_id}/advance")
@@ -1735,4 +1745,5 @@ def advance_mission(mission_id: str, request: Request, payload: MissionAdvanceIn
             result.update(detail)
         return result
     except Exception as exc:
-        return {"ok": False, "applied": False, "error": api_error_message(exc)}
+        log_api_exception(exc, route="missions.advance")
+        return {"ok": False, "applied": False, "error": api_error_code()}

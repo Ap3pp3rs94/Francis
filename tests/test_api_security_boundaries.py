@@ -47,6 +47,64 @@ def test_operator_posture_guard_sanitizes_snapshot_errors(monkeypatch) -> None:
     assert "traceback" not in reason.lower()
 
 
+def test_chat_send_sanitizes_handler_exceptions(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import chat
+
+    def fail_handle(*_args, **_kwargs):
+        raise RuntimeError("chat handler traceback token=chat-secret")
+
+    monkeypatch.setattr(chat, "handle", fail_handle)
+
+    client = TestClient(create_app())
+    response = client.post("/chat/send", json={"message": "hello", "use_llm": False})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["error"] == "internal_api_error"
+    assert "chat-secret" not in json.dumps(body, sort_keys=True)
+    assert "traceback" not in json.dumps(body, sort_keys=True).lower()
+
+
+def test_operation_run_sanitizes_runtime_exceptions(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    actor = "test.operations.security"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps({actor: ["operations.run"]}))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import operations
+
+    def allow_posture(_action: str) -> str:
+        return ""
+
+    def fail_run(*_args, **_kwargs):
+        raise RuntimeError("operation runtime traceback token=operation-secret")
+
+    monkeypatch.setattr(operations, "_execution_posture_guard", allow_posture)
+    monkeypatch.setattr(operations.operations_runtime, "run_operation", fail_run)
+
+    client = TestClient(create_app())
+    response = client.post(
+        "/operations/op_security/run",
+        json={"actor": actor, "worker_id": "test.operations.security"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["error"] == "internal_api_error"
+    assert "operation-secret" not in json.dumps(body, sort_keys=True)
+    assert "traceback" not in json.dumps(body, sort_keys=True).lower()
+
+
 def test_plugin_runtime_paths_reject_registry_traversal(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

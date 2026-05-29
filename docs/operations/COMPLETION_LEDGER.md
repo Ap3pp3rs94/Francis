@@ -42929,6 +42929,45 @@ Latest validation for artifact/plugin path handle hardening:
   src/francis/api/routes/plugins.py`
   Result: `passed`
 
+### 2026-05-28 - Non-Lens API route errors separate logging from response codes
+
+Roadmap area: GitHub security cleanup / API boundary hardening.
+
+Material change:
+
+- API error utilities now expose `log_api_exception(...)` for internal
+  traceback logging and `api_error_code()` for stable response construction.
+- Chat, mission, and operation route exception handlers no longer construct
+  response bodies from `api_error_message(exc)`.
+- The caller-visible contract remains the stable `internal_api_error` code;
+  raw exception text and tracebacks remain internal log details only.
+
+Latest validation for non-Lens API error response sanitization:
+
+- `python -m pytest
+  tests/test_api_security_boundaries.py::test_chat_send_sanitizes_handler_exceptions
+  tests/test_api_security_boundaries.py::test_operation_run_sanitizes_runtime_exceptions
+  tests/test_api_missions.py::test_mission_run_once_reports_failed_status_for_runtime_errors
+  -q --tb=short --maxfail=1`
+  Result: `passed; 3 passed`
+- `python -m ruff check src/francis/api/errors.py
+  src/francis/api/routes/chat.py src/francis/api/routes/missions.py
+  src/francis/api/routes/operations.py tests/test_api_security_boundaries.py`
+  Result: `passed`
+- `python -m ruff format src/francis/api/routes/chat.py
+  src/francis/api/routes/missions.py src/francis/api/routes/operations.py`
+  Result: `passed; 3 files reformatted`
+- `python -m ruff format --check src/francis/api/errors.py
+  src/francis/api/routes/chat.py src/francis/api/routes/missions.py
+  src/francis/api/routes/operations.py tests/test_api_security_boundaries.py`
+  Result: `passed; 5 files already formatted`
+- `python -m mypy src/francis/api/errors.py src/francis/api/routes/chat.py
+  src/francis/api/routes/missions.py src/francis/api/routes/operations.py`
+  Result: `passed`
+- `rg -n "api_error_message\(exc\)" src/francis/api/routes/chat.py
+  src/francis/api/routes/missions.py src/francis/api/routes/operations.py`
+  Result: `no matches`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

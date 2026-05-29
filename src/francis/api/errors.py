@@ -10,10 +10,18 @@ _ERROR_CODE = "internal_api_error"
 _LOG = logging.getLogger("francis.api.errors")
 
 
-def api_error_message(exc: BaseException, *, code: str = _ERROR_CODE, route: str = "") -> str:
+def api_error_code(*, code: str = _ERROR_CODE) -> str:
+    return code
+
+
+def log_api_exception(exc: BaseException, *, route: str = "") -> None:
     route_text = f" route={route}" if route else ""
     _LOG.exception("API boundary exception%s", route_text, exc_info=(type(exc), exc, exc.__traceback__))
-    return code
+
+
+def api_error_message(exc: BaseException, *, code: str = _ERROR_CODE, route: str = "") -> str:
+    log_api_exception(exc, route=route)
+    return api_error_code(code=code)
 
 
 async def sanitized_exception_handler(request: Request, exc: Exception) -> JSONResponse:
