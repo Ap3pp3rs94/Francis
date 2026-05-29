@@ -9,11 +9,13 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
+from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.kernel.paths import data_dir
 
 router = APIRouter()
+_FEDERATION_WRITE_SCOPE = "federation.write"
 
 _ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._:-]{1,127}$")
 
@@ -25,6 +27,49 @@ def _safe_str(value: Any) -> str:
         return str(value)
     except Exception:
         return ""
+
+
+def _federation_write_actor(payload: dict[str, Any]) -> str:
+    return (
+        _safe_str(payload.get("request_actor")).strip()
+        or _safe_str(payload.get("api_actor")).strip()
+        or _safe_str(payload.get("actor")).strip()
+        or "api.federation"
+    )
+
+
+def _federation_write_permission(actor: Any, *, route: str, method: str) -> ApiPermissionDecision:
+    return ApiPermissionGate.from_env().check(
+        actor_id=actor,
+        required_scopes=[_FEDERATION_WRITE_SCOPE],
+        route=route,
+        method=method,
+    )
+
+
+def _permission_denied(decision: ApiPermissionDecision) -> dict[str, object]:
+    return {
+        "ok": False,
+        "status": "denied",
+        "error": "api_permission_denied",
+        "governance": {
+            "gate": "permission_gate",
+            "reason": decision.reason,
+            "next_step": "configure_actor_scope_before_writing_federation",
+            "evidence": decision.evidence,
+        },
+    }
+
+
+def _write_permission_denial(payload: dict[str, Any], request: Request) -> dict[str, object] | None:
+    decision = _federation_write_permission(
+        _federation_write_actor(payload),
+        route=request.url.path,
+        method=request.method,
+    )
+    if decision.allowed:
+        return None
+    return _permission_denied(decision)
 
 
 def _now_s() -> int:
@@ -471,8 +516,11 @@ def list_shared_knowledge(
 
 
 @router.post("/instances/upsert")
-def upsert_instance(payload: dict[str, Any]) -> dict[str, Any]:
+def upsert_instance(payload: dict[str, Any], request: Request) -> dict[str, Any]:
     try:
+        if denial := _write_permission_denial(payload, request):
+            return denial
+
         requested_id = _safe_str(payload.get("id")).strip()
         name = _safe_str(payload.get("name")).strip()
         if not requested_id and not name:
@@ -539,8 +587,11 @@ def upsert_instance(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 @router.post("/delegations/record")
-def record_delegation(payload: dict[str, Any]) -> dict[str, Any]:
+def record_delegation(payload: dict[str, Any], request: Request) -> dict[str, Any]:
     try:
+        if denial := _write_permission_denial(payload, request):
+            return denial
+
         scope = _safe_str(payload.get("scope")).strip() or _safe_str(payload.get("scope_id")).strip()
         if not scope:
             return {"ok": False, "error": "scope_required"}
@@ -568,8 +619,11 @@ def record_delegation(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 @router.post("/consensus_logs/append")
-def append_consensus_log(payload: dict[str, Any]) -> dict[str, Any]:
+def append_consensus_log(payload: dict[str, Any], request: Request) -> dict[str, Any]:
     try:
+        if denial := _write_permission_denial(payload, request):
+            return denial
+
         message = _safe_str(payload.get("message")).strip() or _safe_str(payload.get("msg")).strip()
         if not message:
             return {"ok": False, "error": "message_required"}
@@ -598,8 +652,11 @@ def append_consensus_log(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 @router.post("/shared_knowledge/publish")
-def publish_shared_knowledge(payload: dict[str, Any]) -> dict[str, Any]:
+def publish_shared_knowledge(payload: dict[str, Any], request: Request) -> dict[str, Any]:
     try:
+        if denial := _write_permission_denial(payload, request):
+            return denial
+
         title = _safe_str(payload.get("title")).strip() or _safe_str(payload.get("name")).strip()
         if not title and not _safe_str(payload.get("id")).strip():
             return {"ok": False, "error": "title_or_id_required"}

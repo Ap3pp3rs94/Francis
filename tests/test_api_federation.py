@@ -148,6 +148,38 @@ def test_federation_hub_contract_lifecycle(monkeypatch, tmp_path: Path) -> None:
     assert final_counts["shared_knowledge"] >= 1
 
 
+def test_federation_write_denies_unscoped_actor_before_persisting(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    denied = client.post(
+        "/federation/instances/upsert",
+        json={
+            "request_actor": "unscoped.federation.writer",
+            "id": "node-denied",
+            "status": "online",
+        },
+    )
+
+    assert denied.status_code == 200
+    body = denied.json()
+    assert body["ok"] is False
+    assert body["status"] == "denied"
+    assert body["error"] == "api_permission_denied"
+    assert body["governance"]["gate"] == "permission_gate"
+    assert body["governance"]["reason"] == "missing_scopes"
+    assert body["governance"]["next_step"] == "configure_actor_scope_before_writing_federation"
+    assert body["governance"]["evidence"]["actor_present"] is True
+    assert body["governance"]["evidence"]["required_scope_count"] == 1
+    assert not (data_root / "federation" / "_registry.json").exists()
+
+
 def test_federation_pagination_time_filters_and_persistence(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

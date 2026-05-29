@@ -156,12 +156,12 @@ _RULES: tuple[AuthorityRule, ...] = (
     AuthorityRule(
         family="federation",
         prefixes=("/federation",),
-        required_actor="payload fields identify source/target, but no generic actor gate",
-        required_scope="documented_gap: no federation.write ApiPermissionGate scope enforced",
-        approval_requirement="route-specific federation status/delegation fields only",
+        required_actor="payload.request_actor, payload.api_actor, payload.actor, or api.federation default",
+        required_scope="federation.write",
+        approval_requirement="not_required_scope_gate_only",
         receipt_behavior="federation registry record",
-        denial_behavior="validation or sanitized error; not generic permission_gate",
-        governance_maturity="documented_gap",
+        denial_behavior="api_permission_denied via permission_gate before registry load/save",
+        governance_maturity="permission_gated",
     ),
     AuthorityRule(
         family="forge",

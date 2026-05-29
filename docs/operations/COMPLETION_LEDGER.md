@@ -43663,8 +43663,7 @@ Material change:
   required scope, approval requirement, receipt behavior, denial behavior, and
   current governance maturity.
 - The matrix intentionally marks current non-uniform surfaces as documented
-  gaps instead of claiming they are fixed, including federation registry writes
-  and industrial registry writes.
+  gaps instead of claiming they are fixed, including industrial registry writes.
 - Added a contract test that fails when any non-GET route lacks matrix coverage.
 
 Latest validation for API mutating-route authority matrix:
@@ -43818,6 +43817,42 @@ Latest validation for attachment upload gating:
   tests/test_api_mutating_route_authority_matrix.py tests/conftest.py`
   Result: `passed`
 - `python -m mypy src/francis/api/routes/attachments.py
+  src/francis/api/mutation_authority_matrix.py`
+  Result: `passed`
+
+### 2026-05-29 - Federation registry writes require explicit API actor scope
+
+Roadmap area: Phase 2 / P3_GOVERNANCE -> P2_IDENTITY, multi-instance
+coordination governance.
+
+Material change:
+
+- `POST /federation/instances/upsert`,
+  `POST /federation/delegations/record`,
+  `POST /federation/consensus_logs/append`, and
+  `POST /federation/shared_knowledge/publish` now require an API actor with
+  `federation.write` before federation registry load/save.
+- Federation write actor identity is accepted from `request_actor`, `api_actor`,
+  `actor`, or the `api.federation` default.
+- Denied writes return `api_permission_denied` with bounded governance evidence
+  and do not create `data/federation/_registry.json`.
+- The mutating-route authority matrix now reports federation writes as
+  `permission_gated` instead of a documented gap.
+
+Latest validation for federation write gating:
+
+- `python -m pytest tests/test_api_federation.py
+  tests/test_api_mutating_route_authority_matrix.py -q --tb=short --maxfail=1`
+  Result: `passed; 5 passed`
+- `python -m ruff check src/francis/api/routes/federation.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_federation.py
+  tests/test_api_mutating_route_authority_matrix.py tests/conftest.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_federation.py
+  tests/test_api_mutating_route_authority_matrix.py tests/conftest.py`
+  Result: `passed`
+- `python -m mypy src/francis/api/routes/federation.py
   src/francis/api/mutation_authority_matrix.py`
   Result: `passed`
 

@@ -107,6 +107,15 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
     assert web_learning["governance_maturity"] == "permission_and_policy_gated"
     assert "permission_gate" in web_learning["denial_behavior"]
 
+    federation = entries["/federation/instances/upsert"]
+    assert federation["family"] == "federation"
+    assert federation["required_actor"] == (
+        "payload.request_actor, payload.api_actor, payload.actor, or api.federation default"
+    )
+    assert federation["required_scope"] == "federation.write"
+    assert federation["governance_maturity"] == "permission_gated"
+    assert "permission_gate" in federation["denial_behavior"]
+
     read_batch = entries["/operations/get_many"]
     assert read_batch["family"] == "operations_read_batch"
     assert read_batch["required_actor"] == "none"
