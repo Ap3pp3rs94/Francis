@@ -5,6 +5,8 @@ import io
 import json
 from pathlib import Path
 
+_MEMORY_TIMELINE_WRITE_ACTOR = "test.memory.timeline.write"
+
 
 def test_memory_timeline_list_get_export_filters_and_cursor(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
@@ -32,6 +34,7 @@ def test_memory_timeline_list_get_export_filters_and_cursor(monkeypatch, tmp_pat
             "operation_status": "succeeded",
             "domain": "operations",
             "actor": "francis",
+            "request_actor": _MEMORY_TIMELINE_WRITE_ACTOR,
             "scope": "chat.session",
             "correlation_id": "corr-1",
             "trace_id": "trace-memory-a",
@@ -65,6 +68,7 @@ def test_memory_timeline_list_get_export_filters_and_cursor(monkeypatch, tmp_pat
             "severity": "warning",
             "domain": "operations",
             "actor": "user",
+            "request_actor": _MEMORY_TIMELINE_WRITE_ACTOR,
             "scope": "chat.session",
             "correlation_id": "corr-1",
             "title": "Retrieval query",
@@ -85,6 +89,7 @@ def test_memory_timeline_list_get_export_filters_and_cursor(monkeypatch, tmp_pat
             "severity": "error",
             "domain": "security",
             "actor": "daemon",
+            "request_actor": _MEMORY_TIMELINE_WRITE_ACTOR,
             "scope": "approval.memory",
             "correlation_id": "corr-2",
             "title": "Write denied",
@@ -234,6 +239,7 @@ def test_memory_timeline_create_alias_and_persistence(monkeypatch, tmp_path: Pat
         "/memory/timeline/create",
         json={
             "id": "evt-persist",
+            "request_actor": _MEMORY_TIMELINE_WRITE_ACTOR,
             "kind": "checkpoint",
             "severity": "info",
             "title": "Checkpoint saved",
@@ -276,6 +282,7 @@ def test_memory_timeline_record_preserves_structured_references_and_loop(monkeyp
         "/memory/timeline/record",
         json={
             "id": "evt-structured-loop",
+            "request_actor": _MEMORY_TIMELINE_WRITE_ACTOR,
             "ts": 1_700_000_004,
             "kind": "ledger_append",
             "severity": "info",
@@ -379,6 +386,47 @@ def test_memory_timeline_record_preserves_structured_references_and_loop(monkeyp
     assert persisted_body["item"]["references"]["mission_id"] == "msn-structured-loop"
     assert persisted_body["item"]["loop"]["current_task_operation_id"] == "tsk-structured-loop"
     assert persisted_body["item"]["loop"]["current_task_operation_name"] == "plan.create"
+
+
+def test_memory_timeline_record_denies_unscoped_write_without_persisting(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    denied = client.post(
+        "/memory/timeline/record",
+        json={
+            "id": "evt-denied-unscoped",
+            "request_actor": "unscoped.memory.writer",
+            "actor": "forged.operator",
+            "kind": "memory_write",
+            "message": "This unscoped write must not persist.",
+            "payload": {"poison": "do_not_store"},
+        },
+    )
+
+    assert denied.status_code == 200
+    body = denied.json()
+    assert body["ok"] is False
+    assert body["status"] == "denied"
+    assert body["error"] == "api_permission_denied"
+    assert body["governance"]["gate"] == "permission_gate"
+    assert body["governance"]["reason"] == "missing_scopes"
+    assert body["governance"]["next_step"] == "configure_actor_scope_before_writing_memory_timeline"
+    assert body["governance"]["evidence"]["actor_present"] is True
+    assert body["governance"]["evidence"]["required_scope_count"] == 1
+
+    registry_path = data_root / "memory" / "timeline" / "_events.json"
+    assert not registry_path.exists()
+
+    listed = client.get("/memory/timeline/list?search=do_not_store&include_payload=1")
+    assert listed.status_code == 200
+    assert listed.json()["total"] == 0
 
 
 def test_memory_timeline_filters_continuity_ledger_by_references(monkeypatch, tmp_path: Path) -> None:
@@ -862,6 +910,7 @@ def test_memory_timeline_redacts_secrets_from_persistence_and_api(monkeypatch, t
         "/memory/timeline/record",
         json={
             "id": "evt-redaction",
+            "request_actor": _MEMORY_TIMELINE_WRITE_ACTOR,
             "kind": "memory_write",
             "severity": "info",
             "domain": "operations",

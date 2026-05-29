@@ -43664,8 +43664,8 @@ Material change:
   current governance maturity.
 - The matrix intentionally marks current non-uniform surfaces as documented
   gaps instead of claiming they are fixed, including attachment upload,
-  memory timeline writes, federation registry writes, explanation records,
-  industrial registry writes, and web-learning policy routes.
+  federation registry writes, explanation records, industrial registry writes,
+  and web-learning policy routes.
 - Added a contract test that fails when any non-GET route lacks matrix coverage.
 
 Latest validation for API mutating-route authority matrix:
@@ -43683,6 +43683,39 @@ Latest validation for API mutating-route authority matrix:
   Result: `passed`
 - `python -m mypy src/francis/api/mutation_authority_matrix.py
   src/francis/api/routes/system.py`
+  Result: `passed`
+
+### 2026-05-29 - Memory timeline writes require explicit API actor scope
+
+Roadmap area: Phase 2 / P3_GOVERNANCE -> P2_IDENTITY -> P8_MEMORY,
+typed memory-write governance and poisoning resistance.
+
+Material change:
+
+- `POST /memory/timeline/record` and `POST /memory/timeline/create` now require
+  an API actor with `memory.timeline.write` before any registry load/save.
+- The write actor is resolved from `request_actor`, `api_actor`, or `actor`, so
+  event provenance can remain distinct from the API caller identity.
+- Denied writes return `api_permission_denied` with bounded governance evidence
+  and do not create `data/memory/timeline/_events.json`.
+- The mutating-route authority matrix now reports memory timeline writes as
+  `permission_gated` instead of a documented gap.
+
+Latest validation for memory timeline write gating:
+
+- `python -m pytest tests/test_api_memory_timeline.py
+  tests/test_api_mutating_route_authority_matrix.py -q --tb=short --maxfail=1`
+  Result: `passed; 13 passed`
+- `python -m ruff check src/francis/api/routes/memory_timeline.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_memory_timeline.py
+  tests/test_api_mutating_route_authority_matrix.py tests/conftest.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/memory_timeline.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_memory_timeline.py
+  tests/test_api_mutating_route_authority_matrix.py tests/conftest.py`
+  Result: `passed`
+- `python -m mypy src/francis/api/routes/memory_timeline.py
+  src/francis/api/mutation_authority_matrix.py`
   Result: `passed`
 
 ## 6. Update rule

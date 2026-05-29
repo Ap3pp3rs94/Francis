@@ -81,9 +81,10 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
 
     memory = entries["/memory/timeline/record"]
     assert memory["family"] == "memory_timeline"
-    assert memory["required_actor"] == "payload.actor"
-    assert memory["required_scope"] == "documented_gap: no memory.timeline.write ApiPermissionGate scope enforced"
-    assert memory["governance_maturity"] == "documented_gap"
+    assert memory["required_actor"] == "payload.request_actor, payload.api_actor, or payload.actor"
+    assert memory["required_scope"] == "memory.timeline.write"
+    assert memory["governance_maturity"] == "permission_gated"
+    assert "permission_gate" in memory["denial_behavior"]
 
     read_batch = entries["/operations/get_many"]
     assert read_batch["family"] == "operations_read_batch"

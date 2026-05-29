@@ -13,14 +13,16 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import Response
 
 from francis.chat.continuity.ledger import tail as continuity_tail
+from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.redaction import redact_governed_metadata, redact_governed_value, redact_secret_text
 from francis.kernel.paths import data_dir
 
 router = APIRouter()
+_MEMORY_TIMELINE_WRITE_SCOPE = "memory.timeline.write"
 _ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._:-]{1,127}$")
 _REFERENCE_CSV_FIELDS = (
     "mission_id",
@@ -181,6 +183,33 @@ def _redact_tags(value: Any) -> list[str]:
         if redacted and redacted not in tags:
             tags.append(redacted)
     return tags
+
+
+def _memory_timeline_write_actor(payload: dict[str, Any]) -> str:
+    return _first_text(payload.get("request_actor"), payload.get("api_actor"), payload.get("actor"))
+
+
+def _memory_timeline_write_permission(actor: Any, *, route: str, method: str) -> ApiPermissionDecision:
+    return ApiPermissionGate.from_env().check(
+        actor_id=actor,
+        required_scopes=[_MEMORY_TIMELINE_WRITE_SCOPE],
+        route=route,
+        method=method,
+    )
+
+
+def _permission_denied(decision: ApiPermissionDecision) -> dict[str, object]:
+    return {
+        "ok": False,
+        "status": "denied",
+        "error": "api_permission_denied",
+        "governance": {
+            "gate": "permission_gate",
+            "reason": decision.reason,
+            "next_step": "configure_actor_scope_before_writing_memory_timeline",
+            "evidence": decision.evidence,
+        },
+    }
 
 
 def _reference_value(item: dict[str, Any], meta: dict[str, Any], field: str) -> str:
@@ -952,8 +981,16 @@ def export_timeline(
 
 @router.post("/record")
 @router.post("/create")
-def record_timeline_event(payload: dict[str, Any]) -> dict[str, Any]:
+def record_timeline_event(payload: dict[str, Any], request: Request) -> dict[str, Any]:
     try:
+        permission = _memory_timeline_write_permission(
+            _memory_timeline_write_actor(payload),
+            route=request.url.path,
+            method=request.method,
+        )
+        if not permission.allowed:
+            return _permission_denied(permission)
+
         requested_id = _safe_str(payload.get("id")).strip()
         if requested_id:
             event_id = _validate_id(requested_id, "event id")
