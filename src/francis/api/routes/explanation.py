@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from francis.api.errors import api_error_message
 import csv
 import io
 import json
@@ -748,7 +749,7 @@ def status() -> dict[str, Any]:
             },
         }
     except Exception as exc:
-        return {"ok": False, "route": "explanation", "status": "error", "error": str(exc)}
+        return {"ok": False, "route": "explanation", "status": "error", "error": api_error_message(exc)}
 
 
 @router.get("/health")
@@ -800,7 +801,7 @@ def list_explanations(
         summaries = [_summary(item) for item in page]
         return {"items": summaries, "records": summaries, "total": total, "limit": safe_limit, "offset": safe_offset}
     except Exception as exc:
-        return {"items": [], "records": [], "total": 0, "limit": 0, "offset": 0, "error": str(exc)}
+        return {"items": [], "records": [], "total": 0, "limit": 0, "offset": 0, "error": api_error_message(exc)}
 
 
 @router.get("/get")
@@ -826,7 +827,7 @@ def get_explanation(id: str) -> dict[str, Any]:
             "meta": item.get("meta") if isinstance(item.get("meta"), dict) else {},
         }
     except Exception as exc:
-        return {"ok": False, "error": str(exc), "item": None}
+        return {"ok": False, "error": api_error_message(exc), "item": None}
 
 
 @router.get("/export")
@@ -894,7 +895,7 @@ def export_explanations(
         )
     except Exception as exc:
         return Response(
-            content=json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False),
+            content=json.dumps({"ok": False, "error": api_error_message(exc)}, ensure_ascii=False),
             media_type="application/json",
             status_code=500,
         )
@@ -1051,4 +1052,4 @@ def record_explanation(payload: dict[str, Any]) -> dict[str, Any]:
         _save_registry(registry)
         return {"ok": True, "id": explanation_id, "item": _summary(item)}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}

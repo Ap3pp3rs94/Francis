@@ -70,7 +70,7 @@ def _atomic_write_json(path: Path, obj: dict[str, Any]) -> None:
 
 
 def _artifact_root() -> Path:
-    return (data_dir() / "artifacts" / "plugins").resolve()
+    return Path(os.path.realpath(data_dir() / "artifacts" / "plugins"))
 
 
 def _collection_dir(collection: str) -> Path:
@@ -82,15 +82,27 @@ def _registry_path() -> Path:
 
 
 def _generated_plugin_dir(plugin_id: str) -> Path:
-    return repo_root() / "plugins" / "generated" / plugin_id
+    return Path(os.path.realpath(repo_root() / "plugins" / "generated" / plugin_id))
 
 
 def _is_under(root: Path, target: Path) -> bool:
     try:
-        target.resolve(strict=False).relative_to(root.resolve(strict=False))
+        Path(os.path.realpath(target)).relative_to(Path(os.path.realpath(root)))
         return True
     except Exception:
         return False
+
+
+def _resolve_generated_plugin_dir(plugin_id: str, generated_dir: str = "") -> Path | None:
+    text = _safe_str(generated_dir).strip() or plugin_id
+    if not text or any(ch in text for ch in ("\x00", "\n", "\r")):
+        return None
+    root = Path(os.path.realpath(repo_root() / "plugins" / "generated"))
+    candidate = Path(text).expanduser()
+    if not candidate.is_absolute():
+        candidate = root / candidate
+    resolved = Path(os.path.realpath(candidate))
+    return resolved if _is_under(root, resolved) else None
 
 
 def _record_id(item: dict[str, Any], collection: str, path: Path) -> str:
@@ -228,8 +240,9 @@ def _promotion_readiness_for_plugin(plugin_id: str, plugin: dict[str, Any]) -> d
     tests = meta.get("tests") or meta.get("test_refs") or quality.get("tests") or []
     docs = meta.get("docs") or meta.get("documentation") or quality.get("docs") or []
     generated_dir = _safe_str(plugin.get("generated_dir")).strip()
-    readme_path = Path(generated_dir) / "README.md" if generated_dir else _generated_plugin_dir(plugin_id) / "README.md"
-    if not _has_readiness_value(docs) and readme_path.exists():
+    generated_plugin_dir = _resolve_generated_plugin_dir(plugin_id, generated_dir)
+    readme_path = generated_plugin_dir / "README.md" if generated_plugin_dir is not None else None
+    if not _has_readiness_value(docs) and readme_path is not None and readme_path.exists():
         docs = [str(readme_path.resolve())]
     risk_tier = _safe_str(meta.get("risk_tier") or quality.get("risk_tier")).strip().lower()
 

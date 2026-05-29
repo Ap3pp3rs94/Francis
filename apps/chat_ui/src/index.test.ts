@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { ApprovalsApiError, ApprovalsClient } from "./index.ts";
+import { ApprovalsApiError, ApprovalsClient, trimTrailingSlashes } from "./index.ts";
 
 type FetchHandler = (url: string, init?: RequestInit) => Response | Promise<Response>;
 
@@ -29,6 +29,12 @@ function installFetch(handler: FetchHandler): () => void {
     delete globals.fetch;
   };
 }
+
+test("trimTrailingSlashes uses bounded string scanning instead of regex trimming", () => {
+  assert.equal(trimTrailingSlashes("http://127.0.0.1:8000///"), "http://127.0.0.1:8000");
+  assert.equal(trimTrailingSlashes("http://127.0.0.1:8000/path"), "http://127.0.0.1:8000/path");
+  assert.equal(trimTrailingSlashes("////"), "");
+});
 
 test("ApprovalsClient.list preserves bounded approval projection fields", async () => {
   const requests: string[] = [];

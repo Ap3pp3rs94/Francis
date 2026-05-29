@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from francis.api.errors import api_error_message
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
@@ -65,4 +66,4 @@ def run(payload: SupervisedExecIn) -> dict[str, object]:
         }
         return run_supervised_exec(inputs, objective)
     except Exception as exc:
-        return {"kind": "supervised_exec.result", "ok": False, "status": "error", "error": str(exc)}
+        return {"kind": "supervised_exec.result", "ok": False, "status": "error", "error": api_error_message(exc)}

@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from francis.api.errors import sanitized_exception_handler
 from francis.api.routes import (
     approvals,
     artifacts,
@@ -41,6 +42,7 @@ from francis.kernel.paths import repo_root
 def create_app() -> FastAPI:
     """Create the Francis API application."""
     app = FastAPI(title="Francis API")
+    app.add_exception_handler(Exception, sanitized_exception_handler)
     _configure_cors(app)
 
     _mount_controller_ui(app)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from francis.api.errors import api_error_message
 import csv
 import io
 import json
@@ -764,7 +765,7 @@ def status() -> dict[str, object]:
             "capabilities": _allowed_capabilities(),
         }
     except Exception as exc:
-        return {"ok": False, "route": "operations", "status": "error", "error": str(exc)}
+        return {"ok": False, "route": "operations", "status": "error", "error": api_error_message(exc)}
 
 
 @router.get("/list")
@@ -805,7 +806,7 @@ def list_operations(
         )
         return {"items": items, "total": total, "offset": safe_offset, "limit": safe_limit}
     except Exception as exc:
-        return {"items": [], "total": 0, "offset": 0, "limit": 0, "error": str(exc)}
+        return {"items": [], "total": 0, "offset": 0, "limit": 0, "error": api_error_message(exc)}
 
 
 @router.post("/get_many")
@@ -847,7 +848,7 @@ def get_many_operations(payload: OperationGetManyIn) -> dict[str, object]:
 
         return {"items": details}
     except Exception as exc:
-        return {"items": [], "error": str(exc)}
+        return {"items": [], "error": api_error_message(exc)}
 
 
 @router.post("/create")
@@ -874,7 +875,7 @@ def create_operation(request: Request, payload: OperationCreateIn) -> dict[str, 
             ttl_sec=payload.ttl_sec,
         )
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.post("/run-once")
@@ -900,7 +901,7 @@ def run_workers_once(request: Request, payload: WorkerRunOnceIn) -> dict[str, ob
         )
         return {"ok": exit_code == 0, "exit_code": exit_code}
     except Exception as exc:
-        return {"ok": False, "exit_code": 1, "error": str(exc)}
+        return {"ok": False, "exit_code": 1, "error": api_error_message(exc)}
 
 
 @router.get("/export")
@@ -1012,7 +1013,7 @@ def get_operation(operation_id: str) -> dict[str, object]:
 
         return _operation_detail_payload(op_id, task)
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 def _operation_lifecycle_posture_block(op_id: str, blocked_reason: str) -> dict[str, object]:
@@ -1088,7 +1089,7 @@ def patch_operation(operation_id: str, request: Request, payload: OperationPatch
         operation = _task_to_operation(task)
         return {"ok": True, "operation": operation, "status": operation.get("status", "unknown")}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.post("/{operation_id}/cancel")
@@ -1116,7 +1117,7 @@ def cancel_operation(operation_id: str, request: Request, payload: OperationCanc
             "message": err if not ok else "cancelled",
         }
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.post("/{operation_id}/run")
@@ -1140,7 +1141,7 @@ def run_operation(operation_id: str, request: Request, payload: OperationRunIn) 
     try:
         return operations_runtime.run_operation(operation_id, worker_id=payload.worker_id)
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.delete("/{operation_id}")
@@ -1168,4 +1169,4 @@ def delete_operation(operation_id: str, request: Request, payload: OperationDele
             "message": err if not ok else "deleted",
         }
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}

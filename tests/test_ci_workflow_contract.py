@@ -31,6 +31,16 @@ def test_ci_workflow_triggers_cancel_stale_runs() -> None:
     }
 
 
+def test_ci_workflow_uses_explicit_minimal_permissions() -> None:
+    workflow = _workflow()
+
+    assert workflow["permissions"] == {
+        "contents": "read",
+        "checks": "write",
+    }
+    assert workflow["permissions"] != "write-all"
+
+
 def test_ci_pytest_step_has_bounded_timeout_and_failure_receipts() -> None:
     workflow = _workflow()
     steps = workflow["jobs"]["test"]["steps"]

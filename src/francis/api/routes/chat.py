@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from francis.api.errors import api_error_message
 import json
 from typing import Any, cast
 
@@ -406,7 +407,7 @@ def send(payload: ChatIn) -> dict[str, object]:
             "telemetry_context": telemetry_context,
         }
     except Exception as exc:
-        return {"reply": "", "error": str(exc)}
+        return {"reply": "", "error": api_error_message(exc)}
 
 
 @router.websocket("/ws")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from francis.api.errors import api_error_message
 import csv
 import io
 import json
@@ -647,7 +648,7 @@ def list_assets(
         page, total, safe_limit, safe_offset, next_cursor = _paginate(items, limit, offset, cursor)
         return {"items": page, "total": total, "limit": safe_limit, "offset": safe_offset, "next_cursor": next_cursor}
     except Exception as exc:
-        return {"items": [], "total": 0, "limit": 0, "offset": 0, "error": str(exc)}
+        return {"items": [], "total": 0, "limit": 0, "offset": 0, "error": api_error_message(exc)}
 
 
 @router.get("/assets/{asset_id}")
@@ -660,7 +661,7 @@ def get_asset(asset_id: str) -> dict[str, object]:
             return {"ok": False, "error": "not_found"}
         return {"ok": True, "item": _normalize_asset(entity_id, raw)}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.post("/assets")
@@ -696,7 +697,7 @@ def create_asset(payload: dict[str, Any]) -> dict[str, object]:
         _save_registry(registry)
         return {"ok": True, "id": entity_id, "item": item}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.patch("/assets/{asset_id}")
@@ -724,7 +725,7 @@ def update_asset(asset_id: str, payload: dict[str, Any]) -> dict[str, object]:
         _save_registry(registry)
         return {"ok": True, "id": entity_id, "item": item}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.delete("/assets/{asset_id}")
@@ -743,7 +744,7 @@ def delete_asset(asset_id: str, payload: dict[str, Any] | None = None) -> dict[s
             "reason": _safe_str((payload or {}).get("reason")).strip(),
         }
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.get("/processes")
@@ -772,7 +773,7 @@ def list_processes(
         page, total, safe_limit, safe_offset, next_cursor = _paginate(items, limit, offset, cursor)
         return {"items": page, "total": total, "limit": safe_limit, "offset": safe_offset, "next_cursor": next_cursor}
     except Exception as exc:
-        return {"items": [], "total": 0, "limit": 0, "offset": 0, "error": str(exc)}
+        return {"items": [], "total": 0, "limit": 0, "offset": 0, "error": api_error_message(exc)}
 
 
 @router.get("/processes/{process_id}")
@@ -785,7 +786,7 @@ def get_process(process_id: str) -> dict[str, object]:
             return {"ok": False, "error": "not_found"}
         return {"ok": True, "item": _normalize_process(entity_id, raw)}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.post("/processes")
@@ -821,7 +822,7 @@ def create_process(payload: dict[str, Any]) -> dict[str, object]:
         _save_registry(registry)
         return {"ok": True, "id": entity_id, "item": item}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.patch("/processes/{process_id}")
@@ -848,7 +849,7 @@ def update_process(process_id: str, payload: dict[str, Any]) -> dict[str, object
         _save_registry(registry)
         return {"ok": True, "id": entity_id, "item": item}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.delete("/processes/{process_id}")
@@ -867,7 +868,7 @@ def delete_process(process_id: str, payload: dict[str, Any] | None = None) -> di
             "reason": _safe_str((payload or {}).get("reason")).strip(),
         }
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.get("/simulations")
@@ -906,7 +907,7 @@ def list_simulations(
         page, total, safe_limit, safe_offset, next_cursor = _paginate(items, limit, offset, cursor)
         return {"items": page, "total": total, "limit": safe_limit, "offset": safe_offset, "next_cursor": next_cursor}
     except Exception as exc:
-        return {"items": [], "total": 0, "limit": 0, "offset": 0, "error": str(exc)}
+        return {"items": [], "total": 0, "limit": 0, "offset": 0, "error": api_error_message(exc)}
 
 
 @router.get("/simulations/{simulation_id}")
@@ -919,7 +920,7 @@ def get_simulation(simulation_id: str) -> dict[str, object]:
             return {"ok": False, "error": "not_found"}
         return {"ok": True, "item": _normalize_simulation(entity_id, raw)}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.post("/simulations")
@@ -958,7 +959,7 @@ def create_simulation(payload: dict[str, Any]) -> dict[str, object]:
         _save_registry(registry)
         return {"ok": True, "id": entity_id, "item": item}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.patch("/simulations/{simulation_id}")
@@ -996,7 +997,7 @@ def update_simulation(simulation_id: str, payload: dict[str, Any]) -> dict[str, 
         _save_registry(registry)
         return {"ok": True, "id": entity_id, "item": item}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.delete("/simulations/{simulation_id}")
@@ -1015,7 +1016,7 @@ def delete_simulation(simulation_id: str, payload: dict[str, Any] | None = None)
             "reason": _safe_str((payload or {}).get("reason")).strip(),
         }
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.get("/runs")
@@ -1047,7 +1048,7 @@ def list_runs(
         page, total, safe_limit, safe_offset, next_cursor = _paginate(items, limit, offset, cursor)
         return {"items": page, "total": total, "limit": safe_limit, "offset": safe_offset, "next_cursor": next_cursor}
     except Exception as exc:
-        return {"items": [], "total": 0, "limit": 0, "offset": 0, "error": str(exc)}
+        return {"items": [], "total": 0, "limit": 0, "offset": 0, "error": api_error_message(exc)}
 
 
 @router.get("/runs/export")
@@ -1119,7 +1120,7 @@ def get_run(run_id: str) -> dict[str, object]:
             return {"ok": False, "error": "not_found"}
         return {"ok": True, "item": _normalize_run(entity_id, raw)}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.post("/runs/start")
@@ -1167,7 +1168,7 @@ def start_run(payload: dict[str, Any]) -> dict[str, object]:
         _save_registry(registry)
         return {"ok": True, "id": run_id, "run": run, "status": run.get("status")}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.post("/runs/{run_id}/cancel")
@@ -1196,7 +1197,7 @@ def cancel_run(run_id: str, payload: dict[str, Any]) -> dict[str, object]:
         _save_registry(registry)
         return {"ok": True, "id": entity_id, "status": run.get("status")}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.get("/safety/validations")
@@ -1229,7 +1230,7 @@ def list_safety_validations(
         page, total, safe_limit, safe_offset, next_cursor = _paginate(items, limit, offset, cursor)
         return {"items": page, "total": total, "limit": safe_limit, "offset": safe_offset, "next_cursor": next_cursor}
     except Exception as exc:
-        return {"items": [], "total": 0, "limit": 0, "offset": 0, "error": str(exc)}
+        return {"items": [], "total": 0, "limit": 0, "offset": 0, "error": api_error_message(exc)}
 
 
 @router.post("/safety/validate")
@@ -1528,7 +1529,7 @@ def validate_safety(payload: dict[str, Any]) -> dict[str, object]:
             "request_id": request_id,
         }
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.get("/telemetry")
@@ -1572,7 +1573,7 @@ def query_telemetry(
         next_cursor = str(safe_limit) if safe_limit < len(items) else None
         return {"items": page, "total": len(items), "limit": safe_limit, "next_cursor": next_cursor}
     except Exception as exc:
-        return {"items": [], "total": 0, "error": str(exc)}
+        return {"items": [], "total": 0, "error": api_error_message(exc)}
 
 
 @router.post("/interventions/request")
@@ -1854,7 +1855,7 @@ def request_intervention(payload: dict[str, Any]) -> dict[str, object]:
             "message": "Intervention request approved.",
         }
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.post("/interventions/execute")
@@ -2127,7 +2128,7 @@ def execute_intervention(payload: dict[str, Any]) -> dict[str, object]:
             "message": message,
         }
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.get("/digital_twins/list")
@@ -2156,7 +2157,7 @@ def list_digital_twins() -> dict[str, object]:
         items.sort(key=lambda item: (int(item.get("updated_ts") or 0), _safe_str(item.get("id"))), reverse=True)
         return {"items": items, "twins": items, "total": len(items)}
     except Exception as exc:
-        return {"items": [], "twins": [], "total": 0, "error": str(exc)}
+        return {"items": [], "twins": [], "total": 0, "error": api_error_message(exc)}
 
 
 @router.get("/digital_twins/get")
@@ -2184,7 +2185,7 @@ def get_digital_twin(id: str) -> dict[str, object]:
         }
         return {"ok": True, "item": item}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.get("/digital_twins/snapshot")
@@ -2237,7 +2238,7 @@ def get_digital_twin_snapshot(id: str) -> dict[str, object]:
         }
         return {"ok": True, "snapshot": snapshot}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.post("/digital_twins/action")
@@ -2546,4 +2547,4 @@ def digital_twin_action(payload: dict[str, Any]) -> dict[str, object]:
             "status": status,
         }
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}

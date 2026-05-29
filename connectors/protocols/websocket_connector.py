@@ -75,6 +75,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import logging
 import os
 import socket
 import ssl
@@ -131,6 +132,7 @@ __all__ = [
 WEBSOCKET_PROTOCOL_ID = "websocket"
 WS_DEFAULT_PORT = 80
 WSS_DEFAULT_PORT = 443
+_LOG = logging.getLogger(__name__)
 
 # WebSocket opcodes
 _OP_CONT = 0x0
@@ -197,7 +199,7 @@ def normalize_ws_target(target: str) -> dict[str, Any]:
     Accepts:
       - "ws://host:port/path?query"
       - "wss://host/path"
-      - shorthand "host:port/path" or "host/path" (assumes ws://)
+      - shorthand "host:port/path" or "host/path" (assumes wss://)
 
     Returns:
       {
@@ -233,13 +235,13 @@ def normalize_ws_target(target: str) -> dict[str, Any]:
                 "websocket target missing host",
                 context=ProtocolErrorContext(protocol_id=WEBSOCKET_PROTOCOL_ID, operation="ws.normalize_target"),
             )
-        scheme = "ws"
-        tls = False
+        scheme = "wss"
+        tls = True
 
         host = hostport
-        port = WS_DEFAULT_PORT
+        port = WSS_DEFAULT_PORT
         if ":" in hostport:
-            h, p = hostport.rsplit(":", 1)
+            h, port_text = hostport.rsplit(":", 1)
             h = h.strip()
             if not h:
                 raise ProtocolValidationError(
@@ -247,11 +249,11 @@ def normalize_ws_target(target: str) -> dict[str, Any]:
                     context=ProtocolErrorContext(protocol_id=WEBSOCKET_PROTOCOL_ID, operation="ws.normalize_target"),
                 )
             try:
-                port = int(p.strip())
+                port = int(port_text.strip())
             except Exception as exc:  # noqa: BLE001
                 raise ProtocolValidationError(
                     "invalid websocket port",
-                    details={"port": redact_value(p)},
+                    details={"port": redact_value(port_text)},
                     context=ProtocolErrorContext(protocol_id=WEBSOCKET_PROTOCOL_ID, operation="ws.normalize_target"),
                     cause=exc,
                 ) from exc
@@ -265,8 +267,8 @@ def normalize_ws_target(target: str) -> dict[str, Any]:
             )
 
         resource = "/" + pathq if pathq else "/"
-        url = f"{scheme}://{host}:{port}{resource}" if port != WS_DEFAULT_PORT else f"{scheme}://{host}{resource}"
-        host_header = f"{host}:{port}" if port != WS_DEFAULT_PORT else host
+        url = f"{scheme}://{host}:{port}{resource}" if port != WSS_DEFAULT_PORT else f"{scheme}://{host}{resource}"
+        host_header = f"{host}:{port}" if port != WSS_DEFAULT_PORT else host
         return {
             "url": url,
             "scheme": scheme,
@@ -277,8 +279,8 @@ def normalize_ws_target(target: str) -> dict[str, Any]:
             "host_header": host_header,
         }
 
-    p = urlsplit(raw)
-    scheme = (p.scheme or "").lower()
+    parsed = urlsplit(raw)
+    scheme = (parsed.scheme or "").lower()
     if scheme not in ("ws", "wss"):
         raise ProtocolValidationError(
             "unsupported websocket scheme",
@@ -286,22 +288,23 @@ def normalize_ws_target(target: str) -> dict[str, Any]:
             context=ProtocolErrorContext(protocol_id=WEBSOCKET_PROTOCOL_ID, operation="ws.normalize_target"),
         )
 
-    if p.username or p.password:
+    if parsed.username or parsed.password:
         raise ProtocolValidationError(
             "websocket target must not include userinfo",
             context=ProtocolErrorContext(protocol_id=WEBSOCKET_PROTOCOL_ID, operation="ws.normalize_target"),
         )
 
-    host = p.hostname
-    if not host:
+    parsed_host = parsed.hostname
+    if not parsed_host:
         raise ProtocolValidationError(
             "websocket target missing host",
             details={"target": redact_value(raw)},
             context=ProtocolErrorContext(protocol_id=WEBSOCKET_PROTOCOL_ID, operation="ws.normalize_target"),
         )
+    host = str(parsed_host)
 
     tls = scheme == "wss"
-    port = int(p.port or (WSS_DEFAULT_PORT if tls else WS_DEFAULT_PORT))
+    port = int(parsed.port or (WSS_DEFAULT_PORT if tls else WS_DEFAULT_PORT))
     if not (1 <= port <= 65535):
         raise ProtocolValidationError(
             "websocket port out of range (1..65535)",
@@ -309,8 +312,8 @@ def normalize_ws_target(target: str) -> dict[str, Any]:
             context=ProtocolErrorContext(protocol_id=WEBSOCKET_PROTOCOL_ID, operation="ws.normalize_target"),
         )
 
-    path = p.path or "/"
-    query = p.query or ""
+    path = parsed.path or "/"
+    query = parsed.query or ""
     resource = path + (f"?{query}" if query else "")
 
     netloc = f"{host}:{port}"
@@ -431,6 +434,7 @@ class WebSocketConnectorConfig:
     origin: str | None = None
 
     # TLS options (for wss)
+    allow_plaintext: bool = False
     verify_tls: bool = True
     ca_file: str | None = None
     server_hostname: str | None = None
@@ -906,14 +910,14 @@ def _connect_websocket_once(
         if tls:
             try:
                 if tls_verify:
-                    ctx = ssl.create_default_context(cafile=ca_file)
+                    ssl_ctx = ssl.create_default_context(cafile=ca_file)
                 else:
-                    ctx = ssl._create_unverified_context()  # noqa: SLF001
+                    ssl_ctx = ssl._create_unverified_context()  # noqa: SLF001
             except Exception:
-                ctx = ssl.create_default_context()
+                ssl_ctx = ssl.create_default_context()
 
             hn = server_hostname or host
-            s = ctx.wrap_socket(s, server_hostname=hn)
+            s = ssl_ctx.wrap_socket(s, server_hostname=hn)
 
         # From here on, IO timeout
         s.settimeout(float(io_timeout_s))
@@ -934,7 +938,7 @@ def _connect_websocket_once(
 
         if code != 101:
             # Map common auth/rate-limit/unavailable
-            ctx = ProtocolErrorContext(
+            error_ctx = ProtocolErrorContext(
                 protocol_id=WEBSOCKET_PROTOCOL_ID,
                 operation="ws.handshake",
                 details={
@@ -945,18 +949,22 @@ def _connect_websocket_once(
                 },
             )
             if code == 401:
-                raise ProtocolAuthError("websocket handshake unauthorized", context=ctx, code="handshake_401")
+                raise ProtocolAuthError("websocket handshake unauthorized", context=error_ctx, code="handshake_401")
             if code == 403:
-                raise ProtocolPermissionError("websocket handshake forbidden", context=ctx, code="handshake_403")
+                raise ProtocolPermissionError("websocket handshake forbidden", context=error_ctx, code="handshake_403")
             if code == 429:
-                raise ProtocolRateLimitError("websocket handshake rate limited", context=ctx, code="handshake_429")
+                raise ProtocolRateLimitError(
+                    "websocket handshake rate limited",
+                    context=error_ctx,
+                    code="handshake_429",
+                )
             if code in (502, 503, 504):
                 raise ProtocolUnavailableError(
                     "websocket handshake failed (gateway/unavailable)",
-                    context=ctx,
+                    context=error_ctx,
                     code=f"handshake_{code}",
                 )
-            raise ProtocolError("websocket handshake failed", context=ctx, code=f"handshake_{code}")
+            raise ProtocolError("websocket handshake failed", context=error_ctx, code=f"handshake_{code}")
 
         # Validate Sec-WebSocket-Accept
         accept = (resp_headers.get("sec-websocket-accept") or "").strip()
@@ -1003,6 +1011,7 @@ class WebSocketProtocolConnector:
     def __init__(self, config: WebSocketConnectorConfig) -> None:
         self._cfg = config
         self._base_target = normalize_ws_target(config.target)
+        self._enforce_transport_governance(self._base_target)
 
         self._default_headers = normalize_ws_headers(dict(config.headers) if config.headers else {})
         self._default_subprotocols = tuple(str(x) for x in (config.subprotocols or ()))
@@ -1035,10 +1044,25 @@ class WebSocketProtocolConnector:
                 "target": redact_uri(str(self._base_target["url"])),
                 "keep_connection": bool(self._cfg.keep_connection),
                 "tls": bool(self._base_target["tls"]),
+                "allow_plaintext": bool(self._cfg.allow_plaintext),
                 "max_message_bytes": int(self._cfg.max_message_bytes),
                 "max_frame_bytes": int(self._cfg.max_frame_bytes),
                 "auto_pong": bool(self._cfg.auto_pong),
             },
+        )
+
+    def _enforce_transport_governance(self, target: dict[str, Any]) -> None:
+        if bool(target.get("tls")):
+            return
+        if not self._cfg.allow_plaintext:
+            raise ProtocolValidationError(
+                "plaintext websocket requires explicit allow_plaintext governance opt-in",
+                details={"url": redact_uri(str(target.get("url", ""))), "allow_plaintext": False},
+                context=ProtocolErrorContext(protocol_id=WEBSOCKET_PROTOCOL_ID, operation="ws.transport_governance"),
+            )
+        _LOG.warning(
+            "Plaintext WebSocket enabled by explicit governance opt-in for url=%s",
+            redact_uri(str(target.get("url", ""))),
         )
 
     def _close_socket(self) -> None:
@@ -1117,6 +1141,7 @@ class WebSocketProtocolConnector:
         if endpoint and (endpoint.uri or endpoint.address):
             try:
                 target = normalize_ws_target(endpoint.uri or endpoint.address)
+                self._enforce_transport_governance(target)
             except Exception as exc:
                 return ProtocolHealth(
                     ok=False,
@@ -1208,6 +1233,7 @@ class WebSocketProtocolConnector:
         override_target = False
         if req.endpoint and (req.endpoint.uri or req.endpoint.address):
             target = normalize_ws_target(req.endpoint.uri or req.endpoint.address)
+            self._enforce_transport_governance(target)
             override_target = True
 
         # Header merge: config.headers -> req.headers -> req.meta.headers (if provided)

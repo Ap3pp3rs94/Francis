@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from francis.api.errors import api_error_message
 import csv
 import io
 import json
@@ -426,7 +427,7 @@ def _request_learn(payload: dict[str, Any]) -> dict[str, Any]:
     try:
         normalized_url, parsed_domain = _parse_url(url)
     except Exception as exc:
-        return {"ok": False, "error": "invalid_url", "message": str(exc)}
+        return {"ok": False, "error": "invalid_url", "message": api_error_message(exc)}
 
     actor = _safe_str(payload.get("actor")).strip() or "api"
     reason = _safe_str(payload.get("reason")).strip() or "requested"
@@ -1545,7 +1546,7 @@ def status() -> dict[str, Any]:
             "meta": {"updated_at": int(registry.get("updated_at") or _now_s())},
         }
     except Exception as exc:
-        return {"ok": False, "route": "web_learning", "status": "error", "error": str(exc)}
+        return {"ok": False, "route": "web_learning", "status": "error", "error": api_error_message(exc)}
 
 
 @router.get("/policy")
@@ -1558,7 +1559,7 @@ def policy() -> dict[str, Any]:
         body["enabled"] = _effective_enabled(registry)
         return {"ok": True, "policy": body}
     except Exception as exc:
-        return {"ok": False, "policy": _default_policy(), "error": str(exc)}
+        return {"ok": False, "policy": _default_policy(), "error": api_error_message(exc)}
 
 
 @router.get("/records")
@@ -1645,7 +1646,7 @@ def request_learn(payload: dict[str, Any]) -> dict[str, Any]:
     try:
         return _request_learn(payload)
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.post("/enabled")
@@ -1655,7 +1656,7 @@ def set_enabled(payload: dict[str, Any]) -> dict[str, Any]:
     try:
         return _set_enabled(payload)
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.post("/quarantine/decide")
@@ -1664,7 +1665,7 @@ def decide_quarantine_payload(payload: dict[str, Any]) -> dict[str, Any]:
     try:
         return _decide_quarantine("", payload)
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.post("/quarantine/{item_id}/decide")
@@ -1673,7 +1674,7 @@ def decide_quarantine(item_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     try:
         return _decide_quarantine(item_id, payload)
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.post("/export")
@@ -1692,7 +1693,7 @@ def export_post(payload: dict[str, Any]) -> Response:
         )
     except Exception as exc:
         return Response(
-            content=json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False),
+            content=json.dumps({"ok": False, "error": api_error_message(exc)}, ensure_ascii=False),
             media_type="application/json",
             status_code=500,
         )

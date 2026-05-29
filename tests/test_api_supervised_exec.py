@@ -99,6 +99,65 @@ def test_api_supervised_exec_flow(monkeypatch, tmp_path: Path) -> None:
     assert (art / "result.json").exists()
 
 
+def test_api_supervised_exec_rejects_shell_metacharacters_before_approval(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _allow_supervised_exec(monkeypatch)
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/operations/supervised-exec/run",
+        json={
+            "objective": "test",
+            "user_command": "echo hello && whoami",
+            "cwd": str(tmp_path),
+            "actor": _SUPERVISED_ACTOR,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["status"] == "invalid"
+    assert body["error"] == "unsupported_shell_syntax"
+    assert not (data_root / "approvals").exists()
+
+
+def test_api_supervised_exec_rejects_cwd_outside_allowed_roots(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    outside_root = Path.cwd().parent / f"{Path.cwd().name}_outside_cwd"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _allow_supervised_exec(monkeypatch)
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/operations/supervised-exec/run",
+        json={
+            "objective": "test",
+            "user_command": "echo hello",
+            "cwd": str(outside_root),
+            "actor": _SUPERVISED_ACTOR,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["status"] == "invalid"
+    assert body["error"] == "cwd_outside_allowed_root"
+    assert not (data_root / "approvals").exists()
+
+
 def test_api_supervised_exec_rejects_approval_payload_mismatch(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

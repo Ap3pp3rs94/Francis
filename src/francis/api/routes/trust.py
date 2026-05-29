@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from francis.api.errors import api_error_message
 import json
 import os
 import re
@@ -394,7 +395,7 @@ def state() -> dict[str, Any]:
     try:
         return _state_body()
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.get("/policy")
@@ -405,7 +406,7 @@ def policy() -> dict[str, Any]:
         loaded = _load_policy()
         return {"ok": True, "policy": loaded}
     except Exception as exc:
-        return {"ok": False, "policy": _default_policy(), "error": str(exc)}
+        return {"ok": False, "policy": _default_policy(), "error": api_error_message(exc)}
 
 
 @router.get("/history")
@@ -442,7 +443,14 @@ def history(
         page, total, safe_limit, _, next_cursor = _paginate(out, limit, cursor)
         return {"items": page, "history": page, "total": total, "limit": safe_limit, "next_cursor": next_cursor}
     except Exception as exc:
-        return {"items": [], "history": [], "total": 0, "limit": 0, "next_cursor": None, "error": str(exc)}
+        return {
+            "items": [],
+            "history": [],
+            "total": 0,
+            "limit": 0,
+            "next_cursor": None,
+            "error": api_error_message(exc),
+        }
 
 
 @router.get("/events")
@@ -486,7 +494,7 @@ def events(
         page, total, safe_limit, _, next_cursor = _paginate(filtered, limit, cursor)
         return {"items": page, "events": page, "total": total, "limit": safe_limit, "next_cursor": next_cursor}
     except Exception as exc:
-        return {"items": [], "events": [], "total": 0, "limit": 0, "next_cursor": None, "error": str(exc)}
+        return {"items": [], "events": [], "total": 0, "limit": 0, "next_cursor": None, "error": api_error_message(exc)}
 
 
 @router.post("/adjust")
@@ -495,7 +503,7 @@ def adjust(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
     try:
         return _adjust(payload, default_op="set", route=request.url.path)
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.post("/set")
@@ -540,7 +548,7 @@ def set_level(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
 
         return {"ok": False, "error": "level_or_value_required"}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.post("/policy")
@@ -580,4 +588,4 @@ def set_policy(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
         _save_policy(merged)
         return {"ok": True, "policy": _load_policy()}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}

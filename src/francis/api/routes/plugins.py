@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from francis.api.errors import api_error_message
 import csv
 from dataclasses import replace
 import importlib.util
@@ -190,6 +191,43 @@ def _validate_plugin_id(value: str) -> str:
     if not _PLUGIN_ID_RE.match(text):
         raise ValueError("invalid plugin id")
     return text
+
+
+def _real_path(value: str | Path) -> Path:
+    return Path(os.path.realpath(os.fspath(value)))
+
+
+def _resolve_under(root: Path, raw: str | Path, *, relative_to_root: bool = True) -> Path | None:
+    text = _safe_str(raw).strip()
+    if not text or any(ch in text for ch in ("\x00", "\n", "\r")):
+        return None
+    root_resolved = _real_path(root)
+    candidate = Path(text).expanduser()
+    if relative_to_root and not candidate.is_absolute():
+        candidate = root_resolved / candidate
+    try:
+        resolved = _real_path(candidate)
+    except OSError:
+        return None
+    return resolved if _is_under(root_resolved, resolved) else None
+
+
+def _generated_plugin_dir(plugin_id: str, generated_dir: str = "") -> Path | None:
+    try:
+        normalized_id = _validate_plugin_id(plugin_id)
+    except Exception:
+        return None
+    raw = _safe_str(generated_dir).strip() or normalized_id
+    return _resolve_under(_gen_dir(), raw)
+
+
+def _plugin_artifact_path(plugin_id: str, artifact_zip: str = "") -> Path | None:
+    try:
+        normalized_id = _validate_plugin_id(plugin_id)
+    except Exception:
+        return None
+    raw = _safe_str(artifact_zip).strip() or f"{normalized_id}.zip"
+    return _resolve_under(_art_dir(), raw)
 
 
 def _normalize_capability(plugin_id: str, raw: dict[str, Any]) -> dict[str, Any] | None:
@@ -427,8 +465,8 @@ def _spec_from_plugin_record(plugin: dict[str, Any]) -> PluginSpec:
     meta = plugin.get("meta") if isinstance(plugin.get("meta"), dict) else {}
     generated_dir = _safe_str(plugin.get("generated_dir")).strip()
     if generated_dir:
-        plugin_dir = Path(generated_dir)
-        if plugin_dir.exists():
+        plugin_dir = _generated_plugin_dir(plugin_id, generated_dir)
+        if plugin_dir is not None and plugin_dir.exists():
             contract = _load_generated_contract(plugin_dir)
             if contract is not None:
                 return replace(contract, metadata={**dict(contract.metadata), **dict(meta)})
@@ -698,7 +736,8 @@ def _plugin_promotion_quality(
 ) -> dict[str, Any]:
     promoted_meta = promoted.get("meta") if isinstance(promoted.get("meta"), dict) else {}
     generated_dir = _safe_str(promoted.get("generated_dir")).strip()
-    readme_path = Path(generated_dir) / "README.md" if generated_dir else _gen_dir() / plugin_id / "README.md"
+    plugin_dir = _generated_plugin_dir(plugin_id, generated_dir)
+    readme_path = plugin_dir / "README.md" if plugin_dir is not None else _gen_dir() / plugin_id / "README.md"
     docs: Any = payload_meta.get("docs") or payload_meta.get("documentation") or []
     if not docs and readme_path.exists():
         docs = [str(readme_path.resolve())]
@@ -743,7 +782,8 @@ def _plugin_promotion_readiness(
     staged_meta = dict(staged.get("meta") or {}) if isinstance(staged.get("meta"), dict) else {}
     payload_meta = {**staged_meta, **redact_governed_metadata(payload.meta)}
     generated_dir = _safe_str(staged.get("generated_dir")).strip()
-    readme_path = Path(generated_dir) / "README.md" if generated_dir else _gen_dir() / plugin_id / "README.md"
+    plugin_dir = _generated_plugin_dir(plugin_id, generated_dir)
+    readme_path = plugin_dir / "README.md" if plugin_dir is not None else _gen_dir() / plugin_id / "README.md"
     docs = payload_meta.get("docs") or payload_meta.get("documentation") or []
     if not _has_readiness_value(docs) and readme_path.exists():
         docs = [str(readme_path.resolve())]
@@ -1215,7 +1255,9 @@ def _read_runtime_catalog_payload(catalog: dict[str, Any]) -> dict[str, Any]:
     path_text = _safe_str(catalog.get("path")).strip()
     if not path_text:
         return {}
-    path = Path(path_text)
+    path = _resolve_under(data_dir() / "plugins", path_text)
+    if path is None:
+        return {}
     if not path.exists():
         return {}
     try:
@@ -1457,7 +1499,9 @@ def _record_from_generated_contract(
 
 def _read_generated_details(plugin_id: str, plugin: dict[str, Any]) -> dict[str, Any]:
     generated_dir = _safe_str(plugin.get("generated_dir")).strip()
-    plugin_dir = Path(generated_dir) if generated_dir else (_gen_dir() / plugin_id)
+    plugin_dir = _generated_plugin_dir(plugin_id, generated_dir)
+    if plugin_dir is None:
+        return {}
     if not plugin_dir.exists() or not plugin_dir.is_dir():
         return {}
 
@@ -1586,7 +1630,7 @@ def _sync_generated_plugins(registry: dict[str, Any]) -> int:
 
 def _is_under(base: Path, candidate: Path) -> bool:
     try:
-        candidate.resolve().relative_to(base.resolve())
+        _real_path(candidate).relative_to(_real_path(base))
         return True
     except Exception:
         return False
@@ -1604,7 +1648,9 @@ def _coerce_run_input(value: Any) -> str:
 def _run_generated_plugin(plugin: dict[str, Any], payload_input: Any) -> Any:
     plugin_id = _safe_str(plugin.get("id")).strip()
     generated_dir = _safe_str(plugin.get("generated_dir")).strip()
-    plugin_dir = Path(generated_dir) if generated_dir else (_gen_dir() / plugin_id)
+    plugin_dir = _generated_plugin_dir(plugin_id, generated_dir)
+    if plugin_dir is None:
+        return {"echo": payload_input}
     if not plugin_dir.exists():
         return {"echo": payload_input}
 
@@ -1641,7 +1687,8 @@ def _sandbox_limits_for_plugin(plugin: dict[str, Any], capability: dict[str, Any
     max_payload_bytes = int(raw_payload_limit) if isinstance(raw_payload_limit, (int, float)) else 65536
     risk_tier = _safe_str(meta.get("risk_tier")).strip().lower() or "normal"
     generated_dir = _safe_str(plugin.get("generated_dir")).strip()
-    allowed_paths = [generated_dir] if generated_dir else []
+    plugin_dir = _generated_plugin_dir(_safe_str(plugin.get("id")).strip(), generated_dir)
+    allowed_paths = [str(plugin_dir)] if plugin_dir is not None else []
     return SandboxLimits(
         max_payload_bytes=max_payload_bytes,
         allow_network="web_access" in _parse_tags(meta.get("policy_tags")),
@@ -1941,7 +1988,7 @@ def status() -> dict[str, object]:
         total = len(plugins) if isinstance(plugins, dict) else 0
         return {"ok": True, "route": "plugins", "status": "ready", "total": total, "catalog": catalog}
     except Exception as exc:
-        return {"ok": False, "route": "plugins", "status": "error", "error": str(exc)}
+        return {"ok": False, "route": "plugins", "status": "error", "error": api_error_message(exc)}
 
 
 @router.post("/build")
@@ -2051,7 +2098,7 @@ def build(payload: PluginBuildIn, request: Request) -> dict[str, object]:
             "download_url": f"/plugins/download/{plugin_id}",
         }
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.get("/download/{plugin_id}")
@@ -2061,7 +2108,9 @@ def download(plugin_id: str):
     except Exception:
         return {"ok": False, "error": "invalid_plugin_id"}
 
-    path = _art_dir() / f"{normalized_id}.zip"
+    path = _plugin_artifact_path(normalized_id)
+    if path is None:
+        return {"ok": False, "error": "artifact_path_invalid"}
     if not path.exists():
         return {"ok": False, "error": "not_found"}
     return FileResponse(path, filename=path.name)
@@ -2112,7 +2161,7 @@ def list_plugins(
         page = items[safe_offset : safe_offset + safe_limit]
         return {"items": page, "plugins": page, "total": total, "offset": safe_offset, "limit": safe_limit}
     except Exception as exc:
-        return {"items": [], "plugins": [], "total": 0, "offset": 0, "limit": 0, "error": str(exc)}
+        return {"items": [], "plugins": [], "total": 0, "offset": 0, "limit": 0, "error": api_error_message(exc)}
 
 
 @router.get("/capabilities/catalog")
@@ -2186,7 +2235,7 @@ def list_plugin_capabilities(
             "total": 0,
             "offset": 0,
             "limit": 0,
-            "error": str(exc),
+            "error": api_error_message(exc),
         }
 
 
@@ -2218,7 +2267,14 @@ def get_plugin(id: str) -> dict[str, object]:
                 "entrypoint": _safe_str(details.get("entrypoint")).strip() or "plugin.py",
                 "generated_dir": _safe_str(item.get("generated_dir")).strip(),
                 "artifact_exists": bool(
-                    _safe_str(item.get("artifact_zip")).strip() and Path(_safe_str(item.get("artifact_zip"))).exists()
+                    (
+                        artifact_path := _plugin_artifact_path(
+                            plugin_id,
+                            _safe_str(item.get("artifact_zip")).strip(),
+                        )
+                    )
+                    is not None
+                    and artifact_path.exists()
                 ),
                 "spec_exists": bool(isinstance(details.get("contract"), dict) and details.get("contract")),
                 "registry_snapshot_exists": bool(
@@ -2229,11 +2285,16 @@ def get_plugin(id: str) -> dict[str, object]:
             meta = item.get("meta") if isinstance(item.get("meta"), dict) else {}
             if isinstance(meta.get("contract"), dict) and meta.get("contract"):
                 item["contract"] = meta.get("contract")
-            item["runtime"] = {"generated_dir": _safe_str(item.get("generated_dir")).strip(), "artifact_exists": False}
+            item["runtime"] = {
+                "generated_dir": _safe_str(item.get("generated_dir")).strip(),
+                "artifact_exists": False,
+                "spec_exists": False,
+                "registry_snapshot_exists": False,
+            }
 
         return {"ok": True, "item": item}
     except Exception as exc:
-        return {"ok": False, "error": str(exc), "item": None}
+        return {"ok": False, "error": api_error_message(exc), "item": None}
 
 
 @router.get("/tools/list")
@@ -2269,7 +2330,7 @@ def list_plugin_tools(
         )
         return {"items": page, "tools": page, "total": total, "offset": safe_offset, "limit": safe_limit}
     except Exception as exc:
-        return {"items": [], "tools": [], "total": 0, "offset": 0, "limit": 0, "error": str(exc)}
+        return {"items": [], "tools": [], "total": 0, "offset": 0, "limit": 0, "error": api_error_message(exc)}
 
 
 @router.get("/tools/get")
@@ -2300,7 +2361,7 @@ def get_plugin_tool(id: str) -> dict[str, object]:
                 return {"ok": True, "item": item}
         return {"ok": False, "error": "not_found", "item": None}
     except Exception as exc:
-        return {"ok": False, "error": str(exc), "item": None}
+        return {"ok": False, "error": api_error_message(exc), "item": None}
 
 
 @router.get("/tools/export")
@@ -2419,7 +2480,7 @@ def run_plugin_tool(payload: PluginToolRunIn) -> dict[str, object]:
             return out
         return {"ok": False, "error": "unexpected_result_type", "status": "error", "tool_id": tool_id}
     except Exception as exc:
-        return {"ok": False, "status": "error", "error": str(exc)}
+        return {"ok": False, "status": "error", "error": api_error_message(exc)}
 
 
 @router.post("/enable")
@@ -2498,7 +2559,7 @@ def enable_plugin(payload: PluginToggleIn, request: Request) -> dict[str, object
             out["promotion_receipt"] = promotion_receipt
         return out
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.post("/disable")
@@ -2530,7 +2591,7 @@ def disable_plugin(payload: PluginToggleIn, request: Request) -> dict[str, objec
             "catalog": catalog,
         }
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.post("/install")
@@ -2633,7 +2694,7 @@ def install_plugin(payload: PluginInstallIn, request: Request) -> dict[str, obje
             "catalog": catalog,
         }
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.post("/uninstall")
@@ -2654,13 +2715,13 @@ def uninstall_plugin(payload: PluginUninstallIn, request: Request) -> dict[str, 
         artifact_zip = _safe_str(current.get("artifact_zip")).strip()
 
         if generated_dir:
-            generated_path = Path(generated_dir)
-            if generated_path.exists() and _is_under(_gen_dir(), generated_path):
+            generated_path = _generated_plugin_dir(plugin_id, generated_dir)
+            if generated_path is not None and generated_path.exists():
                 shutil.rmtree(generated_path, ignore_errors=True)
 
         if artifact_zip:
-            artifact_path = Path(artifact_zip)
-            if artifact_path.exists() and _is_under(_art_dir(), artifact_path):
+            artifact_path = _plugin_artifact_path(plugin_id, artifact_zip)
+            if artifact_path is not None and artifact_path.exists():
                 try:
                     artifact_path.unlink()
                 except OSError:
@@ -2670,7 +2731,7 @@ def uninstall_plugin(payload: PluginUninstallIn, request: Request) -> dict[str, 
         catalog = _save_registry_and_catalog(registry)
         return {"ok": True, "id": plugin_id, "status": "uninstalled", "message": "uninstalled", "catalog": catalog}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.post("/run")
@@ -2970,7 +3031,7 @@ def run_plugin(payload: PluginRunIn) -> dict[str, object]:
             },
         }
     except Exception as exc:
-        return {"ok": False, "status": "error", "error": str(exc)}
+        return {"ok": False, "status": "error", "error": api_error_message(exc)}
 
 
 @router.post("/reload")
@@ -2988,4 +3049,4 @@ def reload_plugins(request: Request, payload: PluginReloadIn | None = None) -> d
         total = len(plugins) if isinstance(plugins, dict) else 0
         return {"ok": True, "message": "reloaded", "synced": synced, "total": total, "catalog": catalog}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}

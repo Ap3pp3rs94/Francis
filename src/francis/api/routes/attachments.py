@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from francis.api.errors import api_error_message
 import os
 import re
 from pathlib import Path
@@ -43,4 +44,4 @@ async def upload(file: UploadFile = File(...)) -> dict[str, object]:
         out.write_bytes(data)
         return {"ok": True, "stored": str(out), "bytes": out.stat().st_size}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}

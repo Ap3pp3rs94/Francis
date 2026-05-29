@@ -75,12 +75,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import socket
 import ssl
 import threading
 import time
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlsplit
@@ -128,6 +129,7 @@ __all__ = [
 MQTT_PROTOCOL_ID = "mqtt"
 MQTT_DEFAULT_PORT = 1883
 MQTTS_DEFAULT_PORT = 8883
+_LOG = logging.getLogger(__name__)
 
 # MQTT control packet types (high 4 bits)
 _PKT_CONNECT = 0x01
@@ -194,7 +196,7 @@ def normalize_mqtt_target(target: str) -> tuple[str, int, bool]:
 
     Accepts:
       - "host:port"
-      - "host" (defaults to 1883)
+      - "host" (defaults to TLS on 8883)
       - "mqtt://host:port"
       - "mqtts://host:port" (TLS, defaults to 8883)
 
@@ -246,7 +248,8 @@ def normalize_mqtt_target(target: str) -> tuple[str, int, bool]:
             )
         return host, port, tls
 
-    # host:port or host
+    # host:port or host. Shorthand is secure-by-default; use mqtt:// plus
+    # allow_plaintext=True for governed plaintext opt-in.
     if ":" in raw:
         host, port_s = raw.rsplit(":", 1)
         host = host.strip()
@@ -271,9 +274,9 @@ def normalize_mqtt_target(target: str) -> tuple[str, int, bool]:
                 details={"port": port},
                 context=ProtocolErrorContext(protocol_id=MQTT_PROTOCOL_ID, operation="mqtt.normalize_target"),
             )
-        return host, port, False
+        return host, port, True
 
-    return raw, MQTT_DEFAULT_PORT, False
+    return raw, MQTTS_DEFAULT_PORT, True
 
 
 def normalize_mqtt_topic(topic: str) -> str:
@@ -404,7 +407,7 @@ def _encode_varint(n: int) -> bytes:
     return bytes(out)
 
 
-def _decode_varint(recv1: callable) -> int:
+def _decode_varint(recv1: Callable[[], bytes]) -> int:
     """
     Decode MQTT Remaining Length by repeatedly calling recv1() -> bytes(1).
     """
@@ -680,8 +683,10 @@ class MqttConnectorConfig:
     username: str | None = None
     password: str | None = None
 
-    # TLS options (only used when mqtts:// or when force_tls=True)
+    # TLS options. Plaintext MQTT is blocked unless allow_plaintext is an
+    # explicit governed opt-in.
     force_tls: bool = False
+    allow_plaintext: bool = False
     verify_tls: bool = True
     ca_file: str | None = None
     server_hostname: str | None = None  # optional override
@@ -835,6 +840,8 @@ class MqttProtocolConnector:
         self._host = host
         self._port = port
         self._tls = bool(tls or config.force_tls)
+        self._allow_plaintext = bool(config.allow_plaintext)
+        self._enforce_transport_governance(tls=self._tls, target=f"{host}:{port}")
 
         if self._cfg.keep_alive_s < 0 or self._cfg.keep_alive_s > 65535:
             raise ProtocolValidationError(
@@ -899,11 +906,26 @@ class MqttProtocolConnector:
             meta={
                 "target": f"{self._host}:{self._port}",
                 "tls": bool(self._tls),
+                "allow_plaintext": bool(self._allow_plaintext),
                 "clean_session": bool(self._cfg.clean_session),
                 "keep_alive_s": int(self._cfg.keep_alive_s),
                 "keep_connection": bool(self._cfg.keep_connection),
                 "max_packet_bytes": int(self._cfg.max_packet_bytes),
             },
+        )
+
+    def _enforce_transport_governance(self, *, tls: bool, target: str) -> None:
+        if tls:
+            return
+        if not self._allow_plaintext:
+            raise ProtocolValidationError(
+                "plaintext mqtt requires explicit allow_plaintext governance opt-in",
+                details={"target": redact_value(target), "allow_plaintext": False},
+                context=ProtocolErrorContext(protocol_id=MQTT_PROTOCOL_ID, operation="mqtt.transport_governance"),
+            )
+        _LOG.warning(
+            "Plaintext MQTT enabled by explicit governance opt-in for target=%s",
+            redact_value(target),
         )
 
     def _close_socket(self) -> None:
@@ -1067,6 +1089,8 @@ class MqttProtocolConnector:
         if endpoint and (endpoint.uri or endpoint.address):
             try:
                 host, port, tls = normalize_mqtt_target(endpoint.uri or endpoint.address)
+                tls = bool(tls or self._cfg.force_tls)
+                self._enforce_transport_governance(tls=tls, target=f"{host}:{port}")
             except Exception as exc:
                 return ProtocolHealth(
                     ok=False,
@@ -1149,6 +1173,8 @@ class MqttProtocolConnector:
         override_target = False
         if req.endpoint and (req.endpoint.uri or req.endpoint.address):
             host, port, tls = normalize_mqtt_target(req.endpoint.uri or req.endpoint.address)
+            tls = bool(tls or self._cfg.force_tls)
+            self._enforce_transport_governance(tls=tls, target=f"{host}:{port}")
             override_target = True
 
         # Determine idempotency (reads/ping/connect/disconnect are idempotent)

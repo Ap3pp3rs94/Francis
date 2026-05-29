@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from francis.api.errors import api_error_message
 import ipaddress
 import os
 from typing import Any
@@ -98,7 +99,7 @@ def request_approval(payload: ApprovalIn) -> dict[str, object]:
         item = create_request(payload.action, payload.reason, payload.payload)
         return _approval_item(item)
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.get("/list")
@@ -106,7 +107,7 @@ def list_approvals(status: str = "pending", limit: int = 100) -> dict[str, objec
     try:
         return {"items": [_approval_item(item) for item in list_requests(status=status, limit=limit)]}
     except Exception as exc:
-        return {"items": [], "error": str(exc)}
+        return {"items": [], "error": api_error_message(exc)}
 
 
 @router.get("/delegations")
@@ -118,7 +119,7 @@ def list_delegations(limit: int = 100, receiving_actor: str = "", active_only: b
             active_only=active_only,
         )
     except Exception as exc:
-        return {"ok": False, "items": [], "error": str(exc)}
+        return {"ok": False, "items": [], "error": api_error_message(exc)}
 
 
 @router.post("/decision")
@@ -147,4 +148,4 @@ def decide_approval(request: Request, payload: ApprovalDecisionIn) -> dict[str, 
     except Exception as exc:
         if isinstance(exc, HTTPException):
             raise
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}

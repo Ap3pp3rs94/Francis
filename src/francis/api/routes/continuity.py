@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from francis.api.errors import api_error_message
 import time
 from typing import Any
 
@@ -31,7 +32,7 @@ def _operator_surface() -> dict[str, Any]:
     try:
         payload = operator_mode_snapshot()
     except Exception as exc:
-        return {"available": False, "error": str(exc)}
+        return {"available": False, "error": api_error_message(exc)}
 
     if not bool(payload.get("ok")):
         return {
@@ -51,7 +52,7 @@ def _orb_surface() -> dict[str, Any]:
     try:
         payload = orb_status_snapshot()
     except Exception as exc:
-        return {"available": False, "error": str(exc)}
+        return {"available": False, "error": api_error_message(exc)}
 
     if not bool(payload.get("ok")):
         return {
@@ -76,7 +77,7 @@ def _observer_briefing() -> dict[str, Any]:
             "counts": {"active": 0},
             "focus": [],
             "recent_scans": [],
-            "error": str(exc),
+            "error": api_error_message(exc),
         }
 
     return {
@@ -96,7 +97,7 @@ def ledger(limit: int = 200) -> dict[str, object]:
     try:
         return {"entries": tail(limit=limit)}
     except Exception as exc:
-        return {"entries": [], "error": str(exc)}
+        return {"entries": [], "error": api_error_message(exc)}
 
 
 @router.get("/briefing")
@@ -132,7 +133,7 @@ def briefing(
         return {
             "ok": False,
             "subsystem": "continuity_briefing",
-            "error": str(exc),
+            "error": api_error_message(exc),
             "briefing": {},
             "mission_status_counts": {},
             "recent_missions": [],

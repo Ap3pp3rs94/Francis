@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from francis.api.errors import api_error_message
 import csv
 import hashlib
 import io
@@ -770,7 +771,7 @@ def status() -> dict[str, Any]:
             },
         }
     except Exception as exc:
-        return {"ok": False, "route": "memory_timeline", "status": "error", "error": str(exc)}
+        return {"ok": False, "route": "memory_timeline", "status": "error", "error": api_error_message(exc)}
 
 
 @router.get("/health")
@@ -849,7 +850,7 @@ def list_timeline(
             "limit": 0,
             "offset": 0,
             "next_cursor": None,
-            "error": str(exc),
+            "error": api_error_message(exc),
         }
 
 
@@ -864,7 +865,7 @@ def get_timeline_event(id: str, include_payload: bool = True) -> dict[str, Any]:
         event = _public_event(found, include_payload=include_payload)
         return {"ok": True, "item": event, "event": event}
     except Exception as exc:
-        return {"ok": False, "error": str(exc), "item": None}
+        return {"ok": False, "error": api_error_message(exc), "item": None}
 
 
 @router.get("/export")
@@ -943,7 +944,7 @@ def export_timeline(
         )
     except Exception as exc:
         return Response(
-            content=json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False),
+            content=json.dumps({"ok": False, "error": api_error_message(exc)}, ensure_ascii=False),
             media_type="application/json",
             status_code=500,
         )
@@ -1041,4 +1042,4 @@ def record_timeline_event(payload: dict[str, Any]) -> dict[str, Any]:
         event = _public_event(item, include_payload=True)
         return {"ok": True, "id": event_id, "item": event, "event": event}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}

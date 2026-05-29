@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import os
 from pathlib import Path
 
 from fastapi import APIRouter, Query
@@ -55,7 +56,7 @@ _ORIGIN_RECEIPT_PLAN_NUMBER_FIELDS = ("plan_step_count", "plan_checkpoint_count"
 
 
 def _artifact_root() -> Path:
-    return (data_dir() / "artifacts").resolve()
+    return Path(os.path.realpath(data_dir() / "artifacts"))
 
 
 def _display_path(path: Path) -> str:
@@ -94,7 +95,9 @@ def _safe_nonnegative_int(value: object) -> int | None:
 
 def _is_under(root: Path, target: Path) -> bool:
     try:
-        return target.resolve(strict=False).is_relative_to(root)
+        resolved_root = Path(os.path.realpath(root))
+        resolved_target = Path(os.path.realpath(target))
+        return resolved_target.is_relative_to(resolved_root)
     except OSError:
         return False
 
@@ -109,7 +112,7 @@ def _resolve_artifact_handle(raw: str) -> tuple[Path | None, str]:
     if not candidate.is_absolute():
         candidate = root / candidate
     try:
-        resolved = candidate.resolve(strict=False)
+        resolved = Path(os.path.realpath(candidate))
     except OSError:
         return None, "artifact_path_invalid"
     if not _is_under(root, resolved):
@@ -267,7 +270,7 @@ def _originating_receipt_projection(root: Path, target: Path, raw: str) -> dict[
 
 
 def _entry_projection(root: Path, path: Path) -> dict[str, object]:
-    resolved = path.resolve(strict=False)
+    resolved = Path(os.path.realpath(path))
     base = {
         "name": redact_secret_text(path.name),
         "relative_path": _relative_artifact_path(root, resolved),

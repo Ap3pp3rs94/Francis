@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from francis.api.errors import api_error_message
 import json
 import os
 import re
@@ -753,7 +754,7 @@ def status() -> dict[str, object]:
             "delegations": len(_load_delegations(registry)),
         }
     except Exception as exc:
-        return {"ok": False, "route": "credentials", "status": "error", "error": str(exc)}
+        return {"ok": False, "route": "credentials", "status": "error", "error": api_error_message(exc)}
 
 
 @router.get("/list")
@@ -803,7 +804,7 @@ def list_credentials(
         page = items[safe_offset : safe_offset + safe_limit]
         return {"items": page, "credentials": page, "total": total, "offset": safe_offset, "limit": safe_limit}
     except Exception as exc:
-        return {"items": [], "credentials": [], "total": 0, "offset": 0, "limit": 0, "error": str(exc)}
+        return {"items": [], "credentials": [], "total": 0, "offset": 0, "limit": 0, "error": api_error_message(exc)}
 
 
 @router.get("/scopes")
@@ -817,7 +818,7 @@ def list_scopes() -> dict[str, object]:
         items = _load_scopes(registry)
         return {"items": items, "scopes": items, "total": len(items)}
     except Exception as exc:
-        return {"items": [], "scopes": [], "total": 0, "error": str(exc)}
+        return {"items": [], "scopes": [], "total": 0, "error": api_error_message(exc)}
 
 
 @router.get("/delegations")
@@ -832,7 +833,7 @@ def list_delegations(limit: int = 200) -> dict[str, object]:
         items = _load_delegations(registry)[:safe_limit]
         return {"items": items, "delegations": items, "total": len(items), "limit": safe_limit}
     except Exception as exc:
-        return {"items": [], "delegations": [], "total": 0, "error": str(exc)}
+        return {"items": [], "delegations": [], "total": 0, "error": api_error_message(exc)}
 
 
 @router.post("/request")
@@ -942,7 +943,7 @@ def request_credential(request: Request, payload: CredentialRequestIn) -> dict[s
             "status": "pending",
         }
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.post("/revoke")
@@ -1020,4 +1021,4 @@ def revoke_credential(request: Request, payload: CredentialRevokeIn) -> dict[str
 
         return {"ok": True, "id": credential_id, "approval_id": approval_id, "actor": actor, "status": "pending"}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}

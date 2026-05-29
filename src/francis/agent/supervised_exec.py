@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
+import shlex
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -16,6 +19,44 @@ from francis.governance.redaction import (
 )
 from francis.kernel.paths import data_dir, repo_root
 
+_SAFE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,191}$")
+_FORBIDDEN_COMMAND_TOKENS = (
+    "\x00",
+    "\n",
+    "\r",
+    "&&",
+    "||",
+    ";",
+    "|",
+    "<",
+    ">",
+    "`",
+    "$(",
+)
+_ALLOWED_EXECUTABLES = {
+    "echo",
+    "mypy",
+    "mypy.exe",
+    "node",
+    "node.exe",
+    "npm",
+    "npm.cmd",
+    "npx",
+    "npx.cmd",
+    "py",
+    "py.exe",
+    "pytest",
+    "pytest.exe",
+    "python",
+    "python.exe",
+    "pwsh",
+    "pwsh.exe",
+    "ruff",
+    "ruff.exe",
+    "uv",
+    "uv.exe",
+}
+
 
 def _safe_str(v: Any) -> str:
     if v is None:
@@ -26,8 +67,32 @@ def _safe_str(v: Any) -> str:
         return ""
 
 
+def _real_path(value: str | Path) -> Path:
+    return Path(os.path.realpath(os.fspath(value)))
+
+
+def _path_is_under(root: Path, candidate: Path) -> bool:
+    try:
+        candidate.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def _safe_identifier(value: Any, *, fallback: str = "") -> str:
+    text = _safe_str(value).strip()
+    if _SAFE_ID_RE.fullmatch(text):
+        return text
+    return fallback
+
+
 def _artifact_dir(run_id: str) -> Path:
-    return data_dir() / "artifacts" / "supervised_exec" / run_id
+    root = _real_path(data_dir() / "artifacts" / "supervised_exec")
+    safe_run_id = _safe_identifier(run_id, fallback="invalid_run_id")
+    candidate = _real_path(root / safe_run_id)
+    if not _path_is_under(root, candidate):
+        raise ValueError("artifact_path_outside_allowed_root")
+    return candidate
 
 
 def _write_json(path: Path, obj: Any) -> None:
@@ -42,7 +107,7 @@ def _write_redacted_text(path: Path, value: str) -> None:
 
 
 def _find_approval(approval_id: str) -> tuple[str, dict[str, Any] | None]:
-    approval_id = _safe_str(approval_id).strip()
+    approval_id = _safe_identifier(approval_id)
     if not approval_id:
         return "missing", None
 
@@ -78,15 +143,59 @@ def _normalize_timeout_sec(value: Any) -> int:
 def _normalize_cwd(cwd_raw: str) -> str:
     cwd_raw = _safe_str(cwd_raw).strip()
     if not cwd_raw:
-        return str(repo_root())
+        return str(_real_path(repo_root()))
     try:
         p = Path(cwd_raw)
         if not p.is_absolute():
             p = repo_root() / p
-        p = p.resolve()
+        p = _real_path(p)
         return str(p)
     except Exception:
-        return str(repo_root())
+        return str(_real_path(repo_root()))
+
+
+def _allowed_cwd_roots() -> list[Path]:
+    roots = [_real_path(repo_root()), _real_path(data_dir()).parent]
+    unique: dict[str, Path] = {}
+    for root in roots:
+        unique[str(root).casefold()] = root
+    return list(unique.values())
+
+
+def _validated_cwd(cwd_raw: Any) -> tuple[str, str]:
+    cwd = _real_path(_normalize_cwd(_safe_str(cwd_raw)))
+    for root in _allowed_cwd_roots():
+        if _path_is_under(root, cwd) or cwd == root:
+            return str(cwd), ""
+    return str(_real_path(repo_root())), "cwd_outside_allowed_root"
+
+
+def _parse_command_args(user_command: str) -> tuple[list[str], str]:
+    command = _safe_str(user_command).strip()
+    if not command:
+        return [], "missing_user_command"
+    if any(token in command for token in _FORBIDDEN_COMMAND_TOKENS):
+        return [], "unsupported_shell_syntax"
+    try:
+        args = shlex.split(command, posix=os.name != "nt")
+    except ValueError:
+        return [], "invalid_command_syntax"
+    if not args:
+        return [], "missing_user_command"
+
+    executable = Path(args[0]).name.lower()
+    if executable not in _ALLOWED_EXECUTABLES:
+        return [], "unsupported_command"
+
+    if executable == "echo":
+        return [
+            sys.executable,
+            "-c",
+            "import sys; print(' '.join(sys.argv[1:]))",
+            *args[1:],
+        ], ""
+
+    return args, ""
 
 
 def _normalize_string_list(value: Any) -> list[str]:
@@ -196,7 +305,12 @@ def run_supervised_exec(inputs: dict[str, Any], objective: str) -> dict[str, Any
     if not user_command:
         return {"kind": "supervised_exec.result", "ok": False, "status": "invalid", "error": "missing_user_command"}
 
-    cwd = _normalize_cwd(_safe_str(inputs.get("cwd")))
+    cwd, cwd_error = _validated_cwd(inputs.get("cwd"))
+    if cwd_error:
+        return {"kind": "supervised_exec.result", "ok": False, "status": "invalid", "error": cwd_error}
+    command_args, command_error = _parse_command_args(user_command)
+    if command_error:
+        return {"kind": "supervised_exec.result", "ok": False, "status": "invalid", "error": command_error}
     timeout_sec = _normalize_timeout_sec(inputs.get("timeout_sec"))
     expected_artifacts = _normalize_string_list(inputs.get("expected_artifacts"))
     prechecks = _normalize_string_list(inputs.get("prechecks"))
@@ -210,7 +324,9 @@ def run_supervised_exec(inputs: dict[str, Any], objective: str) -> dict[str, Any
     )
     request_payload = _approval_contract_payload(raw_request_payload)
 
-    approval_id = _safe_str(inputs.get("approval_id")).strip()
+    approval_id = _safe_identifier(inputs.get("approval_id"))
+    if _safe_str(inputs.get("approval_id")).strip() and not approval_id:
+        return {"kind": "supervised_exec.result", "ok": False, "status": "invalid", "error": "invalid_approval_id"}
 
     # 1) No approval_id => create an approval request.
     if not approval_id:
@@ -372,11 +488,9 @@ def run_supervised_exec(inputs: dict[str, Any], objective: str) -> dict[str, Any
 
     t0 = time.time()
     try:
-        # We execute the exact user-provided command string; on Windows this needs `shell=True`
-        # to support built-ins like `echo`.
         proc = subprocess.run(
-            user_command,
-            shell=True,
+            command_args,
+            shell=False,
             cwd=cwd,
             timeout=timeout_sec,
             capture_output=True,
@@ -393,6 +507,7 @@ def run_supervised_exec(inputs: dict[str, Any], objective: str) -> dict[str, Any
                 "approval_id": approval_id,
                 "objective": objective,
                 "cmd": user_command,
+                "argv": command_args,
                 "cwd": cwd,
                 "timeout_sec": timeout_sec,
                 "elapsed_sec": dt,

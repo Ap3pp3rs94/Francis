@@ -89,6 +89,14 @@ type DecideResult = {
 
 const DEFAULT_APPROVAL_DECISION_ACTOR = "chat_ui.approvals";
 
+export function trimTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47) {
+    end -= 1;
+  }
+  return value.slice(0, end);
+}
+
 function safeString(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
@@ -213,7 +221,7 @@ export class ApprovalsClient {
   private readonly baseUrl: string;
 
   constructor(baseUrl: string) {
-    this.baseUrl = (baseUrl || "").replace(/\/+$/, "");
+    this.baseUrl = trimTrailingSlashes(baseUrl || "");
   }
 
   async list(opts: {

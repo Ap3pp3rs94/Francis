@@ -42575,6 +42575,53 @@ Latest validation for delegated-authority OS-binding proof posture:
   tests/test_api_approvals.py`
   Result: `passed; 2 files already formatted`
 
+### 2026-05-28 - Code-scanning security alerts are bounded at execution, path, API, workflow, UI, and connector edges
+
+Roadmap area: governance/security hardening for the local-first operator
+runtime.
+
+Material change:
+
+- Supervised execution now validates approved command strings into bounded argv
+  lists, rejects shell metacharacters before approval creation, runs with
+  `shell=False`, and validates cwd/artifact/approval identifiers against
+  expected roots.
+- Artifact, plugin, and Forge path handling now normalizes paths with realpath
+  semantics and rejects traversal/out-of-root records before file operations.
+- API route error bodies now return stable sanitized error codes while logging
+  exception traces internally at the API boundary.
+- The CI workflow declares explicit minimal permissions:
+  `contents: read` and `checks: write`.
+- The approvals UI trims API base URLs with bounded string scanning instead of
+  a trailing-slash regex.
+- MQTT and WebSocket connectors default to TLS; plaintext transport requires an
+  explicit `allow_plaintext` governance opt-in and emits a warning.
+- A governed workflow-change receipt was written at
+  `data/approvals/workflow_change_receipts/wfperm_add1086ad5fd49fc95a936cf60a1e95a.json`.
+
+Latest validation for code-scanning security hardening:
+
+- `python -m pytest tests/test_api_supervised_exec.py
+  tests/test_api_security_boundaries.py tests/test_protocol_tls_governance.py
+  tests/test_ci_workflow_contract.py -q --tb=short --maxfail=1`
+  Result: `passed; 18 passed`
+- `python -m pytest tests/test_api_approvals.py tests/test_api_artifacts.py
+  tests/test_api_plugins.py tests/test_api_supervised_exec.py
+  tests/test_api_security_boundaries.py tests/test_protocol_tls_governance.py
+  tests/test_ci_workflow_contract.py -q --tb=short --maxfail=1`
+  Result: `passed`
+- `cd apps/chat_ui; npm run test`
+  Result: `passed; 110 passed`
+- `python -m ruff check .`
+  Result: `passed`
+- `python -m ruff format --check .`
+  Result: `passed; 691 files already formatted`
+- `python -m mypy src connectors/protocols/__init__.py
+  connectors/protocols/mqtt.py connectors/protocols/websocket_connector.py`
+  Result: `passed; no issues found in 511 source files`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

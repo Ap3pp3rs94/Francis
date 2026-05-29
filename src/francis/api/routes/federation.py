@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from francis.api.errors import api_error_message
 import json
 import os
 import re
@@ -378,7 +379,7 @@ def status() -> dict[str, Any]:
             },
         }
     except Exception as exc:
-        return {"ok": False, "route": "federation", "status": "error", "error": str(exc)}
+        return {"ok": False, "route": "federation", "status": "error", "error": api_error_message(exc)}
 
 
 @router.get("/health")
@@ -399,7 +400,7 @@ def list_instances(
         registry = _load_registry()
         return _list_instances(registry, status=status, limit=limit, offset=offset, tags=_parse_list(tags))
     except Exception as exc:
-        return {"items": [], "instances": [], "total": 0, "limit": 0, "offset": 0, "error": str(exc)}
+        return {"items": [], "instances": [], "total": 0, "limit": 0, "offset": 0, "error": api_error_message(exc)}
 
 
 @router.get("/instances/get")
@@ -415,7 +416,7 @@ def get_instance(id: str) -> dict[str, Any]:
         item = {k: v for k, v in full.items() if k not in {"health", "inventory"}}
         return {"ok": True, "item": item, "health": full.get("health") or {}, "inventory": full.get("inventory") or {}}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.get("/delegations/list")
@@ -427,7 +428,7 @@ def list_delegations(
     try:
         return _list_delegations(_load_registry(), status=status, limit=limit, offset=offset)
     except Exception as exc:
-        return {"items": [], "delegations": [], "total": 0, "limit": 0, "offset": 0, "error": str(exc)}
+        return {"items": [], "delegations": [], "total": 0, "limit": 0, "offset": 0, "error": api_error_message(exc)}
 
 
 @router.get("/consensus_logs/list")
@@ -450,7 +451,7 @@ def list_consensus_logs(
             offset=offset,
         )
     except Exception as exc:
-        return {"items": [], "logs": [], "total": 0, "limit": 0, "offset": 0, "error": str(exc)}
+        return {"items": [], "logs": [], "total": 0, "limit": 0, "offset": 0, "error": api_error_message(exc)}
 
 
 @router.get("/shared_knowledge/list")
@@ -466,7 +467,7 @@ def list_shared_knowledge(
             _load_registry(), kind=kind, domain=domain, limit=limit, offset=offset, tags=_parse_list(tags)
         )
     except Exception as exc:
-        return {"items": [], "knowledge": [], "total": 0, "limit": 0, "offset": 0, "error": str(exc)}
+        return {"items": [], "knowledge": [], "total": 0, "limit": 0, "offset": 0, "error": api_error_message(exc)}
 
 
 @router.post("/instances/upsert")
@@ -534,7 +535,7 @@ def upsert_instance(payload: dict[str, Any]) -> dict[str, Any]:
         _save_registry(registry)
         return {"ok": True, "id": instance_id, "item": item}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.post("/delegations/record")
@@ -563,7 +564,7 @@ def record_delegation(payload: dict[str, Any]) -> dict[str, Any]:
         _save_registry(registry)
         return {"ok": True, "id": item.get("id"), "item": item}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.post("/consensus_logs/append")
@@ -593,7 +594,7 @@ def append_consensus_log(payload: dict[str, Any]) -> dict[str, Any]:
         _save_registry(registry)
         return {"ok": True, "id": item.get("id"), "item": item}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.post("/shared_knowledge/publish")
@@ -622,4 +623,4 @@ def publish_shared_knowledge(payload: dict[str, Any]) -> dict[str, Any]:
         _save_registry(registry)
         return {"ok": True, "id": item.get("id"), "item": item}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from francis.api.errors import api_error_message
 import json
 import os
 import re
@@ -278,7 +279,7 @@ def status() -> dict[str, object]:
             "total": len(domains),
         }
     except Exception as exc:
-        return {"ok": False, "route": "domains", "status": "error", "error": str(exc)}
+        return {"ok": False, "route": "domains", "status": "error", "error": api_error_message(exc)}
 
 
 @router.get("/list")
@@ -317,7 +318,7 @@ def list_domains(
         page = items[safe_offset : safe_offset + safe_limit]
         return {"items": page, "domains": page, "total": total, "offset": safe_offset, "limit": safe_limit}
     except Exception as exc:
-        return {"items": [], "domains": [], "total": 0, "offset": 0, "limit": 0, "error": str(exc)}
+        return {"items": [], "domains": [], "total": 0, "offset": 0, "limit": 0, "error": api_error_message(exc)}
 
 
 @router.get("/get")
@@ -330,7 +331,7 @@ def get_domain(domain_id: str) -> dict[str, object]:
             return {"ok": False, "error": "not_found"}
         return {"ok": True, "item": item}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.post("/create")
@@ -387,7 +388,7 @@ def create_domain(payload: DomainCreateIn) -> dict[str, object]:
             "message": "created",
         }
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.patch("/update")
@@ -434,7 +435,7 @@ def update_domain(payload: DomainUpdateIn) -> dict[str, object]:
             "message": "updated",
         }
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.post("/delete")
@@ -458,7 +459,7 @@ def delete_domain(payload: DomainDeleteIn) -> dict[str, object]:
             "message": "deleted",
         }
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.get("/summary")
@@ -471,4 +472,4 @@ def domain_summary(domain_id: str) -> dict[str, object]:
             return {"ok": False, "error": "not_found"}
         return {"ok": True, "summary": _summarize_domain(item)}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}

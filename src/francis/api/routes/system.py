@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from francis.api.errors import api_error_message
 import importlib.metadata
 import json
 import logging
@@ -428,7 +429,7 @@ def health() -> dict[str, object]:
     try:
         return {"ok": True, "report": health_report()}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.get("/info")
@@ -436,7 +437,7 @@ def info() -> dict[str, object]:
     try:
         return {"ok": True, "info": _system_info_record()}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.get("/status")
@@ -447,7 +448,7 @@ def status() -> dict[str, object]:
         payload["ok"] = True
         return payload
     except Exception as exc:
-        return {"ok": False, "status": "error", "error": str(exc)}
+        return {"ok": False, "status": "error", "error": api_error_message(exc)}
 
 
 @router.get("/stack")
@@ -455,7 +456,7 @@ def stack() -> dict[str, object]:
     try:
         return {"ok": True, "report": stack_status(probe_runtime=True)}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.get("/services")
@@ -463,7 +464,7 @@ def services() -> dict[str, object]:
     try:
         return {"ok": True, "report": services_status()}
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.get("/world_state")
@@ -472,7 +473,7 @@ def world_state() -> dict[str, object]:
     try:
         return world_state_snapshot()
     except Exception as exc:
-        return {"ok": False, "error": str(exc), "subsystem": "world_state"}
+        return {"ok": False, "error": api_error_message(exc), "subsystem": "world_state"}
 
 
 @router.get("/observer")
@@ -480,7 +481,7 @@ def observer(recent_limit: int = 10) -> dict[str, object]:
     try:
         return _observer_state_payload(recent_limit=recent_limit)
     except Exception as exc:
-        return {"ok": False, "error": str(exc), "subsystem": "observer"}
+        return {"ok": False, "error": api_error_message(exc), "subsystem": "observer"}
 
 
 @router.get("/observer/events")
@@ -509,7 +510,7 @@ def observer_events(
             "history": [],
             "total": 0,
             "limit": max(1, min(int(limit), 100)),
-            "error": str(exc),
+            "error": api_error_message(exc),
         }
 
 
@@ -547,7 +548,7 @@ def observer_scan(request: Request, payload: ObserverScanIn | None = None, recen
         response["receipt"] = observer_scan_event_projection(receipt)
         return response
     except Exception as exc:
-        return {"ok": False, "error": str(exc), "subsystem": "observer"}
+        return {"ok": False, "error": api_error_message(exc), "subsystem": "observer"}
 
 
 @router.get("/orb_status")
@@ -557,7 +558,7 @@ def orb_status() -> dict[str, object]:
     try:
         return orb_status_snapshot()
     except Exception as exc:
-        return {"ok": False, "error": str(exc), "subsystem": "orb_status"}
+        return {"ok": False, "error": api_error_message(exc), "subsystem": "orb_status"}
 
 
 @router.get("/operator_mode")
@@ -566,7 +567,7 @@ def operator_mode() -> dict[str, object]:
     try:
         return operator_mode_snapshot()
     except Exception as exc:
-        return {"ok": False, "error": str(exc), "subsystem": "operator_mode"}
+        return {"ok": False, "error": api_error_message(exc), "subsystem": "operator_mode"}
 
 
 @router.post("/operator_mode")
@@ -593,7 +594,7 @@ def update_operator_mode(request: Request, payload: ControlModeSetIn) -> dict[st
             "ok": False,
             "applied": False,
             "status": "error",
-            "message": str(exc),
+            "message": api_error_message(exc),
             "subsystem": "operator_mode",
         }
 
@@ -610,7 +611,7 @@ def service_action(request: Request, payload: ServiceActionIn) -> dict[str, obje
     try:
         return services_action(payload.action, payload.services)
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": api_error_message(exc)}
 
 
 @router.get("/flags")
@@ -620,7 +621,7 @@ def list_feature_flags() -> dict[str, object]:
     try:
         return {"items": feature_flags.list_flags()}
     except Exception as exc:
-        return {"items": [], "error": str(exc)}
+        return {"items": [], "error": api_error_message(exc)}
 
 
 @router.post("/flags/set")
@@ -661,7 +662,7 @@ def set_feature_flag_for_key(request: Request, key: str, payload: FlagSetIn) -> 
         )
         return {"ok": True, "applied": True, "status": "applied", "item": item}
     except Exception as exc:
-        return {"ok": False, "applied": False, "status": "error", "error": str(exc)}
+        return {"ok": False, "applied": False, "status": "error", "error": api_error_message(exc)}
 
 
 @router.get("/config/effective")
@@ -681,7 +682,7 @@ def effective_config() -> dict[str, object]:
             },
         }
     except Exception as exc:
-        return {"config": {}, "error": str(exc)}
+        return {"config": {}, "error": api_error_message(exc)}
 
 
 @router.post("/config/mutate")
@@ -728,5 +729,5 @@ def mutate_config(request: Request, payload: ConfigMutationIn) -> dict[str, obje
             "ok": False,
             "applied": False,
             "status": "error",
-            "message": str(exc),
+            "message": api_error_message(exc),
         }
