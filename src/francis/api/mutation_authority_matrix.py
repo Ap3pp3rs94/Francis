@@ -85,13 +85,13 @@ _RULES: tuple[AuthorityRule, ...] = (
     AuthorityRule(
         family="attachments",
         prefixes=("/attachments/upload",),
-        required_actor="none_currently",
-        required_scope="documented_gap: no upload.write scope enforced",
+        required_actor="multipart request_actor, actor, or api.attachments default",
+        required_scope="attachments.write",
         approval_requirement="not_required_currently",
         receipt_behavior="stored upload path and byte count only",
-        denial_behavior="file_too_large or sanitized error; not generic permission_gate",
-        governance_maturity="documented_gap",
-        notes="Filename and size are bounded, but upload is not actor/scope gated yet.",
+        denial_behavior="api_permission_denied via permission_gate before reading or writing upload bytes",
+        governance_maturity="permission_gated",
+        notes="Filename and size remain bounded; upload bytes require explicit API actor scope before persistence.",
     ),
     AuthorityRule(
         family="approval_request",

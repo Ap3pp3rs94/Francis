@@ -122,6 +122,11 @@ WEB_LEARNING_WRITE_TEST_ACTORS = (
     "operator:sealed",
     "test.web_learning.write",
 )
+ATTACHMENTS_WRITE_TEST_SCOPE = "attachments.write"
+ATTACHMENTS_WRITE_TEST_ACTORS = (
+    "api.attachments",
+    "test.attachments.write",
+)
 
 
 def _add_actor_scopes(policy: dict[str, list[str]], actors: tuple[str, ...], scope: str) -> None:
@@ -143,6 +148,7 @@ def _test_actor_scope_policy() -> dict[str, list[str]]:
     _add_actor_scopes(policy, MEMORY_TIMELINE_WRITE_TEST_ACTORS, MEMORY_TIMELINE_WRITE_TEST_SCOPE)
     _add_actor_scopes(policy, EXPLANATION_WRITE_TEST_ACTORS, EXPLANATION_WRITE_TEST_SCOPE)
     _add_actor_scopes(policy, WEB_LEARNING_WRITE_TEST_ACTORS, WEB_LEARNING_WRITE_TEST_SCOPE)
+    _add_actor_scopes(policy, ATTACHMENTS_WRITE_TEST_ACTORS, ATTACHMENTS_WRITE_TEST_SCOPE)
     return policy
 
 

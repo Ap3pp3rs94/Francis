@@ -43663,8 +43663,8 @@ Material change:
   required scope, approval requirement, receipt behavior, denial behavior, and
   current governance maturity.
 - The matrix intentionally marks current non-uniform surfaces as documented
-  gaps instead of claiming they are fixed, including attachment upload,
-  federation registry writes and industrial registry writes.
+  gaps instead of claiming they are fixed, including federation registry writes
+  and industrial registry writes.
 - Added a contract test that fails when any non-GET route lacks matrix coverage.
 
 Latest validation for API mutating-route authority matrix:
@@ -43784,6 +43784,40 @@ Latest validation for web-learning write gating:
   tests/test_api_mutating_route_authority_matrix.py tests/conftest.py`
   Result: `passed`
 - `python -m mypy src/francis/api/routes/web_learning.py
+  src/francis/api/mutation_authority_matrix.py`
+  Result: `passed`
+
+### 2026-05-29 - Attachment upload requires explicit API actor scope
+
+Roadmap area: Phase 2 / P3_GOVERNANCE -> P2_IDENTITY, bounded file mutation
+governance.
+
+Material change:
+
+- `POST /attachments/upload` now requires an API actor with `attachments.write`
+  before reading upload bytes or writing them to disk.
+- Upload actor identity is accepted from multipart `request_actor`, multipart
+  `actor`, or the `api.attachments` default.
+- Denied uploads return `api_permission_denied` with bounded governance
+  evidence and do not create the upload directory.
+- Filename and size bounds remain in place; the mutating-route authority matrix
+  now reports attachment upload as `permission_gated` instead of a documented
+  gap.
+
+Latest validation for attachment upload gating:
+
+- `python -m pytest tests/test_api_attachments.py
+  tests/test_api_mutating_route_authority_matrix.py -q --tb=short --maxfail=1`
+  Result: `passed; 4 passed`
+- `python -m ruff check src/francis/api/routes/attachments.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_attachments.py
+  tests/test_api_mutating_route_authority_matrix.py tests/conftest.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/attachments.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_attachments.py
+  tests/test_api_mutating_route_authority_matrix.py tests/conftest.py`
+  Result: `passed`
+- `python -m mypy src/francis/api/routes/attachments.py
   src/francis/api/mutation_authority_matrix.py`
   Result: `passed`
 
