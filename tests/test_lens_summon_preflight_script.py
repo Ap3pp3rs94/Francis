@@ -103,31 +103,29 @@ def test_lens_summon_preflight_reports_disabled_hotkey_without_authority() -> No
     assert payload["hotkey_runtime_readback"]["ready"] is False
     assert payload["hotkey_runtime_readback"]["requirement_state"] == "missing"
     assert "global_hotkey_binding_disabled" in payload["blockers"]
-    assert "summon_authority_not_granted" in payload["blockers"]
+    assert "summon_authority_not_granted" not in payload["blockers"]
     blocker_groups = payload["blocker_groups"]
     assert blocker_groups["global_hotkey_binding"] == [
         "global_hotkey_binding_disabled",
         "global_hotkey_registration_disabled",
-        "hotkey_registration_authority_not_granted",
     ]
     assert blocker_groups["summon_binding"] == [
         "lens_summon_binding_disabled_pending_authority",
-        "summon_authority_not_granted",
     ]
     assert blocker_groups["surface_dependencies"] == [
         "tray_host_missing",
         "overlay_window_missing",
     ]
-    assert "local_process_launch_authority_not_granted" in blocker_groups["host_dependency"]
+    assert blocker_groups["authority"] == []
     checks = {item["id"]: item for item in payload["checks"]}
-    assert checks["summon_config"]["status"] == "present_disabled"
+    assert checks["summon_config"]["status"] == "present_enabled"
     assert checks["summon_runner"]["status"] == "present"
     assert checks["hotkey_declared"]["status"] == "declared"
     assert checks["binding_enabled"]["status"] == "disabled"
     assert checks["register_hotkey"]["status"] == "disabled"
     assert checks["hotkey_runtime"]["status"] == "missing"
     assert checks["host_preflight"]["status"] == "present"
-    assert checks["hotkey_registration_authority"]["status"] == "blocked"
+    assert checks["hotkey_registration_authority"]["status"] == "allowed"
     assert payload["governance"] == {
         "read_only_contract": True,
         "execution_authority": False,

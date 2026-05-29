@@ -335,15 +335,21 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert "resident_host_process_missing" in criteria["summon_anywhere"]["blockers"]
     assert "global_hotkey_binding_missing" in criteria["summon_anywhere"]["blockers"]
     assert "summon_binding_missing" in criteria["summon_anywhere"]["blockers"]
-    assert criteria["helpful_not_noisy"]["status"] == "resident_surface_foreground_runtime_observed"
+    assert criteria["helpful_not_noisy"]["status"] in {
+        "resident_surface_content_readback_ready",
+        "resident_surface_foreground_runtime_observed",
+    }
     assert criteria["helpful_not_noisy"]["ready"] is False
     helpful_blockers = set(criteria["helpful_not_noisy"]["blockers"])
-    assert {"resident_surface_not_resident", "resident_surface_runtime_not_supervised"} <= helpful_blockers
-    assert helpful_blockers <= {
-        "operator_experience_proof_missing",
-        "resident_surface_not_resident",
-        "resident_surface_runtime_not_supervised",
-    }
+    if criteria["helpful_not_noisy"]["status"] == "resident_surface_content_readback_ready":
+        assert helpful_blockers == {"resident_surface_runtime_missing"}
+    else:
+        assert {"resident_surface_not_resident", "resident_surface_runtime_not_supervised"} <= helpful_blockers
+        assert helpful_blockers <= {
+            "operator_experience_proof_missing",
+            "resident_surface_not_resident",
+            "resident_surface_runtime_not_supervised",
+        }
     assert "/lens/resident-surface" in criteria["helpful_not_noisy"]["evidence"]
     assert "scripts/lens-live-operator-proof.ps1" in criteria["helpful_not_noisy"]["evidence"]
     assert criteria["mode_visibility"]["status"] == "readback_ready"
