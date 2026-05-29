@@ -223,6 +223,7 @@ def test_lens_summon_authority_blocker_proof_is_readback_only(tmp_path: Path) ->
     assert recommended_handoff["would_execute"] is False
     assert recommended_handoff["would_mutate"] is False
     assert payload["summon_authority_family_observed"] is True
+    assert payload["summon_authority_delegated_posture_observed"] is True
     assert payload["summon_authority_family_observed_after_resolved_summon_binding"] is False
     assert payload["previous_summon_binding_contract_observed"] is True
     assert payload["previous_summon_binding_contract_readback_observed"] is True
@@ -232,16 +233,10 @@ def test_lens_summon_authority_blocker_proof_is_readback_only(tmp_path: Path) ->
     assert payload["all_summon_blocker_families_consumed"] is True
     assert payload["handoff_aligned"] is True
     assert payload["side_effects_denied"] is True
-    assert payload["summon_authority_blockers"] == [
-        "summon_authority_not_granted",
-        "hotkey_registration_authority_not_granted",
-        "overlay_control_authority_not_granted",
-        "local_process_launch_authority_not_granted",
-    ]
+    assert payload["summon_authority_blockers"] == []
     assert payload["direct_summon_preflight_authority_blockers"] == payload["summon_authority_blockers"]
     assert payload["direct_summon_preflight_binding_blockers"] == [
         "lens_summon_binding_disabled_pending_authority",
-        "summon_authority_not_granted",
     ]
 
     previous_binding = payload["previous_binding_handoff"]
@@ -263,7 +258,6 @@ def test_lens_summon_authority_blocker_proof_is_readback_only(tmp_path: Path) ->
     assert previous_binding["side_effects_denied"] is True
     assert previous_binding["blockers"] == [
         "lens_summon_binding_disabled_pending_authority",
-        "summon_authority_not_granted",
     ]
 
     boundary = payload["summon_authority_boundary"]
@@ -284,15 +278,15 @@ def test_lens_summon_authority_blocker_proof_is_readback_only(tmp_path: Path) ->
     assert boundary["binding_enabled"] is False
     assert boundary["register_hotkey"] is False
     assert boundary["startup_register"] is False
-    assert "summon_authority_not_granted" in boundary["blockers"]
-    assert "hotkey_registration_authority_not_granted" in boundary["blockers"]
-    assert "overlay_control_authority_not_granted" in boundary["blockers"]
-    assert "local_process_launch_authority_not_granted" in boundary["blockers"]
+    assert "lens_summon_binding_disabled_pending_authority" in boundary["blockers"]
+    assert "global_hotkey_binding_disabled" in boundary["blockers"]
+    assert "global_hotkey_registration_disabled" in boundary["blockers"]
+    assert boundary["authority_blockers"] == []
     assert boundary["summon_binding_blockers"] == payload["direct_summon_preflight_binding_blockers"]
     assert boundary["authority_blockers"] == payload["direct_summon_preflight_authority_blockers"]
 
     checks = {item["id"]: item for item in payload["checks"]}
-    assert checks["summon_authority_family"]["status"] == "sixth_family_projected"
+    assert checks["summon_authority_family"]["status"] == "authority_delegated_no_family_blocker"
     assert checks["previous_summon_binding_contract"]["status"] == "previous_family_contract_observed"
     assert checks["previous_summon_binding_contract_readback"]["status"] == "previous_contract_readback_observed"
     assert checks["summon_preflight_authority"]["status"] == "blocked_readback_ready"
@@ -365,9 +359,7 @@ def test_lens_summon_authority_blocker_accepts_resolved_summon_binding_runtime_r
     assert payload["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
     assert payload["authority_required"] == "summon_hotkey_overlay_and_process_authority"
     assert payload["authority_granted"] is False
-    assert "summon_authority_not_granted" in payload["summon_authority_blockers"]
-    assert "hotkey_registration_authority_not_granted" in payload["summon_authority_blockers"]
-    assert "overlay_control_authority_not_granted" in payload["summon_authority_blockers"]
+    assert payload["summon_authority_blockers"] == []
 
     previous_binding = payload["previous_binding_handoff"]
     assert previous_binding["source"] == "summon_anywhere_blockers.surface_runtime_readback_observed"
@@ -388,7 +380,6 @@ def test_lens_summon_authority_blocker_accepts_resolved_summon_binding_runtime_r
     assert previous_binding["side_effects_denied"] is True
     assert previous_binding["blockers"] == []
     assert "lens_summon_binding_disabled_pending_authority" in previous_binding["suppressed_blockers"]
-    assert "summon_authority_not_granted" in previous_binding["suppressed_blockers"]
 
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["summon_authority_family"]["status"] == "authority_family_after_resolved_summon_binding"
@@ -435,11 +426,7 @@ def test_lens_summon_authority_blocker_accepts_overlay_remaining_after_surface_r
     assert payload["all_summon_blocker_families_consumed"] is True
     assert payload["handoff_aligned"] is True
     assert payload["side_effects_denied"] is True
-    assert payload["summon_authority_blockers"] == [
-        "summon_authority_not_granted",
-        "hotkey_registration_authority_not_granted",
-        "overlay_control_authority_not_granted",
-    ]
+    assert payload["summon_authority_blockers"] == []
 
     previous_binding = payload["previous_binding_handoff"]
     assert previous_binding["source"] == "summon_anywhere_blockers.surface_runtime_readback_observed"
@@ -456,7 +443,6 @@ def test_lens_summon_authority_blocker_accepts_overlay_remaining_after_surface_r
     assert previous_binding["would_mutate"] is False
     assert previous_binding["side_effects_denied"] is True
     assert "lens_summon_binding_disabled_pending_authority" in previous_binding["suppressed_blockers"]
-    assert "summon_authority_not_granted" in previous_binding["suppressed_blockers"]
 
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["summon_authority_family"]["status"] == "authority_family_after_resolved_summon_binding"

@@ -199,6 +199,8 @@ def test_lens_summon_anywhere_family_chain_requires_child_authority_readbacks() 
     assert "scripts/lens-stage6-completion-audit.ps1 -Mode Status" in script
     assert "summon_binding_resolved_by_runtime_readback" in script
     assert "final_authority_runtime_readback_resolved" in script
+    assert "function Test-OrderedKnownFamilies" in script
+    assert "resident_host_family_resolved_by_current_readback" in script
     assert (
         "[string](Get-PropertyValue -Payload $AuthorityPayload -Name 'authority_required' -Default '') "
         "-eq 'summon_hotkey_overlay_and_process_authority'"
@@ -237,6 +239,7 @@ def test_lens_summon_anywhere_family_chain_consumes_handoffs(tmp_path: Path) -> 
     assert payload["authority_granted"] is False
     assert payload["family_chain_observed"] is True
     assert payload["resident_host_family_handoff_observed"] is True
+    assert payload["resident_host_family_resolved_by_current_readback"] is True
     assert payload["final_summon_authority_handoff_observed"] is True
     assert payload["final_summon_authority_contract_readback_observed"] is True
     assert payload["final_summon_authority_runtime_readback_resolved"] is False
@@ -258,17 +261,15 @@ def test_lens_summon_anywhere_family_chain_consumes_handoffs(tmp_path: Path) -> 
         assert run["duration_ms"] >= 0
 
     assert payload["blocked_families"] == [
-        "resident_host",
         "tray_presence",
         "overlay_window",
         "global_hotkey_binding",
         "summon_binding",
-        "authority",
     ]
     assert [item["id"] for item in payload["blocked_family_handoffs"]] == payload["blocked_families"]
-    assert payload["first_blocker_family"] == "resident_host"
+    assert payload["first_blocker_family"] == "tray_presence"
     assert payload["first_blocker_family_handoff"]["next_smallest_truthful_gap"] == (
-        "resident_host_runtime_blocker_boundary"
+        "summon_overlay_window_blocker_boundary"
     )
     recommended_handoff = payload["recommended_handoff"]
     assert recommended_handoff["id"] == "stage6_lens_completion_audit"
@@ -299,20 +300,20 @@ def test_lens_summon_anywhere_family_chain_consumes_handoffs(tmp_path: Path) -> 
 
     resident_host = payload["resident_host"]
     assert resident_host["handoff_source"] == "summon_anywhere_blockers_first_family_handoff"
-    assert resident_host["id"] == "resident_host"
+    assert resident_host["id"] == "tray_presence"
     assert resident_host["status"] == "blocked"
-    assert resident_host["proof_script"] == "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status"
-    assert resident_host["route"] == "/lens/host"
-    assert resident_host["readiness_route"] == "/lens/host/runtime-loop/readiness"
-    assert resident_host["next_step"] == "run_resident_host_blocker_proof"
-    assert resident_host["next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
-    assert resident_host["authority_required"] == "resident_runtime_execution_authority"
+    assert resident_host["proof_script"] == "scripts/lens-summon-tray-presence-blocker-proof.ps1 -Mode Status"
+    assert resident_host["route"] == "/lens/tray"
+    assert resident_host["readiness_route"] == "/lens/tray/readiness"
+    assert resident_host["next_step"] == "run_tray_presence_blocker_proof"
+    assert resident_host["next_smallest_truthful_gap"] == "summon_overlay_window_blocker_boundary"
+    assert resident_host["authority_required"] == "tray_registration_authority"
     assert resident_host["authority_granted"] is False
     assert resident_host["read_only_contract"] is True
     assert resident_host["diagnostic_only"] is True
     assert resident_host["would_execute"] is False
     assert resident_host["would_mutate"] is False
-    assert resident_host["blockers"] == ["local_process_launch_authority_not_granted"]
+    assert resident_host["blockers"] == ["tray_host_missing"]
 
     final_authority = payload["final_authority"]
     assert final_authority["previous_summon_blocker_family"] == "summon_binding"
@@ -345,18 +346,12 @@ def test_lens_summon_anywhere_family_chain_consumes_handoffs(tmp_path: Path) -> 
     assert previous_binding["side_effects_denied"] is True
     assert previous_binding["blockers"] == [
         "lens_summon_binding_disabled_pending_authority",
-        "summon_authority_not_granted",
     ]
-    assert final_authority["blockers"] == [
-        "summon_authority_not_granted",
-        "hotkey_registration_authority_not_granted",
-        "overlay_control_authority_not_granted",
-        "local_process_launch_authority_not_granted",
-    ]
+    assert final_authority["blockers"] == []
 
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["summon_anywhere_family_chain"]["status"] == "family_chain_projected"
-    assert checks["resident_host_family_handoff"]["status"] == "resident_host_contract_ready"
+    assert checks["resident_host_family_handoff"]["status"] == "current_family_contract_ready"
     assert checks["final_summon_authority_handoff"]["status"] == "final_family_consumed"
     assert checks["final_summon_authority_contract_readback"]["status"] == ("final_contract_readback_observed")
     assert checks["handoff_alignment"]["status"] == "handoff_aligned"
@@ -417,13 +412,13 @@ def test_lens_summon_anywhere_family_chain_accepts_resolved_summon_binding_runti
     assert payload["status"] == "proof_passed"
     assert payload["ok"] is True
     assert payload["blocked_families"] == [
-        "resident_host",
         "tray_presence",
         "overlay_window",
         "global_hotkey_binding",
-        "authority",
     ]
+    assert payload["resident_host_family_resolved_by_current_readback"] is True
     assert "summon_binding" not in payload["blocked_families"]
+    assert "authority" not in payload["blocked_families"]
     assert payload["family_chain_observed"] is True
     assert payload["final_summon_authority_handoff_observed"] is True
     assert payload["final_summon_authority_contract_readback_observed"] is True
@@ -463,7 +458,6 @@ def test_lens_summon_anywhere_family_chain_accepts_resolved_summon_binding_runti
     assert previous_binding["would_mutate"] is False
     assert previous_binding["blockers"] == []
     assert "lens_summon_binding_disabled_pending_authority" in previous_binding["suppressed_blockers"]
-    assert "summon_authority_not_granted" in previous_binding["suppressed_blockers"]
 
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["summon_anywhere_family_chain"]["status"] == "family_chain_projected"
@@ -501,7 +495,7 @@ def test_lens_summon_anywhere_family_chain_accepts_overlay_remaining_after_surfa
     assert payload["kind"] == "lens.summon_anywhere_family_chain.proof"
     assert payload["status"] == "proof_passed"
     assert payload["ok"] is True
-    assert payload["blocked_families"] == ["overlay_window", "authority"]
+    assert payload["blocked_families"] == ["overlay_window"]
     assert [item["id"] for item in payload["blocked_family_handoffs"]] == payload["blocked_families"]
     assert payload["first_blocker_family"] == "overlay_window"
     assert payload["family_chain_observed"] is True

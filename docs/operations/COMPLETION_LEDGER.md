@@ -43363,6 +43363,55 @@ Latest validation for Stage 6 checkpoint proof-readback alignment:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-29 - Stage 6 summon family chain consumes delegated-authority posture
+
+Roadmap area: Stage 6 Lens MVP / summon-anywhere proof readbacks under
+delegated development authority.
+
+Material change:
+
+- `scripts/lens-summon-authority-blocker-proof.ps1` now distinguishes the
+  previous no-authority blocker posture from the current delegated-authority
+  posture where authority blockers are absent but runtime readiness is still
+  blocked by the governed binding/tray/overlay/hotkey surfaces.
+- `scripts/lens-summon-anywhere-family-chain-proof.ps1` now validates the
+  ordered blocker families emitted by the aggregate summon-anywhere proof
+  instead of forcing the older resident-host-plus-authority chain after
+  delegated authority removed those families from the current blocker set.
+- The proof remains diagnostic/readback-only: it does not grant summon,
+  hotkey, overlay, process, memory, approval-decision, receipt, sensing,
+  capture, or resident-claim authority and does not mark Stage 6 closed.
+
+Latest validation for Stage 6 summon family-chain delegated-authority
+readbacks:
+
+- `python -m pytest tests/test_lens_stage6_checkpoint_script.py
+  tests/test_lens_resident_runtime_hotkey_summon_boundary_proof_script.py
+  tests/test_lens_command_palette_os_binding_proof_script.py
+  tests/test_lens_summon_authority_blocker_proof_script.py
+  tests/test_lens_summon_anywhere_family_chain_proof_script.py -q --tb=short
+  --maxfail=1`
+  Result: `passed`
+- PowerShell parser validation for
+  `scripts/lens-summon-authority-blocker-proof.ps1`,
+  `scripts/lens-summon-anywhere-family-chain-proof.ps1`,
+  `scripts/lens-stage6-checkpoint.ps1`,
+  `scripts/lens-resident-runtime-hotkey-summon-boundary-proof.ps1`, and
+  `scripts/lens-command-palette-os-binding-proof.ps1`
+  Result: `passed`
+- `python -m ruff check tests/test_lens_stage6_checkpoint_script.py
+  tests/test_lens_resident_runtime_hotkey_summon_boundary_proof_script.py
+  tests/test_lens_command_palette_os_binding_proof_script.py
+  tests/test_lens_summon_authority_blocker_proof_script.py
+  tests/test_lens_summon_anywhere_family_chain_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_stage6_checkpoint_script.py
+  tests/test_lens_resident_runtime_hotkey_summon_boundary_proof_script.py
+  tests/test_lens_command_palette_os_binding_proof_script.py
+  tests/test_lens_summon_authority_blocker_proof_script.py
+  tests/test_lens_summon_anywhere_family_chain_proof_script.py`
+  Result: `passed; 5 files already formatted`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
