@@ -8,7 +8,13 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from francis.governance.approval_projection import approval_projection_fields
-from francis.governance.approvals import decide as decide_request, list_requests, request as create_request
+from francis.governance.approvals import (
+    BUILDER_APPROVAL_ACTOR,
+    builder_self_decide,
+    decide as decide_request,
+    list_requests,
+    request as create_request,
+)
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.redaction import redact_governed_display_value
 
@@ -81,6 +87,7 @@ class ApprovalDecisionIn(BaseModel):
     id: str
     action: str
     comment: str | None = None
+    reason: str | None = None
     actor: str | None = None
 
 
@@ -107,11 +114,19 @@ def decide_approval(request: Request, payload: ApprovalDecisionIn) -> dict[str, 
         client_host = request.client.host if request.client is not None else ""
         if not _remote_decisions_allowed() and not _is_local_client(client_host):
             raise HTTPException(status_code=403, detail="approval decisions require a local caller")
+        decision_note = payload.comment or payload.reason
+        if (payload.actor or "").strip() == BUILDER_APPROVAL_ACTOR:
+            result = builder_self_decide(payload.id, payload.action, reason=decision_note, actor=payload.actor)
+            if isinstance(result.get("item"), dict):
+                result = dict(result)
+                result["item"] = _approval_item(result["item"])
+            return result
+
         permission = _decision_permission(payload.actor)
         if not permission.allowed:
             return _permission_denied(permission)
 
-        result = decide_request(payload.id, payload.action, payload.comment, actor=payload.actor)
+        result = decide_request(payload.id, payload.action, decision_note, actor=payload.actor)
         if isinstance(result.get("item"), dict):
             result = dict(result)
             result["item"] = _approval_item(result["item"])

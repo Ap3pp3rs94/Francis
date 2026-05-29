@@ -114,6 +114,179 @@ def test_approval_reason_and_decision_comment_redact_secrets(monkeypatch, tmp_pa
     assert raw_comment_secret not in approved_text
 
 
+def test_builder_self_approval_writes_auditable_receipt_without_operator_scope(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.governance import approvals
+
+    approval = approvals.request(
+        "codex.supervised_exec",
+        "builder test execution",
+        {
+            "objective": "supervised_exec:test-approval-builder-test",
+            "user_command": "python -m pytest tests/test_api_approvals.py -q",
+            "cwd": str(tmp_path),
+            "timeout_sec": 60,
+            "expected_artifacts": [],
+            "prechecks": [],
+        },
+    )
+    approval_id = str(approval["id"])
+
+    client = TestClient(create_app())
+    decided = client.post(
+        "/approvals/decision",
+        json={
+            "id": approval_id,
+            "action": "approve",
+            "actor": "codex.builder",
+            "reason": "builder_dev_test_scaffolding",
+        },
+    )
+
+    assert decided.status_code == 200
+    body = decided.json()
+    assert body["ok"] is True
+    assert body["status"] == "approved"
+    item = body["item"]
+    assert item["decision_actor"] == "codex.builder"
+    assert item["decision_kind"] == "builder_self_approval"
+    assert item["decision_reason"] == "builder_dev_test_scaffolding"
+    assert item["builder_self_approval"] is True
+    assert item["operator_approval"] is False
+    assert item["builder_self_approval_command_category"] == "test_scaffolding_command"
+    assert item["builder_self_approval_policy"]["env_profile"] == "dev"
+    assert item["builder_self_approval_policy"]["authority_granted"] is False
+    assert item["builder_self_approval_policy"]["summon_authority"] is False
+    assert item["builder_self_approval_policy"]["hotkey_registration_authority"] is False
+    assert item["builder_self_approval_policy"]["overlay_control_authority"] is False
+    assert item["builder_self_approval_policy"]["local_process_launch_authority"] is False
+    assert item["builder_self_approval_policy"]["requires_explicit_enable"] is False
+
+    approved_path = data_root / "approvals" / "approved" / f"{approval_id}.json"
+    pending_path = data_root / "approvals" / "pending" / f"{approval_id}.json"
+    assert approved_path.exists()
+    assert not pending_path.exists()
+    approved_payload = json.loads(approved_path.read_text(encoding="utf-8"))
+    assert approved_payload["builder_self_approval"] is True
+    assert approved_payload["decision_kind"] == "builder_self_approval"
+    assert approved_payload["operator_approval"] is False
+
+    receipt_path = Path(str(item["builder_self_approval_receipt_path"]))
+    assert receipt_path.exists()
+    assert receipt_path.parent == data_root / "approvals" / "builder_self_approval_receipts"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert receipt["kind"] == "francis.approval.builder_self_approval_receipt"
+    assert receipt["approval_id"] == approval_id
+    assert receipt["actor"] == "codex.builder"
+    assert receipt["decision"] == "approved"
+    assert receipt["requested_decision"] == "approve"
+    assert receipt["reason"] == "builder_dev_test_scaffolding"
+    assert receipt["decision_kind"] == "builder_self_approval"
+    assert receipt["operator_approval"] is False
+    assert receipt["builder_self_approval"] is True
+    assert receipt["command_category"] == "test_scaffolding_command"
+    assert receipt["policy"]["authority_granted"] is False
+    assert isinstance(receipt["ts"], (int, float))
+
+
+def test_builder_self_approval_rejects_operator_authority_flags(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "workstation")
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.governance import approvals
+
+    approval = approvals.request(
+        "codex.supervised_exec",
+        "operator authority must stay manual",
+        {
+            "objective": "supervised_exec:test-approval-authority-denial",
+            "user_command": "python -m pytest tests/test_api_approvals.py -q",
+            "overlay_control_authority": True,
+            "requires_explicit_enable": True,
+        },
+    )
+    approval_id = str(approval["id"])
+
+    denied = TestClient(create_app()).post(
+        "/approvals/decision",
+        json={
+            "id": approval_id,
+            "action": "approve",
+            "actor": "codex.builder",
+            "reason": "builder_should_not_cross_operator_gate",
+        },
+    )
+
+    assert denied.status_code == 200
+    body = denied.json()
+    assert body["ok"] is False
+    assert body["status"] == "denied"
+    assert body["error"] == "builder_self_approval_denied"
+    assert body["governance"]["gate"] == "builder_self_approval_policy"
+    assert body["governance"]["reason"] == "operator_authority_flag_present"
+    assert body["governance"]["operator_decision_required"] is True
+    assert body["governance"]["authority_granted"] is False
+    assert (data_root / "approvals" / "pending" / f"{approval_id}.json").exists()
+    assert not (data_root / "approvals" / "approved" / f"{approval_id}.json").exists()
+    assert not (data_root / "approvals" / "builder_self_approval_receipts" / f"{approval_id}.json").exists()
+
+
+def test_builder_self_approval_requires_dev_or_workstation_profile(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "production")
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.governance import approvals
+
+    approval = approvals.request(
+        "codex.supervised_exec",
+        "builder proof execution",
+        {
+            "objective": "supervised_exec:test-approval-production-denial",
+            "user_command": "python -m pytest tests/test_api_approvals.py -q",
+        },
+    )
+    approval_id = str(approval["id"])
+
+    denied = TestClient(create_app()).post(
+        "/approvals/decision",
+        json={"id": approval_id, "action": "approve", "actor": "codex.builder", "reason": "prod_denied"},
+    )
+
+    assert denied.status_code == 200
+    body = denied.json()
+    assert body["ok"] is False
+    assert body["status"] == "denied"
+    assert body["governance"]["reason"] == "env_profile_not_allowed"
+    assert body["governance"]["env_profile"] == "production"
+    assert (data_root / "approvals" / "pending" / f"{approval_id}.json").exists()
+
+
 def test_approval_api_redacts_sealed_payload_digests(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

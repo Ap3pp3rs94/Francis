@@ -42363,6 +42363,68 @@ Latest validation for Stage 6 completion-audit review diagnostics:
   recommended_concrete_handoff_source=stage6_system_resident_host_supervision_authority_request_proof_handoff,
   recommended_concrete_next_smallest_truthful_gap=persistent_supervision_required_prerequisites_missing`
 
+### 2026-05-28 - Builder self-approval is bounded to development artifacts
+
+Roadmap area: Governance / approvals, local-first builder execution during
+development and proof work.
+
+Material change:
+
+- `codex.builder` now has a separate builder self-approval path through the
+  existing `POST /approvals/decision` route.
+- The path is local-call only, activates only when `FRANCIS_ENV_PROFILE` is
+  `dev` or `workstation`, and does not require broad `approvals.decide`
+  operator scope.
+- Builder self-approval is bounded to development/build-plane approval records,
+  including `codex.supervised_exec` requests whose objective starts with
+  `supervised_exec:` and whose command class is test scaffolding, build artifact
+  generation, or proof script execution.
+- Builder self-approval is denied for operator authority flags including
+  `summon_authority`, `hotkey_registration_authority`,
+  `overlay_control_authority`, `local_process_launch_authority`, and
+  `requires_explicit_enable`.
+- Builder decisions are distinguishable from operator decisions through
+  `builder_self_approval=true`, `operator_approval=false`,
+  `decision_kind=builder_self_approval`, `decision_reason`, and a dedicated
+  receipt path.
+- The stale supervised-exec approval
+  `e9e11362-c076-4c07-9023-8e71c5f6cd55` for command `echo hello` was rejected
+  through `POST /approvals/decision` as actor `codex.builder` with reason
+  `stale_test_artifact_no_longer_relevant`.
+- The stale approval moved from `data/approvals/pending/` to
+  `data/approvals/rejected/` and received a builder receipt at
+  `data/approvals/builder_self_approval_receipts/e9e11362-c076-4c07-9023-8e71c5f6cd55.json`.
+- This does not grant summon authority, hotkey registration authority, overlay
+  control authority, local process launch authority, config/runtime explicit
+  enablement, production approval authority, or regulated-profile approval
+  authority.
+
+Latest validation for builder self-approval governance:
+
+- `POST /approvals/decision` via local `TestClient` with
+  `FRANCIS_ENV_PROFILE=dev`, actor `codex.builder`, action `reject`, and reason
+  `stale_test_artifact_no_longer_relevant` for
+  `e9e11362-c076-4c07-9023-8e71c5f6cd55`
+  Result: `ok=true; status=rejected; decision_actor=codex.builder;
+  decision_kind=builder_self_approval; builder_self_approval=true;
+  operator_approval=false`
+- `Get-ChildItem data/approvals -Recurse -Filter
+  e9e11362-c076-4c07-9023-8e71c5f6cd55.json`
+  Result: `receipt and rejected approval records present; pending record absent`
+- `python -m pytest tests/test_api_approvals.py -q --tb=short`
+  Result: `passed`
+- `python -m mypy src/francis/governance/approvals.py
+  src/francis/api/routes/approvals.py`
+  Result: `passed`
+- `python -m ruff check src/francis/governance/approvals.py
+  src/francis/api/routes/approvals.py tests/test_api_approvals.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/governance/approvals.py
+  src/francis/api/routes/approvals.py tests/test_api_approvals.py`
+  Result: `passed; 3 files already formatted`
+- `git diff --check`
+  Result: `passed; no whitespace errors`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
