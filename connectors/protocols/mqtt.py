@@ -130,6 +130,7 @@ MQTT_PROTOCOL_ID = "mqtt"
 MQTT_DEFAULT_PORT = 1883
 MQTTS_DEFAULT_PORT = 8883
 _LOG = logging.getLogger(__name__)
+_MIN_TLS_VERSION = ssl.TLSVersion.TLSv1_2
 
 # MQTT control packet types (high 4 bits)
 _PKT_CONNECT = 0x01
@@ -147,6 +148,19 @@ _SUPPORTED_QOS = {0}
 # Conservative bounds
 _MAX_TOPIC_LEN = 512
 _MAX_PACKET_BYTES_DEFAULT = 2 * 1024 * 1024  # 2MB
+
+
+def _set_minimum_tls_version(ctx: ssl.SSLContext) -> ssl.SSLContext:
+    ctx.minimum_version = _MIN_TLS_VERSION
+    return ctx
+
+
+def _mqtt_ssl_context(*, verify_tls: bool, ca_file: str | None = None) -> ssl.SSLContext:
+    if verify_tls:
+        ctx = ssl.create_default_context(cafile=ca_file)
+    else:
+        ctx = ssl._create_unverified_context()  # noqa: SLF001
+    return _set_minimum_tls_version(ctx)
 
 
 # =============================================================================
@@ -877,10 +891,7 @@ class MqttProtocolConnector:
         self._ssl_context: ssl.SSLContext | None = None
         if self._tls:
             try:
-                if self._cfg.verify_tls:
-                    self._ssl_context = ssl.create_default_context(cafile=self._cfg.ca_file)
-                else:
-                    self._ssl_context = ssl._create_unverified_context()  # noqa: SLF001
+                self._ssl_context = _mqtt_ssl_context(verify_tls=self._cfg.verify_tls, ca_file=self._cfg.ca_file)
             except Exception:
                 self._ssl_context = None
 
@@ -955,7 +966,7 @@ class MqttProtocolConnector:
                 ctx = self._ssl_context
                 server_hostname = self._cfg.server_hostname or host
                 if ctx is None:
-                    ctx = ssl.create_default_context()
+                    ctx = _mqtt_ssl_context(verify_tls=True)
                 s = ctx.wrap_socket(s, server_hostname=server_hostname)
 
             # set io timeout

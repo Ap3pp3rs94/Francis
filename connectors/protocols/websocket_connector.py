@@ -133,6 +133,7 @@ WEBSOCKET_PROTOCOL_ID = "websocket"
 WS_DEFAULT_PORT = 80
 WSS_DEFAULT_PORT = 443
 _LOG = logging.getLogger(__name__)
+_MIN_TLS_VERSION = ssl.TLSVersion.TLSv1_2
 
 # WebSocket opcodes
 _OP_CONT = 0x0
@@ -149,6 +150,19 @@ _WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 _DEFAULT_MAX_HANDSHAKE_BYTES = 16 * 1024
 _DEFAULT_MAX_FRAME_BYTES = 2 * 1024 * 1024
 _DEFAULT_MAX_MESSAGE_BYTES = 8 * 1024 * 1024
+
+
+def _set_minimum_tls_version(ctx: ssl.SSLContext) -> ssl.SSLContext:
+    ctx.minimum_version = _MIN_TLS_VERSION
+    return ctx
+
+
+def _websocket_ssl_context(*, tls_verify: bool, ca_file: str | None = None) -> ssl.SSLContext:
+    if tls_verify:
+        ctx = ssl.create_default_context(cafile=ca_file)
+    else:
+        ctx = ssl._create_unverified_context()  # noqa: SLF001
+    return _set_minimum_tls_version(ctx)
 
 
 # =============================================================================
@@ -909,12 +923,9 @@ def _connect_websocket_once(
 
         if tls:
             try:
-                if tls_verify:
-                    ssl_ctx = ssl.create_default_context(cafile=ca_file)
-                else:
-                    ssl_ctx = ssl._create_unverified_context()  # noqa: SLF001
+                ssl_ctx = _websocket_ssl_context(tls_verify=tls_verify, ca_file=ca_file)
             except Exception:
-                ssl_ctx = ssl.create_default_context()
+                ssl_ctx = _websocket_ssl_context(tls_verify=True)
 
             hn = server_hostname or host
             s = ssl_ctx.wrap_socket(s, server_hostname=hn)

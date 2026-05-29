@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import ssl
 
 import pytest
 
@@ -9,12 +10,14 @@ from connectors.protocols.mqtt import (
     MQTTS_DEFAULT_PORT,
     MqttConnectorConfig,
     MqttProtocolConnector,
+    _mqtt_ssl_context,
     normalize_mqtt_target,
 )
 from connectors.protocols.websocket_connector import (
     WSS_DEFAULT_PORT,
     WebSocketConnectorConfig,
     WebSocketProtocolConnector,
+    _websocket_ssl_context,
     normalize_ws_target,
 )
 
@@ -42,6 +45,14 @@ def test_mqtt_plaintext_requires_explicit_governance_opt_in(caplog: pytest.LogCa
     assert any("Plaintext MQTT enabled" in record.message for record in caplog.records)
 
 
+def test_mqtt_tls_context_enforces_minimum_tls_version() -> None:
+    verified = _mqtt_ssl_context(verify_tls=True)
+    unverified = _mqtt_ssl_context(verify_tls=False)
+
+    assert verified.minimum_version == ssl.TLSVersion.TLSv1_2
+    assert unverified.minimum_version == ssl.TLSVersion.TLSv1_2
+
+
 def test_websocket_targets_are_tls_by_default() -> None:
     target = normalize_ws_target("socket.example.test/stream")
 
@@ -63,3 +74,11 @@ def test_websocket_plaintext_requires_explicit_governance_opt_in(caplog: pytest.
     assert info.meta["tls"] is False
     assert info.meta["allow_plaintext"] is True
     assert any("Plaintext WebSocket enabled" in record.message for record in caplog.records)
+
+
+def test_websocket_tls_context_enforces_minimum_tls_version() -> None:
+    verified = _websocket_ssl_context(tls_verify=True)
+    unverified = _websocket_ssl_context(tls_verify=False)
+
+    assert verified.minimum_version == ssl.TLSVersion.TLSv1_2
+    assert unverified.minimum_version == ssl.TLSVersion.TLSv1_2

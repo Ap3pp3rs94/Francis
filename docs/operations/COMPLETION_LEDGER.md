@@ -42716,6 +42716,35 @@ Latest validation for dependency cleanup:
 - `python -m ruff format --check tests/test_security_dependency_contract.py`
   Result: `passed; 1 file already formatted`
 
+### 2026-05-28 - Protocol TLS contexts enforce TLS 1.2 minimum
+
+Roadmap area: GitHub security cleanup / protocol transport governance.
+
+Material change:
+
+- MQTT and WebSocket connector TLS contexts now explicitly set
+  `minimum_version = ssl.TLSVersion.TLSv1_2`.
+- The minimum applies to both verified and explicitly unverified TLS contexts.
+- Plaintext MQTT/WebSocket remains blocked by default and still requires the
+  existing explicit `allow_plaintext` governance opt-in.
+- This is the targeted follow-up for CodeQL `py/insecure-protocol` alerts 3 and
+  237.
+
+Latest validation for protocol TLS minimum-version hardening:
+
+- `python -m pytest tests/test_protocol_tls_governance.py
+  -q --tb=short --maxfail=1`
+  Result: `passed; 6 passed`
+- `python -m ruff check connectors/protocols/mqtt.py
+  connectors/protocols/websocket_connector.py tests/test_protocol_tls_governance.py`
+  Result: `passed`
+- `python -m ruff format --check connectors/protocols/mqtt.py
+  connectors/protocols/websocket_connector.py tests/test_protocol_tls_governance.py`
+  Result: `passed; 3 files already formatted`
+- `python -m mypy connectors/protocols/mqtt.py
+  connectors/protocols/websocket_connector.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
