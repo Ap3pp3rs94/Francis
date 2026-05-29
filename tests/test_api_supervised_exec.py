@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 _SUPERVISED_ACTOR = "test.supervised_exec"
 
 
@@ -156,6 +158,37 @@ def test_api_supervised_exec_rejects_cwd_outside_allowed_roots(monkeypatch, tmp_
     assert body["status"] == "invalid"
     assert body["error"] == "cwd_outside_allowed_root"
     assert not (data_root / "approvals").exists()
+
+
+def test_supervised_exec_artifact_writers_reject_paths_outside_artifact_root(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from francis.agent import supervised_exec
+
+    outside_json = tmp_path / "outside" / "escape.json"
+    with pytest.raises(ValueError, match="artifact_path_outside_allowed_root"):
+        supervised_exec._write_json(outside_json, {"password": "artifactsecret123"})
+    assert not outside_json.exists()
+
+    outside_text = tmp_path / "outside" / "stdout.txt"
+    with pytest.raises(ValueError, match="artifact_path_outside_allowed_root"):
+        supervised_exec._write_redacted_text(outside_text, "token=artifacttextsecret123")
+    assert not outside_text.exists()
+
+    artifact_dir = supervised_exec._artifact_dir("run_artifact_guard")
+    supervised_exec._write_json(artifact_dir / "request.json", {"password": "artifactsecret123"})
+    supervised_exec._write_redacted_text(artifact_dir / "stdout.txt", "token=artifacttextsecret123")
+
+    request_text = (artifact_dir / "request.json").read_text(encoding="utf-8")
+    stdout_text = (artifact_dir / "stdout.txt").read_text(encoding="utf-8")
+    assert "artifactsecret123" not in request_text
+    assert "artifacttextsecret123" not in stdout_text
+    assert "[REDACTED:secret]" in request_text
+    assert "[REDACTED:secret]" in stdout_text
 
 
 def test_api_supervised_exec_rejects_approval_payload_mismatch(monkeypatch, tmp_path: Path) -> None:

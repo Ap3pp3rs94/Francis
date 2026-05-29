@@ -42808,6 +42808,41 @@ Latest validation for helper-level exception sanitization:
   src/francis/reactor/dispatch.py`
   Result: `passed`
 
+### 2026-05-28 - Supervised exec artifact writes are root-checked at the sink
+
+Roadmap area: GitHub security cleanup / supervised execution governance.
+
+Material change:
+
+- Supervised-exec artifact path containment is now enforced inside the artifact
+  write helpers, not only before caller construction.
+- `_path_is_under` now resolves both root and candidate before containment
+  checks.
+- JSON and text artifact writers reject paths outside
+  `data/artifacts/supervised_exec` before creating parent directories or
+  writing content.
+- Approved-run artifact directory creation now uses the same root-checked
+  helper.
+- Stored supervised-exec artifacts continue to be redacted display artifacts;
+  approval comparison still uses sealed approval payloads.
+
+Latest validation for supervised-exec artifact path and storage hardening:
+
+- `python -m pytest
+  tests/test_api_supervised_exec.py::test_supervised_exec_artifact_writers_reject_paths_outside_artifact_root
+  tests/test_api_supervised_exec.py::test_api_supervised_exec_flow
+  tests/test_api_supervised_exec.py::test_api_supervised_exec_rejects_cwd_outside_allowed_roots
+  -q --tb=short --maxfail=1`
+  Result: `passed; 3 passed`
+- `python -m ruff check src/francis/agent/supervised_exec.py
+  tests/test_api_supervised_exec.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/agent/supervised_exec.py
+  tests/test_api_supervised_exec.py`
+  Result: `passed; 2 files already formatted`
+- `python -m mypy src/francis/agent/supervised_exec.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

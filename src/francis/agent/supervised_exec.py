@@ -72,6 +72,8 @@ def _real_path(value: str | Path) -> Path:
 
 
 def _path_is_under(root: Path, candidate: Path) -> bool:
+    root = _real_path(root)
+    candidate = _real_path(candidate)
     try:
         candidate.relative_to(root)
         return True
@@ -86,8 +88,12 @@ def _safe_identifier(value: Any, *, fallback: str = "") -> str:
     return fallback
 
 
+def _artifact_root() -> Path:
+    return _real_path(data_dir() / "artifacts" / "supervised_exec")
+
+
 def _artifact_dir(run_id: str) -> Path:
-    root = _real_path(data_dir() / "artifacts" / "supervised_exec")
+    root = _artifact_root()
     safe_run_id = _safe_identifier(run_id, fallback="invalid_run_id")
     candidate = _real_path(root / safe_run_id)
     if not _path_is_under(root, candidate):
@@ -95,15 +101,35 @@ def _artifact_dir(run_id: str) -> Path:
     return candidate
 
 
-def _write_json(path: Path, obj: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+def _artifact_path(path: Path) -> Path:
+    root = _artifact_root()
+    candidate = _real_path(path)
+    if not _path_is_under(root, candidate):
+        raise ValueError("artifact_path_outside_allowed_root")
+    return candidate
+
+
+def _ensure_artifact_dir(path: Path) -> Path:
+    target = _artifact_path(path)
+    target.mkdir(parents=True, exist_ok=True)
+    return target
+
+
+def _display_safe_json_text(obj: Any) -> str:
     redacted = redact_governed_display_value(obj)
-    path.write_text(json.dumps(redacted, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    return json.dumps(redacted, ensure_ascii=False, indent=2, default=str)
+
+
+def _write_json(path: Path, obj: Any) -> None:
+    target = _artifact_path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(_display_safe_json_text(obj), encoding="utf-8")
 
 
 def _write_redacted_text(path: Path, value: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(redact_secret_text(value or ""), encoding="utf-8")
+    target = _artifact_path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(redact_secret_text(value or ""), encoding="utf-8")
 
 
 def _find_approval(approval_id: str) -> tuple[str, dict[str, Any] | None]:
@@ -470,7 +496,7 @@ def run_supervised_exec(inputs: dict[str, Any], objective: str) -> dict[str, Any
         }
 
     # 3) Approved => execute.
-    art.mkdir(parents=True, exist_ok=True)
+    _ensure_artifact_dir(art)
     _write_json(
         art / "plan.json",
         {
