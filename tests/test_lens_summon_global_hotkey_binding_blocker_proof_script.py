@@ -169,6 +169,7 @@ def test_lens_summon_global_hotkey_binding_blocker_proof_is_readback_only(
     assert payload["recommended_readiness_route"] == "/lens/summon/readiness"
     assert payload["authority_required"] == "summon_authority"
     assert payload["authority_granted"] is False
+    assert payload["summon_global_hotkey_delegated_authority_posture_observed"] is True
     recommended_handoff = payload["recommended_handoff"]
     assert recommended_handoff["id"] == "summon_binding"
     assert recommended_handoff["next_step"] == "run_summon_binding_blocker_proof"
@@ -207,7 +208,6 @@ def test_lens_summon_global_hotkey_binding_blocker_proof_is_readback_only(
     assert payload["summon_global_hotkey_binding_blockers"] == [
         "global_hotkey_binding_disabled",
         "global_hotkey_registration_disabled",
-        "hotkey_registration_authority_not_granted",
     ]
 
     runtime_blockers = payload["resident_runtime_hotkey_summon_blockers"]
@@ -233,11 +233,11 @@ def test_lens_summon_global_hotkey_binding_blocker_proof_is_readback_only(
     assert boundary["blockers"] == runtime_blockers
     assert "global_hotkey_binding_disabled" in boundary["summon_preflight_blockers"]
     assert "global_hotkey_registration_disabled" in boundary["summon_preflight_blockers"]
-    assert "hotkey_registration_authority_not_granted" in boundary["summon_preflight_blockers"]
-    assert "summon_authority_not_granted" in boundary["summon_preflight_blockers"]
+    assert "hotkey_registration_authority_not_granted" not in boundary["summon_preflight_blockers"]
+    assert "summon_authority_not_granted" not in boundary["summon_preflight_blockers"]
 
     checks = {item["id"]: item for item in payload["checks"]}
-    assert checks["summon_global_hotkey_binding_family"]["status"] == "fourth_family_projected"
+    assert checks["summon_global_hotkey_binding_family"]["status"] == "delegated_authority_posture"
     assert checks["previous_overlay_window_contract"]["status"] == "previous_family_contract_observed"
     assert checks["previous_overlay_window_contract_readback"]["status"] == "previous_contract_readback_observed"
     assert checks["resident_runtime_hotkey_summon_boundary"]["status"] == "blocked_readback_ready"
@@ -294,35 +294,33 @@ def test_lens_summon_global_hotkey_binding_blocker_skips_observed_summon_binding
     assert payload["status"] == "proof_passed"
     assert payload["ok"] is True
     assert payload["summon_binding_runtime_readback_observed"] is True
-    assert payload["summon_binding_resolved_to_authority_handoff"] is True
-    assert payload["next_summon_blocker_family"] == "authority"
-    assert payload["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
-    assert payload["recommended_handoff_source"] == "summon_authority_handoff_after_summon_binding_runtime_readback"
-    assert payload["recommended_next_slice"] == "run_summon_authority_blocker_proof"
-    assert payload["recommended_proof_script"] == "scripts/lens-summon-authority-blocker-proof.ps1 -Mode Status"
-    assert payload["authority_required"] == "summon_hotkey_overlay_and_process_authority"
+    assert payload["summon_binding_resolved_to_authority_handoff"] is False
+    assert payload["summon_global_hotkey_delegated_authority_posture_observed"] is True
+    assert payload["next_summon_blocker_family"] == "summon_binding"
+    assert payload["next_smallest_truthful_gap"] == "summon_binding_blocker_boundary"
+    assert payload["recommended_handoff_source"] == "summon_global_hotkey_binding_handoff"
+    assert payload["recommended_next_slice"] == "run_summon_binding_blocker_proof"
+    assert payload["recommended_proof_script"] == "scripts/lens-summon-binding-blocker-proof.ps1 -Mode Status"
+    assert payload["authority_required"] == "summon_authority"
     assert payload["authority_granted"] is False
 
     handoff = payload["recommended_handoff"]
-    assert handoff["id"] == "authority"
+    assert handoff["id"] == "summon_binding"
     assert handoff["previous_summon_blocker_family"] == "global_hotkey_binding"
-    assert handoff["next_summon_blocker_family"] == "authority"
-    assert handoff["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
-    assert handoff["next_step"] == "run_summon_authority_blocker_proof"
-    assert handoff["proof_script"] == "scripts/lens-summon-authority-blocker-proof.ps1 -Mode Status"
-    assert handoff["authority_required"] == "summon_hotkey_overlay_and_process_authority"
+    assert handoff["next_summon_blocker_family"] == "summon_binding"
+    assert handoff["next_smallest_truthful_gap"] == "summon_binding_blocker_boundary"
+    assert handoff["next_step"] == "run_summon_binding_blocker_proof"
+    assert handoff["proof_script"] == "scripts/lens-summon-binding-blocker-proof.ps1 -Mode Status"
+    assert handoff["authority_required"] == "summon_authority"
     assert handoff["authority_granted"] is False
     assert handoff["read_only_contract"] is True
     assert handoff["diagnostic_only"] is True
     assert handoff["would_execute"] is False
     assert handoff["would_mutate"] is False
-    assert "summon_authority_not_granted" in handoff["blockers"]
-    assert "hotkey_registration_authority_not_granted" in handoff["blockers"]
-    assert "overlay_control_authority_not_granted" in handoff["blockers"]
 
     checks = {item["id"]: item for item in payload["checks"]}
-    assert checks["summon_binding_runtime_readback"]["status"] == "resolved_to_authority_handoff"
-    assert checks["summon_global_hotkey_binding_family"]["status"] == "fourth_family_projected"
+    assert checks["summon_binding_runtime_readback"]["status"] == "readback_present_without_authority_handoff"
+    assert checks["summon_global_hotkey_binding_family"]["status"] == "delegated_authority_posture"
     assert all(item["passed"] for item in payload["checks"])
 
 
@@ -342,24 +340,22 @@ def test_lens_summon_global_hotkey_binding_accepts_surface_runtime_resolved_chai
     assert payload["global_hotkey_runtime_readback_observed"] is True
     assert payload["global_hotkey_resolved_by_runtime_readback"] is True
     assert payload["summon_binding_runtime_readback_observed"] is True
-    assert payload["summon_binding_resolved_to_authority_handoff"] is True
+    assert payload["summon_binding_resolved_to_authority_handoff"] is False
+    assert payload["summon_global_hotkey_delegated_authority_posture_observed"] is True
     assert payload["summon_global_hotkey_family_observed"] is True
     assert payload["previous_overlay_window_contract_readback_observed"] is True
-    assert payload["next_summon_blocker_family"] == "authority"
-    assert payload["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
-    assert payload["recommended_handoff_source"] == "summon_authority_handoff_after_summon_binding_runtime_readback"
-    assert payload["recommended_next_slice"] == "run_summon_authority_blocker_proof"
-    assert payload["recommended_proof_script"] == "scripts/lens-summon-authority-blocker-proof.ps1 -Mode Status"
+    assert payload["next_summon_blocker_family"] == "summon_binding"
+    assert payload["next_smallest_truthful_gap"] == "summon_binding_blocker_boundary"
+    assert payload["recommended_handoff_source"] == "summon_global_hotkey_binding_handoff"
+    assert payload["recommended_next_slice"] == "run_summon_binding_blocker_proof"
+    assert payload["recommended_proof_script"] == "scripts/lens-summon-binding-blocker-proof.ps1 -Mode Status"
 
     handoff = payload["recommended_handoff"]
-    assert handoff["id"] == "authority"
+    assert handoff["id"] == "summon_binding"
     assert handoff["previous_summon_blocker_family"] == "global_hotkey_binding"
-    assert handoff["next_summon_blocker_family"] == "authority"
-    assert handoff["next_smallest_truthful_gap"] == "stage6_lens_completion_audit"
+    assert handoff["next_summon_blocker_family"] == "summon_binding"
+    assert handoff["next_smallest_truthful_gap"] == "summon_binding_blocker_boundary"
     assert handoff["authority_granted"] is False
-    assert "summon_authority_not_granted" in handoff["blockers"]
-    assert "hotkey_registration_authority_not_granted" in handoff["blockers"]
-    assert "overlay_control_authority_not_granted" in handoff["blockers"]
 
     previous_overlay = payload["previous_overlay_handoff"]
     assert previous_overlay["source"] == "summon_anywhere_blockers.blocked_family_handoffs"
@@ -367,8 +363,8 @@ def test_lens_summon_global_hotkey_binding_accepts_surface_runtime_resolved_chai
     assert previous_overlay["blockers"] == ["overlay_window_missing"]
 
     checks = {item["id"]: item for item in payload["checks"]}
-    assert checks["summon_global_hotkey_binding_family"]["status"] == "runtime_readback_resolved"
-    assert checks["summon_binding_runtime_readback"]["status"] == "resolved_to_authority_handoff"
+    assert checks["summon_global_hotkey_binding_family"]["status"] == "delegated_authority_posture"
+    assert checks["summon_binding_runtime_readback"]["status"] == "readback_present_without_authority_handoff"
     assert checks["previous_overlay_window_contract"]["status"] == "previous_family_contract_observed"
     assert checks["resident_runtime_hotkey_summon_boundary"]["status"] == "blocked_readback_ready"
     assert checks["handoff_alignment"]["status"] == "handoff_aligned"

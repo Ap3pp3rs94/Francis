@@ -207,8 +207,7 @@ $GlobalHotkeyResolvedByRuntimeReadbackObserved = (
   $GlobalHotkeyRuntimeObserved -and
   $GlobalHotkeyFamilyIndex -lt 0 -and
   $GlobalHotkeyRuntimeSuppressedBlockers -contains 'global_hotkey_binding_disabled' -and
-  $GlobalHotkeyRuntimeSuppressedBlockers -contains 'global_hotkey_registration_disabled' -and
-  $GlobalHotkeyRuntimeSuppressedBlockers -contains 'hotkey_registration_authority_not_granted'
+  $GlobalHotkeyRuntimeSuppressedBlockers -contains 'global_hotkey_registration_disabled'
 )
 $SummonBindingResolvedToAuthority = (
   $SummonBindingRuntimeObserved -and
@@ -253,6 +252,21 @@ $SummonGlobalHotkeyFamilyObservedLegacy = (
   $EffectiveSummonGlobalHotkeyBlockers -contains 'global_hotkey_registration_disabled' -and
   $EffectiveSummonGlobalHotkeyBlockers -contains 'hotkey_registration_authority_not_granted'
 )
+$SummonGlobalHotkeyDelegatedAuthorityPostureObserved = (
+  [int]$SummonResult.exit_code -eq 0 -and
+  [string](Get-PropertyValue -Payload $SummonPayload -Name 'kind' -Default '') -eq 'lens.summon_anywhere_blockers.proof' -and
+  [string](Get-PropertyValue -Payload $SummonPayload -Name 'status' -Default '') -eq 'proof_passed' -and
+  [string](Get-PropertyValue -Payload $SummonPayload -Name 'acceptance_criterion' -Default '') -eq 'summon_anywhere' -and
+  [string](Get-PropertyValue -Payload $SummonPayload -Name 'next_smallest_truthful_gap' -Default '') -eq 'summon_anywhere_blockers' -and
+  [string](Get-PropertyValue -Payload $OverlayWindowFamilyHandoff -Name 'id' -Default '') -eq 'overlay_window' -and
+  (
+    $GlobalHotkeyFamilyIndex -lt 0 -or
+    $GlobalHotkeyFamilyIndex -eq ($OverlayWindowFamilyIndex + 1)
+  ) -and
+  $EffectiveSummonGlobalHotkeyBlockers -contains 'global_hotkey_binding_disabled' -and
+  $EffectiveSummonGlobalHotkeyBlockers -contains 'global_hotkey_registration_disabled' -and
+  -not ($EffectiveSummonGlobalHotkeyBlockers -contains 'hotkey_registration_authority_not_granted')
+)
 $SummonGlobalHotkeyFamilyObservedResolved = (
   [int]$SummonResult.exit_code -eq 0 -and
   [string](Get-PropertyValue -Payload $SummonPayload -Name 'kind' -Default '') -eq 'lens.summon_anywhere_blockers.proof' -and
@@ -267,6 +281,7 @@ $SummonGlobalHotkeyFamilyObservedResolved = (
 )
 $SummonGlobalHotkeyFamilyObserved = (
   $SummonGlobalHotkeyFamilyObservedLegacy -or
+  $SummonGlobalHotkeyDelegatedAuthorityPostureObserved -or
   $SummonGlobalHotkeyFamilyObservedResolved
 )
 $OverlayWindowContractReadbackObserved = (
@@ -283,6 +298,19 @@ $OverlayWindowContractReadbackObserved = (
   -not [bool](Get-PropertyValue -Payload $OverlayWindowFamilyHandoff -Name 'would_mutate' -Default $true) -and
   $OverlayWindowFamilyBlockers -contains 'overlay_window_missing'
 )
+$SummonGlobalHotkeyDelegatedAuthorityPostureObserved = (
+  $SummonGlobalHotkeyDelegatedAuthorityPostureObserved -or
+  (
+    $OverlayWindowContractReadbackObserved -and
+    (
+      $GlobalHotkeyFamilyIndex -lt 0 -or
+      $GlobalHotkeyFamilyIndex -eq ($OverlayWindowFamilyIndex + 1)
+    ) -and
+    $EffectiveSummonGlobalHotkeyBlockers -contains 'global_hotkey_binding_disabled' -and
+    $EffectiveSummonGlobalHotkeyBlockers -contains 'global_hotkey_registration_disabled' -and
+    -not ($EffectiveSummonGlobalHotkeyBlockers -contains 'hotkey_registration_authority_not_granted')
+  )
+)
 $SummonGlobalHotkeyFamilyObservedResolved = (
   $SummonGlobalHotkeyFamilyObservedResolved -or
   (
@@ -293,6 +321,7 @@ $SummonGlobalHotkeyFamilyObservedResolved = (
 )
 $SummonGlobalHotkeyFamilyObserved = (
   $SummonGlobalHotkeyFamilyObservedLegacy -or
+  $SummonGlobalHotkeyDelegatedAuthorityPostureObserved -or
   $SummonGlobalHotkeyFamilyObservedResolved
 )
 $HotkeySummonBoundaryObserved = (
@@ -318,7 +347,10 @@ $HandoffAligned = (
   $HotkeySummonBoundaryObserved -and
   $EffectiveSummonGlobalHotkeyBlockers -contains 'global_hotkey_binding_disabled' -and
   $EffectiveSummonGlobalHotkeyBlockers -contains 'global_hotkey_registration_disabled' -and
-  $EffectiveSummonGlobalHotkeyBlockers -contains 'hotkey_registration_authority_not_granted' -and
+  (
+    $EffectiveSummonGlobalHotkeyBlockers -contains 'hotkey_registration_authority_not_granted' -or
+    $SummonGlobalHotkeyDelegatedAuthorityPostureObserved
+  ) -and
   $HotkeySummonBlockers -contains 'global_hotkey_binding_disabled' -and
   $HotkeySummonBlockers -contains 'global_hotkey_registration_disabled' -and
   $HotkeySummonBlockers -contains 'hotkey_registration_authority_not_granted' -and
@@ -419,7 +451,7 @@ $RecommendedHandoff = if ($SummonBindingResolvedToAuthority) {
 }
 
 $Checks = @(
-  (New-Check -Id 'summon_global_hotkey_binding_family' -Status $(if ($SummonGlobalHotkeyFamilyObservedResolved) { 'runtime_readback_resolved' } elseif ($SummonGlobalHotkeyFamilyObservedLegacy) { 'fourth_family_projected' } else { 'missing_or_unexpected' }) -Passed $SummonGlobalHotkeyFamilyObserved -Evidence 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status' -Reason 'The summon-anywhere blocker proof must either keep global_hotkey_binding as the fourth blocked acceptance family after overlay_window or mark it resolved by surface runtime readback.'),
+  (New-Check -Id 'summon_global_hotkey_binding_family' -Status $(if ($SummonGlobalHotkeyFamilyObservedResolved) { 'runtime_readback_resolved' } elseif ($SummonGlobalHotkeyDelegatedAuthorityPostureObserved) { 'delegated_authority_posture' } elseif ($SummonGlobalHotkeyFamilyObservedLegacy) { 'fourth_family_projected' } else { 'missing_or_unexpected' }) -Passed $SummonGlobalHotkeyFamilyObserved -Evidence 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status' -Reason 'The summon-anywhere blocker proof must either keep global_hotkey_binding as the fourth blocked acceptance family after overlay_window, mark it resolved by surface runtime readback, or expose the delegated-authority posture without granting execution.'),
   (New-Check -Id 'previous_overlay_window_contract' -Status $(if ($OverlayWindowContractReadbackObserved) { 'previous_family_contract_observed' } else { 'missing_or_unexpected' }) -Passed $OverlayWindowContractReadbackObserved -Evidence 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status blocked_family_handoffs[overlay_window]' -Reason 'The global-hotkey handoff should consume the overlay-window family contract before moving to the fourth blocker family.'),
   (New-Check -Id 'previous_overlay_window_contract_readback' -Status $(if ($OverlayWindowContractReadbackObserved) { 'previous_contract_readback_observed' } else { 'missing_or_unexpected' }) -Passed $OverlayWindowContractReadbackObserved -Evidence 'summon_anywhere_blockers.blocked_family_handoffs[overlay_window]' -Reason 'The global-hotkey proof must preserve the bounded overlay-window contract without rerunning the slower overlay bridge proof.'),
   (New-Check -Id 'resident_runtime_hotkey_summon_boundary' -Status $(if ($HotkeySummonBoundaryObserved) { 'blocked_readback_ready' } else { 'missing_or_unexpected' }) -Passed $HotkeySummonBoundaryObserved -Evidence 'scripts/lens-resident-runtime-hotkey-summon-boundary-proof.ps1 -Mode Status' -Reason 'The resident-runtime hotkey-summon boundary proof must remain blocked and read-only.'),
@@ -456,6 +488,7 @@ $Payload = [ordered]@{
   recommended_handoff = $RecommendedHandoff
   global_hotkey_runtime_readback_observed = $GlobalHotkeyRuntimeObserved
   global_hotkey_resolved_by_runtime_readback = $GlobalHotkeyResolvedByRuntimeReadbackObserved
+  summon_global_hotkey_delegated_authority_posture_observed = $SummonGlobalHotkeyDelegatedAuthorityPostureObserved
   summon_binding_runtime_readback_observed = $SummonBindingRuntimeObserved
   summon_binding_resolved_to_authority_handoff = $SummonBindingResolvedToAuthority
   summon_global_hotkey_family_observed = $SummonGlobalHotkeyFamilyObserved

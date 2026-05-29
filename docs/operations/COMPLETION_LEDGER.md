@@ -43378,6 +43378,11 @@ Material change:
   delegated-authority posture for the summon-binding handoff: binding remains
   disabled and read-only while summon/hotkey authority blockers are absent
   because the delegated authority receipt has already been applied.
+- `scripts/lens-summon-global-hotkey-binding-blocker-proof.ps1` now accepts
+  the delegated-authority global-hotkey posture where binding and registration
+  remain disabled/read-only but `hotkey_registration_authority_not_granted` is
+  no longer duplicated as live blocker evidence after delegation has already
+  been recorded.
 - `scripts/lens-summon-anywhere-family-chain-proof.ps1` now validates the
   ordered blocker families emitted by the aggregate summon-anywhere proof
   instead of forcing the older resident-host-plus-authority chain after
@@ -43392,6 +43397,7 @@ readbacks:
 - `python -m pytest tests/test_lens_stage6_checkpoint_script.py
   tests/test_lens_resident_runtime_hotkey_summon_boundary_proof_script.py
   tests/test_lens_command_palette_os_binding_proof_script.py
+  tests/test_lens_summon_global_hotkey_binding_blocker_proof_script.py
   tests/test_lens_summon_binding_blocker_proof_script.py
   tests/test_lens_summon_authority_blocker_proof_script.py
   tests/test_lens_summon_anywhere_family_chain_proof_script.py -q --tb=short
@@ -43399,6 +43405,7 @@ readbacks:
   Result: `passed`
 - PowerShell parser validation for
   `scripts/lens-summon-binding-blocker-proof.ps1`,
+  `scripts/lens-summon-global-hotkey-binding-blocker-proof.ps1`,
   `scripts/lens-summon-authority-blocker-proof.ps1`,
   `scripts/lens-summon-anywhere-family-chain-proof.ps1`,
   `scripts/lens-stage6-checkpoint.ps1`,
@@ -43408,6 +43415,7 @@ readbacks:
 - `python -m ruff check tests/test_lens_stage6_checkpoint_script.py
   tests/test_lens_resident_runtime_hotkey_summon_boundary_proof_script.py
   tests/test_lens_command_palette_os_binding_proof_script.py
+  tests/test_lens_summon_global_hotkey_binding_blocker_proof_script.py
   tests/test_lens_summon_binding_blocker_proof_script.py
   tests/test_lens_summon_authority_blocker_proof_script.py
   tests/test_lens_summon_anywhere_family_chain_proof_script.py`
@@ -43415,10 +43423,11 @@ readbacks:
 - `python -m ruff format --check tests/test_lens_stage6_checkpoint_script.py
   tests/test_lens_resident_runtime_hotkey_summon_boundary_proof_script.py
   tests/test_lens_command_palette_os_binding_proof_script.py
+  tests/test_lens_summon_global_hotkey_binding_blocker_proof_script.py
   tests/test_lens_summon_binding_blocker_proof_script.py
   tests/test_lens_summon_authority_blocker_proof_script.py
   tests/test_lens_summon_anywhere_family_chain_proof_script.py`
-  Result: `passed; 6 files already formatted`
+  Result: `passed; 7 files already formatted`
 
 ## 6. Update rule
 
