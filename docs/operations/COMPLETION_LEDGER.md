@@ -43452,6 +43452,10 @@ Material change:
 - The same test file now expects bind-action denial to remain policy/readiness
   gated without reporting missing authorities when those authorities are
   already present in the delegated development config.
+- `tests/test_lens_summon_script.py` now expects the local launcher status
+  readback to omit `summon_authority_not_granted` when delegated summon
+  authority is already present, while still reporting disabled local binding
+  and registration blockers and keeping launcher governance read-only.
 - This is a CI/test contract correction only. It does not grant summon,
   hotkey, overlay, local-process, memory, approval-decision, receipt, sensing,
   capture, or resident-claim authority and does not mark Stage 6 closed.
@@ -43465,6 +43469,15 @@ Latest validation for Stage 6 summon preflight live-hotkey readback:
   Result: `passed`
 - `python -m ruff format --check tests/test_lens_summon_preflight_script.py`
   Result: `passed; 1 file already formatted`
+- `python -m pytest tests/test_lens_summon_script.py
+  tests/test_lens_summon_preflight_script.py -q --tb=short --maxfail=1`
+  Result: `passed; 6 passed`
+- `python -m ruff check tests/test_lens_summon_script.py
+  tests/test_lens_summon_preflight_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_summon_script.py
+  tests/test_lens_summon_preflight_script.py`
+  Result: `passed; 2 files already formatted`
 
 ## 6. Update rule
 

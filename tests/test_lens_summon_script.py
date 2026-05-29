@@ -95,7 +95,8 @@ def test_lens_summon_status_reports_local_binding_without_os_authority(tmp_path:
     assert payload["next_smallest_truthful_gap"] == "global_hotkey_binding"
     assert "lens_summon_binding_disabled_pending_authority" in payload["blockers"]
     assert "global_hotkey_binding_disabled" in payload["blockers"]
-    assert "summon_authority_not_granted" in payload["blockers"]
+    assert "global_hotkey_registration_disabled" in payload["blockers"]
+    assert "summon_authority_not_granted" not in payload["blockers"]
     palette = payload["palette_launcher"]
     assert palette["script"] == "scripts/lens-command-palette.ps1"
     assert palette["status"] == "local_open_ready"
@@ -104,7 +105,7 @@ def test_lens_summon_status_reports_local_binding_without_os_authority(tmp_path:
     checks = {item["id"]: item for item in payload["checks"]}
     assert checks["command_palette_local_open"]["status"] == "local_open_ready"
     assert checks["global_hotkey_binding"]["status"] == "disabled"
-    assert checks["summon_authority"]["status"] == "blocked"
+    assert checks["summon_authority"]["status"] == "allowed"
     assert payload["governance"] == {
         "read_only_contract": True,
         "opens_palette": False,
