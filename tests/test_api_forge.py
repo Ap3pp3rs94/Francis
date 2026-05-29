@@ -318,6 +318,7 @@ def test_forge_collection_readback_bounds_record_ids_and_traversal_paths(monkeyp
     assert listed_body["total"] == 1
     listed_item = listed_body["items"][0]
     assert listed_item["id"] == "safe_proposal"
+    assert listed_item["proposal_id"] == "safe_proposal"
     assert listed_item["relative_path"] == "proposals/safe_proposal.json"
     assert "outside.plugin" not in str(listed_body)
 
@@ -336,6 +337,7 @@ def test_forge_collection_readback_bounds_record_ids_and_traversal_paths(monkeyp
     safe_get_body = safe_get.json()
     assert safe_get_body["ok"] is True
     assert safe_get_body["item"]["id"] == "safe_proposal"
+    assert safe_get_body["item"]["proposal_id"] == "safe_proposal"
 
     traversal_decision = client.post(
         "/forge/proposals/decision",

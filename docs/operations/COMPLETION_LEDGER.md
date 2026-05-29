@@ -42857,6 +42857,8 @@ Material change:
   the expected collection root before any file operation.
 - Proposal decision receipts and proposal updates now use the same checked
   collection path helpers.
+- If a record body contains an invalid embedded id, Forge projects the safe
+  filename-derived record id instead of returning the unsafe embedded value.
 
 Latest validation for Forge collection path hardening:
 
@@ -42866,6 +42868,11 @@ Latest validation for Forge collection path hardening:
   tests/test_api_forge.py::test_forge_proposal_and_promotion_readback
   -q --tb=short --maxfail=1`
   Result: `passed; 3 passed`
+- `python -m pytest
+  tests/test_api_forge.py::test_forge_collection_readback_bounds_record_ids_and_traversal_paths
+  tests/test_api_forge.py::test_forge_proposal_decision_receipts_without_promotion
+  -q --tb=short --maxfail=1`
+  Result: `passed; 2 passed`
 - `python -m ruff check src/francis/api/routes/forge.py
   tests/test_api_forge.py`
   Result: `passed`

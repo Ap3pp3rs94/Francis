@@ -21,6 +21,12 @@ router = APIRouter()
 
 _SAFE_RECORD_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,191}$")
 _COLLECTIONS = {"proposals", "validations", "promotions", "proposal_reviews"}
+_COLLECTION_ID_FIELDS = {
+    "proposals": "proposal_id",
+    "validations": "validation_id",
+    "promotions": "receipt_id",
+    "proposal_reviews": "receipt_id",
+}
 _FORGE_WRITE_SCOPE = "plugins.write"
 _RISK_ORDER = {"readonly": 0, "normal": 1, "critical": 2, "safety_critical": 3}
 _PROPOSAL_DECISIONS = {
@@ -72,15 +78,15 @@ def _safe_record_id(value: Any) -> str:
     return record_id if _SAFE_RECORD_ID_RE.match(record_id) else ""
 
 
-def _atomic_write_json(path: Path, obj: dict[str, Any], *, collection: str) -> bool:
-    resolved_path = _collection_path(collection, path)
+def _atomic_write_record_json(collection: str, record_id: str, obj: dict[str, Any]) -> Path | None:
+    resolved_path = _collection_record_path(collection, record_id)
     if resolved_path is None:
-        return False
+        return None
     resolved_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = resolved_path.with_suffix(resolved_path.suffix + ".tmp")
     tmp.write_text(json.dumps(obj, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
     os.replace(tmp, resolved_path)
-    return True
+    return resolved_path
 
 
 def _artifact_root() -> Path:
@@ -143,14 +149,8 @@ def _resolve_generated_plugin_dir(plugin_id: str, generated_dir: str = "") -> Pa
 
 def _record_id(item: dict[str, Any], collection: str, path: Path) -> str:
     candidates: tuple[Any, ...]
-    if collection == "proposals":
-        candidates = (item.get("proposal_id"), path.stem)
-    elif collection == "validations":
-        candidates = (item.get("validation_id"), path.stem)
-    elif collection in {"promotions", "proposal_reviews"}:
-        candidates = (item.get("receipt_id"), path.stem)
-    else:
-        candidates = (path.stem,)
+    id_field = _COLLECTION_ID_FIELDS.get(collection)
+    candidates = (item.get(id_field), path.stem) if id_field else (path.stem,)
     for candidate in candidates:
         safe_id = _safe_record_id(candidate)
         if safe_id:
@@ -192,6 +192,9 @@ def _read_json_record(path: Path, collection: str) -> dict[str, Any] | None:
     item["id"] = _record_id(item, collection, resolved_path)
     if not item["id"]:
         return None
+    id_field = _COLLECTION_ID_FIELDS.get(collection)
+    if id_field and not _safe_record_id(item.get(id_field)):
+        item[id_field] = item["id"]
     item["artifact_path"] = redact_secret_text(str(resolved_path))
     try:
         item["relative_path"] = redact_secret_text(resolved_path.relative_to(_artifact_root()).as_posix())
@@ -624,6 +627,7 @@ def decide_proposal(payload: ProposalDecisionIn, request: Request) -> dict[str, 
     proposal = _read_raw_record(proposal_path, "proposals")
     if proposal is None:
         return {"ok": False, "applied": False, "error": "unreadable_record", "item": None}
+    proposal["proposal_id"] = proposal_id
 
     previous_status = _safe_str(proposal.get("status")).strip() or "unknown"
     decided_ts = _now_s()
@@ -686,11 +690,12 @@ def decide_proposal(payload: ProposalDecisionIn, request: Request) -> dict[str, 
 
     redacted_proposal = redact_governed_display_value(proposal)
     proposal_out = redacted_proposal if isinstance(redacted_proposal, dict) else {}
-    if not _atomic_write_json(receipt_path, receipt_out, collection="proposal_reviews"):
+    if _atomic_write_record_json("proposal_reviews", receipt_id, receipt_out) is None:
         return {"ok": False, "applied": False, "error": "invalid_receipt_path", "item": None}
-    if not _atomic_write_json(proposal_path, proposal_out, collection="proposals"):
+    written_proposal_path = _atomic_write_record_json("proposals", proposal_id, proposal_out)
+    if written_proposal_path is None:
         return {"ok": False, "applied": False, "error": "invalid_id", "item": None}
-    item = _read_json_record(proposal_path, "proposals") or proposal_out
+    item = _read_json_record(written_proposal_path, "proposals") or proposal_out
 
     return {
         "ok": True,
