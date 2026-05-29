@@ -43234,6 +43234,35 @@ Latest validation for the security path-boundary hardening:
   src/francis/plugin_factory/spec_builder.py`
   Result: `passed`
 
+### 2026-05-29 - Stage 6 completion audit keeps first-missing handoff visible
+
+Roadmap area: Stage 6 Lens completion audit / persistent supervision
+handoff readback.
+
+Material change:
+
+- `scripts/lens-stage6-completion-audit.ps1` no longer suppresses the
+  system-resident persistent-supervision first-missing requirement concrete
+  handoff solely because the current truthful gap is still
+  `system_resident_presence_blockers`.
+- The audit can now keep the persistent-supervision first-missing handoff
+  visible while still leaving Stage 6 closure to the live completion audit.
+- This does not mark Stage 6 closed, launch runtime, or grant new authority.
+
+Latest validation for the completion-audit handoff readback:
+
+- `python -m pytest tests/test_lens_stage6_completion_audit_script.py
+  -q --tb=short --maxfail=1`
+  Result: `passed; 50 passed, 1 skipped`
+- PowerShell parser validation for
+  `scripts/lens-stage6-completion-audit.ps1`
+  Result: `passed`
+- `python -m ruff check tests/test_lens_stage6_completion_audit_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests/test_lens_stage6_completion_audit_script.py`
+  Result: `passed; 1 file already formatted`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

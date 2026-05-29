@@ -5976,7 +5976,6 @@ if ($SystemResidentHostSupervisionAuthorityRequestProofConcreteHandoffObserved) 
   $RecommendedConcreteHandoff['runtime_files'] = $HostSupervisionAuthorityRequestProofRuntimeFiles
 }
 $SystemResidentPersistentSupervisionFirstMissingRequirementConcreteHandoffObserved = (
-  $NextSmallestTruthfulGap -ne 'system_resident_presence_blockers' -and
   $SystemResidentHostSupervisionAuthorityRequestProofConcreteHandoffObserved -and
   $PersistentSupervisionPrerequisitesProofObserved -and
   -not [string]::IsNullOrWhiteSpace($PersistentSupervisionPrerequisitesFirstMissingRequiredBeforeEnable) -and

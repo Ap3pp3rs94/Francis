@@ -1385,9 +1385,20 @@ def test_lens_stage6_completion_audit_distills_system_resident_concrete_handoff_
     ) in script
     assert "$PersistentSupervisionFirstMissingTrayConcreteHandoffObserved" in script
     assert "$PersistentSupervisionFirstMissingRequirementConcreteHandoffObserved" in script
+    first_missing_start = script.index(
+        "$SystemResidentPersistentSupervisionFirstMissingRequirementConcreteHandoffObserved = ("
+    )
+    first_missing_end = script.index(
+        "if ($SystemResidentPersistentSupervisionFirstMissingRequirementConcreteHandoffObserved)", first_missing_start
+    )
+    first_missing_block = script[first_missing_start:first_missing_end]
+    assert "$SystemResidentHostSupervisionAuthorityRequestProofConcreteHandoffObserved -and" in first_missing_block
+    assert "$PersistentSupervisionPrerequisitesProofObserved -and" in first_missing_block
+    assert "system_resident_presence_blockers" not in first_missing_block
     assert (
         "$NextSmallestTruthfulGap -ne 'system_resident_presence_blockers' -and\n"
-        "  $SystemResidentHostSupervisionAuthorityRequestProofConcreteHandoffObserved"
+        "  (\n"
+        "    $NextSmallestTruthfulGap -eq 'persistent_supervision_required_prerequisites_missing'"
     ) in script
     assert (
         "persistent_supervision_first_missing_tray_concrete_handoff_observed = "
