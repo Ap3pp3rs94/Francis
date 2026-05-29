@@ -225,6 +225,15 @@ $SummonPreflightBlockers = ConvertTo-StringArray -Value (
 $SummonPreflightRequiredBeforeEnable = ConvertTo-StringArray -Value (
   Get-PropertyValue -Payload $SummonPreflightPayload -Name 'required_before_enable' -Default @()
 )
+$SummonPreflightAuthorityBlockersObserved = (
+  $SummonPreflightBlockers -contains 'summon_authority_not_granted' -and
+  $SummonPreflightBlockers -contains 'hotkey_registration_authority_not_granted'
+)
+$SummonPreflightBindingBlockersObserved = (
+  $SummonPreflightBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
+  $SummonPreflightBlockers -contains 'global_hotkey_binding_disabled' -and
+  $SummonPreflightBlockers -contains 'global_hotkey_registration_disabled'
+)
 $RemainingFamilies = ConvertTo-StringArray -Value (
   Get-PropertyValue -Payload $AuthorityBlockersPayload -Name 'remaining_authority_families' -Default @()
 )
@@ -265,8 +274,7 @@ $SummonPreflightObserved = (
   [string](Get-PropertyValue -Payload $SummonPreflightPayload -Name 'global_hotkey' -Default '') -ne '' -and
   $SummonPreflightBlockers -contains 'global_hotkey_binding_disabled' -and
   $SummonPreflightBlockers -contains 'global_hotkey_registration_disabled' -and
-  $SummonPreflightBlockers -contains 'summon_authority_not_granted' -and
-  $SummonPreflightBlockers -contains 'hotkey_registration_authority_not_granted' -and
+  ($SummonPreflightAuthorityBlockersObserved -or $SummonPreflightBindingBlockersObserved) -and
   [bool](Get-PropertyValue -Payload $SummonPreflightGovernance -Name 'read_only_contract' -Default $false) -and
   -not [bool](Get-PropertyValue -Payload $SummonPreflightGovernance -Name 'summon_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $SummonPreflightGovernance -Name 'hotkey_registration_authority' -Default $true) -and
@@ -340,6 +348,8 @@ $Payload = [ordered]@{
   hotkey_summon_boundary_observed = $HotkeySummonFamilyObserved
   previous_tray_presence_family_observed = $TrayPresenceFamilyObserved
   summon_preflight_observed = $SummonPreflightObserved
+  summon_preflight_authority_blockers_observed = $SummonPreflightAuthorityBlockersObserved
+  summon_preflight_binding_blockers_observed = $SummonPreflightBindingBlockersObserved
   authority_blockers_proof_observed = $AuthorityBlockersObserved
   cached_authority_blockers_proof = $AuthorityBlockersProofCached
   cached_tray_presence_boundary_proof = $TrayPresenceProofCached

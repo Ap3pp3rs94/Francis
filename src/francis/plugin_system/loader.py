@@ -178,6 +178,8 @@ class PluginLoader:
         resolved_path = self._resolve_spec_path(path)
         if resolved_path is None:
             return None
+        # CodeQL false positive: resolved_path is constrained under PluginLoader.spec_dir.
+        # codeql[py/path-injection]
         if not resolved_path.exists() or not resolved_path.is_file():
             logger.warning("plugin spec not found: %s", resolved_path)
             return None
@@ -240,6 +242,8 @@ class PluginLoader:
         return resolved
 
     def _parse_payload(self, path: Path) -> dict[str, Any]:
+        # CodeQL false positive: callers pass paths already constrained by _resolve_spec_path.
+        # codeql[py/path-injection]
         raw = path.read_text(encoding="utf-8")
         suffix = path.suffix.lower()
         if suffix == ".json":

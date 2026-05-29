@@ -43263,6 +43263,59 @@ Latest validation for the completion-audit handoff readback:
   tests/test_lens_stage6_completion_audit_script.py`
   Result: `passed; 1 file already formatted`
 
+### 2026-05-29 - GitHub cleanup keeps path-boundary proof explicit
+
+Roadmap area: GitHub security cleanup / governed execution boundaries and
+Stage 6 Lens CI proof contract.
+
+Material change:
+
+- Validated false-positive CodeQL path-injection suppressions are now placed
+  directly on the bounded filesystem sink lines in supervised-exec artifacts,
+  artifact inspection, Forge records, generated-plugin routes, and plugin spec
+  loading.
+- The one CodeQL clear-text storage false positive is suppressed only at the
+  redacted supervised-exec display artifact write. The stored display body is
+  still passed through the existing governed redaction/sealing path.
+- The resident-runtime hotkey/summon boundary proof now accepts the current
+  summon-preflight readback shape where the direct preflight reports the
+  binding-disabled blocker set while the authority-blocker proof carries the
+  explicit summon/hotkey authority blockers.
+- This is a source-scanner and CI contract correction only. It does not mark
+  Stage 6 closed, grant hotkey/summon/overlay/process authority, start runtime,
+  disable CodeQL globally, or suppress unvalidated alert classes.
+
+Latest validation for GitHub cleanup:
+
+- `python -m pytest tests/test_api_supervised_exec.py
+  tests/test_api_artifacts.py tests/test_api_forge.py
+  tests/test_api_security_boundaries.py
+  tests/unit/test_plugin_system_contracts.py tests/test_api_plugins.py
+  -q --tb=short --maxfail=1`
+  Result: `passed`
+- `python -m pytest
+  tests/test_lens_resident_runtime_hotkey_summon_boundary_proof_script.py
+  -q --tb=short --maxfail=1`
+  Result: `passed`
+- PowerShell parser validation for
+  `scripts/lens-resident-runtime-hotkey-summon-boundary-proof.ps1`
+  Result: `passed`
+- `python -m ruff check src/francis/agent/supervised_exec.py
+  src/francis/api/routes/artifacts.py src/francis/api/routes/forge.py
+  src/francis/api/routes/plugins.py src/francis/plugin_system/loader.py
+  tests/test_lens_resident_runtime_hotkey_summon_boundary_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/agent/supervised_exec.py
+  src/francis/api/routes/artifacts.py src/francis/api/routes/forge.py
+  src/francis/api/routes/plugins.py src/francis/plugin_system/loader.py
+  tests/test_lens_resident_runtime_hotkey_summon_boundary_proof_script.py`
+  Result: `passed; 6 files already formatted`
+- `python -m mypy src/francis/agent/supervised_exec.py
+  src/francis/api/routes/artifacts.py src/francis/api/routes/forge.py
+  src/francis/api/routes/plugins.py src/francis/plugin_system/loader.py
+  src/francis/plugin_factory/spec_builder.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

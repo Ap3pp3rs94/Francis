@@ -285,12 +285,18 @@ def _entry_projection(root: Path, path: Path) -> dict[str, object]:
     if not _is_under(root, resolved):
         return {**base, "kind": "external_link", "bytes": 0, "modified_ts": None}
     try:
+        # CodeQL false positive: resolved is accepted only after realpath/commonpath containment under root.
+        # codeql[py/path-injection]
         stat = resolved.stat()
     except OSError:
         return {**base, "kind": "unavailable", "bytes": 0, "modified_ts": None}
     return {
         **base,
+        # CodeQL false positive: resolved is accepted only after realpath/commonpath containment under root.
+        # codeql[py/path-injection]
         "kind": "directory" if resolved.is_dir() else "file",
+        # CodeQL false positive: resolved is accepted only after realpath/commonpath containment under root.
+        # codeql[py/path-injection]
         "bytes": stat.st_size if resolved.is_file() else 0,
         "modified_ts": stat.st_mtime,
     }
@@ -313,6 +319,8 @@ def inspect_artifact(
         }
 
     originating_receipt = _originating_receipt_projection(root, target, artifact_dir)
+    # CodeQL false positive: target is returned only by _resolve_artifact_handle after containment checks.
+    # codeql[py/path-injection]
     if not target.exists():
         body = {
             "ok": False,
@@ -328,6 +336,8 @@ def inspect_artifact(
         return body
 
     projection = _entry_projection(root, target)
+    # CodeQL false positive: target is returned only by _resolve_artifact_handle after containment checks.
+    # codeql[py/path-injection]
     if target.is_file():
         body = {
             "ok": True,

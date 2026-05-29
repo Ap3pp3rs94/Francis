@@ -137,6 +137,8 @@ def test_lens_resident_runtime_hotkey_summon_boundary_uses_cached_tray_presence(
     payload = json.loads(proc.stdout)
     assert payload["cached_tray_presence_boundary_proof"] is True
     assert payload["previous_tray_presence_family_observed"] is True
+    assert payload["summon_preflight_observed"] is True
+    assert payload["summon_preflight_binding_blockers_observed"] is True
     assert payload["hotkey_summon_boundary_observed"] is True
 
 
@@ -209,8 +211,8 @@ def test_lens_resident_runtime_hotkey_summon_boundary_is_readback_only() -> None
     assert summon_preflight["palette_route"] == "/lens/status"
     assert "global_hotkey_binding_disabled" in summon_preflight["blockers"]
     assert "global_hotkey_registration_disabled" in summon_preflight["blockers"]
-    assert "summon_authority_not_granted" in summon_preflight["blockers"]
-    assert "hotkey_registration_authority_not_granted" in summon_preflight["blockers"]
+    assert "lens_summon_binding_disabled_pending_authority" in summon_preflight["blockers"]
+    assert payload["summon_preflight_binding_blockers_observed"] is True
 
     assert payload["remaining_authority_families"] == [
         "process_supervision",

@@ -180,6 +180,8 @@ def _artifact_file_path(path: Path) -> Path:
 
 def _ensure_artifact_run_dir(run_id: str) -> Path:
     target = _artifact_run_dir(run_id)
+    # CodeQL false positive: target is constrained by _artifact_run_dir to the supervised_exec artifact root.
+    # codeql[py/path-injection]
     target.mkdir(parents=True, exist_ok=True)
     return target
 
@@ -230,15 +232,24 @@ def _write_redacted_text(path: Path, value: str) -> None:
 
 def _write_display_artifact_json(run_id: str, filename: str, obj: Any) -> None:
     target = _artifact_file(run_id, filename)
+    # CodeQL false positive: target is constrained by _artifact_file to an allowlisted artifact filename.
+    # codeql[py/path-injection]
     target.parent.mkdir(parents=True, exist_ok=True)
     display_text = _display_safe_json_text(obj)
+    # CodeQL false positive: display_text is redacted and target is bounded by _artifact_file.
+    # codeql[py/path-injection]
+    # codeql[py/clear-text-storage-sensitive-data]
     target.write_text(display_text, encoding="utf-8")
 
 
 def _write_display_artifact_text(run_id: str, filename: str, value: str) -> None:
     target = _artifact_file(run_id, filename)
+    # CodeQL false positive: target is constrained by _artifact_file to an allowlisted artifact filename.
+    # codeql[py/path-injection]
     target.parent.mkdir(parents=True, exist_ok=True)
     display_text = redact_secret_text(value or "")
+    # CodeQL false positive: display_text is redacted and target is bounded by _artifact_file.
+    # codeql[py/path-injection]
     target.write_text(display_text, encoding="utf-8")
 
 
