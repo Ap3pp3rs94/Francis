@@ -43456,6 +43456,10 @@ Material change:
   readback to omit `summon_authority_not_granted` when delegated summon
   authority is already present, while still reporting disabled local binding
   and registration blockers and keeping launcher governance read-only.
+- `scripts/lens-summon-tray-presence-blocker-proof.ps1` now consumes the
+  aggregate summon-anywhere readback where `resident_host` has no active
+  blockers and `tray_presence` is the current blocker family, without rerunning
+  the resident-host bridge or granting new authority.
 - This is a CI/test contract correction only. It does not grant summon,
   hotkey, overlay, local-process, memory, approval-decision, receipt, sensing,
   capture, or resident-claim authority and does not mark Stage 6 closed.
@@ -43478,6 +43482,28 @@ Latest validation for Stage 6 summon preflight live-hotkey readback:
 - `python -m ruff format --check tests/test_lens_summon_script.py
   tests/test_lens_summon_preflight_script.py`
   Result: `passed; 2 files already formatted`
+- PowerShell parser validation for
+  `scripts/lens-summon-tray-presence-blocker-proof.ps1`
+  Result: `passed`
+- `python -m pytest tests/test_lens_summon_script.py
+  tests/test_lens_summon_preflight_script.py
+  tests/test_lens_summon_global_hotkey_binding_blocker_proof_script.py
+  tests/test_lens_summon_tray_presence_blocker_proof_script.py
+  tests/test_lens_summon_overlay_window_blocker_proof_script.py -q
+  --tb=short --maxfail=1`
+  Result: `passed; 13 passed`
+- `python -m ruff check tests/test_lens_summon_script.py
+  tests/test_lens_summon_preflight_script.py
+  tests/test_lens_summon_global_hotkey_binding_blocker_proof_script.py
+  tests/test_lens_summon_tray_presence_blocker_proof_script.py
+  tests/test_lens_summon_overlay_window_blocker_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_summon_script.py
+  tests/test_lens_summon_preflight_script.py
+  tests/test_lens_summon_global_hotkey_binding_blocker_proof_script.py
+  tests/test_lens_summon_tray_presence_blocker_proof_script.py
+  tests/test_lens_summon_overlay_window_blocker_proof_script.py`
+  Result: `passed; 5 files already formatted`
 
 ## 6. Update rule
 

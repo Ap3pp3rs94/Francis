@@ -194,6 +194,10 @@ $TrayBoundaryBlockers = ConvertTo-StringArray -Value (
   Get-PropertyValue -Payload $TrayBoundaryPayload -Name 'blockers' -Default @()
 )
 
+$ResidentHostResolvedByCurrentSummonReadbackObserved = (
+  -not ($SummonBlockedFamilies -contains 'resident_host') -and
+  @($ResidentHostFamilyBlockers).Count -eq 0
+)
 $SummonTrayFamilyObserved = (
   [int]$SummonResult.exit_code -eq 0 -and
   [string](Get-PropertyValue -Payload $SummonPayload -Name 'kind' -Default '') -eq 'lens.summon_anywhere_blockers.proof' -and
@@ -209,7 +213,7 @@ $SummonTrayFamilyObserved = (
       $SummonFirstBlockerFamily -eq 'resident_host'
     ) -or
     (
-      $ResidentHostSupervisedRuntimeObserved -and
+      $ResidentHostResolvedByCurrentSummonReadbackObserved -and
       @($SummonBlockedFamilies).Count -ge 1 -and
       [string]$SummonBlockedFamilies[0] -eq 'tray_presence' -and
       $SummonFirstBlockerFamily -eq 'tray_presence'
@@ -238,8 +242,22 @@ $ResidentHostResolvedBySupervisionObserved = (
 )
 $ResidentHostContractReadbackObserved = (
   $ResidentHostContractReadbackObservedLegacy -or
-  $ResidentHostResolvedBySupervisionObserved
+  $ResidentHostResolvedByCurrentSummonReadbackObserved
 )
+$ResidentHostReadbackSource = if ($ResidentHostResolvedBySupervisionObserved) {
+  'summon_anywhere_blockers.resident_host_supervised_runtime_observed'
+} elseif ($ResidentHostResolvedByCurrentSummonReadbackObserved) {
+  'summon_anywhere_blockers.resident_host_no_active_blockers'
+} else {
+  'summon_anywhere_blockers.blocked_family_handoffs'
+}
+$ResidentHostReadbackStatus = if ($ResidentHostResolvedBySupervisionObserved) {
+  'resolved_by_supervision'
+} elseif ($ResidentHostResolvedByCurrentSummonReadbackObserved) {
+  'resolved_by_current_summon_readback'
+} else {
+  [string](Get-PropertyValue -Payload $ResidentHostFamilyHandoff -Name 'status' -Default 'missing')
+}
 $TrayBoundaryObserved = (
   [int]$TrayBoundaryResult.exit_code -eq 0 -and
   [string](Get-PropertyValue -Payload $TrayBoundaryPayload -Name 'kind' -Default '') -eq 'lens.resident_runtime.tray_presence_boundary.proof' -and
@@ -290,9 +308,9 @@ $SideEffectsDenied = (
 )
 
 $Checks = @(
-  (New-Check -Id 'summon_tray_presence_family' -Status $(if ($SummonTrayFamilyObserved) { 'second_family_projected' } else { 'missing_or_unexpected' }) -Passed $SummonTrayFamilyObserved -Evidence 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status' -Reason 'The summon-anywhere blocker proof must keep tray_presence as the second blocked acceptance family after resident_host.'),
-  (New-Check -Id 'previous_resident_host_contract' -Status $(if ($ResidentHostContractReadbackObserved) { 'previous_family_contract_observed' } else { 'missing_or_unexpected' }) -Passed $ResidentHostContractReadbackObserved -Evidence 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status blocked_family_handoffs[resident_host]' -Reason 'The tray-presence handoff should consume the resident-host family contract before moving to the second blocker family.'),
-  (New-Check -Id 'previous_resident_host_contract_readback' -Status $(if ($ResidentHostContractReadbackObserved) { 'previous_contract_readback_observed' } else { 'missing_or_unexpected' }) -Passed $ResidentHostContractReadbackObserved -Evidence 'summon_anywhere_blockers.blocked_family_handoffs[resident_host]' -Reason 'The tray-presence proof must preserve the bounded resident-host contract without rerunning the slower resident-host bridge proof.'),
+  (New-Check -Id 'summon_tray_presence_family' -Status $(if ($SummonTrayFamilyObserved) { 'current_family_projected' } else { 'missing_or_unexpected' }) -Passed $SummonTrayFamilyObserved -Evidence 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status' -Reason 'The summon-anywhere blocker proof must keep tray_presence as the current blocked acceptance family after resident_host has no active blockers.'),
+  (New-Check -Id 'previous_resident_host_contract' -Status $(if ($ResidentHostContractReadbackObserved) { 'previous_family_contract_observed' } else { 'missing_or_unexpected' }) -Passed $ResidentHostContractReadbackObserved -Evidence 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status resident_host readback' -Reason 'The tray-presence handoff should consume either the resident-host family contract or the current no-active-resident-host-blocker readback before moving to tray_presence.'),
+  (New-Check -Id 'previous_resident_host_contract_readback' -Status $(if ($ResidentHostContractReadbackObserved) { 'previous_contract_readback_observed' } else { 'missing_or_unexpected' }) -Passed $ResidentHostContractReadbackObserved -Evidence 'summon_anywhere_blockers resident_host readback' -Reason 'The tray-presence proof must preserve the bounded resident-host readback without rerunning the slower resident-host bridge proof.'),
   (New-Check -Id 'tray_presence_boundary' -Status $(if ($TrayBoundaryObserved) { 'blocked_readback_ready' } else { 'missing_or_unexpected' }) -Passed $TrayBoundaryObserved -Evidence 'scripts/lens-resident-runtime-tray-presence-boundary-proof.ps1 -Mode Status' -Reason 'The resident-runtime tray-presence boundary proof must remain blocked and read-only.'),
   (New-Check -Id 'handoff_alignment' -Status $(if ($HandoffAligned) { 'handoff_aligned' } else { 'handoff_mismatch' }) -Passed $HandoffAligned -Evidence 'summon tray_presence blocker group + resident runtime tray boundary proof' -Reason 'The summon tray_presence blocker must map to the direct tray preflight and resident-runtime tray boundary without changing authority.'),
   (New-Check -Id 'side_effects_denied' -Status $(if ($SideEffectsDenied) { 'diagnostic_bounded' } else { 'unexpected_authority' }) -Passed $SideEffectsDenied -Evidence 'summon, resident-host family contract, and tray boundary governance payloads' -Reason 'The bridge proof must remain diagnostic/readback only and grant no tray, notification, summon, hotkey, overlay, process, service, memory, approval-decision, or resident-claim authority.')
@@ -347,27 +365,28 @@ $Payload = [ordered]@{
   previous_resident_host_contract_readback_observed = $ResidentHostContractReadbackObserved
   resident_host_resolved_by_supervision = $ResidentHostResolvedBySupervisionObserved
   resident_host_supervised_runtime_observed = $ResidentHostSupervisedRuntimeObserved
+  resident_host_current_readback_resolved = $ResidentHostResolvedByCurrentSummonReadbackObserved
   previous_resident_host_contract = [ordered]@{
-    source = $(if ($ResidentHostResolvedBySupervisionObserved) { 'summon_anywhere_blockers.resident_host_supervised_runtime_observed' } else { 'summon_anywhere_blockers.blocked_family_handoffs' })
+    source = $ResidentHostReadbackSource
     status = 'contract_projected'
-    contract_status = $(if ($ResidentHostResolvedBySupervisionObserved) { 'resolved_by_supervision' } else { [string](Get-PropertyValue -Payload $ResidentHostFamilyHandoff -Name 'status' -Default 'missing') })
-    proof_script = $(if ($ResidentHostResolvedBySupervisionObserved) { 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status' } else { [string](Get-PropertyValue -Payload $ResidentHostFamilyHandoff -Name 'proof_script' -Default '') })
+    contract_status = $ResidentHostReadbackStatus
+    proof_script = $(if ($ResidentHostResolvedByCurrentSummonReadbackObserved) { 'scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status' } else { [string](Get-PropertyValue -Payload $ResidentHostFamilyHandoff -Name 'proof_script' -Default '') })
     previous_summon_blocker_family = ''
     summon_resident_host_blocker_family = 'resident_host'
     next_summon_blocker_family = 'tray_presence'
     summon_next_smallest_truthful_gap = 'summon_anywhere_blockers'
-    next_smallest_truthful_gap = $(if ($ResidentHostResolvedBySupervisionObserved) { 'summon_tray_presence_blocker_boundary' } else { [string](Get-PropertyValue -Payload $ResidentHostFamilyHandoff -Name 'next_smallest_truthful_gap' -Default '') })
+    next_smallest_truthful_gap = $(if ($ResidentHostResolvedByCurrentSummonReadbackObserved) { 'summon_tray_presence_blocker_boundary' } else { [string](Get-PropertyValue -Payload $ResidentHostFamilyHandoff -Name 'next_smallest_truthful_gap' -Default '') })
     route = '/lens/host'
     readiness_route = '/lens/host/runtime-loop/readiness'
-    authority_required = $(if ($ResidentHostResolvedBySupervisionObserved) { 'none_readback_only' } else { [string](Get-PropertyValue -Payload $ResidentHostFamilyHandoff -Name 'authority_required' -Default '') })
-    authority_granted = $(if ($ResidentHostResolvedBySupervisionObserved) { $false } else { [bool](Get-PropertyValue -Payload $ResidentHostFamilyHandoff -Name 'authority_granted' -Default $false) })
+    authority_required = $(if ($ResidentHostResolvedByCurrentSummonReadbackObserved) { 'none_readback_only' } else { [string](Get-PropertyValue -Payload $ResidentHostFamilyHandoff -Name 'authority_required' -Default '') })
+    authority_granted = $(if ($ResidentHostResolvedByCurrentSummonReadbackObserved) { $false } else { [bool](Get-PropertyValue -Payload $ResidentHostFamilyHandoff -Name 'authority_granted' -Default $false) })
     read_only_contract = $true
     diagnostic_only = $true
     would_execute = $false
     would_mutate = $false
     handoff_aligned = $ResidentHostContractReadbackObserved
     side_effects_denied = $ResidentHostContractReadbackObserved
-    blockers = [string[]]@($(if ($ResidentHostResolvedBySupervisionObserved) { @() } else { $ResidentHostFamilyBlockers }))
+    blockers = [string[]]@($(if ($ResidentHostResolvedByCurrentSummonReadbackObserved) { @() } else { $ResidentHostFamilyBlockers }))
   }
   tray_presence_boundary_observed = $TrayBoundaryObserved
   handoff_aligned = $HandoffAligned
@@ -403,6 +422,7 @@ $Payload = [ordered]@{
     wraps_summon_resident_host_blocker_proof = $false
     uses_resident_host_family_contract_readback = $ResidentHostContractReadbackObservedLegacy
     resident_host_contract_readback = $ResidentHostContractReadbackObservedLegacy
+    resident_host_current_readback_resolved = $ResidentHostResolvedByCurrentSummonReadbackObserved
     resident_host_supervised_runtime_readback = $ResidentHostResolvedBySupervisionObserved
     wraps_resident_runtime_tray_presence_boundary_proof = $true
     tray_preflight_readback = [bool](Get-PropertyValue -Payload $TrayBoundaryGovernance -Name 'tray_preflight_readback' -Default $false)

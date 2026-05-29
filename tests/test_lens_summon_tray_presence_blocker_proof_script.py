@@ -41,6 +41,7 @@ def test_lens_summon_tray_presence_bridge_uses_resident_host_contract_readback()
     script = (_repo_root() / "scripts" / "lens-summon-tray-presence-blocker-proof.ps1").read_text(encoding="utf-8")
 
     assert "blocked_family_handoffs[resident_host]" in script
+    assert "resident_host_no_active_blockers" in script
     assert "$ResidentHostBridgeScript" not in script
     assert "-ConsumeProcessSupervisionHandoff" not in script
     assert "$ResidentHostBridgeForegroundRunSeconds" not in script
@@ -89,19 +90,20 @@ def test_lens_summon_tray_presence_blocker_proof_is_readback_only(tmp_path: Path
     assert payload["summon_tray_family_observed"] is True
     assert payload["previous_resident_host_contract_observed"] is True
     assert payload["previous_resident_host_contract_readback_observed"] is True
+    assert payload["resident_host_current_readback_resolved"] is True
     previous_contract = payload["previous_resident_host_contract"]
-    assert previous_contract["source"] == "summon_anywhere_blockers.blocked_family_handoffs"
+    assert previous_contract["source"] == "summon_anywhere_blockers.resident_host_no_active_blockers"
     assert previous_contract["status"] == "contract_projected"
-    assert previous_contract["contract_status"] == "blocked"
-    assert previous_contract["proof_script"] == "scripts/lens-summon-resident-host-blocker-proof.ps1 -Mode Status"
+    assert previous_contract["contract_status"] == "resolved_by_current_summon_readback"
+    assert previous_contract["proof_script"] == "scripts/lens-summon-anywhere-blockers-proof.ps1 -Mode Status"
     assert previous_contract["previous_summon_blocker_family"] == ""
     assert previous_contract["summon_resident_host_blocker_family"] == "resident_host"
     assert previous_contract["next_summon_blocker_family"] == "tray_presence"
     assert previous_contract["summon_next_smallest_truthful_gap"] == "summon_anywhere_blockers"
-    assert previous_contract["next_smallest_truthful_gap"] == "resident_host_runtime_blocker_boundary"
+    assert previous_contract["next_smallest_truthful_gap"] == "summon_tray_presence_blocker_boundary"
     assert previous_contract["route"] == "/lens/host"
     assert previous_contract["readiness_route"] == "/lens/host/runtime-loop/readiness"
-    assert previous_contract["authority_required"] == "resident_runtime_execution_authority"
+    assert previous_contract["authority_required"] == "none_readback_only"
     assert previous_contract["authority_granted"] is False
     assert previous_contract["read_only_contract"] is True
     assert previous_contract["diagnostic_only"] is True
@@ -109,7 +111,7 @@ def test_lens_summon_tray_presence_blocker_proof_is_readback_only(tmp_path: Path
     assert previous_contract["would_mutate"] is False
     assert previous_contract["handoff_aligned"] is True
     assert previous_contract["side_effects_denied"] is True
-    assert previous_contract["blockers"] == ["local_process_launch_authority_not_granted"]
+    assert previous_contract["blockers"] == []
     assert payload["tray_presence_boundary_observed"] is True
     assert payload["handoff_aligned"] is True
     assert payload["side_effects_denied"] is True
@@ -139,7 +141,7 @@ def test_lens_summon_tray_presence_blocker_proof_is_readback_only(tmp_path: Path
     assert boundary["blockers"] == runtime_blockers
 
     checks = {item["id"]: item for item in payload["checks"]}
-    assert checks["summon_tray_presence_family"]["status"] == "second_family_projected"
+    assert checks["summon_tray_presence_family"]["status"] == "current_family_projected"
     assert checks["previous_resident_host_contract"]["status"] == "previous_family_contract_observed"
     assert checks["previous_resident_host_contract_readback"]["status"] == "previous_contract_readback_observed"
     assert checks["tray_presence_boundary"]["status"] == "blocked_readback_ready"
@@ -151,8 +153,9 @@ def test_lens_summon_tray_presence_blocker_proof_is_readback_only(tmp_path: Path
         "diagnostic_only": True,
         "wraps_summon_anywhere_blockers_proof": True,
         "wraps_summon_resident_host_blocker_proof": False,
-        "uses_resident_host_family_contract_readback": True,
-        "resident_host_contract_readback": True,
+        "uses_resident_host_family_contract_readback": False,
+        "resident_host_contract_readback": False,
+        "resident_host_current_readback_resolved": True,
         "resident_host_supervised_runtime_readback": False,
         "wraps_resident_runtime_tray_presence_boundary_proof": True,
         "tray_preflight_readback": True,
