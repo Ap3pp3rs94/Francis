@@ -42622,6 +42622,44 @@ Latest validation for code-scanning security hardening:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-28 - Full operator delegation receipt is active for codex.builder
+
+Roadmap area: governance/security hardening for delegated local operator
+authority.
+
+Material change:
+
+- Austin's full operator delegation decision was recorded as
+  `operator.delegation.receipt` id
+  `opdel_2a7e1182b90a5c98bea67233661065ba`.
+- The receipt grants `codex.builder` scope `["*"]` under
+  `expiry_policy=active_until_explicit_revocation`.
+- The delegation remains bounded to `dev` and `workstation` profiles; production
+  and regulated profiles remain blocked, and subdelegation remains blocked.
+- Builder delegated approvals now recognize wildcard scope, reference the active
+  delegation id, and continue writing delegated-operator approval receipts.
+- The receipt is inspectable through `GET /approvals/delegations`.
+
+Latest validation for full operator delegation:
+
+- `GET /approvals/delegations?receiving_actor=codex.builder&active_only=true`
+  with `FRANCIS_ENV_PROFILE=dev`
+  Result: `ok=true; latest_id=opdel_2a7e1182b90a5c98bea67233661065ba;
+  latest_scope=["*"]; full_operator_authority=true`
+- `python -m pytest
+  tests/test_api_approvals.py::test_full_operator_delegation_receipt_is_inspectable_and_referenced_by_builder_approval
+  -q --tb=short --maxfail=1`
+  Result: `passed`
+- `python -m mypy src/francis/governance/approvals.py
+  src/francis/api/routes/approvals.py`
+  Result: `passed`
+- `python -m ruff check src/francis/governance/approvals.py
+  tests/test_api_approvals.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/governance/approvals.py
+  tests/test_api_approvals.py`
+  Result: `passed; 2 files already formatted`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

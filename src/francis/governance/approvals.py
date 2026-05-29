@@ -57,6 +57,7 @@ DELEGATED_OPERATOR_AUTHORITY = "delegated_operator"
 OPERATOR_DELEGATION_KIND = "operator.delegation.receipt"
 DELEGATED_OPERATOR_APPROVAL_RECEIPT_KIND = "francis.approval.delegated_operator_approval_receipt"
 DELEGATED_OPERATOR_AUTHORITY_GRANT_RECEIPT_KIND = "operator.delegated_authority.grant_receipt"
+FULL_OPERATOR_AUTHORITY_SCOPE = "*"
 STAGE6_LENS_AUTHORITY_SCOPES = (
     "lens.summon_authority",
     "lens.hotkey_registration_authority",
@@ -352,19 +353,49 @@ def create_operator_delegation_receipt(
     reason: str,
     expiry_policy: str,
     expires_ts: float | None = None,
+    delegation_id: str | None = None,
+    governance_overrides: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     ts = _now()
     clean_delegating_actor = _redact_free_text(delegating_actor) or "operator"
     clean_receiving_actor = _redact_free_text(receiving_actor)
     scopes = [scope for scope in _string_list(granted_scope) if scope]
-    delegation_id = _operator_delegation_id(
+    clean_delegation_id = _safe_str(delegation_id).strip() or _operator_delegation_id(
         delegating_actor=clean_delegating_actor,
         receiving_actor=clean_receiving_actor,
         ts=ts,
     )
+    full_operator_authority = FULL_OPERATOR_AUTHORITY_SCOPE in scopes
+    governance = {
+        "operator_decision_record": True,
+        "delegated_operator_authority": True,
+        "receiving_actor": clean_receiving_actor,
+        "allowed_env_profiles": sorted(_BUILDER_ALLOWED_ENV_PROFILES),
+        "disallowed_env_profiles": sorted(_DISALLOWED_OPERATOR_DELEGATION_ENV_PROFILES),
+        "scope_limited": not full_operator_authority,
+        "full_operator_authority": full_operator_authority,
+        "granted_scope": scopes,
+        "subdelegation_allowed": False,
+        "production_allowed": False,
+        "regulated_profile_allowed": False,
+        "memory_write": False,
+    }
+    if isinstance(governance_overrides, dict):
+        governance.update(_redact_metadata(governance_overrides))
+    governance["operator_decision_record"] = True
+    governance["delegated_operator_authority"] = True
+    governance["receiving_actor"] = clean_receiving_actor
+    governance["allowed_env_profiles"] = sorted(_BUILDER_ALLOWED_ENV_PROFILES)
+    governance["disallowed_env_profiles"] = sorted(_DISALLOWED_OPERATOR_DELEGATION_ENV_PROFILES)
+    governance["scope_limited"] = not full_operator_authority
+    governance["full_operator_authority"] = full_operator_authority
+    governance["granted_scope"] = scopes
+    governance["subdelegation_allowed"] = False
+    governance["production_allowed"] = False
+    governance["regulated_profile_allowed"] = False
     receipt = {
         "kind": OPERATOR_DELEGATION_KIND,
-        "delegation_id": delegation_id,
+        "delegation_id": clean_delegation_id,
         "delegating_actor": clean_delegating_actor,
         "receiving_actor": clean_receiving_actor,
         "granted_scope": scopes,
@@ -376,21 +407,9 @@ def create_operator_delegation_receipt(
         "status": "active",
         "revoked": False,
         "authority": DELEGATED_OPERATOR_AUTHORITY,
-        "governance": {
-            "operator_decision_record": True,
-            "delegated_operator_authority": True,
-            "receiving_actor": clean_receiving_actor,
-            "allowed_env_profiles": sorted(_BUILDER_ALLOWED_ENV_PROFILES),
-            "disallowed_env_profiles": sorted(_DISALLOWED_OPERATOR_DELEGATION_ENV_PROFILES),
-            "scope_limited": True,
-            "granted_scope": scopes,
-            "subdelegation_allowed": False,
-            "production_allowed": False,
-            "regulated_profile_allowed": False,
-            "memory_write": False,
-        },
+        "governance": governance,
     }
-    path = _operator_delegation_receipt_path(delegation_id)
+    path = _operator_delegation_receipt_path(clean_delegation_id)
     if path is None:
         raise ValueError("invalid delegation_id")
     _write_json(path, receipt)
@@ -438,6 +457,8 @@ def _operator_delegation_is_active(
         except (TypeError, ValueError):
             return False
     scope = set(_string_list(receipt.get("granted_scope")))
+    if FULL_OPERATOR_AUTHORITY_SCOPE in scope:
+        return True
     return set(required_scopes).issubset(scope)
 
 
@@ -524,6 +545,40 @@ def _builder_delegated_operator_evaluation(record: dict[str, Any], decision_stat
     }
 
 
+def _record_requests_subdelegation(record: dict[str, Any]) -> bool:
+    approval_action = _safe_str(record.get("action")).strip().lower()
+    if "delegation" in approval_action or "subdelegation" in approval_action:
+        return True
+    payload = _as_dict(record.get("payload"))
+    if _truthy(payload.get("subdelegation_allowed")):
+        return True
+    receiving_actor = _safe_str(payload.get("receiving_actor")).strip()
+    if receiving_actor and receiving_actor != BUILDER_APPROVAL_ACTOR:
+        return True
+    return False
+
+
+def _builder_full_operator_delegation_evaluation(decision_status: str) -> dict[str, Any] | None:
+    profile = _current_env_profile()
+    delegation = active_operator_delegation_for(
+        receiving_actor=BUILDER_APPROVAL_ACTOR,
+        required_scopes=[FULL_OPERATOR_AUTHORITY_SCOPE],
+        profile=profile,
+    )
+    if delegation is None:
+        return None
+    if decision_status == "emergency":
+        return {"allowed": False, "reason": "delegated_operator_emergency_decisions_forbidden", "env_profile": profile}
+    return {
+        "allowed": True,
+        "reason": "full_operator_delegation_policy_satisfied",
+        "env_profile": profile,
+        "decision_kind": "delegated_operator_approval",
+        "required_scopes": [FULL_OPERATOR_AUTHORITY_SCOPE],
+        "delegation": delegation,
+    }
+
+
 def _builder_self_approval_evaluation(record: dict[str, Any], decision_status: str) -> dict[str, Any]:
     approval_action = _safe_str(record.get("action")).strip()
     if approval_action in _STAGE6_LENS_DELEGATED_ACTION_SCOPES:
@@ -535,6 +590,12 @@ def _builder_self_approval_evaluation(record: dict[str, Any], decision_status: s
 
     if decision_status == "emergency":
         return {"allowed": False, "reason": "builder_emergency_decisions_forbidden", "env_profile": profile}
+
+    full_operator_evaluation = _builder_full_operator_delegation_evaluation(decision_status)
+    if full_operator_evaluation is not None:
+        if _record_requests_subdelegation(record):
+            return {"allowed": False, "reason": "subdelegation_not_allowed", "env_profile": profile}
+        return full_operator_evaluation
 
     if approval_action not in _BUILDER_APPROVABLE_ACTIONS:
         return {"allowed": False, "reason": "approval_action_outside_builder_plane", "env_profile": profile}
@@ -716,6 +777,9 @@ def builder_self_decide(
         delegation = _as_dict(evaluation.get("delegation"))
         delegation_id = _safe_str(delegation.get("delegation_id")).strip()
         required_scopes = _string_list(evaluation.get("required_scopes"))
+        granted_scopes = _string_list(delegation.get("granted_scope"))
+        delegation_governance = _as_dict(delegation.get("governance"))
+        full_operator_authority = FULL_OPERATOR_AUTHORITY_SCOPE in granted_scopes
         now = time.time()
         redacted_reason = _redact_free_text(reason or "delegated_operator_approval")
         receipt = {
@@ -737,12 +801,14 @@ def builder_self_decide(
             "delegation_id": delegation_id,
             "delegating_actor": _redact_free_text(delegation.get("delegating_actor")),
             "receiving_actor": BUILDER_APPROVAL_ACTOR,
-            "granted_scope": _string_list(delegation.get("granted_scope")),
+            "granted_scope": granted_scopes,
             "required_scope": required_scopes,
             "policy": {
                 "allowed_env_profiles": sorted(_BUILDER_ALLOWED_ENV_PROFILES),
                 "env_profile": profile,
-                "stage6_lens_authority_only": True,
+                "stage6_lens_authority_only": not full_operator_authority,
+                "full_operator_authority": full_operator_authority,
+                "any_approval_request_allowed": full_operator_authority,
                 "delegation_required": True,
                 "delegation_id": delegation_id,
                 "operator_decision_recorded": True,
@@ -754,7 +820,10 @@ def builder_self_decide(
                 "requires_explicit_enable": False,
                 "production_allowed": False,
                 "regulated_profile_allowed": False,
-                "memory_write": False,
+                "subdelegation_allowed": False,
+                "memory_write": bool(delegation_governance.get("memory_write")) if full_operator_authority else False,
+                "workflow_edits_allowed": bool(delegation_governance.get("workflow_edits_allowed")),
+                "stage_closure_allowed": bool(delegation_governance.get("stage_closure_allowed")),
             },
         }
         receipt_path = _write_delegated_operator_approval_receipt(receipt)

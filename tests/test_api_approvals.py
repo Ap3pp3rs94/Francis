@@ -418,6 +418,7 @@ def test_builder_delegated_operator_authority_writes_receipts_and_grants_stage6_
     assert result["authority"] == "delegated_operator"
     assert result["delegation_id"] == delegation_id
     assert result["stage6_closed"] is False
+
     updated_config = json.loads(summon_config.read_text(encoding="utf-8"))
     assert updated_config["requires_explicit_enable"] is True
     for flag in (
@@ -447,6 +448,115 @@ def test_builder_delegated_operator_authority_writes_receipts_and_grants_stage6_
         assert receipt["governance"]["stage6_lens_authority_only"] is True
         assert receipt["governance"]["requires_explicit_enable_changed"] is False
         assert Path(str(receipt["receipt_path"])).exists()
+
+
+def test_full_operator_delegation_receipt_is_inspectable_and_referenced_by_builder_approval(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.governance import approvals
+
+    delegation = approvals.create_operator_delegation_receipt(
+        delegating_actor="Austin",
+        receiving_actor="codex.builder",
+        granted_scope=[approvals.FULL_OPERATOR_AUTHORITY_SCOPE],
+        reason="austin_grants_codex_full_operator_authority",
+        expiry_policy="active_until_explicit_revocation",
+        governance_overrides={
+            "operator_decision_record": True,
+            "delegated_operator_authority": True,
+            "subdelegation_allowed": False,
+            "production_allowed": False,
+            "regulated_profile_allowed": False,
+            "memory_write": True,
+            "workflow_edits_allowed": True,
+            "stage_closure_allowed": True,
+        },
+    )
+    delegation_id = str(delegation["delegation_id"])
+    assert delegation_id.startswith("opdel_")
+
+    receipt_path = data_root / "approvals" / "operator_delegation_receipts" / f"{delegation_id}.json"
+    assert receipt_path.exists()
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert receipt["kind"] == "operator.delegation.receipt"
+    assert receipt["delegating_actor"] == "Austin"
+    assert receipt["receiving_actor"] == "codex.builder"
+    assert receipt["granted_scope"] == ["*"]
+    assert receipt["reason"] == "austin_grants_codex_full_operator_authority"
+    assert receipt["expiry_policy"] == "active_until_explicit_revocation"
+    assert receipt["governance"]["operator_decision_record"] is True
+    assert receipt["governance"]["delegated_operator_authority"] is True
+    assert receipt["governance"]["full_operator_authority"] is True
+    assert receipt["governance"]["scope_limited"] is False
+    assert receipt["governance"]["subdelegation_allowed"] is False
+    assert receipt["governance"]["production_allowed"] is False
+    assert receipt["governance"]["regulated_profile_allowed"] is False
+    assert receipt["governance"]["memory_write"] is True
+    assert receipt["governance"]["workflow_edits_allowed"] is True
+    assert receipt["governance"]["stage_closure_allowed"] is True
+
+    client = TestClient(create_app())
+    listed = client.get("/approvals/delegations?receiving_actor=codex.builder&active_only=true")
+    assert listed.status_code == 200
+    listed_body = listed.json()
+    assert listed_body["ok"] is True
+    assert listed_body["total"] == 1
+    assert listed_body["items"][0]["delegation_id"] == delegation_id
+    assert listed_body["items"][0]["granted_scope"] == ["*"]
+    assert listed_body["items"][0]["governance"]["full_operator_authority"] is True
+
+    approval = approvals.request(
+        "security.fix.implementation",
+        "security fix implementation",
+        {
+            "objective": "security_fix:code_scanning_followup",
+            "context": "dev",
+            "workflow_path": ".github/workflows/ci.yml",
+        },
+    )
+    approval_id = str(approval["id"])
+
+    decided = client.post(
+        "/approvals/decision",
+        json={
+            "id": approval_id,
+            "action": "approve",
+            "actor": "codex.builder",
+            "reason": "security_fix_under_full_operator_delegation",
+        },
+    )
+
+    assert decided.status_code == 200
+    body = decided.json()
+    assert body["ok"] is True
+    assert body["status"] == "approved"
+    item = body["item"]
+    assert item["decision_actor"] == "codex.builder"
+    assert item["decision_kind"] == "delegated_operator_approval"
+    assert item["authority"] == "delegated_operator"
+    assert item["delegation_id"] == delegation_id
+    assert item["delegated_operator_required_scope"] == ["*"]
+    assert item["delegated_operator_approval_policy"]["full_operator_authority"] is True
+    assert item["delegated_operator_approval_policy"]["workflow_edits_allowed"] is True
+    assert item["delegated_operator_approval_policy"]["stage_closure_allowed"] is True
+    assert item["delegated_operator_approval_policy"]["memory_write"] is True
+
+    approval_receipt_path = Path(str(item["delegated_operator_approval_receipt_path"]))
+    assert approval_receipt_path.exists()
+    approval_receipt = json.loads(approval_receipt_path.read_text(encoding="utf-8"))
+    assert approval_receipt["delegation_id"] == delegation_id
+    assert approval_receipt["required_scope"] == ["*"]
+    assert approval_receipt["policy"]["full_operator_authority"] is True
+    assert approval_receipt["policy"]["subdelegation_allowed"] is False
 
 
 def test_builder_delegated_operator_authority_requires_dev_or_workstation_profile(
