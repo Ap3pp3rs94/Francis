@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from francis.api.errors import api_error_message
 from francis.world_state.operator_mode import snapshot as operator_mode_snapshot
 
 
@@ -28,7 +29,7 @@ def posture_write_guard(
     try:
         operator_state = operator_mode_snapshot()
     except Exception as exc:
-        return f"{verification_prefix}: {exc}"
+        return f"{verification_prefix}: {api_error_message(exc, route='operator_posture')}"
 
     if not bool(operator_state.get("ok")):
         return f"{verification_prefix}."

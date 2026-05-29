@@ -42745,6 +42745,35 @@ Latest validation for protocol TLS minimum-version hardening:
   connectors/protocols/websocket_connector.py`
   Result: `passed`
 
+### 2026-05-28 - Operator posture guard stops returning exception text
+
+Roadmap area: GitHub security cleanup / API boundary hardening.
+
+Material change:
+
+- The shared operator posture write guard no longer interpolates raw exception
+  text from posture snapshot failures into API-visible denial messages.
+- Snapshot exceptions are logged internally through the API error boundary and
+  surfaced to callers only as the stable `internal_api_error` code.
+- This reduces the remaining `py/stack-trace-exposure` surface that feeds
+  mission, operation, system, and chat mutation-denial routes.
+
+Latest validation for operator posture sanitization:
+
+- `python -m pytest
+  tests/test_api_security_boundaries.py::test_operator_posture_guard_sanitizes_snapshot_errors
+  tests/test_api_security_boundaries.py::test_api_boundary_returns_stable_error_code_without_exception_text
+  -q --tb=short --maxfail=1`
+  Result: `passed; 2 passed`
+- `python -m ruff check src/francis/api/routes/_operator_posture.py
+  tests/test_api_security_boundaries.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/_operator_posture.py
+  tests/test_api_security_boundaries.py`
+  Result: `passed; 2 files already formatted`
+- `python -m mypy src/francis/api/routes/_operator_posture.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

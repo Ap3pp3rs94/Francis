@@ -32,6 +32,21 @@ def test_api_boundary_returns_stable_error_code_without_exception_text(monkeypat
     assert "traceback" not in json.dumps(body, sort_keys=True).lower()
 
 
+def test_operator_posture_guard_sanitizes_snapshot_errors(monkeypatch) -> None:
+    from francis.api.routes import _operator_posture
+
+    def fail_snapshot() -> dict[str, object]:
+        raise RuntimeError("operator posture traceback token=posture-secret")
+
+    monkeypatch.setattr(_operator_posture, "operator_mode_snapshot", fail_snapshot)
+
+    reason = _operator_posture.posture_write_guard("writing test state")
+
+    assert reason == "Writes are blocked until operator posture can be verified: internal_api_error"
+    assert "posture-secret" not in reason
+    assert "traceback" not in reason.lower()
+
+
 def test_plugin_runtime_paths_reject_registry_traversal(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
