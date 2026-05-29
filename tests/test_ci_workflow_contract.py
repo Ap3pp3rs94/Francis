@@ -25,6 +25,7 @@ def test_ci_workflow_triggers_cancel_stale_runs() -> None:
 
     assert triggers["push"]["branches"] == ["main"]
     assert "pull_request" in triggers
+    assert triggers["workflow_dispatch"] is None
     assert workflow["concurrency"] == {
         "group": "${{ github.workflow }}-${{ github.ref }}",
         "cancel-in-progress": True,
