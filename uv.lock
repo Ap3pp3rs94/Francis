@@ -1256,7 +1256,7 @@ iot = [
     { name = "bleak" },
     { name = "paho-mqtt" },
     { name = "pyserial" },
-    { name = "zeroconf" },
+    { name = "zeroconf", specifier = ">=0.149.7" },
 ]
 llm = [
     { name = "llama-index" },
@@ -1387,7 +1387,7 @@ requires-dist = [
     { name = "uvicorn", marker = "extra == 'web'" },
     { name = "watchdog", marker = "extra == 'ops'" },
     { name = "websockets", marker = "extra == 'web'" },
-    { name = "zeroconf", marker = "extra == 'iot'" },
+    { name = "zeroconf", marker = "extra == 'iot'", specifier = ">=0.149.7" },
 ]
 provides-extras = ["core", "ops", "web", "data", "scraping", "llm", "security", "observability", "comms", "iot", "reports", "dev"]
 
