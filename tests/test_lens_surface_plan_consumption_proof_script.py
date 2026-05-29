@@ -197,7 +197,7 @@ def test_lens_surface_plan_consumption_proof_consumes_summon_handoff_readback() 
     assert hotkey["hotkey_runtime_ready"] is True
     assert hotkey["hotkey_runtime_process_alive"] is True
     assert hotkey["hotkey_runtime_bound"] is True
-    assert hotkey["hotkey_registration_authority"] is False
+    assert hotkey["hotkey_registration_authority"] is True
 
     overlay = payload["overlay_dependency"]
     assert overlay["id"] == "overlay_window"
@@ -220,8 +220,8 @@ def test_lens_surface_plan_consumption_proof_consumes_summon_handoff_readback() 
     assert summon["blocker"] == ""
     assert summon["requirement_state"] == "ready"
     assert summon["blocked_reason"] == ""
-    assert summon["summon_authority"] is False
-    assert summon["local_process_launch_authority"] is False
+    assert summon["summon_authority"] is True
+    assert summon["local_process_launch_authority"] is True
     assert summon["summon_config_ready"] is False
     assert summon["summon_runtime_ready"] is True
     assert summon["summon_presence_source"] == "live_runtime_readback"

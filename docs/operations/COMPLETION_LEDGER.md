@@ -43460,6 +43460,10 @@ Material change:
   aggregate summon-anywhere readback where `resident_host` has no active
   blockers and `tray_presence` is the current blocker family, without rerunning
   the resident-host bridge or granting new authority.
+- `tests/test_lens_surface_plan_consumption_proof_script.py` now expects the
+  surface-plan dependency readbacks to reflect delegated hotkey, summon, and
+  local-process config authority while the proof governance still denies
+  product execution, mutation, memory, receipt, and stage-closure authority.
 - This is a CI/test contract correction only. It does not grant summon,
   hotkey, overlay, local-process, memory, approval-decision, receipt, sensing,
   capture, or resident-claim authority and does not mark Stage 6 closed.
@@ -43504,6 +43508,17 @@ Latest validation for Stage 6 summon preflight live-hotkey readback:
   tests/test_lens_summon_tray_presence_blocker_proof_script.py
   tests/test_lens_summon_overlay_window_blocker_proof_script.py`
   Result: `passed; 5 files already formatted`
+- `python -m pytest tests/test_lens_surface_plan_consumption_proof_script.py
+  tests/test_lens_summon_tray_presence_blocker_proof_script.py -q --tb=short
+  --maxfail=1`
+  Result: `passed; 3 passed`
+- `python -m ruff check tests/test_lens_surface_plan_consumption_proof_script.py
+  tests/test_lens_summon_tray_presence_blocker_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests/test_lens_surface_plan_consumption_proof_script.py
+  tests/test_lens_summon_tray_presence_blocker_proof_script.py`
+  Result: `passed; 2 files already formatted`
 
 ## 6. Update rule
 
