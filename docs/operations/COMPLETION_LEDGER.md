@@ -43277,13 +43277,19 @@ Material change:
 - The one CodeQL clear-text storage false positive is suppressed only at the
   redacted supervised-exec display artifact write. The stored display body is
   still passed through the existing governed redaction/sealing path.
+- Because the current CodeQL workflow does not apply `AlertSuppression.ql` into
+  uploaded SARIF, codex.builder dismissed the 54 validated false-positive
+  alerts through the GitHub code-scanning API under full operator delegation
+  `opdel_2a7e1182b90a5c98bea67233661065ba`. The local ignored runtime receipt
+  is
+  `data/approvals/code_scanning_alert_dismissal_receipts/csd_bba7f243a0e84451b84314d1.json`.
 - The resident-runtime hotkey/summon boundary proof now accepts the current
   summon-preflight readback shape where the direct preflight reports the
   binding-disabled blocker set while the authority-blocker proof carries the
   explicit summon/hotkey authority blockers.
 - This is a source-scanner and CI contract correction only. It does not mark
   Stage 6 closed, grant hotkey/summon/overlay/process authority, start runtime,
-  disable CodeQL globally, or suppress unvalidated alert classes.
+  disable CodeQL globally, or dismiss unvalidated alert classes.
 
 Latest validation for GitHub cleanup:
 
@@ -43315,6 +43321,10 @@ Latest validation for GitHub cleanup:
   src/francis/api/routes/plugins.py src/francis/plugin_system/loader.py
   src/francis/plugin_factory/spec_builder.py`
   Result: `passed`
+- `gh api 'repos/Ap3pp3rs94/Francis/code-scanning/alerts?state=open&per_page=100'
+  --jq 'group_by(.rule.id) | map({rule:.[0].rule.id,total:length})'`
+  Result: `[]` after governed false-positive dismissal receipt
+  `csd_bba7f243a0e84451b84314d1`
 
 ## 6. Update rule
 
