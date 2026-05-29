@@ -140,6 +140,9 @@ def test_lens_stage6_checkpoint_prefers_runtime_authority_family_chain_before_le
     assert "$ResidentRuntimeHotkeySummonBoundaryProofPassed -and" in script
     assert "$ResidentRuntimeOverlayWindowBoundaryProofPassed -and" in script
     assert "$ResidentRuntimeResidentClaimBoundaryProofPassed" in script
+    assert "$SummonPreflightAuthorityBlockersObserved = (" in script
+    assert "$SummonPreflightBindingBlockersObserved = (" in script
+    assert "($SummonPreflightAuthorityBlockersObserved -or $SummonPreflightBindingBlockersObserved)" in script
     assert script.index("} elseif ($ResidentRuntimeAuthorityFamilyProofChainObserved) {") < script.index(
         "} elseif ($RuntimeGrantReadinessSpineObserved"
     )
@@ -1179,6 +1182,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert runtime_hotkey_boundary["hotkey_summon_boundary_observed"] is True
     assert runtime_hotkey_boundary["previous_tray_presence_family_observed"] is True
     assert runtime_hotkey_boundary["summon_preflight_observed"] is True
+    assert runtime_hotkey_boundary["summon_preflight_binding_blockers_observed"] is True
     assert runtime_hotkey_boundary["authority_blockers_proof_observed"] is True
     assert runtime_hotkey_boundary["side_effects_denied"] is True
     assert runtime_hotkey_boundary["fourth_authority_family_consumed"] is True
@@ -1601,7 +1605,7 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert "lens_summon_binding_disabled_pending_authority" in os_binding_groups["summon_binding"]
     assert "tray_host_disabled" in os_binding_groups["tray_presence"]
     assert "overlay_window_disabled" in os_binding_groups["overlay_window"]
-    assert "summon_authority_not_granted" in os_binding_groups["authority"]
+    assert "local_process_launch_authority_not_granted" in os_binding_groups["authority"]
     assert command_palette_os_binding["command_palette"]["availability"] == "chat_ui_only"
     assert command_palette_os_binding["command_palette"]["os_level_command_palette"] is False
     os_binding_candidate = command_palette_os_binding["os_binding_candidate"]
@@ -1628,8 +1632,6 @@ def test_lens_stage6_checkpoint_reports_blocked_done_criteria_without_authority(
     assert "os_level_command_palette_missing" in os_binding_candidate["blocked_by"]
     assert "global_hotkey_binding_disabled" in os_binding_candidate["blocked_by"]
     assert "lens_summon_binding_disabled_pending_authority" in os_binding_candidate["blocked_by"]
-    assert "summon_authority_not_granted" in os_binding_candidate["blocked_by"]
-    assert "hotkey_registration_authority_not_granted" in os_binding_candidate["blocked_by"]
     assert "local_process_launch_authority_not_granted" in os_binding_candidate["blocked_by"]
     assert os_binding_candidate["current_authorized_effect"] == "readback_only_status"
     assert os_binding_candidate["candidate_effect_if_authorized"] == (

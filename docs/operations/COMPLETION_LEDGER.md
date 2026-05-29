@@ -43326,6 +43326,43 @@ Latest validation for GitHub cleanup:
   Result: `[]` after governed false-positive dismissal receipt
   `csd_bba7f243a0e84451b84314d1`
 
+### 2026-05-29 - Stage 6 checkpoint consumes current proof readbacks
+
+Roadmap area: Stage 6 Lens checkpoint / resident runtime authority-family
+proof readbacks and summon-anywhere OS-binding evidence.
+
+Material change:
+
+- `scripts/lens-stage6-checkpoint.ps1` now accepts the same current summon
+  preflight evidence shape as
+  `scripts/lens-resident-runtime-hotkey-summon-boundary-proof.ps1`: authority
+  remains denied, while the direct preflight may expose the
+  binding-disabled blocker set instead of duplicating every authority blocker.
+- The checkpoint command-palette OS-binding recheck now matches the dedicated
+  `scripts/lens-command-palette-os-binding-proof.ps1` projection, where the
+  current candidate blockers carry the observed local-process authority blocker
+  and keep summon/hotkey authority as required authority, not duplicated
+  blocker evidence.
+- This is a CI/checkpoint contract correction only. It does not mark Stage 6
+  closed, grant summon/hotkey/overlay/process authority, start runtime, or
+  change operator-facing authority decisions.
+
+Latest validation for Stage 6 checkpoint proof-readback alignment:
+
+- `python -m pytest tests/test_lens_stage6_checkpoint_script.py
+  tests/test_lens_resident_runtime_hotkey_summon_boundary_proof_script.py
+  tests/test_lens_command_palette_os_binding_proof_script.py -q --tb=short
+  --maxfail=1`
+  Result: `passed`
+- PowerShell parser validation for `scripts/lens-stage6-checkpoint.ps1`
+  Result: `passed`
+- `python -m ruff check tests/test_lens_stage6_checkpoint_script.py`
+  Result: `passed`
+- `python -m ruff format --check tests/test_lens_stage6_checkpoint_script.py`
+  Result: `passed; 1 file already formatted`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

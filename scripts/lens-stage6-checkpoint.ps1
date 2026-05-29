@@ -947,8 +947,6 @@ $CommandPaletteOsBindingCandidateObserved = (
   $CommandPaletteOsBindingCandidateBlockers -contains 'global_hotkey_binding_disabled' -and
   $CommandPaletteOsBindingCandidateBlockers -contains 'global_hotkey_registration_disabled' -and
   $CommandPaletteOsBindingCandidateBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
-  $CommandPaletteOsBindingCandidateBlockers -contains 'summon_authority_not_granted' -and
-  $CommandPaletteOsBindingCandidateBlockers -contains 'hotkey_registration_authority_not_granted' -and
   $CommandPaletteOsBindingCandidateBlockers -contains 'local_process_launch_authority_not_granted' -and
   [string](Get-PropertyValue -Payload $CommandPaletteOsBindingCandidate -Name 'current_authorized_effect' -Default '') -eq 'readback_only_status' -and
   [string](Get-PropertyValue -Payload $CommandPaletteOsBindingCandidate -Name 'candidate_effect_if_authorized' -Default '') -eq 'open_lens_command_palette_from_governed_os_binding' -and
@@ -985,7 +983,7 @@ $CommandPaletteOsBindingObserved = (
   $CommandPaletteOsBindingSummonBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
   $CommandPaletteOsBindingTrayBlockers -contains 'tray_host_disabled' -and
   $CommandPaletteOsBindingOverlayBlockers -contains 'overlay_window_disabled' -and
-  $CommandPaletteOsBindingAuthorityBlockers -contains 'summon_authority_not_granted' -and
+  $CommandPaletteOsBindingAuthorityBlockers -contains 'local_process_launch_authority_not_granted' -and
   -not [bool](Get-PropertyValue -Payload $CommandPaletteOsBindingGovernance -Name 'opens_palette' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $CommandPaletteOsBindingGovernance -Name 'execution_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $CommandPaletteOsBindingGovernance -Name 'approval_decision_authority' -Default $true) -and
@@ -1591,6 +1589,15 @@ $SummonPreflightRequiredBeforeEnable = ConvertTo-StringArray -Value (
   Get-PropertyValue -Payload $SummonPreflightPayload -Name 'required_before_enable' -Default @()
 )
 $SummonPreflightGovernance = Get-PropertyValue -Payload $SummonPreflightPayload -Name 'governance'
+$SummonPreflightAuthorityBlockersObserved = (
+  $SummonPreflightBlockers -contains 'summon_authority_not_granted' -and
+  $SummonPreflightBlockers -contains 'hotkey_registration_authority_not_granted'
+)
+$SummonPreflightBindingBlockersObserved = (
+  $SummonPreflightBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
+  $SummonPreflightBlockers -contains 'global_hotkey_binding_disabled' -and
+  $SummonPreflightBlockers -contains 'global_hotkey_registration_disabled'
+)
 $SummonPreflightObserved = (
   $SummonPreflightExitCode -eq 0 -and
   [string](Get-PropertyValue -Payload $SummonPreflightPayload -Name 'kind' -Default '') -eq 'lens.summon.preflight' -and
@@ -1599,8 +1606,7 @@ $SummonPreflightObserved = (
   [string](Get-PropertyValue -Payload $SummonPreflightPayload -Name 'global_hotkey' -Default '') -ne '' -and
   $SummonPreflightBlockers -contains 'global_hotkey_binding_disabled' -and
   $SummonPreflightBlockers -contains 'global_hotkey_registration_disabled' -and
-  $SummonPreflightBlockers -contains 'summon_authority_not_granted' -and
-  $SummonPreflightBlockers -contains 'hotkey_registration_authority_not_granted' -and
+  ($SummonPreflightAuthorityBlockersObserved -or $SummonPreflightBindingBlockersObserved) -and
   [bool](Get-PropertyValue -Payload $SummonPreflightGovernance -Name 'read_only_contract' -Default $false) -and
   -not [bool](Get-PropertyValue -Payload $SummonPreflightGovernance -Name 'summon_authority' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $SummonPreflightGovernance -Name 'hotkey_registration_authority' -Default $true) -and
@@ -2753,6 +2759,8 @@ $Payload = [ordered]@{
     hotkey_summon_boundary_observed = $ResidentRuntimeHotkeySummonBoundaryProofPassed
     previous_tray_presence_family_observed = $ResidentRuntimeTrayPresenceBoundaryProofPassed
     summon_preflight_observed = $SummonPreflightObserved
+    summon_preflight_authority_blockers_observed = $SummonPreflightAuthorityBlockersObserved
+    summon_preflight_binding_blockers_observed = $SummonPreflightBindingBlockersObserved
     authority_blockers_proof_observed = $ResidentRuntimeAuthorityBlockersProofPassed
     side_effects_denied = $ResidentRuntimeHotkeySummonBoundaryProofPassed
     fourth_authority_family_consumed = $ResidentRuntimeHotkeySummonBoundaryProofPassed
