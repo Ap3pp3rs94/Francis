@@ -43061,6 +43061,35 @@ alignment:
 - `python -m mypy src/francis/agent/executor.py`
   Result: `passed`
 
+### 2026-05-29 - Persistent supervision plan test matches delegated authority config
+
+Roadmap area: GitHub CI cleanup / Stage 6 Lens authority-readback contract.
+
+Material change:
+
+- `tests/test_lens_persistent_supervision_plan_script.py` now asserts the
+  current delegated-authority split truthfully: hotkey registration, summon,
+  and local process launch authority can be present while binding/runtime
+  enablement remains disabled and the persistent supervision plan remains
+  blocked.
+- This only aligns a stale assertion with the repository's governed runtime
+  config. It does not mark Stage 6 closed, grant new authority, start runtime
+  processes, or change product behavior.
+
+Latest validation for the persistent-supervision CI assertion:
+
+- `python -m pytest
+  tests/test_lens_persistent_supervision_plan_script.py::test_lens_persistent_supervision_plan_stays_blocked_without_authority
+  tests/test_lens_hotkey_binding_script.py::test_lens_hotkey_binding_start_refuses_default_blocked_config
+  tests/test_lens_hotkey_binding_script.py::test_lens_hotkey_binding_run_refuses_default_blocked_config
+  -q --tb=short --maxfail=1`
+  Result: `passed; 3 passed`
+- `python -m ruff check tests/test_lens_persistent_supervision_plan_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests/test_lens_persistent_supervision_plan_script.py`
+  Result: `passed; 1 file already formatted`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

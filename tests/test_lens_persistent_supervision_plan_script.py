@@ -131,7 +131,10 @@ def test_lens_persistent_supervision_plan_stays_blocked_without_authority(tmp_pa
     assert hotkey["blocker"] == "global_hotkey_binding_missing"
     assert hotkey["requirement_state"] == "binding_disabled"
     assert hotkey["global_hotkey"] == "Ctrl+Alt+Space"
-    assert hotkey["hotkey_registration_authority"] is False
+    assert hotkey["binding_enabled"] is False
+    assert hotkey["register_hotkey"] is False
+    assert hotkey["hotkey_registration_authority"] is True
+    assert hotkey["hotkey_config_ready"] is False
 
     overlay = dependencies["overlay_window"]
     assert overlay["route"] == "/lens/overlay"
@@ -149,8 +152,11 @@ def test_lens_persistent_supervision_plan_stays_blocked_without_authority(tmp_pa
     assert summon["blocked_reason"] == "lens_summon_binding_disabled_pending_authority"
     assert summon["summon_runner"] == "scripts/lens-summon.ps1"
     assert summon["local_palette_launcher"] == "scripts/lens-command-palette.ps1 -Mode LocalOpen"
-    assert summon["summon_authority"] is False
-    assert summon["local_process_launch_authority"] is False
+    assert summon["summon_enabled"] is False
+    assert summon["binding_enabled"] is False
+    assert summon["summon_authority"] is True
+    assert summon["local_process_launch_authority"] is True
+    assert summon["summon_config_ready"] is False
 
     assert payload["first_missing_requirement_handoff"] == resident_host
 
