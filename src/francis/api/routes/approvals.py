@@ -12,6 +12,7 @@ from francis.governance.approvals import (
     BUILDER_APPROVAL_ACTOR,
     builder_self_decide,
     decide as decide_request,
+    list_operator_delegation_receipts,
     list_requests,
     request as create_request,
 )
@@ -106,6 +107,18 @@ def list_approvals(status: str = "pending", limit: int = 100) -> dict[str, objec
         return {"items": [_approval_item(item) for item in list_requests(status=status, limit=limit)]}
     except Exception as exc:
         return {"items": [], "error": str(exc)}
+
+
+@router.get("/delegations")
+def list_delegations(limit: int = 100, receiving_actor: str = "", active_only: bool = False) -> dict[str, object]:
+    try:
+        return list_operator_delegation_receipts(
+            limit=limit,
+            receiving_actor=receiving_actor,
+            active_only=active_only,
+        )
+    except Exception as exc:
+        return {"ok": False, "items": [], "error": str(exc)}
 
 
 @router.post("/decision")

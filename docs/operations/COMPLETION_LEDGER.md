@@ -42465,6 +42465,72 @@ Latest validation for CI timeout budget:
 - `gh run view 26611346358 --json status,conclusion,jobs,url`
   Result: `completed; conclusion=success; all four jobs passed`
 
+### 2026-05-28 - Stage 6 Lens authority gates use delegated operator receipts
+
+Roadmap area: Stage 6 / Lens MVP, governed authority grants for Lens summon
+readiness.
+
+Material change:
+
+- Austin's operator decision was recorded as a durable
+  `operator.delegation.receipt` delegating bounded Stage 6 Lens authority to
+  `codex.builder`.
+- The receipt is inspectable through `GET /approvals/delegations` and is active
+  only under `FRANCIS_ENV_PROFILE=dev` or `workstation`.
+- `codex.builder` can now approve only the Stage 6 Lens authority-request
+  actions covered by that delegation, and delegated approvals are recorded as
+  `decision_kind=delegated_operator_approval` with
+  `authority=delegated_operator`.
+- The delegated path still denies production or regulated profiles and does not
+  weaken the existing builder self-approval path for generic build/dev
+  artifacts.
+- Stage 6 Lens authority was granted under delegation id
+  `opdel_dc02f01385545fe89510142312aaf455`.
+- Approval records written under that delegation:
+  `52314fda-5210-423a-b532-ef06c5d87ac7` for
+  `lens.summon.action_authority`,
+  `20e933fe-3d1a-4f6f-a74c-3b7473e23312` for
+  `lens.os_binding.command_palette_binding_authority`, and
+  `7bb2b91b-07ff-4fb4-8dfe-1a1cb963211d` for
+  `lens.overlay.window_authority`.
+- `config/runtime/lens/summon.json` now has
+  `summon_authority=true`, `hotkey_registration_authority=true`,
+  `overlay_control_authority=true`, and
+  `local_process_launch_authority=true`.
+- Four `operator.delegated_authority.grant_receipt` records were written under
+  `data/approvals/delegated_operator_authority_grant_receipts/`, one for each
+  config authority flag, each referencing the same delegation id and the
+  delegated approval id(s).
+- This does not flip `requires_explicit_enable`, start Lens runtime surfaces,
+  launch local processes, register hotkeys, open overlays, write memory, or mark
+  Stage 6 closed.
+
+Latest validation for delegated Stage 6 Lens authority:
+
+- `POST /approvals/decision` via local `TestClient` with
+  `FRANCIS_ENV_PROFILE=dev`, actor `codex.builder`, and action `approve` for
+  the three Stage 6 Lens authority request actions
+  Result: `ok=true; status=approved; decision_kind=delegated_operator_approval;
+  authority=delegated_operator; delegation_id=opdel_dc02f01385545fe89510142312aaf455`
+- `GET /approvals/delegations?receiving_actor=codex.builder&active_only=true`
+  Result: `ok=true; total=1; latest.kind=operator.delegation.receipt;
+  latest.delegation_id=opdel_dc02f01385545fe89510142312aaf455`
+- Read-only receipt verification for delegation, delegated approvals, and four
+  authority grant receipts
+  Result: `passed; all records reference
+  opdel_dc02f01385545fe89510142312aaf455 and authority=delegated_operator`
+- `python -m pytest tests/test_api_approvals.py -q --tb=short --maxfail=1`
+  Result: `passed`
+- `python -m mypy src/francis/governance/approvals.py
+  src/francis/api/routes/approvals.py`
+  Result: `passed`
+- `python -m ruff check src/francis/governance/approvals.py
+  src/francis/api/routes/approvals.py tests/test_api_approvals.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/governance/approvals.py
+  src/francis/api/routes/approvals.py tests/test_api_approvals.py`
+  Result: `passed; 3 files already formatted`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -287,6 +287,218 @@ def test_builder_self_approval_requires_dev_or_workstation_profile(
     assert (data_root / "approvals" / "pending" / f"{approval_id}.json").exists()
 
 
+def test_builder_delegated_operator_authority_writes_receipts_and_grants_stage6_lens_flags(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    summon_config = tmp_path / "repo" / "config" / "runtime" / "lens" / "summon.json"
+    summon_config.parent.mkdir(parents=True, exist_ok=True)
+    summon_config.write_text(
+        json.dumps(
+            {
+                "kind": "lens.summon.config",
+                "version": 1,
+                "requires_explicit_enable": True,
+                "summon_authority": False,
+                "hotkey_registration_authority": False,
+                "overlay_control_authority": False,
+                "local_process_launch_authority": False,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.governance import approvals
+
+    delegation = approvals.create_operator_delegation_receipt(
+        delegating_actor="Austin",
+        receiving_actor="codex.builder",
+        granted_scope=list(approvals.STAGE6_LENS_AUTHORITY_SCOPES),
+        reason="austin_delegates_stage6_lens_authority",
+        expiry_policy="stage6_lens_authority_gates_until_explicit_revocation",
+    )
+    delegation_id = str(delegation["delegation_id"])
+    delegation_path = data_root / "approvals" / "operator_delegation_receipts" / f"{delegation_id}.json"
+    assert delegation_path.exists()
+
+    client = TestClient(create_app())
+    listed = client.get("/approvals/delegations?receiving_actor=codex.builder&active_only=true")
+    assert listed.status_code == 200
+    listed_body = listed.json()
+    assert listed_body["ok"] is True
+    assert listed_body["items"][0]["kind"] == "operator.delegation.receipt"
+    assert listed_body["items"][0]["delegation_id"] == delegation_id
+    assert listed_body["items"][0]["delegating_actor"] == "Austin"
+    assert listed_body["items"][0]["receiving_actor"] == "codex.builder"
+    assert listed_body["items"][0]["authority"] == "delegated_operator"
+
+    action_by_scope = {
+        "lens.summon_authority": "lens.summon.action_authority",
+        "lens.hotkey_registration_authority": "lens.os_binding.command_palette_binding_authority",
+        "lens.overlay_control_authority": "lens.overlay.window_authority",
+    }
+    approval_ids: dict[str, list[str]] = {}
+    for scope, action in action_by_scope.items():
+        approval = approvals.request(
+            action,
+            "stage6 delegated lens authority",
+            {
+                "stage": "stage6",
+                "plane": "dev",
+                "authority_scope": scope,
+                "objective": "approve Stage 6 Lens authority gate under Austin delegation",
+            },
+        )
+        approval_id = str(approval["id"])
+        decided = client.post(
+            "/approvals/decision",
+            json={
+                "id": approval_id,
+                "action": "approve",
+                "actor": "codex.builder",
+                "reason": "delegated_stage6_lens_authority",
+            },
+        )
+
+        assert decided.status_code == 200
+        body = decided.json()
+        assert body["ok"] is True
+        assert body["status"] == "approved"
+        item = body["item"]
+        assert item["decision_actor"] == "codex.builder"
+        assert item["decision_kind"] == "delegated_operator_approval"
+        assert item["authority"] == "delegated_operator"
+        assert item["delegated_operator_approval"] is True
+        assert item["builder_self_approval"] is False
+        assert item["operator_approval"] is False
+        assert item["delegation_id"] == delegation_id
+        assert item["delegating_actor"] == "Austin"
+        assert scope in item["delegated_operator_required_scope"]
+
+        receipt_path = Path(str(item["delegated_operator_approval_receipt_path"]))
+        assert receipt_path.exists()
+        assert receipt_path.parent == data_root / "approvals" / "delegated_operator_approval_receipts"
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        assert receipt["kind"] == "francis.approval.delegated_operator_approval_receipt"
+        assert receipt["approval_id"] == approval_id
+        assert receipt["actor"] == "codex.builder"
+        assert receipt["authority"] == "delegated_operator"
+        assert receipt["delegation_id"] == delegation_id
+        assert scope in receipt["required_scope"]
+        approval_ids.setdefault(scope, []).append(approval_id)
+
+    os_binding_approval_id = approval_ids["lens.hotkey_registration_authority"][0]
+    result = approvals.apply_stage6_lens_delegated_authority_grants(
+        delegation_id=delegation_id,
+        actor="codex.builder",
+        reason="delegated_stage6_lens_config_authority_grants",
+        summon_config_path=summon_config,
+        approval_ids={
+            "summon_authority": approval_ids["lens.summon_authority"],
+            "hotkey_registration_authority": approval_ids["lens.hotkey_registration_authority"],
+            "overlay_control_authority": approval_ids["lens.overlay_control_authority"],
+            "local_process_launch_authority": [
+                approval_ids["lens.summon_authority"][0],
+                os_binding_approval_id,
+                approval_ids["lens.overlay_control_authority"][0],
+            ],
+        },
+    )
+
+    assert result["ok"] is True
+    assert result["status"] == "authority_granted"
+    assert result["authority"] == "delegated_operator"
+    assert result["delegation_id"] == delegation_id
+    assert result["stage6_closed"] is False
+    updated_config = json.loads(summon_config.read_text(encoding="utf-8"))
+    assert updated_config["requires_explicit_enable"] is True
+    for flag in (
+        "summon_authority",
+        "hotkey_registration_authority",
+        "overlay_control_authority",
+        "local_process_launch_authority",
+    ):
+        assert updated_config[flag] is True
+
+    receipts = result["receipts"]
+    assert [receipt["config_key"] for receipt in receipts] == [
+        "summon_authority",
+        "hotkey_registration_authority",
+        "overlay_control_authority",
+        "local_process_launch_authority",
+    ]
+    for receipt in receipts:
+        assert receipt["kind"] == "operator.delegated_authority.grant_receipt"
+        assert receipt["actor"] == "codex.builder"
+        assert receipt["authority"] == "delegated_operator"
+        assert receipt["delegation_id"] == delegation_id
+        assert receipt["delegating_actor"] == "Austin"
+        assert receipt["before"] is False
+        assert receipt["after"] is True
+        assert receipt["approval_ids"]
+        assert receipt["governance"]["stage6_lens_authority_only"] is True
+        assert receipt["governance"]["requires_explicit_enable_changed"] is False
+        assert Path(str(receipt["receipt_path"])).exists()
+
+
+def test_builder_delegated_operator_authority_requires_dev_or_workstation_profile(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "production")
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.governance import approvals
+
+    approvals.create_operator_delegation_receipt(
+        delegating_actor="Austin",
+        receiving_actor="codex.builder",
+        granted_scope=list(approvals.STAGE6_LENS_AUTHORITY_SCOPES),
+        reason="austin_delegates_stage6_lens_authority",
+        expiry_policy="stage6_lens_authority_gates_until_explicit_revocation",
+    )
+    approval = approvals.request(
+        "lens.summon.action_authority",
+        "stage6 delegated lens authority",
+        {"stage": "stage6", "authority_scope": "lens.summon_authority"},
+    )
+    approval_id = str(approval["id"])
+
+    denied = TestClient(create_app()).post(
+        "/approvals/decision",
+        json={
+            "id": approval_id,
+            "action": "approve",
+            "actor": "codex.builder",
+            "reason": "production_profile_must_not_use_delegation",
+        },
+    )
+
+    assert denied.status_code == 200
+    body = denied.json()
+    assert body["ok"] is False
+    assert body["status"] == "denied"
+    assert body["error"] == "builder_self_approval_denied"
+    assert body["governance"]["reason"] == "env_profile_not_allowed"
+    assert body["governance"]["env_profile"] == "production"
+    assert (data_root / "approvals" / "pending" / f"{approval_id}.json").exists()
+    assert not (data_root / "approvals" / "approved" / f"{approval_id}.json").exists()
+    assert not (data_root / "approvals" / "delegated_operator_approval_receipts").exists()
+
+
 def test_approval_api_redacts_sealed_payload_digests(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
