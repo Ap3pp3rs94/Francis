@@ -42441,9 +42441,10 @@ Material change:
 - The CI Pytest step timeout was increased from 45 minutes to 90 minutes, and
   the job timeout was increased from 55 minutes to 105 minutes.
 - The workflow contract test was updated to lock the new bounded timeouts.
+- Replacement GitHub Actions run `26611346358` passed all four CI matrix jobs:
+  Ubuntu 3.12, Ubuntu 3.13, Windows 3.12, and Windows 3.13.
 - This does not skip tests, lower failure sensitivity, remove Windows 3.12 from
-  the matrix, mark a timed-out run as green, or claim the replacement CI run has
-  passed before GitHub reports it.
+  the matrix, or mark a timed-out run as green.
 
 Latest validation for CI timeout budget:
 
@@ -42461,6 +42462,8 @@ Latest validation for CI timeout budget:
   tests/test_api_approvals.py src/francis/governance/approvals.py
   src/francis/api/routes/approvals.py`
   Result: `passed; 4 files already formatted`
+- `gh run view 26611346358 --json status,conclusion,jobs,url`
+  Result: `completed; conclusion=success; all four jobs passed`
 
 ## 6. Update rule
 
