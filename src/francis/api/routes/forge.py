@@ -105,9 +105,19 @@ def _registry_path() -> Path:
 
 def _is_under(root: Path, target: Path) -> bool:
     try:
-        _real_path(target).relative_to(_real_path(root))
-        return True
-    except Exception:
+        root_text = os.path.normcase(os.path.realpath(os.fspath(root)))
+        target_text = os.path.normcase(os.path.realpath(os.fspath(target)))
+        return os.path.commonpath([root_text, target_text]) == root_text
+    except (OSError, ValueError):
+        return False
+
+
+def _same_path(left: Path, right: Path) -> bool:
+    try:
+        left_text = os.path.normcase(os.path.realpath(os.fspath(left)))
+        right_text = os.path.normcase(os.path.realpath(os.fspath(right)))
+        return left_text == right_text
+    except OSError:
         return False
 
 
@@ -136,15 +146,21 @@ def _collection_record_path(collection: str, record_id: str) -> Path | None:
 
 
 def _resolve_generated_plugin_dir(plugin_id: str, generated_dir: str = "") -> Path | None:
-    text = _safe_str(generated_dir).strip() or plugin_id
-    if not text or any(ch in text for ch in ("\x00", "\n", "\r")):
+    normalized_id = _safe_record_id(plugin_id)
+    if not normalized_id:
         return None
     root = _real_path(repo_root() / "plugins" / "generated")
-    candidate = Path(text).expanduser()
+    expected = _real_path(root / normalized_id)
+    raw = _safe_str(generated_dir).strip()
+    if not raw:
+        return expected
+    if any(ch in raw for ch in ("\x00", "\n", "\r")):
+        return None
+    candidate = Path(raw).expanduser()
     if not candidate.is_absolute():
         candidate = root / candidate
     resolved = _real_path(candidate)
-    return resolved if _is_under(root, resolved) else None
+    return expected if _is_under(root, resolved) and _same_path(resolved, expected) else None
 
 
 def _record_id(item: dict[str, Any], collection: str, path: Path) -> str:

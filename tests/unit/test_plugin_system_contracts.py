@@ -70,6 +70,48 @@ def test_plugin_loader_normalizes_canonical_json_and_legacy_yaml(tmp_path: Path)
     assert legacy.tools[0].action == "run"
 
 
+def test_plugin_loader_rejects_specs_outside_trusted_root(monkeypatch, tmp_path: Path) -> None:
+    spec_dir = tmp_path / "spec"
+    outside_dir = tmp_path / "outside"
+    spec_dir.mkdir(parents=True, exist_ok=True)
+    outside_dir.mkdir(parents=True, exist_ok=True)
+
+    trusted_path = spec_dir / "trusted.json"
+    trusted_path.write_text(
+        json.dumps(
+            {
+                "plugin_id": "trusted.echo",
+                "name": "Trusted Echo",
+                "origin": "builtin",
+                "entrypoint": "plugin.py",
+            }
+        ),
+        encoding="utf-8",
+    )
+    outside_path = outside_dir / "outside.json"
+    outside_path.write_text(
+        json.dumps(
+            {
+                "plugin_id": "outside.echo",
+                "name": "Outside Echo",
+                "origin": "generated",
+                "entrypoint": "plugin.py",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    loader = PluginLoader(spec_dir=spec_dir)
+
+    assert loader.load(trusted_path) is not None
+    assert loader.load(outside_path) is None
+    assert loader.load(Path("..") / "outside" / "outside.json") is None
+    assert loader.load_directory(outside_dir) == []
+    monkeypatch.chdir(spec_dir)
+    assert loader.load_directory(Path("..") / "outside") == []
+    assert PluginLoader().load(trusted_path) is None
+
+
 def test_plugin_validator_enforces_sensitive_tool_governance() -> None:
     spec = PluginSpec(
         plugin_id="ops.deploy",

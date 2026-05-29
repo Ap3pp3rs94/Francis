@@ -99,8 +99,10 @@ def _safe_nonnegative_int(value: object) -> int | None:
 
 def _is_under(root: Path, target: Path) -> bool:
     try:
-        return _real_path(target).is_relative_to(_real_path(root))
-    except OSError:
+        root_text = os.path.normcase(os.path.realpath(os.fspath(root)))
+        target_text = os.path.normcase(os.path.realpath(os.fspath(target)))
+        return os.path.commonpath([root_text, target_text]) == root_text
+    except (OSError, ValueError):
         return False
 
 
@@ -109,6 +111,9 @@ def _resolve_artifact_handle(raw: str) -> tuple[Path | None, str]:
     if not cleaned:
         return None, "artifact_dir_required"
     if any(ch in cleaned for ch in ("\x00", "\n", "\r")):
+        return None, "artifact_path_invalid"
+    raw_path = Path(cleaned)
+    if not raw_path.is_absolute() and any(part == ".." for part in raw_path.parts):
         return None, "artifact_path_invalid"
 
     root = _artifact_root()
@@ -272,21 +277,21 @@ def _originating_receipt_projection(root: Path, target: Path, raw: str) -> dict[
 
 
 def _entry_projection(root: Path, path: Path) -> dict[str, object]:
-    resolved = Path(os.path.realpath(path))
+    resolved = _real_path(path)
     base = {
-        "name": redact_secret_text(path.name),
+        "name": redact_secret_text(resolved.name),
         "relative_path": _relative_artifact_path(root, resolved),
     }
     if not _is_under(root, resolved):
         return {**base, "kind": "external_link", "bytes": 0, "modified_ts": None}
     try:
-        stat = path.stat()
+        stat = resolved.stat()
     except OSError:
         return {**base, "kind": "unavailable", "bytes": 0, "modified_ts": None}
     return {
         **base,
-        "kind": "directory" if path.is_dir() else "file",
-        "bytes": stat.st_size if path.is_file() else 0,
+        "kind": "directory" if resolved.is_dir() else "file",
+        "bytes": stat.st_size if resolved.is_file() else 0,
         "modified_ts": stat.st_mtime,
     }
 

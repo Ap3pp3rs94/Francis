@@ -254,13 +254,34 @@ def test_artifact_inspect_rejects_paths_outside_artifact_root(monkeypatch, tmp_p
     assert traversal.status_code == 200
     traversal_body = traversal.json()
     assert traversal_body["ok"] is False
-    assert traversal_body["error"] == "artifact_outside_data_root"
+    assert traversal_body["error"] == "artifact_path_invalid"
 
     invalid = client.get("/artifacts/inspect", params={"artifact_dir": "bad\x00handle"})
     assert invalid.status_code == 200
     invalid_body = invalid.json()
     assert invalid_body["ok"] is False
     assert invalid_body["error"] == "artifact_path_invalid"
+
+
+def test_artifact_inspect_rejects_parent_segments_before_filesystem(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    outside = data_root / "outside.txt"
+    outside.parent.mkdir(parents=True)
+    outside.write_text("not an artifact", encoding="utf-8")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    response = client.get("/artifacts/inspect", params={"artifact_dir": "plugins/../outside.txt"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["error"] == "artifact_path_invalid"
+    assert body["next_step"] == "use_receipt_artifact_handle"
 
 
 def test_artifact_inspect_reports_missing_handles_without_creating_state(monkeypatch, tmp_path: Path) -> None:

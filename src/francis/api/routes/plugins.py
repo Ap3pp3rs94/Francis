@@ -43,7 +43,6 @@ from francis.trust.levels import get_state
 
 router = APIRouter()
 
-_PLUGIN_LOADER = PluginLoader()
 _PLUGIN_VALIDATOR = PluginValidator()
 _RISK_ORDER = {"readonly": 0, "normal": 1, "critical": 2, "safety_critical": 3}
 _PLUGIN_WRITE_SCOPE = "plugins.write"
@@ -212,13 +211,27 @@ def _resolve_under(root: Path, raw: str | Path, *, relative_to_root: bool = True
     return resolved if _is_under(root_resolved, resolved) else None
 
 
+def _same_path(left: Path, right: Path) -> bool:
+    try:
+        left_text = os.path.normcase(os.path.realpath(os.fspath(left)))
+        right_text = os.path.normcase(os.path.realpath(os.fspath(right)))
+        return left_text == right_text
+    except OSError:
+        return False
+
+
 def _generated_plugin_dir(plugin_id: str, generated_dir: str = "") -> Path | None:
     try:
         normalized_id = _validate_plugin_id(plugin_id)
     except Exception:
         return None
-    raw = _safe_str(generated_dir).strip() or normalized_id
-    return _resolve_under(_gen_dir(), raw)
+    root = _real_path(_gen_dir())
+    expected = _real_path(root / normalized_id)
+    raw = _safe_str(generated_dir).strip()
+    if not raw:
+        return expected
+    resolved = _resolve_under(root, raw)
+    return expected if resolved is not None and _same_path(resolved, expected) else None
 
 
 def _plugin_artifact_path(plugin_id: str, artifact_zip: str = "") -> Path | None:
@@ -226,8 +239,13 @@ def _plugin_artifact_path(plugin_id: str, artifact_zip: str = "") -> Path | None
         normalized_id = _validate_plugin_id(plugin_id)
     except Exception:
         return None
-    raw = _safe_str(artifact_zip).strip() or f"{normalized_id}.zip"
-    return _resolve_under(_art_dir(), raw)
+    root = _real_path(_art_dir())
+    expected = _real_path(root / f"{normalized_id}.zip")
+    raw = _safe_str(artifact_zip).strip()
+    if not raw:
+        return expected
+    resolved = _resolve_under(root, raw)
+    return expected if resolved is not None and _same_path(resolved, expected) else None
 
 
 def _normalize_capability(plugin_id: str, raw: dict[str, Any]) -> dict[str, Any] | None:
@@ -737,9 +755,9 @@ def _plugin_promotion_quality(
     promoted_meta = promoted.get("meta") if isinstance(promoted.get("meta"), dict) else {}
     generated_dir = _safe_str(promoted.get("generated_dir")).strip()
     plugin_dir = _generated_plugin_dir(plugin_id, generated_dir)
-    readme_path = plugin_dir / "README.md" if plugin_dir is not None else _gen_dir() / plugin_id / "README.md"
+    readme_path = _generated_child_path(plugin_dir, "README.md") if plugin_dir is not None else None
     docs: Any = payload_meta.get("docs") or payload_meta.get("documentation") or []
-    if not docs and readme_path.exists():
+    if not docs and readme_path is not None and readme_path.exists():
         docs = [str(readme_path.resolve())]
     return {
         "summary": payload_meta.get("summary")
@@ -783,9 +801,9 @@ def _plugin_promotion_readiness(
     payload_meta = {**staged_meta, **redact_governed_metadata(payload.meta)}
     generated_dir = _safe_str(staged.get("generated_dir")).strip()
     plugin_dir = _generated_plugin_dir(plugin_id, generated_dir)
-    readme_path = plugin_dir / "README.md" if plugin_dir is not None else _gen_dir() / plugin_id / "README.md"
+    readme_path = _generated_child_path(plugin_dir, "README.md") if plugin_dir is not None else None
     docs = payload_meta.get("docs") or payload_meta.get("documentation") or []
-    if not _has_readiness_value(docs) and readme_path.exists():
+    if not _has_readiness_value(docs) and readme_path is not None and readme_path.exists():
         docs = [str(readme_path.resolve())]
 
     risk_tier = _safe_str(payload_meta.get("risk_tier")).strip().lower() or _plugin_risk_tier(staged)
@@ -1363,27 +1381,63 @@ def _parse_simple_yaml(path: Path) -> dict[str, str]:
     return out
 
 
+def _generated_child_path(plugin_dir: Path, *parts: str) -> Path | None:
+    clean_parts: list[str] = []
+    for part in parts:
+        text = _safe_str(part).strip()
+        if not text or any(ch in text for ch in ("\x00", "\n", "\r")):
+            return None
+        clean_parts.append(text)
+    root = _real_path(plugin_dir)
+    try:
+        resolved = _real_path(root.joinpath(*clean_parts))
+    except OSError:
+        return None
+    return resolved if _is_under(root, resolved) else None
+
+
+def _required_generated_child_path(plugin_dir: Path, *parts: str) -> Path:
+    path = _generated_child_path(plugin_dir, *parts)
+    if path is None:
+        raise ValueError("invalid_generated_child_path")
+    return path
+
+
+def _generated_relative_file(plugin_dir: Path, path: Path) -> str | None:
+    root = _real_path(plugin_dir)
+    try:
+        resolved = _real_path(path)
+    except OSError:
+        return None
+    if not _is_under(root, resolved):
+        return None
+    try:
+        return resolved.relative_to(root).as_posix()
+    except ValueError:
+        return None
+
+
 def _manifest_for_plugin_dir(plugin_dir: Path) -> dict[str, str]:
-    yaml_path = plugin_dir / "plugin.yaml"
-    manifest = _parse_simple_yaml(yaml_path)
+    yaml_path = _generated_child_path(plugin_dir, "plugin.yaml")
+    manifest = _parse_simple_yaml(yaml_path) if yaml_path is not None else {}
     if "entrypoint" not in manifest:
         manifest["entrypoint"] = "plugin.py"
     return manifest
 
 
 def _generated_contract_path(plugin_dir: Path) -> Path:
-    return plugin_dir / "plugin.spec.json"
+    return _required_generated_child_path(plugin_dir, "plugin.spec.json")
 
 
 def _generated_registry_snapshot_path(plugin_dir: Path) -> Path:
-    return plugin_dir / "plugin.registry.json"
+    return _required_generated_child_path(plugin_dir, "plugin.registry.json")
 
 
 def _load_generated_contract(plugin_dir: Path) -> PluginSpec | None:
     spec_path = _generated_contract_path(plugin_dir)
     if not spec_path.exists() or not spec_path.is_file():
         return None
-    return _PLUGIN_LOADER.load(spec_path)
+    return PluginLoader(spec_dir=plugin_dir).load(spec_path)
 
 
 def _read_generated_registry_snapshot(plugin_dir: Path) -> dict[str, Any]:
@@ -1516,16 +1570,19 @@ def _read_generated_details(plugin_id: str, plugin: dict[str, Any]) -> dict[str,
             "entrypoint": contract_spec.entrypoint or "plugin.py",
         }
     entrypoint = _safe_str(manifest.get("entrypoint")).strip() or "plugin.py"
-    readme_path = plugin_dir / "README.md"
-    readme = readme_path.read_text(encoding="utf-8", errors="replace") if readme_path.exists() else ""
+    readme_path = _generated_child_path(plugin_dir, "README.md")
+    readme = (
+        readme_path.read_text(encoding="utf-8", errors="replace")
+        if readme_path is not None and readme_path.exists()
+        else ""
+    )
 
     files: list[str] = []
     for p in plugin_dir.rglob("*"):
         if p.is_file():
-            try:
-                files.append(p.relative_to(plugin_dir).as_posix())
-            except ValueError:
-                continue
+            relative_file = _generated_relative_file(plugin_dir, p)
+            if relative_file is not None:
+                files.append(relative_file)
     files.sort()
 
     contract_summary: dict[str, Any] = {}
@@ -1564,7 +1621,9 @@ def _read_generated_details(plugin_id: str, plugin: dict[str, Any]) -> dict[str,
 
 
 def _ensure_plugin_from_generated(registry: dict[str, Any], plugin_id: str) -> bool:
-    plugin_dir = _gen_dir() / plugin_id
+    plugin_dir = _generated_plugin_dir(plugin_id)
+    if plugin_dir is None:
+        return False
     if not plugin_dir.exists() or not plugin_dir.is_dir():
         return False
 
@@ -1630,9 +1689,10 @@ def _sync_generated_plugins(registry: dict[str, Any]) -> int:
 
 def _is_under(base: Path, candidate: Path) -> bool:
     try:
-        _real_path(candidate).relative_to(_real_path(base))
-        return True
-    except Exception:
+        base_text = os.path.normcase(os.path.realpath(os.fspath(base)))
+        candidate_text = os.path.normcase(os.path.realpath(os.fspath(candidate)))
+        return os.path.commonpath([base_text, candidate_text]) == base_text
+    except (OSError, ValueError):
         return False
 
 
@@ -1657,7 +1717,9 @@ def _run_generated_plugin(plugin: dict[str, Any], payload_input: Any) -> Any:
     meta = plugin.get("meta")
     meta_obj = meta if isinstance(meta, dict) else {}
     entrypoint = _safe_str(meta_obj.get("entrypoint")).strip() or "plugin.py"
-    entrypoint_path = plugin_dir / entrypoint
+    entrypoint_path = _generated_child_path(plugin_dir, entrypoint)
+    if entrypoint_path is None:
+        return {"echo": payload_input}
     if not entrypoint_path.exists() or not entrypoint_path.is_file():
         return {"echo": payload_input}
 

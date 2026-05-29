@@ -85,12 +85,11 @@ def _real_path(value: str | Path) -> Path:
 
 
 def _path_is_under(root: Path, candidate: Path) -> bool:
-    root = _real_path(root)
-    candidate = _real_path(candidate)
     try:
-        candidate.relative_to(root)
-        return True
-    except ValueError:
+        root_text = os.path.normcase(os.path.realpath(os.fspath(root)))
+        candidate_text = os.path.normcase(os.path.realpath(os.fspath(candidate)))
+        return os.path.commonpath([root_text, candidate_text]) == root_text
+    except (OSError, ValueError):
         return False
 
 
@@ -105,34 +104,88 @@ def _artifact_root() -> Path:
     return _real_path(data_dir() / "artifacts" / "supervised_exec")
 
 
-def _artifact_dir(run_id: str) -> Path:
+def _artifact_run_dir(run_id: str) -> Path:
     root = _artifact_root()
-    safe_run_id = _safe_identifier(run_id, fallback="invalid_run_id")
+    safe_run_id = _safe_identifier(run_id)
+    if not safe_run_id:
+        raise ValueError("artifact_run_id_not_allowed")
     candidate = _real_path(root / safe_run_id)
     if not _path_is_under(root, candidate):
         raise ValueError("artifact_path_outside_allowed_root")
     return candidate
 
 
-def _artifact_path(path: Path) -> Path:
-    root = _artifact_root()
-    candidate = _real_path(path)
-    if not _path_is_under(root, candidate):
+def _artifact_dir(run_id: str) -> Path:
+    return _artifact_run_dir(run_id)
+
+
+def _artifact_file(run_id: str, filename: str) -> Path:
+    safe_filename = _safe_str(filename).strip()
+    if safe_filename not in _ARTIFACT_FILENAMES or Path(safe_filename).name != safe_filename:
+        raise ValueError("artifact_filename_not_allowed")
+    run_dir = _artifact_run_dir(run_id)
+    candidate = _real_path(run_dir / safe_filename)
+    if candidate.parent != run_dir or not _path_is_under(run_dir, candidate):
         raise ValueError("artifact_path_outside_allowed_root")
     return candidate
 
 
-def _artifact_file_path(path: Path) -> Path:
-    candidate = _artifact_path(path)
-    if candidate.name not in _ARTIFACT_FILENAMES:
+def _artifact_path_components(path: Path) -> tuple[str, str]:
+    root = _artifact_root()
+    candidate = _real_path(path)
+    if not _path_is_under(root, candidate):
+        raise ValueError("artifact_path_outside_allowed_root")
+    try:
+        relative = candidate.relative_to(root)
+    except ValueError as exc:
+        raise ValueError("artifact_path_outside_allowed_root") from exc
+    parts = relative.parts
+    if len(parts) != 2:
+        raise ValueError("artifact_path_shape_not_allowed")
+    run_id, filename = parts
+    if _safe_identifier(run_id) != run_id:
+        raise ValueError("artifact_run_id_not_allowed")
+    if filename not in _ARTIFACT_FILENAMES:
         raise ValueError("artifact_filename_not_allowed")
-    return candidate
+    return run_id, filename
+
+
+def _artifact_dir_run_id(path: Path) -> str:
+    root = _artifact_root()
+    candidate = _real_path(path)
+    if not _path_is_under(root, candidate):
+        raise ValueError("artifact_path_outside_allowed_root")
+    try:
+        relative = candidate.relative_to(root)
+    except ValueError as exc:
+        raise ValueError("artifact_path_outside_allowed_root") from exc
+    parts = relative.parts
+    if len(parts) != 1 or _safe_identifier(parts[0]) != parts[0]:
+        raise ValueError("artifact_path_shape_not_allowed")
+    return parts[0]
+
+
+def _artifact_path(path: Path) -> Path:
+    try:
+        run_id, filename = _artifact_path_components(path)
+        return _artifact_file(run_id, filename)
+    except ValueError:
+        return _artifact_run_dir(_artifact_dir_run_id(path))
+
+
+def _artifact_file_path(path: Path) -> Path:
+    run_id, filename = _artifact_path_components(path)
+    return _artifact_file(run_id, filename)
+
+
+def _ensure_artifact_run_dir(run_id: str) -> Path:
+    target = _artifact_run_dir(run_id)
+    target.mkdir(parents=True, exist_ok=True)
+    return target
 
 
 def _ensure_artifact_dir(path: Path) -> Path:
-    target = _artifact_path(path)
-    target.mkdir(parents=True, exist_ok=True)
-    return target
+    return _ensure_artifact_run_dir(_artifact_dir_run_id(path))
 
 
 def _display_safe_json_text(obj: Any) -> str:
@@ -140,16 +193,53 @@ def _display_safe_json_text(obj: Any) -> str:
     return json.dumps(redacted, ensure_ascii=False, indent=2, default=str)
 
 
+def _artifact_approval_summary(record: dict[str, Any] | None) -> dict[str, Any]:
+    item = record if isinstance(record, dict) else {}
+    created_ts = item.get("created_ts")
+    updated_ts = item.get("updated_ts")
+    return {
+        "id": _safe_identifier(item.get("id")),
+        "status": _safe_str(item.get("status")).strip(),
+        "action": _safe_str(item.get("action")).strip(),
+        "created_ts": created_ts if isinstance(created_ts, (int, float)) and not isinstance(created_ts, bool) else 0,
+        "updated_ts": updated_ts if isinstance(updated_ts, (int, float)) and not isinstance(updated_ts, bool) else 0,
+    }
+
+
+def _artifact_request_summary(request_payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "objective": seal_governed_approval_value(request_payload.get("objective"), key="objective"),
+        "user_command": seal_governed_approval_value(request_payload.get("user_command"), key="user_command"),
+        "cwd": seal_governed_approval_value(request_payload.get("cwd"), key="cwd"),
+        "timeout_sec": _normalize_timeout_sec(request_payload.get("timeout_sec")),
+        "expected_artifact_count": len(_normalize_string_list(request_payload.get("expected_artifacts"))),
+        "precheck_count": len(_normalize_string_list(request_payload.get("prechecks"))),
+        "sealed": True,
+    }
+
+
 def _write_json(path: Path, obj: Any) -> None:
-    target = _artifact_file_path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(_display_safe_json_text(obj), encoding="utf-8")
+    run_id, filename = _artifact_path_components(path)
+    _write_display_artifact_json(run_id, filename, obj)
 
 
 def _write_redacted_text(path: Path, value: str) -> None:
-    target = _artifact_file_path(path)
+    run_id, filename = _artifact_path_components(path)
+    _write_display_artifact_text(run_id, filename, value)
+
+
+def _write_display_artifact_json(run_id: str, filename: str, obj: Any) -> None:
+    target = _artifact_file(run_id, filename)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(redact_secret_text(value or ""), encoding="utf-8")
+    display_text = _display_safe_json_text(obj)
+    target.write_text(display_text, encoding="utf-8")
+
+
+def _write_display_artifact_text(run_id: str, filename: str, value: str) -> None:
+    target = _artifact_file(run_id, filename)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    display_text = redact_secret_text(value or "")
+    target.write_text(display_text, encoding="utf-8")
 
 
 def _find_approval(approval_id: str) -> tuple[str, dict[str, Any] | None]:
@@ -323,17 +413,17 @@ def _request_approval(
     art = _artifact_dir(approval_id)
     request_body: dict[str, Any] = {
         "kind": "supervised_exec.request",
-        "approval": req,
-        "objective": objective,
-        "request": request_payload,
+        "approval": _artifact_approval_summary(req),
+        "objective": redact_secret_text(objective),
+        "request": _artifact_request_summary(request_payload),
     }
     if previous_approval_id:
         request_body["previous_approval_id"] = previous_approval_id
     if previous_status:
         request_body["previous_status"] = previous_status
     if isinstance(previous_record, dict):
-        request_body["previous_approval"] = previous_record
-    _write_json(art / "request.json", request_body)
+        request_body["previous_approval"] = _artifact_approval_summary(previous_record)
+    _write_display_artifact_json(approval_id, "request.json", request_body)
     return approval_id, art
 
 
@@ -419,14 +509,15 @@ def run_supervised_exec(inputs: dict[str, Any], objective: str) -> dict[str, Any
             previous_status=status,
             previous_record=record,
         )
-        _write_json(
-            art / "error.json",
+        _write_display_artifact_json(
+            refreshed_approval_id,
+            "error.json",
             {
                 "kind": "supervised_exec.error",
                 "approval_id": refreshed_approval_id,
                 "previous_approval_id": approval_id,
                 "status": status,
-                "objective": objective,
+                "objective": redact_secret_text(objective),
             },
         )
         return {
@@ -443,9 +534,14 @@ def run_supervised_exec(inputs: dict[str, Any], objective: str) -> dict[str, Any
 
     art = _artifact_dir(approval_id)
     if status == "pending":
-        _write_json(
-            art / "pending.json",
-            {"kind": "supervised_exec.pending", "approval": record, "objective": objective},
+        _write_display_artifact_json(
+            approval_id,
+            "pending.json",
+            {
+                "kind": "supervised_exec.pending",
+                "approval": _artifact_approval_summary(record),
+                "objective": redact_secret_text(objective),
+            },
         )
         return {
             "kind": "supervised_exec.result",
@@ -458,9 +554,14 @@ def run_supervised_exec(inputs: dict[str, Any], objective: str) -> dict[str, Any
         }
 
     if status in ("rejected", "emergency"):
-        _write_json(
-            art / "denied.json",
-            {"kind": "supervised_exec.denied", "approval": record, "objective": objective},
+        _write_display_artifact_json(
+            approval_id,
+            "denied.json",
+            {
+                "kind": "supervised_exec.denied",
+                "approval": _artifact_approval_summary(record),
+                "objective": redact_secret_text(objective),
+            },
         )
         return {
             "kind": "supervised_exec.result",
@@ -474,9 +575,15 @@ def run_supervised_exec(inputs: dict[str, Any], objective: str) -> dict[str, Any
         }
 
     if status != "approved":
-        _write_json(
-            art / "error.json",
-            {"kind": "supervised_exec.error", "approval_id": approval_id, "status": status, "objective": objective},
+        _write_display_artifact_json(
+            approval_id,
+            "error.json",
+            {
+                "kind": "supervised_exec.error",
+                "approval_id": approval_id,
+                "status": status,
+                "objective": redact_secret_text(objective),
+            },
         )
         return {
             "kind": "supervised_exec.result",
@@ -498,25 +605,27 @@ def run_supervised_exec(inputs: dict[str, Any], objective: str) -> dict[str, Any
             previous_status=status,
             previous_record=record,
         )
-        _write_json(
-            refreshed_art / "mismatch.json",
+        _write_display_artifact_json(
+            refreshed_approval_id,
+            "mismatch.json",
             {
                 "kind": "supervised_exec.mismatch",
                 "approval_id": refreshed_approval_id,
                 "previous_approval_id": approval_id,
-                "objective": objective,
-                "expected_payload": request_payload,
-                "approval_record": record,
+                "objective": redact_secret_text(objective),
+                "expected_payload": _artifact_request_summary(request_payload),
+                "approval_record": _artifact_approval_summary(record),
             },
         )
-        _write_json(
-            art / "mismatch.json",
+        _write_display_artifact_json(
+            approval_id,
+            "mismatch.json",
             {
                 "kind": "supervised_exec.mismatch",
                 "approval_id": approval_id,
-                "objective": objective,
-                "expected_payload": request_payload,
-                "approval_record": record,
+                "objective": redact_secret_text(objective),
+                "expected_payload": _artifact_request_summary(request_payload),
+                "approval_record": _artifact_approval_summary(record),
             },
         )
         return {
@@ -533,18 +642,19 @@ def run_supervised_exec(inputs: dict[str, Any], objective: str) -> dict[str, Any
         }
 
     # 3) Approved => execute.
-    _ensure_artifact_dir(art)
-    _write_json(
-        art / "plan.json",
+    _ensure_artifact_run_dir(approval_id)
+    _write_display_artifact_json(
+        approval_id,
+        "plan.json",
         {
             "kind": "supervised_exec.plan",
             "approval_id": approval_id,
-            "objective": objective,
+            "objective": redact_secret_text(objective),
             "command": _command_artifact_metadata(user_command=user_command, command_args=command_args, cwd=cwd),
             "timeout_sec": timeout_sec,
             "expected_artifacts": expected_artifacts,
             "prechecks": prechecks,
-            "approval_record": record,
+            "approval_record": _artifact_approval_summary(record),
         },
     )
 
@@ -560,14 +670,15 @@ def run_supervised_exec(inputs: dict[str, Any], objective: str) -> dict[str, Any
             env=os.environ.copy(),
         )
         dt = time.time() - t0
-        _write_redacted_text(art / "stdout.txt", proc.stdout or "")
-        _write_redacted_text(art / "stderr.txt", proc.stderr or "")
-        _write_json(
-            art / "result.json",
+        _write_display_artifact_text(approval_id, "stdout.txt", proc.stdout or "")
+        _write_display_artifact_text(approval_id, "stderr.txt", proc.stderr or "")
+        _write_display_artifact_json(
+            approval_id,
+            "result.json",
             {
                 "kind": "supervised_exec.run_result",
                 "approval_id": approval_id,
-                "objective": objective,
+                "objective": redact_secret_text(objective),
                 "command": _command_artifact_metadata(user_command=user_command, command_args=command_args, cwd=cwd),
                 "timeout_sec": timeout_sec,
                 "elapsed_sec": dt,
@@ -585,12 +696,13 @@ def run_supervised_exec(inputs: dict[str, Any], objective: str) -> dict[str, Any
         }
     except subprocess.TimeoutExpired:
         dt = time.time() - t0
-        _write_json(
-            art / "result.json",
+        _write_display_artifact_json(
+            approval_id,
+            "result.json",
             {
                 "kind": "supervised_exec.run_result",
                 "approval_id": approval_id,
-                "objective": objective,
+                "objective": redact_secret_text(objective),
                 "command": _command_artifact_metadata(user_command=user_command, command_args=command_args, cwd=cwd),
                 "timeout_sec": timeout_sec,
                 "elapsed_sec": dt,

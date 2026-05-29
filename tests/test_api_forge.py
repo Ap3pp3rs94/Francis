@@ -353,6 +353,85 @@ def test_forge_collection_readback_bounds_record_ids_and_traversal_paths(monkeyp
     assert traversal_decision.json()["error"] == "invalid_id"
 
 
+def test_forge_atomic_write_record_json_rejects_record_traversal(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from francis.api.routes import forge
+
+    assert forge._atomic_write_record_json("proposals", "../outside", {"ok": True}) is None
+    assert not (data_root / "artifacts" / "plugins" / "outside.json").exists()
+    assert not (data_root / "artifacts" / "outside.json").exists()
+
+    written = forge._atomic_write_record_json("proposals", "proposal_safe", {"ok": True})
+
+    assert written == (data_root / "artifacts" / "plugins" / "proposals" / "proposal_safe.json").resolve()
+    assert json.loads(written.read_text(encoding="utf-8")) == {"ok": True}
+
+
+def test_forge_promotion_readiness_rejects_generated_dir_sibling_escape(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    repo_root = tmp_path / "repo"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+
+    plugin_id = "forge.safe.plugin"
+    generated_root = repo_root / "plugins" / "generated"
+    expected_dir = generated_root / plugin_id
+    sibling_dir = generated_root / "forge.sibling.plugin"
+    expected_dir.mkdir(parents=True)
+    sibling_dir.mkdir(parents=True)
+    (sibling_dir / "README.md").write_text("sibling docs must not count", encoding="utf-8")
+
+    registry_path = data_root / "plugins" / "_registry.json"
+    registry_path.parent.mkdir(parents=True)
+    registry_path.write_text(
+        json.dumps(
+            {
+                "plugins": {
+                    plugin_id: {
+                        "id": plugin_id,
+                        "name": "Forge Sibling Escape",
+                        "status": "staged",
+                        "enabled": False,
+                        "generated_dir": str(sibling_dir),
+                        "meta": {
+                            "proposal_id": "forge_sibling_escape",
+                            "proposal_evidence": ["mission.forge.sibling_escape"],
+                            "tests": [
+                                "tests/test_api_forge.py::test_forge_promotion_readiness_rejects_generated_dir_sibling_escape"
+                            ],
+                            "risk_tier": "normal",
+                        },
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import forge
+
+    assert forge._resolve_generated_plugin_dir(plugin_id, str(expected_dir)) == expected_dir.resolve()
+    assert forge._resolve_generated_plugin_dir(plugin_id, str(sibling_dir)) is None
+    assert forge._resolve_generated_plugin_dir(plugin_id, "../forge.sibling.plugin") is None
+
+    client = TestClient(create_app())
+    response = client.get("/forge/promotion_readiness/list", params={"plugin_id": plugin_id})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    item = body["items"][0]
+    assert item["plugin_id"] == plugin_id
+    assert item["requirements"]["docs"] is False
+    assert item["evidence"]["docs"] == []
+    assert str(sibling_dir) not in json.dumps(body, sort_keys=True)
+
+
 def test_forge_proposal_decision_receipts_without_promotion(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

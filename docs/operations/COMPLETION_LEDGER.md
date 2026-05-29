@@ -43176,6 +43176,64 @@ Latest validation for the delegated-authority proof chain:
   tests/test_lens_persistent_supervision_prerequisites_proof_script.py`
   Result: `passed; 3 files already formatted`
 
+### 2026-05-29 - Security path sinks are bounded before CodeQL rescan
+
+Roadmap area: GitHub security cleanup / governed execution and plugin
+artifact boundaries.
+
+Material change:
+
+- Supervised-exec display artifact writes now resolve through bounded run-id
+  and filename helpers under `data/artifacts/supervised_exec`, and display
+  artifacts store redacted approval/request summaries instead of raw request
+  bodies.
+- Artifact inspection, Forge record writes/readbacks, plugin generated
+  directories, plugin artifacts, generated plugin child files, and plugin spec
+  loading now use realpath/commonpath style containment checks before file
+  operations.
+- Plugin promotion quality/readiness no longer falls back to
+  `plugins/generated/<plugin_id>/README.md` when the stored generated path is
+  invalid; invalid registry paths must not silently borrow sibling or expected
+  directory docs.
+- This is path-boundary and artifact redaction hardening only. It does not grant
+  new plugin, Forge, supervised-exec, or approval authority.
+
+Latest validation for the security path-boundary hardening:
+
+- `python -m pytest
+  tests/test_api_security_boundaries.py::test_plugin_generated_child_helpers_reject_traversal_and_invalid_fallbacks
+  tests/test_api_forge.py::test_forge_atomic_write_record_json_rejects_record_traversal
+  tests/unit/test_plugin_system_contracts.py::test_plugin_loader_rejects_specs_outside_trusted_root
+  -q --tb=short --maxfail=1`
+  Result: `passed; 3 passed`
+- `python -m pytest tests/test_api_supervised_exec.py
+  tests/test_api_artifacts.py tests/test_api_forge.py
+  tests/test_api_security_boundaries.py
+  tests/unit/test_plugin_system_contracts.py tests/test_api_plugins.py
+  -q --tb=short --maxfail=1`
+  Result: `passed`
+- `python -m ruff check src/francis/agent/supervised_exec.py
+  src/francis/api/routes/artifacts.py src/francis/api/routes/forge.py
+  src/francis/api/routes/plugins.py src/francis/plugin_system/loader.py
+  src/francis/plugin_factory/spec_builder.py tests/test_api_supervised_exec.py
+  tests/test_api_artifacts.py tests/test_api_forge.py
+  tests/test_api_security_boundaries.py
+  tests/unit/test_plugin_system_contracts.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/agent/supervised_exec.py
+  src/francis/api/routes/artifacts.py src/francis/api/routes/forge.py
+  src/francis/api/routes/plugins.py src/francis/plugin_system/loader.py
+  src/francis/plugin_factory/spec_builder.py tests/test_api_supervised_exec.py
+  tests/test_api_artifacts.py tests/test_api_forge.py
+  tests/test_api_security_boundaries.py
+  tests/unit/test_plugin_system_contracts.py`
+  Result: `passed; 11 files already formatted`
+- `python -m mypy src/francis/agent/supervised_exec.py
+  src/francis/api/routes/artifacts.py src/francis/api/routes/forge.py
+  src/francis/api/routes/plugins.py src/francis/plugin_system/loader.py
+  src/francis/plugin_factory/spec_builder.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -72,7 +72,7 @@ def _write_contract_spec(plugin_id: str, name: str, description: str, root: Path
 
 
 def _write_registry_snapshot(spec_path: Path, root: Path) -> tuple[Path, dict]:
-    loader = PluginLoader()
+    loader = PluginLoader(spec_dir=root)
     spec = loader.load(spec_path)
     if spec is None:
         raise ValueError(f"failed_to_load_spec:{spec_path}")

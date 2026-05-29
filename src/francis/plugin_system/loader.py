@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -27,6 +28,19 @@ _EXECUTE_ACTIONS = {
     "update",
     "write",
 }
+
+
+def _real_path(value: str | Path) -> Path:
+    return Path(os.path.realpath(os.fspath(value)))
+
+
+def _is_under(root: Path, candidate: Path) -> bool:
+    try:
+        root_text = os.path.normcase(os.path.realpath(os.fspath(root)))
+        candidate_text = os.path.normcase(os.path.realpath(os.fspath(candidate)))
+        return os.path.commonpath([root_text, candidate_text]) == root_text
+    except (OSError, ValueError):
+        return False
 
 
 def _slugify(value: str, *, separator: str = "_") -> str:
@@ -155,34 +169,35 @@ class PluginSpec:
 
 class PluginLoader:
     def __init__(self, *, spec_dir: Path | None = None) -> None:
-        self.spec_dir = spec_dir
+        self.spec_dir = _real_path(spec_dir) if spec_dir is not None else None
 
     def load(self, path: Path) -> PluginSpec | None:
         if not isinstance(path, Path):
             logger.warning("load expected Path")
             return None
-        if not path.exists() or not path.is_file():
-            logger.warning("plugin spec not found: %s", path)
+        resolved_path = self._resolve_spec_path(path)
+        if resolved_path is None:
             return None
-        if path.suffix.lower() not in _VALID_SPEC_SUFFIXES:
-            logger.warning("unsupported plugin spec suffix: %s", path.suffix)
+        if not resolved_path.exists() or not resolved_path.is_file():
+            logger.warning("plugin spec not found: %s", resolved_path)
+            return None
+        if resolved_path.suffix.lower() not in _VALID_SPEC_SUFFIXES:
+            logger.warning("unsupported plugin spec suffix: %s", resolved_path.suffix)
             return None
         try:
-            payload = self._parse_payload(path)
+            payload = self._parse_payload(resolved_path)
             if not isinstance(payload, dict):
-                logger.warning("plugin spec must be a mapping: %s", path)
+                logger.warning("plugin spec must be a mapping: %s", resolved_path)
                 return None
-            return self._normalize_spec(payload, source_path=path)
+            return self._normalize_spec(payload, source_path=resolved_path)
         except Exception as exc:
-            logger.error("Failed to load plugin spec %s: %s", path, exc)
+            logger.error("Failed to load plugin spec %s: %s", resolved_path, exc)
             return None
 
     def load_directory(self, directory: Path | None = None) -> list[PluginSpec]:
-        target = directory or self.spec_dir
+        target = self._resolve_directory(directory)
         if target is None:
             return []
-        if not isinstance(target, Path):
-            target = Path(target)
         if not target.exists():
             return []
         specs: list[PluginSpec] = []
@@ -192,6 +207,37 @@ class PluginLoader:
                 if spec is not None:
                     specs.append(spec)
         return specs
+
+    def _resolve_spec_path(self, path: Path) -> Path | None:
+        if self.spec_dir is None:
+            logger.warning("trusted plugin spec_dir is required")
+            return None
+        candidate = path if path.is_absolute() else self.spec_dir / path
+        try:
+            resolved = _real_path(candidate)
+        except OSError:
+            return None
+        if not _is_under(self.spec_dir, resolved):
+            logger.warning("plugin spec outside trusted root rejected: %s", path)
+            return None
+        return resolved
+
+    def _resolve_directory(self, directory: Path | None) -> Path | None:
+        if self.spec_dir is None:
+            logger.warning("trusted plugin spec_dir is required")
+            return None
+        target = directory or self.spec_dir
+        if not isinstance(target, Path):
+            target = Path(target)
+        candidate = target if target.is_absolute() else self.spec_dir / target
+        try:
+            resolved = _real_path(candidate)
+        except OSError:
+            return None
+        if not _is_under(self.spec_dir, resolved):
+            logger.warning("plugin spec directory outside trusted root rejected: %s", target)
+            return None
+        return resolved
 
     def _parse_payload(self, path: Path) -> dict[str, Any]:
         raw = path.read_text(encoding="utf-8")

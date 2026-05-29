@@ -191,6 +191,25 @@ def test_supervised_exec_artifact_writers_reject_paths_outside_artifact_root(
     assert "[REDACTED:secret]" in stdout_text
 
 
+def test_supervised_exec_artifact_helpers_reject_nested_run_paths(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from francis.agent import supervised_exec
+
+    artifact_dir = supervised_exec._artifact_dir("run_nested_guard")
+
+    with pytest.raises(ValueError, match="artifact_path_shape_not_allowed"):
+        supervised_exec._write_json(artifact_dir / "nested" / "request.json", {"ok": True})
+    with pytest.raises(ValueError, match="artifact_path_shape_not_allowed"):
+        supervised_exec._ensure_artifact_dir(artifact_dir / "nested")
+    with pytest.raises(ValueError, match="artifact_filename_not_allowed"):
+        supervised_exec._write_redacted_text(artifact_dir / "unexpected.txt", "token=nestedsecret123")
+
+    assert not (artifact_dir / "nested").exists()
+    assert not (artifact_dir / "unexpected.txt").exists()
+
+
 def test_api_supervised_exec_rejects_storage_unsafe_approval_ids(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
@@ -281,6 +300,9 @@ def test_api_supervised_exec_artifacts_store_redacted_command_metadata(monkeypat
         assert "cmd" not in payload
         assert "argv" not in payload
         assert "cwd" not in payload
+        if "approval_record" in payload:
+            assert payload["approval_record"]["id"] == approval_id
+            assert "payload" not in payload["approval_record"]
         assert payload["command"]["command_preview"] == "echo password=[REDACTED:secret]"
         assert payload["command"]["requested_executable"] == "echo"
         assert payload["command"]["cwd_policy"] == "allowed_root_checked"
