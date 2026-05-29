@@ -198,10 +198,17 @@ $SummonBindingBlockersForAlignment = [string[]]@($SummonBindingBlockers)
 if (
   @($SummonBindingBlockersForAlignment).Count -eq 0 -and
   $SummonPreflightBindingBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
-  $SummonPreflightBindingBlockers -contains 'summon_authority_not_granted'
+  (
+    $SummonPreflightBindingBlockers -contains 'summon_authority_not_granted' -or
+    @($SummonPreflightAuthorityBlockers).Count -eq 0
+  )
 ) {
   $SummonBindingBlockersForAlignment = [string[]]@($SummonPreflightBindingBlockers)
 }
+$SummonBindingAuthorityAlreadyDelegated = (
+  @($SummonPreflightAuthorityBlockers).Count -eq 0 -and
+  $SummonPreflightBindingBlockers -contains 'lens_summon_binding_disabled_pending_authority'
+)
 
 $SummonBindingFamilyObserved = (
   [int]$SummonResult.exit_code -eq 0 -and
@@ -214,14 +221,20 @@ $SummonBindingFamilyObserved = (
     (
       $SummonBindingFamilyIndex -eq ($GlobalHotkeyFamilyIndex + 1) -and
       $SummonBindingBlockersForAlignment -contains 'lens_summon_binding_disabled_pending_authority' -and
-      $SummonBindingBlockersForAlignment -contains 'summon_authority_not_granted'
+      (
+        $SummonBindingBlockersForAlignment -contains 'summon_authority_not_granted' -or
+        $SummonBindingAuthorityAlreadyDelegated
+      )
     ) -or
     (
       $SummonBindingFamilyIndex -lt 0 -and
       [string](Get-PropertyValue -Payload $GlobalHotkeyFamilyHandoff -Name 'next_smallest_truthful_gap' -Default '') -eq 'summon_binding_blocker_boundary' -and
       $SummonPreflightRequiredBefore -contains 'summon_binding' -and
       $SummonPreflightBindingBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
-      $SummonPreflightBindingBlockers -contains 'summon_authority_not_granted'
+      (
+        $SummonPreflightBindingBlockers -contains 'summon_authority_not_granted' -or
+        $SummonBindingAuthorityAlreadyDelegated
+      )
     )
   )
 )
@@ -239,7 +252,10 @@ $GlobalHotkeyContractReadbackObserved = (
   -not [bool](Get-PropertyValue -Payload $GlobalHotkeyFamilyHandoff -Name 'would_mutate' -Default $true) -and
   $GlobalHotkeyFamilyBlockers -contains 'global_hotkey_binding_disabled' -and
   $GlobalHotkeyFamilyBlockers -contains 'global_hotkey_registration_disabled' -and
-  $GlobalHotkeyFamilyBlockers -contains 'hotkey_registration_authority_not_granted'
+  (
+    $GlobalHotkeyFamilyBlockers -contains 'hotkey_registration_authority_not_granted' -or
+    @($SummonPreflightAuthorityBlockers).Count -eq 0
+  )
 )
 $SummonPreflightObserved = (
   [int]$SummonPreflightResult.exit_code -eq 0 -and
@@ -256,18 +272,30 @@ $SummonPreflightObserved = (
   -not [bool](Get-PropertyValue -Payload $SummonBinding -Name 'register_hotkey' -Default $true) -and
   -not [bool](Get-PropertyValue -Payload $SummonBinding -Name 'startup_register' -Default $true) -and
   $SummonPreflightBindingBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
-  $SummonPreflightBindingBlockers -contains 'summon_authority_not_granted' -and
+  (
+    $SummonPreflightBindingBlockers -contains 'summon_authority_not_granted' -or
+    $SummonBindingAuthorityAlreadyDelegated
+  ) -and
   $SummonPreflightBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
-  $SummonPreflightBlockers -contains 'summon_authority_not_granted'
+  (
+    $SummonPreflightBlockers -contains 'summon_authority_not_granted' -or
+    $SummonBindingAuthorityAlreadyDelegated
+  )
 )
 $HandoffAligned = (
   $SummonBindingFamilyObserved -and
   $GlobalHotkeyContractReadbackObserved -and
   $SummonPreflightObserved -and
   $SummonBindingBlockersForAlignment -contains 'lens_summon_binding_disabled_pending_authority' -and
-  $SummonBindingBlockersForAlignment -contains 'summon_authority_not_granted' -and
+  (
+    $SummonBindingBlockersForAlignment -contains 'summon_authority_not_granted' -or
+    $SummonBindingAuthorityAlreadyDelegated
+  ) -and
   $SummonPreflightBindingBlockers -contains 'lens_summon_binding_disabled_pending_authority' -and
-  $SummonPreflightBindingBlockers -contains 'summon_authority_not_granted' -and
+  (
+    $SummonPreflightBindingBlockers -contains 'summon_authority_not_granted' -or
+    $SummonBindingAuthorityAlreadyDelegated
+  ) -and
   $SummonPreflightRequiredBefore -contains 'summon_binding'
 )
 $SideEffectsDenied = (
@@ -347,6 +375,7 @@ $Payload = [ordered]@{
     would_mutate = $false
   }
   summon_binding_family_observed = $SummonBindingFamilyObserved
+  summon_binding_delegated_authority_posture_observed = $SummonBindingAuthorityAlreadyDelegated
   summon_binding_family_projected_from_preflight = @($SummonBindingBlockers).Count -eq 0 -and @($SummonBindingBlockersForAlignment).Count -gt 0
   previous_global_hotkey_contract_observed = $GlobalHotkeyContractReadbackObserved
   previous_global_hotkey_contract_readback_observed = $GlobalHotkeyContractReadbackObserved

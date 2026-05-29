@@ -85,6 +85,7 @@ def test_lens_summon_binding_blocker_proof_is_readback_only(tmp_path: Path) -> N
     assert recommended_handoff["would_execute"] is False
     assert recommended_handoff["would_mutate"] is False
     assert payload["summon_binding_family_observed"] is True
+    assert payload["summon_binding_delegated_authority_posture_observed"] is True
     assert isinstance(payload["summon_binding_family_projected_from_preflight"], bool)
     assert payload["previous_global_hotkey_contract_observed"] is True
     assert payload["previous_global_hotkey_contract_readback_observed"] is True
@@ -110,14 +111,12 @@ def test_lens_summon_binding_blocker_proof_is_readback_only(tmp_path: Path) -> N
     assert previous_global_hotkey["blockers"] == [
         "global_hotkey_binding_disabled",
         "global_hotkey_registration_disabled",
-        "hotkey_registration_authority_not_granted",
     ]
     assert payload["summon_preflight_observed"] is True
     assert payload["handoff_aligned"] is True
     assert payload["side_effects_denied"] is True
     assert payload["summon_binding_blockers"] == [
         "lens_summon_binding_disabled_pending_authority",
-        "summon_authority_not_granted",
     ]
     if payload["summon_binding_family_projected_from_preflight"]:
         assert payload["summon_anywhere_binding_blockers"] == []
@@ -125,10 +124,8 @@ def test_lens_summon_binding_blocker_proof_is_readback_only(tmp_path: Path) -> N
         assert payload["summon_anywhere_binding_blockers"] == payload["summon_binding_blockers"]
     assert payload["direct_summon_preflight_binding_blockers"] == [
         "lens_summon_binding_disabled_pending_authority",
-        "summon_authority_not_granted",
     ]
-    assert "summon_authority_not_granted" in payload["direct_summon_preflight_authority_blockers"]
-    assert "hotkey_registration_authority_not_granted" in (payload["direct_summon_preflight_authority_blockers"])
+    assert payload["direct_summon_preflight_authority_blockers"] == []
 
     boundary = payload["summon_preflight_boundary"]
     assert boundary["status"] == "blocked"
@@ -149,7 +146,6 @@ def test_lens_summon_binding_blocker_proof_is_readback_only(tmp_path: Path) -> N
     assert boundary["register_hotkey"] is False
     assert boundary["startup_register"] is False
     assert "lens_summon_binding_disabled_pending_authority" in boundary["blockers"]
-    assert "summon_authority_not_granted" in boundary["blockers"]
     assert boundary["summon_binding_blockers"] == payload["direct_summon_preflight_binding_blockers"]
     assert boundary["authority_blockers"] == payload["direct_summon_preflight_authority_blockers"]
 
