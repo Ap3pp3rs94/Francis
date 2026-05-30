@@ -37,7 +37,7 @@ _MAX_PATHS = 5
 _MAX_LIMIT = 100
 _MAX_TEXT_LENGTH = 2_000
 _MAX_TAGS = 16
-_NEXT_CONTEXT_FEEDBACK_GAP = "stage7_context_feedback_memory_assistance_operator_feedback_memory_readback"
+_NEXT_CONTEXT_FEEDBACK_GAP = "stage7_context_feedback_memory_assistance_operator_feedback_memory_ui_recording"
 
 
 def telemetry_context_snapshot(*, surface: Any = "assist") -> dict[str, Any]:
@@ -491,13 +491,26 @@ def telemetry_context_feedback_memory_assistance_policy() -> dict[str, Any]:
         "status": "policy_ready",
         "policy_id": "stage7_context_feedback_memory_assistance_policy",
         "memory_readback_route": "/telemetry/context/feedback/memory-retrieval-readback",
+        "operator_feedback_memory_readback_route": (
+            "/telemetry/context/feedback/memory-assistance-feedback-memory-readback"
+        ),
         "memory_policy_route": "/telemetry/context/feedback/memory-retrieval-policy",
-        "allowed_memory_event_kinds": ["telemetry_context_feedback_quality_review"],
-        "allowed_action_types": ["telemetry.context_feedback.quality_review"],
-        "allowed_classifications": ["operator_feedback_quality_signal"],
+        "allowed_memory_event_kinds": [
+            "telemetry_context_feedback_quality_review",
+            "telemetry_context_feedback_memory_assistance_operator_feedback_review",
+        ],
+        "allowed_action_types": [
+            "telemetry.context_feedback.quality_review",
+            "telemetry.context_feedback.memory_assistance_operator_feedback_review",
+        ],
+        "allowed_classifications": [
+            "operator_feedback_quality_signal",
+            "operator_feedback_memory_assistance_quality_signal",
+        ],
         "allowed_influence": [
             "surface_context_source_quality_counts",
             "inform_operator_review_of_context_relevance",
+            "surface_feedback_memory_assistance_operator_quality_counts",
             "suggest_context_source_attention",
             "shape_assistance_summary_priority",
         ],
@@ -519,9 +532,18 @@ def telemetry_context_feedback_memory_assistance_policy() -> dict[str, Any]:
             "telemetry_is_untrusted_input": True,
             "requires_operator_visible_readback": True,
             "requires_retrieval_policy_match": True,
-            "requires_action_type": "telemetry.context_feedback.quality_review",
-            "requires_classification": "operator_feedback_quality_signal",
-            "requires_retention_policy": "stage7_context_feedback_quality",
+            "allowed_action_types": [
+                "telemetry.context_feedback.quality_review",
+                "telemetry.context_feedback.memory_assistance_operator_feedback_review",
+            ],
+            "allowed_classifications": [
+                "operator_feedback_quality_signal",
+                "operator_feedback_memory_assistance_quality_signal",
+            ],
+            "allowed_retention_policies": [
+                "stage7_context_feedback_quality",
+                "stage7_feedback_memory_assistance_operator_feedback_quality",
+            ],
             "max_events": 20,
             "ignore_payload_instruction_text": True,
             "no_hidden_prompt_injection": True,

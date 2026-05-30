@@ -150,8 +150,12 @@ def context_feedback_memory_assistance_dry_run(limit: int = 20) -> dict[str, Any
     safe_limit = max(1, min(int(limit), 100))
     policy = telemetry_context_feedback_memory_assistance_policy()
     readback = context_feedback_memory_retrieval_readback(limit=safe_limit)
+    operator_feedback_readback = context_feedback_memory_assistance_operator_feedback_memory_readback(limit=safe_limit)
     raw_items_value = readback.get("items")
+    operator_items_value = operator_feedback_readback.get("items")
     raw_items: list[Any] = raw_items_value if isinstance(raw_items_value, list) else []
+    if isinstance(operator_items_value, list):
+        raw_items = [*raw_items, *operator_items_value]
     rating_counts = {"useful": 0, "not_useful": 0, "neutral": 0}
     source_counts: dict[str, int] = {}
     event_refs: list[dict[str, Any]] = []
@@ -201,6 +205,11 @@ def context_feedback_memory_assistance_dry_run(limit: int = 20) -> dict[str, Any
             "count": readback.get("count", 0),
             "total": readback.get("total", 0),
             "skipped_count": readback.get("skipped_count", 0),
+            "operator_feedback_route": "/telemetry/context/feedback/memory-assistance-feedback-memory-readback",
+            "operator_feedback_status": operator_feedback_readback.get("status", "unknown"),
+            "operator_feedback_count": operator_feedback_readback.get("count", 0),
+            "operator_feedback_total": operator_feedback_readback.get("total", 0),
+            "operator_feedback_skipped_count": operator_feedback_readback.get("skipped_count", 0),
         },
         "event_refs": event_refs,
         "event_count": matched_count,
@@ -228,6 +237,7 @@ def context_feedback_memory_assistance_dry_run(limit: int = 20) -> dict[str, Any
             "read_only": True,
             "dry_run_only": True,
             "uses_memory_retrieval_readback": True,
+            "uses_operator_feedback_memory_readback": True,
             "uses_assistance_policy": True,
             "telemetry_is_untrusted_input": True,
             "ignores_payload_instruction_text": True,
@@ -240,7 +250,7 @@ def context_feedback_memory_assistance_dry_run(limit: int = 20) -> dict[str, Any
             "grants_memory_write_authority": False,
         },
         "skipped_untrusted_items": skipped,
-        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_memory_readback",
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_memory_ui_recording",
     }
 
 
@@ -300,7 +310,86 @@ def context_feedback_memory_assistance_chat_context_readback(limit: int = 20) ->
             "grants_execution_authority": False,
             "grants_memory_write_authority": False,
         },
-        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_memory_readback",
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_memory_ui_recording",
+    }
+
+
+@router.get("/context/feedback/memory-assistance-feedback-memory-readback")
+def context_feedback_memory_assistance_operator_feedback_memory_readback(limit: int = 20) -> dict[str, Any]:
+    safe_limit = max(1, min(int(limit), 100))
+    policy = telemetry_context_feedback_memory_assistance_policy()
+    timeline = list_timeline(
+        limit=safe_limit,
+        kinds=["telemetry_context_feedback_memory_assistance_operator_feedback_review"],
+        include_payload=True,
+    )
+    raw_items_value = timeline.get("items")
+    raw_items: list[Any] = raw_items_value if isinstance(raw_items_value, list) else []
+    items: list[dict[str, Any]] = []
+    skipped = 0
+    for raw_item in raw_items:
+        if not isinstance(raw_item, dict):
+            skipped += 1
+            continue
+        retention_value = raw_item.get("retention")
+        retention: dict[str, Any] = retention_value if isinstance(retention_value, dict) else {}
+        if (
+            raw_item.get("action_type") == "telemetry.context_feedback.memory_assistance_operator_feedback_review"
+            and raw_item.get("classification") == "operator_feedback_memory_assistance_quality_signal"
+            and retention.get("policy") == "stage7_feedback_memory_assistance_operator_feedback_quality"
+        ):
+            items.append(raw_item)
+            continue
+        skipped += 1
+
+    return {
+        "ok": True,
+        "kind": "francis.stage7.telemetry.context_feedback_memory_assistance_operator_feedback_memory_readback",
+        "stage": "Stage 7 / Telemetry MVP",
+        "source_id": "telemetry_context",
+        "status": "readback_ready" if items else "empty",
+        "target": "feedback_memory_assistance_prompt_integration",
+        "policy": {
+            "route": "/telemetry/context/feedback/memory-assistance-policy",
+            "status": policy.get("status", "unknown"),
+            "operator_feedback_memory_readback_route": policy.get("operator_feedback_memory_readback_route", ""),
+        },
+        "memory_query": {
+            "route": "/memory/timeline/list",
+            "method": "GET",
+            "filters": {
+                "kinds": ["telemetry_context_feedback_memory_assistance_operator_feedback_review"],
+                "include_payload": True,
+                "limit": safe_limit,
+            },
+        },
+        "items": items,
+        "count": len(items),
+        "total": timeline.get("total", len(items)),
+        "skipped_count": skipped,
+        "reads_memory": True,
+        "writes_memory": False,
+        "calls_model": False,
+        "selects_tools": False,
+        "trains_model": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "uses_memory_timeline_read_route": True,
+            "uses_assistance_policy_filters": True,
+            "target": "feedback_memory_assistance_prompt_integration",
+            "telemetry_is_untrusted_input": True,
+            "ignores_payload_instruction_text": True,
+            "stores_prompt_body": False,
+            "stores_model_response": False,
+            "calls_model": False,
+            "selects_tools": False,
+            "trains_model": False,
+            "grants_execution_authority": False,
+            "grants_memory_write_authority": False,
+        },
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_memory_ui_recording",
     }
 
 
@@ -369,7 +458,7 @@ def context_feedback_memory_retrieval_readback(limit: int = 20) -> dict[str, Any
             "grants_execution_authority": False,
             "grants_memory_write_authority": False,
         },
-        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_memory_readback",
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_memory_ui_recording",
     }
 
 

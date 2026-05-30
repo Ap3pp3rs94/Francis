@@ -486,7 +486,7 @@ def test_chat_send_applies_feedback_memory_assistance_context_to_llm_prompt(
     assert integration["grants_execution_authority"] is False
     assert (
         integration["next_smallest_truthful_gap"]
-        == "stage7_context_feedback_memory_assistance_operator_feedback_memory_readback"
+        == "stage7_context_feedback_memory_assistance_operator_feedback_memory_ui_recording"
     )
     feedback_target = integration["feedback_target"]
     assert feedback_target["feedback_route"] == "/telemetry/context/feedback"

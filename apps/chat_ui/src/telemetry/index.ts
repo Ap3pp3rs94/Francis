@@ -243,6 +243,28 @@ export type TelemetryContextFeedbackMemoryRetrievalReadback = {
   next_smallest_truthful_gap: string;
 };
 
+export type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackMemoryReadback = {
+  ok: boolean;
+  kind: string;
+  stage: string;
+  source_id: string;
+  status: string;
+  target: string;
+  count: number;
+  total: number;
+  skipped_count: number;
+  items: TelemetryContextFeedbackMemoryRetrievalEvent[];
+  reads_memory: boolean;
+  writes_memory: boolean;
+  calls_model: boolean;
+  selects_tools: boolean;
+  trains_model: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+  governance: Record<string, unknown>;
+  next_smallest_truthful_gap: string;
+};
+
 export type TelemetryContextFeedbackMemoryAssistancePolicy = {
   ok: boolean;
   kind: string;
@@ -251,6 +273,7 @@ export type TelemetryContextFeedbackMemoryAssistancePolicy = {
   status: string;
   policy_id: string;
   memory_readback_route: string;
+  operator_feedback_memory_readback_route: string;
   memory_policy_route: string;
   allowed_memory_event_kinds: string[];
   allowed_action_types: string[];
@@ -537,6 +560,39 @@ export function parseTelemetryContextFeedbackMemoryRetrievalReadback(
   };
 }
 
+export function parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackMemoryReadback(
+  value: unknown,
+): TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackMemoryReadback {
+  const raw = isRecord(value) ? value : {};
+  const items = Array.isArray(raw.items)
+    ? raw.items
+        .map(parseTelemetryContextFeedbackMemoryRetrievalEvent)
+        .filter((item): item is TelemetryContextFeedbackMemoryRetrievalEvent => item !== null)
+    : [];
+
+  return {
+    ok: safeBoolean(raw.ok, false),
+    kind: safeString(raw.kind, ""),
+    stage: safeString(raw.stage, ""),
+    source_id: safeString(raw.source_id, ""),
+    status: safeString(raw.status, "unknown"),
+    target: safeString(raw.target, ""),
+    count: safeNumber(raw.count, items.length),
+    total: safeNumber(raw.total, items.length),
+    skipped_count: safeNumber(raw.skipped_count, 0),
+    items,
+    reads_memory: safeBoolean(raw.reads_memory, false),
+    writes_memory: safeBoolean(raw.writes_memory, true),
+    calls_model: safeBoolean(raw.calls_model, true),
+    selects_tools: safeBoolean(raw.selects_tools, true),
+    trains_model: safeBoolean(raw.trains_model, true),
+    grants_execution_authority: safeBoolean(raw.grants_execution_authority, true),
+    grants_mutation_authority: safeBoolean(raw.grants_mutation_authority, true),
+    governance: recordOrEmpty(raw.governance),
+    next_smallest_truthful_gap: safeString(raw.next_smallest_truthful_gap, ""),
+  };
+}
+
 export function parseTelemetryContextFeedbackMemoryAssistancePolicy(
   value: unknown,
 ): TelemetryContextFeedbackMemoryAssistancePolicy {
@@ -550,6 +606,7 @@ export function parseTelemetryContextFeedbackMemoryAssistancePolicy(
     status: safeString(raw.status, "unknown"),
     policy_id: safeString(raw.policy_id, ""),
     memory_readback_route: safeString(raw.memory_readback_route, ""),
+    operator_feedback_memory_readback_route: safeString(raw.operator_feedback_memory_readback_route, ""),
     memory_policy_route: safeString(raw.memory_policy_route, ""),
     allowed_memory_event_kinds: safeStringArray(raw.allowed_memory_event_kinds),
     allowed_action_types: safeStringArray(raw.allowed_action_types),
@@ -943,6 +1000,44 @@ export class TelemetryClient {
       return parseTelemetryContextFeedbackMemoryRetrievalReadback(text ? JSON.parse(text) : {});
     } catch (err) {
       throw new TelemetryApiError("Telemetry context feedback memory retrieval readback response was not valid JSON.", { url, cause: err });
+    }
+  }
+
+  async getContextFeedbackMemoryAssistanceOperatorFeedbackMemoryReadback(opts?: {
+    limit?: number;
+    signal?: AbortSignal;
+  }): Promise<TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackMemoryReadback> {
+    const limit = clampLimit(opts?.limit, 20);
+    const url = this.url(`/telemetry/context/feedback/memory-assistance-feedback-memory-readback?limit=${limit}`);
+    let response: Response;
+    try {
+      response = await fetch(url, { method: "GET", signal: opts?.signal });
+    } catch (err) {
+      throw new TelemetryApiError("Telemetry feedback memory assistance memory readback request failed.", {
+        url,
+        cause: err,
+      });
+    }
+
+    const text = await response.text();
+    if (!response.ok) {
+      throw new TelemetryApiError(
+        `HTTP ${response.status} for telemetry feedback memory assistance memory readback request`,
+        {
+          status: response.status,
+          url,
+          bodySnippet: text.slice(0, 500),
+        },
+      );
+    }
+
+    try {
+      return parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackMemoryReadback(text ? JSON.parse(text) : {});
+    } catch (err) {
+      throw new TelemetryApiError("Telemetry feedback memory assistance memory readback response was not valid JSON.", {
+        url,
+        cause: err,
+      });
     }
   }
 
