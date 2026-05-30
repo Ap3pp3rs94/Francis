@@ -101,6 +101,7 @@ import type {
 import {
   TelemetryApiError,
   TelemetryClient,
+  type TelemetryContextFeedbackMemoryAssistanceChatContextReadback,
   type TelemetryContextFeedbackMemoryAssistanceDryRun,
   type TelemetryContextFeedbackMemoryAssistancePolicy,
   type TelemetryContextFeedbackMemoryQualityRecord,
@@ -3971,6 +3972,11 @@ function SystemPanel(props: {
     useState<TelemetryContextFeedbackMemoryAssistanceDryRun | null>(null);
   const [telemetryFeedbackMemoryAssistanceDryRunError, setTelemetryFeedbackMemoryAssistanceDryRunError] = useState<string | null>(null);
   const [telemetryFeedbackMemoryAssistanceDryRunLoadedAt, setTelemetryFeedbackMemoryAssistanceDryRunLoadedAt] = useState<number | null>(null);
+  const [telemetryFeedbackMemoryAssistanceChatContext, setTelemetryFeedbackMemoryAssistanceChatContext] =
+    useState<TelemetryContextFeedbackMemoryAssistanceChatContextReadback | null>(null);
+  const [telemetryFeedbackMemoryAssistanceChatContextError, setTelemetryFeedbackMemoryAssistanceChatContextError] = useState<string | null>(null);
+  const [telemetryFeedbackMemoryAssistanceChatContextLoadedAt, setTelemetryFeedbackMemoryAssistanceChatContextLoadedAt] =
+    useState<number | null>(null);
   const [telemetryFeedbackMemoryQualityBusy, setTelemetryFeedbackMemoryQualityBusy] = useState(false);
   const [telemetryFeedbackMemoryQualityNotice, setTelemetryFeedbackMemoryQualityNotice] = useState<{
     tone: "info" | "error";
@@ -4168,6 +4174,7 @@ function SystemPanel(props: {
         nextTelemetryFeedbackMemoryReadback,
         nextTelemetryFeedbackMemoryAssistancePolicy,
         nextTelemetryFeedbackMemoryAssistanceDryRun,
+        nextTelemetryFeedbackMemoryAssistanceChatContext,
       ] =
         await Promise.allSettled([
         client.getSystemInfo(),
@@ -4193,6 +4200,7 @@ function SystemPanel(props: {
         telemetryClient.getContextFeedbackMemoryRetrievalReadback({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistancePolicy(),
         telemetryClient.getContextFeedbackMemoryAssistanceDryRun({ limit: 20 }),
+        telemetryClient.getContextFeedbackMemoryAssistanceChatContextReadback({ limit: 20 }),
       ]);
 
       const degradedFeeds: string[] = [];
@@ -4350,6 +4358,15 @@ function SystemPanel(props: {
       } else {
         setTelemetryFeedbackMemoryAssistanceDryRunError(telemetryError(nextTelemetryFeedbackMemoryAssistanceDryRun.reason));
         degradedFeeds.push("telemetry feedback memory assistance dry run");
+      }
+
+      if (nextTelemetryFeedbackMemoryAssistanceChatContext.status === "fulfilled") {
+        setTelemetryFeedbackMemoryAssistanceChatContext(nextTelemetryFeedbackMemoryAssistanceChatContext.value);
+        setTelemetryFeedbackMemoryAssistanceChatContextError(null);
+        setTelemetryFeedbackMemoryAssistanceChatContextLoadedAt(refreshStartedAt);
+      } else {
+        setTelemetryFeedbackMemoryAssistanceChatContextError(telemetryError(nextTelemetryFeedbackMemoryAssistanceChatContext.reason));
+        degradedFeeds.push("telemetry feedback memory assistance chat context");
       }
 
       if (degradedFeeds.length > 0) {
@@ -6120,6 +6137,23 @@ function SystemPanel(props: {
       ? `${telemetryFeedbackMemoryAssistanceDryRun.event_count} feedback-memory event${telemetryFeedbackMemoryAssistanceDryRun.event_count === 1 ? "" : "s"} projected without prompt, tool, model, or memory mutation.`
       : "Feedback memory assistance dry run has not loaded yet.";
   const latestTelemetryFeedbackMemoryAttention = telemetryFeedbackMemoryAssistanceDryRun?.source_attention[0] ?? null;
+  const telemetryFeedbackMemoryAssistanceChatContextStatus =
+    safeString(telemetryFeedbackMemoryAssistanceChatContext?.status).trim() ||
+    (telemetryFeedbackMemoryAssistanceChatContextError ? "unavailable" : "unloaded");
+  const telemetryFeedbackMemoryAssistanceChatContextTone = telemetryFeedbackMemoryAssistanceChatContextError
+    ? "blocked"
+    : telemetryFeedbackMemoryAssistanceChatContext
+      ? telemetryFeedbackMemoryAssistanceChatContext.chat_context.line_count > 0
+        ? "running"
+        : "dormant"
+      : "standby";
+  const telemetryFeedbackMemoryAssistanceChatContextDetail = telemetryFeedbackMemoryAssistanceChatContextError
+    ? `Feedback memory assistance chat-context readback could not refresh: ${telemetryFeedbackMemoryAssistanceChatContextError}`
+    : telemetryFeedbackMemoryAssistanceChatContext
+      ? `${telemetryFeedbackMemoryAssistanceChatContext.chat_context.line_count} bounded chat context line${telemetryFeedbackMemoryAssistanceChatContext.chat_context.line_count === 1 ? "" : "s"} projected; applies now ${telemetryFeedbackMemoryAssistanceChatContext.applies_to_chat_now ? "true" : "false"}.`
+      : "Feedback memory assistance chat-context readback has not loaded yet.";
+  const latestTelemetryFeedbackMemoryChatContextLine =
+    telemetryFeedbackMemoryAssistanceChatContext?.chat_context.lines[0] ?? "";
   const controlTone =
     controlModeId === "pilot"
       ? { bg: "#24160a", border: "#7a541b", color: "#ffd38a" }
@@ -11054,6 +11088,9 @@ function SystemPanel(props: {
             <span style={badgeStyle(telemetryFeedbackMemoryAssistanceDryRunTone)}>
               Dry run {telemetryFeedbackMemoryAssistanceDryRunStatus}
             </span>
+            <span style={badgeStyle(telemetryFeedbackMemoryAssistanceChatContextTone)}>
+              Chat context {telemetryFeedbackMemoryAssistanceChatContextStatus}
+            </span>
             <span style={badgeStyle(continuation.tone)}>{continuation.label}</span>
           </div>
         </div>
@@ -11099,6 +11136,15 @@ function SystemPanel(props: {
           style={{ fontSize: 12, color: telemetryFeedbackMemoryAssistanceDryRunError ? "#ffcf9d" : THEME.text, marginTop: 8 }}
         >
           {telemetryFeedbackMemoryAssistanceDryRunDetail}
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            color: telemetryFeedbackMemoryAssistanceChatContextError ? "#ffcf9d" : THEME.text,
+            marginTop: 8,
+          }}
+        >
+          {telemetryFeedbackMemoryAssistanceChatContextDetail}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
           <button
@@ -11337,6 +11383,58 @@ function SystemPanel(props: {
                 </>
               ) : (
                 <div style={{ fontSize: 12, color: THEME.muted, marginTop: 6 }}>No source attention projected.</div>
+              )}
+            </div>
+          </div>
+        ) : null}
+        {telemetryFeedbackMemoryAssistanceChatContext ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+              gap: 8,
+              marginTop: 10,
+            }}
+          >
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Chat context readback</div>
+              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
+                {telemetryFeedbackMemoryAssistanceChatContext.chat_context.line_count}/
+                {telemetryFeedbackMemoryAssistanceChatContext.chat_context.max_context_lines}
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                target <code>{telemetryFeedbackMemoryAssistanceChatContext.chat_context.target || "prompt_lines"}</code>
+              </div>
+              {telemetryFeedbackMemoryAssistanceChatContextLoadedAt ? (
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                  Loaded {toLocaleTime(telemetryFeedbackMemoryAssistanceChatContextLoadedAt)}
+                </div>
+              ) : null}
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Prompt posture</div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                applies <code>{telemetryFeedbackMemoryAssistanceChatContext.applies_to_chat_now ? "true" : "false"}</code>
+                {" / "}would change{" "}
+                <code>{telemetryFeedbackMemoryAssistanceChatContext.would_change_chat_prompt ? "true" : "false"}</code>
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                model <code>{telemetryFeedbackMemoryAssistanceChatContext.calls_model ? "true" : "false"}</code>
+                {" / "}prompt <code>{telemetryFeedbackMemoryAssistanceChatContext.mutates_prompt ? "true" : "false"}</code>
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                tools <code>{telemetryFeedbackMemoryAssistanceChatContext.selects_tools ? "true" : "false"}</code>
+                {" / "}writes <code>{telemetryFeedbackMemoryAssistanceChatContext.writes_memory ? "true" : "false"}</code>
+              </div>
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>First context line</div>
+              {latestTelemetryFeedbackMemoryChatContextLine ? (
+                <div style={{ fontSize: 12, color: THEME.text, marginTop: 6, overflowWrap: "anywhere" }}>
+                  {latestTelemetryFeedbackMemoryChatContextLine}
+                </div>
+              ) : (
+                <div style={{ fontSize: 12, color: THEME.muted, marginTop: 6 }}>No bounded context line projected.</div>
               )}
             </div>
           </div>

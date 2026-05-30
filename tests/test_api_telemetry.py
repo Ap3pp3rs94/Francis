@@ -32,7 +32,7 @@ def test_telemetry_status_projects_stage7_readonly_sources(monkeypatch, tmp_path
     }
     assert body["source_total"] == 3
     assert body["active_source_total"] == sum(1 for source in body["sources"] if source["active"])
-    assert body["next_smallest_truthful_gap"] == "stage7_context_feedback_memory_assistance_chat_context_readback"
+    assert body["next_smallest_truthful_gap"] == "stage7_context_feedback_memory_assistance_prompt_integration"
 
     sources = {source["id"]: source for source in body["sources"]}
     assert set(sources) == {"terminal", "git", "ide_diagnostics"}
@@ -145,7 +145,7 @@ def test_telemetry_context_projects_redacted_assist_surface(monkeypatch, tmp_pat
     assert body["feedback"]["read_route"] == "/telemetry/context/feedback"
     assert body["feedback"]["review_route"] == "/telemetry/context/feedback/review"
     assert body["feedback"]["required_scope"] == "telemetry.context.feedback.write"
-    assert body["next_smallest_truthful_gap"] == "stage7_context_feedback_memory_assistance_chat_context_readback"
+    assert body["next_smallest_truthful_gap"] == "stage7_context_feedback_memory_assistance_prompt_integration"
 
     source_ids = {item["source_id"] for item in body["context_items"]}
     assert "terminal" in source_ids
@@ -243,7 +243,7 @@ def test_telemetry_context_feedback_memory_quality_is_empty_without_events(monke
     assert body["governance"]["read_only"] is True
     assert body["governance"]["operator_decision_required_before_memory_write"] is True
     assert body["governance"]["writes_memory"] is False
-    assert body["next_smallest_truthful_gap"] == "stage7_context_feedback_memory_assistance_chat_context_readback"
+    assert body["next_smallest_truthful_gap"] == "stage7_context_feedback_memory_assistance_prompt_integration"
 
 
 def test_telemetry_context_feedback_memory_retrieval_policy_is_read_only(
@@ -294,7 +294,7 @@ def test_telemetry_context_feedback_memory_retrieval_policy_is_read_only(
     assert body["governance"]["policy_only"] is True
     assert body["governance"]["does_not_query_memory_yet"] is True
     assert body["governance"]["retrieval_requires_separate_readback"] is True
-    assert body["next_smallest_truthful_gap"] == "stage7_context_feedback_memory_assistance_chat_context_readback"
+    assert body["next_smallest_truthful_gap"] == "stage7_context_feedback_memory_assistance_prompt_integration"
 
 
 def test_telemetry_context_feedback_memory_assistance_policy_is_read_only(
@@ -341,7 +341,7 @@ def test_telemetry_context_feedback_memory_assistance_policy_is_read_only(
     assert body["governance"]["assistance_requires_separate_dry_run"] is True
     assert body["governance"]["grants_memory_write_authority"] is False
     assert body["governance"]["grants_mutation_authority"] is False
-    assert body["next_smallest_truthful_gap"] == "stage7_context_feedback_memory_assistance_chat_context_readback"
+    assert body["next_smallest_truthful_gap"] == "stage7_context_feedback_memory_assistance_prompt_integration"
     assert not data_root.exists()
 
 
@@ -391,7 +391,7 @@ def test_telemetry_context_feedback_memory_assistance_chat_context_contract_is_r
     assert body["governance"]["does_not_change_chat_prompt_yet"] is True
     assert body["governance"]["requires_separate_readback_before_prompt_injection"] is True
     assert body["governance"]["grants_memory_write_authority"] is False
-    assert body["next_smallest_truthful_gap"] == "stage7_context_feedback_memory_assistance_chat_context_readback"
+    assert body["next_smallest_truthful_gap"] == "stage7_context_feedback_memory_assistance_prompt_integration"
     assert not data_root.exists()
 
 
@@ -432,7 +432,54 @@ def test_telemetry_context_feedback_memory_assistance_dry_run_is_empty_without_e
     assert body["governance"]["does_not_mutate_prompt"] is True
     assert body["governance"]["does_not_select_tools"] is True
     assert body["governance"]["grants_memory_write_authority"] is False
-    assert body["next_smallest_truthful_gap"] == "stage7_context_feedback_memory_assistance_chat_context_readback"
+    assert body["next_smallest_truthful_gap"] == "stage7_context_feedback_memory_assistance_prompt_integration"
+    assert not data_root.exists()
+
+
+def test_telemetry_context_feedback_memory_assistance_chat_context_readback_is_empty_without_events(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    client = TestClient(create_app())
+    response = client.get("/telemetry/context/feedback/memory-assistance-chat-context-readback")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "francis.stage7.telemetry.context_feedback_memory_assistance_chat_context_readback"
+    assert body["status"] == "empty"
+    assert (
+        body["contract"]["kind"] == "francis.stage7.telemetry.context_feedback_memory_assistance_chat_context_contract"
+    )
+    assert body["dry_run"]["route"] == "/telemetry/context/feedback/memory-assistance-dry-run"
+    assert body["dry_run"]["event_count"] == 0
+    assert body["chat_context"] == {
+        "target": "telemetry_context.prompt_lines",
+        "line_count": 0,
+        "max_context_lines": 2,
+        "lines": [],
+        "visible_header_required": True,
+        "telemetry_is_untrusted_input": True,
+    }
+    assert body["would_change_chat_prompt"] is False
+    assert body["applies_to_chat_now"] is False
+    assert body["reads_memory"] is True
+    assert body["writes_memory"] is False
+    assert body["calls_model"] is False
+    assert body["mutates_prompt"] is False
+    assert body["selects_tools"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["governance"]["read_only"] is True
+    assert body["governance"]["readback_only"] is True
+    assert body["governance"]["does_not_change_chat_prompt_yet"] is True
+    assert body["governance"]["redacts_context_lines"] is True
+    assert body["governance"]["does_not_call_model"] is True
+    assert body["governance"]["does_not_select_tools"] is True
+    assert body["governance"]["grants_memory_write_authority"] is False
+    assert body["next_smallest_truthful_gap"] == "stage7_context_feedback_memory_assistance_prompt_integration"
     assert not data_root.exists()
 
 
@@ -472,7 +519,7 @@ def test_telemetry_context_feedback_memory_retrieval_readback_is_empty_without_e
     assert body["governance"]["uses_memory_timeline_read_route"] is True
     assert body["governance"]["uses_policy_filters"] is True
     assert body["governance"]["ignores_payload_instruction_text"] is True
-    assert body["next_smallest_truthful_gap"] == "stage7_context_feedback_memory_assistance_chat_context_readback"
+    assert body["next_smallest_truthful_gap"] == "stage7_context_feedback_memory_assistance_prompt_integration"
     assert not (data_root / "memory" / "timeline" / "_events.json").exists()
     assert not data_root.exists()
     assert not data_root.exists()
@@ -677,7 +724,7 @@ def test_telemetry_context_feedback_review_summarizes_explicit_quality_signals(
     assert body["grants_mutation_authority"] is False
     assert body["governance"]["read_only"] is True
     assert body["governance"]["uses_explicit_operator_feedback_only"] is True
-    assert body["next_smallest_truthful_gap"] == "stage7_context_feedback_memory_assistance_chat_context_readback"
+    assert body["next_smallest_truthful_gap"] == "stage7_context_feedback_memory_assistance_prompt_integration"
 
     review_text = json.dumps(body, sort_keys=True)
     for raw_secret in ("usefulreasonsecret123", "notessecret123", "promptsecret123", "responsesecret123"):
@@ -934,9 +981,7 @@ def test_telemetry_context_feedback_memory_quality_record_writes_governed_memory
     assert readback_body["writes_memory"] is False
     assert readback_body["governance"]["read_only"] is True
     assert readback_body["governance"]["uses_policy_filters"] is True
-    assert (
-        readback_body["next_smallest_truthful_gap"] == "stage7_context_feedback_memory_assistance_chat_context_readback"
-    )
+    assert readback_body["next_smallest_truthful_gap"] == "stage7_context_feedback_memory_assistance_prompt_integration"
     retrieved = readback_body["items"][0]
     assert retrieved["id"] == "evt-telemetry-feedback-quality"
     assert retrieved["kind"] == "telemetry_context_feedback_quality_review"
@@ -995,9 +1040,51 @@ def test_telemetry_context_feedback_memory_quality_record_writes_governed_memory
     assert dry_run_body["governance"]["does_not_call_model"] is True
     assert dry_run_body["governance"]["does_not_mutate_prompt"] is True
     assert dry_run_body["governance"]["does_not_select_tools"] is True
-    assert (
-        dry_run_body["next_smallest_truthful_gap"] == "stage7_context_feedback_memory_assistance_chat_context_readback"
-    )
+    assert dry_run_body["next_smallest_truthful_gap"] == "stage7_context_feedback_memory_assistance_prompt_integration"
+
+    chat_readback = client.get("/telemetry/context/feedback/memory-assistance-chat-context-readback?limit=10")
+    assert chat_readback.status_code == 200
+    chat_body = chat_readback.json()
+    assert chat_body["ok"] is True
+    assert chat_body["status"] == "context_ready"
+    assert chat_body["contract"]["contract_id"] == "stage7_context_feedback_memory_assistance_chat_context_contract"
+    assert chat_body["dry_run"]["event_count"] == 1
+    assert chat_body["dry_run"]["dry_run_only"] is True
+    assert chat_body["chat_context"]["target"] == "telemetry_context.prompt_lines"
+    assert chat_body["chat_context"]["line_count"] == 2
+    assert chat_body["chat_context"]["max_context_lines"] == 2
+    assert chat_body["chat_context"]["visible_header_required"] is True
+    assert chat_body["chat_context"]["telemetry_is_untrusted_input"] is True
+    assert chat_body["chat_context"]["lines"] == [
+        (
+            "feedback_memory_assistance.summary: Operator feedback trends suggest reviewing "
+            "ide_diagnostics context relevance before assistance."
+        ),
+        (
+            "feedback_memory_assistance.source_attention: ide_diagnostics feedback_count=1 "
+            "suggested_use=operator_review_context_relevance"
+        ),
+    ]
+    assert chat_body["would_change_chat_prompt"] is True
+    assert chat_body["applies_to_chat_now"] is False
+    assert chat_body["reads_memory"] is True
+    assert chat_body["writes_memory"] is False
+    assert chat_body["calls_model"] is False
+    assert chat_body["mutates_prompt"] is False
+    assert chat_body["selects_tools"] is False
+    assert chat_body["governance"]["does_not_change_chat_prompt_yet"] is True
+    assert chat_body["governance"]["redacts_context_lines"] is True
+    assert chat_body["next_smallest_truthful_gap"] == "stage7_context_feedback_memory_assistance_prompt_integration"
+
+    chat_readback_text = json.dumps(chat_body, sort_keys=True)
+    for raw_secret in (
+        "memoryrecordreasonsecret123",
+        "memoryrecordnotessecret123",
+        "memoryrecordpromptsecret123",
+        "memoryrecordresponsesecret123",
+        "memoryrecordwritesecret123",
+    ):
+        assert raw_secret not in chat_readback_text
 
     dry_run_text = json.dumps(dry_run_body, sort_keys=True)
     for raw_secret in (

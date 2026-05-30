@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from francis.api.routes.memory_timeline import list_timeline, record_memory_timeline_payload
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
+from francis.governance.redaction import redact_secret_text
 from francis.telemetry.context import (
     MEMORY_TIMELINE_WRITE_SCOPE,
     TELEMETRY_CONTEXT_FEEDBACK_WRITE_SCOPE,
@@ -227,7 +228,66 @@ def context_feedback_memory_assistance_dry_run(limit: int = 20) -> dict[str, Any
             "grants_memory_write_authority": False,
         },
         "skipped_untrusted_items": skipped,
-        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_chat_context_readback",
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_prompt_integration",
+    }
+
+
+@router.get("/context/feedback/memory-assistance-chat-context-readback")
+def context_feedback_memory_assistance_chat_context_readback(limit: int = 20) -> dict[str, Any]:
+    safe_limit = max(1, min(int(limit), 100))
+    contract = telemetry_context_feedback_memory_assistance_chat_context_contract()
+    dry_run = context_feedback_memory_assistance_dry_run(limit=safe_limit)
+    max_lines = _safe_count(contract.get("max_context_lines")) or 2
+    max_lines = max(1, min(max_lines, 2))
+    context_lines = _feedback_memory_assistance_chat_context_lines(dry_run=dry_run, max_lines=max_lines)
+    status = "context_ready" if context_lines else "empty"
+    return {
+        "ok": True,
+        "kind": "francis.stage7.telemetry.context_feedback_memory_assistance_chat_context_readback",
+        "stage": "Stage 7 / Telemetry MVP",
+        "source_id": "telemetry_context",
+        "status": status,
+        "contract": contract,
+        "dry_run": {
+            "route": "/telemetry/context/feedback/memory-assistance-dry-run",
+            "status": dry_run.get("status", "unknown"),
+            "event_count": dry_run.get("event_count", 0),
+            "dry_run_only": dry_run.get("dry_run_only", False),
+        },
+        "chat_context": {
+            "target": "telemetry_context.prompt_lines",
+            "line_count": len(context_lines),
+            "max_context_lines": max_lines,
+            "lines": context_lines,
+            "visible_header_required": True,
+            "telemetry_is_untrusted_input": True,
+        },
+        "would_change_chat_prompt": bool(context_lines),
+        "applies_to_chat_now": False,
+        "reads_memory": True,
+        "writes_memory": False,
+        "calls_model": False,
+        "mutates_prompt": False,
+        "selects_tools": False,
+        "trains_model": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "readback_only": True,
+            "uses_assistance_chat_context_contract": True,
+            "uses_assistance_dry_run": True,
+            "does_not_change_chat_prompt_yet": True,
+            "telemetry_is_untrusted_input": True,
+            "redacts_context_lines": True,
+            "does_not_call_model": True,
+            "does_not_select_tools": True,
+            "writes_memory": False,
+            "trains_model": False,
+            "grants_execution_authority": False,
+            "grants_memory_write_authority": False,
+        },
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_prompt_integration",
     }
 
 
@@ -296,7 +356,7 @@ def context_feedback_memory_retrieval_readback(limit: int = 20) -> dict[str, Any
             "grants_execution_authority": False,
             "grants_memory_write_authority": False,
         },
-        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_chat_context_readback",
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_prompt_integration",
     }
 
 
@@ -444,6 +504,40 @@ def _assistance_projection_summary(
     if useful > 0:
         return f"Operator feedback trends support surfacing {top_source} as a relevant context source."
     return f"Operator feedback memory is available for bounded {top_source} context review."
+
+
+def _feedback_memory_assistance_chat_context_lines(*, dry_run: dict[str, Any], max_lines: int) -> list[str]:
+    if dry_run.get("status") != "dry_run_ready":
+        return []
+    projection_value = dry_run.get("assistance_projection")
+    projection: dict[str, Any] = projection_value if isinstance(projection_value, dict) else {}
+    lines: list[str] = []
+    summary = _redacted_line_text(projection.get("summary"))
+    if summary:
+        lines.append(_bounded_chat_context_line(f"feedback_memory_assistance.summary: {summary}"))
+    attention_value = dry_run.get("source_attention")
+    attention: list[Any] = attention_value if isinstance(attention_value, list) else []
+    first_attention = attention[0] if attention and isinstance(attention[0], dict) else {}
+    if first_attention:
+        source_id = _redacted_line_text(first_attention.get("source_id"))
+        feedback_count = _safe_count(first_attention.get("feedback_count"))
+        suggested_use = _redacted_line_text(first_attention.get("suggested_use"))
+        if source_id:
+            lines.append(
+                _bounded_chat_context_line(
+                    "feedback_memory_assistance.source_attention: "
+                    f"{source_id} feedback_count={feedback_count} suggested_use={suggested_use}"
+                )
+            )
+    return [line for line in lines if line][:max_lines]
+
+
+def _redacted_line_text(value: Any) -> str:
+    return redact_secret_text(str(value or "").strip()).replace("\r", " ").replace("\n", " ").strip()
+
+
+def _bounded_chat_context_line(value: str) -> str:
+    return value[:400]
 
 
 @router.get("/terminal/scope")

@@ -44676,6 +44676,61 @@ Latest validation for Stage 7 feedback memory assistance chat-context contract:
   `mutates_prompt=false`,
   `next_smallest_truthful_gap=stage7_context_feedback_memory_assistance_chat_context_readback`.
 
+### 2026-05-30 - Stage 7 feedback memory assistance chat-context readback is visible
+
+Roadmap area: Stage 7 / Telemetry MVP, read-only chat-context readback for
+feedback-memory assistance.
+
+Material change:
+
+- Telemetry context feedback now exposes
+  `/telemetry/context/feedback/memory-assistance-chat-context-readback`.
+- The readback derives at most two redacted context lines from the governed
+  feedback-memory assistance dry run and projects them only as
+  `telemetry_context.prompt_lines` candidates.
+- The readback reports `applies_to_chat_now=false`; it does not call a model,
+  mutate the chat prompt, select tools, train, write memory, or grant execution
+  or mutation authority.
+- The chat UI telemetry client and Telemetry & Continuation surface now show the
+  readback status, line count, first projected context line, and prompt posture.
+- `/telemetry/status`, `/telemetry/context`, feedback review, feedback
+  memory-quality, feedback memory-retrieval, feedback assistance policy,
+  feedback assistance dry run, and the chat-context contract now advance their
+  next smallest truthful gap to
+  `stage7_context_feedback_memory_assistance_prompt_integration`.
+
+Latest validation for Stage 7 feedback memory assistance chat-context readback:
+
+- `python -m pytest tests/test_api_telemetry.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 26 collected tests passed`
+- `python -m mypy src/francis/telemetry/context.py
+  src/francis/telemetry/status.py src/francis/api/routes/telemetry.py`
+  Result: `passed`
+- `python -m ruff check src/francis/telemetry/context.py
+  src/francis/telemetry/status.py src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/telemetry/context.py
+  src/francis/telemetry/status.py src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `node --test --experimental-strip-types src/telemetry/index.test.ts` in
+  `apps/chat_ui`
+  Result: `passed; 14 passed`
+- `npm run test` in `apps/chat_ui`
+  Result: `passed; 122 passed`
+- `npm run build` in `apps/chat_ui`
+  Result: `passed`
+- Direct
+  `/telemetry/context/feedback/memory-assistance-chat-context-readback?limit=5`
+  readback
+  Result: `status=empty`, `would_change_chat_prompt=false`,
+  `applies_to_chat_now=false`, `reads_memory=true`, `writes_memory=false`,
+  `calls_model=false`, `mutates_prompt=false`, `selects_tools=false`,
+  `next_smallest_truthful_gap=stage7_context_feedback_memory_assistance_prompt_integration`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

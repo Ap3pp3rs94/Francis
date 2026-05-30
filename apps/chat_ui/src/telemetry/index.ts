@@ -206,6 +206,34 @@ export type TelemetryContextFeedbackMemoryAssistanceDryRun = {
   next_smallest_truthful_gap: string;
 };
 
+export type TelemetryContextFeedbackMemoryAssistanceChatContextReadback = {
+  ok: boolean;
+  kind: string;
+  stage: string;
+  source_id: string;
+  status: string;
+  chat_context: {
+    target: string;
+    line_count: number;
+    max_context_lines: number;
+    lines: string[];
+    visible_header_required: boolean;
+    telemetry_is_untrusted_input: boolean;
+  };
+  would_change_chat_prompt: boolean;
+  applies_to_chat_now: boolean;
+  reads_memory: boolean;
+  writes_memory: boolean;
+  calls_model: boolean;
+  mutates_prompt: boolean;
+  selects_tools: boolean;
+  trains_model: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+  governance: Record<string, unknown>;
+  next_smallest_truthful_gap: string;
+};
+
 export class TelemetryApiError extends Error {
   readonly status?: number;
   readonly url?: string;
@@ -381,6 +409,41 @@ export function parseTelemetryContextFeedbackMemoryAssistanceDryRun(
     calls_model: safeBoolean(raw.calls_model, true),
     mutates_prompt: safeBoolean(raw.mutates_prompt, true),
     selects_tools: safeBoolean(raw.selects_tools, true),
+    grants_execution_authority: safeBoolean(raw.grants_execution_authority, true),
+    grants_mutation_authority: safeBoolean(raw.grants_mutation_authority, true),
+    governance: recordOrEmpty(raw.governance),
+    next_smallest_truthful_gap: safeString(raw.next_smallest_truthful_gap, ""),
+  };
+}
+
+export function parseTelemetryContextFeedbackMemoryAssistanceChatContextReadback(
+  value: unknown,
+): TelemetryContextFeedbackMemoryAssistanceChatContextReadback {
+  const raw = isRecord(value) ? value : {};
+  const chatContext = recordOrEmpty(raw.chat_context);
+
+  return {
+    ok: safeBoolean(raw.ok, false),
+    kind: safeString(raw.kind, ""),
+    stage: safeString(raw.stage, ""),
+    source_id: safeString(raw.source_id, ""),
+    status: safeString(raw.status, "unknown"),
+    chat_context: {
+      target: safeString(chatContext.target, ""),
+      line_count: safeNumber(chatContext.line_count, 0),
+      max_context_lines: safeNumber(chatContext.max_context_lines, 0),
+      lines: safeStringArray(chatContext.lines),
+      visible_header_required: safeBoolean(chatContext.visible_header_required, false),
+      telemetry_is_untrusted_input: safeBoolean(chatContext.telemetry_is_untrusted_input, true),
+    },
+    would_change_chat_prompt: safeBoolean(raw.would_change_chat_prompt, false),
+    applies_to_chat_now: safeBoolean(raw.applies_to_chat_now, false),
+    reads_memory: safeBoolean(raw.reads_memory, false),
+    writes_memory: safeBoolean(raw.writes_memory, true),
+    calls_model: safeBoolean(raw.calls_model, true),
+    mutates_prompt: safeBoolean(raw.mutates_prompt, true),
+    selects_tools: safeBoolean(raw.selects_tools, true),
+    trains_model: safeBoolean(raw.trains_model, true),
     grants_execution_authority: safeBoolean(raw.grants_execution_authority, true),
     grants_mutation_authority: safeBoolean(raw.grants_mutation_authority, true),
     governance: recordOrEmpty(raw.governance),
@@ -581,6 +644,41 @@ export class TelemetryClient {
         url,
         cause: err,
       });
+    }
+  }
+
+  async getContextFeedbackMemoryAssistanceChatContextReadback(opts?: {
+    limit?: number;
+    signal?: AbortSignal;
+  }): Promise<TelemetryContextFeedbackMemoryAssistanceChatContextReadback> {
+    const limit = clampLimit(opts?.limit, 20);
+    const url = this.url(`/telemetry/context/feedback/memory-assistance-chat-context-readback?limit=${limit}`);
+    let response: Response;
+    try {
+      response = await fetch(url, { method: "GET", signal: opts?.signal });
+    } catch (err) {
+      throw new TelemetryApiError("Telemetry context feedback memory assistance chat-context readback request failed.", {
+        url,
+        cause: err,
+      });
+    }
+
+    const text = await response.text();
+    if (!response.ok) {
+      throw new TelemetryApiError(`HTTP ${response.status} for telemetry context feedback memory assistance chat-context readback request`, {
+        status: response.status,
+        url,
+        bodySnippet: text.slice(0, 500),
+      });
+    }
+
+    try {
+      return parseTelemetryContextFeedbackMemoryAssistanceChatContextReadback(text ? JSON.parse(text) : {});
+    } catch (err) {
+      throw new TelemetryApiError(
+        "Telemetry context feedback memory assistance chat-context readback response was not valid JSON.",
+        { url, cause: err },
+      );
     }
   }
 
