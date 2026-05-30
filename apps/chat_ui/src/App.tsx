@@ -104,6 +104,7 @@ import {
   type TelemetryContextFeedbackRecord,
   type TelemetryContextFeedbackMemoryAssistanceChatContextReadback,
   type TelemetryContextFeedbackMemoryAssistanceDryRun,
+  type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopE2eAcceptanceAudit,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopE2eSample,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackMemoryReadback,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackReview,
@@ -4159,6 +4160,14 @@ function SystemPanel(props: {
     useState<string | null>(null);
   const [telemetryFeedbackMemoryAssistanceLoopSampleLoadedAt, setTelemetryFeedbackMemoryAssistanceLoopSampleLoadedAt] =
     useState<number | null>(null);
+  const [telemetryFeedbackMemoryAssistanceAcceptanceAudit, setTelemetryFeedbackMemoryAssistanceAcceptanceAudit] =
+    useState<TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopE2eAcceptanceAudit | null>(null);
+  const [telemetryFeedbackMemoryAssistanceAcceptanceAuditError, setTelemetryFeedbackMemoryAssistanceAcceptanceAuditError] =
+    useState<string | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceAcceptanceAuditLoadedAt,
+    setTelemetryFeedbackMemoryAssistanceAcceptanceAuditLoadedAt,
+  ] = useState<number | null>(null);
   const [telemetryFeedbackMemoryQualityBusy, setTelemetryFeedbackMemoryQualityBusy] = useState(false);
   const [telemetryFeedbackMemoryQualityNotice, setTelemetryFeedbackMemoryQualityNotice] = useState<{
     tone: "info" | "error";
@@ -4366,6 +4375,7 @@ function SystemPanel(props: {
         nextTelemetryFeedbackMemoryAssistanceOperatorReview,
         nextTelemetryFeedbackMemoryAssistanceOperatorMemoryReadback,
         nextTelemetryFeedbackMemoryAssistanceLoopSample,
+        nextTelemetryFeedbackMemoryAssistanceAcceptanceAudit,
       ] =
         await Promise.allSettled([
         client.getSystemInfo(),
@@ -4395,6 +4405,7 @@ function SystemPanel(props: {
         telemetryClient.getContextFeedbackMemoryAssistanceOperatorFeedbackReview({ limit: 25 }),
         telemetryClient.getContextFeedbackMemoryAssistanceOperatorFeedbackMemoryReadback({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistanceOperatorFeedbackLoopE2eSample({ limit: 20 }),
+        telemetryClient.getContextFeedbackMemoryAssistanceOperatorFeedbackLoopE2eAcceptanceAudit({ limit: 20 }),
       ]);
 
       const degradedFeeds: string[] = [];
@@ -4596,6 +4607,17 @@ function SystemPanel(props: {
           telemetryError(nextTelemetryFeedbackMemoryAssistanceLoopSample.reason),
         );
         degradedFeeds.push("telemetry feedback memory assistance e2e sample");
+      }
+
+      if (nextTelemetryFeedbackMemoryAssistanceAcceptanceAudit.status === "fulfilled") {
+        setTelemetryFeedbackMemoryAssistanceAcceptanceAudit(nextTelemetryFeedbackMemoryAssistanceAcceptanceAudit.value);
+        setTelemetryFeedbackMemoryAssistanceAcceptanceAuditError(null);
+        setTelemetryFeedbackMemoryAssistanceAcceptanceAuditLoadedAt(refreshStartedAt);
+      } else {
+        setTelemetryFeedbackMemoryAssistanceAcceptanceAuditError(
+          telemetryError(nextTelemetryFeedbackMemoryAssistanceAcceptanceAudit.reason),
+        );
+        degradedFeeds.push("telemetry feedback memory assistance e2e acceptance audit");
       }
 
       if (degradedFeeds.length > 0) {
@@ -6494,6 +6516,23 @@ function SystemPanel(props: {
     : telemetryFeedbackMemoryAssistanceLoopSample
       ? `Feedback memory assistance e2e sample ${telemetryFeedbackMemoryAssistanceLoopSample.status}; audit ${safeNumber(telemetryFeedbackMemoryAssistanceLoopSampleAudit.ready_count, 0)}/${safeNumber(telemetryFeedbackMemoryAssistanceLoopSampleAudit.required_count, 0)}, context lines ${safeNumber(telemetryFeedbackMemoryAssistanceLoopSampleChatContext.line_count, 0)}.`
       : "Feedback memory assistance e2e sample has not loaded yet.";
+  const telemetryFeedbackMemoryAssistanceAcceptanceAuditStatus =
+    safeString(telemetryFeedbackMemoryAssistanceAcceptanceAudit?.status).trim() ||
+    (telemetryFeedbackMemoryAssistanceAcceptanceAuditError ? "unavailable" : "unloaded");
+  const telemetryFeedbackMemoryAssistanceAcceptanceAuditTone = telemetryFeedbackMemoryAssistanceAcceptanceAuditError
+    ? "blocked"
+    : telemetryFeedbackMemoryAssistanceAcceptanceAudit
+      ? telemetryFeedbackMemoryAssistanceAcceptanceAudit.acceptance_ready
+        ? "running"
+        : "dormant"
+      : "standby";
+  const telemetryFeedbackMemoryAssistanceAcceptanceAuditSample =
+    telemetryFeedbackMemoryAssistanceAcceptanceAudit?.sample ?? {};
+  const telemetryFeedbackMemoryAssistanceAcceptanceAuditDetail = telemetryFeedbackMemoryAssistanceAcceptanceAuditError
+    ? `Feedback memory assistance e2e acceptance audit could not refresh: ${telemetryFeedbackMemoryAssistanceAcceptanceAuditError}`
+    : telemetryFeedbackMemoryAssistanceAcceptanceAudit
+      ? `Feedback memory assistance acceptance ${telemetryFeedbackMemoryAssistanceAcceptanceAudit.status}; criteria ${telemetryFeedbackMemoryAssistanceAcceptanceAudit.ready_count}/${telemetryFeedbackMemoryAssistanceAcceptanceAudit.required_count}, sample ${safeString(telemetryFeedbackMemoryAssistanceAcceptanceAuditSample.status).trim() || "unknown"}.`
+      : "Feedback memory assistance e2e acceptance audit has not loaded yet.";
   const controlTone =
     controlModeId === "pilot"
       ? { bg: "#24160a", border: "#7a541b", color: "#ffd38a" }
@@ -11440,6 +11479,9 @@ function SystemPanel(props: {
             <span style={badgeStyle(telemetryFeedbackMemoryAssistanceLoopSampleTone)}>
               Assist sample {telemetryFeedbackMemoryAssistanceLoopSampleStatus}
             </span>
+            <span style={badgeStyle(telemetryFeedbackMemoryAssistanceAcceptanceAuditTone)}>
+              Assist acceptance {telemetryFeedbackMemoryAssistanceAcceptanceAuditStatus}
+            </span>
             <span style={badgeStyle(continuation.tone)}>{continuation.label}</span>
           </div>
         </div>
@@ -11521,6 +11563,15 @@ function SystemPanel(props: {
           }}
         >
           {telemetryFeedbackMemoryAssistanceLoopSampleDetail}
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            color: telemetryFeedbackMemoryAssistanceAcceptanceAuditError ? "#ffcf9d" : THEME.text,
+            marginTop: 8,
+          }}
+        >
+          {telemetryFeedbackMemoryAssistanceAcceptanceAuditDetail}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
           <button
@@ -11629,6 +11680,49 @@ function SystemPanel(props: {
               </div>
               <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
                 next <code>{telemetryFeedbackMemoryAssistanceLoopSample.next_smallest_truthful_gap || "operator_surface"}</code>
+              </div>
+            </div>
+          </div>
+        ) : null}
+        {telemetryFeedbackMemoryAssistanceAcceptanceAudit ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+              gap: 8,
+              marginTop: 10,
+            }}
+          >
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>E2e acceptance</div>
+              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
+                {telemetryFeedbackMemoryAssistanceAcceptanceAudit.acceptance_ready ? "ready" : "waiting"}
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                criteria <code>{telemetryFeedbackMemoryAssistanceAcceptanceAudit.ready_count}</code>/
+                <code>{telemetryFeedbackMemoryAssistanceAcceptanceAudit.required_count}</code>
+                {" / "}sample{" "}
+                <code>{safeString(telemetryFeedbackMemoryAssistanceAcceptanceAuditSample.status).trim() || "unknown"}</code>
+              </div>
+              {telemetryFeedbackMemoryAssistanceAcceptanceAuditLoadedAt ? (
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                  Loaded {toLocaleTime(telemetryFeedbackMemoryAssistanceAcceptanceAuditLoadedAt)}
+                </div>
+              ) : null}
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Acceptance guards</div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 6 }}>
+                sends <code>{telemetryFeedbackMemoryAssistanceAcceptanceAudit.sends_chat ? "true" : "false"}</code>
+                {" / "}feedback{" "}
+                <code>{telemetryFeedbackMemoryAssistanceAcceptanceAudit.writes_feedback ? "true" : "false"}</code>
+              </div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 4 }}>
+                memory <code>{telemetryFeedbackMemoryAssistanceAcceptanceAudit.writes_memory ? "true" : "false"}</code>
+                {" / "}model <code>{telemetryFeedbackMemoryAssistanceAcceptanceAudit.calls_model ? "true" : "false"}</code>
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                next <code>{telemetryFeedbackMemoryAssistanceAcceptanceAudit.next_smallest_truthful_gap || "live_sample_run"}</code>
               </div>
             </div>
           </div>

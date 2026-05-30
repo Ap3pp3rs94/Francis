@@ -45152,6 +45152,60 @@ Latest validation for Stage 7 feedback memory assistance e2e sample:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-30 - Stage 7 feedback memory assistance e2e acceptance audit is visible
+
+Roadmap area: Stage 7 / Telemetry MVP, operator-visible feedback-memory
+assistance quality loop acceptance.
+
+Material change:
+
+- Telemetry now exposes a read-only e2e acceptance audit at
+  `/telemetry/context/feedback/memory-assistance-feedback-loop-e2e-acceptance-audit`.
+- The acceptance audit verifies the loop audit, e2e sample readback, bound chat
+  feedback and memory-record routes, non-execution guards, redacted context
+  lines, and the operator surface declaration together.
+- The Telemetry & Continuation panel now refreshes and displays the acceptance
+  audit status, ready/required counts, criterion readbacks, next gap, and
+  non-execution guard status.
+- Empty states remain truthful: the route reports `awaiting_sample_evidence`
+  until explicit feedback, memory receipt, loop audit, sample, and context-line
+  readbacks are all ready.
+- The acceptance audit writes no memory, writes no feedback, sends no chat,
+  calls no model, selects no tools, trains no model, and grants no execution or
+  mutation authority.
+- The next smallest truthful gap advances to
+  `stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run`.
+
+Latest validation for Stage 7 feedback memory assistance e2e acceptance audit:
+
+- `python -m pytest tests/test_api_telemetry.py tests/test_api_chat.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  --tb=short --maxfail=1`
+  Result: `passed; 43 passed`
+- `python -m mypy src/francis/telemetry/context.py
+  src/francis/api/routes/telemetry.py src/francis/telemetry/status.py
+  src/francis/api/routes/chat.py`
+  Result: `passed`
+- `python -m ruff check src/francis/telemetry/context.py
+  src/francis/api/routes/telemetry.py src/francis/telemetry/status.py
+  src/francis/api/routes/chat.py tests/test_api_telemetry.py
+  tests/test_api_chat.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/telemetry/context.py
+  src/francis/api/routes/telemetry.py src/francis/telemetry/status.py
+  src/francis/api/routes/chat.py tests/test_api_telemetry.py
+  tests/test_api_chat.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `node --test --experimental-strip-types src/telemetry/index.test.ts` in
+  `apps/chat_ui`
+  Result: `passed; 28 passed`
+- `npm run test` in `apps/chat_ui`
+  Result: `passed; 136 passed`
+- `npm run build` in `apps/chat_ui`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

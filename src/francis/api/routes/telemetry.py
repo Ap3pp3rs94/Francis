@@ -250,7 +250,7 @@ def context_feedback_memory_assistance_dry_run(limit: int = 20) -> dict[str, Any
             "grants_memory_write_authority": False,
         },
         "skipped_untrusted_items": skipped,
-        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit",
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run",
     }
 
 
@@ -310,7 +310,7 @@ def context_feedback_memory_assistance_chat_context_readback(limit: int = 20) ->
             "grants_execution_authority": False,
             "grants_memory_write_authority": False,
         },
-        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit",
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run",
     }
 
 
@@ -389,7 +389,7 @@ def context_feedback_memory_assistance_operator_feedback_memory_readback(limit: 
             "grants_execution_authority": False,
             "grants_memory_write_authority": False,
         },
-        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit",
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run",
     }
 
 
@@ -512,7 +512,7 @@ def context_feedback_memory_assistance_operator_feedback_loop_audit(limit: int =
             "grants_execution_authority": False,
             "grants_memory_write_authority": False,
         },
-        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit",
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run",
     }
 
 
@@ -630,7 +630,158 @@ def context_feedback_memory_assistance_operator_feedback_loop_e2e_sample(limit: 
             "grants_execution_authority": False,
             "grants_memory_write_authority": False,
         },
-        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit",
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run",
+    }
+
+
+@router.get("/context/feedback/memory-assistance-feedback-loop-e2e-acceptance-audit")
+def context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit(limit: int = 20) -> dict[str, Any]:
+    safe_limit = max(1, min(int(limit), 100))
+    sample = context_feedback_memory_assistance_operator_feedback_loop_e2e_sample(limit=safe_limit)
+    sample_audit_value = sample.get("audit")
+    sample_audit: dict[str, Any] = sample_audit_value if isinstance(sample_audit_value, dict) else {}
+    sample_chat_context_value = sample.get("chat_context")
+    sample_chat_context: dict[str, Any] = (
+        sample_chat_context_value if isinstance(sample_chat_context_value, dict) else {}
+    )
+    chat_request_value = sample.get("sample_chat_request")
+    chat_request: dict[str, Any] = chat_request_value if isinstance(chat_request_value, dict) else {}
+    feedback_request_value = sample.get("sample_feedback_request")
+    feedback_request: dict[str, Any] = feedback_request_value if isinstance(feedback_request_value, dict) else {}
+    memory_request_value = sample.get("sample_memory_record_request")
+    memory_request: dict[str, Any] = memory_request_value if isinstance(memory_request_value, dict) else {}
+    context_lines_value = sample_chat_context.get("lines")
+    context_lines = context_lines_value if isinstance(context_lines_value, list) else []
+
+    sample_readback_ready = bool(sample.get("loop_observed")) and sample.get("status") == "sample_ready"
+    loop_audit_ready = bool(sample_audit.get("loop_observed")) and (
+        _safe_count(sample_audit.get("ready_count")) == _safe_count(sample_audit.get("required_count")) > 0
+    )
+    sample_routes_bound = (
+        chat_request.get("route") == "/chat/send"
+        and feedback_request.get("route") == "/telemetry/context/feedback"
+        and feedback_request.get("required_scope") == TELEMETRY_CONTEXT_FEEDBACK_WRITE_SCOPE
+        and memory_request.get("route") == "/telemetry/context/feedback/memory-assistance-feedback-memory-quality"
+        and memory_request.get("required_scope") == MEMORY_TIMELINE_WRITE_SCOPE
+    )
+    sample_non_execution_guarded = (
+        sample.get("writes_memory") is False
+        and sample.get("writes_feedback") is False
+        and sample.get("sends_chat") is False
+        and sample.get("calls_model") is False
+        and sample.get("selects_tools") is False
+        and sample.get("grants_execution_authority") is False
+        and chat_request.get("executed_by_sample") is False
+        and feedback_request.get("executed_by_sample") is False
+        and memory_request.get("executed_by_sample") is False
+    )
+    context_redaction_ready = (
+        _safe_count(sample_chat_context.get("line_count")) > 0
+        and all(isinstance(line, str) and "\n" not in line and "\r" not in line for line in context_lines)
+        and bool(sample_chat_context.get("redacted_context_lines"))
+        and bool(sample_chat_context.get("telemetry_is_untrusted_input"))
+    )
+    operator_surface_visible = True
+
+    acceptance_criteria = [
+        {
+            "id": "loop_audit_ready",
+            "ready": loop_audit_ready,
+            "status": sample_audit.get("status", "unknown"),
+            "evidence": {
+                "ready_count": _safe_count(sample_audit.get("ready_count")),
+                "required_count": _safe_count(sample_audit.get("required_count")),
+            },
+        },
+        {
+            "id": "e2e_sample_readback_ready",
+            "ready": sample_readback_ready,
+            "status": sample.get("status", "unknown"),
+            "evidence": {"sample_id": sample.get("sample_id", "")},
+        },
+        {
+            "id": "sample_routes_bound",
+            "ready": sample_routes_bound,
+            "status": "routes_bound" if sample_routes_bound else "missing_or_unexpected",
+            "evidence": {
+                "chat_route": chat_request.get("route", ""),
+                "feedback_route": feedback_request.get("route", ""),
+                "memory_route": memory_request.get("route", ""),
+            },
+        },
+        {
+            "id": "sample_non_execution_guarded",
+            "ready": sample_non_execution_guarded,
+            "status": "non_executing" if sample_non_execution_guarded else "mutation_or_execution_possible",
+            "evidence": {
+                "sends_chat": bool(sample.get("sends_chat")),
+                "writes_feedback": bool(sample.get("writes_feedback")),
+                "writes_memory": bool(sample.get("writes_memory")),
+                "calls_model": bool(sample.get("calls_model")),
+            },
+        },
+        {
+            "id": "redacted_context_lines_ready",
+            "ready": context_redaction_ready,
+            "status": "redacted_context_ready" if context_redaction_ready else "awaiting_context_lines",
+            "evidence": {"line_count": _safe_count(sample_chat_context.get("line_count"))},
+        },
+        {
+            "id": "operator_surface_visible",
+            "ready": operator_surface_visible,
+            "status": "declared",
+            "evidence": {
+                "route": "apps/chat_ui/src/App.tsx",
+                "surface": "Telemetry & Continuation",
+                "badge": "Assist sample",
+            },
+        },
+    ]
+    ready_count = sum(1 for criterion in acceptance_criteria if criterion["ready"])
+    acceptance_ready = ready_count == len(acceptance_criteria)
+    status = "acceptance_ready" if acceptance_ready else "awaiting_sample_evidence"
+
+    return {
+        "ok": True,
+        "kind": "francis.stage7.telemetry.context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit",
+        "stage": "Stage 7 / Telemetry MVP",
+        "source_id": "telemetry_context",
+        "status": status,
+        "target": "feedback_memory_assistance_prompt_integration",
+        "sample_id": sample.get("sample_id", ""),
+        "acceptance_ready": acceptance_ready,
+        "acceptance_criteria": acceptance_criteria,
+        "ready_count": ready_count,
+        "required_count": len(acceptance_criteria),
+        "sample": {
+            "route": "/telemetry/context/feedback/memory-assistance-feedback-loop-e2e-sample",
+            "status": sample.get("status", "unknown"),
+            "loop_observed": sample.get("loop_observed", False),
+            "chat_context_line_count": _safe_count(sample_chat_context.get("line_count")),
+        },
+        "reads_memory": True,
+        "writes_memory": False,
+        "writes_feedback": False,
+        "sends_chat": False,
+        "calls_model": False,
+        "selects_tools": False,
+        "trains_model": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "acceptance_audit_only": True,
+            "uses_e2e_sample_readback": True,
+            "telemetry_is_untrusted_input": True,
+            "does_not_send_chat": True,
+            "does_not_write_feedback": True,
+            "does_not_write_memory": True,
+            "does_not_call_model": True,
+            "does_not_select_tools": True,
+            "grants_execution_authority": False,
+            "grants_memory_write_authority": False,
+        },
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run",
     }
 
 
@@ -699,7 +850,7 @@ def context_feedback_memory_retrieval_readback(limit: int = 20) -> dict[str, Any
             "grants_execution_authority": False,
             "grants_memory_write_authority": False,
         },
-        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit",
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run",
     }
 
 

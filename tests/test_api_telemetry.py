@@ -34,7 +34,7 @@ def test_telemetry_status_projects_stage7_readonly_sources(monkeypatch, tmp_path
     assert body["active_source_total"] == sum(1 for source in body["sources"] if source["active"])
     assert (
         body["next_smallest_truthful_gap"]
-        == "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit"
+        == "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run"
     )
 
     sources = {source["id"]: source for source in body["sources"]}
@@ -150,7 +150,7 @@ def test_telemetry_context_projects_redacted_assist_surface(monkeypatch, tmp_pat
     assert body["feedback"]["required_scope"] == "telemetry.context.feedback.write"
     assert (
         body["next_smallest_truthful_gap"]
-        == "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit"
+        == "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run"
     )
 
     source_ids = {item["source_id"] for item in body["context_items"]}
@@ -251,7 +251,7 @@ def test_telemetry_context_feedback_memory_quality_is_empty_without_events(monke
     assert body["governance"]["writes_memory"] is False
     assert (
         body["next_smallest_truthful_gap"]
-        == "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit"
+        == "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run"
     )
 
 
@@ -305,7 +305,7 @@ def test_telemetry_context_feedback_memory_retrieval_policy_is_read_only(
     assert body["governance"]["retrieval_requires_separate_readback"] is True
     assert (
         body["next_smallest_truthful_gap"]
-        == "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit"
+        == "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run"
     )
 
 
@@ -377,7 +377,7 @@ def test_telemetry_context_feedback_memory_assistance_policy_is_read_only(
     assert body["governance"]["grants_mutation_authority"] is False
     assert (
         body["next_smallest_truthful_gap"]
-        == "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit"
+        == "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run"
     )
     assert not data_root.exists()
 
@@ -430,7 +430,7 @@ def test_telemetry_context_feedback_memory_assistance_chat_context_contract_is_r
     assert body["governance"]["grants_memory_write_authority"] is False
     assert (
         body["next_smallest_truthful_gap"]
-        == "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit"
+        == "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run"
     )
     assert not data_root.exists()
 
@@ -474,7 +474,7 @@ def test_telemetry_context_feedback_memory_assistance_dry_run_is_empty_without_e
     assert body["governance"]["grants_memory_write_authority"] is False
     assert (
         body["next_smallest_truthful_gap"]
-        == "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit"
+        == "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run"
     )
     assert not data_root.exists()
 
@@ -524,7 +524,7 @@ def test_telemetry_context_feedback_memory_assistance_chat_context_readback_is_e
     assert body["governance"]["grants_memory_write_authority"] is False
     assert (
         body["next_smallest_truthful_gap"]
-        == "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit"
+        == "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run"
     )
     assert not data_root.exists()
 
@@ -558,7 +558,7 @@ def test_telemetry_context_feedback_memory_assistance_operator_feedback_review_i
     assert body["governance"]["target"] == "feedback_memory_assistance_prompt_integration"
     assert body["governance"]["uses_explicit_operator_feedback_only"] is True
     assert body["next_smallest_truthful_gap"] == (
-        "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit"
+        "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run"
     )
     assert not data_root.exists()
 
@@ -594,7 +594,7 @@ def test_telemetry_context_feedback_memory_assistance_operator_feedback_memory_q
     assert body["governance"]["candidate_only"] is True
     assert body["governance"]["target"] == "feedback_memory_assistance_prompt_integration"
     assert body["next_smallest_truthful_gap"] == (
-        "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit"
+        "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run"
     )
     assert not data_root.exists()
 
@@ -637,7 +637,7 @@ def test_telemetry_context_feedback_memory_retrieval_readback_is_empty_without_e
     assert body["governance"]["ignores_payload_instruction_text"] is True
     assert (
         body["next_smallest_truthful_gap"]
-        == "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit"
+        == "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run"
     )
     assert not (data_root / "memory" / "timeline" / "_events.json").exists()
     assert not data_root.exists()
@@ -687,7 +687,7 @@ def test_telemetry_context_feedback_memory_assistance_operator_feedback_memory_r
     assert body["governance"]["uses_assistance_policy_filters"] is True
     assert body["governance"]["ignores_payload_instruction_text"] is True
     assert body["next_smallest_truthful_gap"] == (
-        "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit"
+        "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run"
     )
     assert not (data_root / "memory" / "timeline" / "_events.json").exists()
     assert not data_root.exists()
@@ -736,7 +736,7 @@ def test_telemetry_context_feedback_memory_assistance_operator_feedback_loop_aud
     assert body["governance"]["does_not_call_model"] is True
     assert body["governance"]["does_not_select_tools"] is True
     assert body["next_smallest_truthful_gap"] == (
-        "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit"
+        "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run"
     )
     assert not (data_root / "memory" / "timeline" / "_events.json").exists()
     assert not data_root.exists()
@@ -789,7 +789,56 @@ def test_telemetry_context_feedback_memory_assistance_operator_feedback_loop_e2e
     assert body["governance"]["does_not_write_feedback"] is True
     assert body["governance"]["does_not_write_memory"] is True
     assert body["next_smallest_truthful_gap"] == (
-        "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit"
+        "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run"
+    )
+    assert not (data_root / "memory" / "timeline" / "_events.json").exists()
+    assert not data_root.exists()
+
+
+def test_telemetry_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit_is_empty_without_events(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    client = TestClient(create_app())
+    response = client.get("/telemetry/context/feedback/memory-assistance-feedback-loop-e2e-acceptance-audit")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert (
+        body["kind"]
+        == "francis.stage7.telemetry.context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit"
+    )
+    assert body["status"] == "awaiting_sample_evidence"
+    assert body["acceptance_ready"] is False
+    assert body["sample_id"] == "stage7_feedback_memory_assistance_operator_feedback_loop_e2e_sample"
+    assert body["ready_count"] == 3
+    assert body["required_count"] == 6
+    criteria = {item["id"]: item for item in body["acceptance_criteria"]}
+    assert criteria["loop_audit_ready"]["ready"] is False
+    assert criteria["e2e_sample_readback_ready"]["ready"] is False
+    assert criteria["sample_routes_bound"]["ready"] is True
+    assert criteria["sample_non_execution_guarded"]["ready"] is True
+    assert criteria["redacted_context_lines_ready"]["ready"] is False
+    assert criteria["operator_surface_visible"]["ready"] is True
+    assert body["sample"]["route"] == "/telemetry/context/feedback/memory-assistance-feedback-loop-e2e-sample"
+    assert body["sample"]["status"] == "awaiting_loop_evidence"
+    assert body["sample"]["loop_observed"] is False
+    assert body["writes_memory"] is False
+    assert body["writes_feedback"] is False
+    assert body["sends_chat"] is False
+    assert body["calls_model"] is False
+    assert body["selects_tools"] is False
+    assert body["governance"]["read_only"] is True
+    assert body["governance"]["acceptance_audit_only"] is True
+    assert body["governance"]["does_not_send_chat"] is True
+    assert body["governance"]["does_not_write_memory"] is True
+    assert body["governance"]["does_not_call_model"] is True
+    assert body["next_smallest_truthful_gap"] == (
+        "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run"
     )
     assert not (data_root / "memory" / "timeline" / "_events.json").exists()
     assert not data_root.exists()
@@ -996,7 +1045,7 @@ def test_telemetry_context_feedback_review_summarizes_explicit_quality_signals(
     assert body["governance"]["uses_explicit_operator_feedback_only"] is True
     assert (
         body["next_smallest_truthful_gap"]
-        == "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit"
+        == "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run"
     )
 
     review_text = json.dumps(body, sort_keys=True)
@@ -1256,7 +1305,7 @@ def test_telemetry_context_feedback_memory_quality_record_writes_governed_memory
     assert readback_body["governance"]["uses_policy_filters"] is True
     assert (
         readback_body["next_smallest_truthful_gap"]
-        == "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit"
+        == "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run"
     )
     retrieved = readback_body["items"][0]
     assert retrieved["id"] == "evt-telemetry-feedback-quality"
@@ -1318,7 +1367,7 @@ def test_telemetry_context_feedback_memory_quality_record_writes_governed_memory
     assert dry_run_body["governance"]["does_not_select_tools"] is True
     assert (
         dry_run_body["next_smallest_truthful_gap"]
-        == "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit"
+        == "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run"
     )
 
     chat_readback = client.get("/telemetry/context/feedback/memory-assistance-chat-context-readback?limit=10")
@@ -1355,7 +1404,7 @@ def test_telemetry_context_feedback_memory_quality_record_writes_governed_memory
     assert chat_body["governance"]["redacts_context_lines"] is True
     assert (
         chat_body["next_smallest_truthful_gap"]
-        == "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit"
+        == "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run"
     )
 
     chat_readback_text = json.dumps(chat_body, sort_keys=True)
@@ -1466,7 +1515,7 @@ def test_telemetry_context_feedback_memory_assistance_operator_feedback_review_s
     assert body["grants_mutation_authority"] is False
     assert body["governance"]["read_only"] is True
     assert body["next_smallest_truthful_gap"] == (
-        "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit"
+        "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run"
     )
 
     review_text = json.dumps(body, sort_keys=True)
@@ -1716,7 +1765,7 @@ def test_telemetry_context_feedback_memory_assistance_operator_feedback_memory_q
     assert readback_body["governance"]["read_only"] is True
     assert readback_body["governance"]["uses_assistance_policy_filters"] is True
     assert readback_body["next_smallest_truthful_gap"] == (
-        "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit"
+        "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run"
     )
     retrieved = readback_body["items"][0]
     assert retrieved["id"] == "evt-feedback-memory-assistance-quality"
@@ -1786,7 +1835,7 @@ def test_telemetry_context_feedback_memory_assistance_operator_feedback_memory_q
     assert audit_body["selects_tools"] is False
     assert audit_body["governance"]["audit_only"] is True
     assert audit_body["next_smallest_truthful_gap"] == (
-        "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit"
+        "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run"
     )
 
     sample = client.get("/telemetry/context/feedback/memory-assistance-feedback-loop-e2e-sample?limit=10")
@@ -1836,7 +1885,42 @@ def test_telemetry_context_feedback_memory_assistance_operator_feedback_memory_q
     assert sample_body["governance"]["does_not_write_memory"] is True
     assert sample_body["governance"]["does_not_call_model"] is True
     assert sample_body["next_smallest_truthful_gap"] == (
-        "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit"
+        "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run"
+    )
+
+    acceptance = client.get("/telemetry/context/feedback/memory-assistance-feedback-loop-e2e-acceptance-audit?limit=10")
+    assert acceptance.status_code == 200
+    acceptance_body = acceptance.json()
+    assert acceptance_body["ok"] is True
+    assert (
+        acceptance_body["kind"]
+        == "francis.stage7.telemetry.context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit"
+    )
+    assert acceptance_body["status"] == "acceptance_ready"
+    assert acceptance_body["acceptance_ready"] is True
+    assert acceptance_body["ready_count"] == acceptance_body["required_count"] == 6
+    assert acceptance_body["sample_id"] == "stage7_feedback_memory_assistance_operator_feedback_loop_e2e_sample"
+    acceptance_criteria = {item["id"]: item for item in acceptance_body["acceptance_criteria"]}
+    assert all(item["ready"] for item in acceptance_criteria.values())
+    assert acceptance_criteria["loop_audit_ready"]["evidence"]["ready_count"] == 6
+    assert acceptance_criteria["sample_routes_bound"]["evidence"]["chat_route"] == "/chat/send"
+    assert acceptance_criteria["sample_non_execution_guarded"]["status"] == "non_executing"
+    assert acceptance_criteria["redacted_context_lines_ready"]["evidence"]["line_count"] == 2
+    assert acceptance_body["sample"]["status"] == "sample_ready"
+    assert acceptance_body["sample"]["loop_observed"] is True
+    assert acceptance_body["sample"]["chat_context_line_count"] == 2
+    assert acceptance_body["writes_memory"] is False
+    assert acceptance_body["writes_feedback"] is False
+    assert acceptance_body["sends_chat"] is False
+    assert acceptance_body["calls_model"] is False
+    assert acceptance_body["selects_tools"] is False
+    assert acceptance_body["governance"]["read_only"] is True
+    assert acceptance_body["governance"]["acceptance_audit_only"] is True
+    assert acceptance_body["governance"]["does_not_send_chat"] is True
+    assert acceptance_body["governance"]["does_not_write_memory"] is True
+    assert acceptance_body["governance"]["does_not_call_model"] is True
+    assert acceptance_body["next_smallest_truthful_gap"] == (
+        "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run"
     )
 
     raw_text = (data_root / "memory" / "timeline" / "_events.json").read_text(encoding="utf-8")
@@ -1861,6 +1945,7 @@ def test_telemetry_context_feedback_memory_assistance_operator_feedback_memory_q
         assert raw_secret not in dry_run_text
         assert raw_secret not in json.dumps(audit_body, sort_keys=True)
         assert raw_secret not in json.dumps(sample_body, sort_keys=True)
+        assert raw_secret not in json.dumps(acceptance_body, sort_keys=True)
 
 
 def test_terminal_telemetry_denies_event_without_actor_scope(monkeypatch, tmp_path: Path) -> None:
