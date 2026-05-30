@@ -1932,7 +1932,57 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decis
     assert done_review["grants_mutation_authority"] is False
     assert done_review["governance"]["done_criteria_review"] is True
     assert done_review["governance"]["does_not_mark_stage7_closed"] is True
-    assert done_review["next_smallest_truthful_gap"] == ("stage7_telemetry_multi_source_usefulness_review")
+    assert done_review["next_smallest_truthful_gap"] == (
+        "stage7_context_feedback_memory_assistance_multi_source_usefulness_review"
+    )
+
+    usefulness = client.get(
+        "/telemetry/context/feedback/memory-assistance-feedback-loop-multi-source-usefulness-review?limit=10"
+    ).json()
+    assert usefulness["ok"] is True
+    assert usefulness["kind"] == (
+        "francis.stage7.telemetry.context_feedback_memory_assistance_multi_source_usefulness_review"
+    )
+    assert usefulness["status"] == "multi_source_usefulness_ready"
+    assert usefulness["multi_source_usefulness_ready"] is True
+    assert usefulness["ready_count"] == usefulness["required_count"] == 6
+    assert usefulness["ready_sources"] == ["terminal", "git", "ide_diagnostics"]
+    assert [item["id"] for item in usefulness["criteria"]] == [
+        "terminal_signal_useful",
+        "git_signal_useful",
+        "ide_signal_useful",
+        "operator_quality_improved",
+        "visible_source_coverage",
+        "done_criteria_backstop",
+    ]
+    assert all(item["ready"] is True for item in usefulness["criteria"])
+    usefulness_criteria = {item["id"]: item for item in usefulness["criteria"]}
+    assert usefulness_criteria["terminal_signal_useful"]["evidence"]["event_count"] == 1
+    assert usefulness_criteria["git_signal_useful"]["evidence"]["branch"]
+    assert usefulness_criteria["ide_signal_useful"]["evidence"]["event_count"] == 1
+    assert usefulness_criteria["operator_quality_improved"]["evidence"]["quality_signals"] == [
+        "operator_reported_useful_feedback_memory_assistance"
+    ]
+    assert usefulness_criteria["visible_source_coverage"]["evidence"]["ready_sources"] == [
+        "terminal",
+        "git",
+        "ide_diagnostics",
+    ]
+    assert usefulness["done_criteria_review"]["done_criteria_ready"] is True
+    assert usefulness["sensing_summary"]["visible_sensing_indicators_ready"] is True
+    assert usefulness["read_only"] is True
+    assert usefulness["writes_memory"] is False
+    assert usefulness["writes_feedback"] is False
+    assert usefulness["sends_chat"] is False
+    assert usefulness["calls_model"] is False
+    assert usefulness["selects_tools"] is False
+    assert usefulness["grants_execution_authority"] is False
+    assert usefulness["grants_mutation_authority"] is False
+    assert usefulness["governance"]["multi_source_usefulness_review"] is True
+    assert usefulness["governance"]["does_not_start_terminal_capture"] is True
+    assert usefulness["governance"]["does_not_start_git_watcher"] is True
+    assert usefulness["governance"]["does_not_start_ide_integration"] is True
+    assert usefulness["next_smallest_truthful_gap"] == ("stage7_telemetry_operator_usage_over_time_review")
 
 
 def test_telemetry_context_feedback_memory_quality_record_is_empty_without_events(

@@ -2499,9 +2499,168 @@ def context_feedback_memory_assistance_operator_feedback_loop_done_criteria_revi
             "grants_mutation_authority": False,
         },
         "next_smallest_truthful_gap": (
-            "stage7_telemetry_multi_source_usefulness_review"
+            "stage7_context_feedback_memory_assistance_multi_source_usefulness_review"
             if done_criteria_ready
             else "stage7_context_feedback_memory_assistance_done_criteria_review"
+        ),
+    }
+
+
+@router.get("/context/feedback/memory-assistance-feedback-loop-multi-source-usefulness-review")
+def context_feedback_memory_assistance_operator_feedback_loop_multi_source_usefulness_review(
+    limit: int = 20,
+) -> dict[str, Any]:
+    safe_limit = max(1, min(int(limit), 100))
+    done_review = context_feedback_memory_assistance_operator_feedback_loop_done_criteria_review(limit=safe_limit)
+    action_quality = context_feedback_memory_assistance_operator_feedback_loop_action_quality_signal_review(
+        limit=safe_limit
+    )
+    sensing_summary = context_feedback_memory_assistance_operator_feedback_loop_sensing_indicator_summary(
+        limit=safe_limit
+    )
+    ide_signal_value = sensing_summary.get("ide_context_signal")
+    ide_signal: dict[str, Any] = ide_signal_value if isinstance(ide_signal_value, dict) else {}
+    git_signal_value = ide_signal.get("git_context_signal")
+    git_signal: dict[str, Any] = git_signal_value if isinstance(git_signal_value, dict) else {}
+    terminal_signal_value = git_signal.get("terminal_context_signal")
+    terminal_signal: dict[str, Any] = terminal_signal_value if isinstance(terminal_signal_value, dict) else {}
+    indicators_value = sensing_summary.get("indicators")
+    indicators: list[Any] = indicators_value if isinstance(indicators_value, list) else []
+    ready_sources = [
+        _redacted_line_text(indicator.get("source_id"))
+        for indicator in indicators
+        if isinstance(indicator, dict) and indicator.get("ready") is True
+    ]
+    usefulness_criteria = [
+        {
+            "id": "terminal_signal_useful",
+            "ready": bool(terminal_signal.get("terminal_context_signal_ready"))
+            and _safe_count(terminal_signal.get("terminal_event_count")) > 0,
+            "source_id": "terminal",
+            "evidence": {
+                "status": terminal_signal.get("status", "unknown"),
+                "event_count": _safe_count(terminal_signal.get("terminal_event_count")),
+                "context_line_count": _safe_count(terminal_signal.get("terminal_context_line_count")),
+            },
+        },
+        {
+            "id": "git_signal_useful",
+            "ready": bool(git_signal.get("git_context_signal_ready"))
+            and bool(git_signal.get("branch"))
+            and bool(git_signal.get("head")),
+            "source_id": "git",
+            "evidence": {
+                "status": git_signal.get("status", "unknown"),
+                "branch": _redacted_line_text(git_signal.get("branch")),
+                "head": _redacted_line_text(git_signal.get("head")),
+                "changed_count": _safe_count(git_signal.get("changed_count")),
+            },
+        },
+        {
+            "id": "ide_signal_useful",
+            "ready": bool(ide_signal.get("ide_context_signal_ready"))
+            and _safe_count(ide_signal.get("ide_event_count")) > 0,
+            "source_id": "ide_diagnostics",
+            "evidence": {
+                "status": ide_signal.get("status", "unknown"),
+                "event_count": _safe_count(ide_signal.get("ide_event_count")),
+                "context_line_count": _safe_count(ide_signal.get("ide_context_line_count")),
+            },
+        },
+        {
+            "id": "operator_quality_improved",
+            "ready": bool(action_quality.get("action_quality_signal_review_ready"))
+            and bool(action_quality.get("quality_signals")),
+            "source_id": "operator_feedback",
+            "evidence": {
+                "status": action_quality.get("status", "unknown"),
+                "quality_signals": action_quality.get("quality_signals", []),
+                "reviewed_event_count": _safe_count(action_quality.get("reviewed_event_count")),
+            },
+        },
+        {
+            "id": "visible_source_coverage",
+            "ready": (
+                bool(sensing_summary.get("visible_sensing_indicators_ready"))
+                and set(ready_sources) >= {"terminal", "git", "ide_diagnostics"}
+            ),
+            "source_id": "telemetry_context",
+            "evidence": {
+                "ready_sources": ready_sources,
+                "indicator_count": _safe_count(sensing_summary.get("indicator_count")),
+                "ready_indicator_count": _safe_count(sensing_summary.get("ready_indicator_count")),
+            },
+        },
+        {
+            "id": "done_criteria_backstop",
+            "ready": bool(done_review.get("done_criteria_ready")),
+            "source_id": "telemetry_context",
+            "evidence": {
+                "status": done_review.get("status", "unknown"),
+                "ready_count": _safe_count(done_review.get("ready_count")),
+                "required_count": _safe_count(done_review.get("required_count")),
+            },
+        },
+    ]
+    ready_count = sum(1 for criterion in usefulness_criteria if criterion["ready"])
+    multi_source_usefulness_ready = ready_count == len(usefulness_criteria)
+    return {
+        "ok": True,
+        "kind": "francis.stage7.telemetry.context_feedback_memory_assistance_multi_source_usefulness_review",
+        "stage": "Stage 7 / Telemetry MVP",
+        "source_id": "telemetry_context",
+        "status": "multi_source_usefulness_ready"
+        if multi_source_usefulness_ready
+        else "partial_multi_source_usefulness",
+        "target": "feedback_memory_assistance_prompt_integration",
+        "multi_source_usefulness_ready": multi_source_usefulness_ready,
+        "ready_count": ready_count,
+        "required_count": len(usefulness_criteria),
+        "ready_sources": ready_sources,
+        "criteria": usefulness_criteria,
+        "done_criteria_review": {
+            "route": "/telemetry/context/feedback/memory-assistance-feedback-loop-done-criteria-review",
+            "status": done_review.get("status", "unknown"),
+            "done_criteria_ready": bool(done_review.get("done_criteria_ready")),
+        },
+        "sensing_summary": {
+            "route": "/telemetry/context/feedback/memory-assistance-feedback-loop-sensing-indicator-summary",
+            "status": sensing_summary.get("status", "unknown"),
+            "visible_sensing_indicators_ready": bool(sensing_summary.get("visible_sensing_indicators_ready")),
+        },
+        "read_only": True,
+        "writes_memory": False,
+        "writes_feedback": False,
+        "mutates_prompt": False,
+        "sends_chat": False,
+        "calls_model": False,
+        "selects_tools": False,
+        "trains_model": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "multi_source_usefulness_review": True,
+            "bounded_to_feedback_memory_assistance_loop": True,
+            "uses_existing_done_criteria_review": True,
+            "uses_existing_sensing_summary": True,
+            "uses_existing_action_quality_review": True,
+            "does_not_start_terminal_capture": True,
+            "does_not_start_git_watcher": True,
+            "does_not_start_ide_integration": True,
+            "telemetry_is_untrusted_input": True,
+            "does_not_write_memory": True,
+            "does_not_write_feedback": True,
+            "does_not_send_chat": True,
+            "does_not_call_model": True,
+            "does_not_select_tools": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": (
+            "stage7_telemetry_operator_usage_over_time_review"
+            if multi_source_usefulness_ready
+            else "stage7_context_feedback_memory_assistance_multi_source_usefulness_review"
         ),
     }
 

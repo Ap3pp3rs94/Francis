@@ -46027,6 +46027,43 @@ Latest validation for Stage 7 feedback memory assistance done criteria:
   tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
   Result: `passed`
 
+### 2026-05-30 - Stage 7 feedback memory assistance multi-source usefulness is reviewed
+
+Roadmap area: Stage 7 / Telemetry MVP, multi-source usefulness review for the
+feedback-memory assistance primary loop.
+
+Material change:
+
+- Telemetry now exposes a read-only multi-source usefulness review at
+  `/telemetry/context/feedback/memory-assistance-feedback-loop-multi-source-usefulness-review`.
+- The review consumes existing terminal, git, and IDE context signal readbacks
+  plus action-quality and done-criteria reviews.
+- It marks usefulness ready only when terminal, git, IDE, operator-quality,
+  visible source coverage, and done-criteria backstop are all ready.
+- It does not start terminal capture, git watcher, IDE integration, write
+  memory or feedback, send chat, call a model, select tools, or grant
+  authority.
+- The done-criteria review now advances to
+  `stage7_context_feedback_memory_assistance_multi_source_usefulness_review`,
+  and the new review points at `stage7_telemetry_operator_usage_over_time_review`
+  when ready.
+
+Latest validation for Stage 7 feedback memory assistance multi-source
+usefulness:
+
+- `python -m pytest tests/test_api_telemetry.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 41 passed`
+- `python -m mypy src/francis/api/routes/telemetry.py`
+  Result: `passed`
+- `python -m ruff check src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
