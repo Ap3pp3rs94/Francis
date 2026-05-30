@@ -14,6 +14,75 @@ def _assert_display_artifact(path: Path, *raw_values: str) -> str:
     return text
 
 
+def test_industrial_mutations_require_write_scope_before_registry_or_approval(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({"test.industrial.write": ["industrial.write"]}),
+    )
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    registry_path = data_root / "industrial" / "_registry.json"
+
+    denied_asset = client.post(
+        "/industrial/assets",
+        json={
+            "request_actor": "test.industrial.denied",
+            "name": "Denied Pump",
+            "asset_type": "pump",
+        },
+    )
+
+    assert denied_asset.status_code == 200
+    denied_body = denied_asset.json()
+    assert denied_body["ok"] is False
+    assert denied_body["status"] == "denied"
+    assert denied_body["error"] == "api_permission_denied"
+    assert denied_body["governance"]["gate"] == "permission_gate"
+    assert denied_body["governance"]["next_step"] == "configure_actor_scope_before_writing_industrial_registry"
+    assert denied_body["governance"]["evidence"]["actor_present"] is True
+    assert not registry_path.exists()
+
+    denied_approval = client.post(
+        "/industrial/interventions/request",
+        json={
+            "request_actor": "test.industrial.denied",
+            "target_kind": "asset",
+            "target_id": "pump_denied",
+            "action": "calibrate",
+            "reason": "denied_before_approval",
+            "risk": "high",
+        },
+    )
+
+    assert denied_approval.status_code == 200
+    assert denied_approval.json()["error"] == "api_permission_denied"
+    assert not registry_path.exists()
+    assert not (data_root / "approvals").exists()
+    assert not (data_root / "artifacts" / "industrial" / "approvals").exists()
+
+    allowed_asset = client.post(
+        "/industrial/assets",
+        json={
+            "request_actor": "test.industrial.write",
+            "name": "Allowed Pump",
+            "asset_type": "pump",
+        },
+    )
+
+    assert allowed_asset.status_code == 200
+    assert allowed_asset.json()["ok"] is True
+    assert registry_path.exists()
+
+
 def test_industrial_lifecycle_runs_safety_and_interventions(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

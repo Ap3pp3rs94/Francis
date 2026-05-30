@@ -257,12 +257,13 @@ _RULES: tuple[AuthorityRule, ...] = (
     AuthorityRule(
         family="industrial",
         prefixes=("/industrial",),
-        required_actor="payload.actor where accepted",
-        required_scope="documented_gap: no industrial.write ApiPermissionGate scope enforced",
-        approval_requirement="intervention execution uses approval-store checks; registry CRUD is not generic-scope gated",
+        required_actor="payload.request_actor, payload.api_actor, payload.actor, payload.requested_by, or api.industrial default",
+        required_scope="industrial.write",
+        approval_requirement="exact-action approval-store checks remain required for safety/intervention/digital-twin actions",
         receipt_behavior="industrial registry, safety validation, run, intervention, or digital-twin action record",
-        denial_behavior="validation, approval mismatch, or sanitized error; not generic permission_gate for all routes",
-        governance_maturity="documented_gap_mixed_approval_gating",
+        denial_behavior="api_permission_denied via permission_gate before registry mutation or approval request creation",
+        governance_maturity="permission_and_policy_gated",
+        notes="API actor scope is checked before industrial registry writes and before exact-action approval requests.",
     ),
 )
 

@@ -132,6 +132,16 @@ FEDERATION_WRITE_TEST_ACTORS = (
     "api.federation",
     "test.federation.write",
 )
+INDUSTRIAL_WRITE_TEST_SCOPE = "industrial.write"
+INDUSTRIAL_WRITE_TEST_ACTORS = (
+    "api.industrial",
+    "industrial_api",
+    "operator:a",
+    "operator:b",
+    "operator:redaction",
+    "operator:params",
+    "test.industrial.write",
+)
 
 
 def _add_actor_scopes(policy: dict[str, list[str]], actors: tuple[str, ...], scope: str) -> None:
@@ -155,6 +165,7 @@ def _test_actor_scope_policy() -> dict[str, list[str]]:
     _add_actor_scopes(policy, WEB_LEARNING_WRITE_TEST_ACTORS, WEB_LEARNING_WRITE_TEST_SCOPE)
     _add_actor_scopes(policy, ATTACHMENTS_WRITE_TEST_ACTORS, ATTACHMENTS_WRITE_TEST_SCOPE)
     _add_actor_scopes(policy, FEDERATION_WRITE_TEST_ACTORS, FEDERATION_WRITE_TEST_SCOPE)
+    _add_actor_scopes(policy, INDUSTRIAL_WRITE_TEST_ACTORS, INDUSTRIAL_WRITE_TEST_SCOPE)
     return policy
 
 

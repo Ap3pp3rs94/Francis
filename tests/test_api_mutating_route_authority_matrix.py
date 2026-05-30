@@ -116,6 +116,16 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
     assert federation["governance_maturity"] == "permission_gated"
     assert "permission_gate" in federation["denial_behavior"]
 
+    industrial = entries["/industrial/assets"]
+    assert industrial["family"] == "industrial"
+    assert industrial["required_actor"] == (
+        "payload.request_actor, payload.api_actor, payload.actor, payload.requested_by, or api.industrial default"
+    )
+    assert industrial["required_scope"] == "industrial.write"
+    assert industrial["governance_maturity"] == "permission_and_policy_gated"
+    assert "permission_gate" in industrial["denial_behavior"]
+    assert "exact-action" in industrial["approval_requirement"]
+
     read_batch = entries["/operations/get_many"]
     assert read_batch["family"] == "operations_read_batch"
     assert read_batch["required_actor"] == "none"

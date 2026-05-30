@@ -12,9 +12,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import Response
 
+from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance import approvals as approval_store
 from francis.governance.redaction import (
     redact_governed_display_value,
@@ -25,6 +26,7 @@ from francis.governance.redaction import (
 from francis.kernel.paths import data_dir
 
 router = APIRouter()
+_INDUSTRIAL_WRITE_SCOPE = "industrial.write"
 _ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._:-]{1,127}$")
 
 
@@ -35,6 +37,51 @@ def _safe_str(value: Any) -> str:
         return str(value)
     except Exception:
         return ""
+
+
+def _industrial_write_actor(payload: dict[str, Any]) -> str:
+    return (
+        _safe_str(payload.get("request_actor")).strip()
+        or _safe_str(payload.get("api_actor")).strip()
+        or _safe_str(payload.get("actor")).strip()
+        or _safe_str(payload.get("requested_by")).strip()
+        or "api.industrial"
+    )
+
+
+def _industrial_write_permission(actor: Any, *, route: str, method: str) -> ApiPermissionDecision:
+    return ApiPermissionGate.from_env().check(
+        actor_id=actor,
+        required_scopes=[_INDUSTRIAL_WRITE_SCOPE],
+        route=route,
+        method=method,
+    )
+
+
+def _permission_denied(decision: ApiPermissionDecision) -> dict[str, object]:
+    return {
+        "ok": False,
+        "status": "denied",
+        "error": "api_permission_denied",
+        "governance": {
+            "gate": "permission_gate",
+            "reason": decision.reason,
+            "next_step": "configure_actor_scope_before_writing_industrial_registry",
+            "evidence": decision.evidence,
+        },
+    }
+
+
+def _write_permission_denial(payload: dict[str, Any] | None, request: Request) -> dict[str, object] | None:
+    body = payload if isinstance(payload, dict) else {}
+    decision = _industrial_write_permission(
+        _industrial_write_actor(body),
+        route=request.url.path,
+        method=request.method,
+    )
+    if decision.allowed:
+        return None
+    return _permission_denied(decision)
 
 
 def _now_s() -> int:
@@ -665,8 +712,11 @@ def get_asset(asset_id: str) -> dict[str, object]:
 
 
 @router.post("/assets")
-def create_asset(payload: dict[str, Any]) -> dict[str, object]:
+def create_asset(payload: dict[str, Any], request: Request) -> dict[str, object]:
     try:
+        if denial := _write_permission_denial(payload, request):
+            return denial
+
         name = _safe_str(payload.get("name")).strip()
         if not name:
             return {"ok": False, "error": "name_required"}
@@ -701,8 +751,11 @@ def create_asset(payload: dict[str, Any]) -> dict[str, object]:
 
 
 @router.patch("/assets/{asset_id}")
-def update_asset(asset_id: str, payload: dict[str, Any]) -> dict[str, object]:
+def update_asset(asset_id: str, payload: dict[str, Any], request: Request) -> dict[str, object]:
     try:
+        if denial := _write_permission_denial(payload, request):
+            return denial
+
         entity_id = _validate_id(asset_id, "asset id")
         registry = _load_registry()
         current = _read_section(registry, "assets", entity_id)
@@ -729,8 +782,11 @@ def update_asset(asset_id: str, payload: dict[str, Any]) -> dict[str, object]:
 
 
 @router.delete("/assets/{asset_id}")
-def delete_asset(asset_id: str, payload: dict[str, Any] | None = None) -> dict[str, object]:
+def delete_asset(asset_id: str, request: Request, payload: dict[str, Any] | None = None) -> dict[str, object]:
     try:
+        if denial := _write_permission_denial(payload, request):
+            return denial
+
         entity_id = _validate_id(asset_id, "asset id")
         registry = _load_registry()
         removed = _delete_section(registry, "assets", entity_id)
@@ -790,8 +846,11 @@ def get_process(process_id: str) -> dict[str, object]:
 
 
 @router.post("/processes")
-def create_process(payload: dict[str, Any]) -> dict[str, object]:
+def create_process(payload: dict[str, Any], request: Request) -> dict[str, object]:
     try:
+        if denial := _write_permission_denial(payload, request):
+            return denial
+
         name = _safe_str(payload.get("name")).strip()
         if not name:
             return {"ok": False, "error": "name_required"}
@@ -826,8 +885,11 @@ def create_process(payload: dict[str, Any]) -> dict[str, object]:
 
 
 @router.patch("/processes/{process_id}")
-def update_process(process_id: str, payload: dict[str, Any]) -> dict[str, object]:
+def update_process(process_id: str, payload: dict[str, Any], request: Request) -> dict[str, object]:
     try:
+        if denial := _write_permission_denial(payload, request):
+            return denial
+
         entity_id = _validate_id(process_id, "process id")
         registry = _load_registry()
         current = _read_section(registry, "processes", entity_id)
@@ -853,8 +915,11 @@ def update_process(process_id: str, payload: dict[str, Any]) -> dict[str, object
 
 
 @router.delete("/processes/{process_id}")
-def delete_process(process_id: str, payload: dict[str, Any] | None = None) -> dict[str, object]:
+def delete_process(process_id: str, request: Request, payload: dict[str, Any] | None = None) -> dict[str, object]:
     try:
+        if denial := _write_permission_denial(payload, request):
+            return denial
+
         entity_id = _validate_id(process_id, "process id")
         registry = _load_registry()
         removed = _delete_section(registry, "processes", entity_id)
@@ -924,8 +989,11 @@ def get_simulation(simulation_id: str) -> dict[str, object]:
 
 
 @router.post("/simulations")
-def create_simulation(payload: dict[str, Any]) -> dict[str, object]:
+def create_simulation(payload: dict[str, Any], request: Request) -> dict[str, object]:
     try:
+        if denial := _write_permission_denial(payload, request):
+            return denial
+
         name = _safe_str(payload.get("name")).strip()
         if not name:
             return {"ok": False, "error": "name_required"}
@@ -963,8 +1031,11 @@ def create_simulation(payload: dict[str, Any]) -> dict[str, object]:
 
 
 @router.patch("/simulations/{simulation_id}")
-def update_simulation(simulation_id: str, payload: dict[str, Any]) -> dict[str, object]:
+def update_simulation(simulation_id: str, payload: dict[str, Any], request: Request) -> dict[str, object]:
     try:
+        if denial := _write_permission_denial(payload, request):
+            return denial
+
         entity_id = _validate_id(simulation_id, "simulation id")
         registry = _load_registry()
         current = _read_section(registry, "simulations", entity_id)
@@ -1001,8 +1072,11 @@ def update_simulation(simulation_id: str, payload: dict[str, Any]) -> dict[str, 
 
 
 @router.delete("/simulations/{simulation_id}")
-def delete_simulation(simulation_id: str, payload: dict[str, Any] | None = None) -> dict[str, object]:
+def delete_simulation(simulation_id: str, request: Request, payload: dict[str, Any] | None = None) -> dict[str, object]:
     try:
+        if denial := _write_permission_denial(payload, request):
+            return denial
+
         entity_id = _validate_id(simulation_id, "simulation id")
         registry = _load_registry()
         removed = _delete_section(registry, "simulations", entity_id)
@@ -1124,8 +1198,11 @@ def get_run(run_id: str) -> dict[str, object]:
 
 
 @router.post("/runs/start")
-def start_run(payload: dict[str, Any]) -> dict[str, object]:
+def start_run(payload: dict[str, Any], request: Request) -> dict[str, object]:
     try:
+        if denial := _write_permission_denial(payload, request):
+            return denial
+
         simulation_id = _validate_id(_safe_str(payload.get("simulation_id")).strip(), "simulation id")
         registry = _load_registry()
         if _read_section(registry, "simulations", simulation_id) is None:
@@ -1172,8 +1249,11 @@ def start_run(payload: dict[str, Any]) -> dict[str, object]:
 
 
 @router.post("/runs/{run_id}/cancel")
-def cancel_run(run_id: str, payload: dict[str, Any]) -> dict[str, object]:
+def cancel_run(run_id: str, payload: dict[str, Any], request: Request) -> dict[str, object]:
     try:
+        if denial := _write_permission_denial(payload, request):
+            return denial
+
         entity_id = _validate_id(run_id, "run id")
         registry = _load_registry()
         raw = _read_section(registry, "runs", entity_id)
@@ -1234,8 +1314,11 @@ def list_safety_validations(
 
 
 @router.post("/safety/validate")
-def validate_safety(payload: dict[str, Any]) -> dict[str, object]:
+def validate_safety(payload: dict[str, Any], request: Request) -> dict[str, object]:
     try:
+        if denial := _write_permission_denial(payload, request):
+            return denial
+
         target_kind = _safe_str(payload.get("target_kind")).strip().lower()
         target_id = _validate_id(_safe_str(payload.get("target_id")).strip(), "target id")
         if not target_kind:
@@ -1577,8 +1660,11 @@ def query_telemetry(
 
 
 @router.post("/interventions/request")
-def request_intervention(payload: dict[str, Any]) -> dict[str, object]:
+def request_intervention(payload: dict[str, Any], request: Request) -> dict[str, object]:
     try:
+        if denial := _write_permission_denial(payload, request):
+            return denial
+
         target_kind = _safe_str(payload.get("target_kind")).strip().lower()
         target_id = _validate_id(_safe_str(payload.get("target_id")).strip(), "target id")
         action = _safe_str(payload.get("action")).strip()
@@ -1859,8 +1945,11 @@ def request_intervention(payload: dict[str, Any]) -> dict[str, object]:
 
 
 @router.post("/interventions/execute")
-def execute_intervention(payload: dict[str, Any]) -> dict[str, object]:
+def execute_intervention(payload: dict[str, Any], request: Request) -> dict[str, object]:
     try:
+        if denial := _write_permission_denial(payload, request):
+            return denial
+
         target_kind = _safe_str(payload.get("target_kind")).strip().lower()
         target_id = _validate_id(_safe_str(payload.get("target_id")).strip(), "target id")
         action = _safe_str(payload.get("action")).strip()
@@ -2242,8 +2331,11 @@ def get_digital_twin_snapshot(id: str) -> dict[str, object]:
 
 
 @router.post("/digital_twins/action")
-def digital_twin_action(payload: dict[str, Any]) -> dict[str, object]:
+def digital_twin_action(payload: dict[str, Any], request: Request) -> dict[str, object]:
     try:
+        if denial := _write_permission_denial(payload, request):
+            return denial
+
         twin_id = _validate_id(_safe_str(payload.get("twin_id")).strip(), "twin id")
         action = _safe_str(payload.get("action")).strip()
         if not action:

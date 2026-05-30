@@ -43856,6 +43856,51 @@ Latest validation for federation write gating:
   src/francis/api/mutation_authority_matrix.py`
   Result: `passed`
 
+### 2026-05-29 - Industrial mutations require API actor scope before registry or approval writes
+
+Roadmap area: Phase 2 / P3_GOVERNANCE -> P2_IDENTITY -> P7_EXECUTION,
+industrial safety/action governance.
+
+Material change:
+
+- `POST`, `PATCH`, and `DELETE` routes under `/industrial` now require an API
+  actor with `industrial.write` before industrial registry mutation.
+- The same gate runs before industrial exact-action approval requests are
+  created for safety validation, intervention request/execution, and
+  digital-twin action paths.
+- Industrial write actor identity is accepted from `request_actor`,
+  `api_actor`, `actor`, `requested_by`, or the `api.industrial` default.
+- Denied writes return `api_permission_denied` with bounded governance
+  evidence and do not create `data/industrial/_registry.json`, approval queue
+  records, or industrial approval artifacts.
+- The mutating-route authority matrix now reports industrial writes as
+  `permission_and_policy_gated`. The matrix no longer has a
+  `documented_gap_mixed_approval_gating` bucket.
+
+Latest validation for industrial write gating:
+
+- `python -m pytest tests/test_api_industrial.py
+  tests/test_api_mutating_route_authority_matrix.py -q --tb=short --maxfail=1`
+  Result: `passed; 15 passed`
+- `python -m ruff check src/francis/api/routes/industrial.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_industrial.py
+  tests/test_api_mutating_route_authority_matrix.py tests/conftest.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/industrial.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_industrial.py
+  tests/test_api_mutating_route_authority_matrix.py tests/conftest.py`
+  Result: `passed`
+- `python -m mypy src/francis/api/routes/industrial.py
+  src/francis/api/mutation_authority_matrix.py`
+  Result: `passed`
+- Direct `/system/mutating-route-authority-matrix` readback:
+  Result: `status=covered`, `missing_total=0`, `total=171`,
+  `maturity_counts={"approval_and_receipt_gated":31,
+  "approval_queue_write_without_decision_scope":1,
+  "conditional_permission_gate":1,
+  "permission_and_policy_gated":59,"permission_gated":78,
+  "read_projection_using_post":1}`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
