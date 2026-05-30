@@ -3,16 +3,23 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from francis.kernel.paths import repo_root
 
 _SAFE_SEGMENT_RE = re.compile(r"[^A-Za-z0-9._-]+")
+_PYTEST_SESSION_RETENTION_ROOT = repo_root() / "data" / "test_runs" / "pytest"
+_PYTEST_SESSION_RETENTION_KEEP_COUNT = 50
+_PYTEST_SESSION_RETENTION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60
+_PYTEST_SESSION_RETENTION_KIND = "retention.execution.receipt"
+_PYTEST_SESSION_RETENTION_ENV = "FRANCIS_PYTEST_SESSION_RETENTION_ROOT"
 APPROVAL_DECISION_TEST_ACTOR = "test.approvals.decision"
 APPROVAL_DECISION_TEST_SCOPE = "approvals.decide"
 APPROVAL_REQUEST_TEST_SCOPE = "approvals.request"
@@ -158,6 +165,131 @@ INDUSTRIAL_WRITE_TEST_ACTORS = (
 )
 
 
+def _safe_real_path(path: Path) -> str:
+    return str(path.resolve())
+
+
+def _dir_size_bytes(path: Path) -> int:
+    if not path.exists():
+        return 0
+    total = 0
+    for entry in path.rglob("*"):
+        try:
+            if entry.is_file():
+                total += entry.stat().st_size
+        except (OSError, ValueError):
+            continue
+    return total
+
+
+def _session_directories(pytest_root: Path) -> list[Path]:
+    if not pytest_root.exists():
+        return []
+    sessions: list[tuple[Path, float]] = []
+    for child in pytest_root.iterdir():
+        if not child.is_dir() or not child.name.startswith("session_"):
+            continue
+        try:
+            mtime = child.stat().st_mtime
+        except OSError:
+            continue
+        sessions.append((child, mtime))
+    sessions.sort(key=lambda item: item[1], reverse=True)
+    return [path for path, _ in sessions]
+
+
+def _build_retention_receipt_path(pytest_root: Path, now_ts: float) -> Path:
+    receipts_dir = pytest_root / "receipts"
+    receipts_dir.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime(now_ts))
+    return receipts_dir / f"retention.execution.receipt.{stamp}.json"
+
+
+def _pytest_session_retention_root() -> Path:
+    configured = os.environ.get(_PYTEST_SESSION_RETENTION_ENV)
+    if configured:
+        candidate = Path(configured)
+        if not candidate.is_absolute():
+            candidate = repo_root() / configured
+        retention_root = _PYTEST_SESSION_RETENTION_ROOT.resolve()
+        if not candidate.is_relative_to(repo_root()):
+            raise RuntimeError("Invalid pytest retention root path")
+        candidate = candidate.resolve()
+        try:
+            candidate.relative_to(retention_root)
+        except ValueError:
+            raise RuntimeError("Invalid pytest retention root path")
+        return candidate
+    return _PYTEST_SESSION_RETENTION_ROOT
+
+
+def run_pytest_session_retention(
+    *, pytest_root: Path, now: float | None = None, receipt_path: Path | None = None
+) -> dict[str, Any]:
+    now_ts = now if now is not None else time.time()
+    pytest_root.mkdir(parents=True, exist_ok=True)
+
+    sessions = _session_directories(pytest_root)
+    kept_by_floor = sessions[:_PYTEST_SESSION_RETENTION_KEEP_COUNT]
+    stale_cutoff = now_ts - _PYTEST_SESSION_RETENTION_MAX_AGE_SECONDS
+
+    deletion_candidates = sessions[_PYTEST_SESSION_RETENTION_KEEP_COUNT:]
+    deleted_sessions: list[Path] = []
+    failed_deletions: list[str] = []
+    bytes_freed = 0
+    for session in deletion_candidates:
+        try:
+            mtime = session.stat().st_mtime
+        except OSError:
+            failed_deletions.append(f"{session.resolve()} (unreadable)")
+            continue
+        if mtime <= stale_cutoff:
+            session_size = _dir_size_bytes(session)
+            try:
+                shutil.rmtree(session)
+            except OSError:
+                failed_deletions.append(str(session.resolve()))
+                continue
+            deleted_sessions.append(session)
+            bytes_freed += session_size
+
+    if receipt_path is None:
+        receipt_path = _build_retention_receipt_path(pytest_root, now_ts)
+    receipt_path.parent.mkdir(parents=True, exist_ok=True)
+
+    retained_skip_due_to_floor = [str(session.resolve()) for session in kept_by_floor]
+    deleted_names = [str(session.resolve()) for session in deleted_sessions]
+
+    payload = {
+        "kind": _PYTEST_SESSION_RETENTION_KIND,
+        "scope": "pytest_session_retention",
+        "created_at": int(now_ts),
+        "pytest_root": _safe_real_path(pytest_root),
+        "policy": {
+            "keep_most_recent_sessions": _PYTEST_SESSION_RETENTION_KEEP_COUNT,
+            "max_age_seconds": _PYTEST_SESSION_RETENTION_MAX_AGE_SECONDS,
+        },
+        "retained_by_floor_count": len(retained_skip_due_to_floor),
+        "considered_count": len(deletion_candidates),
+        "deleted_count": len(deleted_sessions),
+        "bytes_freed": bytes_freed,
+        "deleted_sessions": deleted_names,
+        "failed_deletions": failed_deletions,
+        "retained_by_floor_sessions": retained_skip_due_to_floor,
+        "receipt_path": str(receipt_path.resolve()),
+    }
+    receipt_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+    return payload
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    pytest_root = _pytest_session_retention_root()
+    if not pytest_root.is_relative_to(repo_root()):
+        raise RuntimeError("Invalid pytest root path for retention cleanup")
+    run_pytest_session_retention(pytest_root=pytest_root)
+
+
 def _add_actor_scopes(policy: dict[str, list[str]], actors: tuple[str, ...], scope: str) -> None:
     for actor in actors:
         scopes = policy.setdefault(actor, [])
@@ -196,11 +328,9 @@ def _francis_tmp_root() -> Path:
 
     The sandboxed environment backing this repo can deny access to pytest's default
     temp/cache paths during fixture setup and cleanup. We keep test temp state in
-    `data/test_runs/pytest/` and intentionally do not delete it automatically.
+    `data/test_runs/pytest/`.
     """
-
-    root = repo_root() / "data" / "test_runs" / "pytest"
-    root.mkdir(parents=True, exist_ok=True)
+    root = _pytest_session_retention_root()
 
     session_root = root / f"session_{int(time.time())}_{os.getpid()}_{uuid.uuid4().hex[:8]}"
     session_root.mkdir(parents=True, exist_ok=True)
