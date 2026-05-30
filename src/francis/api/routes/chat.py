@@ -261,7 +261,7 @@ def _chat_feedback_memory_assistance_context(telemetry_context: dict[str, Any]) 
         "grants_execution_authority": False,
         "grants_mutation_authority": False,
         "feedback_target": feedback_target,
-        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_sample",
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit",
     }
     return context
 

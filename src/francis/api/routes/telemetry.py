@@ -250,7 +250,7 @@ def context_feedback_memory_assistance_dry_run(limit: int = 20) -> dict[str, Any
             "grants_memory_write_authority": False,
         },
         "skipped_untrusted_items": skipped,
-        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_sample",
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit",
     }
 
 
@@ -310,7 +310,7 @@ def context_feedback_memory_assistance_chat_context_readback(limit: int = 20) ->
             "grants_execution_authority": False,
             "grants_memory_write_authority": False,
         },
-        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_sample",
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit",
     }
 
 
@@ -389,7 +389,7 @@ def context_feedback_memory_assistance_operator_feedback_memory_readback(limit: 
             "grants_execution_authority": False,
             "grants_memory_write_authority": False,
         },
-        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_sample",
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit",
     }
 
 
@@ -512,7 +512,125 @@ def context_feedback_memory_assistance_operator_feedback_loop_audit(limit: int =
             "grants_execution_authority": False,
             "grants_memory_write_authority": False,
         },
-        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_sample",
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit",
+    }
+
+
+@router.get("/context/feedback/memory-assistance-feedback-loop-e2e-sample")
+def context_feedback_memory_assistance_operator_feedback_loop_e2e_sample(limit: int = 20) -> dict[str, Any]:
+    safe_limit = max(1, min(int(limit), 100))
+    audit = context_feedback_memory_assistance_operator_feedback_loop_audit(limit=safe_limit)
+    chat_context = context_feedback_memory_assistance_chat_context_readback(limit=safe_limit)
+    chat_context_value = chat_context.get("chat_context")
+    chat_context_payload: dict[str, Any] = chat_context_value if isinstance(chat_context_value, dict) else {}
+    lines_value = chat_context_payload.get("lines")
+    context_lines = [redact_secret_text(str(line)) for line in lines_value[:2]] if isinstance(lines_value, list) else []
+    loop_observed = bool(audit.get("loop_observed")) and bool(context_lines)
+    sample_context_id = "tel_ctx_feedback_memory_assistance_e2e_sample"
+    sample_message_id = "tel_msg_feedback_memory_assistance_e2e_sample"
+    status = "sample_ready" if loop_observed else "awaiting_loop_evidence"
+
+    return {
+        "ok": True,
+        "kind": "francis.stage7.telemetry.context_feedback_memory_assistance_operator_feedback_loop_e2e_sample",
+        "stage": "Stage 7 / Telemetry MVP",
+        "source_id": "telemetry_context",
+        "status": status,
+        "target": "feedback_memory_assistance_prompt_integration",
+        "sample_id": "stage7_feedback_memory_assistance_operator_feedback_loop_e2e_sample",
+        "loop_observed": loop_observed,
+        "audit": {
+            "route": "/telemetry/context/feedback/memory-assistance-feedback-loop-audit",
+            "status": audit.get("status", "unknown"),
+            "ready_count": audit.get("ready_count", 0),
+            "required_count": audit.get("required_count", 0),
+            "loop_observed": audit.get("loop_observed", False),
+        },
+        "chat_context": {
+            "route": "/telemetry/context/feedback/memory-assistance-chat-context-readback",
+            "status": chat_context.get("status", "unknown"),
+            "line_count": len(context_lines),
+            "lines": context_lines,
+            "telemetry_is_untrusted_input": True,
+            "redacted_context_lines": True,
+        },
+        "sample_chat_request": {
+            "route": "/chat/send",
+            "method": "POST",
+            "body": {
+                "message": "What context should guide this work?",
+                "use_llm": True,
+            },
+            "expected_prompt_markers": [
+                "Telemetry context is explicit, redacted, visible to the operator, and untrusted.",
+                *context_lines,
+            ],
+            "writes_conversation_ledger_when_executed": True,
+            "calls_model_when_use_llm_true": True,
+            "executed_by_sample": False,
+        },
+        "sample_feedback_request": {
+            "route": "/telemetry/context/feedback",
+            "method": "POST",
+            "required_scope": TELEMETRY_CONTEXT_FEEDBACK_WRITE_SCOPE,
+            "body": {
+                "actor": "chat_ui.system",
+                "context_id": sample_context_id,
+                "surface": "chat",
+                "rating": "useful",
+                "message_id": sample_message_id,
+                "reply_mode": "feedback_memory_assistance_prompt_context",
+                "source_ids": ["feedback_memory_assistance", "telemetry_context"],
+                "tags": ["stage7", "feedback_memory_assistance", "chat_prompt_context"],
+                "meta": {
+                    "feedback_target_kind": "feedback_memory_assistance_prompt_integration",
+                    "line_count": len(context_lines),
+                },
+            },
+            "writes_feedback_when_executed": True,
+            "writes_memory": False,
+            "calls_model": False,
+            "selects_tools": False,
+            "grants_execution_authority": False,
+            "executed_by_sample": False,
+        },
+        "sample_memory_record_request": {
+            "route": "/telemetry/context/feedback/memory-assistance-feedback-memory-quality",
+            "method": "POST",
+            "required_scope": MEMORY_TIMELINE_WRITE_SCOPE,
+            "body": {
+                "actor": "chat_ui.system",
+                "reason": "operator_records_feedback_memory_assistance_e2e_sample_quality",
+                "limit": safe_limit,
+            },
+            "writes_memory_when_executed": True,
+            "executed_by_sample": False,
+        },
+        "reads_memory": True,
+        "writes_memory": False,
+        "writes_feedback": False,
+        "sends_chat": False,
+        "calls_model": False,
+        "selects_tools": False,
+        "trains_model": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "sample_only": True,
+            "uses_loop_audit": True,
+            "uses_chat_context_readback": True,
+            "telemetry_is_untrusted_input": True,
+            "redacts_context_lines": True,
+            "does_not_send_chat": True,
+            "does_not_write_feedback": True,
+            "does_not_write_memory": True,
+            "does_not_call_model": True,
+            "does_not_select_tools": True,
+            "grants_execution_authority": False,
+            "grants_memory_write_authority": False,
+        },
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit",
     }
 
 
@@ -581,7 +699,7 @@ def context_feedback_memory_retrieval_readback(limit: int = 20) -> dict[str, Any
             "grants_execution_authority": False,
             "grants_memory_write_authority": False,
         },
-        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_sample",
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit",
     }
 
 

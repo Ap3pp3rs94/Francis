@@ -292,6 +292,33 @@ export type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopAudit = 
   next_smallest_truthful_gap: string;
 };
 
+export type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopE2eSample = {
+  ok: boolean;
+  kind: string;
+  stage: string;
+  source_id: string;
+  status: string;
+  target: string;
+  sample_id: string;
+  loop_observed: boolean;
+  audit: Record<string, unknown>;
+  chat_context: Record<string, unknown>;
+  sample_chat_request: Record<string, unknown>;
+  sample_feedback_request: Record<string, unknown>;
+  sample_memory_record_request: Record<string, unknown>;
+  reads_memory: boolean;
+  writes_memory: boolean;
+  writes_feedback: boolean;
+  sends_chat: boolean;
+  calls_model: boolean;
+  selects_tools: boolean;
+  trains_model: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+  governance: Record<string, unknown>;
+  next_smallest_truthful_gap: string;
+};
+
 export type TelemetryContextFeedbackMemoryAssistancePolicy = {
   ok: boolean;
   kind: string;
@@ -643,6 +670,39 @@ export function parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoo
     routes: recordOrEmpty(raw.routes),
     reads_memory: safeBoolean(raw.reads_memory, false),
     writes_memory: safeBoolean(raw.writes_memory, true),
+    calls_model: safeBoolean(raw.calls_model, true),
+    selects_tools: safeBoolean(raw.selects_tools, true),
+    trains_model: safeBoolean(raw.trains_model, true),
+    grants_execution_authority: safeBoolean(raw.grants_execution_authority, true),
+    grants_mutation_authority: safeBoolean(raw.grants_mutation_authority, true),
+    governance: recordOrEmpty(raw.governance),
+    next_smallest_truthful_gap: safeString(raw.next_smallest_truthful_gap, ""),
+  };
+}
+
+export function parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopE2eSample(
+  value: unknown,
+): TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopE2eSample {
+  const raw = isRecord(value) ? value : {};
+
+  return {
+    ok: safeBoolean(raw.ok, false),
+    kind: safeString(raw.kind, ""),
+    stage: safeString(raw.stage, ""),
+    source_id: safeString(raw.source_id, ""),
+    status: safeString(raw.status, "unknown"),
+    target: safeString(raw.target, ""),
+    sample_id: safeString(raw.sample_id, ""),
+    loop_observed: safeBoolean(raw.loop_observed, false),
+    audit: recordOrEmpty(raw.audit),
+    chat_context: recordOrEmpty(raw.chat_context),
+    sample_chat_request: recordOrEmpty(raw.sample_chat_request),
+    sample_feedback_request: recordOrEmpty(raw.sample_feedback_request),
+    sample_memory_record_request: recordOrEmpty(raw.sample_memory_record_request),
+    reads_memory: safeBoolean(raw.reads_memory, false),
+    writes_memory: safeBoolean(raw.writes_memory, true),
+    writes_feedback: safeBoolean(raw.writes_feedback, true),
+    sends_chat: safeBoolean(raw.sends_chat, true),
     calls_model: safeBoolean(raw.calls_model, true),
     selects_tools: safeBoolean(raw.selects_tools, true),
     trains_model: safeBoolean(raw.trains_model, true),
@@ -1133,6 +1193,46 @@ export class TelemetryClient {
       return parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopAudit(text ? JSON.parse(text) : {});
     } catch (err) {
       throw new TelemetryApiError("Telemetry feedback memory assistance loop audit response was not valid JSON.", {
+        url,
+        cause: err,
+      });
+    }
+  }
+
+  async getContextFeedbackMemoryAssistanceOperatorFeedbackLoopE2eSample(opts?: {
+    limit?: number;
+    signal?: AbortSignal;
+  }): Promise<TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopE2eSample> {
+    const limit = clampLimit(opts?.limit, 20);
+    const url = this.url(`/telemetry/context/feedback/memory-assistance-feedback-loop-e2e-sample?limit=${limit}`);
+    let response: Response;
+    try {
+      response = await fetch(url, { method: "GET", signal: opts?.signal });
+    } catch (err) {
+      throw new TelemetryApiError("Telemetry feedback memory assistance e2e sample request failed.", {
+        url,
+        cause: err,
+      });
+    }
+
+    const text = await response.text();
+    if (!response.ok) {
+      throw new TelemetryApiError(
+        `HTTP ${response.status} for telemetry feedback memory assistance e2e sample request`,
+        {
+          status: response.status,
+          url,
+          bodySnippet: text.slice(0, 500),
+        },
+      );
+    }
+
+    try {
+      return parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopE2eSample(
+        text ? JSON.parse(text) : {},
+      );
+    } catch (err) {
+      throw new TelemetryApiError("Telemetry feedback memory assistance e2e sample response was not valid JSON.", {
         url,
         cause: err,
       });
