@@ -774,6 +774,36 @@ export type TelemetryContextFeedbackMemoryAssistanceMemoryPoisoningReview = {
   next_smallest_truthful_gap: string;
 };
 
+export type TelemetryContextFeedbackMemoryAssistanceTrueExecutionTraceReview = {
+  ok: boolean;
+  kind: string;
+  stage: string;
+  source_id: string;
+  status: string;
+  target: string;
+  review_ready: boolean;
+  true_execution_trace_observed: boolean;
+  receipt_backed_trace_observed: boolean;
+  receipt_backed_trace_count: number;
+  true_execution_trace_count: number;
+  trace_sources: Array<Record<string, unknown>>;
+  missing_true_execution_trace: string[];
+  poisoning_review: Record<string, unknown>;
+  primary_loop_evidence: Record<string, unknown>;
+  read_only: boolean;
+  writes_memory: boolean;
+  writes_feedback: boolean;
+  mutates_prompt: boolean;
+  sends_chat: boolean;
+  calls_model: boolean;
+  selects_tools: boolean;
+  trains_model: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+  governance: Record<string, unknown>;
+  next_smallest_truthful_gap: string;
+};
+
 export type TelemetryContextFeedbackMemoryAssistancePolicy = {
   ok: boolean;
   kind: string;
@@ -1704,6 +1734,42 @@ export function parseTelemetryContextFeedbackMemoryAssistanceMemoryPoisoningRevi
     memory_readback: recordOrEmpty(raw.memory_readback),
     read_only: safeBoolean(raw.read_only, false),
     executes_poison_probe: safeBoolean(raw.executes_poison_probe, true),
+    writes_memory: safeBoolean(raw.writes_memory, true),
+    writes_feedback: safeBoolean(raw.writes_feedback, true),
+    mutates_prompt: safeBoolean(raw.mutates_prompt, true),
+    sends_chat: safeBoolean(raw.sends_chat, true),
+    calls_model: safeBoolean(raw.calls_model, true),
+    selects_tools: safeBoolean(raw.selects_tools, true),
+    trains_model: safeBoolean(raw.trains_model, true),
+    grants_execution_authority: safeBoolean(raw.grants_execution_authority, true),
+    grants_mutation_authority: safeBoolean(raw.grants_mutation_authority, true),
+    governance: recordOrEmpty(raw.governance),
+    next_smallest_truthful_gap: safeString(raw.next_smallest_truthful_gap, ""),
+  };
+}
+
+export function parseTelemetryContextFeedbackMemoryAssistanceTrueExecutionTraceReview(
+  value: unknown,
+): TelemetryContextFeedbackMemoryAssistanceTrueExecutionTraceReview {
+  const raw = isRecord(value) ? value : {};
+
+  return {
+    ok: safeBoolean(raw.ok, false),
+    kind: safeString(raw.kind, ""),
+    stage: safeString(raw.stage, ""),
+    source_id: safeString(raw.source_id, ""),
+    status: safeString(raw.status, "unknown"),
+    target: safeString(raw.target, ""),
+    review_ready: safeBoolean(raw.review_ready, false),
+    true_execution_trace_observed: safeBoolean(raw.true_execution_trace_observed, false),
+    receipt_backed_trace_observed: safeBoolean(raw.receipt_backed_trace_observed, false),
+    receipt_backed_trace_count: safeNumber(raw.receipt_backed_trace_count, 0),
+    true_execution_trace_count: safeNumber(raw.true_execution_trace_count, 0),
+    trace_sources: Array.isArray(raw.trace_sources) ? raw.trace_sources.filter(isRecord) : [],
+    missing_true_execution_trace: safeStringArray(raw.missing_true_execution_trace),
+    poisoning_review: recordOrEmpty(raw.poisoning_review),
+    primary_loop_evidence: recordOrEmpty(raw.primary_loop_evidence),
+    read_only: safeBoolean(raw.read_only, false),
     writes_memory: safeBoolean(raw.writes_memory, true),
     writes_feedback: safeBoolean(raw.writes_feedback, true),
     mutates_prompt: safeBoolean(raw.mutates_prompt, true),
@@ -2847,6 +2913,49 @@ export class TelemetryClient {
     } catch (err) {
       throw new TelemetryApiError(
         "Telemetry feedback memory assistance poisoning review response was not valid JSON.",
+        {
+          url,
+          cause: err,
+        },
+      );
+    }
+  }
+
+  async getContextFeedbackMemoryAssistanceTrueExecutionTraceReview(opts?: {
+    limit?: number;
+    signal?: AbortSignal;
+  }): Promise<TelemetryContextFeedbackMemoryAssistanceTrueExecutionTraceReview> {
+    const limit = clampLimit(opts?.limit, 20);
+    const url = this.url(
+      `/telemetry/context/feedback/memory-assistance-feedback-loop-true-execution-trace-review?limit=${limit}`,
+    );
+    let response: Response;
+    try {
+      response = await fetch(url, { method: "GET", signal: opts?.signal });
+    } catch (err) {
+      throw new TelemetryApiError("Telemetry feedback memory assistance true execution trace review request failed.", {
+        url,
+        cause: err,
+      });
+    }
+
+    const text = await response.text();
+    if (!response.ok) {
+      throw new TelemetryApiError(
+        `HTTP ${response.status} for telemetry feedback memory assistance true execution trace review request`,
+        {
+          status: response.status,
+          url,
+          bodySnippet: text.slice(0, 500),
+        },
+      );
+    }
+
+    try {
+      return parseTelemetryContextFeedbackMemoryAssistanceTrueExecutionTraceReview(text ? JSON.parse(text) : {});
+    } catch (err) {
+      throw new TelemetryApiError(
+        "Telemetry feedback memory assistance true execution trace review response was not valid JSON.",
         {
           url,
           cause: err,

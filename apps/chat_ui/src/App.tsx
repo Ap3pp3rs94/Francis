@@ -119,6 +119,7 @@ import {
   type TelemetryContextFeedbackMemoryAssistanceIdeContextSignal,
   type TelemetryContextFeedbackMemoryAssistanceSensingIndicatorSummary,
   type TelemetryContextFeedbackMemoryAssistanceTerminalContextSignal,
+  type TelemetryContextFeedbackMemoryAssistanceTrueExecutionTraceReview,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackMemoryReadback,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackReview,
   type TelemetryContextFeedbackMemoryAssistancePolicy,
@@ -4324,6 +4325,18 @@ function SystemPanel(props: {
     telemetryFeedbackMemoryAssistanceMemoryPoisoningReviewLoadedAt,
     setTelemetryFeedbackMemoryAssistanceMemoryPoisoningReviewLoadedAt,
   ] = useState<number | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceTrueExecutionTraceReview,
+    setTelemetryFeedbackMemoryAssistanceTrueExecutionTraceReview,
+  ] = useState<TelemetryContextFeedbackMemoryAssistanceTrueExecutionTraceReview | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceTrueExecutionTraceReviewError,
+    setTelemetryFeedbackMemoryAssistanceTrueExecutionTraceReviewError,
+  ] = useState<string | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceTrueExecutionTraceReviewLoadedAt,
+    setTelemetryFeedbackMemoryAssistanceTrueExecutionTraceReviewLoadedAt,
+  ] = useState<number | null>(null);
   const [telemetryFeedbackMemoryQualityBusy, setTelemetryFeedbackMemoryQualityBusy] = useState(false);
   const [telemetryFeedbackMemoryQualityNotice, setTelemetryFeedbackMemoryQualityNotice] = useState<{
     tone: "info" | "error";
@@ -4556,6 +4569,7 @@ function SystemPanel(props: {
         nextTelemetryFeedbackMemoryAssistanceActionQualitySignalReview,
         nextTelemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview,
         nextTelemetryFeedbackMemoryAssistanceMemoryPoisoningReview,
+        nextTelemetryFeedbackMemoryAssistanceTrueExecutionTraceReview,
       ] =
         await Promise.allSettled([
         client.getSystemInfo(),
@@ -4600,6 +4614,7 @@ function SystemPanel(props: {
         telemetryClient.getContextFeedbackMemoryAssistanceActionQualitySignalReview({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistancePrimaryLoopEvidenceReview({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistanceMemoryPoisoningReview({ limit: 20 }),
+        telemetryClient.getContextFeedbackMemoryAssistanceTrueExecutionTraceReview({ limit: 20 }),
       ]);
 
       const degradedFeeds: string[] = [];
@@ -4962,6 +4977,19 @@ function SystemPanel(props: {
           telemetryError(nextTelemetryFeedbackMemoryAssistanceMemoryPoisoningReview.reason),
         );
         degradedFeeds.push("telemetry feedback memory assistance memory poisoning review");
+      }
+
+      if (nextTelemetryFeedbackMemoryAssistanceTrueExecutionTraceReview.status === "fulfilled") {
+        setTelemetryFeedbackMemoryAssistanceTrueExecutionTraceReview(
+          nextTelemetryFeedbackMemoryAssistanceTrueExecutionTraceReview.value,
+        );
+        setTelemetryFeedbackMemoryAssistanceTrueExecutionTraceReviewError(null);
+        setTelemetryFeedbackMemoryAssistanceTrueExecutionTraceReviewLoadedAt(refreshStartedAt);
+      } else {
+        setTelemetryFeedbackMemoryAssistanceTrueExecutionTraceReviewError(
+          telemetryError(nextTelemetryFeedbackMemoryAssistanceTrueExecutionTraceReview.reason),
+        );
+        degradedFeeds.push("telemetry feedback memory assistance true execution trace review");
       }
 
       if (degradedFeeds.length > 0) {
@@ -7150,6 +7178,23 @@ function SystemPanel(props: {
       : telemetryFeedbackMemoryAssistanceMemoryPoisoningReview
         ? `Feedback memory assistance poisoning ${telemetryFeedbackMemoryAssistanceMemoryPoisoningReview.status}; controls ${telemetryFeedbackMemoryAssistanceMemoryPoisoningReview.ready_count}/${telemetryFeedbackMemoryAssistanceMemoryPoisoningReview.required_count}.`
         : "Feedback memory assistance poisoning review has not loaded yet.";
+  const telemetryFeedbackMemoryAssistanceTrueExecutionTraceReviewStatus =
+    safeString(telemetryFeedbackMemoryAssistanceTrueExecutionTraceReview?.status).trim() ||
+    (telemetryFeedbackMemoryAssistanceTrueExecutionTraceReviewError ? "unavailable" : "unloaded");
+  const telemetryFeedbackMemoryAssistanceTrueExecutionTraceReviewTone =
+    telemetryFeedbackMemoryAssistanceTrueExecutionTraceReviewError
+      ? "blocked"
+      : telemetryFeedbackMemoryAssistanceTrueExecutionTraceReview
+        ? telemetryFeedbackMemoryAssistanceTrueExecutionTraceReview.review_ready
+          ? "running"
+          : "dormant"
+        : "standby";
+  const telemetryFeedbackMemoryAssistanceTrueExecutionTraceReviewDetail =
+    telemetryFeedbackMemoryAssistanceTrueExecutionTraceReviewError
+      ? `Feedback memory assistance true execution trace review could not refresh: ${telemetryFeedbackMemoryAssistanceTrueExecutionTraceReviewError}`
+      : telemetryFeedbackMemoryAssistanceTrueExecutionTraceReview
+        ? `Feedback memory assistance true execution trace ${telemetryFeedbackMemoryAssistanceTrueExecutionTraceReview.status}; receipt readbacks ${telemetryFeedbackMemoryAssistanceTrueExecutionTraceReview.receipt_backed_trace_count}, true traces ${telemetryFeedbackMemoryAssistanceTrueExecutionTraceReview.true_execution_trace_count}.`
+        : "Feedback memory assistance true execution trace review has not loaded yet.";
   const telemetryFeedbackMemoryAssistanceLiveSampleDecisionCanRecord = Boolean(
     telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview?.operator_review_ready &&
       !telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionRecorded,
@@ -12139,6 +12184,9 @@ function SystemPanel(props: {
             <span style={badgeStyle(telemetryFeedbackMemoryAssistanceMemoryPoisoningReviewTone)}>
               Poisoning review {telemetryFeedbackMemoryAssistanceMemoryPoisoningReviewStatus}
             </span>
+            <span style={badgeStyle(telemetryFeedbackMemoryAssistanceTrueExecutionTraceReviewTone)}>
+              Execution trace {telemetryFeedbackMemoryAssistanceTrueExecutionTraceReviewStatus}
+            </span>
             <span style={badgeStyle(continuation.tone)}>{continuation.label}</span>
           </div>
         </div>
@@ -12339,6 +12387,15 @@ function SystemPanel(props: {
           }}
         >
           {telemetryFeedbackMemoryAssistanceMemoryPoisoningReviewDetail}
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            color: telemetryFeedbackMemoryAssistanceTrueExecutionTraceReviewError ? "#ffcf9d" : THEME.text,
+            marginTop: 8,
+          }}
+        >
+          {telemetryFeedbackMemoryAssistanceTrueExecutionTraceReviewDetail}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
           <button
@@ -13308,6 +13365,86 @@ function SystemPanel(props: {
                 model <code>{telemetryFeedbackMemoryAssistanceMemoryPoisoningReview.calls_model ? "true" : "false"}</code>
                 {" / "}tools{" "}
                 <code>{telemetryFeedbackMemoryAssistanceMemoryPoisoningReview.selects_tools ? "true" : "false"}</code>
+              </div>
+            </div>
+          </div>
+        ) : null}
+        {telemetryFeedbackMemoryAssistanceTrueExecutionTraceReview ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+              gap: 8,
+              marginTop: 10,
+            }}
+          >
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Execution trace</div>
+              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
+                {telemetryFeedbackMemoryAssistanceTrueExecutionTraceReview.true_execution_trace_count}
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                receipt readbacks{" "}
+                <code>{telemetryFeedbackMemoryAssistanceTrueExecutionTraceReview.receipt_backed_trace_count}</code>
+              </div>
+              {telemetryFeedbackMemoryAssistanceTrueExecutionTraceReviewLoadedAt ? (
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                  Loaded {toLocaleTime(telemetryFeedbackMemoryAssistanceTrueExecutionTraceReviewLoadedAt)}
+                </div>
+              ) : null}
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Trace sources</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                {telemetryFeedbackMemoryAssistanceTrueExecutionTraceReview.trace_sources.map((item) => {
+                  const id = safeString(item.id).trim() || "source";
+                  const ready = Boolean(item.ready);
+                  const kind = safeString(item.kind).trim();
+                  return (
+                    <span key={`telemetry-execution-trace-${id}`} style={badgeStyle(ready ? "running" : "dormant")}>
+                      {id} {kind === "true_execution_trace" ? "trace" : "receipt"}
+                    </span>
+                  );
+                })}
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                next{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceTrueExecutionTraceReview.next_smallest_truthful_gap ||
+                    "true_execution_trace_review"}
+                </code>
+              </div>
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Missing trace</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                {telemetryFeedbackMemoryAssistanceTrueExecutionTraceReview.missing_true_execution_trace.map((item) => (
+                  <span key={`telemetry-missing-trace-${item}`} style={badgeStyle("dormant")}>
+                    {item}
+                  </span>
+                ))}
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                observed{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceTrueExecutionTraceReview.true_execution_trace_observed
+                    ? "true"
+                    : "false"}
+                </code>
+              </div>
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Trace guards</div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 6 }}>
+                memory{" "}
+                <code>{telemetryFeedbackMemoryAssistanceTrueExecutionTraceReview.writes_memory ? "true" : "false"}</code>
+                {" / "}chat{" "}
+                <code>{telemetryFeedbackMemoryAssistanceTrueExecutionTraceReview.sends_chat ? "send" : "read"}</code>
+              </div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 4 }}>
+                model <code>{telemetryFeedbackMemoryAssistanceTrueExecutionTraceReview.calls_model ? "true" : "false"}</code>
+                {" / "}tools{" "}
+                <code>{telemetryFeedbackMemoryAssistanceTrueExecutionTraceReview.selects_tools ? "true" : "false"}</code>
               </div>
             </div>
           </div>

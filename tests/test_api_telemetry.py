@@ -1807,6 +1807,50 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decis
         "stage7_context_feedback_memory_assistance_true_execution_trace_review"
     )
 
+    trace_review = client.get(
+        "/telemetry/context/feedback/memory-assistance-feedback-loop-true-execution-trace-review?limit=10"
+    ).json()
+    assert trace_review["ok"] is True
+    assert trace_review["kind"] == (
+        "francis.stage7.telemetry.context_feedback_memory_assistance_true_execution_trace_review"
+    )
+    assert trace_review["status"] == "true_execution_trace_not_observed"
+    assert trace_review["review_ready"] is True
+    assert trace_review["receipt_backed_trace_observed"] is True
+    assert trace_review["receipt_backed_trace_count"] == 4
+    assert trace_review["true_execution_trace_observed"] is False
+    assert trace_review["true_execution_trace_count"] == 0
+    assert [item["id"] for item in trace_review["trace_sources"]] == [
+        "chat_interface_readback",
+        "operator_feedback_receipt",
+        "operator_decision_receipt",
+        "memory_quality_receipt",
+        "operation_execution_trace",
+        "model_or_tool_execution_span",
+    ]
+    assert trace_review["missing_true_execution_trace"] == [
+        "operation_execution_trace",
+        "model_or_tool_execution_span",
+    ]
+    assert trace_review["primary_loop_evidence"]["primary_loop_evidence_ready"] is True
+    assert trace_review["primary_loop_evidence"]["receipt_trace_kind"] == "receipt_backed_readback"
+    assert trace_review["poisoning_review"]["memory_poisoning_review_ready"] is True
+    assert trace_review["read_only"] is True
+    assert trace_review["writes_memory"] is False
+    assert trace_review["writes_feedback"] is False
+    assert trace_review["mutates_prompt"] is False
+    assert trace_review["sends_chat"] is False
+    assert trace_review["calls_model"] is False
+    assert trace_review["selects_tools"] is False
+    assert trace_review["grants_execution_authority"] is False
+    assert trace_review["grants_mutation_authority"] is False
+    assert trace_review["governance"]["true_execution_trace_review"] is True
+    assert trace_review["governance"]["receipt_trace_not_true_execution_trace"] is True
+    assert trace_review["governance"]["reports_missing_true_execution_trace"] is True
+    assert trace_review["next_smallest_truthful_gap"] == (
+        "stage7_context_feedback_memory_assistance_true_execution_trace_capture"
+    )
+
 
 def test_telemetry_context_feedback_memory_quality_record_is_empty_without_events(
     monkeypatch,

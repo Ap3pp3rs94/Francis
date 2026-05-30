@@ -22,6 +22,7 @@ import {
   parseTelemetryContextFeedbackMemoryAssistancePrimaryLoopEvidenceReview,
   parseTelemetryContextFeedbackMemoryAssistanceSensingIndicatorSummary,
   parseTelemetryContextFeedbackMemoryAssistanceTerminalContextSignal,
+  parseTelemetryContextFeedbackMemoryAssistanceTrueExecutionTraceReview,
   parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackReview,
   parseTelemetryContextFeedbackMemoryAssistanceChatContextReadback,
   parseTelemetryContextFeedbackMemoryAssistanceDryRun,
@@ -2514,6 +2515,126 @@ test("TelemetryClient requests the memory poisoning review endpoint", async () =
     assert.deepEqual(requests, [
       {
         path: "/telemetry/context/feedback/memory-assistance-feedback-loop-memory-poisoning-review",
+        search: "?limit=30",
+        method: "GET",
+      },
+    ]);
+  } finally {
+    restore();
+  }
+});
+
+test("parseTelemetryContextFeedbackMemoryAssistanceTrueExecutionTraceReview preserves missing trace truth", () => {
+  const review = parseTelemetryContextFeedbackMemoryAssistanceTrueExecutionTraceReview({
+    ok: true,
+    kind: "francis.stage7.telemetry.context_feedback_memory_assistance_true_execution_trace_review",
+    stage: "Stage 7 / Telemetry MVP",
+    source_id: "telemetry_context",
+    status: "true_execution_trace_not_observed",
+    target: "feedback_memory_assistance_prompt_integration",
+    review_ready: true,
+    true_execution_trace_observed: false,
+    receipt_backed_trace_observed: true,
+    receipt_backed_trace_count: 4,
+    true_execution_trace_count: 0,
+    trace_sources: [
+      { id: "chat_interface_readback", kind: "receipt_backed_readback", ready: true },
+      { id: "operator_feedback_receipt", kind: "receipt_backed_readback", ready: true },
+      { id: "operator_decision_receipt", kind: "receipt_backed_readback", ready: true },
+      { id: "memory_quality_receipt", kind: "receipt_backed_readback", ready: true },
+      { id: "operation_execution_trace", kind: "true_execution_trace", ready: false },
+      { id: "model_or_tool_execution_span", kind: "true_execution_trace", ready: false },
+    ],
+    missing_true_execution_trace: ["operation_execution_trace", "model_or_tool_execution_span"],
+    poisoning_review: { memory_poisoning_review_ready: true },
+    primary_loop_evidence: { primary_loop_evidence_ready: true, receipt_trace_kind: "receipt_backed_readback" },
+    read_only: true,
+    writes_memory: false,
+    writes_feedback: false,
+    mutates_prompt: false,
+    sends_chat: false,
+    calls_model: false,
+    selects_tools: false,
+    trains_model: false,
+    grants_execution_authority: false,
+    grants_mutation_authority: false,
+    governance: {
+      read_only: true,
+      true_execution_trace_review: true,
+      receipt_trace_not_true_execution_trace: true,
+    },
+    next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_true_execution_trace_capture",
+  });
+
+  assert.equal(review.status, "true_execution_trace_not_observed");
+  assert.equal(review.review_ready, true);
+  assert.equal(review.true_execution_trace_observed, false);
+  assert.equal(review.receipt_backed_trace_observed, true);
+  assert.equal(review.receipt_backed_trace_count, 4);
+  assert.equal(review.true_execution_trace_count, 0);
+  assert.deepEqual(review.missing_true_execution_trace, [
+    "operation_execution_trace",
+    "model_or_tool_execution_span",
+  ]);
+  assert.equal(review.trace_sources.length, 6);
+  assert.equal(review.read_only, true);
+  assert.equal(review.writes_memory, false);
+  assert.equal(review.calls_model, false);
+  assert.equal(review.grants_execution_authority, false);
+  assert.equal(review.governance.receipt_trace_not_true_execution_trace, true);
+});
+
+test("TelemetryClient requests the true execution trace review endpoint", async () => {
+  const requests: Array<{ path: string; search: string; method: string }> = [];
+  const restore = installFetch((url, init) => {
+    const parsed = new URL(url);
+    requests.push({ path: parsed.pathname, search: parsed.search, method: init?.method ?? "GET" });
+    return jsonResponse({
+      ok: true,
+      kind: "francis.stage7.telemetry.context_feedback_memory_assistance_true_execution_trace_review",
+      stage: "Stage 7 / Telemetry MVP",
+      source_id: "telemetry_context",
+      status: "true_execution_trace_not_observed",
+      target: "feedback_memory_assistance_prompt_integration",
+      review_ready: true,
+      true_execution_trace_observed: false,
+      receipt_backed_trace_observed: true,
+      receipt_backed_trace_count: 4,
+      true_execution_trace_count: 0,
+      trace_sources: [
+        { id: "chat_interface_readback", kind: "receipt_backed_readback", ready: true },
+        { id: "operator_feedback_receipt", kind: "receipt_backed_readback", ready: true },
+        { id: "operator_decision_receipt", kind: "receipt_backed_readback", ready: true },
+        { id: "memory_quality_receipt", kind: "receipt_backed_readback", ready: true },
+        { id: "operation_execution_trace", kind: "true_execution_trace", ready: false },
+        { id: "model_or_tool_execution_span", kind: "true_execution_trace", ready: false },
+      ],
+      missing_true_execution_trace: ["operation_execution_trace", "model_or_tool_execution_span"],
+      poisoning_review: { memory_poisoning_review_ready: true },
+      primary_loop_evidence: { primary_loop_evidence_ready: true, receipt_trace_kind: "receipt_backed_readback" },
+      read_only: true,
+      writes_memory: false,
+      writes_feedback: false,
+      mutates_prompt: false,
+      sends_chat: false,
+      calls_model: false,
+      selects_tools: false,
+      trains_model: false,
+      grants_execution_authority: false,
+      grants_mutation_authority: false,
+      governance: { read_only: true, true_execution_trace_review: true },
+      next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_true_execution_trace_capture",
+    });
+  });
+
+  try {
+    const client = new TelemetryClient("http://127.0.0.1:8000/");
+    const review = await client.getContextFeedbackMemoryAssistanceTrueExecutionTraceReview({ limit: 30 });
+
+    assert.equal(review.true_execution_trace_observed, false);
+    assert.deepEqual(requests, [
+      {
+        path: "/telemetry/context/feedback/memory-assistance-feedback-loop-true-execution-trace-review",
         search: "?limit=30",
         method: "GET",
       },

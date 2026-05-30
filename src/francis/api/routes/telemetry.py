@@ -2140,6 +2140,156 @@ def context_feedback_memory_assistance_operator_feedback_loop_memory_poisoning_r
     }
 
 
+@router.get("/context/feedback/memory-assistance-feedback-loop-true-execution-trace-review")
+def context_feedback_memory_assistance_operator_feedback_loop_true_execution_trace_review(
+    limit: int = 20,
+) -> dict[str, Any]:
+    safe_limit = max(1, min(int(limit), 100))
+    poisoning_review = context_feedback_memory_assistance_operator_feedback_loop_memory_poisoning_review(
+        limit=safe_limit
+    )
+    primary_loop = context_feedback_memory_assistance_operator_feedback_loop_primary_loop_evidence_review(
+        limit=safe_limit
+    )
+    live_sample = context_feedback_memory_assistance_operator_feedback_loop_live_sample_readback(limit=safe_limit)
+    receipt_id = _redacted_line_text(primary_loop.get("operator_decision_receipt_id"))
+    memory_event_id = _redacted_line_text(primary_loop.get("memory_quality_event_id"))
+    chat_value = live_sample.get("chat")
+    chat: dict[str, Any] = chat_value if isinstance(chat_value, dict) else {}
+    feedback_value = live_sample.get("feedback")
+    feedback: dict[str, Any] = feedback_value if isinstance(feedback_value, dict) else {}
+
+    trace_sources = [
+        {
+            "id": "chat_interface_readback",
+            "kind": "receipt_backed_readback",
+            "ready": bool(chat),
+            "evidence": {
+                "route": "/chat/send",
+                "status": chat.get("status", "unknown"),
+                "api_actor": chat.get("api_actor", ""),
+            },
+        },
+        {
+            "id": "operator_feedback_receipt",
+            "kind": "receipt_backed_readback",
+            "ready": bool(feedback.get("feedback_id")),
+            "evidence": {
+                "feedback_id": feedback.get("feedback_id", ""),
+                "surface": feedback.get("surface", ""),
+            },
+        },
+        {
+            "id": "operator_decision_receipt",
+            "kind": "receipt_backed_readback",
+            "ready": bool(receipt_id),
+            "evidence": {"receipt_id": receipt_id},
+        },
+        {
+            "id": "memory_quality_receipt",
+            "kind": "receipt_backed_readback",
+            "ready": bool(memory_event_id),
+            "evidence": {"memory_event_id": memory_event_id},
+        },
+        {
+            "id": "operation_execution_trace",
+            "kind": "true_execution_trace",
+            "ready": False,
+            "evidence": {
+                "trace_id": "",
+                "run_id": "",
+                "artifact_dir": "",
+                "reason": "feedback_memory_assistance_loop_has_receipt_readbacks_but_no_operation_execution_span",
+            },
+        },
+        {
+            "id": "model_or_tool_execution_span",
+            "kind": "true_execution_trace",
+            "ready": False,
+            "evidence": {
+                "model_call_trace_id": "",
+                "tool_call_trace_id": "",
+                "reason": "review_does_not_call_model_or_select_tools",
+            },
+        },
+    ]
+    receipt_backed_count = sum(
+        1 for item in trace_sources if item["kind"] == "receipt_backed_readback" and item["ready"]
+    )
+    true_execution_trace_count = sum(
+        1 for item in trace_sources if item["kind"] == "true_execution_trace" and item["ready"]
+    )
+    true_execution_trace_observed = true_execution_trace_count > 0
+    review_ready = bool(poisoning_review.get("memory_poisoning_review_ready")) and bool(
+        primary_loop.get("primary_loop_evidence_ready")
+    )
+    missing_true_execution_trace = [
+        _redacted_line_text(item.get("id"))
+        for item in trace_sources
+        if item.get("kind") == "true_execution_trace" and not item.get("ready")
+    ]
+    return {
+        "ok": True,
+        "kind": "francis.stage7.telemetry.context_feedback_memory_assistance_true_execution_trace_review",
+        "stage": "Stage 7 / Telemetry MVP",
+        "source_id": "telemetry_context",
+        "status": "true_execution_trace_not_observed"
+        if review_ready and not true_execution_trace_observed
+        else "true_execution_trace_review_partial",
+        "target": "feedback_memory_assistance_prompt_integration",
+        "review_ready": review_ready,
+        "true_execution_trace_observed": true_execution_trace_observed,
+        "receipt_backed_trace_observed": receipt_backed_count > 0,
+        "receipt_backed_trace_count": receipt_backed_count,
+        "true_execution_trace_count": true_execution_trace_count,
+        "trace_sources": trace_sources,
+        "missing_true_execution_trace": missing_true_execution_trace,
+        "poisoning_review": {
+            "route": "/telemetry/context/feedback/memory-assistance-feedback-loop-memory-poisoning-review",
+            "status": poisoning_review.get("status", "unknown"),
+            "memory_poisoning_review_ready": bool(poisoning_review.get("memory_poisoning_review_ready")),
+        },
+        "primary_loop_evidence": {
+            "route": "/telemetry/context/feedback/memory-assistance-feedback-loop-primary-loop-evidence-review",
+            "status": primary_loop.get("status", "unknown"),
+            "primary_loop_evidence_ready": bool(primary_loop.get("primary_loop_evidence_ready")),
+            "receipt_trace_kind": primary_loop.get("receipt_trace_kind", ""),
+        },
+        "read_only": True,
+        "writes_memory": False,
+        "writes_feedback": False,
+        "mutates_prompt": False,
+        "sends_chat": False,
+        "calls_model": False,
+        "selects_tools": False,
+        "trains_model": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "true_execution_trace_review": True,
+            "receipt_trace_not_true_execution_trace": True,
+            "reports_missing_true_execution_trace": True,
+            "uses_primary_loop_evidence_review": True,
+            "uses_memory_poisoning_review": True,
+            "telemetry_is_untrusted_input": True,
+            "does_not_write_memory": True,
+            "does_not_write_feedback": True,
+            "does_not_mutate_prompt": True,
+            "does_not_send_chat": True,
+            "does_not_call_model": True,
+            "does_not_select_tools": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": (
+            "stage7_context_feedback_memory_assistance_true_execution_trace_capture"
+            if review_ready and not true_execution_trace_observed
+            else "stage7_context_feedback_memory_assistance_true_execution_trace_review"
+        ),
+    }
+
+
 @router.post("/context/feedback/memory-assistance-feedback-loop-live-sample-operator-decision")
 def context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_decision_record(
     payload: TelemetryContextFeedbackMemoryAssistanceLiveSampleOperatorDecisionIn,
