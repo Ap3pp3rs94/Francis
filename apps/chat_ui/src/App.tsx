@@ -113,6 +113,7 @@ import {
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleReadback,
   type TelemetryContextFeedbackMemoryAssistanceGitContextSignal,
   type TelemetryContextFeedbackMemoryAssistanceIdeContextSignal,
+  type TelemetryContextFeedbackMemoryAssistanceSensingIndicatorSummary,
   type TelemetryContextFeedbackMemoryAssistanceTerminalContextSignal,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackMemoryReadback,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackReview,
@@ -4259,6 +4260,18 @@ function SystemPanel(props: {
     telemetryFeedbackMemoryAssistanceIdeContextSignalLoadedAt,
     setTelemetryFeedbackMemoryAssistanceIdeContextSignalLoadedAt,
   ] = useState<number | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceSensingIndicatorSummary,
+    setTelemetryFeedbackMemoryAssistanceSensingIndicatorSummary,
+  ] = useState<TelemetryContextFeedbackMemoryAssistanceSensingIndicatorSummary | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceSensingIndicatorSummaryError,
+    setTelemetryFeedbackMemoryAssistanceSensingIndicatorSummaryError,
+  ] = useState<string | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceSensingIndicatorSummaryLoadedAt,
+    setTelemetryFeedbackMemoryAssistanceSensingIndicatorSummaryLoadedAt,
+  ] = useState<number | null>(null);
   const [telemetryFeedbackMemoryQualityBusy, setTelemetryFeedbackMemoryQualityBusy] = useState(false);
   const [telemetryFeedbackMemoryQualityNotice, setTelemetryFeedbackMemoryQualityNotice] = useState<{
     tone: "info" | "error";
@@ -4486,6 +4499,7 @@ function SystemPanel(props: {
         nextTelemetryFeedbackMemoryAssistanceTerminalContextSignal,
         nextTelemetryFeedbackMemoryAssistanceGitContextSignal,
         nextTelemetryFeedbackMemoryAssistanceIdeContextSignal,
+        nextTelemetryFeedbackMemoryAssistanceSensingIndicatorSummary,
       ] =
         await Promise.allSettled([
         client.getSystemInfo(),
@@ -4525,6 +4539,7 @@ function SystemPanel(props: {
         telemetryClient.getContextFeedbackMemoryAssistanceTerminalContextSignal({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistanceGitContextSignal({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistanceIdeContextSignal({ limit: 20 }),
+        telemetryClient.getContextFeedbackMemoryAssistanceSensingIndicatorSummary({ limit: 20 }),
       ]);
 
       const degradedFeeds: string[] = [];
@@ -4822,6 +4837,19 @@ function SystemPanel(props: {
           telemetryError(nextTelemetryFeedbackMemoryAssistanceIdeContextSignal.reason),
         );
         degradedFeeds.push("telemetry feedback memory assistance IDE context signal");
+      }
+
+      if (nextTelemetryFeedbackMemoryAssistanceSensingIndicatorSummary.status === "fulfilled") {
+        setTelemetryFeedbackMemoryAssistanceSensingIndicatorSummary(
+          nextTelemetryFeedbackMemoryAssistanceSensingIndicatorSummary.value,
+        );
+        setTelemetryFeedbackMemoryAssistanceSensingIndicatorSummaryError(null);
+        setTelemetryFeedbackMemoryAssistanceSensingIndicatorSummaryLoadedAt(refreshStartedAt);
+      } else {
+        setTelemetryFeedbackMemoryAssistanceSensingIndicatorSummaryError(
+          telemetryError(nextTelemetryFeedbackMemoryAssistanceSensingIndicatorSummary.reason),
+        );
+        degradedFeeds.push("telemetry feedback memory assistance sensing indicator summary");
       }
 
       if (degradedFeeds.length > 0) {
@@ -6925,6 +6953,23 @@ function SystemPanel(props: {
       : telemetryFeedbackMemoryAssistanceIdeContextSignal
         ? `Feedback memory assistance IDE context ${telemetryFeedbackMemoryAssistanceIdeContextSignal.status}; events ${telemetryFeedbackMemoryAssistanceIdeContextSignal.ide_event_count}, context lines ${telemetryFeedbackMemoryAssistanceIdeContextSignal.ide_context_line_count}.`
         : "Feedback memory assistance IDE context signal has not loaded yet.";
+  const telemetryFeedbackMemoryAssistanceSensingIndicatorSummaryStatus =
+    safeString(telemetryFeedbackMemoryAssistanceSensingIndicatorSummary?.status).trim() ||
+    (telemetryFeedbackMemoryAssistanceSensingIndicatorSummaryError ? "unavailable" : "unloaded");
+  const telemetryFeedbackMemoryAssistanceSensingIndicatorSummaryTone =
+    telemetryFeedbackMemoryAssistanceSensingIndicatorSummaryError
+      ? "blocked"
+      : telemetryFeedbackMemoryAssistanceSensingIndicatorSummary
+        ? telemetryFeedbackMemoryAssistanceSensingIndicatorSummary.sensing_indicator_summary_ready
+          ? "running"
+          : "dormant"
+        : "standby";
+  const telemetryFeedbackMemoryAssistanceSensingIndicatorSummaryDetail =
+    telemetryFeedbackMemoryAssistanceSensingIndicatorSummaryError
+      ? `Feedback memory assistance sensing indicators could not refresh: ${telemetryFeedbackMemoryAssistanceSensingIndicatorSummaryError}`
+      : telemetryFeedbackMemoryAssistanceSensingIndicatorSummary
+        ? `Feedback memory assistance sensing indicators ${telemetryFeedbackMemoryAssistanceSensingIndicatorSummary.status}; ready ${telemetryFeedbackMemoryAssistanceSensingIndicatorSummary.ready_indicator_count}/${telemetryFeedbackMemoryAssistanceSensingIndicatorSummary.indicator_count}, visible ${telemetryFeedbackMemoryAssistanceSensingIndicatorSummary.visible_indicator_count}.`
+        : "Feedback memory assistance sensing indicators have not loaded yet.";
   const telemetryFeedbackMemoryAssistanceLiveSampleDecisionCanRecord = Boolean(
     telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview?.operator_review_ready &&
       !telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionRecorded,
@@ -11899,6 +11944,9 @@ function SystemPanel(props: {
             <span style={badgeStyle(telemetryFeedbackMemoryAssistanceIdeContextSignalTone)}>
               IDE signal {telemetryFeedbackMemoryAssistanceIdeContextSignalStatus}
             </span>
+            <span style={badgeStyle(telemetryFeedbackMemoryAssistanceSensingIndicatorSummaryTone)}>
+              Sensing indicators {telemetryFeedbackMemoryAssistanceSensingIndicatorSummaryStatus}
+            </span>
             <span style={badgeStyle(continuation.tone)}>{continuation.label}</span>
           </div>
         </div>
@@ -12054,6 +12102,15 @@ function SystemPanel(props: {
           }}
         >
           {telemetryFeedbackMemoryAssistanceIdeContextSignalDetail}
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            color: telemetryFeedbackMemoryAssistanceSensingIndicatorSummaryError ? "#ffcf9d" : THEME.text,
+            marginTop: 8,
+          }}
+        >
+          {telemetryFeedbackMemoryAssistanceSensingIndicatorSummaryDetail}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
           <button
@@ -12661,6 +12718,73 @@ function SystemPanel(props: {
               <div style={{ fontSize: 12, color: THEME.text, marginTop: 4 }}>
                 memory <code>{telemetryFeedbackMemoryAssistanceIdeContextSignal.writes_memory ? "true" : "false"}</code>
                 {" / "}model <code>{telemetryFeedbackMemoryAssistanceIdeContextSignal.calls_model ? "true" : "false"}</code>
+              </div>
+            </div>
+          </div>
+        ) : null}
+        {telemetryFeedbackMemoryAssistanceSensingIndicatorSummary ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+              gap: 8,
+              marginTop: 10,
+            }}
+          >
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Sensing indicators</div>
+              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
+                {telemetryFeedbackMemoryAssistanceSensingIndicatorSummary.ready_indicator_count}/
+                {telemetryFeedbackMemoryAssistanceSensingIndicatorSummary.indicator_count}
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                visible <code>{telemetryFeedbackMemoryAssistanceSensingIndicatorSummary.visible_indicator_count}</code>
+                {" / "}hidden{" "}
+                <code>{telemetryFeedbackMemoryAssistanceSensingIndicatorSummary.hidden_sensing ? "true" : "false"}</code>
+              </div>
+              {telemetryFeedbackMemoryAssistanceSensingIndicatorSummaryLoadedAt ? (
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                  Loaded {toLocaleTime(telemetryFeedbackMemoryAssistanceSensingIndicatorSummaryLoadedAt)}
+                </div>
+              ) : null}
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Indicator readback</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                {telemetryFeedbackMemoryAssistanceSensingIndicatorSummary.indicators.map((indicator) => {
+                  const id = safeString(indicator.id).trim() || "indicator";
+                  const ready = Boolean(indicator.ready);
+                  return (
+                    <span key={`telemetry-sensing-${id}`} style={badgeStyle(ready ? "running" : "dormant")}>
+                      {id} {ready ? "ready" : "waiting"}
+                    </span>
+                  );
+                })}
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                next{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceSensingIndicatorSummary.next_smallest_truthful_gap ||
+                    "sensing_indicator_summary"}
+                </code>
+              </div>
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Sensing guards</div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 6 }}>
+                background{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceSensingIndicatorSummary.captures_background_activity
+                    ? "capture"
+                    : "read"}
+                </code>
+                {" / "}git watcher{" "}
+                <code>{telemetryFeedbackMemoryAssistanceSensingIndicatorSummary.starts_git_watcher ? "start" : "off"}</code>
+              </div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 4 }}>
+                memory <code>{telemetryFeedbackMemoryAssistanceSensingIndicatorSummary.writes_memory ? "true" : "false"}</code>
+                {" / "}model{" "}
+                <code>{telemetryFeedbackMemoryAssistanceSensingIndicatorSummary.calls_model ? "true" : "false"}</code>
               </div>
             </div>
           </div>

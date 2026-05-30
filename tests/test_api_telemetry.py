@@ -1565,6 +1565,55 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decis
         "stage7_context_feedback_memory_assistance_sensing_indicator_summary"
     )
 
+    sensing_summary = client.get(
+        "/telemetry/context/feedback/memory-assistance-feedback-loop-sensing-indicator-summary?limit=10"
+    ).json()
+    assert sensing_summary["ok"] is True
+    assert sensing_summary["kind"] == (
+        "francis.stage7.telemetry.context_feedback_memory_assistance_sensing_indicator_summary"
+    )
+    assert sensing_summary["status"] == "sensing_indicators_ready"
+    assert sensing_summary["sensing_indicator_summary_ready"] is True
+    assert sensing_summary["visible_sensing_indicators_ready"] is True
+    assert sensing_summary["indicator_count"] == 3
+    assert sensing_summary["ready_indicator_count"] == 3
+    assert sensing_summary["visible_indicator_count"] == 3
+    assert [item["id"] for item in sensing_summary["indicators"]] == [
+        "terminal_context",
+        "git_context",
+        "ide_context",
+    ]
+    assert all(item["ready"] is True for item in sensing_summary["indicators"])
+    assert all(item["visible"] is True for item in sensing_summary["indicators"])
+    assert sensing_summary["ide_context_signal"]["ide_context_signal_ready"] is True
+    sensing_summary_text = json.dumps(sensing_summary, sort_keys=True)
+    assert "terminalsignalsecret123" not in sensing_summary_text
+    assert "idesignalsecret123" not in sensing_summary_text
+    assert "idediagnosticsecret123" not in sensing_summary_text
+    assert sensing_summary["hidden_sensing"] is False
+    assert sensing_summary["captures_background_activity"] is False
+    assert sensing_summary["captures_terminal_streams"] is False
+    assert sensing_summary["captures_file_contents"] is False
+    assert sensing_summary["starts_terminal_capture"] is False
+    assert sensing_summary["starts_git_watcher"] is False
+    assert sensing_summary["starts_ide_integration"] is False
+    assert sensing_summary["writes_memory"] is False
+    assert sensing_summary["writes_feedback"] is False
+    assert sensing_summary["sends_chat"] is False
+    assert sensing_summary["calls_model"] is False
+    assert sensing_summary["selects_tools"] is False
+    assert sensing_summary["grants_execution_authority"] is False
+    assert sensing_summary["grants_mutation_authority"] is False
+    assert sensing_summary["governance"]["read_only"] is True
+    assert sensing_summary["governance"]["visible_sensing_indicator_projection"] is True
+    assert sensing_summary["governance"]["hidden_sensing"] is False
+    assert sensing_summary["governance"]["does_not_start_terminal_capture"] is True
+    assert sensing_summary["governance"]["does_not_start_git_watcher"] is True
+    assert sensing_summary["governance"]["does_not_start_ide_integration"] is True
+    assert sensing_summary["next_smallest_truthful_gap"] == (
+        "stage7_context_feedback_memory_assistance_operator_context_surface_review"
+    )
+
 
 def test_telemetry_context_feedback_memory_quality_record_is_empty_without_events(
     monkeypatch,

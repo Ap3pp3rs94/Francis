@@ -1445,6 +1445,126 @@ def context_feedback_memory_assistance_operator_feedback_loop_ide_context_signal
     }
 
 
+@router.get("/context/feedback/memory-assistance-feedback-loop-sensing-indicator-summary")
+def context_feedback_memory_assistance_operator_feedback_loop_sensing_indicator_summary(
+    limit: int = 20,
+) -> dict[str, Any]:
+    safe_limit = max(1, min(int(limit), 100))
+    ide_signal = context_feedback_memory_assistance_operator_feedback_loop_ide_context_signal(limit=safe_limit)
+    git_signal_value = ide_signal.get("git_context_signal")
+    git_signal: dict[str, Any] = git_signal_value if isinstance(git_signal_value, dict) else {}
+    terminal_signal_value = git_signal.get("terminal_context_signal")
+    terminal_signal: dict[str, Any] = terminal_signal_value if isinstance(terminal_signal_value, dict) else {}
+    indicators = [
+        {
+            "id": "terminal_context",
+            "label": "Terminal",
+            "route": "/telemetry/context/feedback/memory-assistance-feedback-loop-terminal-context-signal",
+            "source_id": "terminal",
+            "status": terminal_signal.get("status", "unknown"),
+            "ready": bool(terminal_signal.get("terminal_context_signal_ready")),
+            "visible": True,
+            "read_only": True,
+            "context_line_count": terminal_signal.get("terminal_context_line_count", 0),
+            "event_count": terminal_signal.get("terminal_event_count", 0),
+            "next_smallest_truthful_gap": terminal_signal.get("next_smallest_truthful_gap", ""),
+        },
+        {
+            "id": "git_context",
+            "label": "Git",
+            "route": "/telemetry/context/feedback/memory-assistance-feedback-loop-git-context-signal",
+            "source_id": "git",
+            "status": git_signal.get("status", "unknown"),
+            "ready": bool(git_signal.get("git_context_signal_ready")),
+            "visible": True,
+            "read_only": True,
+            "context_line_count": git_signal.get("git_context_line_count", 0),
+            "changed_count": git_signal.get("changed_count", 0),
+            "next_smallest_truthful_gap": git_signal.get("next_smallest_truthful_gap", ""),
+        },
+        {
+            "id": "ide_context",
+            "label": "IDE",
+            "route": "/telemetry/context/feedback/memory-assistance-feedback-loop-ide-context-signal",
+            "source_id": "ide_diagnostics",
+            "status": ide_signal.get("status", "unknown"),
+            "ready": bool(ide_signal.get("ide_context_signal_ready")),
+            "visible": True,
+            "read_only": True,
+            "context_line_count": ide_signal.get("ide_context_line_count", 0),
+            "event_count": ide_signal.get("ide_event_count", 0),
+            "next_smallest_truthful_gap": ide_signal.get("next_smallest_truthful_gap", ""),
+        },
+    ]
+    ready_indicator_count = sum(1 for indicator in indicators if indicator["ready"])
+    visible_indicator_count = sum(1 for indicator in indicators if indicator["visible"])
+    sensing_indicator_summary_ready = ready_indicator_count == len(indicators)
+    if sensing_indicator_summary_ready:
+        status = "sensing_indicators_ready"
+    elif ready_indicator_count > 0:
+        status = "partial_sensing_indicators"
+    else:
+        status = "awaiting_sensing_indicators"
+    return {
+        "ok": True,
+        "kind": "francis.stage7.telemetry.context_feedback_memory_assistance_sensing_indicator_summary",
+        "stage": "Stage 7 / Telemetry MVP",
+        "source_id": "telemetry_context",
+        "status": status,
+        "target": "feedback_memory_assistance_visible_sensing",
+        "sensing_indicator_summary_ready": sensing_indicator_summary_ready,
+        "visible_sensing_indicators_ready": sensing_indicator_summary_ready,
+        "indicator_count": len(indicators),
+        "ready_indicator_count": ready_indicator_count,
+        "visible_indicator_count": visible_indicator_count,
+        "indicators": indicators,
+        "ide_context_signal": ide_signal,
+        "reads_terminal_context_signal": True,
+        "reads_git_context_signal": True,
+        "reads_ide_context_signal": True,
+        "hidden_sensing": False,
+        "captures_background_activity": False,
+        "captures_terminal_streams": False,
+        "captures_file_contents": False,
+        "starts_terminal_capture": False,
+        "starts_git_watcher": False,
+        "starts_ide_integration": False,
+        "writes_memory": False,
+        "writes_feedback": False,
+        "sends_chat": False,
+        "calls_model": False,
+        "selects_tools": False,
+        "trains_model": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "visible_sensing_indicator_projection": True,
+            "uses_context_signal_readbacks": True,
+            "on_request_only": True,
+            "telemetry_is_untrusted_input": True,
+            "hidden_sensing": False,
+            "does_not_start_terminal_capture": True,
+            "does_not_start_git_watcher": True,
+            "does_not_start_ide_integration": True,
+            "does_not_capture_background_activity": True,
+            "does_not_capture_terminal_streams": True,
+            "does_not_capture_file_contents": True,
+            "does_not_write_memory": True,
+            "does_not_write_feedback": True,
+            "does_not_send_chat": True,
+            "does_not_call_model": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": (
+            "stage7_context_feedback_memory_assistance_operator_context_surface_review"
+            if sensing_indicator_summary_ready
+            else "stage7_context_feedback_memory_assistance_sensing_indicator_summary"
+        ),
+    }
+
+
 @router.post("/context/feedback/memory-assistance-feedback-loop-live-sample-operator-decision")
 def context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_decision_record(
     payload: TelemetryContextFeedbackMemoryAssistanceLiveSampleOperatorDecisionIn,

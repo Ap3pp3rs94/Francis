@@ -45589,6 +45589,51 @@ Latest validation for Stage 7 feedback memory assistance IDE context signal:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-30 - Stage 7 feedback memory assistance sensing indicators are visible
+
+Roadmap area: Stage 7 / Telemetry MVP, visible sensing indicators after the
+feedback-memory assistance IDE context signal.
+
+Material change:
+
+- Telemetry now exposes a read-only sensing-indicator summary at
+  `/telemetry/context/feedback/memory-assistance-feedback-loop-sensing-indicator-summary`.
+- The summary rolls up terminal, git, and IDE context-signal readbacks into
+  visible per-source indicators with ready, visible, route, count, status, and
+  next-gap fields.
+- The Telemetry & Continuation panel now fetches and displays sensing
+  indicators independently, including ready/total count, visible count, per
+  indicator readiness badges, next truthful gap, and non-capture guards.
+- The summary remains read-only: it does not start terminal capture, start a git
+  watcher, start IDE integration, capture background activity, capture terminal
+  streams, capture file contents, write memory, write feedback, send chat, call
+  a model, select tools, train a model, or grant execution or mutation
+  authority.
+
+Latest validation for Stage 7 feedback memory assistance sensing indicators:
+
+- `python -m pytest tests/test_api_telemetry.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed`
+- `python -m mypy src/francis/api/routes/telemetry.py`
+  Result: `passed`
+- `python -m ruff check src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `node --test --experimental-strip-types src/telemetry/index.test.ts` in
+  `apps/chat_ui`
+  Result: `passed; 46 passed`
+- `npm run test` in `apps/chat_ui`
+  Result: `passed; 154 passed`
+- `npm run build` in `apps/chat_ui`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

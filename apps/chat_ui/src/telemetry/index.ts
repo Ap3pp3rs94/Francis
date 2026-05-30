@@ -605,6 +605,42 @@ export type TelemetryContextFeedbackMemoryAssistanceIdeContextSignal = {
   next_smallest_truthful_gap: string;
 };
 
+export type TelemetryContextFeedbackMemoryAssistanceSensingIndicatorSummary = {
+  ok: boolean;
+  kind: string;
+  stage: string;
+  source_id: string;
+  status: string;
+  target: string;
+  sensing_indicator_summary_ready: boolean;
+  visible_sensing_indicators_ready: boolean;
+  indicator_count: number;
+  ready_indicator_count: number;
+  visible_indicator_count: number;
+  indicators: Array<Record<string, unknown>>;
+  ide_context_signal: Record<string, unknown>;
+  reads_terminal_context_signal: boolean;
+  reads_git_context_signal: boolean;
+  reads_ide_context_signal: boolean;
+  hidden_sensing: boolean;
+  captures_background_activity: boolean;
+  captures_terminal_streams: boolean;
+  captures_file_contents: boolean;
+  starts_terminal_capture: boolean;
+  starts_git_watcher: boolean;
+  starts_ide_integration: boolean;
+  writes_memory: boolean;
+  writes_feedback: boolean;
+  sends_chat: boolean;
+  calls_model: boolean;
+  selects_tools: boolean;
+  trains_model: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+  governance: Record<string, unknown>;
+  next_smallest_truthful_gap: string;
+};
+
 export type TelemetryContextFeedbackMemoryAssistancePolicy = {
   ok: boolean;
   kind: string;
@@ -1328,6 +1364,48 @@ export function parseTelemetryContextFeedbackMemoryAssistanceIdeContextSignal(
     writes_ide_diagnostics: safeBoolean(raw.writes_ide_diagnostics, true),
     captures_file_contents: safeBoolean(raw.captures_file_contents, true),
     stores_file_contents: safeBoolean(raw.stores_file_contents, true),
+    starts_ide_integration: safeBoolean(raw.starts_ide_integration, true),
+    writes_memory: safeBoolean(raw.writes_memory, true),
+    writes_feedback: safeBoolean(raw.writes_feedback, true),
+    sends_chat: safeBoolean(raw.sends_chat, true),
+    calls_model: safeBoolean(raw.calls_model, true),
+    selects_tools: safeBoolean(raw.selects_tools, true),
+    trains_model: safeBoolean(raw.trains_model, true),
+    grants_execution_authority: safeBoolean(raw.grants_execution_authority, true),
+    grants_mutation_authority: safeBoolean(raw.grants_mutation_authority, true),
+    governance: recordOrEmpty(raw.governance),
+    next_smallest_truthful_gap: safeString(raw.next_smallest_truthful_gap, ""),
+  };
+}
+
+export function parseTelemetryContextFeedbackMemoryAssistanceSensingIndicatorSummary(
+  value: unknown,
+): TelemetryContextFeedbackMemoryAssistanceSensingIndicatorSummary {
+  const raw = isRecord(value) ? value : {};
+
+  return {
+    ok: safeBoolean(raw.ok, false),
+    kind: safeString(raw.kind, ""),
+    stage: safeString(raw.stage, ""),
+    source_id: safeString(raw.source_id, ""),
+    status: safeString(raw.status, "unknown"),
+    target: safeString(raw.target, ""),
+    sensing_indicator_summary_ready: safeBoolean(raw.sensing_indicator_summary_ready, false),
+    visible_sensing_indicators_ready: safeBoolean(raw.visible_sensing_indicators_ready, false),
+    indicator_count: safeNumber(raw.indicator_count, 0),
+    ready_indicator_count: safeNumber(raw.ready_indicator_count, 0),
+    visible_indicator_count: safeNumber(raw.visible_indicator_count, 0),
+    indicators: Array.isArray(raw.indicators) ? raw.indicators.filter(isRecord) : [],
+    ide_context_signal: recordOrEmpty(raw.ide_context_signal),
+    reads_terminal_context_signal: safeBoolean(raw.reads_terminal_context_signal, false),
+    reads_git_context_signal: safeBoolean(raw.reads_git_context_signal, false),
+    reads_ide_context_signal: safeBoolean(raw.reads_ide_context_signal, false),
+    hidden_sensing: safeBoolean(raw.hidden_sensing, true),
+    captures_background_activity: safeBoolean(raw.captures_background_activity, true),
+    captures_terminal_streams: safeBoolean(raw.captures_terminal_streams, true),
+    captures_file_contents: safeBoolean(raw.captures_file_contents, true),
+    starts_terminal_capture: safeBoolean(raw.starts_terminal_capture, true),
+    starts_git_watcher: safeBoolean(raw.starts_git_watcher, true),
     starts_ide_integration: safeBoolean(raw.starts_ide_integration, true),
     writes_memory: safeBoolean(raw.writes_memory, true),
     writes_feedback: safeBoolean(raw.writes_feedback, true),
@@ -2261,6 +2339,49 @@ export class TelemetryClient {
         url,
         cause: err,
       });
+    }
+  }
+
+  async getContextFeedbackMemoryAssistanceSensingIndicatorSummary(opts?: {
+    limit?: number;
+    signal?: AbortSignal;
+  }): Promise<TelemetryContextFeedbackMemoryAssistanceSensingIndicatorSummary> {
+    const limit = clampLimit(opts?.limit, 20);
+    const url = this.url(
+      `/telemetry/context/feedback/memory-assistance-feedback-loop-sensing-indicator-summary?limit=${limit}`,
+    );
+    let response: Response;
+    try {
+      response = await fetch(url, { method: "GET", signal: opts?.signal });
+    } catch (err) {
+      throw new TelemetryApiError("Telemetry feedback memory assistance sensing indicator request failed.", {
+        url,
+        cause: err,
+      });
+    }
+
+    const text = await response.text();
+    if (!response.ok) {
+      throw new TelemetryApiError(
+        `HTTP ${response.status} for telemetry feedback memory assistance sensing indicator request`,
+        {
+          status: response.status,
+          url,
+          bodySnippet: text.slice(0, 500),
+        },
+      );
+    }
+
+    try {
+      return parseTelemetryContextFeedbackMemoryAssistanceSensingIndicatorSummary(text ? JSON.parse(text) : {});
+    } catch (err) {
+      throw new TelemetryApiError(
+        "Telemetry feedback memory assistance sensing indicator response was not valid JSON.",
+        {
+          url,
+          cause: err,
+        },
+      );
     }
   }
 

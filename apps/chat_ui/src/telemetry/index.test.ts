@@ -16,6 +16,7 @@ import {
   parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleReadback,
   parseTelemetryContextFeedbackMemoryAssistanceGitContextSignal,
   parseTelemetryContextFeedbackMemoryAssistanceIdeContextSignal,
+  parseTelemetryContextFeedbackMemoryAssistanceSensingIndicatorSummary,
   parseTelemetryContextFeedbackMemoryAssistanceTerminalContextSignal,
   parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackReview,
   parseTelemetryContextFeedbackMemoryAssistanceChatContextReadback,
@@ -1909,6 +1910,123 @@ test("TelemetryClient requests the IDE context signal endpoint", async () => {
     assert.deepEqual(requests, [
       {
         path: "/telemetry/context/feedback/memory-assistance-feedback-loop-ide-context-signal",
+        search: "?limit=30",
+        method: "GET",
+      },
+    ]);
+  } finally {
+    restore();
+  }
+});
+
+test("parseTelemetryContextFeedbackMemoryAssistanceSensingIndicatorSummary preserves sensing guards", () => {
+  const summary = parseTelemetryContextFeedbackMemoryAssistanceSensingIndicatorSummary({
+    ok: true,
+    kind: "francis.stage7.telemetry.context_feedback_memory_assistance_sensing_indicator_summary",
+    stage: "Stage 7 / Telemetry MVP",
+    source_id: "telemetry_context",
+    status: "sensing_indicators_ready",
+    target: "feedback_memory_assistance_visible_sensing",
+    sensing_indicator_summary_ready: true,
+    visible_sensing_indicators_ready: true,
+    indicator_count: 3,
+    ready_indicator_count: 3,
+    visible_indicator_count: 3,
+    indicators: [
+      { id: "terminal_context", ready: true, visible: true },
+      { id: "git_context", ready: true, visible: true },
+      { id: "ide_context", ready: true, visible: true },
+    ],
+    ide_context_signal: { ide_context_signal_ready: true },
+    reads_terminal_context_signal: true,
+    reads_git_context_signal: true,
+    reads_ide_context_signal: true,
+    hidden_sensing: false,
+    captures_background_activity: false,
+    captures_terminal_streams: false,
+    captures_file_contents: false,
+    starts_terminal_capture: false,
+    starts_git_watcher: false,
+    starts_ide_integration: false,
+    writes_memory: false,
+    writes_feedback: false,
+    sends_chat: false,
+    calls_model: false,
+    selects_tools: false,
+    trains_model: false,
+    grants_execution_authority: false,
+    grants_mutation_authority: false,
+    governance: { read_only: true, visible_sensing_indicator_projection: true },
+    next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_operator_context_surface_review",
+  });
+
+  assert.equal(summary.status, "sensing_indicators_ready");
+  assert.equal(summary.sensing_indicator_summary_ready, true);
+  assert.equal(summary.indicator_count, 3);
+  assert.equal(summary.indicators.length, 3);
+  assert.equal(summary.hidden_sensing, false);
+  assert.equal(summary.captures_background_activity, false);
+  assert.equal(summary.starts_git_watcher, false);
+  assert.equal(summary.starts_ide_integration, false);
+  assert.equal(summary.writes_memory, false);
+  assert.equal(summary.grants_execution_authority, false);
+  assert.equal(summary.governance.visible_sensing_indicator_projection, true);
+});
+
+test("TelemetryClient requests the sensing indicator summary endpoint", async () => {
+  const requests: Array<{ path: string; search: string; method: string }> = [];
+  const restore = installFetch((url, init) => {
+    const parsed = new URL(url);
+    requests.push({ path: parsed.pathname, search: parsed.search, method: init?.method ?? "GET" });
+    return jsonResponse({
+      ok: true,
+      kind: "francis.stage7.telemetry.context_feedback_memory_assistance_sensing_indicator_summary",
+      stage: "Stage 7 / Telemetry MVP",
+      source_id: "telemetry_context",
+      status: "sensing_indicators_ready",
+      target: "feedback_memory_assistance_visible_sensing",
+      sensing_indicator_summary_ready: true,
+      visible_sensing_indicators_ready: true,
+      indicator_count: 3,
+      ready_indicator_count: 3,
+      visible_indicator_count: 3,
+      indicators: [
+        { id: "terminal_context", ready: true, visible: true },
+        { id: "git_context", ready: true, visible: true },
+        { id: "ide_context", ready: true, visible: true },
+      ],
+      ide_context_signal: { ide_context_signal_ready: true },
+      reads_terminal_context_signal: true,
+      reads_git_context_signal: true,
+      reads_ide_context_signal: true,
+      hidden_sensing: false,
+      captures_background_activity: false,
+      captures_terminal_streams: false,
+      captures_file_contents: false,
+      starts_terminal_capture: false,
+      starts_git_watcher: false,
+      starts_ide_integration: false,
+      writes_memory: false,
+      writes_feedback: false,
+      sends_chat: false,
+      calls_model: false,
+      selects_tools: false,
+      trains_model: false,
+      grants_execution_authority: false,
+      grants_mutation_authority: false,
+      governance: { read_only: true, visible_sensing_indicator_projection: true },
+      next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_operator_context_surface_review",
+    });
+  });
+
+  try {
+    const client = new TelemetryClient("http://127.0.0.1:8000/");
+    const summary = await client.getContextFeedbackMemoryAssistanceSensingIndicatorSummary({ limit: 30 });
+
+    assert.equal(summary.sensing_indicator_summary_ready, true);
+    assert.deepEqual(requests, [
+      {
+        path: "/telemetry/context/feedback/memory-assistance-feedback-loop-sensing-indicator-summary",
         search: "?limit=30",
         method: "GET",
       },
