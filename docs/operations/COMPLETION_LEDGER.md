@@ -44166,6 +44166,49 @@ Latest validation for Stage 6 live closure:
   and Windows 3.13; `CodeQL Advanced` run `26672060208` passed for actions,
   JavaScript/TypeScript, and Python; open code-scanning alerts reported `0`.
 
+### 2026-05-29 - Stage 7 context feedback review reaches operator surface
+
+Roadmap area: Stage 7 / Telemetry MVP, visible action-quality feedback for
+context-aware assistance.
+
+Material change:
+
+- The chat UI telemetry client now reads
+  `/telemetry/context/feedback/review` through a typed defensive parser.
+- The existing Telemetry & Continuation operator surface now shows the
+  context-feedback review status, reviewed/total counts, bounded rating counts,
+  latest redacted feedback handle, and quality-signal badges.
+- The surface preserves the feedback review governance posture: read-only,
+  explicit operator feedback only, redacted, no prompt/model-response storage,
+  no model training, no memory write, and no execution or mutation authority.
+- `/telemetry/status` and `/telemetry/context` now advance their next smallest
+  truthful gap to `stage7_context_feedback_memory_quality_loop`.
+
+Latest validation for Stage 7 context-feedback operator surface:
+
+- `python -m pytest tests/test_api_telemetry.py tests/test_api_chat.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 22 passed`
+- `python -m mypy src/francis/telemetry/context.py
+  src/francis/telemetry/status.py`
+  Result: `passed`
+- `python -m ruff check src/francis/telemetry/context.py
+  src/francis/telemetry/status.py tests/test_api_telemetry.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/telemetry/context.py
+  src/francis/telemetry/status.py tests/test_api_telemetry.py`
+  Result: `passed`
+- `node --test --experimental-strip-types src/telemetry/index.test.ts` in
+  `apps/chat_ui`
+  Result: `passed; 4 passed`
+- `npm run test` in `apps/chat_ui`
+  Result: `passed; 112 passed`
+- `npm run build` in `apps/chat_ui`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

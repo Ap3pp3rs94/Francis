@@ -81,6 +81,42 @@ export type TelemetryStatusSnapshot = {
   next_smallest_truthful_gap: string;
 };
 
+export type TelemetryContextFeedbackReview = {
+  ok: boolean;
+  kind: string;
+  stage: string;
+  source_id: string;
+  status: string;
+  capture_mode: string;
+  reviewed_event_count: number;
+  total: number;
+  limit: number;
+  truncated: boolean;
+  rating_counts: Record<string, number>;
+  source_counts: Record<string, number>;
+  tag_counts: Record<string, number>;
+  quality_signals: string[];
+  latest_feedback: {
+    feedback_id: string;
+    context_id: string;
+    surface: string;
+    rating: string;
+    source_ids: string[];
+    tags: string[];
+    recorded_ts?: number;
+  } | null;
+  redacted: boolean;
+  hidden_sensing: boolean;
+  stores_prompt_body: boolean;
+  stores_model_response: boolean;
+  trains_model: boolean;
+  writes_memory: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+  governance: Record<string, unknown>;
+  next_smallest_truthful_gap: string;
+};
+
 export class TelemetryApiError extends Error {
   readonly status?: number;
   readonly url?: string;
@@ -121,6 +157,39 @@ export function parseTelemetryStatus(value: unknown): TelemetryStatusSnapshot {
   };
 }
 
+export function parseTelemetryContextFeedbackReview(value: unknown): TelemetryContextFeedbackReview {
+  const raw = isRecord(value) ? value : {};
+  const latest = parseTelemetryContextFeedbackReviewItem(raw.latest_feedback);
+
+  return {
+    ok: safeBoolean(raw.ok, false),
+    kind: safeString(raw.kind, ""),
+    stage: safeString(raw.stage, ""),
+    source_id: safeString(raw.source_id, ""),
+    status: safeString(raw.status, "unknown"),
+    capture_mode: safeString(raw.capture_mode, ""),
+    reviewed_event_count: safeNumber(raw.reviewed_event_count, 0),
+    total: safeNumber(raw.total, 0),
+    limit: safeNumber(raw.limit, 0),
+    truncated: safeBoolean(raw.truncated, false),
+    rating_counts: numberRecord(raw.rating_counts),
+    source_counts: numberRecord(raw.source_counts),
+    tag_counts: numberRecord(raw.tag_counts),
+    quality_signals: safeStringArray(raw.quality_signals),
+    latest_feedback: latest,
+    redacted: safeBoolean(raw.redacted, false),
+    hidden_sensing: safeBoolean(raw.hidden_sensing, false),
+    stores_prompt_body: safeBoolean(raw.stores_prompt_body, true),
+    stores_model_response: safeBoolean(raw.stores_model_response, true),
+    trains_model: safeBoolean(raw.trains_model, true),
+    writes_memory: safeBoolean(raw.writes_memory, true),
+    grants_execution_authority: safeBoolean(raw.grants_execution_authority, true),
+    grants_mutation_authority: safeBoolean(raw.grants_mutation_authority, true),
+    governance: recordOrEmpty(raw.governance),
+    next_smallest_truthful_gap: safeString(raw.next_smallest_truthful_gap, ""),
+  };
+}
+
 export class TelemetryClient {
   readonly baseUrl: string;
 
@@ -150,6 +219,32 @@ export class TelemetryClient {
       return parseTelemetryStatus(text ? JSON.parse(text) : {});
     } catch (err) {
       throw new TelemetryApiError("Telemetry status response was not valid JSON.", { url, cause: err });
+    }
+  }
+
+  async getContextFeedbackReview(opts?: { limit?: number; signal?: AbortSignal }): Promise<TelemetryContextFeedbackReview> {
+    const limit = clampLimit(opts?.limit, 100);
+    const url = this.url(`/telemetry/context/feedback/review?limit=${limit}`);
+    let response: Response;
+    try {
+      response = await fetch(url, { method: "GET", signal: opts?.signal });
+    } catch (err) {
+      throw new TelemetryApiError("Telemetry context feedback review request failed.", { url, cause: err });
+    }
+
+    const text = await response.text();
+    if (!response.ok) {
+      throw new TelemetryApiError(`HTTP ${response.status} for telemetry context feedback review request`, {
+        status: response.status,
+        url,
+        bodySnippet: text.slice(0, 500),
+      });
+    }
+
+    try {
+      return parseTelemetryContextFeedbackReview(text ? JSON.parse(text) : {});
+    } catch (err) {
+      throw new TelemetryApiError("Telemetry context feedback review response was not valid JSON.", { url, cause: err });
     }
   }
 
@@ -206,6 +301,15 @@ function booleanRecord(value: unknown): Record<string, boolean> {
   return out;
 }
 
+function numberRecord(value: unknown): Record<string, number> {
+  if (!isRecord(value)) return {};
+  const out: Record<string, number> = {};
+  for (const [key, raw] of Object.entries(value)) {
+    out[key] = safeNumber(raw, 0);
+  }
+  return out;
+}
+
 function stringRecord(value: unknown): Record<string, string> {
   if (!isRecord(value)) return {};
   const out: Record<string, string> = {};
@@ -214,6 +318,25 @@ function stringRecord(value: unknown): Record<string, string> {
     if (text) out[key] = text;
   }
   return out;
+}
+
+function parseTelemetryContextFeedbackReviewItem(
+  value: unknown,
+): TelemetryContextFeedbackReview["latest_feedback"] {
+  if (!isRecord(value)) return null;
+  const item = {
+    feedback_id: safeString(value.feedback_id, ""),
+    context_id: safeString(value.context_id, ""),
+    surface: safeString(value.surface, ""),
+    rating: safeString(value.rating, ""),
+    source_ids: safeStringArray(value.source_ids),
+    tags: safeStringArray(value.tags),
+    recorded_ts: safeNumberOrUndefined(value.recorded_ts),
+  };
+  if (!item.feedback_id && !item.context_id && !item.surface && !item.rating && item.source_ids.length === 0 && item.tags.length === 0) {
+    return null;
+  }
+  return item;
 }
 
 function parseTerminalEventSummary(value: unknown): TelemetryTerminalEventSummary | null {
@@ -307,4 +430,10 @@ function safeNumber(value: unknown, fallback: number): number {
 function safeNumberOrUndefined(value: unknown): number | undefined {
   const parsed = safeNumber(value, Number.NaN);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function clampLimit(value: unknown, fallback: number): number {
+  const parsed = safeNumber(value, fallback);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(Math.max(Math.trunc(parsed), 1), 500);
 }

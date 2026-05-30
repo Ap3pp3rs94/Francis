@@ -98,7 +98,12 @@ import type {
   WorldStateMissionSummary,
   WorldStateSnapshot,
 } from "./settings";
-import { TelemetryApiError, TelemetryClient, type TelemetryStatusSnapshot } from "./telemetry";
+import {
+  TelemetryApiError,
+  TelemetryClient,
+  type TelemetryContextFeedbackReview,
+  type TelemetryStatusSnapshot,
+} from "./telemetry";
 
 const DEFAULT_API = "http://127.0.0.1:8000";
 
@@ -3947,6 +3952,9 @@ function SystemPanel(props: {
   const [telemetryStatus, setTelemetryStatus] = useState<TelemetryStatusSnapshot | null>(null);
   const [telemetryStatusError, setTelemetryStatusError] = useState<string | null>(null);
   const [telemetryStatusLoadedAt, setTelemetryStatusLoadedAt] = useState<number | null>(null);
+  const [telemetryFeedbackReview, setTelemetryFeedbackReview] = useState<TelemetryContextFeedbackReview | null>(null);
+  const [telemetryFeedbackReviewError, setTelemetryFeedbackReviewError] = useState<string | null>(null);
+  const [telemetryFeedbackReviewLoadedAt, setTelemetryFeedbackReviewLoadedAt] = useState<number | null>(null);
   const [lensActionBusy, setLensActionBusy] = useState<
     ""
       | "host_supervision_authority_request"
@@ -4134,6 +4142,7 @@ function SystemPanel(props: {
         nextReactorDeadletters,
         nextLensStatus,
         nextTelemetryStatus,
+        nextTelemetryFeedbackReview,
       ] =
         await Promise.allSettled([
         client.getSystemInfo(),
@@ -4155,6 +4164,7 @@ function SystemPanel(props: {
         reactorClient.listDeadletters({ limit: 6 }),
         lensClient.getStatus({ limit: 6 }),
         telemetryClient.getStatus(),
+        telemetryClient.getContextFeedbackReview({ limit: 25 }),
       ]);
 
       const degradedFeeds: string[] = [];
@@ -4276,6 +4286,15 @@ function SystemPanel(props: {
       } else {
         setTelemetryStatusError(telemetryError(nextTelemetryStatus.reason));
         degradedFeeds.push("telemetry status");
+      }
+
+      if (nextTelemetryFeedbackReview.status === "fulfilled") {
+        setTelemetryFeedbackReview(nextTelemetryFeedbackReview.value);
+        setTelemetryFeedbackReviewError(null);
+        setTelemetryFeedbackReviewLoadedAt(refreshStartedAt);
+      } else {
+        setTelemetryFeedbackReviewError(telemetryError(nextTelemetryFeedbackReview.reason));
+        degradedFeeds.push("telemetry feedback review");
       }
 
       if (degradedFeeds.length > 0) {
@@ -5928,6 +5947,22 @@ function SystemPanel(props: {
     : telemetryStatus
       ? `${telemetryStatus.active_source_total} of ${telemetryStatus.source_total} telemetry source${telemetryStatus.source_total === 1 ? "" : "s"} active; connector collection is ${telemetryStatus.active ? "active" : "inactive"}.`
       : "Stage 7 telemetry readback has not loaded yet.";
+  const telemetryFeedbackStatus =
+    safeString(telemetryFeedbackReview?.status).trim() || (telemetryFeedbackReviewError ? "unavailable" : "unloaded");
+  const telemetryFeedbackTone = telemetryFeedbackReviewError
+    ? "blocked"
+    : telemetryFeedbackReview
+      ? telemetryFeedbackReview.reviewed_event_count > 0
+        ? "running"
+        : "dormant"
+      : "standby";
+  const telemetryFeedbackDetail = telemetryFeedbackReviewError
+    ? `Context feedback review could not refresh: ${telemetryFeedbackReviewError}`
+    : telemetryFeedbackReview
+      ? `${telemetryFeedbackReview.reviewed_event_count} explicit context feedback event${telemetryFeedbackReview.reviewed_event_count === 1 ? "" : "s"} reviewed; total stored ${telemetryFeedbackReview.total}.`
+      : "Context feedback quality review has not loaded yet.";
+  const telemetryFeedbackRatingCounts = telemetryFeedbackReview?.rating_counts ?? {};
+  const latestTelemetryFeedback = telemetryFeedbackReview?.latest_feedback ?? null;
   const controlTone =
     controlModeId === "pilot"
       ? { bg: "#24160a", border: "#7a541b", color: "#ffd38a" }
@@ -10852,6 +10887,7 @@ function SystemPanel(props: {
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             <span style={badgeStyle(telemetry.tone)}>{telemetry.label}</span>
             <span style={badgeStyle(telemetryReadbackTone)}>Stage 7 {telemetryReadbackStatus}</span>
+            <span style={badgeStyle(telemetryFeedbackTone)}>Feedback {telemetryFeedbackStatus}</span>
             <span style={badgeStyle(continuation.tone)}>{continuation.label}</span>
           </div>
         </div>
@@ -10882,6 +10918,73 @@ function SystemPanel(props: {
         <div style={{ fontSize: 12, color: telemetryStatusError ? "#ffcf9d" : THEME.text, marginTop: 8 }}>
           {telemetryReadbackDetail}
         </div>
+        <div style={{ fontSize: 12, color: telemetryFeedbackReviewError ? "#ffcf9d" : THEME.text, marginTop: 8 }}>
+          {telemetryFeedbackDetail}
+        </div>
+        {telemetryFeedbackReview ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+              gap: 8,
+              marginTop: 10,
+            }}
+          >
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Feedback review</div>
+              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
+                {telemetryFeedbackReview.reviewed_event_count}/{telemetryFeedbackReview.total}
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                {telemetryFeedbackReview.capture_mode || "explicit_operator_feedback_review"}
+              </div>
+              {telemetryFeedbackReviewLoadedAt ? (
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                  Loaded {toLocaleTime(telemetryFeedbackReviewLoadedAt)}
+                </div>
+              ) : null}
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Ratings</div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 6 }}>
+                useful <code>{safeNumber(telemetryFeedbackRatingCounts.useful, 0)}</code>
+                {" / "}misses <code>{safeNumber(telemetryFeedbackRatingCounts.not_useful, 0)}</code>
+                {" / "}neutral <code>{safeNumber(telemetryFeedbackRatingCounts.neutral, 0)}</code>
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                redacted <code>{telemetryFeedbackReview.redacted ? "true" : "false"}</code>
+                {" / "}memory writes <code>{telemetryFeedbackReview.writes_memory ? "true" : "false"}</code>
+              </div>
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Latest feedback</div>
+              {latestTelemetryFeedback ? (
+                <>
+                  <div style={{ fontSize: 12, color: THEME.text, marginTop: 6 }}>
+                    {latestTelemetryFeedback.surface || "surface"} / {latestTelemetryFeedback.rating || "rating"}
+                  </div>
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                    context <code>{latestTelemetryFeedback.context_id || "context"}</code>
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontSize: 12, color: THEME.muted, marginTop: 6 }}>No explicit feedback recorded.</div>
+              )}
+            </div>
+            {telemetryFeedbackReview.quality_signals.length > 0 ? (
+              <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+                <div style={{ fontSize: 11, color: THEME.muted }}>Quality signals</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                  {telemetryFeedbackReview.quality_signals.map((signal) => (
+                    <span key={`telemetry-feedback-${signal}`} style={badgeStyle(signal)}>
+                      {signal}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         {telemetryStatus ? (
           <>
             <div

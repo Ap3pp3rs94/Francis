@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { TelemetryClient, parseTelemetryStatus } from "./index.ts";
+import { TelemetryClient, parseTelemetryContextFeedbackReview, parseTelemetryStatus } from "./index.ts";
 
 type FetchHandler = (url: string, init?: RequestInit) => Response | Promise<Response>;
 
@@ -210,6 +210,117 @@ test("TelemetryClient requests the Stage 7 status endpoint", async () => {
     const status = await client.getStatus();
     assert.equal(status.status, "inactive");
     assert.deepEqual(requests, [{ path: "/telemetry/status", method: "GET" }]);
+  } finally {
+    restore();
+  }
+});
+
+test("parseTelemetryContextFeedbackReview preserves redacted feedback quality readback", () => {
+  const review = parseTelemetryContextFeedbackReview({
+    ok: true,
+    kind: "francis.stage7.telemetry.context_feedback_review",
+    stage: "Stage 7 / Telemetry MVP",
+    source_id: "telemetry_context",
+    status: "review_ready",
+    capture_mode: "explicit_operator_feedback_review",
+    reviewed_event_count: 3,
+    total: 5,
+    limit: 3,
+    truncated: true,
+    rating_counts: { useful: 1, not_useful: "1", neutral: 1 },
+    source_counts: { terminal: 2, git: 1 },
+    tag_counts: { accurate: 2 },
+    quality_signals: ["operator_reported_useful_context", "operator_reported_context_misses"],
+    latest_feedback: {
+      feedback_id: "fb_123",
+      context_id: "ctx_123",
+      surface: "chat",
+      rating: "not_useful",
+      source_ids: ["terminal"],
+      tags: ["missing"],
+      recorded_ts: 456,
+      notes: "must not be typed",
+      meta: { prompt_body: "must not be typed" },
+    },
+    redacted: true,
+    hidden_sensing: false,
+    stores_prompt_body: false,
+    stores_model_response: false,
+    trains_model: false,
+    writes_memory: false,
+    grants_execution_authority: false,
+    grants_mutation_authority: false,
+    governance: { read_only: true, uses_explicit_operator_feedback_only: true },
+    next_smallest_truthful_gap: "stage7_context_feedback_memory_quality_loop",
+  });
+
+  assert.equal(review.kind, "francis.stage7.telemetry.context_feedback_review");
+  assert.equal(review.status, "review_ready");
+  assert.equal(review.reviewed_event_count, 3);
+  assert.equal(review.total, 5);
+  assert.equal(review.truncated, true);
+  assert.equal(review.rating_counts.not_useful, 1);
+  assert.deepEqual(review.quality_signals, [
+    "operator_reported_useful_context",
+    "operator_reported_context_misses",
+  ]);
+  assert.equal(review.latest_feedback?.context_id, "ctx_123");
+  assert.equal(review.latest_feedback?.rating, "not_useful");
+  assert.deepEqual(review.latest_feedback?.source_ids, ["terminal"]);
+  assert.equal("notes" in (review.latest_feedback ?? {}), false);
+  assert.equal("meta" in (review.latest_feedback ?? {}), false);
+  assert.equal(review.redacted, true);
+  assert.equal(review.hidden_sensing, false);
+  assert.equal(review.stores_prompt_body, false);
+  assert.equal(review.stores_model_response, false);
+  assert.equal(review.trains_model, false);
+  assert.equal(review.writes_memory, false);
+  assert.equal(review.grants_execution_authority, false);
+  assert.equal(review.grants_mutation_authority, false);
+  assert.equal(review.governance.read_only, true);
+});
+
+test("TelemetryClient requests the Stage 7 context feedback review endpoint", async () => {
+  const requests: Array<{ path: string; search: string; method: string }> = [];
+  const restore = installFetch((url, init) => {
+    const parsed = new URL(url);
+    requests.push({ path: parsed.pathname, search: parsed.search, method: init?.method ?? "GET" });
+    return jsonResponse({
+      ok: true,
+      kind: "francis.stage7.telemetry.context_feedback_review",
+      stage: "Stage 7 / Telemetry MVP",
+      source_id: "telemetry_context",
+      status: "empty",
+      capture_mode: "explicit_operator_feedback_review",
+      reviewed_event_count: 0,
+      total: 0,
+      limit: 25,
+      truncated: false,
+      rating_counts: { useful: 0, not_useful: 0, neutral: 0 },
+      source_counts: {},
+      tag_counts: {},
+      quality_signals: ["no_explicit_context_feedback_recorded"],
+      latest_feedback: {},
+      redacted: true,
+      hidden_sensing: false,
+      stores_prompt_body: false,
+      stores_model_response: false,
+      trains_model: false,
+      writes_memory: false,
+      grants_execution_authority: false,
+      grants_mutation_authority: false,
+      governance: { read_only: true },
+      next_smallest_truthful_gap: "stage7_context_feedback_memory_quality_loop",
+    });
+  });
+
+  try {
+    const client = new TelemetryClient("http://127.0.0.1:8000/");
+    const review = await client.getContextFeedbackReview({ limit: 25 });
+    assert.equal(review.status, "empty");
+    assert.deepEqual(requests, [
+      { path: "/telemetry/context/feedback/review", search: "?limit=25", method: "GET" },
+    ]);
   } finally {
     restore();
   }
