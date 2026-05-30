@@ -129,6 +129,35 @@ export type TelemetryContextFeedbackMemoryQualityRecord = {
   governance: Record<string, unknown>;
 };
 
+export type TelemetryContextFeedbackMemoryRetrievalEvent = {
+  id: string;
+  kind: string;
+  action_type: string;
+  classification: string;
+  confidence?: number;
+  retention: Record<string, unknown>;
+  payload: Record<string, unknown>;
+};
+
+export type TelemetryContextFeedbackMemoryRetrievalReadback = {
+  ok: boolean;
+  kind: string;
+  stage: string;
+  source_id: string;
+  status: string;
+  count: number;
+  total: number;
+  skipped_count: number;
+  items: TelemetryContextFeedbackMemoryRetrievalEvent[];
+  reads_memory: boolean;
+  writes_memory: boolean;
+  trains_model: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+  governance: Record<string, unknown>;
+  next_smallest_truthful_gap: string;
+};
+
 export class TelemetryApiError extends Error {
   readonly status?: number;
   readonly url?: string;
@@ -218,6 +247,36 @@ export function parseTelemetryContextFeedbackMemoryQualityRecord(
     quality: recordOrEmpty(raw.quality),
     memory_event: Object.keys(memoryEvent).length > 0 ? memoryEvent : null,
     governance: recordOrEmpty(raw.governance),
+  };
+}
+
+export function parseTelemetryContextFeedbackMemoryRetrievalReadback(
+  value: unknown,
+): TelemetryContextFeedbackMemoryRetrievalReadback {
+  const raw = isRecord(value) ? value : {};
+  const items = Array.isArray(raw.items)
+    ? raw.items
+        .map(parseTelemetryContextFeedbackMemoryRetrievalEvent)
+        .filter((item): item is TelemetryContextFeedbackMemoryRetrievalEvent => item !== null)
+    : [];
+
+  return {
+    ok: safeBoolean(raw.ok, false),
+    kind: safeString(raw.kind, ""),
+    stage: safeString(raw.stage, ""),
+    source_id: safeString(raw.source_id, ""),
+    status: safeString(raw.status, "unknown"),
+    count: safeNumber(raw.count, items.length),
+    total: safeNumber(raw.total, items.length),
+    skipped_count: safeNumber(raw.skipped_count, 0),
+    items,
+    reads_memory: safeBoolean(raw.reads_memory, false),
+    writes_memory: safeBoolean(raw.writes_memory, true),
+    trains_model: safeBoolean(raw.trains_model, true),
+    grants_execution_authority: safeBoolean(raw.grants_execution_authority, true),
+    grants_mutation_authority: safeBoolean(raw.grants_mutation_authority, true),
+    governance: recordOrEmpty(raw.governance),
+    next_smallest_truthful_gap: safeString(raw.next_smallest_truthful_gap, ""),
   };
 }
 
@@ -323,6 +382,35 @@ export class TelemetryClient {
     }
   }
 
+  async getContextFeedbackMemoryRetrievalReadback(opts?: {
+    limit?: number;
+    signal?: AbortSignal;
+  }): Promise<TelemetryContextFeedbackMemoryRetrievalReadback> {
+    const limit = clampLimit(opts?.limit, 20);
+    const url = this.url(`/telemetry/context/feedback/memory-retrieval-readback?limit=${limit}`);
+    let response: Response;
+    try {
+      response = await fetch(url, { method: "GET", signal: opts?.signal });
+    } catch (err) {
+      throw new TelemetryApiError("Telemetry context feedback memory retrieval readback request failed.", { url, cause: err });
+    }
+
+    const text = await response.text();
+    if (!response.ok) {
+      throw new TelemetryApiError(`HTTP ${response.status} for telemetry context feedback memory retrieval readback request`, {
+        status: response.status,
+        url,
+        bodySnippet: text.slice(0, 500),
+      });
+    }
+
+    try {
+      return parseTelemetryContextFeedbackMemoryRetrievalReadback(text ? JSON.parse(text) : {});
+    } catch (err) {
+      throw new TelemetryApiError("Telemetry context feedback memory retrieval readback response was not valid JSON.", { url, cause: err });
+    }
+  }
+
   private url(path: string): string {
     return `${this.baseUrl}${path}`;
   }
@@ -412,6 +500,24 @@ function parseTelemetryContextFeedbackReviewItem(
     return null;
   }
   return item;
+}
+
+function parseTelemetryContextFeedbackMemoryRetrievalEvent(
+  value: unknown,
+): TelemetryContextFeedbackMemoryRetrievalEvent | null {
+  if (!isRecord(value)) return null;
+  const id = safeString(value.id, "").trim();
+  const kind = safeString(value.kind, "").trim();
+  if (!id && !kind) return null;
+  return {
+    id,
+    kind,
+    action_type: safeString(value.action_type, ""),
+    classification: safeString(value.classification, ""),
+    confidence: safeNumberOrUndefined(value.confidence),
+    retention: recordOrEmpty(value.retention),
+    payload: recordOrEmpty(value.payload),
+  };
 }
 
 function parseTerminalEventSummary(value: unknown): TelemetryTerminalEventSummary | null {

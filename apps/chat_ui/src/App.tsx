@@ -102,6 +102,7 @@ import {
   TelemetryApiError,
   TelemetryClient,
   type TelemetryContextFeedbackMemoryQualityRecord,
+  type TelemetryContextFeedbackMemoryRetrievalReadback,
   type TelemetryContextFeedbackReview,
   type TelemetryStatusSnapshot,
 } from "./telemetry";
@@ -3956,6 +3957,10 @@ function SystemPanel(props: {
   const [telemetryFeedbackReview, setTelemetryFeedbackReview] = useState<TelemetryContextFeedbackReview | null>(null);
   const [telemetryFeedbackReviewError, setTelemetryFeedbackReviewError] = useState<string | null>(null);
   const [telemetryFeedbackReviewLoadedAt, setTelemetryFeedbackReviewLoadedAt] = useState<number | null>(null);
+  const [telemetryFeedbackMemoryReadback, setTelemetryFeedbackMemoryReadback] =
+    useState<TelemetryContextFeedbackMemoryRetrievalReadback | null>(null);
+  const [telemetryFeedbackMemoryReadbackError, setTelemetryFeedbackMemoryReadbackError] = useState<string | null>(null);
+  const [telemetryFeedbackMemoryReadbackLoadedAt, setTelemetryFeedbackMemoryReadbackLoadedAt] = useState<number | null>(null);
   const [telemetryFeedbackMemoryQualityBusy, setTelemetryFeedbackMemoryQualityBusy] = useState(false);
   const [telemetryFeedbackMemoryQualityNotice, setTelemetryFeedbackMemoryQualityNotice] = useState<{
     tone: "info" | "error";
@@ -4150,6 +4155,7 @@ function SystemPanel(props: {
         nextLensStatus,
         nextTelemetryStatus,
         nextTelemetryFeedbackReview,
+        nextTelemetryFeedbackMemoryReadback,
       ] =
         await Promise.allSettled([
         client.getSystemInfo(),
@@ -4172,6 +4178,7 @@ function SystemPanel(props: {
         lensClient.getStatus({ limit: 6 }),
         telemetryClient.getStatus(),
         telemetryClient.getContextFeedbackReview({ limit: 25 }),
+        telemetryClient.getContextFeedbackMemoryRetrievalReadback({ limit: 20 }),
       ]);
 
       const degradedFeeds: string[] = [];
@@ -4302,6 +4309,15 @@ function SystemPanel(props: {
       } else {
         setTelemetryFeedbackReviewError(telemetryError(nextTelemetryFeedbackReview.reason));
         degradedFeeds.push("telemetry feedback review");
+      }
+
+      if (nextTelemetryFeedbackMemoryReadback.status === "fulfilled") {
+        setTelemetryFeedbackMemoryReadback(nextTelemetryFeedbackMemoryReadback.value);
+        setTelemetryFeedbackMemoryReadbackError(null);
+        setTelemetryFeedbackMemoryReadbackLoadedAt(refreshStartedAt);
+      } else {
+        setTelemetryFeedbackMemoryReadbackError(telemetryError(nextTelemetryFeedbackMemoryReadback.reason));
+        degradedFeeds.push("telemetry feedback memory readback");
       }
 
       if (degradedFeeds.length > 0) {
@@ -6027,6 +6043,22 @@ function SystemPanel(props: {
   const telemetryFeedbackMemoryQualityCanRecord = Boolean(
     telemetryFeedbackReview && telemetryFeedbackReview.reviewed_event_count > 0,
   );
+  const telemetryFeedbackMemoryReadbackStatus =
+    safeString(telemetryFeedbackMemoryReadback?.status).trim() ||
+    (telemetryFeedbackMemoryReadbackError ? "unavailable" : "unloaded");
+  const telemetryFeedbackMemoryReadbackTone = telemetryFeedbackMemoryReadbackError
+    ? "blocked"
+    : telemetryFeedbackMemoryReadback
+      ? telemetryFeedbackMemoryReadback.count > 0
+        ? "running"
+        : "dormant"
+      : "standby";
+  const telemetryFeedbackMemoryReadbackDetail = telemetryFeedbackMemoryReadbackError
+    ? `Feedback memory retrieval readback could not refresh: ${telemetryFeedbackMemoryReadbackError}`
+    : telemetryFeedbackMemoryReadback
+      ? `${telemetryFeedbackMemoryReadback.count} governed feedback-quality memory event${telemetryFeedbackMemoryReadback.count === 1 ? "" : "s"} matched; ${telemetryFeedbackMemoryReadback.skipped_count} skipped by policy.`
+      : "Feedback memory retrieval readback has not loaded yet.";
+  const latestTelemetryFeedbackMemoryEvent = telemetryFeedbackMemoryReadback?.items[0] ?? null;
   const controlTone =
     controlModeId === "pilot"
       ? { bg: "#24160a", border: "#7a541b", color: "#ffd38a" }
@@ -10952,6 +10984,9 @@ function SystemPanel(props: {
             <span style={badgeStyle(telemetry.tone)}>{telemetry.label}</span>
             <span style={badgeStyle(telemetryReadbackTone)}>Stage 7 {telemetryReadbackStatus}</span>
             <span style={badgeStyle(telemetryFeedbackTone)}>Feedback {telemetryFeedbackStatus}</span>
+            <span style={badgeStyle(telemetryFeedbackMemoryReadbackTone)}>
+              Memory {telemetryFeedbackMemoryReadbackStatus}
+            </span>
             <span style={badgeStyle(continuation.tone)}>{continuation.label}</span>
           </div>
         </div>
@@ -10984,6 +11019,9 @@ function SystemPanel(props: {
         </div>
         <div style={{ fontSize: 12, color: telemetryFeedbackReviewError ? "#ffcf9d" : THEME.text, marginTop: 8 }}>
           {telemetryFeedbackDetail}
+        </div>
+        <div style={{ fontSize: 12, color: telemetryFeedbackMemoryReadbackError ? "#ffcf9d" : THEME.text, marginTop: 8 }}>
+          {telemetryFeedbackMemoryReadbackDetail}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
           <button
@@ -11071,6 +11109,59 @@ function SystemPanel(props: {
                 </div>
               </div>
             ) : null}
+          </div>
+        ) : null}
+        {telemetryFeedbackMemoryReadback ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+              gap: 8,
+              marginTop: 10,
+            }}
+          >
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Memory readback</div>
+              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
+                {telemetryFeedbackMemoryReadback.count}/{telemetryFeedbackMemoryReadback.total}
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                skipped <code>{telemetryFeedbackMemoryReadback.skipped_count}</code>
+              </div>
+              {telemetryFeedbackMemoryReadbackLoadedAt ? (
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                  Loaded {toLocaleTime(telemetryFeedbackMemoryReadbackLoadedAt)}
+                </div>
+              ) : null}
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Memory governance</div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                reads <code>{telemetryFeedbackMemoryReadback.reads_memory ? "true" : "false"}</code>
+                {" / "}writes <code>{telemetryFeedbackMemoryReadback.writes_memory ? "true" : "false"}</code>
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                trains <code>{telemetryFeedbackMemoryReadback.trains_model ? "true" : "false"}</code>
+                {" / "}exec <code>{telemetryFeedbackMemoryReadback.grants_execution_authority ? "true" : "false"}</code>
+              </div>
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Latest memory signal</div>
+              {latestTelemetryFeedbackMemoryEvent ? (
+                <>
+                  <div style={{ fontSize: 12, color: THEME.text, marginTop: 6 }}>
+                    {latestTelemetryFeedbackMemoryEvent.kind || "memory event"}
+                  </div>
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                    policy <code>{safeString(latestTelemetryFeedbackMemoryEvent.retention.policy).trim() || "unknown"}</code>
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontSize: 12, color: THEME.muted, marginTop: 6 }}>
+                  No governed feedback-quality memory events matched yet.
+                </div>
+              )}
+            </div>
           </div>
         ) : null}
         {telemetryStatus ? (

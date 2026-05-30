@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   TelemetryClient,
   parseTelemetryContextFeedbackMemoryQualityRecord,
+  parseTelemetryContextFeedbackMemoryRetrievalReadback,
   parseTelemetryContextFeedbackReview,
   parseTelemetryStatus,
 } from "./index.ts";
@@ -256,7 +257,7 @@ test("parseTelemetryContextFeedbackReview preserves redacted feedback quality re
     grants_execution_authority: false,
     grants_mutation_authority: false,
     governance: { read_only: true, uses_explicit_operator_feedback_only: true },
-    next_smallest_truthful_gap: "stage7_context_feedback_memory_retrieval_operator_surface",
+    next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_policy",
   });
 
   assert.equal(review.kind, "francis.stage7.telemetry.context_feedback_review");
@@ -315,7 +316,7 @@ test("TelemetryClient requests the Stage 7 context feedback review endpoint", as
       grants_execution_authority: false,
       grants_mutation_authority: false,
       governance: { read_only: true },
-      next_smallest_truthful_gap: "stage7_context_feedback_memory_retrieval_operator_surface",
+      next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_policy",
     });
   });
 
@@ -412,6 +413,97 @@ test("TelemetryClient records Stage 7 context feedback memory quality through th
           limit: 25,
           event_id: "evt-from-ui",
         },
+      },
+    ]);
+  } finally {
+    restore();
+  }
+});
+
+test("parseTelemetryContextFeedbackMemoryRetrievalReadback preserves filtered memory events", () => {
+  const readback = parseTelemetryContextFeedbackMemoryRetrievalReadback({
+    ok: true,
+    kind: "francis.stage7.telemetry.context_feedback_memory_retrieval_readback",
+    stage: "Stage 7 / Telemetry MVP",
+    source_id: "telemetry_context",
+    status: "readback_ready",
+    count: 1,
+    total: 1,
+    skipped_count: 0,
+    items: [
+      {
+        id: "evt-feedback-quality",
+        kind: "telemetry_context_feedback_quality_review",
+        action_type: "telemetry.context_feedback.quality_review",
+        classification: "operator_feedback_quality_signal",
+        confidence: "0.75",
+        retention: { policy: "stage7_context_feedback_quality" },
+        payload: {
+          rating_counts: { useful: 1, not_useful: 0, neutral: 0 },
+          latest_feedback: { context_id: "ctx_123" },
+        },
+      },
+    ],
+    reads_memory: true,
+    writes_memory: false,
+    trains_model: false,
+    grants_execution_authority: false,
+    grants_mutation_authority: false,
+    governance: {
+      read_only: true,
+      uses_policy_filters: true,
+    },
+    next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_policy",
+  });
+
+  assert.equal(readback.kind, "francis.stage7.telemetry.context_feedback_memory_retrieval_readback");
+  assert.equal(readback.status, "readback_ready");
+  assert.equal(readback.count, 1);
+  assert.equal(readback.items[0]?.id, "evt-feedback-quality");
+  assert.equal(readback.items[0]?.confidence, 0.75);
+  assert.equal(readback.items[0]?.retention.policy, "stage7_context_feedback_quality");
+  assert.equal(readback.reads_memory, true);
+  assert.equal(readback.writes_memory, false);
+  assert.equal(readback.trains_model, false);
+  assert.equal(readback.grants_execution_authority, false);
+  assert.equal(readback.governance.read_only, true);
+});
+
+test("TelemetryClient requests the Stage 7 feedback memory retrieval readback endpoint", async () => {
+  const requests: Array<{ path: string; search: string; method: string }> = [];
+  const restore = installFetch((url, init) => {
+    const parsed = new URL(url);
+    requests.push({ path: parsed.pathname, search: parsed.search, method: init?.method ?? "GET" });
+    return jsonResponse({
+      ok: true,
+      kind: "francis.stage7.telemetry.context_feedback_memory_retrieval_readback",
+      stage: "Stage 7 / Telemetry MVP",
+      source_id: "telemetry_context",
+      status: "empty",
+      count: 0,
+      total: 0,
+      skipped_count: 0,
+      items: [],
+      reads_memory: true,
+      writes_memory: false,
+      trains_model: false,
+      grants_execution_authority: false,
+      grants_mutation_authority: false,
+      governance: { read_only: true },
+      next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_policy",
+    });
+  });
+
+  try {
+    const client = new TelemetryClient("http://127.0.0.1:8000/");
+    const readback = await client.getContextFeedbackMemoryRetrievalReadback({ limit: 12 });
+    assert.equal(readback.status, "empty");
+    assert.equal(readback.reads_memory, true);
+    assert.deepEqual(requests, [
+      {
+        path: "/telemetry/context/feedback/memory-retrieval-readback",
+        search: "?limit=12",
+        method: "GET",
       },
     ]);
   } finally {

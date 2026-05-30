@@ -185,7 +185,7 @@ def context_feedback_memory_retrieval_readback(limit: int = 20) -> dict[str, Any
             "grants_execution_authority": False,
             "grants_memory_write_authority": False,
         },
-        "next_smallest_truthful_gap": "stage7_context_feedback_memory_retrieval_operator_surface",
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_policy",
     }
 
 
