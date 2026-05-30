@@ -10154,6 +10154,7 @@ def test_lens_status_surfaces_pending_approval_without_decision_authority(monkey
         json={
             "action": "operations.run",
             "reason": "prove Lens pending approval readback",
+            "actor": "test.lens.approval_request",
             "payload": {"mission_id": "mission-lens", "risk_tier": "normal"},
         },
     )

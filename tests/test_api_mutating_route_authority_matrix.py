@@ -86,6 +86,17 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
     assert attachment["governance_maturity"] == "permission_gated"
     assert "permission_gate" in attachment["denial_behavior"]
 
+    approval_request = entries["/approvals/request"]
+    assert approval_request["family"] == "approval_request"
+    assert approval_request["required_actor"] == "payload.request_actor, payload.api_actor, or payload.actor"
+    assert approval_request["required_scope"] == "approvals.request"
+    assert approval_request["approval_requirement"] == (
+        "creates pending approval after request-scope gate; does not decide it"
+    )
+    assert approval_request["governance_maturity"] == "permission_gated"
+    assert "permission_gate" in approval_request["denial_behavior"]
+    assert "lower authority than deciding" in approval_request["notes"]
+
     memory = entries["/memory/timeline/record"]
     assert memory["family"] == "memory_timeline"
     assert memory["required_actor"] == "payload.request_actor, payload.api_actor, or payload.actor"

@@ -21,7 +21,7 @@ def test_api_boundary_returns_stable_error_code_without_exception_text(monkeypat
     client = TestClient(create_app())
     response = client.post(
         "/approvals/request",
-        json={"action": "test.secret", "reason": "test", "payload": {}},
+        json={"action": "test.secret", "reason": "test", "actor": "test.api.security", "payload": {}},
     )
 
     assert response.status_code == 200

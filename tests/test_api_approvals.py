@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 _APPROVAL_ACTOR = "test.approvals.decision"
+_APPROVAL_REQUEST_ACTOR = "test.approvals.request"
 _PLUGIN_ACTOR = "test.plugins.write"
 
 
@@ -70,6 +71,7 @@ def test_approval_reason_and_decision_comment_redact_secrets(monkeypatch, tmp_pa
         json={
             "action": "plugin.run",
             "reason": f"operator note password={raw_reason_secret}",
+            "actor": _APPROVAL_REQUEST_ACTOR,
             "payload": {"plugin_id": "builtin.echo"},
         },
     )
@@ -112,6 +114,77 @@ def test_approval_reason_and_decision_comment_redact_secrets(monkeypatch, tmp_pa
     approved_text = approved_path.read_text(encoding="utf-8")
     assert raw_reason_secret not in approved_text
     assert raw_comment_secret not in approved_text
+
+
+def test_approval_request_requires_actor_scope_before_pending_write(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    denied = client.post(
+        "/approvals/request",
+        json={
+            "action": "plugin.run",
+            "reason": "unscoped gate injection should not persist",
+            "actor": _APPROVAL_REQUEST_ACTOR,
+            "payload": {"plugin_id": "builtin.echo"},
+        },
+    )
+
+    assert denied.status_code == 200
+    denied_body = denied.json()
+    assert denied_body["ok"] is False
+    assert denied_body["status"] == "denied"
+    assert denied_body["error"] == "api_permission_denied"
+    assert denied_body["governance"]["gate"] == "permission_gate"
+    assert denied_body["governance"]["reason"] == "missing_scopes"
+    assert denied_body["governance"]["next_step"] == "configure_actor_scope_before_requesting_approvals"
+    assert denied_body["governance"]["evidence"]["actor_present"] is True
+    assert denied_body["governance"]["evidence"]["required_scope_count"] == 1
+
+    approval_root = data_root / "approvals"
+    assert not approval_root.exists()
+
+
+def test_approval_request_with_actor_scope_writes_pending_record(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    requested = client.post(
+        "/approvals/request",
+        json={
+            "action": "plugin.run",
+            "reason": "scoped approval request",
+            "request_actor": _APPROVAL_REQUEST_ACTOR,
+            "payload": {"plugin_id": "builtin.echo", "risk_tier": "normal"},
+        },
+    )
+
+    assert requested.status_code == 200
+    body = requested.json()
+    approval_id = str(body["id"])
+    assert body["status"] == "pending"
+    assert body["action"] == "plugin.run"
+    assert body["reason"] == "scoped approval request"
+    assert body["payload_summary"]["plugin_id"] == "builtin.echo"
+    assert body["payload_summary"]["risk_tier"] == "normal"
+
+    pending_path = data_root / "approvals" / "pending" / f"{approval_id}.json"
+    assert pending_path.exists()
+    pending = json.loads(pending_path.read_text(encoding="utf-8"))
+    assert pending["id"] == approval_id
+    assert pending["action"] == "plugin.run"
+    assert pending["status"] == "pending"
 
 
 def test_builder_self_approval_writes_auditable_receipt_without_operator_scope(

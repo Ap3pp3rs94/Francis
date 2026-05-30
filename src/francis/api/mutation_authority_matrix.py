@@ -96,12 +96,13 @@ _RULES: tuple[AuthorityRule, ...] = (
     AuthorityRule(
         family="approval_request",
         prefixes=("/approvals/request",),
-        required_actor="none",
-        required_scope="none_request_only",
-        approval_requirement="creates pending approval; does not decide it",
+        required_actor="payload.request_actor, payload.api_actor, or payload.actor",
+        required_scope="approvals.request",
+        approval_requirement="creates pending approval after request-scope gate; does not decide it",
         receipt_behavior="pending approval record",
-        denial_behavior="validation or sanitized error",
-        governance_maturity="approval_queue_write_without_decision_scope",
+        denial_behavior="api_permission_denied via permission_gate before pending approval record write",
+        governance_maturity="permission_gated",
+        notes="Requesting an approval remains lower authority than deciding an approval.",
     ),
     AuthorityRule(
         family="approval_decision",

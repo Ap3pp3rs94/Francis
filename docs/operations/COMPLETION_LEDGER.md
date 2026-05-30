@@ -43964,6 +43964,54 @@ Latest validation for typed memory writes:
   src/francis/api/mutation_authority_matrix.py`
   Result: `passed`
 
+### 2026-05-29 - Approval request writes require API actor scope before pending gate state
+
+Roadmap area: Phase 2 / P3_GOVERNANCE -> P2_IDENTITY -> P7_EXECUTION,
+approval gate injection control for the primary plan -> gate -> execute loop.
+
+Material change:
+
+- Public `POST /approvals/request` now requires an API actor with
+  `approvals.request` before writing a pending approval record.
+- Approval request actor identity is accepted from `request_actor`, `api_actor`,
+  or `actor`.
+- Denied approval requests return `api_permission_denied` with permission-gate
+  governance evidence and do not create `data/approvals`.
+- Approval requesting remains separate from approval deciding:
+  `approvals.request` does not grant `approvals.decide` and does not change the
+  existing decision route, builder self-approval path, or internal approval
+  service calls.
+- The mutating-route authority matrix now reports `/approvals/request` as
+  `permission_gated`; the previous
+  `approval_queue_write_without_decision_scope` bucket is gone.
+
+Latest validation for approval request write gating:
+
+- `python -m pytest tests/test_api_approvals.py
+  tests/test_api_mutating_route_authority_matrix.py
+  tests/test_api_security_boundaries.py::test_api_boundary_returns_stable_error_code_without_exception_text
+  tests/test_api_lens.py::test_lens_status_surfaces_pending_approval_without_decision_authority
+  -q --tb=short --maxfail=1`
+  Result: `passed; 20 passed`
+- `python -m ruff check src/francis/api/routes/approvals.py
+  src/francis/api/mutation_authority_matrix.py tests/conftest.py
+  tests/test_api_approvals.py tests/test_api_mutating_route_authority_matrix.py
+  tests/test_api_security_boundaries.py tests/test_api_lens.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/approvals.py
+  src/francis/api/mutation_authority_matrix.py tests/conftest.py
+  tests/test_api_approvals.py tests/test_api_mutating_route_authority_matrix.py
+  tests/test_api_security_boundaries.py tests/test_api_lens.py`
+  Result: `passed`
+- `python -m mypy src/francis/api/routes/approvals.py
+  src/francis/api/mutation_authority_matrix.py`
+  Result: `passed`
+- Direct `/system/mutating-route-authority-matrix` readback:
+  Result: `status=covered`, `missing_total=0`, `total=171`,
+  `maturity_counts={"approval_and_receipt_gated":31,
+  "conditional_permission_gate":1,"permission_and_policy_gated":59,
+  "permission_gated":79,"read_projection_using_post":1}`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -23,6 +23,7 @@ from francis.governance.redaction import redact_governed_display_value
 router = APIRouter()
 _TRUE_VALUES = {"1", "true", "t", "yes", "y", "on"}
 _LOCAL_HOST_ALIASES = {"localhost", "testclient"}
+_APPROVAL_REQUEST_SCOPE = "approvals.request"
 _APPROVAL_DECISION_SCOPE = "approvals.decide"
 
 
@@ -65,7 +66,16 @@ def _decision_permission(actor: Any) -> ApiPermissionDecision:
     )
 
 
-def _permission_denied(decision: ApiPermissionDecision) -> dict[str, object]:
+def _request_permission(actor: Any) -> ApiPermissionDecision:
+    return ApiPermissionGate.from_env().check(
+        actor_id=actor,
+        required_scopes=[_APPROVAL_REQUEST_SCOPE],
+        route="/approvals/request",
+        method="POST",
+    )
+
+
+def _permission_denied(decision: ApiPermissionDecision, *, next_step: str) -> dict[str, object]:
     return {
         "ok": False,
         "status": "denied",
@@ -73,7 +83,7 @@ def _permission_denied(decision: ApiPermissionDecision) -> dict[str, object]:
         "governance": {
             "gate": "permission_gate",
             "reason": decision.reason,
-            "next_step": "configure_actor_scope_before_deciding_approvals",
+            "next_step": next_step,
             "evidence": decision.evidence,
         },
     }
@@ -82,6 +92,9 @@ def _permission_denied(decision: ApiPermissionDecision) -> dict[str, object]:
 class ApprovalIn(BaseModel):
     action: str
     reason: str = "requested"
+    actor: str | None = None
+    request_actor: str | None = None
+    api_actor: str | None = None
     payload: dict[str, object] = Field(default_factory=dict)
 
 
@@ -96,6 +109,13 @@ class ApprovalDecisionIn(BaseModel):
 @router.post("/request")
 def request_approval(payload: ApprovalIn) -> dict[str, object]:
     try:
+        actor = payload.request_actor or payload.api_actor or payload.actor
+        permission = _request_permission(actor)
+        if not permission.allowed:
+            return _permission_denied(
+                permission,
+                next_step="configure_actor_scope_before_requesting_approvals",
+            )
         item = create_request(payload.action, payload.reason, payload.payload)
         return _approval_item(item)
     except Exception as exc:
@@ -138,7 +158,10 @@ def decide_approval(request: Request, payload: ApprovalDecisionIn) -> dict[str, 
 
         permission = _decision_permission(payload.actor)
         if not permission.allowed:
-            return _permission_denied(permission)
+            return _permission_denied(
+                permission,
+                next_step="configure_actor_scope_before_deciding_approvals",
+            )
 
         result = decide_request(payload.id, payload.action, decision_note, actor=payload.actor)
         if isinstance(result.get("item"), dict):

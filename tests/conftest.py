@@ -15,6 +15,12 @@ from francis.kernel.paths import repo_root
 _SAFE_SEGMENT_RE = re.compile(r"[^A-Za-z0-9._-]+")
 APPROVAL_DECISION_TEST_ACTOR = "test.approvals.decision"
 APPROVAL_DECISION_TEST_SCOPE = "approvals.decide"
+APPROVAL_REQUEST_TEST_SCOPE = "approvals.request"
+APPROVAL_REQUEST_TEST_ACTORS = (
+    "test.approvals.request",
+    "test.api.security",
+    "test.lens.approval_request",
+)
 TRUST_WRITE_TEST_SCOPE = "trust.write"
 TRUST_WRITE_TEST_ACTORS = (
     "test.trust.write",
@@ -155,6 +161,7 @@ def _add_actor_scopes(policy: dict[str, list[str]], actors: tuple[str, ...], sco
 
 def _test_actor_scope_policy() -> dict[str, list[str]]:
     policy: dict[str, list[str]] = {APPROVAL_DECISION_TEST_ACTOR: [APPROVAL_DECISION_TEST_SCOPE]}
+    _add_actor_scopes(policy, APPROVAL_REQUEST_TEST_ACTORS, APPROVAL_REQUEST_TEST_SCOPE)
     _add_actor_scopes(policy, TRUST_WRITE_TEST_ACTORS, TRUST_WRITE_TEST_SCOPE)
     _add_actor_scopes(policy, CREDENTIAL_WRITE_TEST_ACTORS, CREDENTIAL_WRITE_TEST_SCOPE)
     _add_actor_scopes(policy, SYSTEM_WRITE_TEST_ACTORS, SYSTEM_WRITE_TEST_SCOPE)
