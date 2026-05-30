@@ -1277,6 +1277,7 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decis
             {
                 actor: [
                     "chat.write",
+                    "telemetry.terminal.write",
                     "telemetry.context.feedback.write",
                     "memory.timeline.write",
                 ]
@@ -1286,6 +1287,24 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decis
 
     client = TestClient(create_app())
     _seed_feedback_memory_assistance_live_sample(client, actor)
+    terminal = client.post(
+        "/telemetry/terminal/events",
+        json={
+            "actor": actor,
+            "reason": "record terminal signal for accepted live sample",
+            "command": "pytest token=terminalsignalsecret123",
+            "cwd": "D:/Francis",
+            "shell": "pwsh",
+            "exit_code": 0,
+            "operation_id": "op_stage7_terminal_signal",
+            "artifact_dir": "data/test_runs/pytest/stage7-terminal-signal",
+            "tags": ["stage7", "feedback_memory_assistance"],
+        },
+    )
+    assert terminal.status_code == 200
+    terminal_body = terminal.json()
+    assert terminal_body["ok"] is True
+    assert terminal_body["item"]["source_id"] == "terminal"
     response = client.post(
         "/telemetry/context/feedback/memory-assistance-feedback-loop-live-sample-operator-decision",
         json={
@@ -1402,6 +1421,46 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decis
     assert outcome["governance"]["does_not_execute_decision"] is True
     assert outcome["next_smallest_truthful_gap"] == (
         "stage7_context_feedback_memory_assistance_terminal_context_signal"
+    )
+
+    terminal_signal = client.get(
+        "/telemetry/context/feedback/memory-assistance-feedback-loop-terminal-context-signal?limit=10"
+    ).json()
+    assert terminal_signal["ok"] is True
+    assert terminal_signal["kind"] == (
+        "francis.stage7.telemetry.context_feedback_memory_assistance_terminal_context_signal"
+    )
+    assert terminal_signal["status"] == "terminal_context_signal_ready"
+    assert terminal_signal["terminal_context_signal_ready"] is True
+    assert terminal_signal["accepted_operator_outcome"] is True
+    assert terminal_signal["outcome_review_ready"] is True
+    assert terminal_signal["outcome"] == "operator_accepted_current_live_sample"
+    assert terminal_signal["latest_receipt_id"] == body["receipt_id"]
+    assert terminal_signal["terminal_event_count"] == 1
+    assert terminal_signal["terminal_context_line_count"] == 1
+    assert terminal_signal["terminal_context_items"][0]["source_id"] == "terminal"
+    assert terminal_signal["terminal_context_items"][0]["event_id"] == terminal_body["item"]["event_id"]
+    assert terminal_signal["latest_terminal_event"]["event_id"] == terminal_body["item"]["event_id"]
+    assert "terminalsignalsecret123" not in json.dumps(terminal_signal, sort_keys=True)
+    assert terminal_signal["reads_terminal_context"] is True
+    assert terminal_signal["reads_terminal_events"] is True
+    assert terminal_signal["writes_terminal_events"] is False
+    assert terminal_signal["writes_receipts"] is False
+    assert terminal_signal["writes_memory"] is False
+    assert terminal_signal["writes_feedback"] is False
+    assert terminal_signal["sends_chat"] is False
+    assert terminal_signal["calls_model"] is False
+    assert terminal_signal["selects_tools"] is False
+    assert terminal_signal["captures_terminal_streams"] is False
+    assert terminal_signal["stores_stdout_stderr"] is False
+    assert terminal_signal["grants_execution_authority"] is False
+    assert terminal_signal["grants_mutation_authority"] is False
+    assert terminal_signal["governance"]["read_only"] is True
+    assert terminal_signal["governance"]["terminal_context_signal_projection"] is True
+    assert terminal_signal["governance"]["does_not_record_terminal_event"] is True
+    assert terminal_signal["governance"]["does_not_execute_terminal_command"] is True
+    assert terminal_signal["next_smallest_truthful_gap"] == (
+        "stage7_context_feedback_memory_assistance_git_context_signal"
     )
 
 

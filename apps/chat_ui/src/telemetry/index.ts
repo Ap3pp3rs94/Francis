@@ -491,6 +491,44 @@ export type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSamp
   next_smallest_truthful_gap: string;
 };
 
+export type TelemetryContextFeedbackMemoryAssistanceTerminalContextSignal = {
+  ok: boolean;
+  kind: string;
+  stage: string;
+  source_id: string;
+  status: string;
+  target: string;
+  terminal_context_signal_ready: boolean;
+  accepted_operator_outcome: boolean;
+  outcome_review_ready: boolean;
+  outcome: string;
+  latest_decision: string;
+  latest_receipt_id: string;
+  terminal_event_count: number;
+  terminal_context_line_count: number;
+  terminal_context_items: Array<Record<string, unknown>>;
+  terminal_context_lines: string[];
+  latest_terminal_event: Record<string, unknown>;
+  outcome_review: Record<string, unknown>;
+  reads_terminal_context: boolean;
+  reads_terminal_events: boolean;
+  reads_receipts: boolean;
+  writes_terminal_events: boolean;
+  writes_receipts: boolean;
+  writes_memory: boolean;
+  writes_feedback: boolean;
+  sends_chat: boolean;
+  calls_model: boolean;
+  selects_tools: boolean;
+  trains_model: boolean;
+  captures_terminal_streams: boolean;
+  stores_stdout_stderr: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+  governance: Record<string, unknown>;
+  next_smallest_truthful_gap: string;
+};
+
 export type TelemetryContextFeedbackMemoryAssistancePolicy = {
   ok: boolean;
   kind: string;
@@ -1087,6 +1125,50 @@ export function parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoo
     calls_model: safeBoolean(raw.calls_model, true),
     selects_tools: safeBoolean(raw.selects_tools, true),
     trains_model: safeBoolean(raw.trains_model, true),
+    grants_execution_authority: safeBoolean(raw.grants_execution_authority, true),
+    grants_mutation_authority: safeBoolean(raw.grants_mutation_authority, true),
+    governance: recordOrEmpty(raw.governance),
+    next_smallest_truthful_gap: safeString(raw.next_smallest_truthful_gap, ""),
+  };
+}
+
+export function parseTelemetryContextFeedbackMemoryAssistanceTerminalContextSignal(
+  value: unknown,
+): TelemetryContextFeedbackMemoryAssistanceTerminalContextSignal {
+  const raw = isRecord(value) ? value : {};
+
+  return {
+    ok: safeBoolean(raw.ok, false),
+    kind: safeString(raw.kind, ""),
+    stage: safeString(raw.stage, ""),
+    source_id: safeString(raw.source_id, ""),
+    status: safeString(raw.status, "unknown"),
+    target: safeString(raw.target, ""),
+    terminal_context_signal_ready: safeBoolean(raw.terminal_context_signal_ready, false),
+    accepted_operator_outcome: safeBoolean(raw.accepted_operator_outcome, false),
+    outcome_review_ready: safeBoolean(raw.outcome_review_ready, false),
+    outcome: safeString(raw.outcome, ""),
+    latest_decision: safeString(raw.latest_decision, ""),
+    latest_receipt_id: safeString(raw.latest_receipt_id, ""),
+    terminal_event_count: safeNumber(raw.terminal_event_count, 0),
+    terminal_context_line_count: safeNumber(raw.terminal_context_line_count, 0),
+    terminal_context_items: Array.isArray(raw.terminal_context_items) ? raw.terminal_context_items.filter(isRecord) : [],
+    terminal_context_lines: safeStringArray(raw.terminal_context_lines),
+    latest_terminal_event: recordOrEmpty(raw.latest_terminal_event),
+    outcome_review: recordOrEmpty(raw.outcome_review),
+    reads_terminal_context: safeBoolean(raw.reads_terminal_context, false),
+    reads_terminal_events: safeBoolean(raw.reads_terminal_events, false),
+    reads_receipts: safeBoolean(raw.reads_receipts, false),
+    writes_terminal_events: safeBoolean(raw.writes_terminal_events, true),
+    writes_receipts: safeBoolean(raw.writes_receipts, true),
+    writes_memory: safeBoolean(raw.writes_memory, true),
+    writes_feedback: safeBoolean(raw.writes_feedback, true),
+    sends_chat: safeBoolean(raw.sends_chat, true),
+    calls_model: safeBoolean(raw.calls_model, true),
+    selects_tools: safeBoolean(raw.selects_tools, true),
+    trains_model: safeBoolean(raw.trains_model, true),
+    captures_terminal_streams: safeBoolean(raw.captures_terminal_streams, true),
+    stores_stdout_stderr: safeBoolean(raw.stores_stdout_stderr, true),
     grants_execution_authority: safeBoolean(raw.grants_execution_authority, true),
     grants_mutation_authority: safeBoolean(raw.grants_mutation_authority, true),
     governance: recordOrEmpty(raw.governance),
@@ -1891,6 +1973,46 @@ export class TelemetryClient {
     } catch (err) {
       throw new TelemetryApiError(
         "Telemetry feedback memory assistance live sample operator decision outcome review response was not valid JSON.",
+        { url, cause: err },
+      );
+    }
+  }
+
+  async getContextFeedbackMemoryAssistanceTerminalContextSignal(opts?: {
+    limit?: number;
+    signal?: AbortSignal;
+  }): Promise<TelemetryContextFeedbackMemoryAssistanceTerminalContextSignal> {
+    const limit = clampLimit(opts?.limit, 20);
+    const url = this.url(
+      `/telemetry/context/feedback/memory-assistance-feedback-loop-terminal-context-signal?limit=${limit}`,
+    );
+    let response: Response;
+    try {
+      response = await fetch(url, { method: "GET", signal: opts?.signal });
+    } catch (err) {
+      throw new TelemetryApiError("Telemetry feedback memory assistance terminal context signal request failed.", {
+        url,
+        cause: err,
+      });
+    }
+
+    const text = await response.text();
+    if (!response.ok) {
+      throw new TelemetryApiError(
+        `HTTP ${response.status} for telemetry feedback memory assistance terminal context signal request`,
+        {
+          status: response.status,
+          url,
+          bodySnippet: text.slice(0, 500),
+        },
+      );
+    }
+
+    try {
+      return parseTelemetryContextFeedbackMemoryAssistanceTerminalContextSignal(text ? JSON.parse(text) : {});
+    } catch (err) {
+      throw new TelemetryApiError(
+        "Telemetry feedback memory assistance terminal context signal response was not valid JSON.",
         { url, cause: err },
       );
     }

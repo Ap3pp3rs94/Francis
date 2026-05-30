@@ -1161,6 +1161,108 @@ def context_feedback_memory_assistance_operator_feedback_loop_live_sample_operat
     }
 
 
+@router.get("/context/feedback/memory-assistance-feedback-loop-terminal-context-signal")
+def context_feedback_memory_assistance_operator_feedback_loop_terminal_context_signal(
+    limit: int = 20,
+) -> dict[str, Any]:
+    safe_limit = max(1, min(int(limit), 100))
+    outcome_review = (
+        context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_decision_outcome_review(
+            limit=safe_limit
+        )
+    )
+    context_snapshot = telemetry_context_snapshot(surface="feedback_memory_assistance_terminal_context_signal")
+    terminal_events = terminal_events_snapshot(limit=safe_limit)
+    context_items_value = context_snapshot.get("context_items")
+    context_items: list[Any] = context_items_value if isinstance(context_items_value, list) else []
+    prompt_lines_value = context_snapshot.get("prompt_lines")
+    prompt_lines: list[Any] = prompt_lines_value if isinstance(prompt_lines_value, list) else []
+    terminal_context_items = [
+        item for item in context_items if isinstance(item, dict) and item.get("source_id") == "terminal"
+    ]
+    terminal_context_lines = [
+        str(line) for line in prompt_lines if isinstance(line, str) and line.strip().lower().startswith("terminal:")
+    ]
+    terminal_items_value = terminal_events.get("items")
+    terminal_items: list[Any] = terminal_items_value if isinstance(terminal_items_value, list) else []
+    latest_terminal_event = terminal_items[-1] if terminal_items and isinstance(terminal_items[-1], dict) else {}
+    accepted_outcome = outcome_review.get("outcome") == "operator_accepted_current_live_sample"
+    outcome_ready = bool(outcome_review.get("outcome_review_ready"))
+    terminal_signal_ready = bool(
+        outcome_ready
+        and accepted_outcome
+        and terminal_context_items
+        and terminal_context_lines
+        and latest_terminal_event
+    )
+    if terminal_signal_ready:
+        status = "terminal_context_signal_ready"
+    elif not outcome_ready:
+        status = "awaiting_operator_decision_outcome_review"
+    elif not accepted_outcome:
+        status = "operator_outcome_not_accepted"
+    else:
+        status = "awaiting_terminal_context_event"
+    return {
+        "ok": True,
+        "kind": "francis.stage7.telemetry.context_feedback_memory_assistance_terminal_context_signal",
+        "stage": "Stage 7 / Telemetry MVP",
+        "source_id": "telemetry_context",
+        "status": status,
+        "target": "feedback_memory_assistance_prompt_integration",
+        "terminal_context_signal_ready": terminal_signal_ready,
+        "accepted_operator_outcome": accepted_outcome,
+        "outcome_review_ready": outcome_ready,
+        "outcome": outcome_review.get("outcome", ""),
+        "latest_decision": outcome_review.get("latest_decision", ""),
+        "latest_receipt_id": outcome_review.get("latest_receipt_id", ""),
+        "terminal_event_count": terminal_events.get("total", 0),
+        "terminal_context_line_count": len(terminal_context_lines),
+        "terminal_context_items": terminal_context_items,
+        "terminal_context_lines": terminal_context_lines,
+        "latest_terminal_event": latest_terminal_event,
+        "outcome_review": outcome_review,
+        "reads_terminal_context": True,
+        "reads_terminal_events": True,
+        "reads_receipts": True,
+        "writes_terminal_events": False,
+        "writes_receipts": False,
+        "writes_memory": False,
+        "writes_feedback": False,
+        "sends_chat": False,
+        "calls_model": False,
+        "selects_tools": False,
+        "trains_model": False,
+        "captures_terminal_streams": False,
+        "stores_stdout_stderr": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "terminal_context_signal_projection": True,
+            "uses_operator_decision_outcome_review": True,
+            "uses_terminal_context_snapshot": True,
+            "uses_redacted_terminal_events": True,
+            "telemetry_is_untrusted_input": True,
+            "does_not_record_terminal_event": True,
+            "does_not_capture_terminal_streams": True,
+            "does_not_store_stdout_stderr": True,
+            "does_not_execute_terminal_command": True,
+            "does_not_write_memory": True,
+            "does_not_write_feedback": True,
+            "does_not_send_chat": True,
+            "does_not_call_model": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": (
+            "stage7_context_feedback_memory_assistance_git_context_signal"
+            if terminal_signal_ready
+            else "stage7_context_feedback_memory_assistance_terminal_context_signal"
+        ),
+    }
+
+
 @router.post("/context/feedback/memory-assistance-feedback-loop-live-sample-operator-decision")
 def context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_decision_record(
     payload: TelemetryContextFeedbackMemoryAssistanceLiveSampleOperatorDecisionIn,

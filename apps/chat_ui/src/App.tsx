@@ -111,6 +111,7 @@ import {
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisionRecord,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorReview,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleReadback,
+  type TelemetryContextFeedbackMemoryAssistanceTerminalContextSignal,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackMemoryReadback,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackReview,
   type TelemetryContextFeedbackMemoryAssistancePolicy,
@@ -4224,6 +4225,18 @@ function SystemPanel(props: {
     telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReviewLoadedAt,
     setTelemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReviewLoadedAt,
   ] = useState<number | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceTerminalContextSignal,
+    setTelemetryFeedbackMemoryAssistanceTerminalContextSignal,
+  ] = useState<TelemetryContextFeedbackMemoryAssistanceTerminalContextSignal | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceTerminalContextSignalError,
+    setTelemetryFeedbackMemoryAssistanceTerminalContextSignalError,
+  ] = useState<string | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceTerminalContextSignalLoadedAt,
+    setTelemetryFeedbackMemoryAssistanceTerminalContextSignalLoadedAt,
+  ] = useState<number | null>(null);
   const [telemetryFeedbackMemoryQualityBusy, setTelemetryFeedbackMemoryQualityBusy] = useState(false);
   const [telemetryFeedbackMemoryQualityNotice, setTelemetryFeedbackMemoryQualityNotice] = useState<{
     tone: "info" | "error";
@@ -4448,6 +4461,7 @@ function SystemPanel(props: {
         nextTelemetryFeedbackMemoryAssistanceLiveSampleOperatorReview,
         nextTelemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions,
         nextTelemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReview,
+        nextTelemetryFeedbackMemoryAssistanceTerminalContextSignal,
       ] =
         await Promise.allSettled([
         client.getSystemInfo(),
@@ -4484,6 +4498,7 @@ function SystemPanel(props: {
         telemetryClient.getContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisionOutcomeReview({
           limit: 20,
         }),
+        telemetryClient.getContextFeedbackMemoryAssistanceTerminalContextSignal({ limit: 20 }),
       ]);
 
       const degradedFeeds: string[] = [];
@@ -4746,6 +4761,19 @@ function SystemPanel(props: {
           telemetryError(nextTelemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReview.reason),
         );
         degradedFeeds.push("telemetry feedback memory assistance live sample decision outcome review");
+      }
+
+      if (nextTelemetryFeedbackMemoryAssistanceTerminalContextSignal.status === "fulfilled") {
+        setTelemetryFeedbackMemoryAssistanceTerminalContextSignal(
+          nextTelemetryFeedbackMemoryAssistanceTerminalContextSignal.value,
+        );
+        setTelemetryFeedbackMemoryAssistanceTerminalContextSignalError(null);
+        setTelemetryFeedbackMemoryAssistanceTerminalContextSignalLoadedAt(refreshStartedAt);
+      } else {
+        setTelemetryFeedbackMemoryAssistanceTerminalContextSignalError(
+          telemetryError(nextTelemetryFeedbackMemoryAssistanceTerminalContextSignal.reason),
+        );
+        degradedFeeds.push("telemetry feedback memory assistance terminal context signal");
       }
 
       if (degradedFeeds.length > 0) {
@@ -6798,6 +6826,23 @@ function SystemPanel(props: {
       : telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReview
         ? `Feedback memory assistance decision outcome ${telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReview.status}; outcome ${telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReview.outcome || "unknown"}, latest ${telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReview.latest_decision || "none"}.`
         : "Feedback memory assistance decision outcome review has not loaded yet.";
+  const telemetryFeedbackMemoryAssistanceTerminalContextSignalStatus =
+    safeString(telemetryFeedbackMemoryAssistanceTerminalContextSignal?.status).trim() ||
+    (telemetryFeedbackMemoryAssistanceTerminalContextSignalError ? "unavailable" : "unloaded");
+  const telemetryFeedbackMemoryAssistanceTerminalContextSignalTone =
+    telemetryFeedbackMemoryAssistanceTerminalContextSignalError
+      ? "blocked"
+      : telemetryFeedbackMemoryAssistanceTerminalContextSignal
+        ? telemetryFeedbackMemoryAssistanceTerminalContextSignal.terminal_context_signal_ready
+          ? "running"
+          : "dormant"
+        : "standby";
+  const telemetryFeedbackMemoryAssistanceTerminalContextSignalDetail =
+    telemetryFeedbackMemoryAssistanceTerminalContextSignalError
+      ? `Feedback memory assistance terminal context signal could not refresh: ${telemetryFeedbackMemoryAssistanceTerminalContextSignalError}`
+      : telemetryFeedbackMemoryAssistanceTerminalContextSignal
+        ? `Feedback memory assistance terminal context ${telemetryFeedbackMemoryAssistanceTerminalContextSignal.status}; terminal events ${telemetryFeedbackMemoryAssistanceTerminalContextSignal.terminal_event_count}, context lines ${telemetryFeedbackMemoryAssistanceTerminalContextSignal.terminal_context_line_count}.`
+        : "Feedback memory assistance terminal context signal has not loaded yet.";
   const telemetryFeedbackMemoryAssistanceLiveSampleDecisionCanRecord = Boolean(
     telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview?.operator_review_ready &&
       !telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionRecorded,
@@ -11763,6 +11808,9 @@ function SystemPanel(props: {
             <span style={badgeStyle(telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReviewTone)}>
               Decision outcome {telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReviewStatus}
             </span>
+            <span style={badgeStyle(telemetryFeedbackMemoryAssistanceTerminalContextSignalTone)}>
+              Terminal signal {telemetryFeedbackMemoryAssistanceTerminalContextSignalStatus}
+            </span>
             <span style={badgeStyle(continuation.tone)}>{continuation.label}</span>
           </div>
         </div>
@@ -11891,6 +11939,15 @@ function SystemPanel(props: {
           }}
         >
           {telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReviewDetail}
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            color: telemetryFeedbackMemoryAssistanceTerminalContextSignalError ? "#ffcf9d" : THEME.text,
+            marginTop: 8,
+          }}
+        >
+          {telemetryFeedbackMemoryAssistanceTerminalContextSignalDetail}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
           <button
@@ -12329,6 +12386,68 @@ function SystemPanel(props: {
                 <code>
                   {telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReview.calls_model ? "true" : "false"}
                 </code>
+              </div>
+            </div>
+          </div>
+        ) : null}
+        {telemetryFeedbackMemoryAssistanceTerminalContextSignal ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+              gap: 8,
+              marginTop: 10,
+            }}
+          >
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Terminal signal</div>
+              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
+                {telemetryFeedbackMemoryAssistanceTerminalContextSignal.terminal_context_signal_ready
+                  ? "ready"
+                  : "waiting"}
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                events <code>{telemetryFeedbackMemoryAssistanceTerminalContextSignal.terminal_event_count}</code>
+                {" / "}lines <code>{telemetryFeedbackMemoryAssistanceTerminalContextSignal.terminal_context_line_count}</code>
+              </div>
+              {telemetryFeedbackMemoryAssistanceTerminalContextSignalLoadedAt ? (
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                  Loaded {toLocaleTime(telemetryFeedbackMemoryAssistanceTerminalContextSignalLoadedAt)}
+                </div>
+              ) : null}
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Terminal readback</div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 6 }}>
+                latest{" "}
+                <code>
+                  {safeString(telemetryFeedbackMemoryAssistanceTerminalContextSignal.latest_terminal_event.event_id).trim() ||
+                    "missing"}
+                </code>
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                next{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceTerminalContextSignal.next_smallest_truthful_gap ||
+                    "terminal_context_signal"}
+                </code>
+              </div>
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Signal guards</div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 6 }}>
+                terminal{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceTerminalContextSignal.writes_terminal_events ? "write" : "read"}
+                </code>
+                {" / "}streams{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceTerminalContextSignal.captures_terminal_streams ? "true" : "false"}
+                </code>
+              </div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 4 }}>
+                memory <code>{telemetryFeedbackMemoryAssistanceTerminalContextSignal.writes_memory ? "true" : "false"}</code>
+                {" / "}model <code>{telemetryFeedbackMemoryAssistanceTerminalContextSignal.calls_model ? "true" : "false"}</code>
               </div>
             </div>
           </div>

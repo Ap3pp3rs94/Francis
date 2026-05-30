@@ -14,6 +14,7 @@ import {
   parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisionRecord,
   parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorReview,
   parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleReadback,
+  parseTelemetryContextFeedbackMemoryAssistanceTerminalContextSignal,
   parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackReview,
   parseTelemetryContextFeedbackMemoryAssistanceChatContextReadback,
   parseTelemetryContextFeedbackMemoryAssistanceDryRun,
@@ -1561,6 +1562,121 @@ test("TelemetryClient requests the live sample operator decision outcome review 
     assert.deepEqual(requests, [
       {
         path: "/telemetry/context/feedback/memory-assistance-feedback-loop-live-sample-operator-decision-outcome-review",
+        search: "?limit=30",
+        method: "GET",
+      },
+    ]);
+  } finally {
+    restore();
+  }
+});
+
+test("parseTelemetryContextFeedbackMemoryAssistanceTerminalContextSignal preserves terminal guards", () => {
+  const signal = parseTelemetryContextFeedbackMemoryAssistanceTerminalContextSignal({
+    ok: true,
+    kind: "francis.stage7.telemetry.context_feedback_memory_assistance_terminal_context_signal",
+    stage: "Stage 7 / Telemetry MVP",
+    source_id: "telemetry_context",
+    status: "terminal_context_signal_ready",
+    target: "feedback_memory_assistance_prompt_integration",
+    terminal_context_signal_ready: true,
+    accepted_operator_outcome: true,
+    outcome_review_ready: true,
+    outcome: "operator_accepted_current_live_sample",
+    latest_decision: "accepted",
+    latest_receipt_id: "tel_fma_live_decision_123",
+    terminal_event_count: 1,
+    terminal_context_line_count: 1,
+    terminal_context_items: [{ source_id: "terminal", event_id: "tel_terminal_123" }],
+    terminal_context_lines: ["terminal: latest terminal event tel_terminal_123; exit 0"],
+    latest_terminal_event: { event_id: "tel_terminal_123", exit_code: 0 },
+    outcome_review: { latest_receipt_id: "tel_fma_live_decision_123" },
+    reads_terminal_context: true,
+    reads_terminal_events: true,
+    reads_receipts: true,
+    writes_terminal_events: false,
+    writes_receipts: false,
+    writes_memory: false,
+    writes_feedback: false,
+    sends_chat: false,
+    calls_model: false,
+    selects_tools: false,
+    trains_model: false,
+    captures_terminal_streams: false,
+    stores_stdout_stderr: false,
+    grants_execution_authority: false,
+    grants_mutation_authority: false,
+    governance: { read_only: true, terminal_context_signal_projection: true },
+    next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_git_context_signal",
+  });
+
+  assert.equal(signal.status, "terminal_context_signal_ready");
+  assert.equal(signal.terminal_context_signal_ready, true);
+  assert.equal(signal.terminal_event_count, 1);
+  assert.equal(signal.terminal_context_line_count, 1);
+  assert.equal(signal.terminal_context_items[0]?.event_id, "tel_terminal_123");
+  assert.equal(signal.terminal_context_lines[0]?.startsWith("terminal:"), true);
+  assert.equal(signal.reads_terminal_context, true);
+  assert.equal(signal.writes_terminal_events, false);
+  assert.equal(signal.writes_memory, false);
+  assert.equal(signal.captures_terminal_streams, false);
+  assert.equal(signal.stores_stdout_stderr, false);
+  assert.equal(signal.grants_execution_authority, false);
+  assert.equal(signal.governance.terminal_context_signal_projection, true);
+});
+
+test("TelemetryClient requests the terminal context signal endpoint", async () => {
+  const requests: Array<{ path: string; search: string; method: string }> = [];
+  const restore = installFetch((url, init) => {
+    const parsed = new URL(url);
+    requests.push({ path: parsed.pathname, search: parsed.search, method: init?.method ?? "GET" });
+    return jsonResponse({
+      ok: true,
+      kind: "francis.stage7.telemetry.context_feedback_memory_assistance_terminal_context_signal",
+      stage: "Stage 7 / Telemetry MVP",
+      source_id: "telemetry_context",
+      status: "terminal_context_signal_ready",
+      target: "feedback_memory_assistance_prompt_integration",
+      terminal_context_signal_ready: true,
+      accepted_operator_outcome: true,
+      outcome_review_ready: true,
+      outcome: "operator_accepted_current_live_sample",
+      latest_decision: "accepted",
+      latest_receipt_id: "tel_fma_live_decision_123",
+      terminal_event_count: 1,
+      terminal_context_line_count: 1,
+      terminal_context_items: [{ source_id: "terminal", event_id: "tel_terminal_123" }],
+      terminal_context_lines: ["terminal: latest terminal event tel_terminal_123; exit 0"],
+      latest_terminal_event: { event_id: "tel_terminal_123", exit_code: 0 },
+      outcome_review: { latest_receipt_id: "tel_fma_live_decision_123" },
+      reads_terminal_context: true,
+      reads_terminal_events: true,
+      reads_receipts: true,
+      writes_terminal_events: false,
+      writes_receipts: false,
+      writes_memory: false,
+      writes_feedback: false,
+      sends_chat: false,
+      calls_model: false,
+      selects_tools: false,
+      trains_model: false,
+      captures_terminal_streams: false,
+      stores_stdout_stderr: false,
+      grants_execution_authority: false,
+      grants_mutation_authority: false,
+      governance: { read_only: true, terminal_context_signal_projection: true },
+      next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_git_context_signal",
+    });
+  });
+
+  try {
+    const client = new TelemetryClient("http://127.0.0.1:8000/");
+    const signal = await client.getContextFeedbackMemoryAssistanceTerminalContextSignal({ limit: 30 });
+
+    assert.equal(signal.terminal_context_signal_ready, true);
+    assert.deepEqual(requests, [
+      {
+        path: "/telemetry/context/feedback/memory-assistance-feedback-loop-terminal-context-signal",
         search: "?limit=30",
         method: "GET",
       },
