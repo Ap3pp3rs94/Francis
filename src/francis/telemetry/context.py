@@ -25,7 +25,7 @@ _MAX_PATHS = 5
 _MAX_LIMIT = 100
 _MAX_TEXT_LENGTH = 2_000
 _MAX_TAGS = 16
-_NEXT_CONTEXT_FEEDBACK_GAP = "stage7_context_feedback_memory_retrieval_readback"
+_NEXT_CONTEXT_FEEDBACK_GAP = "stage7_context_feedback_memory_retrieval_operator_surface"
 
 
 def telemetry_context_snapshot(*, surface: Any = "assist") -> dict[str, Any]:

@@ -103,7 +103,7 @@ def telemetry_status_snapshot() -> dict[str, Any]:
             "grants_execution_authority": False,
             "grants_memory_write_authority": False,
         },
-        "next_smallest_truthful_gap": "stage7_context_feedback_memory_retrieval_readback",
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_retrieval_operator_surface",
     }
 
 

@@ -5,7 +5,7 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from francis.api.routes.memory_timeline import record_memory_timeline_payload
+from francis.api.routes.memory_timeline import list_timeline, record_memory_timeline_payload
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.telemetry.context import (
     MEMORY_TIMELINE_WRITE_SCOPE,
@@ -118,6 +118,75 @@ def context_feedback_memory_quality(limit: int = 100) -> dict[str, Any]:
 @router.get("/context/feedback/memory-retrieval-policy")
 def context_feedback_memory_retrieval_policy() -> dict[str, Any]:
     return telemetry_context_feedback_memory_retrieval_policy()
+
+
+@router.get("/context/feedback/memory-retrieval-readback")
+def context_feedback_memory_retrieval_readback(limit: int = 20) -> dict[str, Any]:
+    safe_limit = max(1, min(int(limit), 100))
+    policy = telemetry_context_feedback_memory_retrieval_policy()
+    timeline = list_timeline(
+        limit=safe_limit,
+        kinds=["telemetry_context_feedback_quality_review"],
+        include_payload=True,
+    )
+    raw_items_value = timeline.get("items")
+    raw_items: list[Any] = raw_items_value if isinstance(raw_items_value, list) else []
+    items: list[dict[str, Any]] = []
+    skipped = 0
+    for raw_item in raw_items:
+        if not isinstance(raw_item, dict):
+            skipped += 1
+            continue
+        retention_value = raw_item.get("retention")
+        retention: dict[str, Any] = retention_value if isinstance(retention_value, dict) else {}
+        if (
+            raw_item.get("action_type") == "telemetry.context_feedback.quality_review"
+            and raw_item.get("classification") == "operator_feedback_quality_signal"
+            and retention.get("policy") == "stage7_context_feedback_quality"
+        ):
+            items.append(raw_item)
+            continue
+        skipped += 1
+
+    return {
+        "ok": True,
+        "kind": "francis.stage7.telemetry.context_feedback_memory_retrieval_readback",
+        "stage": "Stage 7 / Telemetry MVP",
+        "source_id": "telemetry_context",
+        "status": "readback_ready" if items else "empty",
+        "policy": policy,
+        "memory_query": {
+            "route": "/memory/timeline/list",
+            "method": "GET",
+            "filters": {
+                "kinds": ["telemetry_context_feedback_quality_review"],
+                "include_payload": True,
+                "limit": safe_limit,
+            },
+        },
+        "items": items,
+        "count": len(items),
+        "total": timeline.get("total", len(items)),
+        "skipped_count": skipped,
+        "reads_memory": True,
+        "writes_memory": False,
+        "trains_model": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "uses_memory_timeline_read_route": True,
+            "uses_policy_filters": True,
+            "telemetry_is_untrusted_input": True,
+            "ignores_payload_instruction_text": True,
+            "stores_prompt_body": False,
+            "stores_model_response": False,
+            "trains_model": False,
+            "grants_execution_authority": False,
+            "grants_memory_write_authority": False,
+        },
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_retrieval_operator_surface",
+    }
 
 
 @router.post("/context/feedback/memory-quality")

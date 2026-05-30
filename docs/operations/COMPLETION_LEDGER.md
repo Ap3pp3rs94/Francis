@@ -44422,6 +44422,54 @@ Latest validation for Stage 7 feedback memory retrieval policy:
   `reads_memory=false`, `writes_memory=false`,
   `next_smallest_truthful_gap=stage7_context_feedback_memory_retrieval_readback`.
 
+### 2026-05-29 - Stage 7 feedback memory retrieval readback is filtered
+
+Roadmap area: Stage 7 / Telemetry MVP, read-only retrieval readback for
+context-feedback quality memory events.
+
+Material change:
+
+- Telemetry context feedback now exposes
+  `/telemetry/context/feedback/memory-retrieval-readback`.
+- The readback uses the memory timeline read route with policy filters for
+  `telemetry_context_feedback_quality_review` events only.
+- Returned items must match the governed action type
+  `telemetry.context_feedback.quality_review`, classification
+  `operator_feedback_quality_signal`, and retention policy
+  `stage7_context_feedback_quality`.
+- The readback is read-only: it does not write memory, train, grant execution
+  authority, grant memory-write authority, or treat feedback payloads as
+  instructions.
+- `/telemetry/status`, `/telemetry/context`, feedback review, and feedback
+  memory-quality readback now advance their next smallest truthful gap to
+  `stage7_context_feedback_memory_retrieval_operator_surface`.
+
+Latest validation for Stage 7 feedback memory retrieval readback:
+
+- `python -m pytest tests/test_api_telemetry.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 22 passed`
+- `python -m mypy src/francis/telemetry/context.py
+  src/francis/telemetry/status.py src/francis/api/routes/telemetry.py`
+  Result: `passed`
+- `python -m ruff check src/francis/telemetry/context.py
+  src/francis/telemetry/status.py src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/telemetry/context.py
+  src/francis/telemetry/status.py src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `node --test --experimental-strip-types src/telemetry/index.test.ts` in
+  `apps/chat_ui`
+  Result: `passed; 6 passed`
+- Direct `/telemetry/context/feedback/memory-retrieval-readback?limit=5`
+  readback
+  Result: `status=empty`, `count=0`, `reads_memory=true`,
+  `writes_memory=false`,
+  `next_smallest_truthful_gap=stage7_context_feedback_memory_retrieval_operator_surface`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
