@@ -33,7 +33,9 @@ TELEMETRY_CONTEXT_FEEDBACK_MEMORY_ASSISTANCE_CHAT_CONTEXT_CONTRACT_KIND = (
 TELEMETRY_CONTEXT_FEEDBACK_MEMORY_ASSISTANCE_LIVE_SAMPLE_OPERATOR_DECISION_KIND = (
     "francis.stage7.telemetry.context_feedback_memory_assistance_live_sample_operator_decision_receipt"
 )
+STAGE7_OPERATOR_STAGE_CLOSURE_DECISION_KIND = "francis.stage7.telemetry.stage7_operator_stage_closure_decision_receipt"
 TELEMETRY_CONTEXT_FEEDBACK_WRITE_SCOPE = "telemetry.context.feedback.write"
+STAGE7_OPERATOR_STAGE_CLOSURE_WRITE_SCOPE = "telemetry.stage7.closure.write"
 MEMORY_TIMELINE_WRITE_SCOPE = "memory.timeline.write"
 _MAX_CONTEXT_ITEMS = 12
 _MAX_PATHS = 5
@@ -247,6 +249,76 @@ def read_feedback_memory_assistance_live_sample_operator_decisions(*, limit: int
 
 def feedback_memory_assistance_live_sample_operator_decision_count() -> int:
     path = _live_sample_operator_decision_path()
+    if not path.exists():
+        return 0
+    return sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
+
+
+def record_stage7_operator_stage_closure_decision(
+    *,
+    actor: Any,
+    reason: Any,
+    decision: Any,
+    review: dict[str, Any],
+    notes: Any = "",
+) -> dict[str, Any]:
+    safe_decision = _safe_stage_closure_decision(decision)
+    closure_ready = bool(review.get("memory_contract_operator_surface_ready"))
+    stage7_closed_by_receipt = safe_decision == "close_stage7" and closure_ready
+    receipt_id = f"tel_stage7_closure_{uuid.uuid4().hex[:12]}"
+    payload = {
+        "ok": True,
+        "kind": STAGE7_OPERATOR_STAGE_CLOSURE_DECISION_KIND,
+        "receipt_id": receipt_id,
+        "stage": STAGE7_TELEMETRY_STAGE,
+        "source_id": "telemetry_context",
+        "capture_mode": "explicit_operator_stage_closure_decision",
+        "target": "stage7_telemetry_mvp",
+        "actor": _redact_text(actor),
+        "reason": _redact_text(reason),
+        "decision": safe_decision,
+        "notes": _redact_text(notes)[:_MAX_TEXT_LENGTH],
+        "review_status": _redact_text(review.get("status")),
+        "memory_contract_operator_surface_ready": closure_ready,
+        "ready_count": _safe_int(review.get("visible_section_count"), 0),
+        "required_count": _safe_int(review.get("surface_section_count"), 0),
+        "stage7_closed_by_receipt": stage7_closed_by_receipt,
+        "marks_runtime_stage_state": False,
+        "recorded_ts": _now_s(),
+        "governance": {
+            "permission_scope": STAGE7_OPERATOR_STAGE_CLOSURE_WRITE_SCOPE,
+            "explicit_operator_decision": True,
+            "stage_closure_decision": True,
+            "redacted_before_storage": True,
+            "telemetry_is_untrusted_input": True,
+            "does_not_mutate_runtime_stage_state": True,
+            "stores_prompt_body": False,
+            "stores_model_response": False,
+            "trains_model": False,
+            "grants_execution_authority": False,
+            "grants_memory_write_authority": False,
+            "grants_mutation_authority": False,
+        },
+    }
+    _append_line(_stage7_operator_stage_closure_decision_path(), payload)
+    audit_record(
+        "telemetry.context.feedback_memory_assistance.stage7_closure_decision_recorded",
+        actor=payload["actor"],
+        reason=payload["reason"],
+        receipt_id=receipt_id,
+        decision=safe_decision,
+        target=payload["target"],
+        stage7_closed_by_receipt=stage7_closed_by_receipt,
+    )
+    return payload
+
+
+def read_stage7_operator_stage_closure_decisions(*, limit: int = 20) -> list[dict[str, Any]]:
+    return _read_jsonl_tail(_stage7_operator_stage_closure_decision_path(), limit=_safe_limit(limit))
+
+
+def stage7_operator_stage_closure_decision_count() -> int:
+    path = _stage7_operator_stage_closure_decision_path()
     if not path.exists():
         return 0
     return sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
@@ -1165,6 +1237,10 @@ def _live_sample_operator_decision_path() -> Path:
     return data_dir() / "logs" / "telemetry" / "context_feedback_memory_assistance_live_sample_decisions.jsonl"
 
 
+def _stage7_operator_stage_closure_decision_path() -> Path:
+    return data_dir() / "logs" / "telemetry" / "stage7_operator_stage_closure_decisions.jsonl"
+
+
 def _append_line(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
@@ -1242,6 +1318,14 @@ def _safe_operator_decision(value: Any) -> str:
     text = _redact_text(value).strip().lower()
     normalized = text.replace("-", "_").replace(" ", "_")
     if normalized in {"accepted", "rejected", "needs_more_evidence"}:
+        return normalized
+    return "needs_more_evidence"
+
+
+def _safe_stage_closure_decision(value: Any) -> str:
+    text = _redact_text(value).strip().lower()
+    normalized = text.replace("-", "_").replace(" ", "_")
+    if normalized in {"close_stage7", "do_not_close_stage7", "needs_more_evidence"}:
         return normalized
     return "needs_more_evidence"
 

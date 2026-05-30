@@ -16,12 +16,16 @@ from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPer
 from francis.governance.redaction import redact_secret_text
 from francis.telemetry.context import (
     MEMORY_TIMELINE_WRITE_SCOPE,
+    STAGE7_OPERATOR_STAGE_CLOSURE_WRITE_SCOPE,
     TELEMETRY_CONTEXT_FEEDBACK_WRITE_SCOPE,
     feedback_memory_assistance_live_sample_operator_decision_count,
     read_telemetry_context_feedback,
     read_feedback_memory_assistance_live_sample_operator_decisions,
+    read_stage7_operator_stage_closure_decisions,
     record_feedback_memory_assistance_live_sample_operator_decision,
+    record_stage7_operator_stage_closure_decision,
     record_telemetry_context_feedback,
+    stage7_operator_stage_closure_decision_count,
     telemetry_context_feedback_memory_assistance_chat_context_contract,
     telemetry_context_feedback_memory_assistance_operator_feedback_memory_quality,
     telemetry_context_feedback_memory_assistance_operator_feedback_review,
@@ -106,6 +110,14 @@ class TelemetryContextFeedbackMemoryQualityIn(BaseModel):
 
 
 class TelemetryContextFeedbackMemoryAssistanceLiveSampleOperatorDecisionIn(BaseModel):
+    actor: str | None = None
+    reason: str = ""
+    decision: str = "needs_more_evidence"
+    notes: str = ""
+    limit: int = 20
+
+
+class Stage7OperatorStageClosureDecisionIn(BaseModel):
     actor: str | None = None
     reason: str = ""
     decision: str = "needs_more_evidence"
@@ -3243,6 +3255,173 @@ def context_feedback_memory_assistance_operator_feedback_loop_memory_contract_op
             "stage7_operator_stage_closure_decision"
             if memory_contract_operator_surface_ready
             else "stage7_memory_contract_operator_surface_review"
+        ),
+    }
+
+
+@router.get("/context/feedback/memory-assistance-feedback-loop-stage-closure-decisions")
+def context_feedback_memory_assistance_operator_feedback_loop_stage_closure_decisions(
+    limit: int = 20,
+) -> dict[str, Any]:
+    safe_limit = max(1, min(int(limit), 100))
+    items = read_stage7_operator_stage_closure_decisions(limit=safe_limit)
+    total = stage7_operator_stage_closure_decision_count()
+    latest_receipt = items[-1] if items else {}
+    decision_counts = {"close_stage7": 0, "do_not_close_stage7": 0, "needs_more_evidence": 0}
+    for item in items:
+        decision = str(item.get("decision", "")).strip()
+        if decision in decision_counts:
+            decision_counts[decision] += 1
+    stage7_closed_by_receipt = bool(latest_receipt.get("stage7_closed_by_receipt"))
+    return {
+        "ok": True,
+        "kind": "francis.stage7.telemetry.stage7_operator_stage_closure_decision_receipts",
+        "stage": "Stage 7 / Telemetry MVP",
+        "source_id": "telemetry_context",
+        "status": "stage_closure_decision_readback_ready" if items else "empty",
+        "target": "stage7_telemetry_mvp",
+        "items": items,
+        "count": len(items),
+        "total": total,
+        "limit": safe_limit,
+        "latest_receipt": latest_receipt,
+        "latest_receipt_id": latest_receipt.get("receipt_id", ""),
+        "latest_decision": latest_receipt.get("decision", ""),
+        "latest_recorded_ts": latest_receipt.get("recorded_ts", 0),
+        "decision_counts": decision_counts,
+        "receipt_readback_ready": bool(latest_receipt),
+        "stage7_closed_by_receipt": stage7_closed_by_receipt,
+        "marks_runtime_stage_state": False,
+        "redacted": True,
+        "reads_receipts": True,
+        "writes_receipts": False,
+        "writes_memory": False,
+        "writes_feedback": False,
+        "sends_chat": False,
+        "calls_model": False,
+        "selects_tools": False,
+        "trains_model": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "stage_closure_decision_receipt_readback": True,
+            "receipt_readback_ready": bool(latest_receipt),
+            "redacted_before_storage": True,
+            "does_not_mutate_runtime_stage_state": True,
+            "does_not_write_receipts": True,
+            "does_not_write_memory": True,
+            "does_not_write_feedback": True,
+            "does_not_send_chat": True,
+            "does_not_call_model": True,
+            "does_not_select_tools": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": (
+            "stage7_ledger_closure" if stage7_closed_by_receipt else "stage7_operator_stage_closure_decision"
+        ),
+    }
+
+
+@router.post("/context/feedback/memory-assistance-feedback-loop-stage-closure-decision")
+def context_feedback_memory_assistance_operator_feedback_loop_stage_closure_decision_record(
+    payload: Stage7OperatorStageClosureDecisionIn,
+) -> dict[str, Any]:
+    route = "/telemetry/context/feedback/memory-assistance-feedback-loop-stage-closure-decision"
+    permission = _write_permission(
+        payload.actor,
+        required_scope=STAGE7_OPERATOR_STAGE_CLOSURE_WRITE_SCOPE,
+        route=route,
+        method="POST",
+    )
+    if not permission.allowed:
+        return _permission_denied(
+            permission,
+            source_id="telemetry_context",
+            required_scope=STAGE7_OPERATOR_STAGE_CLOSURE_WRITE_SCOPE,
+            next_step="configure_stage7_closure_write_scope_before_operator_stage_closure_decision",
+        )
+
+    review = context_feedback_memory_assistance_operator_feedback_loop_memory_contract_operator_surface_review(
+        limit=payload.limit
+    )
+    if not review.get("memory_contract_operator_surface_ready"):
+        return {
+            "ok": True,
+            "kind": "francis.stage7.telemetry.stage7_operator_stage_closure_decision.record",
+            "status": "awaiting_stage7_closure_readiness",
+            "source_id": "telemetry_context",
+            "target": "stage7_telemetry_mvp",
+            "review": review,
+            "receipt": None,
+            "receipt_id": "",
+            "writes_receipt": False,
+            "writes_memory": False,
+            "writes_feedback": False,
+            "sends_chat": False,
+            "calls_model": False,
+            "selects_tools": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+            "marks_runtime_stage_state": False,
+            "governance": {
+                "required_scope": STAGE7_OPERATOR_STAGE_CLOSURE_WRITE_SCOPE,
+                "explicit_operator_decision": True,
+                "does_not_record_when_review_not_ready": True,
+                "does_not_mutate_runtime_stage_state": True,
+                "grants_execution_authority": False,
+                "grants_mutation_authority": False,
+            },
+            "next_smallest_truthful_gap": "stage7_memory_contract_operator_surface_review",
+        }
+
+    receipt = record_stage7_operator_stage_closure_decision(
+        actor=payload.actor,
+        reason=payload.reason,
+        decision=payload.decision,
+        notes=payload.notes,
+        review=review,
+    )
+    return {
+        "ok": True,
+        "kind": "francis.stage7.telemetry.stage7_operator_stage_closure_decision.record",
+        "status": "recorded",
+        "source_id": "telemetry_context",
+        "target": "stage7_telemetry_mvp",
+        "review": review,
+        "receipt": receipt,
+        "receipt_id": receipt.get("receipt_id", ""),
+        "decision": receipt.get("decision", ""),
+        "stage7_closed_by_receipt": bool(receipt.get("stage7_closed_by_receipt")),
+        "writes_receipt": True,
+        "writes_memory": False,
+        "writes_feedback": False,
+        "sends_chat": False,
+        "calls_model": False,
+        "selects_tools": False,
+        "trains_model": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "marks_runtime_stage_state": False,
+        "governance": {
+            "required_scope": STAGE7_OPERATOR_STAGE_CLOSURE_WRITE_SCOPE,
+            "explicit_operator_decision": True,
+            "receipt_redacted_before_storage": True,
+            "telemetry_is_untrusted_input": True,
+            "does_not_mutate_runtime_stage_state": True,
+            "does_not_write_memory": True,
+            "does_not_write_feedback": True,
+            "does_not_send_chat": True,
+            "does_not_call_model": True,
+            "does_not_select_tools": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": (
+            "stage7_ledger_closure"
+            if receipt.get("stage7_closed_by_receipt")
+            else "stage7_operator_stage_closure_decision"
         ),
     }
 

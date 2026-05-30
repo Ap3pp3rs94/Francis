@@ -1287,6 +1287,36 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decis
     ).exists()
 
 
+def test_telemetry_context_feedback_memory_assistance_stage_closure_decision_denies_without_scope(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    actor = "test.telemetry.stage7.closure.denied"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps({actor: []}))
+
+    client = TestClient(create_app())
+    response = client.post(
+        "/telemetry/context/feedback/memory-assistance-feedback-loop-stage-closure-decision",
+        json={
+            "actor": actor,
+            "reason": "operator closes stage7",
+            "decision": "close_stage7",
+            "limit": 10,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["status"] == "denied"
+    assert body["governance"]["required_scope"] == "telemetry.stage7.closure.write"
+    assert body["governance"]["grants_execution_authority"] is False
+    assert body["governance"]["grants_mutation_authority"] is False
+    assert not (data_root / "logs" / "telemetry" / "stage7_operator_stage_closure_decisions.jsonl").exists()
+
+
 def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decision_records_receipt(
     monkeypatch,
     tmp_path: Path,
@@ -1304,6 +1334,7 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decis
                     "telemetry.ide_diagnostics.write",
                     "telemetry.context.feedback.write",
                     "memory.timeline.write",
+                    "telemetry.stage7.closure.write",
                 ]
             }
         ),
@@ -2164,6 +2195,74 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decis
     assert operator_surface["governance"]["does_not_mark_stage7_closed"] is True
     assert operator_surface["governance"]["operator_stage_closure_decision_required"] is True
     assert operator_surface["next_smallest_truthful_gap"] == "stage7_operator_stage_closure_decision"
+
+    stage_closure = client.post(
+        "/telemetry/context/feedback/memory-assistance-feedback-loop-stage-closure-decision",
+        json={
+            "actor": actor,
+            "reason": "operator closes stage7 token=stageclosuresecret123",
+            "decision": "close_stage7",
+            "notes": "stage closure looks ready token=stageclosurenotesecret123",
+            "limit": 10,
+        },
+    )
+    assert stage_closure.status_code == 200
+    stage_closure_body = stage_closure.json()
+    assert stage_closure_body["ok"] is True
+    assert stage_closure_body["status"] == "recorded"
+    assert stage_closure_body["writes_receipt"] is True
+    assert stage_closure_body["writes_memory"] is False
+    assert stage_closure_body["writes_feedback"] is False
+    assert stage_closure_body["sends_chat"] is False
+    assert stage_closure_body["calls_model"] is False
+    assert stage_closure_body["selects_tools"] is False
+    assert stage_closure_body["grants_execution_authority"] is False
+    assert stage_closure_body["grants_mutation_authority"] is False
+    assert stage_closure_body["marks_runtime_stage_state"] is False
+    assert stage_closure_body["decision"] == "close_stage7"
+    assert stage_closure_body["stage7_closed_by_receipt"] is True
+    assert stage_closure_body["next_smallest_truthful_gap"] == "stage7_ledger_closure"
+    stage_closure_receipt = stage_closure_body["receipt"]
+    assert stage_closure_receipt["kind"] == "francis.stage7.telemetry.stage7_operator_stage_closure_decision_receipt"
+    assert stage_closure_receipt["receipt_id"] == stage_closure_body["receipt_id"]
+    assert stage_closure_receipt["actor"] == actor
+    assert stage_closure_receipt["decision"] == "close_stage7"
+    assert stage_closure_receipt["memory_contract_operator_surface_ready"] is True
+    assert stage_closure_receipt["stage7_closed_by_receipt"] is True
+    assert stage_closure_receipt["marks_runtime_stage_state"] is False
+    assert stage_closure_receipt["governance"]["permission_scope"] == "telemetry.stage7.closure.write"
+    assert stage_closure_receipt["governance"]["explicit_operator_decision"] is True
+    assert stage_closure_receipt["governance"]["stage_closure_decision"] is True
+    assert stage_closure_receipt["governance"]["does_not_mutate_runtime_stage_state"] is True
+    assert stage_closure_receipt["governance"]["grants_execution_authority"] is False
+    assert stage_closure_receipt["governance"]["grants_mutation_authority"] is False
+    stage_closure_receipt_text = json.dumps(stage_closure_receipt, sort_keys=True)
+    assert "stageclosuresecret123" not in stage_closure_receipt_text
+    assert "stageclosurenotesecret123" not in stage_closure_receipt_text
+
+    stage_closure_readback = client.get(
+        "/telemetry/context/feedback/memory-assistance-feedback-loop-stage-closure-decisions?limit=10"
+    ).json()
+    assert stage_closure_readback["status"] == "stage_closure_decision_readback_ready"
+    assert stage_closure_readback["count"] == 1
+    assert stage_closure_readback["items"][0]["receipt_id"] == stage_closure_body["receipt_id"]
+    assert stage_closure_readback["latest_receipt"]["receipt_id"] == stage_closure_body["receipt_id"]
+    assert stage_closure_readback["latest_receipt_id"] == stage_closure_body["receipt_id"]
+    assert stage_closure_readback["latest_decision"] == "close_stage7"
+    assert stage_closure_readback["decision_counts"] == {
+        "close_stage7": 1,
+        "do_not_close_stage7": 0,
+        "needs_more_evidence": 0,
+    }
+    assert stage_closure_readback["receipt_readback_ready"] is True
+    assert stage_closure_readback["stage7_closed_by_receipt"] is True
+    assert stage_closure_readback["marks_runtime_stage_state"] is False
+    assert stage_closure_readback["writes_receipts"] is False
+    assert stage_closure_readback["writes_memory"] is False
+    assert stage_closure_readback["grants_execution_authority"] is False
+    assert stage_closure_readback["governance"]["stage_closure_decision_receipt_readback"] is True
+    assert stage_closure_readback["governance"]["does_not_mutate_runtime_stage_state"] is True
+    assert stage_closure_readback["next_smallest_truthful_gap"] == "stage7_ledger_closure"
 
 
 def test_telemetry_context_feedback_memory_quality_record_is_empty_without_events(
