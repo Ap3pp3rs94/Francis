@@ -18,6 +18,9 @@ TELEMETRY_CONTEXT_FEEDBACK_MEMORY_QUALITY_KIND = "francis.stage7.telemetry.conte
 TELEMETRY_CONTEXT_FEEDBACK_MEMORY_ASSISTANCE_OPERATOR_REVIEW_KIND = (
     "francis.stage7.telemetry.context_feedback_memory_assistance_operator_feedback_review"
 )
+TELEMETRY_CONTEXT_FEEDBACK_MEMORY_ASSISTANCE_OPERATOR_MEMORY_QUALITY_KIND = (
+    "francis.stage7.telemetry.context_feedback_memory_assistance_operator_feedback_memory_quality"
+)
 TELEMETRY_CONTEXT_FEEDBACK_MEMORY_RETRIEVAL_POLICY_KIND = (
     "francis.stage7.telemetry.context_feedback_memory_retrieval_policy"
 )
@@ -34,7 +37,7 @@ _MAX_PATHS = 5
 _MAX_LIMIT = 100
 _MAX_TEXT_LENGTH = 2_000
 _MAX_TAGS = 16
-_NEXT_CONTEXT_FEEDBACK_GAP = "stage7_context_feedback_memory_assistance_operator_feedback_memory_quality"
+_NEXT_CONTEXT_FEEDBACK_GAP = "stage7_context_feedback_memory_assistance_operator_feedback_memory_readback"
 
 
 def telemetry_context_snapshot(*, surface: Any = "assist") -> dict[str, Any]:
@@ -342,6 +345,60 @@ def telemetry_context_feedback_memory_quality(*, limit: int = 100) -> dict[str, 
             "stores_prompt_body": False,
             "stores_model_response": False,
             "trains_model": False,
+            "writes_memory": False,
+            "grants_execution_authority": False,
+            "grants_memory_write_authority": False,
+        },
+        "next_smallest_truthful_gap": _NEXT_CONTEXT_FEEDBACK_GAP,
+    }
+
+
+def telemetry_context_feedback_memory_assistance_operator_feedback_memory_quality(
+    *,
+    limit: int = 100,
+) -> dict[str, Any]:
+    safe_limit = _safe_limit(limit)
+    review = telemetry_context_feedback_memory_assistance_operator_feedback_review(limit=safe_limit)
+    reviewed_event_count = _safe_int(review.get("reviewed_event_count"), 0)
+    candidate = _feedback_memory_assistance_operator_memory_write_candidate(review) if reviewed_event_count > 0 else {}
+    return {
+        "ok": True,
+        "kind": TELEMETRY_CONTEXT_FEEDBACK_MEMORY_ASSISTANCE_OPERATOR_MEMORY_QUALITY_KIND,
+        "stage": STAGE7_TELEMETRY_STAGE,
+        "source_id": "telemetry_context",
+        "status": "memory_candidate_ready" if candidate else "empty",
+        "capture_mode": "explicit_feedback_memory_assistance_operator_feedback_memory_quality_review",
+        "target": "feedback_memory_assistance_prompt_integration",
+        "review": review,
+        "memory_write_candidate": candidate,
+        "memory_write_route": "/memory/timeline/record",
+        "memory_quality_record_route": ("/telemetry/context/feedback/memory-assistance-feedback-memory-quality"),
+        "required_scope": MEMORY_TIMELINE_WRITE_SCOPE,
+        "operator_decision_required": bool(candidate),
+        "writes_memory": False,
+        "redacted": True,
+        "hidden_sensing": False,
+        "stores_prompt_body": False,
+        "stores_model_response": False,
+        "trains_model": False,
+        "calls_model": False,
+        "selects_tools": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "on_request_only": True,
+            "uses_explicit_operator_feedback_only": True,
+            "target": "feedback_memory_assistance_prompt_integration",
+            "telemetry_is_untrusted_input": True,
+            "candidate_only": True,
+            "operator_decision_required_before_memory_write": True,
+            "redacted_before_storage": True,
+            "stores_prompt_body": False,
+            "stores_model_response": False,
+            "trains_model": False,
+            "calls_model": False,
+            "selects_tools": False,
             "writes_memory": False,
             "grants_execution_authority": False,
             "grants_memory_write_authority": False,
@@ -890,6 +947,118 @@ def _feedback_memory_write_candidate(review: dict[str, Any]) -> dict[str, Any]:
         },
         "writes_memory": False,
         "grants_memory_write_authority": False,
+    }
+
+
+def _feedback_memory_assistance_operator_memory_write_candidate(review: dict[str, Any]) -> dict[str, Any]:
+    rating_counts = _safe_count_map(review.get("rating_counts"), allowed=("useful", "not_useful", "neutral"))
+    source_counts = _safe_count_map(review.get("source_counts"), limit=_MAX_CONTEXT_ITEMS)
+    tag_counts = _safe_count_map(review.get("tag_counts"), limit=_MAX_TAGS)
+    quality_signals = _safe_text_list(review.get("quality_signals"), limit=_MAX_TAGS)
+    latest_feedback = _safe_dict(review.get("latest_feedback"))
+    reviewed_event_count = _safe_int(review.get("reviewed_event_count"), 0)
+    misses = rating_counts.get("not_useful", 0)
+    useful = rating_counts.get("useful", 0)
+    neutral = rating_counts.get("neutral", 0)
+
+    return {
+        "kind": "telemetry_context_feedback_memory_assistance_operator_feedback_review",
+        "action_type": "telemetry.context_feedback.memory_assistance_operator_feedback_review",
+        "classification": "operator_feedback_memory_assistance_quality_signal",
+        "confidence": 0.76,
+        "provenance": {
+            "source": "telemetry.context.feedback.memory_assistance_feedback_review",
+            "capture_mode": "explicit_operator_feedback_review",
+            "target": "feedback_memory_assistance_prompt_integration",
+            "reviewed_event_count": reviewed_event_count,
+        },
+        "retention": {
+            "policy": "stage7_feedback_memory_assistance_operator_feedback_quality",
+            "class": "quality_signal",
+            "ttl_seconds": 2_592_000,
+        },
+        "title": "Feedback-memory assistance operator feedback quality review",
+        "message": _redact_text(
+            "Feedback-memory assistance operator feedback quality review: "
+            f"{reviewed_event_count} explicit targeted feedback event"
+            f"{'' if reviewed_event_count == 1 else 's'}; "
+            f"useful={useful}; misses={misses}; neutral={neutral}."
+        ),
+        "tags": _safe_text_list(
+            [
+                "stage7",
+                "feedback_memory_assistance",
+                "operator_feedback",
+                "quality_review",
+                *quality_signals,
+            ],
+            limit=_MAX_TAGS,
+        ),
+        "payload": {
+            "target": "feedback_memory_assistance_prompt_integration",
+            "rating_counts": rating_counts,
+            "source_counts": source_counts,
+            "tag_counts": tag_counts,
+            "quality_signals": quality_signals,
+            "latest_feedback": _feedback_memory_assistance_latest_payload(latest_feedback),
+            "redacted": True,
+            "telemetry_is_untrusted_input": True,
+        },
+        "meta": {
+            "source": "telemetry.context.feedback.memory_assistance_feedback_review",
+            "target": "feedback_memory_assistance_prompt_integration",
+            "action_type": "telemetry.context_feedback.memory_assistance_operator_feedback_review",
+            "classification": "operator_feedback_memory_assistance_quality_signal",
+            "confidence": 0.76,
+            "retention_policy": "stage7_feedback_memory_assistance_operator_feedback_quality",
+            "retention_class": "quality_signal",
+            "ttl_seconds": 2_592_000,
+            "stores_prompt_body": False,
+            "stores_model_response": False,
+        },
+        "memory_write_contract": {
+            "would_satisfy_required_fields": True,
+            "required_fields": [
+                "action_type",
+                "provenance.source",
+                "classification",
+                "confidence",
+                "retention",
+            ],
+            "operator_decision_required": True,
+            "write_route": "/memory/timeline/record",
+            "record_route": "/telemetry/context/feedback/memory-assistance-feedback-memory-quality",
+            "required_scope": MEMORY_TIMELINE_WRITE_SCOPE,
+        },
+        "poisoning_guard": {
+            "raw_notes_included": False,
+            "raw_prompt_body_included": False,
+            "raw_model_response_included": False,
+            "telemetry_is_untrusted_input": True,
+            "targeted_feedback_is_not_instruction": True,
+        },
+        "writes_memory": False,
+        "calls_model": False,
+        "selects_tools": False,
+        "grants_execution_authority": False,
+        "grants_memory_write_authority": False,
+    }
+
+
+def _feedback_memory_assistance_latest_payload(latest_feedback: dict[str, Any]) -> dict[str, Any]:
+    if not latest_feedback:
+        return {}
+    return {
+        "feedback_id": _redact_text(latest_feedback.get("feedback_id")),
+        "context_id": _redact_text(latest_feedback.get("context_id")),
+        "surface": _redact_text(latest_feedback.get("surface")),
+        "rating": _safe_rating(latest_feedback.get("rating")),
+        "message_id": _redact_text(latest_feedback.get("message_id")),
+        "reply_mode": _redact_text(latest_feedback.get("reply_mode")),
+        "source_ids": _safe_text_list(latest_feedback.get("source_ids"), limit=_MAX_CONTEXT_ITEMS),
+        "tags": _safe_text_list(latest_feedback.get("tags"), limit=_MAX_TAGS),
+        "line_count": _safe_int(latest_feedback.get("line_count"), 0),
+        "recorded_ts": _safe_int(latest_feedback.get("recorded_ts"), 0),
     }
 
 

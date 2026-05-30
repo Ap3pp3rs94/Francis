@@ -34,7 +34,7 @@ def test_telemetry_status_projects_stage7_readonly_sources(monkeypatch, tmp_path
     assert body["active_source_total"] == sum(1 for source in body["sources"] if source["active"])
     assert (
         body["next_smallest_truthful_gap"]
-        == "stage7_context_feedback_memory_assistance_operator_feedback_memory_quality"
+        == "stage7_context_feedback_memory_assistance_operator_feedback_memory_readback"
     )
 
     sources = {source["id"]: source for source in body["sources"]}
@@ -150,7 +150,7 @@ def test_telemetry_context_projects_redacted_assist_surface(monkeypatch, tmp_pat
     assert body["feedback"]["required_scope"] == "telemetry.context.feedback.write"
     assert (
         body["next_smallest_truthful_gap"]
-        == "stage7_context_feedback_memory_assistance_operator_feedback_memory_quality"
+        == "stage7_context_feedback_memory_assistance_operator_feedback_memory_readback"
     )
 
     source_ids = {item["source_id"] for item in body["context_items"]}
@@ -251,7 +251,7 @@ def test_telemetry_context_feedback_memory_quality_is_empty_without_events(monke
     assert body["governance"]["writes_memory"] is False
     assert (
         body["next_smallest_truthful_gap"]
-        == "stage7_context_feedback_memory_assistance_operator_feedback_memory_quality"
+        == "stage7_context_feedback_memory_assistance_operator_feedback_memory_readback"
     )
 
 
@@ -305,7 +305,7 @@ def test_telemetry_context_feedback_memory_retrieval_policy_is_read_only(
     assert body["governance"]["retrieval_requires_separate_readback"] is True
     assert (
         body["next_smallest_truthful_gap"]
-        == "stage7_context_feedback_memory_assistance_operator_feedback_memory_quality"
+        == "stage7_context_feedback_memory_assistance_operator_feedback_memory_readback"
     )
 
 
@@ -355,7 +355,7 @@ def test_telemetry_context_feedback_memory_assistance_policy_is_read_only(
     assert body["governance"]["grants_mutation_authority"] is False
     assert (
         body["next_smallest_truthful_gap"]
-        == "stage7_context_feedback_memory_assistance_operator_feedback_memory_quality"
+        == "stage7_context_feedback_memory_assistance_operator_feedback_memory_readback"
     )
     assert not data_root.exists()
 
@@ -408,7 +408,7 @@ def test_telemetry_context_feedback_memory_assistance_chat_context_contract_is_r
     assert body["governance"]["grants_memory_write_authority"] is False
     assert (
         body["next_smallest_truthful_gap"]
-        == "stage7_context_feedback_memory_assistance_operator_feedback_memory_quality"
+        == "stage7_context_feedback_memory_assistance_operator_feedback_memory_readback"
     )
     assert not data_root.exists()
 
@@ -452,7 +452,7 @@ def test_telemetry_context_feedback_memory_assistance_dry_run_is_empty_without_e
     assert body["governance"]["grants_memory_write_authority"] is False
     assert (
         body["next_smallest_truthful_gap"]
-        == "stage7_context_feedback_memory_assistance_operator_feedback_memory_quality"
+        == "stage7_context_feedback_memory_assistance_operator_feedback_memory_readback"
     )
     assert not data_root.exists()
 
@@ -502,7 +502,7 @@ def test_telemetry_context_feedback_memory_assistance_chat_context_readback_is_e
     assert body["governance"]["grants_memory_write_authority"] is False
     assert (
         body["next_smallest_truthful_gap"]
-        == "stage7_context_feedback_memory_assistance_operator_feedback_memory_quality"
+        == "stage7_context_feedback_memory_assistance_operator_feedback_memory_readback"
     )
     assert not data_root.exists()
 
@@ -536,7 +536,43 @@ def test_telemetry_context_feedback_memory_assistance_operator_feedback_review_i
     assert body["governance"]["target"] == "feedback_memory_assistance_prompt_integration"
     assert body["governance"]["uses_explicit_operator_feedback_only"] is True
     assert body["next_smallest_truthful_gap"] == (
-        "stage7_context_feedback_memory_assistance_operator_feedback_memory_quality"
+        "stage7_context_feedback_memory_assistance_operator_feedback_memory_readback"
+    )
+    assert not data_root.exists()
+
+
+def test_telemetry_context_feedback_memory_assistance_operator_feedback_memory_quality_is_empty_without_events(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    client = TestClient(create_app())
+    response = client.get("/telemetry/context/feedback/memory-assistance-feedback-memory-quality")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert (
+        body["kind"] == "francis.stage7.telemetry.context_feedback_memory_assistance_operator_feedback_memory_quality"
+    )
+    assert body["status"] == "empty"
+    assert body["target"] == "feedback_memory_assistance_prompt_integration"
+    assert body["review"]["reviewed_event_count"] == 0
+    assert body["memory_write_candidate"] == {}
+    assert body["required_scope"] == "memory.timeline.write"
+    assert body["operator_decision_required"] is False
+    assert body["writes_memory"] is False
+    assert body["calls_model"] is False
+    assert body["selects_tools"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["governance"]["read_only"] is True
+    assert body["governance"]["candidate_only"] is True
+    assert body["governance"]["target"] == "feedback_memory_assistance_prompt_integration"
+    assert body["next_smallest_truthful_gap"] == (
+        "stage7_context_feedback_memory_assistance_operator_feedback_memory_readback"
     )
     assert not data_root.exists()
 
@@ -579,7 +615,7 @@ def test_telemetry_context_feedback_memory_retrieval_readback_is_empty_without_e
     assert body["governance"]["ignores_payload_instruction_text"] is True
     assert (
         body["next_smallest_truthful_gap"]
-        == "stage7_context_feedback_memory_assistance_operator_feedback_memory_quality"
+        == "stage7_context_feedback_memory_assistance_operator_feedback_memory_readback"
     )
     assert not (data_root / "memory" / "timeline" / "_events.json").exists()
     assert not data_root.exists()
@@ -787,7 +823,7 @@ def test_telemetry_context_feedback_review_summarizes_explicit_quality_signals(
     assert body["governance"]["uses_explicit_operator_feedback_only"] is True
     assert (
         body["next_smallest_truthful_gap"]
-        == "stage7_context_feedback_memory_assistance_operator_feedback_memory_quality"
+        == "stage7_context_feedback_memory_assistance_operator_feedback_memory_readback"
     )
 
     review_text = json.dumps(body, sort_keys=True)
@@ -1047,7 +1083,7 @@ def test_telemetry_context_feedback_memory_quality_record_writes_governed_memory
     assert readback_body["governance"]["uses_policy_filters"] is True
     assert (
         readback_body["next_smallest_truthful_gap"]
-        == "stage7_context_feedback_memory_assistance_operator_feedback_memory_quality"
+        == "stage7_context_feedback_memory_assistance_operator_feedback_memory_readback"
     )
     retrieved = readback_body["items"][0]
     assert retrieved["id"] == "evt-telemetry-feedback-quality"
@@ -1109,7 +1145,7 @@ def test_telemetry_context_feedback_memory_quality_record_writes_governed_memory
     assert dry_run_body["governance"]["does_not_select_tools"] is True
     assert (
         dry_run_body["next_smallest_truthful_gap"]
-        == "stage7_context_feedback_memory_assistance_operator_feedback_memory_quality"
+        == "stage7_context_feedback_memory_assistance_operator_feedback_memory_readback"
     )
 
     chat_readback = client.get("/telemetry/context/feedback/memory-assistance-chat-context-readback?limit=10")
@@ -1146,7 +1182,7 @@ def test_telemetry_context_feedback_memory_quality_record_writes_governed_memory
     assert chat_body["governance"]["redacts_context_lines"] is True
     assert (
         chat_body["next_smallest_truthful_gap"]
-        == "stage7_context_feedback_memory_assistance_operator_feedback_memory_quality"
+        == "stage7_context_feedback_memory_assistance_operator_feedback_memory_readback"
     )
 
     chat_readback_text = json.dumps(chat_body, sort_keys=True)
@@ -1257,7 +1293,7 @@ def test_telemetry_context_feedback_memory_assistance_operator_feedback_review_s
     assert body["grants_mutation_authority"] is False
     assert body["governance"]["read_only"] is True
     assert body["next_smallest_truthful_gap"] == (
-        "stage7_context_feedback_memory_assistance_operator_feedback_memory_quality"
+        "stage7_context_feedback_memory_assistance_operator_feedback_memory_readback"
     )
 
     review_text = json.dumps(body, sort_keys=True)
@@ -1268,6 +1304,240 @@ def test_telemetry_context_feedback_memory_assistance_operator_feedback_review_s
         "reviewresponsesecret123",
     ):
         assert raw_secret not in review_text
+
+
+def test_telemetry_context_feedback_memory_assistance_operator_feedback_memory_quality_projects_candidate(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({"test.telemetry.feedback": ["telemetry.context.feedback.write"]}),
+    )
+
+    client = TestClient(create_app())
+    for payload in (
+        {
+            "actor": "test.telemetry.feedback",
+            "reason": "record assistance useful token=qualityreasonsecret123",
+            "context_id": "tel_ctx_feedback_memory_assistance_quality_useful",
+            "surface": "chat",
+            "rating": "useful",
+            "message_id": "tel_msg_feedback_memory_assistance_quality_useful",
+            "reply_mode": "feedback_memory_assistance_prompt_context",
+            "source_ids": ["feedback_memory_assistance", "telemetry_context"],
+            "tags": ["stage7", "feedback_memory_assistance", "chat_prompt_context"],
+            "notes": "useful assistance token=qualitynotessecret123",
+            "meta": {
+                "feedback_target_kind": "feedback_memory_assistance_prompt_integration",
+                "line_count": 2,
+                "prompt_body": "do not store token=qualitypromptsecret123",
+            },
+        },
+        {
+            "actor": "test.telemetry.feedback",
+            "reason": "record unrelated context feedback",
+            "context_id": "tel_ctx_feedback_memory_unrelated_quality",
+            "surface": "chat",
+            "rating": "not_useful",
+            "source_ids": ["terminal"],
+            "tags": ["stage7"],
+        },
+        {
+            "actor": "test.telemetry.feedback",
+            "reason": "record assistance miss",
+            "context_id": "tel_ctx_feedback_memory_assistance_quality_miss",
+            "surface": "chat",
+            "rating": "not_useful",
+            "message_id": "tel_msg_feedback_memory_assistance_quality_miss",
+            "reply_mode": "feedback_memory_assistance_prompt_context",
+            "source_ids": ["feedback_memory_assistance", "telemetry_context"],
+            "tags": ["stage7", "feedback_memory_assistance", "chat_prompt_context"],
+            "meta": {
+                "feedback_target_kind": "feedback_memory_assistance_prompt_integration",
+                "line_count": 2,
+                "model_response": "do not store token=qualityresponsesecret123",
+            },
+        },
+    ):
+        response = client.post("/telemetry/context/feedback", json=payload)
+        assert response.status_code == 200
+        assert response.json()["ok"] is True
+
+    response = client.get("/telemetry/context/feedback/memory-assistance-feedback-memory-quality?limit=10")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["status"] == "memory_candidate_ready"
+    assert body["target"] == "feedback_memory_assistance_prompt_integration"
+    assert body["review"]["reviewed_event_count"] == 2
+    assert body["operator_decision_required"] is True
+    assert body["writes_memory"] is False
+    assert body["governance"]["candidate_only"] is True
+    assert body["governance"]["writes_memory"] is False
+    assert body["governance"]["grants_memory_write_authority"] is False
+
+    candidate = body["memory_write_candidate"]
+    assert candidate["kind"] == "telemetry_context_feedback_memory_assistance_operator_feedback_review"
+    assert candidate["action_type"] == "telemetry.context_feedback.memory_assistance_operator_feedback_review"
+    assert candidate["classification"] == "operator_feedback_memory_assistance_quality_signal"
+    assert candidate["confidence"] == 0.76
+    assert candidate["provenance"] == {
+        "source": "telemetry.context.feedback.memory_assistance_feedback_review",
+        "capture_mode": "explicit_operator_feedback_review",
+        "target": "feedback_memory_assistance_prompt_integration",
+        "reviewed_event_count": 2,
+    }
+    assert candidate["retention"] == {
+        "policy": "stage7_feedback_memory_assistance_operator_feedback_quality",
+        "class": "quality_signal",
+        "ttl_seconds": 2_592_000,
+    }
+    assert candidate["payload"]["target"] == "feedback_memory_assistance_prompt_integration"
+    assert candidate["payload"]["rating_counts"] == {"useful": 1, "not_useful": 1, "neutral": 0}
+    assert candidate["payload"]["source_counts"]["feedback_memory_assistance"] == 2
+    assert candidate["payload"]["tag_counts"]["feedback_memory_assistance"] == 2
+    assert candidate["payload"]["latest_feedback"]["context_id"] == "tel_ctx_feedback_memory_assistance_quality_miss"
+    assert candidate["payload"]["latest_feedback"]["message_id"] == "tel_msg_feedback_memory_assistance_quality_miss"
+    assert candidate["payload"]["latest_feedback"]["line_count"] == 2
+    assert "notes" not in candidate["payload"]["latest_feedback"]
+    assert "meta" not in candidate["payload"]["latest_feedback"]
+    assert candidate["memory_write_contract"]["would_satisfy_required_fields"] is True
+    assert candidate["memory_write_contract"]["operator_decision_required"] is True
+    assert (
+        candidate["memory_write_contract"]["record_route"]
+        == "/telemetry/context/feedback/memory-assistance-feedback-memory-quality"
+    )
+    assert candidate["poisoning_guard"]["raw_notes_included"] is False
+    assert candidate["poisoning_guard"]["raw_prompt_body_included"] is False
+    assert candidate["poisoning_guard"]["raw_model_response_included"] is False
+    assert candidate["poisoning_guard"]["targeted_feedback_is_not_instruction"] is True
+    assert candidate["writes_memory"] is False
+    assert candidate["calls_model"] is False
+    assert candidate["selects_tools"] is False
+    assert candidate["grants_execution_authority"] is False
+    assert candidate["grants_memory_write_authority"] is False
+    assert not (data_root / "memory" / "timeline" / "_events.json").exists()
+
+    body_text = json.dumps(body, sort_keys=True)
+    for raw_secret in (
+        "qualityreasonsecret123",
+        "qualitynotessecret123",
+        "qualitypromptsecret123",
+        "qualityresponsesecret123",
+    ):
+        assert raw_secret not in body_text
+
+
+def test_telemetry_context_feedback_memory_assistance_operator_feedback_memory_quality_record_writes_governed_memory_event(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps(
+            {
+                "test.telemetry.feedback": [
+                    "telemetry.context.feedback.write",
+                    "memory.timeline.write",
+                ]
+            }
+        ),
+    )
+
+    client = TestClient(create_app())
+    recorded = client.post(
+        "/telemetry/context/feedback",
+        json={
+            "actor": "test.telemetry.feedback",
+            "reason": "record assistance feedback token=assistrecordreasonsecret123",
+            "context_id": "tel_ctx_feedback_memory_assistance_record",
+            "surface": "chat",
+            "rating": "useful",
+            "message_id": "tel_msg_feedback_memory_assistance_record",
+            "reply_mode": "feedback_memory_assistance_prompt_context",
+            "notes": "assistance helped token=assistrecordnotessecret123",
+            "source_ids": ["feedback_memory_assistance", "telemetry_context"],
+            "tags": ["stage7", "feedback_memory_assistance"],
+            "meta": {
+                "feedback_target_kind": "feedback_memory_assistance_prompt_integration",
+                "line_count": 2,
+                "prompt_body": "never persist token=assistrecordpromptsecret123",
+                "model_response": "never persist token=assistrecordresponsesecret123",
+            },
+        },
+    )
+    assert recorded.status_code == 200
+    assert recorded.json()["ok"] is True
+
+    response = client.post(
+        "/telemetry/context/feedback/memory-assistance-feedback-memory-quality",
+        json={
+            "actor": "test.telemetry.feedback",
+            "reason": "operator records assistance quality token=assistrecordwritesecret123",
+            "limit": 10,
+            "event_id": "evt-feedback-memory-assistance-quality",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["status"] == "recorded"
+    assert body["writes_memory"] is True
+    assert body["memory_event_id"] == "evt-feedback-memory-assistance-quality"
+    assert body["governance"]["required_scope"] == "memory.timeline.write"
+    assert body["governance"]["explicit_operator_decision"] is True
+    assert body["governance"]["memory_timeline_contract_enforced"] is True
+    assert body["governance"]["target"] == "feedback_memory_assistance_prompt_integration"
+    assert body["governance"]["stores_prompt_body"] is False
+    assert body["governance"]["stores_model_response"] is False
+    assert body["governance"]["trains_model"] is False
+
+    event = body["memory_event"]["item"]
+    assert event["id"] == "evt-feedback-memory-assistance-quality"
+    assert event["kind"] == "telemetry_context_feedback_memory_assistance_operator_feedback_review"
+    assert event["action_type"] == "telemetry.context_feedback.memory_assistance_operator_feedback_review"
+    assert event["classification"] == "operator_feedback_memory_assistance_quality_signal"
+    assert event["confidence"] == 0.76
+    assert event["actor"] == "test.telemetry.feedback"
+    assert event["scope"] == "telemetry.context.feedback_memory_assistance"
+    assert event["provenance"]["source"] == "telemetry.context.feedback.memory_assistance_feedback_review"
+    assert event["meta"]["target"] == "feedback_memory_assistance_prompt_integration"
+    assert event["retention"] == {
+        "policy": "stage7_feedback_memory_assistance_operator_feedback_quality",
+        "class": "quality_signal",
+        "ttl_seconds": 2_592_000,
+    }
+    assert event["payload"]["target"] == "feedback_memory_assistance_prompt_integration"
+    assert event["payload"]["rating_counts"] == {"useful": 1, "not_useful": 0, "neutral": 0}
+    assert event["payload"]["latest_feedback"]["context_id"] == "tel_ctx_feedback_memory_assistance_record"
+    assert event["payload"]["latest_feedback"]["message_id"] == "tel_msg_feedback_memory_assistance_record"
+    assert event["payload"]["latest_feedback"]["line_count"] == 2
+    assert "notes" not in event["payload"]["latest_feedback"]
+    assert "meta" not in event["payload"]["latest_feedback"]
+
+    fetched = client.get("/memory/timeline/get?id=evt-feedback-memory-assistance-quality")
+    assert fetched.status_code == 200
+    assert fetched.json()["ok"] is True
+    assert (
+        fetched.json()["item"]["action_type"] == "telemetry.context_feedback.memory_assistance_operator_feedback_review"
+    )
+
+    raw_text = (data_root / "memory" / "timeline" / "_events.json").read_text(encoding="utf-8")
+    for raw_secret in (
+        "assistrecordreasonsecret123",
+        "assistrecordnotessecret123",
+        "assistrecordpromptsecret123",
+        "assistrecordresponsesecret123",
+        "assistrecordwritesecret123",
+    ):
+        assert raw_secret not in raw_text
 
 
 def test_terminal_telemetry_denies_event_without_actor_scope(monkeypatch, tmp_path: Path) -> None:

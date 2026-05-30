@@ -44892,6 +44892,59 @@ Latest validation for Stage 7 feedback memory assistance operator review:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-30 - Stage 7 feedback memory assistance operator feedback can become governed memory
+
+Roadmap area: Stage 7 / Telemetry MVP, feedback-memory assistance quality
+signals with governed memory-write readiness.
+
+Material change:
+
+- Telemetry now exposes a targeted memory-quality projection at
+  `/telemetry/context/feedback/memory-assistance-feedback-memory-quality`.
+- The projection summarizes only explicit operator feedback for
+  `feedback_memory_assistance_prompt_integration` and returns a bounded,
+  redacted memory-write candidate without writing memory by itself.
+- The governed POST route at the same path records the candidate into
+  `memory.timeline` only when the caller already has `memory.timeline.write`.
+- Memory events use action type
+  `telemetry.context_feedback.memory_assistance_operator_feedback_review`,
+  classification `operator_feedback_memory_assistance_quality_signal`, and
+  retention policy `stage7_feedback_memory_assistance_operator_feedback_quality`.
+- The route does not store raw notes, raw prompt bodies, raw model responses,
+  call a model, select tools, train, or grant execution/mutation authority.
+- The next smallest truthful gap advances to
+  `stage7_context_feedback_memory_assistance_operator_feedback_memory_readback`.
+
+Latest validation for Stage 7 feedback memory assistance memory-quality:
+
+- `python -m pytest tests/test_api_telemetry.py tests/test_api_chat.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  --tb=short`
+  Result: `passed; 39 passed`
+- `python -m mypy src/francis/telemetry/context.py
+  src/francis/api/routes/telemetry.py src/francis/telemetry/status.py
+  src/francis/api/routes/chat.py`
+  Result: `passed`
+- `python -m ruff check src/francis/telemetry/context.py
+  src/francis/api/routes/telemetry.py src/francis/telemetry/status.py
+  src/francis/api/routes/chat.py tests/test_api_telemetry.py
+  tests/test_api_chat.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/telemetry/context.py
+  src/francis/api/routes/telemetry.py src/francis/telemetry/status.py
+  src/francis/api/routes/chat.py tests/test_api_telemetry.py
+  tests/test_api_chat.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `node --test --experimental-strip-types src/telemetry/index.test.ts` in
+  `apps/chat_ui`
+  Result: `passed; 20 passed`
+- `npm run test` in `apps/chat_ui`
+  Result: `passed; 128 passed`
+- `npm run build` in `apps/chat_ui`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
