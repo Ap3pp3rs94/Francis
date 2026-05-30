@@ -5,12 +5,14 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from francis.chat.continuity.ledger import tail as conversation_ledger_tail
 from francis.api.routes.memory_timeline import list_timeline, record_memory_timeline_payload
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.redaction import redact_secret_text
 from francis.telemetry.context import (
     MEMORY_TIMELINE_WRITE_SCOPE,
     TELEMETRY_CONTEXT_FEEDBACK_WRITE_SCOPE,
+    read_telemetry_context_feedback,
     record_telemetry_context_feedback,
     telemetry_context_feedback_memory_assistance_chat_context_contract,
     telemetry_context_feedback_memory_assistance_operator_feedback_memory_quality,
@@ -785,6 +787,106 @@ def context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_aud
     }
 
 
+@router.get("/context/feedback/memory-assistance-feedback-loop-live-sample-readback")
+def context_feedback_memory_assistance_operator_feedback_loop_live_sample_readback(
+    limit: int = 20,
+) -> dict[str, Any]:
+    safe_limit = max(1, min(int(limit), 100))
+    acceptance = context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_audit(limit=safe_limit)
+    chat_evidence = _feedback_memory_assistance_live_chat_evidence(limit=safe_limit)
+    feedback_evidence = _feedback_memory_assistance_live_feedback_evidence(limit=safe_limit)
+    memory_evidence = _feedback_memory_assistance_live_memory_evidence(limit=safe_limit)
+    acceptance_ready = bool(acceptance.get("acceptance_ready"))
+    chat_ready = bool(chat_evidence)
+    feedback_ready = bool(feedback_evidence)
+    memory_ready = bool(memory_evidence)
+    live_sample_observed = acceptance_ready and chat_ready and feedback_ready and memory_ready
+    status = "live_sample_observed" if live_sample_observed else "awaiting_live_sample_evidence"
+    criteria = [
+        {
+            "id": "acceptance_audit_ready",
+            "ready": acceptance_ready,
+            "status": acceptance.get("status", "unknown"),
+            "evidence": {
+                "ready_count": _safe_count(acceptance.get("ready_count")),
+                "required_count": _safe_count(acceptance.get("required_count")),
+            },
+        },
+        {
+            "id": "chat_send_ledger_readback",
+            "ready": chat_ready,
+            "status": "observed" if chat_ready else "missing",
+            "evidence": chat_evidence,
+        },
+        {
+            "id": "operator_feedback_readback",
+            "ready": feedback_ready,
+            "status": "observed" if feedback_ready else "missing",
+            "evidence": feedback_evidence,
+        },
+        {
+            "id": "memory_quality_readback",
+            "ready": memory_ready,
+            "status": "observed" if memory_ready else "missing",
+            "evidence": memory_evidence,
+        },
+    ]
+    ready_count = sum(1 for criterion in criteria if criterion["ready"])
+
+    return {
+        "ok": True,
+        "kind": "francis.stage7.telemetry.context_feedback_memory_assistance_operator_feedback_loop_live_sample_readback",
+        "stage": "Stage 7 / Telemetry MVP",
+        "source_id": "telemetry_context",
+        "status": status,
+        "target": "feedback_memory_assistance_prompt_integration",
+        "live_sample_observed": live_sample_observed,
+        "criteria": criteria,
+        "ready_count": ready_count,
+        "required_count": len(criteria),
+        "acceptance": {
+            "route": "/telemetry/context/feedback/memory-assistance-feedback-loop-e2e-acceptance-audit",
+            "status": acceptance.get("status", "unknown"),
+            "acceptance_ready": acceptance_ready,
+        },
+        "chat": chat_evidence,
+        "feedback": feedback_evidence,
+        "memory": memory_evidence,
+        "reads_conversation_ledger": True,
+        "reads_feedback": True,
+        "reads_memory": True,
+        "writes_memory": False,
+        "writes_feedback": False,
+        "sends_chat": False,
+        "calls_model": False,
+        "selects_tools": False,
+        "trains_model": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "live_sample_readback_only": True,
+            "uses_existing_chat_route_evidence": True,
+            "uses_existing_feedback_route_evidence": True,
+            "uses_existing_memory_quality_route_evidence": True,
+            "telemetry_is_untrusted_input": True,
+            "ignores_payload_instruction_text": True,
+            "does_not_send_chat": True,
+            "does_not_write_feedback": True,
+            "does_not_write_memory": True,
+            "does_not_call_model": True,
+            "does_not_select_tools": True,
+            "grants_execution_authority": False,
+            "grants_memory_write_authority": False,
+        },
+        "next_smallest_truthful_gap": (
+            "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_review"
+            if live_sample_observed
+            else "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run"
+        ),
+    }
+
+
 @router.get("/context/feedback/memory-retrieval-readback")
 def context_feedback_memory_retrieval_readback(limit: int = 20) -> dict[str, Any]:
     safe_limit = max(1, min(int(limit), 100))
@@ -1138,6 +1240,99 @@ def _redacted_line_text(value: Any) -> str:
 
 def _bounded_chat_context_line(value: str) -> str:
     return value[:400]
+
+
+def _feedback_memory_assistance_live_chat_evidence(*, limit: int) -> dict[str, Any]:
+    for entry in reversed(conversation_ledger_tail(max(20, min(limit * 4, 200)))):
+        if not isinstance(entry, dict) or entry.get("role") != "assistant":
+            continue
+        meta_value = entry.get("meta")
+        meta: dict[str, Any] = meta_value if isinstance(meta_value, dict) else {}
+        telemetry_context_value = meta.get("telemetry_context")
+        telemetry_context: dict[str, Any] = telemetry_context_value if isinstance(telemetry_context_value, dict) else {}
+        assistance_value = telemetry_context.get("feedback_memory_assistance_prompt_integration")
+        assistance: dict[str, Any] = assistance_value if isinstance(assistance_value, dict) else {}
+        if not assistance or assistance.get("applies_to_chat_now") is not True:
+            continue
+        return {
+            "status": _redacted_line_text(assistance.get("status")) or "applied",
+            "target": _redacted_line_text(assistance.get("target")) or "telemetry_context.prompt_lines",
+            "source_route": _redacted_line_text(assistance.get("source_route")),
+            "line_count": _safe_count(assistance.get("line_count")),
+            "api_actor": _redacted_line_text(meta.get("api_actor")),
+            "mode": _redacted_line_text(meta.get("mode")),
+            "feedback_target_present": isinstance(assistance.get("feedback_target"), dict)
+            and bool(assistance.get("feedback_target")),
+            "telemetry_is_untrusted_input": bool(assistance.get("telemetry_is_untrusted_input")),
+            "redacted_context_lines": bool(assistance.get("redacted_context_lines")),
+        }
+    return {}
+
+
+def _feedback_memory_assistance_live_feedback_evidence(*, limit: int) -> dict[str, Any]:
+    for item in reversed(read_telemetry_context_feedback(limit=max(20, min(limit * 4, 200)))):
+        if not isinstance(item, dict) or not _is_feedback_memory_assistance_feedback_item(item):
+            continue
+        meta_value = item.get("meta")
+        meta: dict[str, Any] = meta_value if isinstance(meta_value, dict) else {}
+        return {
+            "feedback_id": _redacted_line_text(item.get("feedback_id")),
+            "context_id": _redacted_line_text(item.get("context_id")),
+            "message_id": _redacted_line_text(item.get("message_id")),
+            "surface": _redacted_line_text(item.get("surface")),
+            "rating": _redacted_line_text(item.get("rating")),
+            "reply_mode": _redacted_line_text(item.get("reply_mode")),
+            "source_ids": _safe_string_list(item.get("source_ids"), limit=5),
+            "tags": _safe_string_list(item.get("tags"), limit=8),
+            "target": _redacted_line_text(meta.get("feedback_target_kind"))
+            or "feedback_memory_assistance_prompt_integration",
+            "line_count": _safe_count(meta.get("line_count")),
+            "recorded_ts": _safe_count(item.get("recorded_ts")),
+        }
+    return {}
+
+
+def _feedback_memory_assistance_live_memory_evidence(*, limit: int) -> dict[str, Any]:
+    memory_readback = context_feedback_memory_assistance_operator_feedback_memory_readback(limit=limit)
+    raw_items_value = memory_readback.get("items")
+    raw_items: list[Any] = raw_items_value if isinstance(raw_items_value, list) else []
+    for item in raw_items:
+        if not isinstance(item, dict):
+            continue
+        payload_value = item.get("payload")
+        payload: dict[str, Any] = payload_value if isinstance(payload_value, dict) else {}
+        return {
+            "event_id": _redacted_line_text(item.get("id")),
+            "kind": _redacted_line_text(item.get("kind")),
+            "action_type": _redacted_line_text(item.get("action_type")),
+            "classification": _redacted_line_text(item.get("classification")),
+            "target": _redacted_line_text(payload.get("target")) or "feedback_memory_assistance_prompt_integration",
+            "reviewed_event_count": _safe_count(payload.get("reviewed_event_count")),
+            "rating_counts": payload.get("rating_counts") if isinstance(payload.get("rating_counts"), dict) else {},
+            "reads_memory": True,
+        }
+    return {}
+
+
+def _is_feedback_memory_assistance_feedback_item(item: dict[str, Any]) -> bool:
+    source_ids = set(_safe_string_list(item.get("source_ids"), limit=10))
+    tags = set(_safe_string_list(item.get("tags"), limit=10))
+    meta_value = item.get("meta")
+    meta: dict[str, Any] = meta_value if isinstance(meta_value, dict) else {}
+    reply_mode = _redacted_line_text(item.get("reply_mode"))
+    target_kind = _redacted_line_text(meta.get("feedback_target_kind"))
+    return (
+        "feedback_memory_assistance" in source_ids
+        or "feedback_memory_assistance" in tags
+        or reply_mode.startswith("feedback_memory_assistance_prompt_context")
+        or target_kind == "feedback_memory_assistance_prompt_integration"
+    )
+
+
+def _safe_string_list(value: Any, *, limit: int) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [_redacted_line_text(item) for item in value[:limit] if _redacted_line_text(item)]
 
 
 @router.get("/terminal/scope")

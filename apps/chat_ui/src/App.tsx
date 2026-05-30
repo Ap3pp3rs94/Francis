@@ -106,6 +106,7 @@ import {
   type TelemetryContextFeedbackMemoryAssistanceDryRun,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopE2eAcceptanceAudit,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopE2eSample,
+  type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleReadback,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackMemoryReadback,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackReview,
   type TelemetryContextFeedbackMemoryAssistancePolicy,
@@ -4168,6 +4169,16 @@ function SystemPanel(props: {
     telemetryFeedbackMemoryAssistanceAcceptanceAuditLoadedAt,
     setTelemetryFeedbackMemoryAssistanceAcceptanceAuditLoadedAt,
   ] = useState<number | null>(null);
+  const [telemetryFeedbackMemoryAssistanceLiveSampleReadback, setTelemetryFeedbackMemoryAssistanceLiveSampleReadback] =
+    useState<TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleReadback | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceLiveSampleReadbackError,
+    setTelemetryFeedbackMemoryAssistanceLiveSampleReadbackError,
+  ] = useState<string | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceLiveSampleReadbackLoadedAt,
+    setTelemetryFeedbackMemoryAssistanceLiveSampleReadbackLoadedAt,
+  ] = useState<number | null>(null);
   const [telemetryFeedbackMemoryQualityBusy, setTelemetryFeedbackMemoryQualityBusy] = useState(false);
   const [telemetryFeedbackMemoryQualityNotice, setTelemetryFeedbackMemoryQualityNotice] = useState<{
     tone: "info" | "error";
@@ -4376,6 +4387,7 @@ function SystemPanel(props: {
         nextTelemetryFeedbackMemoryAssistanceOperatorMemoryReadback,
         nextTelemetryFeedbackMemoryAssistanceLoopSample,
         nextTelemetryFeedbackMemoryAssistanceAcceptanceAudit,
+        nextTelemetryFeedbackMemoryAssistanceLiveSampleReadback,
       ] =
         await Promise.allSettled([
         client.getSystemInfo(),
@@ -4406,6 +4418,7 @@ function SystemPanel(props: {
         telemetryClient.getContextFeedbackMemoryAssistanceOperatorFeedbackMemoryReadback({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistanceOperatorFeedbackLoopE2eSample({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistanceOperatorFeedbackLoopE2eAcceptanceAudit({ limit: 20 }),
+        telemetryClient.getContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleReadback({ limit: 20 }),
       ]);
 
       const degradedFeeds: string[] = [];
@@ -4618,6 +4631,17 @@ function SystemPanel(props: {
           telemetryError(nextTelemetryFeedbackMemoryAssistanceAcceptanceAudit.reason),
         );
         degradedFeeds.push("telemetry feedback memory assistance e2e acceptance audit");
+      }
+
+      if (nextTelemetryFeedbackMemoryAssistanceLiveSampleReadback.status === "fulfilled") {
+        setTelemetryFeedbackMemoryAssistanceLiveSampleReadback(nextTelemetryFeedbackMemoryAssistanceLiveSampleReadback.value);
+        setTelemetryFeedbackMemoryAssistanceLiveSampleReadbackError(null);
+        setTelemetryFeedbackMemoryAssistanceLiveSampleReadbackLoadedAt(refreshStartedAt);
+      } else {
+        setTelemetryFeedbackMemoryAssistanceLiveSampleReadbackError(
+          telemetryError(nextTelemetryFeedbackMemoryAssistanceLiveSampleReadback.reason),
+        );
+        degradedFeeds.push("telemetry feedback memory assistance live sample readback");
       }
 
       if (degradedFeeds.length > 0) {
@@ -6533,6 +6557,25 @@ function SystemPanel(props: {
     : telemetryFeedbackMemoryAssistanceAcceptanceAudit
       ? `Feedback memory assistance acceptance ${telemetryFeedbackMemoryAssistanceAcceptanceAudit.status}; criteria ${telemetryFeedbackMemoryAssistanceAcceptanceAudit.ready_count}/${telemetryFeedbackMemoryAssistanceAcceptanceAudit.required_count}, sample ${safeString(telemetryFeedbackMemoryAssistanceAcceptanceAuditSample.status).trim() || "unknown"}.`
       : "Feedback memory assistance e2e acceptance audit has not loaded yet.";
+  const telemetryFeedbackMemoryAssistanceLiveSampleStatus =
+    safeString(telemetryFeedbackMemoryAssistanceLiveSampleReadback?.status).trim() ||
+    (telemetryFeedbackMemoryAssistanceLiveSampleReadbackError ? "unavailable" : "unloaded");
+  const telemetryFeedbackMemoryAssistanceLiveSampleTone = telemetryFeedbackMemoryAssistanceLiveSampleReadbackError
+    ? "blocked"
+    : telemetryFeedbackMemoryAssistanceLiveSampleReadback
+      ? telemetryFeedbackMemoryAssistanceLiveSampleReadback.live_sample_observed
+        ? "running"
+        : "dormant"
+      : "standby";
+  const telemetryFeedbackMemoryAssistanceLiveSampleChat = telemetryFeedbackMemoryAssistanceLiveSampleReadback?.chat ?? {};
+  const telemetryFeedbackMemoryAssistanceLiveSampleMemory =
+    telemetryFeedbackMemoryAssistanceLiveSampleReadback?.memory ?? {};
+  const telemetryFeedbackMemoryAssistanceLiveSampleDetail =
+    telemetryFeedbackMemoryAssistanceLiveSampleReadbackError
+      ? `Feedback memory assistance live sample readback could not refresh: ${telemetryFeedbackMemoryAssistanceLiveSampleReadbackError}`
+      : telemetryFeedbackMemoryAssistanceLiveSampleReadback
+        ? `Feedback memory assistance live sample ${telemetryFeedbackMemoryAssistanceLiveSampleReadback.status}; criteria ${telemetryFeedbackMemoryAssistanceLiveSampleReadback.ready_count}/${telemetryFeedbackMemoryAssistanceLiveSampleReadback.required_count}, chat ${safeString(telemetryFeedbackMemoryAssistanceLiveSampleChat.status).trim() || "missing"}.`
+        : "Feedback memory assistance live sample readback has not loaded yet.";
   const controlTone =
     controlModeId === "pilot"
       ? { bg: "#24160a", border: "#7a541b", color: "#ffd38a" }
@@ -11482,6 +11525,9 @@ function SystemPanel(props: {
             <span style={badgeStyle(telemetryFeedbackMemoryAssistanceAcceptanceAuditTone)}>
               Assist acceptance {telemetryFeedbackMemoryAssistanceAcceptanceAuditStatus}
             </span>
+            <span style={badgeStyle(telemetryFeedbackMemoryAssistanceLiveSampleTone)}>
+              Live sample {telemetryFeedbackMemoryAssistanceLiveSampleStatus}
+            </span>
             <span style={badgeStyle(continuation.tone)}>{continuation.label}</span>
           </div>
         </div>
@@ -11572,6 +11618,15 @@ function SystemPanel(props: {
           }}
         >
           {telemetryFeedbackMemoryAssistanceAcceptanceAuditDetail}
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            color: telemetryFeedbackMemoryAssistanceLiveSampleReadbackError ? "#ffcf9d" : THEME.text,
+            marginTop: 8,
+          }}
+        >
+          {telemetryFeedbackMemoryAssistanceLiveSampleDetail}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
           <button
@@ -11723,6 +11778,59 @@ function SystemPanel(props: {
               </div>
               <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
                 next <code>{telemetryFeedbackMemoryAssistanceAcceptanceAudit.next_smallest_truthful_gap || "live_sample_run"}</code>
+              </div>
+            </div>
+          </div>
+        ) : null}
+        {telemetryFeedbackMemoryAssistanceLiveSampleReadback ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+              gap: 8,
+              marginTop: 10,
+            }}
+          >
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Live sample</div>
+              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
+                {telemetryFeedbackMemoryAssistanceLiveSampleReadback.live_sample_observed ? "observed" : "waiting"}
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                criteria <code>{telemetryFeedbackMemoryAssistanceLiveSampleReadback.ready_count}</code>/
+                <code>{telemetryFeedbackMemoryAssistanceLiveSampleReadback.required_count}</code>
+                {" / "}chat <code>{safeString(telemetryFeedbackMemoryAssistanceLiveSampleChat.status).trim() || "missing"}</code>
+              </div>
+              {telemetryFeedbackMemoryAssistanceLiveSampleReadbackLoadedAt ? (
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                  Loaded {toLocaleTime(telemetryFeedbackMemoryAssistanceLiveSampleReadbackLoadedAt)}
+                </div>
+              ) : null}
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Live evidence</div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 6 }}>
+                ledger{" "}
+                <code>{telemetryFeedbackMemoryAssistanceLiveSampleReadback.reads_conversation_ledger ? "read" : "none"}</code>
+                {" / "}feedback <code>{telemetryFeedbackMemoryAssistanceLiveSampleReadback.reads_feedback ? "read" : "none"}</code>
+              </div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 4 }}>
+                memory <code>{safeString(telemetryFeedbackMemoryAssistanceLiveSampleMemory.event_id).trim() || "missing"}</code>
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                next <code>{telemetryFeedbackMemoryAssistanceLiveSampleReadback.next_smallest_truthful_gap || "live_sample_run"}</code>
+              </div>
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Readback guards</div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 6 }}>
+                sends <code>{telemetryFeedbackMemoryAssistanceLiveSampleReadback.sends_chat ? "true" : "false"}</code>
+                {" / "}feedback{" "}
+                <code>{telemetryFeedbackMemoryAssistanceLiveSampleReadback.writes_feedback ? "true" : "false"}</code>
+              </div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 4 }}>
+                memory <code>{telemetryFeedbackMemoryAssistanceLiveSampleReadback.writes_memory ? "true" : "false"}</code>
+                {" / "}model <code>{telemetryFeedbackMemoryAssistanceLiveSampleReadback.calls_model ? "true" : "false"}</code>
               </div>
             </div>
           </div>

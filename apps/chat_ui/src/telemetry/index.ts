@@ -345,6 +345,36 @@ export type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopE2eAccep
   next_smallest_truthful_gap: string;
 };
 
+export type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleReadback = {
+  ok: boolean;
+  kind: string;
+  stage: string;
+  source_id: string;
+  status: string;
+  target: string;
+  live_sample_observed: boolean;
+  criteria: Array<Record<string, unknown>>;
+  ready_count: number;
+  required_count: number;
+  acceptance: Record<string, unknown>;
+  chat: Record<string, unknown>;
+  feedback: Record<string, unknown>;
+  memory: Record<string, unknown>;
+  reads_conversation_ledger: boolean;
+  reads_feedback: boolean;
+  reads_memory: boolean;
+  writes_memory: boolean;
+  writes_feedback: boolean;
+  sends_chat: boolean;
+  calls_model: boolean;
+  selects_tools: boolean;
+  trains_model: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+  governance: Record<string, unknown>;
+  next_smallest_truthful_gap: string;
+};
+
 export type TelemetryContextFeedbackMemoryAssistancePolicy = {
   ok: boolean;
   kind: string;
@@ -757,6 +787,42 @@ export function parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoo
     ready_count: safeNumber(raw.ready_count, 0),
     required_count: safeNumber(raw.required_count, 0),
     sample: recordOrEmpty(raw.sample),
+    reads_memory: safeBoolean(raw.reads_memory, false),
+    writes_memory: safeBoolean(raw.writes_memory, true),
+    writes_feedback: safeBoolean(raw.writes_feedback, true),
+    sends_chat: safeBoolean(raw.sends_chat, true),
+    calls_model: safeBoolean(raw.calls_model, true),
+    selects_tools: safeBoolean(raw.selects_tools, true),
+    trains_model: safeBoolean(raw.trains_model, true),
+    grants_execution_authority: safeBoolean(raw.grants_execution_authority, true),
+    grants_mutation_authority: safeBoolean(raw.grants_mutation_authority, true),
+    governance: recordOrEmpty(raw.governance),
+    next_smallest_truthful_gap: safeString(raw.next_smallest_truthful_gap, ""),
+  };
+}
+
+export function parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleReadback(
+  value: unknown,
+): TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleReadback {
+  const raw = isRecord(value) ? value : {};
+
+  return {
+    ok: safeBoolean(raw.ok, false),
+    kind: safeString(raw.kind, ""),
+    stage: safeString(raw.stage, ""),
+    source_id: safeString(raw.source_id, ""),
+    status: safeString(raw.status, "unknown"),
+    target: safeString(raw.target, ""),
+    live_sample_observed: safeBoolean(raw.live_sample_observed, false),
+    criteria: Array.isArray(raw.criteria) ? raw.criteria.filter(isRecord) : [],
+    ready_count: safeNumber(raw.ready_count, 0),
+    required_count: safeNumber(raw.required_count, 0),
+    acceptance: recordOrEmpty(raw.acceptance),
+    chat: recordOrEmpty(raw.chat),
+    feedback: recordOrEmpty(raw.feedback),
+    memory: recordOrEmpty(raw.memory),
+    reads_conversation_ledger: safeBoolean(raw.reads_conversation_ledger, false),
+    reads_feedback: safeBoolean(raw.reads_feedback, false),
     reads_memory: safeBoolean(raw.reads_memory, false),
     writes_memory: safeBoolean(raw.writes_memory, true),
     writes_feedback: safeBoolean(raw.writes_feedback, true),
@@ -1334,6 +1400,48 @@ export class TelemetryClient {
     } catch (err) {
       throw new TelemetryApiError(
         "Telemetry feedback memory assistance e2e acceptance audit response was not valid JSON.",
+        { url, cause: err },
+      );
+    }
+  }
+
+  async getContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleReadback(opts?: {
+    limit?: number;
+    signal?: AbortSignal;
+  }): Promise<TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleReadback> {
+    const limit = clampLimit(opts?.limit, 20);
+    const url = this.url(
+      `/telemetry/context/feedback/memory-assistance-feedback-loop-live-sample-readback?limit=${limit}`,
+    );
+    let response: Response;
+    try {
+      response = await fetch(url, { method: "GET", signal: opts?.signal });
+    } catch (err) {
+      throw new TelemetryApiError("Telemetry feedback memory assistance live sample readback request failed.", {
+        url,
+        cause: err,
+      });
+    }
+
+    const text = await response.text();
+    if (!response.ok) {
+      throw new TelemetryApiError(
+        `HTTP ${response.status} for telemetry feedback memory assistance live sample readback request`,
+        {
+          status: response.status,
+          url,
+          bodySnippet: text.slice(0, 500),
+        },
+      );
+    }
+
+    try {
+      return parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleReadback(
+        text ? JSON.parse(text) : {},
+      );
+    } catch (err) {
+      throw new TelemetryApiError(
+        "Telemetry feedback memory assistance live sample readback response was not valid JSON.",
         { url, cause: err },
       );
     }
