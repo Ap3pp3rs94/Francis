@@ -3121,6 +3121,132 @@ def context_feedback_memory_assistance_operator_feedback_loop_memory_write_contr
     }
 
 
+@router.get("/context/feedback/memory-assistance-feedback-loop-memory-contract-operator-surface-review")
+def context_feedback_memory_assistance_operator_feedback_loop_memory_contract_operator_surface_review(
+    limit: int = 20,
+) -> dict[str, Any]:
+    safe_limit = max(1, min(int(limit), 100))
+    memory_contract = context_feedback_memory_assistance_operator_feedback_loop_memory_write_contract_hardening_review(
+        limit=safe_limit
+    )
+    visible_sections = [
+        {
+            "id": "memory_contract_status_badge",
+            "label": "Memory contract status badge",
+            "visible": True,
+            "source": "apps/chat_ui/src/App.tsx",
+            "evidence": "telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReviewStatus",
+        },
+        {
+            "id": "memory_contract_summary_detail",
+            "label": "Memory contract summary detail",
+            "visible": True,
+            "source": "apps/chat_ui/src/App.tsx",
+            "evidence": "telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReviewDetail",
+        },
+        {
+            "id": "memory_contract_review_card",
+            "label": "Memory contract review card",
+            "visible": True,
+            "source": "apps/chat_ui/src/App.tsx",
+            "evidence": "telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview",
+        },
+        {
+            "id": "required_memory_contract_fields",
+            "label": "Required memory contract fields",
+            "visible": bool(memory_contract.get("required_memory_contract_fields")),
+            "source": "apps/chat_ui/src/App.tsx",
+            "evidence": "required_memory_contract_fields",
+        },
+        {
+            "id": "memory_contract_criteria",
+            "label": "Memory contract criteria",
+            "visible": bool(memory_contract.get("criteria")),
+            "source": "apps/chat_ui/src/App.tsx",
+            "evidence": "criteria",
+        },
+        {
+            "id": "sample_denial_controls",
+            "label": "Sample denial controls",
+            "visible": bool(memory_contract.get("sample_denial_controls")),
+            "source": "apps/chat_ui/src/App.tsx",
+            "evidence": "sample_denial_controls",
+        },
+        {
+            "id": "non_authorizing_memory_contract_guards",
+            "label": "Non-authorizing memory contract guards",
+            "visible": (
+                memory_contract.get("writes_memory") is False
+                and memory_contract.get("writes_receipts") is False
+                and memory_contract.get("calls_model") is False
+                and memory_contract.get("grants_execution_authority") is False
+            ),
+            "source": "apps/chat_ui/src/App.tsx",
+            "evidence": "read_only_guard_fields",
+        },
+    ]
+    visible_section_count = sum(1 for section in visible_sections if section["visible"])
+    memory_contract_operator_surface_ready = bool(
+        memory_contract.get("memory_write_contract_hardening_ready") and visible_section_count == len(visible_sections)
+    )
+    return {
+        "ok": True,
+        "kind": "francis.stage7.telemetry.memory_contract_operator_surface_review",
+        "stage": "Stage 7 / Telemetry MVP",
+        "source_id": "telemetry_context",
+        "status": (
+            "memory_contract_operator_surface_ready"
+            if memory_contract_operator_surface_ready
+            else "awaiting_memory_contract_operator_surface"
+        ),
+        "target": "feedback_memory_assistance_prompt_integration",
+        "memory_contract_operator_surface_ready": memory_contract_operator_surface_ready,
+        "memory_write_contract_hardening_ready": bool(memory_contract.get("memory_write_contract_hardening_ready")),
+        "surface_id": "telemetry_continuation_panel",
+        "surface_label": "Telemetry & Continuation",
+        "surface_source": "apps/chat_ui/src/App.tsx",
+        "visible_section_count": visible_section_count,
+        "surface_section_count": len(visible_sections),
+        "visible_sections": visible_sections,
+        "memory_contract_review": memory_contract,
+        "read_only": True,
+        "writes_memory": False,
+        "writes_feedback": False,
+        "writes_receipts": False,
+        "mutates_prompt": False,
+        "sends_chat": False,
+        "calls_model": False,
+        "selects_tools": False,
+        "trains_model": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "marks_stage7_closed": False,
+        "requires_operator_stage_closure_decision": True,
+        "governance": {
+            "read_only": True,
+            "memory_contract_operator_surface_review": True,
+            "uses_memory_write_contract_hardening_review": True,
+            "bounded_to_telemetry_continuation_panel": True,
+            "telemetry_is_untrusted_input": True,
+            "does_not_write_memory": True,
+            "does_not_write_feedback": True,
+            "does_not_write_receipts": True,
+            "does_not_send_chat": True,
+            "does_not_call_model": True,
+            "does_not_select_tools": True,
+            "does_not_mark_stage7_closed": True,
+            "operator_stage_closure_decision_required": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": (
+            "stage7_operator_stage_closure_decision"
+            if memory_contract_operator_surface_ready
+            else "stage7_memory_contract_operator_surface_review"
+        ),
+    }
+
+
 @router.post("/context/feedback/memory-assistance-feedback-loop-live-sample-operator-decision")
 def context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_decision_record(
     payload: TelemetryContextFeedbackMemoryAssistanceLiveSampleOperatorDecisionIn,

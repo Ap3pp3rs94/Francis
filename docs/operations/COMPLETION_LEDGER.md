@@ -46212,6 +46212,41 @@ Latest validation for Stage 7 memory contract operator visibility:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-30 - Stage 7 memory contract operator surface is reviewed
+
+Roadmap area: Stage 7 / Telemetry MVP, truthful operator-surface review for the
+feedback-memory assistance memory contract.
+
+Material change:
+
+- Telemetry now exposes a read-only memory contract operator-surface review at
+  `/telemetry/context/feedback/memory-assistance-feedback-loop-memory-contract-operator-surface-review`.
+- The review consumes the memory write contract hardening review and verifies
+  the Telemetry & Continuation surface exposes the memory contract status badge,
+  summary detail, review card, required fields, criteria, denial controls, and
+  non-authorizing guard posture.
+- The review does not write memory, feedback, receipts, chat, prompts, model
+  calls, tools, or authority.
+- The review explicitly does not mark Stage 7 closed; when ready, it points the
+  next truthful gap at `stage7_operator_stage_closure_decision`.
+
+Latest validation for Stage 7 memory contract operator-surface review:
+
+- `python -m pytest tests/test_api_telemetry.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed`
+- `python -m mypy src/francis/api/routes/telemetry.py`
+  Result: `passed`
+- `python -m ruff check src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed; 3 files already formatted`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

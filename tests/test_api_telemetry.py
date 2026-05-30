@@ -2128,6 +2128,43 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decis
     assert memory_contract["governance"]["requires_retention"] is True
     assert memory_contract["next_smallest_truthful_gap"] == ("stage7_memory_contract_operator_surface_review")
 
+    operator_surface = client.get(
+        "/telemetry/context/feedback/memory-assistance-feedback-loop-memory-contract-operator-surface-review?limit=10"
+    ).json()
+    assert operator_surface["ok"] is True
+    assert operator_surface["kind"] == "francis.stage7.telemetry.memory_contract_operator_surface_review"
+    assert operator_surface["status"] == "memory_contract_operator_surface_ready"
+    assert operator_surface["memory_contract_operator_surface_ready"] is True
+    assert operator_surface["memory_write_contract_hardening_ready"] is True
+    assert operator_surface["surface_id"] == "telemetry_continuation_panel"
+    assert operator_surface["surface_label"] == "Telemetry & Continuation"
+    assert operator_surface["visible_section_count"] == operator_surface["surface_section_count"] == 7
+    assert [item["id"] for item in operator_surface["visible_sections"]] == [
+        "memory_contract_status_badge",
+        "memory_contract_summary_detail",
+        "memory_contract_review_card",
+        "required_memory_contract_fields",
+        "memory_contract_criteria",
+        "sample_denial_controls",
+        "non_authorizing_memory_contract_guards",
+    ]
+    assert all(item["visible"] is True for item in operator_surface["visible_sections"])
+    assert operator_surface["memory_contract_review"]["memory_write_contract_hardening_ready"] is True
+    assert operator_surface["read_only"] is True
+    assert operator_surface["writes_memory"] is False
+    assert operator_surface["writes_receipts"] is False
+    assert operator_surface["sends_chat"] is False
+    assert operator_surface["calls_model"] is False
+    assert operator_surface["selects_tools"] is False
+    assert operator_surface["grants_execution_authority"] is False
+    assert operator_surface["grants_mutation_authority"] is False
+    assert operator_surface["marks_stage7_closed"] is False
+    assert operator_surface["requires_operator_stage_closure_decision"] is True
+    assert operator_surface["governance"]["memory_contract_operator_surface_review"] is True
+    assert operator_surface["governance"]["does_not_mark_stage7_closed"] is True
+    assert operator_surface["governance"]["operator_stage_closure_decision_required"] is True
+    assert operator_surface["next_smallest_truthful_gap"] == "stage7_operator_stage_closure_decision"
+
 
 def test_telemetry_context_feedback_memory_quality_record_is_empty_without_events(
     monkeypatch,
