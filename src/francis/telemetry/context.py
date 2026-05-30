@@ -15,6 +15,9 @@ TELEMETRY_CONTEXT_FEEDBACK_KIND = "francis.stage7.telemetry.context_feedback"
 TELEMETRY_CONTEXT_FEEDBACK_EVENTS_KIND = "francis.stage7.telemetry.context_feedback_events"
 TELEMETRY_CONTEXT_FEEDBACK_REVIEW_KIND = "francis.stage7.telemetry.context_feedback_review"
 TELEMETRY_CONTEXT_FEEDBACK_MEMORY_QUALITY_KIND = "francis.stage7.telemetry.context_feedback_memory_quality"
+TELEMETRY_CONTEXT_FEEDBACK_MEMORY_ASSISTANCE_OPERATOR_REVIEW_KIND = (
+    "francis.stage7.telemetry.context_feedback_memory_assistance_operator_feedback_review"
+)
 TELEMETRY_CONTEXT_FEEDBACK_MEMORY_RETRIEVAL_POLICY_KIND = (
     "francis.stage7.telemetry.context_feedback_memory_retrieval_policy"
 )
@@ -31,7 +34,7 @@ _MAX_PATHS = 5
 _MAX_LIMIT = 100
 _MAX_TEXT_LENGTH = 2_000
 _MAX_TAGS = 16
-_NEXT_CONTEXT_FEEDBACK_GAP = "stage7_context_feedback_memory_assistance_operator_feedback_review"
+_NEXT_CONTEXT_FEEDBACK_GAP = "stage7_context_feedback_memory_assistance_operator_feedback_memory_quality"
 
 
 def telemetry_context_snapshot(*, surface: Any = "assist") -> dict[str, Any]:
@@ -230,6 +233,73 @@ def telemetry_context_feedback_review(*, limit: int = 100) -> dict[str, Any]:
             "trains_model": False,
             "grants_execution_authority": False,
             "grants_memory_write_authority": False,
+        },
+        "next_smallest_truthful_gap": _NEXT_CONTEXT_FEEDBACK_GAP,
+    }
+
+
+def telemetry_context_feedback_memory_assistance_operator_feedback_review(*, limit: int = 100) -> dict[str, Any]:
+    safe_limit = _safe_limit(limit)
+    items = [
+        item
+        for item in read_telemetry_context_feedback(limit=_MAX_LIMIT)
+        if _is_feedback_memory_assistance_feedback(item)
+    ][-safe_limit:]
+    rating_counts = {"useful": 0, "not_useful": 0, "neutral": 0}
+    source_counts: dict[str, int] = {}
+    tag_counts: dict[str, int] = {}
+    for item in items:
+        rating = _safe_rating(item.get("rating"))
+        rating_counts[rating] += 1
+        for source_id in _safe_text_list(item.get("source_ids"), limit=_MAX_CONTEXT_ITEMS):
+            source_counts[source_id] = source_counts.get(source_id, 0) + 1
+        for tag in _safe_text_list(item.get("tags"), limit=_MAX_TAGS):
+            tag_counts[tag] = tag_counts.get(tag, 0) + 1
+
+    return {
+        "ok": True,
+        "kind": TELEMETRY_CONTEXT_FEEDBACK_MEMORY_ASSISTANCE_OPERATOR_REVIEW_KIND,
+        "stage": STAGE7_TELEMETRY_STAGE,
+        "source_id": "telemetry_context",
+        "status": "review_ready" if items else "empty",
+        "capture_mode": "explicit_operator_feedback_review",
+        "target": "feedback_memory_assistance_prompt_integration",
+        "reviewed_event_count": len(items),
+        "limit": safe_limit,
+        "rating_counts": rating_counts,
+        "source_counts": _bounded_count_map(source_counts, limit=_MAX_CONTEXT_ITEMS),
+        "tag_counts": _bounded_count_map(tag_counts, limit=_MAX_TAGS),
+        "quality_signals": _feedback_memory_assistance_quality_signals(
+            rating_counts,
+            reviewed_event_count=len(items),
+        ),
+        "latest_feedback": _feedback_memory_assistance_review_item(items[-1]) if items else {},
+        "redacted": True,
+        "hidden_sensing": False,
+        "stores_prompt_body": False,
+        "stores_model_response": False,
+        "trains_model": False,
+        "writes_memory": False,
+        "calls_model": False,
+        "selects_tools": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "on_request_only": True,
+            "capture_mode": "explicit_operator_feedback",
+            "uses_explicit_operator_feedback_only": True,
+            "target": "feedback_memory_assistance_prompt_integration",
+            "redacted_before_storage": True,
+            "telemetry_is_untrusted_input": True,
+            "stores_prompt_body": False,
+            "stores_model_response": False,
+            "trains_model": False,
+            "writes_memory": False,
+            "calls_model": False,
+            "selects_tools": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
         },
         "next_smallest_truthful_gap": _NEXT_CONTEXT_FEEDBACK_GAP,
     }
@@ -680,6 +750,36 @@ def _feedback_review_item(item: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _feedback_memory_assistance_review_item(item: dict[str, Any]) -> dict[str, Any]:
+    meta = _safe_dict(item.get("meta"))
+    return {
+        "feedback_id": _redact_text(item.get("feedback_id")),
+        "context_id": _redact_text(item.get("context_id")),
+        "surface": _redact_text(item.get("surface")),
+        "rating": _safe_rating(item.get("rating")),
+        "message_id": _redact_text(item.get("message_id")),
+        "reply_mode": _redact_text(item.get("reply_mode")),
+        "source_ids": _safe_text_list(item.get("source_ids"), limit=_MAX_CONTEXT_ITEMS),
+        "tags": _safe_text_list(item.get("tags"), limit=_MAX_TAGS),
+        "line_count": _safe_int(meta.get("line_count"), 0),
+        "recorded_ts": _safe_int(item.get("recorded_ts"), 0),
+    }
+
+
+def _is_feedback_memory_assistance_feedback(item: dict[str, Any]) -> bool:
+    source_ids = set(_safe_text_list(item.get("source_ids"), limit=_MAX_CONTEXT_ITEMS))
+    tags = set(_safe_text_list(item.get("tags"), limit=_MAX_TAGS))
+    reply_mode = _redact_text(item.get("reply_mode")).strip()
+    meta = _safe_dict(item.get("meta"))
+    target_kind = _redact_text(meta.get("feedback_target_kind")).strip()
+    return (
+        "feedback_memory_assistance" in source_ids
+        or "feedback_memory_assistance" in tags
+        or reply_mode == "feedback_memory_assistance_prompt_context"
+        or target_kind == "feedback_memory_assistance_prompt_integration"
+    )
+
+
 def _feedback_quality_signals(rating_counts: dict[str, int], *, reviewed_event_count: int) -> list[str]:
     if reviewed_event_count <= 0:
         return ["no_explicit_context_feedback_recorded"]
@@ -690,6 +790,23 @@ def _feedback_quality_signals(rating_counts: dict[str, int], *, reviewed_event_c
         signals.append("operator_reported_context_misses")
     if rating_counts["neutral"] > 0:
         signals.append("operator_reported_neutral_context")
+    return signals
+
+
+def _feedback_memory_assistance_quality_signals(
+    rating_counts: dict[str, int],
+    *,
+    reviewed_event_count: int,
+) -> list[str]:
+    if reviewed_event_count <= 0:
+        return ["no_feedback_memory_assistance_operator_feedback_recorded"]
+    signals: list[str] = []
+    if rating_counts["useful"] > 0:
+        signals.append("operator_reported_useful_feedback_memory_assistance")
+    if rating_counts["not_useful"] > 0:
+        signals.append("operator_reported_feedback_memory_assistance_misses")
+    if rating_counts["neutral"] > 0:
+        signals.append("operator_reported_neutral_feedback_memory_assistance")
     return signals
 
 

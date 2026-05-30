@@ -104,6 +104,7 @@ import {
   type TelemetryContextFeedbackRecord,
   type TelemetryContextFeedbackMemoryAssistanceChatContextReadback,
   type TelemetryContextFeedbackMemoryAssistanceDryRun,
+  type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackReview,
   type TelemetryContextFeedbackMemoryAssistancePolicy,
   type TelemetryContextFeedbackMemoryQualityRecord,
   type TelemetryContextFeedbackMemoryRetrievalReadback,
@@ -4134,6 +4135,12 @@ function SystemPanel(props: {
   const [telemetryFeedbackMemoryAssistanceChatContextError, setTelemetryFeedbackMemoryAssistanceChatContextError] = useState<string | null>(null);
   const [telemetryFeedbackMemoryAssistanceChatContextLoadedAt, setTelemetryFeedbackMemoryAssistanceChatContextLoadedAt] =
     useState<number | null>(null);
+  const [telemetryFeedbackMemoryAssistanceOperatorReview, setTelemetryFeedbackMemoryAssistanceOperatorReview] =
+    useState<TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackReview | null>(null);
+  const [telemetryFeedbackMemoryAssistanceOperatorReviewError, setTelemetryFeedbackMemoryAssistanceOperatorReviewError] =
+    useState<string | null>(null);
+  const [telemetryFeedbackMemoryAssistanceOperatorReviewLoadedAt, setTelemetryFeedbackMemoryAssistanceOperatorReviewLoadedAt] =
+    useState<number | null>(null);
   const [telemetryFeedbackMemoryQualityBusy, setTelemetryFeedbackMemoryQualityBusy] = useState(false);
   const [telemetryFeedbackMemoryQualityNotice, setTelemetryFeedbackMemoryQualityNotice] = useState<{
     tone: "info" | "error";
@@ -4332,6 +4339,7 @@ function SystemPanel(props: {
         nextTelemetryFeedbackMemoryAssistancePolicy,
         nextTelemetryFeedbackMemoryAssistanceDryRun,
         nextTelemetryFeedbackMemoryAssistanceChatContext,
+        nextTelemetryFeedbackMemoryAssistanceOperatorReview,
       ] =
         await Promise.allSettled([
         client.getSystemInfo(),
@@ -4358,6 +4366,7 @@ function SystemPanel(props: {
         telemetryClient.getContextFeedbackMemoryAssistancePolicy(),
         telemetryClient.getContextFeedbackMemoryAssistanceDryRun({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistanceChatContextReadback({ limit: 20 }),
+        telemetryClient.getContextFeedbackMemoryAssistanceOperatorFeedbackReview({ limit: 25 }),
       ]);
 
       const degradedFeeds: string[] = [];
@@ -4524,6 +4533,17 @@ function SystemPanel(props: {
       } else {
         setTelemetryFeedbackMemoryAssistanceChatContextError(telemetryError(nextTelemetryFeedbackMemoryAssistanceChatContext.reason));
         degradedFeeds.push("telemetry feedback memory assistance chat context");
+      }
+
+      if (nextTelemetryFeedbackMemoryAssistanceOperatorReview.status === "fulfilled") {
+        setTelemetryFeedbackMemoryAssistanceOperatorReview(nextTelemetryFeedbackMemoryAssistanceOperatorReview.value);
+        setTelemetryFeedbackMemoryAssistanceOperatorReviewError(null);
+        setTelemetryFeedbackMemoryAssistanceOperatorReviewLoadedAt(refreshStartedAt);
+      } else {
+        setTelemetryFeedbackMemoryAssistanceOperatorReviewError(
+          telemetryError(nextTelemetryFeedbackMemoryAssistanceOperatorReview.reason),
+        );
+        degradedFeeds.push("telemetry feedback memory assistance operator review");
       }
 
       if (degradedFeeds.length > 0) {
@@ -6311,6 +6331,21 @@ function SystemPanel(props: {
       : "Feedback memory assistance chat-context readback has not loaded yet.";
   const latestTelemetryFeedbackMemoryChatContextLine =
     telemetryFeedbackMemoryAssistanceChatContext?.chat_context.lines[0] ?? "";
+  const telemetryFeedbackMemoryAssistanceOperatorReviewStatus =
+    safeString(telemetryFeedbackMemoryAssistanceOperatorReview?.status).trim() ||
+    (telemetryFeedbackMemoryAssistanceOperatorReviewError ? "unavailable" : "unloaded");
+  const telemetryFeedbackMemoryAssistanceOperatorReviewTone = telemetryFeedbackMemoryAssistanceOperatorReviewError
+    ? "blocked"
+    : telemetryFeedbackMemoryAssistanceOperatorReview
+      ? telemetryFeedbackMemoryAssistanceOperatorReview.reviewed_event_count > 0
+        ? "running"
+        : "dormant"
+      : "standby";
+  const telemetryFeedbackMemoryAssistanceOperatorReviewDetail = telemetryFeedbackMemoryAssistanceOperatorReviewError
+    ? `Feedback memory assistance operator review could not refresh: ${telemetryFeedbackMemoryAssistanceOperatorReviewError}`
+    : telemetryFeedbackMemoryAssistanceOperatorReview
+      ? `${telemetryFeedbackMemoryAssistanceOperatorReview.reviewed_event_count} targeted operator feedback event${telemetryFeedbackMemoryAssistanceOperatorReview.reviewed_event_count === 1 ? "" : "s"} reviewed; useful ${safeNumber(telemetryFeedbackMemoryAssistanceOperatorReview.rating_counts.useful, 0)}, missed ${safeNumber(telemetryFeedbackMemoryAssistanceOperatorReview.rating_counts.not_useful, 0)}, neutral ${safeNumber(telemetryFeedbackMemoryAssistanceOperatorReview.rating_counts.neutral, 0)}.`
+      : "Feedback memory assistance operator review has not loaded yet.";
   const controlTone =
     controlModeId === "pilot"
       ? { bg: "#24160a", border: "#7a541b", color: "#ffd38a" }
@@ -11248,6 +11283,9 @@ function SystemPanel(props: {
             <span style={badgeStyle(telemetryFeedbackMemoryAssistanceChatContextTone)}>
               Chat context {telemetryFeedbackMemoryAssistanceChatContextStatus}
             </span>
+            <span style={badgeStyle(telemetryFeedbackMemoryAssistanceOperatorReviewTone)}>
+              Assist review {telemetryFeedbackMemoryAssistanceOperatorReviewStatus}
+            </span>
             <span style={badgeStyle(continuation.tone)}>{continuation.label}</span>
           </div>
         </div>
@@ -11302,6 +11340,15 @@ function SystemPanel(props: {
           }}
         >
           {telemetryFeedbackMemoryAssistanceChatContextDetail}
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            color: telemetryFeedbackMemoryAssistanceOperatorReviewError ? "#ffcf9d" : THEME.text,
+            marginTop: 8,
+          }}
+        >
+          {telemetryFeedbackMemoryAssistanceOperatorReviewDetail}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
           <button

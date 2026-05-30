@@ -136,6 +136,44 @@ export type TelemetryContextFeedbackRecord = {
   governance: Record<string, unknown>;
 };
 
+export type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackReview = {
+  ok: boolean;
+  kind: string;
+  stage: string;
+  source_id: string;
+  status: string;
+  capture_mode: string;
+  target: string;
+  reviewed_event_count: number;
+  limit: number;
+  rating_counts: Record<string, number>;
+  source_counts: Record<string, number>;
+  tag_counts: Record<string, number>;
+  quality_signals: string[];
+  latest_feedback: {
+    feedback_id: string;
+    context_id: string;
+    surface: string;
+    rating: string;
+    message_id: string;
+    reply_mode: string;
+    source_ids: string[];
+    tags: string[];
+    line_count: number;
+    recorded_ts?: number;
+  } | null;
+  redacted: boolean;
+  hidden_sensing: boolean;
+  writes_memory: boolean;
+  calls_model: boolean;
+  selects_tools: boolean;
+  trains_model: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+  governance: Record<string, unknown>;
+  next_smallest_truthful_gap: string;
+};
+
 export type TelemetryContextFeedbackMemoryQualityRecord = {
   ok: boolean;
   kind: string;
@@ -351,6 +389,40 @@ export function parseTelemetryContextFeedbackRecord(value: unknown): TelemetryCo
     source_id: safeString(raw.source_id, ""),
     item,
     governance: recordOrEmpty(raw.governance),
+  };
+}
+
+export function parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackReview(
+  value: unknown,
+): TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackReview {
+  const raw = isRecord(value) ? value : {};
+  const latest = parseTelemetryContextFeedbackMemoryAssistanceLatestFeedback(raw.latest_feedback);
+
+  return {
+    ok: safeBoolean(raw.ok, false),
+    kind: safeString(raw.kind, ""),
+    stage: safeString(raw.stage, ""),
+    source_id: safeString(raw.source_id, ""),
+    status: safeString(raw.status, "unknown"),
+    capture_mode: safeString(raw.capture_mode, ""),
+    target: safeString(raw.target, ""),
+    reviewed_event_count: safeNumber(raw.reviewed_event_count, 0),
+    limit: safeNumber(raw.limit, 0),
+    rating_counts: numberRecord(raw.rating_counts),
+    source_counts: numberRecord(raw.source_counts),
+    tag_counts: numberRecord(raw.tag_counts),
+    quality_signals: safeStringArray(raw.quality_signals),
+    latest_feedback: latest,
+    redacted: safeBoolean(raw.redacted, false),
+    hidden_sensing: safeBoolean(raw.hidden_sensing, false),
+    writes_memory: safeBoolean(raw.writes_memory, true),
+    calls_model: safeBoolean(raw.calls_model, true),
+    selects_tools: safeBoolean(raw.selects_tools, true),
+    trains_model: safeBoolean(raw.trains_model, true),
+    grants_execution_authority: safeBoolean(raw.grants_execution_authority, true),
+    grants_mutation_authority: safeBoolean(raw.grants_mutation_authority, true),
+    governance: recordOrEmpty(raw.governance),
+    next_smallest_truthful_gap: safeString(raw.next_smallest_truthful_gap, ""),
   };
 }
 
@@ -613,6 +685,41 @@ export class TelemetryClient {
     }
   }
 
+  async getContextFeedbackMemoryAssistanceOperatorFeedbackReview(opts?: {
+    limit?: number;
+    signal?: AbortSignal;
+  }): Promise<TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackReview> {
+    const limit = clampLimit(opts?.limit, 100);
+    const url = this.url(`/telemetry/context/feedback/memory-assistance-feedback-review?limit=${limit}`);
+    let response: Response;
+    try {
+      response = await fetch(url, { method: "GET", signal: opts?.signal });
+    } catch (err) {
+      throw new TelemetryApiError("Telemetry feedback memory assistance operator review request failed.", {
+        url,
+        cause: err,
+      });
+    }
+
+    const text = await response.text();
+    if (!response.ok) {
+      throw new TelemetryApiError(`HTTP ${response.status} for telemetry feedback memory assistance operator review request`, {
+        status: response.status,
+        url,
+        bodySnippet: text.slice(0, 500),
+      });
+    }
+
+    try {
+      return parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackReview(text ? JSON.parse(text) : {});
+    } catch (err) {
+      throw new TelemetryApiError("Telemetry feedback memory assistance operator review response was not valid JSON.", {
+        url,
+        cause: err,
+      });
+    }
+  }
+
   async recordContextFeedbackMemoryQuality(opts: {
     actor: string;
     reason: string;
@@ -872,6 +979,35 @@ function parseTelemetryContextFeedbackReviewItem(
     recorded_ts: safeNumberOrUndefined(value.recorded_ts),
   };
   if (!item.feedback_id && !item.context_id && !item.surface && !item.rating && item.source_ids.length === 0 && item.tags.length === 0) {
+    return null;
+  }
+  return item;
+}
+
+function parseTelemetryContextFeedbackMemoryAssistanceLatestFeedback(
+  value: unknown,
+): TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackReview["latest_feedback"] {
+  if (!isRecord(value)) return null;
+  const item = {
+    feedback_id: safeString(value.feedback_id, ""),
+    context_id: safeString(value.context_id, ""),
+    surface: safeString(value.surface, ""),
+    rating: safeString(value.rating, ""),
+    message_id: safeString(value.message_id, ""),
+    reply_mode: safeString(value.reply_mode, ""),
+    source_ids: safeStringArray(value.source_ids),
+    tags: safeStringArray(value.tags),
+    line_count: safeNumber(value.line_count, 0),
+    recorded_ts: safeNumberOrUndefined(value.recorded_ts),
+  };
+  if (
+    !item.feedback_id &&
+    !item.context_id &&
+    !item.message_id &&
+    !item.reply_mode &&
+    item.source_ids.length === 0 &&
+    item.tags.length === 0
+  ) {
     return null;
   }
   return item;
