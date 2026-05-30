@@ -101,6 +101,7 @@ import type {
 import {
   TelemetryApiError,
   TelemetryClient,
+  type TelemetryContextFeedbackRecord,
   type TelemetryContextFeedbackMemoryAssistanceChatContextReadback,
   type TelemetryContextFeedbackMemoryAssistanceDryRun,
   type TelemetryContextFeedbackMemoryAssistancePolicy,
@@ -154,6 +155,20 @@ type ChatTelemetrySurface = {
   sourceTotal: number;
   eventCount: number;
   lines: string[];
+  feedbackMemoryAssistance?: ChatTelemetryFeedbackTarget;
+};
+
+type ChatTelemetryFeedbackTarget = {
+  status: string;
+  contextId: string;
+  messageId: string;
+  feedbackRoute: string;
+  requiredScope: string;
+  surface: string;
+  replyMode: string;
+  lineCount: number;
+  sourceIds: string[];
+  tags: string[];
 };
 
 type MissionMemoryReceiptLike = {
@@ -324,6 +339,15 @@ function safeNumber(v: unknown, fallback = 0): number {
   return typeof v === "number" && Number.isFinite(v) ? v : fallback;
 }
 
+function safeBoolean(v: unknown, fallback = false): boolean {
+  return typeof v === "boolean" ? v : fallback;
+}
+
+function safeStringArray(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return v.map((item) => safeString(item).trim()).filter(Boolean);
+}
+
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
 }
@@ -417,14 +441,38 @@ function chatTelemetrySurface(message: ChatMessage): ChatTelemetrySurface | null
   const governance = isRecord(context.governance) ? context.governance : {};
   if (context.hidden_sensing === true || governance.grants_execution_authority === true) return null;
   const rawLines = Array.isArray(context.prompt_lines) ? context.prompt_lines : [];
-  const lines = rawLines.map((line) => safeString(line).trim()).filter(Boolean).slice(0, 3);
+  const allLines = rawLines.map((line) => safeString(line).trim()).filter(Boolean);
+  const lines = allLines.slice(0, 3);
   const status = safeString(context.status).trim() || safeString(context.source_status).trim() || "telemetry_context";
+  const integration = isRecord(context.feedback_memory_assistance_prompt_integration)
+    ? context.feedback_memory_assistance_prompt_integration
+    : {};
+  const feedbackTargetRaw = isRecord(integration.feedback_target) ? integration.feedback_target : {};
+  const assistanceLines = allLines.filter((line) => line.startsWith("feedback_memory_assistance."));
+  const feedbackContextId = safeString(feedbackTargetRaw.context_id).trim();
+  const assistanceApplies = safeBoolean(integration.applies_to_chat_now, false) || assistanceLines.length > 0;
+  const feedbackMemoryAssistance =
+    assistanceApplies && feedbackContextId
+      ? {
+          status: safeString(integration.status).trim() || "applied",
+          contextId: feedbackContextId,
+          messageId: safeString(feedbackTargetRaw.message_id).trim() || feedbackContextId,
+          feedbackRoute: safeString(feedbackTargetRaw.feedback_route).trim() || "/telemetry/context/feedback",
+          requiredScope: safeString(feedbackTargetRaw.required_scope).trim() || "telemetry.context.feedback.write",
+          surface: safeString(feedbackTargetRaw.surface).trim() || "chat",
+          replyMode: safeString(feedbackTargetRaw.reply_mode).trim() || "feedback_memory_assistance_prompt_context",
+          lineCount: safeNumber(integration.line_count, assistanceLines.length),
+          sourceIds: safeStringArray(feedbackTargetRaw.source_ids),
+          tags: safeStringArray(feedbackTargetRaw.tags),
+        }
+      : undefined;
   return {
     status,
     activeSourceTotal: safeNumber(context.active_source_total, 0),
     sourceTotal: safeNumber(context.source_total, 0),
     eventCount: safeNumber(context.event_count, 0),
     lines,
+    feedbackMemoryAssistance,
   };
 }
 
@@ -1951,6 +1999,14 @@ function ChatPanel(props: {
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const lastSpokenIdx = useRef(-1);
+  const telemetryClient = useMemo(() => new TelemetryClient(normalizeBaseUrl(props.baseUrl)), [props.baseUrl]);
+  const [telemetryFeedbackBusyContextId, setTelemetryFeedbackBusyContextId] = useState("");
+  const [telemetryFeedbackNotice, setTelemetryFeedbackNotice] = useState<{
+    contextId: string;
+    tone: "info" | "error";
+    text: string;
+    record?: TelemetryContextFeedbackRecord;
+  } | null>(null);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -1966,6 +2022,61 @@ function ChatPanel(props: {
     lastSpokenIdx.current = lastIdx;
     props.onSpeak(msg.content);
   }, [props.messages, props.onSpeak]);
+
+  const recordChatTelemetryFeedback = useCallback(
+    async (target: ChatTelemetryFeedbackTarget, rating: "useful" | "not_useful" | "neutral") => {
+      if (!target.contextId) return;
+      setTelemetryFeedbackBusyContextId(target.contextId);
+      setTelemetryFeedbackNotice(null);
+      try {
+        const record = await telemetryClient.recordContextFeedback({
+          actor: "chat_ui.system",
+          reason: `record chat feedback memory assistance ${rating}`,
+          context_id: target.contextId,
+          surface: target.surface,
+          rating,
+          message_id: target.messageId,
+          reply_mode: target.replyMode,
+          source_ids: target.sourceIds.length ? target.sourceIds : ["feedback_memory_assistance", "telemetry_context"],
+          tags: target.tags.length ? target.tags : ["stage7", "feedback_memory_assistance", "chat_prompt_context"],
+          meta: {
+            feedback_target_kind: "feedback_memory_assistance_prompt_integration",
+            feedback_route: target.feedbackRoute,
+            required_scope: target.requiredScope,
+            line_count: target.lineCount,
+          },
+        });
+        if (!record.ok) {
+          const reason = safeString(record.governance.reason).trim() || record.status;
+          const requiredScope = safeString(record.governance.required_scope).trim() || target.requiredScope;
+          setTelemetryFeedbackNotice({
+            contextId: target.contextId,
+            tone: "error",
+            text: requiredScope ? `Feedback denied: ${reason}; required scope ${requiredScope}.` : `Feedback denied: ${reason}.`,
+            record,
+          });
+          return;
+        }
+        setTelemetryFeedbackNotice({
+          contextId: target.contextId,
+          tone: "info",
+          text: record.item?.feedback_id ? `Feedback recorded as ${record.item.feedback_id}.` : "Feedback recorded.",
+          record,
+        });
+      } catch (err) {
+        const text =
+          err instanceof TelemetryApiError
+            ? `${err.message}${err.status ? ` (HTTP ${err.status})` : ""}`
+            : err instanceof Error
+              ? err.message
+              : "Telemetry feedback request failed.";
+        setTelemetryFeedbackNotice({ contextId: target.contextId, tone: "error", text });
+      } finally {
+        setTelemetryFeedbackBusyContextId("");
+      }
+    },
+    [telemetryClient],
+  );
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16, height: "100%" }}>
@@ -1989,6 +2100,7 @@ function ChatPanel(props: {
           const isUser = m.role === "user";
           const missionSurface = isUser ? null : chatMissionSurface(m);
           const telemetrySurface = isUser ? null : chatTelemetrySurface(m);
+          const assistanceFeedback = telemetrySurface?.feedbackMemoryAssistance;
           return (
             <div
               key={`${m.role}-${idx}`}
@@ -2071,6 +2183,51 @@ function ChatPanel(props: {
                           <code>{line}</code>
                         </React.Fragment>
                       ))}
+                    </div>
+                  ) : null}
+                  {assistanceFeedback ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      <div style={{ fontSize: 11, color: THEME.muted }}>
+                        feedback memory <code>{assistanceFeedback.status}</code>
+                        {" / "}target <code>{assistanceFeedback.contextId}</code>
+                        {" / "}scope <code>{assistanceFeedback.requiredScope}</code>
+                      </div>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        <button
+                          type="button"
+                          style={{ ...buttonStyle, fontSize: 11, padding: "6px 8px" }}
+                          disabled={telemetryFeedbackBusyContextId === assistanceFeedback.contextId}
+                          onClick={() => void recordChatTelemetryFeedback(assistanceFeedback, "useful")}
+                        >
+                          Useful
+                        </button>
+                        <button
+                          type="button"
+                          style={{ ...buttonStyle, fontSize: 11, padding: "6px 8px" }}
+                          disabled={telemetryFeedbackBusyContextId === assistanceFeedback.contextId}
+                          onClick={() => void recordChatTelemetryFeedback(assistanceFeedback, "not_useful")}
+                        >
+                          Missed
+                        </button>
+                        <button
+                          type="button"
+                          style={{ ...buttonStyle, fontSize: 11, padding: "6px 8px" }}
+                          disabled={telemetryFeedbackBusyContextId === assistanceFeedback.contextId}
+                          onClick={() => void recordChatTelemetryFeedback(assistanceFeedback, "neutral")}
+                        >
+                          Neutral
+                        </button>
+                      </div>
+                      {telemetryFeedbackNotice?.contextId === assistanceFeedback.contextId ? (
+                        <div
+                          style={{
+                            fontSize: 11,
+                            color: telemetryFeedbackNotice.tone === "error" ? "#ffcf9d" : THEME.text,
+                          }}
+                        >
+                          {telemetryFeedbackNotice.text}
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
                 </div>

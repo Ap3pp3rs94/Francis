@@ -3,6 +3,7 @@ from __future__ import annotations
 from francis.api.errors import api_error_code, log_api_exception
 import json
 from typing import Any, cast
+import uuid
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
@@ -16,7 +17,7 @@ from francis.governance.redaction import redact_secret_text
 from francis.missions import runtime as mission_runtime
 from francis.missions import store as mission_store
 from francis.missions.store import MissionCreateRequest
-from francis.telemetry.context import telemetry_context_snapshot
+from francis.telemetry.context import TELEMETRY_CONTEXT_FEEDBACK_WRITE_SCOPE, telemetry_context_snapshot
 
 router = APIRouter()
 manager = ConnectionManager()
@@ -221,6 +222,27 @@ def _chat_feedback_memory_assistance_context(telemetry_context: dict[str, Any]) 
 
     context["prompt_lines"] = prompt_lines
     context["max_prompt_lines"] = min(len(prompt_lines), 7)
+    feedback_target: dict[str, object] = {}
+    if assistance_lines:
+        feedback_context_id = f"tel_ctx_feedback_memory_assistance_chat_{uuid.uuid4().hex[:16]}"
+        feedback_target = {
+            "feedback_route": "/telemetry/context/feedback",
+            "required_scope": TELEMETRY_CONTEXT_FEEDBACK_WRITE_SCOPE,
+            "actor": "chat_ui.system",
+            "context_id": feedback_context_id,
+            "message_id": feedback_context_id,
+            "surface": "chat",
+            "reply_mode": "feedback_memory_assistance_prompt_context",
+            "source_ids": ["feedback_memory_assistance", "telemetry_context"],
+            "tags": ["stage7", "feedback_memory_assistance", "chat_prompt_context"],
+            "ratings": ["useful", "not_useful", "neutral"],
+            "records_operator_feedback": True,
+            "writes_memory": False,
+            "calls_model": False,
+            "selects_tools": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        }
     context["feedback_memory_assistance_prompt_integration"] = {
         "status": "applied" if assistance_lines else "empty",
         "source_route": "/telemetry/context/feedback/memory-assistance-chat-context-readback",
@@ -238,7 +260,8 @@ def _chat_feedback_memory_assistance_context(telemetry_context: dict[str, Any]) 
         "trains_model": False,
         "grants_execution_authority": False,
         "grants_mutation_authority": False,
-        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop",
+        "feedback_target": feedback_target,
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_review",
     }
     return context
 

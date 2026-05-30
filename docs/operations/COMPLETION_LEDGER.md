@@ -44788,6 +44788,61 @@ Latest validation for Stage 7 feedback memory assistance prompt integration:
   `calls_model=false`, `mutates_prompt=false`, `selects_tools=false`,
   `next_smallest_truthful_gap=stage7_context_feedback_memory_assistance_operator_feedback_loop`.
 
+### 2026-05-30 - Stage 7 chat feedback memory assistance gains operator feedback loop
+
+Roadmap area: Stage 7 / Telemetry MVP, action-quality feedback for bounded
+feedback-memory assistance in chat.
+
+Material change:
+
+- `/chat/send` now returns a bounded `feedback_target` when
+  feedback-memory assistance context is applied to a chat reply. The target
+  names `/telemetry/context/feedback`, the required
+  `telemetry.context.feedback.write` scope, a per-response context/message id,
+  allowed ratings, source ids, and tags.
+- The chat UI now renders compact Useful, Missed, and Neutral feedback controls
+  only on assistant messages where `feedback_memory_assistance.*` prompt lines
+  were actually applied.
+- The UI feedback path posts to the existing governed
+  `/telemetry/context/feedback` route, records actor `chat_ui.system`, and
+  surfaces permission denial or receipt ids without writing memory, calling a
+  model, selecting tools, or granting execution/mutation authority.
+- `/telemetry/status`, `/telemetry/context`, feedback review, feedback
+  memory-quality, feedback memory-retrieval, feedback assistance policy,
+  feedback assistance dry run, the chat-context contract, the chat-context
+  readback, and `/chat/send` now advance their next smallest truthful gap to
+  `stage7_context_feedback_memory_assistance_operator_feedback_review`.
+
+Latest validation for Stage 7 feedback memory assistance operator feedback loop:
+
+- `python -m pytest tests/test_api_chat.py tests/test_api_telemetry.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 34 collected tests passed`
+- `python -m mypy src/francis/api/routes/chat.py
+  src/francis/api/routes/telemetry.py src/francis/telemetry/context.py
+  src/francis/telemetry/status.py`
+  Result: `passed`
+- `python -m ruff check src/francis/api/routes/chat.py
+  src/francis/api/routes/telemetry.py src/francis/telemetry/context.py
+  src/francis/telemetry/status.py tests/test_api_chat.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/chat.py
+  src/francis/api/routes/telemetry.py src/francis/telemetry/context.py
+  src/francis/telemetry/status.py tests/test_api_chat.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `node --test --experimental-strip-types src/telemetry/index.test.ts` in
+  `apps/chat_ui`
+  Result: `passed; 16 passed`
+- `npm run test` in `apps/chat_ui`
+  Result: `passed; 124 passed`
+- `npm run build` in `apps/chat_ui`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

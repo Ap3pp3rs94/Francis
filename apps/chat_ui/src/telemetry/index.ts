@@ -117,6 +117,25 @@ export type TelemetryContextFeedbackReview = {
   next_smallest_truthful_gap: string;
 };
 
+export type TelemetryContextFeedbackRecord = {
+  ok: boolean;
+  kind: string;
+  status: string;
+  source_id: string;
+  item: {
+    feedback_id: string;
+    context_id: string;
+    surface: string;
+    rating: string;
+    message_id: string;
+    reply_mode: string;
+    source_ids: string[];
+    tags: string[];
+    recorded_ts?: number;
+  } | null;
+  governance: Record<string, unknown>;
+};
+
 export type TelemetryContextFeedbackMemoryQualityRecord = {
   ok: boolean;
   kind: string;
@@ -304,6 +323,34 @@ export function parseTelemetryContextFeedbackReview(value: unknown): TelemetryCo
     grants_mutation_authority: safeBoolean(raw.grants_mutation_authority, true),
     governance: recordOrEmpty(raw.governance),
     next_smallest_truthful_gap: safeString(raw.next_smallest_truthful_gap, ""),
+  };
+}
+
+export function parseTelemetryContextFeedbackRecord(value: unknown): TelemetryContextFeedbackRecord {
+  const raw = isRecord(value) ? value : {};
+  const itemRaw = recordOrEmpty(raw.item);
+  const item =
+    Object.keys(itemRaw).length > 0
+      ? {
+          feedback_id: safeString(itemRaw.feedback_id, ""),
+          context_id: safeString(itemRaw.context_id, ""),
+          surface: safeString(itemRaw.surface, ""),
+          rating: safeString(itemRaw.rating, ""),
+          message_id: safeString(itemRaw.message_id, ""),
+          reply_mode: safeString(itemRaw.reply_mode, ""),
+          source_ids: safeStringArray(itemRaw.source_ids),
+          tags: safeStringArray(itemRaw.tags),
+          recorded_ts: safeNumberOrUndefined(itemRaw.recorded_ts),
+        }
+      : null;
+
+  return {
+    ok: safeBoolean(raw.ok, false),
+    kind: safeString(raw.kind, ""),
+    status: safeString(raw.status, "unknown"),
+    source_id: safeString(raw.source_id, ""),
+    item,
+    governance: recordOrEmpty(raw.governance),
   };
 }
 
@@ -506,6 +553,63 @@ export class TelemetryClient {
       return parseTelemetryContextFeedbackReview(text ? JSON.parse(text) : {});
     } catch (err) {
       throw new TelemetryApiError("Telemetry context feedback review response was not valid JSON.", { url, cause: err });
+    }
+  }
+
+  async recordContextFeedback(opts: {
+    actor: string;
+    reason: string;
+    rating: "useful" | "not_useful" | "neutral" | string;
+    context_id?: string;
+    surface?: string;
+    message_id?: string;
+    reply_mode?: string;
+    notes?: string;
+    source_ids?: string[];
+    tags?: string[];
+    meta?: Record<string, unknown>;
+    signal?: AbortSignal;
+  }): Promise<TelemetryContextFeedbackRecord> {
+    const url = this.url("/telemetry/context/feedback");
+    const body: Record<string, unknown> = {
+      actor: opts.actor,
+      reason: opts.reason,
+      rating: opts.rating,
+      surface: opts.surface ?? "chat",
+      source_ids: opts.source_ids ?? [],
+      tags: opts.tags ?? [],
+      meta: opts.meta ?? {},
+    };
+    if (opts.context_id?.trim()) body.context_id = opts.context_id.trim();
+    if (opts.message_id?.trim()) body.message_id = opts.message_id.trim();
+    if (opts.reply_mode?.trim()) body.reply_mode = opts.reply_mode.trim();
+    if (opts.notes?.trim()) body.notes = opts.notes.trim();
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+        signal: opts.signal,
+      });
+    } catch (err) {
+      throw new TelemetryApiError("Telemetry context feedback record request failed.", { url, cause: err });
+    }
+
+    const text = await response.text();
+    if (!response.ok) {
+      throw new TelemetryApiError(`HTTP ${response.status} for telemetry context feedback record request`, {
+        status: response.status,
+        url,
+        bodySnippet: text.slice(0, 500),
+      });
+    }
+
+    try {
+      return parseTelemetryContextFeedbackRecord(text ? JSON.parse(text) : {});
+    } catch (err) {
+      throw new TelemetryApiError("Telemetry context feedback record response was not valid JSON.", { url, cause: err });
     }
   }
 

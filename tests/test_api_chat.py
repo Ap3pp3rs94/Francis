@@ -485,10 +485,57 @@ def test_chat_send_applies_feedback_memory_assistance_context_to_llm_prompt(
     assert integration["selects_tools"] is False
     assert integration["grants_execution_authority"] is False
     assert (
-        integration["next_smallest_truthful_gap"] == "stage7_context_feedback_memory_assistance_operator_feedback_loop"
+        integration["next_smallest_truthful_gap"]
+        == "stage7_context_feedback_memory_assistance_operator_feedback_review"
     )
+    feedback_target = integration["feedback_target"]
+    assert feedback_target["feedback_route"] == "/telemetry/context/feedback"
+    assert feedback_target["required_scope"] == "telemetry.context.feedback.write"
+    assert feedback_target["actor"] == "chat_ui.system"
+    assert feedback_target["context_id"].startswith("tel_ctx_feedback_memory_assistance_chat_")
+    assert feedback_target["message_id"] == feedback_target["context_id"]
+    assert feedback_target["surface"] == "chat"
+    assert feedback_target["reply_mode"] == "feedback_memory_assistance_prompt_context"
+    assert feedback_target["source_ids"] == ["feedback_memory_assistance", "telemetry_context"]
+    assert "feedback_memory_assistance" in feedback_target["tags"]
+    assert feedback_target["ratings"] == ["useful", "not_useful", "neutral"]
+    assert feedback_target["writes_memory"] is False
+    assert feedback_target["calls_model"] is False
+    assert feedback_target["selects_tools"] is False
+    assert feedback_target["grants_execution_authority"] is False
+    assert feedback_target["grants_mutation_authority"] is False
     assert context["max_prompt_lines"] <= 7
     assert any(line.startswith("feedback_memory_assistance.summary:") for line in context["prompt_lines"])
+
+    feedback_recorded = client.post(
+        "/telemetry/context/feedback",
+        json={
+            "actor": "test.telemetry.feedback",
+            "reason": "operator marks chat feedback memory assistance useful",
+            "context_id": feedback_target["context_id"],
+            "surface": feedback_target["surface"],
+            "rating": "useful",
+            "message_id": feedback_target["message_id"],
+            "reply_mode": feedback_target["reply_mode"],
+            "source_ids": feedback_target["source_ids"],
+            "tags": feedback_target["tags"],
+            "meta": {
+                "feedback_target_kind": "feedback_memory_assistance_prompt_integration",
+                "line_count": integration["line_count"],
+            },
+        },
+    )
+    assert feedback_recorded.status_code == 200
+    feedback_body = feedback_recorded.json()
+    assert feedback_body["ok"] is True
+    assert feedback_body["kind"] == "francis.stage7.telemetry.context_feedback.recorded"
+    assert feedback_body["item"]["context_id"] == feedback_target["context_id"]
+    assert feedback_body["item"]["message_id"] == feedback_target["message_id"]
+    assert feedback_body["item"]["reply_mode"] == "feedback_memory_assistance_prompt_context"
+    assert feedback_body["item"]["rating"] == "useful"
+    assert feedback_body["item"]["source_ids"] == ["feedback_memory_assistance", "telemetry_context"]
+    assert feedback_body["governance"]["required_scope"] == "telemetry.context.feedback.write"
+    assert feedback_body["governance"]["grants_execution_authority"] is False
 
     ledger_text = (data_root / "conversations" / "ledger" / "ledger.jsonl").read_text(encoding="utf-8")
     ledger_entries = [json.loads(line) for line in ledger_text.splitlines()]
