@@ -106,6 +106,7 @@ import {
   type TelemetryContextFeedbackMemoryAssistanceDryRun,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopE2eAcceptanceAudit,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopE2eSample,
+  type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisionOutcomeReview,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisionReadback,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisionRecord,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorReview,
@@ -4208,6 +4209,21 @@ function SystemPanel(props: {
     telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionsLoadedAt,
     setTelemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionsLoadedAt,
   ] = useState<number | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReview,
+    setTelemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReview,
+  ] =
+    useState<TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisionOutcomeReview | null>(
+      null,
+    );
+  const [
+    telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReviewError,
+    setTelemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReviewError,
+  ] = useState<string | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReviewLoadedAt,
+    setTelemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReviewLoadedAt,
+  ] = useState<number | null>(null);
   const [telemetryFeedbackMemoryQualityBusy, setTelemetryFeedbackMemoryQualityBusy] = useState(false);
   const [telemetryFeedbackMemoryQualityNotice, setTelemetryFeedbackMemoryQualityNotice] = useState<{
     tone: "info" | "error";
@@ -4431,6 +4447,7 @@ function SystemPanel(props: {
         nextTelemetryFeedbackMemoryAssistanceLiveSampleReadback,
         nextTelemetryFeedbackMemoryAssistanceLiveSampleOperatorReview,
         nextTelemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions,
+        nextTelemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReview,
       ] =
         await Promise.allSettled([
         client.getSystemInfo(),
@@ -4464,6 +4481,9 @@ function SystemPanel(props: {
         telemetryClient.getContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleReadback({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorReview({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisions({ limit: 20 }),
+        telemetryClient.getContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisionOutcomeReview({
+          limit: 20,
+        }),
       ]);
 
       const degradedFeeds: string[] = [];
@@ -4713,6 +4733,19 @@ function SystemPanel(props: {
           telemetryError(nextTelemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions.reason),
         );
         degradedFeeds.push("telemetry feedback memory assistance live sample decision receipts");
+      }
+
+      if (nextTelemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReview.status === "fulfilled") {
+        setTelemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReview(
+          nextTelemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReview.value,
+        );
+        setTelemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReviewError(null);
+        setTelemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReviewLoadedAt(refreshStartedAt);
+      } else {
+        setTelemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReviewError(
+          telemetryError(nextTelemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReview.reason),
+        );
+        degradedFeeds.push("telemetry feedback memory assistance live sample decision outcome review");
       }
 
       if (degradedFeeds.length > 0) {
@@ -6748,6 +6781,23 @@ function SystemPanel(props: {
       : telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions
         ? `Feedback memory assistance decision receipts ${telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions.status}; total ${telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions.total}, latest ${telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions.latest_decision || "none"}.`
         : "Feedback memory assistance decision receipts have not loaded yet.";
+  const telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReviewStatus =
+    safeString(telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReview?.status).trim() ||
+    (telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReviewError ? "unavailable" : "unloaded");
+  const telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReviewTone =
+    telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReviewError
+      ? "blocked"
+      : telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReview
+        ? telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReview.outcome_review_ready
+          ? "running"
+          : "dormant"
+        : "standby";
+  const telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReviewDetail =
+    telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReviewError
+      ? `Feedback memory assistance decision outcome review could not refresh: ${telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReviewError}`
+      : telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReview
+        ? `Feedback memory assistance decision outcome ${telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReview.status}; outcome ${telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReview.outcome || "unknown"}, latest ${telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReview.latest_decision || "none"}.`
+        : "Feedback memory assistance decision outcome review has not loaded yet.";
   const telemetryFeedbackMemoryAssistanceLiveSampleDecisionCanRecord = Boolean(
     telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview?.operator_review_ready &&
       !telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionRecorded,
@@ -11710,6 +11760,9 @@ function SystemPanel(props: {
             <span style={badgeStyle(telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionsTone)}>
               Decision receipts {telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionsStatus}
             </span>
+            <span style={badgeStyle(telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReviewTone)}>
+              Decision outcome {telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReviewStatus}
+            </span>
             <span style={badgeStyle(continuation.tone)}>{continuation.label}</span>
           </div>
         </div>
@@ -11827,6 +11880,17 @@ function SystemPanel(props: {
           }}
         >
           {telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionsDetail}
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            color: telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReviewError
+              ? "#ffcf9d"
+              : THEME.text,
+            marginTop: 8,
+          }}
+        >
+          {telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReviewDetail}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
           <button
@@ -12185,6 +12249,86 @@ function SystemPanel(props: {
                 <code>{telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions.writes_memory ? "true" : "false"}</code>
                 {" / "}model{" "}
                 <code>{telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions.calls_model ? "true" : "false"}</code>
+              </div>
+            </div>
+          </div>
+        ) : null}
+        {telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReview ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+              gap: 8,
+              marginTop: 10,
+            }}
+          >
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Decision outcome</div>
+              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
+                {telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReview.latest_decision || "none"}
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                ready{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReview.outcome_review_ready
+                    ? "true"
+                    : "false"}
+                </code>
+                {" / "}receipt{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReview.latest_receipt_id || "missing"}
+                </code>
+              </div>
+              {telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReviewLoadedAt ? (
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                  Loaded {toLocaleTime(telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReviewLoadedAt)}
+                </div>
+              ) : null}
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Outcome review</div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 6 }}>
+                outcome{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReview.outcome ||
+                    "awaiting_operator_decision"}
+                </code>
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                next{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReview.next_smallest_truthful_gap ||
+                    "decision_outcome_review"}
+                </code>
+              </div>
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Outcome guards</div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 6 }}>
+                receipts{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReview.writes_receipts
+                    ? "write"
+                    : "read"}
+                </code>
+                {" / "}feedback{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReview.writes_feedback
+                    ? "true"
+                    : "false"}
+                </code>
+              </div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 4 }}>
+                memory{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReview.writes_memory
+                    ? "true"
+                    : "false"}
+                </code>
+                {" / "}model{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReview.calls_model ? "true" : "false"}
+                </code>
               </div>
             </div>
           </div>

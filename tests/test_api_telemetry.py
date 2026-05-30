@@ -1364,7 +1364,44 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decis
     assert review["latest_operator_decision"]["receipt_id"] == body["receipt_id"]
     assert review["operator_decision_total"] == 1
     assert review["next_smallest_truthful_gap"] == (
-        "stage7_context_feedback_memory_assistance_operator_feedback_loop_decision_receipt_readback"
+        "stage7_context_feedback_memory_assistance_operator_feedback_loop_decision_outcome_review"
+    )
+
+    outcome = client.get(
+        "/telemetry/context/feedback/memory-assistance-feedback-loop-live-sample-operator-decision-outcome-review"
+        "?limit=10"
+    ).json()
+    assert outcome["ok"] is True
+    assert (
+        outcome["kind"]
+        == "francis.stage7.telemetry.context_feedback_memory_assistance_live_sample_operator_decision_outcome_review"
+    )
+    assert outcome["status"] == "outcome_review_ready"
+    assert outcome["outcome"] == "operator_accepted_current_live_sample"
+    assert outcome["outcome_review_ready"] is True
+    assert outcome["latest_decision"] == "accepted"
+    assert outcome["latest_receipt_id"] == body["receipt_id"]
+    assert outcome["review"] == {
+        "accepted_current_sample": True,
+        "rejected_current_sample": False,
+        "needs_more_evidence": False,
+        "receipt_readback_ready": True,
+        "receipt_redacted": True,
+    }
+    assert outcome["receipt_readback"]["latest_receipt_id"] == body["receipt_id"]
+    assert outcome["writes_receipts"] is False
+    assert outcome["writes_memory"] is False
+    assert outcome["writes_feedback"] is False
+    assert outcome["sends_chat"] is False
+    assert outcome["calls_model"] is False
+    assert outcome["selects_tools"] is False
+    assert outcome["grants_execution_authority"] is False
+    assert outcome["grants_mutation_authority"] is False
+    assert outcome["governance"]["read_only"] is True
+    assert outcome["governance"]["operator_decision_outcome_review"] is True
+    assert outcome["governance"]["does_not_execute_decision"] is True
+    assert outcome["next_smallest_truthful_gap"] == (
+        "stage7_context_feedback_memory_assistance_terminal_context_signal"
     )
 
 

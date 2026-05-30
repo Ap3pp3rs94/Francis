@@ -1017,7 +1017,7 @@ def context_feedback_memory_assistance_operator_feedback_loop_live_sample_operat
             "grants_memory_write_authority": False,
         },
         "next_smallest_truthful_gap": (
-            "stage7_context_feedback_memory_assistance_operator_feedback_loop_decision_receipt_readback"
+            "stage7_context_feedback_memory_assistance_operator_feedback_loop_decision_outcome_review"
             if decision_recorded
             else (
                 "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_decision"
@@ -1085,6 +1085,78 @@ def context_feedback_memory_assistance_operator_feedback_loop_live_sample_operat
             "stage7_context_feedback_memory_assistance_operator_feedback_loop_decision_outcome_review"
             if readback_ready
             else "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_decision"
+        ),
+    }
+
+
+@router.get("/context/feedback/memory-assistance-feedback-loop-live-sample-operator-decision-outcome-review")
+def context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_decision_outcome_review(
+    limit: int = 20,
+) -> dict[str, Any]:
+    safe_limit = max(1, min(int(limit), 100))
+    receipt_readback = context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_decisions(
+        limit=safe_limit
+    )
+    latest_receipt_value = receipt_readback.get("latest_receipt")
+    latest_receipt: dict[str, Any] = latest_receipt_value if isinstance(latest_receipt_value, dict) else {}
+    latest_decision = str(receipt_readback.get("latest_decision", "")).strip()
+    receipt_ready = bool(receipt_readback.get("receipt_readback_ready")) and bool(latest_receipt)
+    outcome_by_decision = {
+        "accepted": "operator_accepted_current_live_sample",
+        "rejected": "operator_rejected_current_live_sample",
+        "needs_more_evidence": "operator_requested_more_evidence",
+    }
+    outcome = outcome_by_decision.get(latest_decision, "awaiting_operator_decision")
+    outcome_review_ready = receipt_ready and latest_decision in outcome_by_decision
+    return {
+        "ok": True,
+        "kind": "francis.stage7.telemetry.context_feedback_memory_assistance_live_sample_operator_decision_outcome_review",
+        "stage": "Stage 7 / Telemetry MVP",
+        "source_id": "telemetry_context",
+        "status": "outcome_review_ready" if outcome_review_ready else "awaiting_decision_receipt_readback",
+        "target": "feedback_memory_assistance_prompt_integration",
+        "outcome": outcome,
+        "outcome_review_ready": outcome_review_ready,
+        "latest_decision": latest_decision,
+        "latest_receipt_id": receipt_readback.get("latest_receipt_id", ""),
+        "latest_recorded_ts": receipt_readback.get("latest_recorded_ts", 0),
+        "receipt_readback": receipt_readback,
+        "decision_counts": receipt_readback.get("decision_counts", {}),
+        "review": {
+            "accepted_current_sample": latest_decision == "accepted",
+            "rejected_current_sample": latest_decision == "rejected",
+            "needs_more_evidence": latest_decision == "needs_more_evidence",
+            "receipt_readback_ready": receipt_ready,
+            "receipt_redacted": bool(receipt_readback.get("redacted")),
+        },
+        "reads_receipts": True,
+        "writes_receipts": False,
+        "writes_memory": False,
+        "writes_feedback": False,
+        "sends_chat": False,
+        "calls_model": False,
+        "selects_tools": False,
+        "trains_model": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "operator_decision_outcome_review": True,
+            "uses_decision_receipt_readback": True,
+            "telemetry_is_untrusted_input": True,
+            "receipt_redacted_before_review": bool(receipt_readback.get("redacted")),
+            "does_not_execute_decision": True,
+            "does_not_write_memory": True,
+            "does_not_write_feedback": True,
+            "does_not_send_chat": True,
+            "does_not_call_model": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": (
+            "stage7_context_feedback_memory_assistance_terminal_context_signal"
+            if outcome_review_ready
+            else "stage7_context_feedback_memory_assistance_operator_feedback_loop_decision_receipt_readback"
         ),
     }
 

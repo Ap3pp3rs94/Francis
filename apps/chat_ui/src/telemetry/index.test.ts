@@ -9,6 +9,7 @@ import {
   parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopAudit,
   parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopE2eAcceptanceAudit,
   parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopE2eSample,
+  parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisionOutcomeReview,
   parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisionReadback,
   parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisionRecord,
   parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorReview,
@@ -1463,6 +1464,103 @@ test("TelemetryClient requests the live sample operator decision receipt readbac
     assert.deepEqual(requests, [
       {
         path: "/telemetry/context/feedback/memory-assistance-feedback-loop-live-sample-operator-decisions",
+        search: "?limit=30",
+        method: "GET",
+      },
+    ]);
+  } finally {
+    restore();
+  }
+});
+
+test("parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisionOutcomeReview preserves outcome guards", () => {
+  const review = parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisionOutcomeReview({
+    ok: true,
+    kind: "francis.stage7.telemetry.context_feedback_memory_assistance_live_sample_operator_decision_outcome_review",
+    stage: "Stage 7 / Telemetry MVP",
+    source_id: "telemetry_context",
+    status: "outcome_review_ready",
+    target: "feedback_memory_assistance_prompt_integration",
+    outcome: "operator_accepted_current_live_sample",
+    outcome_review_ready: true,
+    latest_decision: "accepted",
+    latest_receipt_id: "tel_fma_live_decision_123",
+    latest_recorded_ts: 123,
+    receipt_readback: { latest_receipt_id: "tel_fma_live_decision_123" },
+    decision_counts: { accepted: 1, rejected: 0, needs_more_evidence: 0 },
+    review: { accepted_current_sample: true, receipt_readback_ready: true },
+    reads_receipts: true,
+    writes_receipts: false,
+    writes_memory: false,
+    writes_feedback: false,
+    sends_chat: false,
+    calls_model: false,
+    selects_tools: false,
+    trains_model: false,
+    grants_execution_authority: false,
+    grants_mutation_authority: false,
+    governance: { read_only: true, operator_decision_outcome_review: true },
+    next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_terminal_context_signal",
+  });
+
+  assert.equal(review.status, "outcome_review_ready");
+  assert.equal(review.outcome, "operator_accepted_current_live_sample");
+  assert.equal(review.outcome_review_ready, true);
+  assert.equal(review.latest_receipt_id, "tel_fma_live_decision_123");
+  assert.equal(review.decision_counts.accepted, 1);
+  assert.equal(review.writes_receipts, false);
+  assert.equal(review.writes_memory, false);
+  assert.equal(review.sends_chat, false);
+  assert.equal(review.grants_execution_authority, false);
+  assert.equal(review.governance.operator_decision_outcome_review, true);
+});
+
+test("TelemetryClient requests the live sample operator decision outcome review endpoint", async () => {
+  const requests: Array<{ path: string; search: string; method: string }> = [];
+  const restore = installFetch((url, init) => {
+    const parsed = new URL(url);
+    requests.push({ path: parsed.pathname, search: parsed.search, method: init?.method ?? "GET" });
+    return jsonResponse({
+      ok: true,
+      kind: "francis.stage7.telemetry.context_feedback_memory_assistance_live_sample_operator_decision_outcome_review",
+      stage: "Stage 7 / Telemetry MVP",
+      source_id: "telemetry_context",
+      status: "outcome_review_ready",
+      target: "feedback_memory_assistance_prompt_integration",
+      outcome: "operator_accepted_current_live_sample",
+      outcome_review_ready: true,
+      latest_decision: "accepted",
+      latest_receipt_id: "tel_fma_live_decision_123",
+      latest_recorded_ts: 123,
+      receipt_readback: { latest_receipt_id: "tel_fma_live_decision_123" },
+      decision_counts: { accepted: 1, rejected: 0, needs_more_evidence: 0 },
+      review: { accepted_current_sample: true, receipt_readback_ready: true },
+      reads_receipts: true,
+      writes_receipts: false,
+      writes_memory: false,
+      writes_feedback: false,
+      sends_chat: false,
+      calls_model: false,
+      selects_tools: false,
+      trains_model: false,
+      grants_execution_authority: false,
+      grants_mutation_authority: false,
+      governance: { read_only: true, operator_decision_outcome_review: true },
+      next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_terminal_context_signal",
+    });
+  });
+
+  try {
+    const client = new TelemetryClient("http://127.0.0.1:8000/");
+    const review =
+      await client.getContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisionOutcomeReview({
+        limit: 30,
+      });
+
+    assert.equal(review.outcome, "operator_accepted_current_live_sample");
+    assert.deepEqual(requests, [
+      {
+        path: "/telemetry/context/feedback/memory-assistance-feedback-loop-live-sample-operator-decision-outcome-review",
         search: "?limit=30",
         method: "GET",
       },
