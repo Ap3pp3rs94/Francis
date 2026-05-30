@@ -1982,7 +1982,50 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decis
     assert usefulness["governance"]["does_not_start_terminal_capture"] is True
     assert usefulness["governance"]["does_not_start_git_watcher"] is True
     assert usefulness["governance"]["does_not_start_ide_integration"] is True
-    assert usefulness["next_smallest_truthful_gap"] == ("stage7_telemetry_operator_usage_over_time_review")
+    assert usefulness["next_smallest_truthful_gap"] == (
+        "stage7_context_feedback_memory_assistance_operator_usage_over_time_review"
+    )
+
+    usage = client.get(
+        "/telemetry/context/feedback/memory-assistance-feedback-loop-operator-usage-over-time-review?limit=10"
+    ).json()
+    assert usage["ok"] is True
+    assert usage["kind"] == (
+        "francis.stage7.telemetry.context_feedback_memory_assistance_operator_usage_over_time_review"
+    )
+    assert usage["status"] == "operator_usage_over_time_ready"
+    assert usage["operator_usage_over_time_ready"] is True
+    assert usage["observed_event_count"] == 3
+    assert usage["operator_feedback_count"] == 2
+    assert usage["operator_decision_count"] == 1
+    assert usage["rating_counts"] == {"useful": 2, "not_useful": 0, "neutral": 0}
+    assert usage["decision_counts"] == {"accepted": 1, "rejected": 0, "needs_more_evidence": 0}
+    assert len(usage["usage_by_day"]) == 1
+    assert usage["usage_by_day"][0]["operator_feedback_count"] == 2
+    assert usage["usage_by_day"][0]["operator_decision_count"] == 1
+    assert usage["latest_recorded_ts"] >= usage["first_recorded_ts"] > 0
+    assert usage["duration_seconds"] >= 0
+    assert [event["kind"] for event in usage["recent_usage_events"]] == [
+        "operator_feedback",
+        "operator_feedback",
+        "operator_decision",
+    ]
+    assert usage["multi_source_usefulness"]["multi_source_usefulness_ready"] is True
+    assert usage["read_only"] is True
+    assert usage["writes_usage"] is False
+    assert usage["writes_memory"] is False
+    assert usage["writes_feedback"] is False
+    assert usage["writes_receipts"] is False
+    assert usage["sends_chat"] is False
+    assert usage["calls_model"] is False
+    assert usage["selects_tools"] is False
+    assert usage["grants_execution_authority"] is False
+    assert usage["grants_mutation_authority"] is False
+    assert usage["governance"]["operator_usage_over_time_review"] is True
+    assert usage["governance"]["uses_existing_operator_feedback_receipts"] is True
+    assert usage["governance"]["uses_existing_operator_decision_receipts"] is True
+    assert usage["governance"]["does_not_record_operator_usage"] is True
+    assert usage["next_smallest_truthful_gap"] == ("stage7_context_feedback_memory_assistance_closure_readiness_review")
 
 
 def test_telemetry_context_feedback_memory_quality_record_is_empty_without_events(

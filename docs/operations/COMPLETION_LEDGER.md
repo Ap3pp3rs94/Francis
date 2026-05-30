@@ -46064,6 +46064,45 @@ usefulness:
   tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
   Result: `passed`
 
+### 2026-05-30 - Stage 7 feedback memory assistance operator usage over time is reviewed
+
+Roadmap area: Stage 7 / Telemetry MVP, operator usage over time for the
+feedback-memory assistance primary loop.
+
+Material change:
+
+- Telemetry now exposes a read-only operator usage over time review at
+  `/telemetry/context/feedback/memory-assistance-feedback-loop-operator-usage-over-time-review`.
+- The review consumes existing explicit operator feedback events and live-sample
+  operator decision receipts for the feedback-memory assistance loop.
+- It reports event totals, rating counts, decision counts, day buckets, first
+  and latest timestamps, and recent usage events without recording new usage.
+- It requires the multi-source usefulness review to be ready before the usage
+  posture can be ready.
+- It does not write usage, memory, feedback, or receipts; it does not send
+  chat, call a model, select tools, train a model, or grant authority.
+- The multi-source usefulness review now advances to
+  `stage7_context_feedback_memory_assistance_operator_usage_over_time_review`,
+  and the usage review points at
+  `stage7_context_feedback_memory_assistance_closure_readiness_review` when
+  ready.
+
+Latest validation for Stage 7 feedback memory assistance operator usage over
+time:
+
+- `python -m pytest tests/test_api_telemetry.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 41 passed`
+- `python -m mypy src/francis/api/routes/telemetry.py`
+  Result: `passed`
+- `python -m ruff check src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed; 3 files already formatted`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

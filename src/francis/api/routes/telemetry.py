@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter
@@ -2658,9 +2659,147 @@ def context_feedback_memory_assistance_operator_feedback_loop_multi_source_usefu
             "grants_mutation_authority": False,
         },
         "next_smallest_truthful_gap": (
-            "stage7_telemetry_operator_usage_over_time_review"
+            "stage7_context_feedback_memory_assistance_operator_usage_over_time_review"
             if multi_source_usefulness_ready
             else "stage7_context_feedback_memory_assistance_multi_source_usefulness_review"
+        ),
+    }
+
+
+@router.get("/context/feedback/memory-assistance-feedback-loop-operator-usage-over-time-review")
+def context_feedback_memory_assistance_operator_feedback_loop_operator_usage_over_time_review(
+    limit: int = 20,
+) -> dict[str, Any]:
+    safe_limit = max(1, min(int(limit), 100))
+    usefulness = context_feedback_memory_assistance_operator_feedback_loop_multi_source_usefulness_review(
+        limit=safe_limit
+    )
+    feedback_items = _feedback_memory_assistance_feedback_items(limit=max(safe_limit * 4, 100))[-safe_limit:]
+    decision_items = read_feedback_memory_assistance_live_sample_operator_decisions(limit=safe_limit)
+    usage_events: list[dict[str, Any]] = []
+    rating_counts = {"useful": 0, "not_useful": 0, "neutral": 0}
+    decision_counts = {"accepted": 0, "rejected": 0, "needs_more_evidence": 0}
+    for item in feedback_items:
+        rating = _redacted_line_text(item.get("rating")) or "neutral"
+        if rating not in rating_counts:
+            rating = "neutral"
+        rating_counts[rating] += 1
+        usage_events.append(
+            {
+                "kind": "operator_feedback",
+                "id": _redacted_line_text(item.get("feedback_id")),
+                "recorded_ts": _safe_count(item.get("recorded_ts")),
+                "day": _usage_day(item.get("recorded_ts")),
+                "rating": rating,
+                "surface": _redacted_line_text(item.get("surface")),
+            }
+        )
+    for item in decision_items:
+        decision = _redacted_line_text(item.get("decision")) or "needs_more_evidence"
+        if decision not in decision_counts:
+            decision = "needs_more_evidence"
+        decision_counts[decision] += 1
+        usage_events.append(
+            {
+                "kind": "operator_decision",
+                "id": _redacted_line_text(item.get("receipt_id")),
+                "recorded_ts": _safe_count(item.get("recorded_ts")),
+                "day": _usage_day(item.get("recorded_ts")),
+                "decision": decision,
+            }
+        )
+    usage_events = sorted(
+        usage_events,
+        key=lambda item: (
+            _safe_count(item.get("recorded_ts")),
+            {"operator_feedback": 0, "operator_decision": 1}.get(_redacted_line_text(item.get("kind")), 99),
+            _redacted_line_text(item.get("id")),
+        ),
+    )
+    day_counts: dict[str, dict[str, int]] = {}
+    for event in usage_events:
+        day = _redacted_line_text(event.get("day")) or "unknown"
+        day_counts.setdefault(day, {"operator_feedback": 0, "operator_decision": 0})
+        kind = _redacted_line_text(event.get("kind"))
+        if kind in day_counts[day]:
+            day_counts[day][kind] += 1
+    usage_by_day = [
+        {
+            "day": day,
+            "operator_feedback_count": counts["operator_feedback"],
+            "operator_decision_count": counts["operator_decision"],
+            "total": counts["operator_feedback"] + counts["operator_decision"],
+        }
+        for day, counts in sorted(day_counts.items())
+    ]
+    timestamps = [
+        _safe_count(event.get("recorded_ts")) for event in usage_events if _safe_count(event.get("recorded_ts"))
+    ]
+    first_recorded_ts = min(timestamps) if timestamps else 0
+    latest_recorded_ts = max(timestamps) if timestamps else 0
+    usage_over_time_ready = (
+        bool(usefulness.get("multi_source_usefulness_ready"))
+        and len(feedback_items) > 0
+        and len(decision_items) > 0
+        and len(usage_by_day) > 0
+    )
+    return {
+        "ok": True,
+        "kind": "francis.stage7.telemetry.context_feedback_memory_assistance_operator_usage_over_time_review",
+        "stage": "Stage 7 / Telemetry MVP",
+        "source_id": "telemetry_context",
+        "status": "operator_usage_over_time_ready" if usage_over_time_ready else "operator_usage_over_time_partial",
+        "target": "feedback_memory_assistance_prompt_integration",
+        "operator_usage_over_time_ready": usage_over_time_ready,
+        "observed_event_count": len(usage_events),
+        "operator_feedback_count": len(feedback_items),
+        "operator_decision_count": len(decision_items),
+        "rating_counts": rating_counts,
+        "decision_counts": decision_counts,
+        "usage_by_day": usage_by_day,
+        "first_recorded_ts": first_recorded_ts,
+        "latest_recorded_ts": latest_recorded_ts,
+        "duration_seconds": max(latest_recorded_ts - first_recorded_ts, 0),
+        "recent_usage_events": usage_events[-safe_limit:],
+        "multi_source_usefulness": {
+            "route": "/telemetry/context/feedback/memory-assistance-feedback-loop-multi-source-usefulness-review",
+            "status": usefulness.get("status", "unknown"),
+            "multi_source_usefulness_ready": bool(usefulness.get("multi_source_usefulness_ready")),
+        },
+        "read_only": True,
+        "writes_usage": False,
+        "writes_memory": False,
+        "writes_feedback": False,
+        "writes_receipts": False,
+        "mutates_prompt": False,
+        "sends_chat": False,
+        "calls_model": False,
+        "selects_tools": False,
+        "trains_model": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "operator_usage_over_time_review": True,
+            "bounded_to_feedback_memory_assistance_loop": True,
+            "uses_existing_operator_feedback_receipts": True,
+            "uses_existing_operator_decision_receipts": True,
+            "uses_existing_multi_source_usefulness_review": True,
+            "does_not_record_operator_usage": True,
+            "does_not_write_memory": True,
+            "does_not_write_feedback": True,
+            "does_not_write_receipts": True,
+            "does_not_send_chat": True,
+            "does_not_call_model": True,
+            "does_not_select_tools": True,
+            "telemetry_is_untrusted_input": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": (
+            "stage7_context_feedback_memory_assistance_closure_readiness_review"
+            if usage_over_time_ready
+            else "stage7_context_feedback_memory_assistance_operator_usage_over_time_review"
         ),
     }
 
@@ -3057,6 +3196,22 @@ def _safe_count(value: Any) -> int:
     except (TypeError, ValueError):
         return 0
     return max(count, 0)
+
+
+def _feedback_memory_assistance_feedback_items(*, limit: int) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for item in read_telemetry_context_feedback(limit=max(1, min(limit, 400))):
+        if not isinstance(item, dict) or not _is_feedback_memory_assistance_feedback_item(item):
+            continue
+        items.append(item)
+    return items
+
+
+def _usage_day(value: Any) -> str:
+    timestamp = _safe_count(value)
+    if timestamp <= 0:
+        return "unknown"
+    return datetime.fromtimestamp(timestamp, tz=UTC).date().isoformat()
 
 
 def _assistance_projection_summary(
