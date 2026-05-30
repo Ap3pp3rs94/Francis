@@ -45258,6 +45258,54 @@ Latest validation for Stage 7 feedback memory assistance live sample readback:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-30 - Stage 7 feedback memory assistance live sample operator review is visible
+
+Roadmap area: Stage 7 / Telemetry MVP, operator-visible feedback-memory
+assistance live sample review.
+
+Material change:
+
+- Telemetry now exposes a read-only live sample operator review at
+  `/telemetry/context/feedback/memory-assistance-feedback-loop-live-sample-operator-review`.
+- The review projects whether the existing live sample readback is ready for an
+  operator decision, including acceptance, chat ledger, operator feedback, and
+  memory-quality readback criteria.
+- The Telemetry & Continuation panel now refreshes and displays the live sample
+  operator review status, decision-required readback, next gap, and non-mutation
+  guards.
+- The review does not record an operator decision, send chat, write feedback,
+  write memory, call a model, select tools, train a model, or grant execution or
+  mutation authority.
+- When live evidence is present, the next smallest truthful gap advances to
+  `stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_decision`.
+
+Latest validation for Stage 7 feedback memory assistance live sample operator
+review:
+
+- `python -m pytest tests/test_api_telemetry.py tests/test_api_chat.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed`
+- `python -m mypy src/francis/api/routes/telemetry.py
+  src/francis/telemetry/context.py src/francis/telemetry/status.py
+  src/francis/api/routes/chat.py`
+  Result: `passed`
+- `python -m ruff check src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `node --test --experimental-strip-types src/telemetry/index.test.ts` in
+  `apps/chat_ui`
+  Result: `passed; 32 passed`
+- `npm run test` in `apps/chat_ui`
+  Result: `passed; 140 passed`
+- `npm run build` in `apps/chat_ui`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

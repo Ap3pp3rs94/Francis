@@ -106,6 +106,7 @@ import {
   type TelemetryContextFeedbackMemoryAssistanceDryRun,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopE2eAcceptanceAudit,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopE2eSample,
+  type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorReview,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleReadback,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackMemoryReadback,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackReview,
@@ -4179,6 +4180,18 @@ function SystemPanel(props: {
     telemetryFeedbackMemoryAssistanceLiveSampleReadbackLoadedAt,
     setTelemetryFeedbackMemoryAssistanceLiveSampleReadbackLoadedAt,
   ] = useState<number | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview,
+    setTelemetryFeedbackMemoryAssistanceLiveSampleOperatorReview,
+  ] = useState<TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorReview | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceLiveSampleOperatorReviewError,
+    setTelemetryFeedbackMemoryAssistanceLiveSampleOperatorReviewError,
+  ] = useState<string | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceLiveSampleOperatorReviewLoadedAt,
+    setTelemetryFeedbackMemoryAssistanceLiveSampleOperatorReviewLoadedAt,
+  ] = useState<number | null>(null);
   const [telemetryFeedbackMemoryQualityBusy, setTelemetryFeedbackMemoryQualityBusy] = useState(false);
   const [telemetryFeedbackMemoryQualityNotice, setTelemetryFeedbackMemoryQualityNotice] = useState<{
     tone: "info" | "error";
@@ -4388,6 +4401,7 @@ function SystemPanel(props: {
         nextTelemetryFeedbackMemoryAssistanceLoopSample,
         nextTelemetryFeedbackMemoryAssistanceAcceptanceAudit,
         nextTelemetryFeedbackMemoryAssistanceLiveSampleReadback,
+        nextTelemetryFeedbackMemoryAssistanceLiveSampleOperatorReview,
       ] =
         await Promise.allSettled([
         client.getSystemInfo(),
@@ -4419,6 +4433,7 @@ function SystemPanel(props: {
         telemetryClient.getContextFeedbackMemoryAssistanceOperatorFeedbackLoopE2eSample({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistanceOperatorFeedbackLoopE2eAcceptanceAudit({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleReadback({ limit: 20 }),
+        telemetryClient.getContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorReview({ limit: 20 }),
       ]);
 
       const degradedFeeds: string[] = [];
@@ -4642,6 +4657,19 @@ function SystemPanel(props: {
           telemetryError(nextTelemetryFeedbackMemoryAssistanceLiveSampleReadback.reason),
         );
         degradedFeeds.push("telemetry feedback memory assistance live sample readback");
+      }
+
+      if (nextTelemetryFeedbackMemoryAssistanceLiveSampleOperatorReview.status === "fulfilled") {
+        setTelemetryFeedbackMemoryAssistanceLiveSampleOperatorReview(
+          nextTelemetryFeedbackMemoryAssistanceLiveSampleOperatorReview.value,
+        );
+        setTelemetryFeedbackMemoryAssistanceLiveSampleOperatorReviewError(null);
+        setTelemetryFeedbackMemoryAssistanceLiveSampleOperatorReviewLoadedAt(refreshStartedAt);
+      } else {
+        setTelemetryFeedbackMemoryAssistanceLiveSampleOperatorReviewError(
+          telemetryError(nextTelemetryFeedbackMemoryAssistanceLiveSampleOperatorReview.reason),
+        );
+        degradedFeeds.push("telemetry feedback memory assistance live sample operator review");
       }
 
       if (degradedFeeds.length > 0) {
@@ -6576,6 +6604,31 @@ function SystemPanel(props: {
       : telemetryFeedbackMemoryAssistanceLiveSampleReadback
         ? `Feedback memory assistance live sample ${telemetryFeedbackMemoryAssistanceLiveSampleReadback.status}; criteria ${telemetryFeedbackMemoryAssistanceLiveSampleReadback.ready_count}/${telemetryFeedbackMemoryAssistanceLiveSampleReadback.required_count}, chat ${safeString(telemetryFeedbackMemoryAssistanceLiveSampleChat.status).trim() || "missing"}.`
         : "Feedback memory assistance live sample readback has not loaded yet.";
+  const telemetryFeedbackMemoryAssistanceLiveSampleOperatorReviewStatus =
+    safeString(telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview?.status).trim() ||
+    (telemetryFeedbackMemoryAssistanceLiveSampleOperatorReviewError ? "unavailable" : "unloaded");
+  const telemetryFeedbackMemoryAssistanceLiveSampleOperatorReviewTone =
+    telemetryFeedbackMemoryAssistanceLiveSampleOperatorReviewError
+      ? "blocked"
+      : telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview
+        ? telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview.operator_review_ready
+          ? "running"
+          : "dormant"
+        : "standby";
+  const telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecision =
+    telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview?.operator_decision ?? {};
+  const telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionRequired = Boolean(
+    telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecision.required,
+  );
+  const telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionRecorded = Boolean(
+    telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecision.recorded,
+  );
+  const telemetryFeedbackMemoryAssistanceLiveSampleOperatorReviewDetail =
+    telemetryFeedbackMemoryAssistanceLiveSampleOperatorReviewError
+      ? `Feedback memory assistance live sample operator review could not refresh: ${telemetryFeedbackMemoryAssistanceLiveSampleOperatorReviewError}`
+      : telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview
+        ? `Feedback memory assistance operator review ${telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview.status}; criteria ${telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview.ready_count}/${telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview.required_count}, decision required ${telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionRequired ? "true" : "false"}.`
+        : "Feedback memory assistance live sample operator review has not loaded yet.";
   const controlTone =
     controlModeId === "pilot"
       ? { bg: "#24160a", border: "#7a541b", color: "#ffd38a" }
@@ -11528,6 +11581,9 @@ function SystemPanel(props: {
             <span style={badgeStyle(telemetryFeedbackMemoryAssistanceLiveSampleTone)}>
               Live sample {telemetryFeedbackMemoryAssistanceLiveSampleStatus}
             </span>
+            <span style={badgeStyle(telemetryFeedbackMemoryAssistanceLiveSampleOperatorReviewTone)}>
+              Sample review {telemetryFeedbackMemoryAssistanceLiveSampleOperatorReviewStatus}
+            </span>
             <span style={badgeStyle(continuation.tone)}>{continuation.label}</span>
           </div>
         </div>
@@ -11627,6 +11683,15 @@ function SystemPanel(props: {
           }}
         >
           {telemetryFeedbackMemoryAssistanceLiveSampleDetail}
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            color: telemetryFeedbackMemoryAssistanceLiveSampleOperatorReviewError ? "#ffcf9d" : THEME.text,
+            marginTop: 8,
+          }}
+        >
+          {telemetryFeedbackMemoryAssistanceLiveSampleOperatorReviewDetail}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
           <button
@@ -11831,6 +11896,63 @@ function SystemPanel(props: {
               <div style={{ fontSize: 12, color: THEME.text, marginTop: 4 }}>
                 memory <code>{telemetryFeedbackMemoryAssistanceLiveSampleReadback.writes_memory ? "true" : "false"}</code>
                 {" / "}model <code>{telemetryFeedbackMemoryAssistanceLiveSampleReadback.calls_model ? "true" : "false"}</code>
+              </div>
+            </div>
+          </div>
+        ) : null}
+        {telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+              gap: 8,
+              marginTop: 10,
+            }}
+          >
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Live sample review</div>
+              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
+                {telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview.operator_review_ready ? "ready" : "waiting"}
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                criteria <code>{telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview.ready_count}</code>/
+                <code>{telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview.required_count}</code>
+                {" / "}sample{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview.live_sample_observed ? "observed" : "missing"}
+                </code>
+              </div>
+              {telemetryFeedbackMemoryAssistanceLiveSampleOperatorReviewLoadedAt ? (
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                  Loaded {toLocaleTime(telemetryFeedbackMemoryAssistanceLiveSampleOperatorReviewLoadedAt)}
+                </div>
+              ) : null}
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Operator decision</div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 6 }}>
+                required <code>{telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionRequired ? "true" : "false"}</code>
+                {" / "}recorded{" "}
+                <code>{telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionRecorded ? "true" : "false"}</code>
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                next{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview.next_smallest_truthful_gap ||
+                    "live_sample_operator_review"}
+                </code>
+              </div>
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Review guards</div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 6 }}>
+                sends <code>{telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview.sends_chat ? "true" : "false"}</code>
+                {" / "}feedback{" "}
+                <code>{telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview.writes_feedback ? "true" : "false"}</code>
+              </div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 4 }}>
+                memory <code>{telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview.writes_memory ? "true" : "false"}</code>
+                {" / "}model <code>{telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview.calls_model ? "true" : "false"}</code>
               </div>
             </div>
           </div>

@@ -887,6 +887,119 @@ def context_feedback_memory_assistance_operator_feedback_loop_live_sample_readba
     }
 
 
+@router.get("/context/feedback/memory-assistance-feedback-loop-live-sample-operator-review")
+def context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_review(
+    limit: int = 20,
+) -> dict[str, Any]:
+    safe_limit = max(1, min(int(limit), 100))
+    readback = context_feedback_memory_assistance_operator_feedback_loop_live_sample_readback(limit=safe_limit)
+    live_sample_observed = bool(readback.get("live_sample_observed"))
+    criteria_value = readback.get("criteria")
+    criteria: list[Any] = criteria_value if isinstance(criteria_value, list) else []
+    ready_count = _safe_count(readback.get("ready_count"))
+    required_count = _safe_count(readback.get("required_count"))
+    operator_review_ready = live_sample_observed and ready_count >= required_count and required_count > 0
+    status = "operator_review_ready" if operator_review_ready else "awaiting_live_sample_evidence"
+    acceptance_value = readback.get("acceptance")
+    acceptance: dict[str, Any] = acceptance_value if isinstance(acceptance_value, dict) else {}
+    chat_value = readback.get("chat")
+    chat: dict[str, Any] = chat_value if isinstance(chat_value, dict) else {}
+    feedback_value = readback.get("feedback")
+    feedback: dict[str, Any] = feedback_value if isinstance(feedback_value, dict) else {}
+    memory_value = readback.get("memory")
+    memory: dict[str, Any] = memory_value if isinstance(memory_value, dict) else {}
+    review_items = [
+        {
+            "id": "acceptance_audit_ready",
+            "ready": bool(acceptance.get("acceptance_ready")),
+            "status": acceptance.get("status", "missing"),
+        },
+        {
+            "id": "chat_send_ledger_readback",
+            "ready": bool(chat),
+            "status": chat.get("status", "missing"),
+        },
+        {
+            "id": "operator_feedback_readback",
+            "ready": bool(feedback),
+            "status": feedback.get("status", "missing"),
+        },
+        {
+            "id": "memory_quality_readback",
+            "ready": bool(memory),
+            "status": memory.get("status", "missing"),
+        },
+    ]
+
+    return {
+        "ok": True,
+        "kind": "francis.stage7.telemetry.context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_review",
+        "stage": "Stage 7 / Telemetry MVP",
+        "source_id": "telemetry_context",
+        "status": status,
+        "target": "feedback_memory_assistance_prompt_integration",
+        "operator_review_ready": operator_review_ready,
+        "live_sample_observed": live_sample_observed,
+        "ready_count": ready_count,
+        "required_count": required_count,
+        "criteria": criteria,
+        "review_items": review_items,
+        "live_sample": {
+            "route": "/telemetry/context/feedback/memory-assistance-feedback-loop-live-sample-readback",
+            "status": readback.get("status", "unknown"),
+            "next_smallest_truthful_gap": readback.get("next_smallest_truthful_gap", ""),
+        },
+        "evidence": {
+            "acceptance": acceptance,
+            "chat": chat,
+            "feedback": feedback,
+            "memory": memory,
+        },
+        "operator_decision": {
+            "required": operator_review_ready,
+            "recorded": False,
+            "decision": "",
+            "receipt_id": "",
+            "reason": (
+                "operator_review_decision_not_recorded_by_read_only_projection"
+                if operator_review_ready
+                else "live_sample_evidence_required_before_operator_review"
+            ),
+        },
+        "reads_conversation_ledger": True,
+        "reads_feedback": True,
+        "reads_memory": True,
+        "writes_memory": False,
+        "writes_feedback": False,
+        "sends_chat": False,
+        "calls_model": False,
+        "selects_tools": False,
+        "trains_model": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "operator_review_projection_only": True,
+            "uses_live_sample_readback": True,
+            "telemetry_is_untrusted_input": True,
+            "ignores_payload_instruction_text": True,
+            "does_not_record_operator_decision": True,
+            "does_not_send_chat": True,
+            "does_not_write_feedback": True,
+            "does_not_write_memory": True,
+            "does_not_call_model": True,
+            "does_not_select_tools": True,
+            "grants_execution_authority": False,
+            "grants_memory_write_authority": False,
+        },
+        "next_smallest_truthful_gap": (
+            "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_decision"
+            if operator_review_ready
+            else "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run"
+        ),
+    }
+
+
 @router.get("/context/feedback/memory-retrieval-readback")
 def context_feedback_memory_retrieval_readback(limit: int = 20) -> dict[str, Any]:
     safe_limit = max(1, min(int(limit), 100))

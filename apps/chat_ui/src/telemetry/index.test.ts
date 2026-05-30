@@ -9,6 +9,7 @@ import {
   parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopAudit,
   parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopE2eAcceptanceAudit,
   parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopE2eSample,
+  parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorReview,
   parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleReadback,
   parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackReview,
   parseTelemetryContextFeedbackMemoryAssistanceChatContextReadback,
@@ -1145,6 +1146,115 @@ test("TelemetryClient requests the targeted feedback-memory assistance live samp
       {
         path: "/telemetry/context/feedback/memory-assistance-feedback-loop-live-sample-readback",
         search: "?limit=25",
+        method: "GET",
+      },
+    ]);
+  } finally {
+    restore();
+  }
+});
+
+test("parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorReview preserves operator gate", () => {
+  const review = parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorReview({
+    ok: true,
+    kind: "francis.stage7.telemetry.context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_review",
+    stage: "Stage 7 / Telemetry MVP",
+    source_id: "telemetry_context",
+    status: "operator_review_ready",
+    target: "feedback_memory_assistance_prompt_integration",
+    operator_review_ready: true,
+    live_sample_observed: true,
+    ready_count: 4,
+    required_count: 4,
+    criteria: [{ id: "chat_send_ledger_readback", ready: true }],
+    review_items: [{ id: "memory_quality_readback", ready: true }],
+    live_sample: { status: "live_sample_observed" },
+    evidence: { chat: { status: "applied" }, memory: { event_id: "evt-live" } },
+    operator_decision: { required: true, recorded: false },
+    reads_conversation_ledger: true,
+    reads_feedback: true,
+    reads_memory: true,
+    writes_memory: false,
+    writes_feedback: false,
+    sends_chat: false,
+    calls_model: false,
+    selects_tools: false,
+    trains_model: false,
+    grants_execution_authority: false,
+    grants_mutation_authority: false,
+    governance: { read_only: true, operator_review_projection_only: true },
+    next_smallest_truthful_gap:
+      "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_decision",
+  });
+
+  assert.equal(review.status, "operator_review_ready");
+  assert.equal(review.operator_review_ready, true);
+  assert.equal(review.live_sample_observed, true);
+  assert.equal(review.ready_count, 4);
+  assert.equal(review.required_count, 4);
+  assert.equal(review.criteria.length, 1);
+  assert.equal(review.review_items.length, 1);
+  assert.equal(review.live_sample.status, "live_sample_observed");
+  assert.equal((review.evidence.memory as Record<string, unknown>).event_id, "evt-live");
+  assert.equal(review.operator_decision.required, true);
+  assert.equal(review.operator_decision.recorded, false);
+  assert.equal(review.reads_conversation_ledger, true);
+  assert.equal(review.writes_memory, false);
+  assert.equal(review.sends_chat, false);
+  assert.equal(review.governance.operator_review_projection_only, true);
+  assert.equal(
+    review.next_smallest_truthful_gap,
+    "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_decision",
+  );
+});
+
+test("TelemetryClient requests the targeted feedback-memory assistance live sample operator review endpoint", async () => {
+  const requests: Array<{ path: string; search: string; method: string }> = [];
+  const restore = installFetch((url, init) => {
+    const parsed = new URL(url);
+    requests.push({ path: parsed.pathname, search: parsed.search, method: init?.method ?? "GET" });
+    return jsonResponse({
+      ok: true,
+      kind: "francis.stage7.telemetry.context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_review",
+      stage: "Stage 7 / Telemetry MVP",
+      source_id: "telemetry_context",
+      status: "awaiting_live_sample_evidence",
+      target: "feedback_memory_assistance_prompt_integration",
+      operator_review_ready: false,
+      live_sample_observed: false,
+      ready_count: 0,
+      required_count: 4,
+      criteria: [],
+      review_items: [],
+      live_sample: { status: "awaiting_live_sample_evidence" },
+      evidence: {},
+      operator_decision: { required: false, recorded: false },
+      reads_conversation_ledger: true,
+      reads_feedback: true,
+      reads_memory: true,
+      writes_memory: false,
+      writes_feedback: false,
+      sends_chat: false,
+      calls_model: false,
+      selects_tools: false,
+      trains_model: false,
+      grants_execution_authority: false,
+      grants_mutation_authority: false,
+      governance: { read_only: true, operator_review_projection_only: true },
+      next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run",
+    });
+  });
+
+  try {
+    const client = new TelemetryClient("http://127.0.0.1:8000/");
+    const review = await client.getContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorReview({
+      limit: 30,
+    });
+    assert.equal(review.status, "awaiting_live_sample_evidence");
+    assert.deepEqual(requests, [
+      {
+        path: "/telemetry/context/feedback/memory-assistance-feedback-loop-live-sample-operator-review",
+        search: "?limit=30",
         method: "GET",
       },
     ]);

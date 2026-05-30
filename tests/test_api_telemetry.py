@@ -891,6 +891,140 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_readback_is_em
     assert not data_root.exists()
 
 
+def test_telemetry_context_feedback_memory_assistance_live_sample_operator_review_is_empty_without_events(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    client = TestClient(create_app())
+    response = client.get("/telemetry/context/feedback/memory-assistance-feedback-loop-live-sample-operator-review")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert (
+        body["kind"]
+        == "francis.stage7.telemetry.context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_review"
+    )
+    assert body["status"] == "awaiting_live_sample_evidence"
+    assert body["operator_review_ready"] is False
+    assert body["live_sample_observed"] is False
+    assert body["ready_count"] == 0
+    assert body["required_count"] == 4
+    assert body["operator_decision"] == {
+        "required": False,
+        "recorded": False,
+        "decision": "",
+        "receipt_id": "",
+        "reason": "live_sample_evidence_required_before_operator_review",
+    }
+    assert body["evidence"]["chat"] == {}
+    assert body["evidence"]["feedback"] == {}
+    assert body["evidence"]["memory"] == {}
+    assert body["reads_conversation_ledger"] is True
+    assert body["reads_feedback"] is True
+    assert body["reads_memory"] is True
+    assert body["writes_memory"] is False
+    assert body["writes_feedback"] is False
+    assert body["sends_chat"] is False
+    assert body["calls_model"] is False
+    assert body["selects_tools"] is False
+    assert body["governance"]["read_only"] is True
+    assert body["governance"]["operator_review_projection_only"] is True
+    assert body["governance"]["does_not_record_operator_decision"] is True
+    assert body["next_smallest_truthful_gap"] == (
+        "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run"
+    )
+    assert not (data_root / "conversations" / "ledger" / "ledger.jsonl").exists()
+    assert not (data_root / "telemetry" / "context_feedback.jsonl").exists()
+    assert not (data_root / "memory" / "timeline" / "_events.json").exists()
+    assert not data_root.exists()
+
+
+def _seed_feedback_memory_assistance_live_sample(client: TestClient, actor: str) -> None:
+    seed_feedback = client.post(
+        "/telemetry/context/feedback",
+        json={
+            "actor": actor,
+            "reason": "seed live sample assistance feedback",
+            "context_id": "tel_ctx_live_sample_seed",
+            "surface": "chat",
+            "rating": "useful",
+            "message_id": "tel_msg_live_sample_seed",
+            "reply_mode": "feedback_memory_assistance_prompt_context",
+            "source_ids": ["feedback_memory_assistance", "telemetry_context"],
+            "tags": ["stage7", "feedback_memory_assistance", "chat_prompt_context"],
+            "meta": {
+                "feedback_target_kind": "feedback_memory_assistance_prompt_integration",
+                "line_count": 2,
+            },
+        },
+    )
+    assert seed_feedback.status_code == 200
+    assert seed_feedback.json()["ok"] is True
+
+    seed_memory = client.post(
+        "/telemetry/context/feedback/memory-assistance-feedback-memory-quality",
+        json={
+            "actor": actor,
+            "reason": "seed live sample assistance memory quality",
+            "limit": 10,
+            "event_id": "evt-feedback-memory-assistance-live-seed",
+        },
+    )
+    assert seed_memory.status_code == 200
+    assert seed_memory.json()["writes_memory"] is True
+
+    chat = client.post(
+        "/chat/send",
+        json={
+            "message": "What context should guide this work?",
+            "use_llm": False,
+            "api_actor": actor,
+        },
+    )
+    assert chat.status_code == 200
+    chat_body = chat.json()
+    assistance = chat_body["telemetry_context"]["feedback_memory_assistance_prompt_integration"]
+    assert assistance["applies_to_chat_now"] is True
+    feedback_target = assistance["feedback_target"]
+
+    live_feedback = client.post(
+        "/telemetry/context/feedback",
+        json={
+            "actor": actor,
+            "reason": "record live sample feedback",
+            "context_id": feedback_target["context_id"],
+            "surface": feedback_target["surface"],
+            "rating": "useful",
+            "message_id": feedback_target["message_id"],
+            "reply_mode": feedback_target["reply_mode"],
+            "source_ids": feedback_target["source_ids"],
+            "tags": feedback_target["tags"],
+            "meta": {
+                "feedback_target_kind": "feedback_memory_assistance_prompt_integration",
+                "line_count": assistance["line_count"],
+            },
+        },
+    )
+    assert live_feedback.status_code == 200
+    assert live_feedback.json()["ok"] is True
+
+    live_memory = client.post(
+        "/telemetry/context/feedback/memory-assistance-feedback-memory-quality",
+        json={
+            "actor": actor,
+            "reason": "record live sample assistance memory quality",
+            "limit": 10,
+            "event_id": "evt-feedback-memory-assistance-live-sample",
+        },
+    )
+    assert live_memory.status_code == 200
+    assert live_memory.json()["writes_memory"] is True
+
+
 def test_telemetry_context_feedback_memory_assistance_live_sample_readback_observes_existing_governed_routes(
     monkeypatch,
     tmp_path: Path,
@@ -1027,6 +1161,74 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_readback_obser
     assert body["governance"]["does_not_write_memory"] is True
     assert body["next_smallest_truthful_gap"] == (
         "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_review"
+    )
+
+
+def test_telemetry_context_feedback_memory_assistance_live_sample_operator_review_projects_operator_decision_gate(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    actor = "test.telemetry.live.review"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps(
+            {
+                actor: [
+                    "chat.write",
+                    "telemetry.context.feedback.write",
+                    "memory.timeline.write",
+                ]
+            }
+        ),
+    )
+
+    client = TestClient(create_app())
+    _seed_feedback_memory_assistance_live_sample(client, actor)
+    response = client.get(
+        "/telemetry/context/feedback/memory-assistance-feedback-loop-live-sample-operator-review?limit=10"
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["status"] == "operator_review_ready"
+    assert body["operator_review_ready"] is True
+    assert body["live_sample_observed"] is True
+    assert body["ready_count"] == body["required_count"] == 4
+    assert body["live_sample"]["status"] == "live_sample_observed"
+    assert body["operator_decision"] == {
+        "required": True,
+        "recorded": False,
+        "decision": "",
+        "receipt_id": "",
+        "reason": "operator_review_decision_not_recorded_by_read_only_projection",
+    }
+    review_items = {item["id"]: item for item in body["review_items"]}
+    assert set(review_items) == {
+        "acceptance_audit_ready",
+        "chat_send_ledger_readback",
+        "operator_feedback_readback",
+        "memory_quality_readback",
+    }
+    assert all(item["ready"] for item in review_items.values())
+    assert body["evidence"]["chat"]["status"] == "applied"
+    assert body["evidence"]["feedback"]["target"] == "feedback_memory_assistance_prompt_integration"
+    assert body["evidence"]["memory"]["event_id"] in {
+        "evt-feedback-memory-assistance-live-seed",
+        "evt-feedback-memory-assistance-live-sample",
+    }
+    assert body["writes_memory"] is False
+    assert body["writes_feedback"] is False
+    assert body["sends_chat"] is False
+    assert body["calls_model"] is False
+    assert body["governance"]["read_only"] is True
+    assert body["governance"]["operator_review_projection_only"] is True
+    assert body["governance"]["uses_live_sample_readback"] is True
+    assert body["governance"]["does_not_record_operator_decision"] is True
+    assert body["next_smallest_truthful_gap"] == (
+        "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_decision"
     )
 
 
