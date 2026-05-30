@@ -46,11 +46,18 @@ def handle(
     use_llm: bool = False,
     telemetry_context: dict[str, object] | None = None,
     api_actor: str = "",
+    execution_trace: dict[str, object] | None = None,
 ) -> str:
     if not isinstance(text, str):
         logger.warning("handle received non-string input")
         text = str(text)
     ledger_meta: dict[str, object] = {"api_actor": api_actor} if api_actor else {}
+    if execution_trace:
+        ledger_meta["execution_trace"] = execution_trace
+        for key in ("trace_id", "run_id", "trace_kind"):
+            value = str(execution_trace.get(key) or "").strip()
+            if value:
+                ledger_meta[key] = value
     append("user", text, ledger_meta)
 
     action = try_handle(text)
@@ -72,6 +79,12 @@ def handle(
     meta: dict[str, object] = {"mode": "llm" if use_llm else "stub"}
     if api_actor:
         meta["api_actor"] = api_actor
+    if execution_trace:
+        meta["execution_trace"] = execution_trace
+        for key in ("trace_id", "run_id", "trace_kind"):
+            value = str(execution_trace.get(key) or "").strip()
+            if value:
+                meta[key] = value
     if telemetry_context:
         meta["telemetry_context"] = telemetry_context
     append("assistant", reply, meta)

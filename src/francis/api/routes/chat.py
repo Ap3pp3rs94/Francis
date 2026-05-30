@@ -54,6 +54,30 @@ def _safe_int(value: object) -> int:
     return 0
 
 
+def _chat_route_execution_trace(
+    *,
+    actor: str,
+    route: str = "/chat/send",
+    method: str = "POST",
+    use_llm: bool = False,
+) -> dict[str, object]:
+    return {
+        "trace_kind": "chat_route_execution_trace",
+        "trace_id": f"chat_trace_{uuid.uuid4().hex[:16]}",
+        "run_id": f"chat_run_{uuid.uuid4().hex[:16]}",
+        "artifact_dir": "",
+        "route": route,
+        "method": method,
+        "api_actor": actor,
+        "source": "chat.send",
+        "llm_requested": bool(use_llm),
+        "model_or_tool_execution_span_captured": False,
+        "conversation_ledger_write": True,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+    }
+
+
 def _chat_text_from_wire(raw: str) -> str:
     if not isinstance(raw, str):
         return str(raw)
@@ -524,13 +548,16 @@ def send(payload: ChatIn) -> dict[str, object]:
                 reply="Chat request denied by permission gate.",
             )
         telemetry_context = _chat_feedback_memory_assistance_context(telemetry_context_snapshot(surface="chat"))
+        execution_trace = _chat_route_execution_trace(actor=actor, use_llm=payload.use_llm)
         return {
             "reply": handle(
                 payload.message,
                 use_llm=payload.use_llm,
                 telemetry_context=telemetry_context,
                 api_actor=actor,
+                execution_trace=execution_trace,
             ),
+            "execution_trace": execution_trace,
             "telemetry_context": telemetry_context,
         }
     except Exception as exc:

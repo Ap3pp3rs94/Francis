@@ -1147,6 +1147,12 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_readback_obser
     assert body["acceptance"]["acceptance_ready"] is True
     assert body["chat"]["status"] == "applied"
     assert body["chat"]["feedback_target_present"] is True
+    assert body["chat"]["trace_kind"] == "chat_route_execution_trace"
+    assert body["chat"]["trace_id"].startswith("chat_trace_")
+    assert body["chat"]["run_id"].startswith("chat_run_")
+    assert body["chat"]["route"] == "/chat/send"
+    assert body["chat"]["method"] == "POST"
+    assert body["chat"]["model_or_tool_execution_span_captured"] is False
     assert body["feedback"]["feedback_id"]
     assert body["memory"]["event_id"] in {
         "evt-feedback-memory-assistance-live-seed",
@@ -1734,7 +1740,10 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decis
     ]
     assert all(item["ready"] is True for item in primary_loop["primary_loop_evidence"])
     assert primary_loop["receipt_trace_kind"] == "receipt_backed_readback"
-    assert primary_loop["true_execution_trace_observed"] is False
+    assert primary_loop["true_execution_trace_observed"] is True
+    assert primary_loop["chat_route_execution_trace_observed"] is True
+    assert primary_loop["chat_route_trace_id"].startswith("chat_trace_")
+    assert primary_loop["chat_route_run_id"].startswith("chat_run_")
     assert primary_loop["operator_decision_receipt_id"] == body["receipt_id"]
     assert primary_loop["memory_quality_event_id"]
     assert primary_loop["action_quality_review"]["action_quality_signal_review_ready"] is True
@@ -1788,6 +1797,11 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decis
     assert poisoning["detected_poisoned_memory_items"] == []
     assert poisoning["detected_poisoned_memory_item_count"] == 0
     assert poisoning["primary_loop_evidence"]["primary_loop_evidence_ready"] is True
+    poisoning_controls = {item["id"]: item for item in poisoning["poisoning_controls"]}
+    assert (
+        poisoning_controls["primary_loop_receipt_trace_bounded"]["evidence"]["chat_route_execution_trace_observed"]
+        is True
+    )
     assert poisoning["memory_readback"]["count"] >= 1
     assert poisoning["read_only"] is True
     assert poisoning["executes_poison_probe"] is False
@@ -1814,26 +1828,29 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decis
     assert trace_review["kind"] == (
         "francis.stage7.telemetry.context_feedback_memory_assistance_true_execution_trace_review"
     )
-    assert trace_review["status"] == "true_execution_trace_not_observed"
+    assert trace_review["status"] == "true_execution_trace_partially_observed"
     assert trace_review["review_ready"] is True
     assert trace_review["receipt_backed_trace_observed"] is True
     assert trace_review["receipt_backed_trace_count"] == 4
-    assert trace_review["true_execution_trace_observed"] is False
-    assert trace_review["true_execution_trace_count"] == 0
+    assert trace_review["true_execution_trace_observed"] is True
+    assert trace_review["true_execution_trace_count"] == 1
     assert [item["id"] for item in trace_review["trace_sources"]] == [
         "chat_interface_readback",
         "operator_feedback_receipt",
         "operator_decision_receipt",
         "memory_quality_receipt",
-        "operation_execution_trace",
+        "chat_route_execution_trace",
         "model_or_tool_execution_span",
     ]
-    assert trace_review["missing_true_execution_trace"] == [
-        "operation_execution_trace",
-        "model_or_tool_execution_span",
-    ]
+    trace_sources = {item["id"]: item for item in trace_review["trace_sources"]}
+    assert trace_sources["chat_route_execution_trace"]["ready"] is True
+    assert trace_sources["chat_route_execution_trace"]["evidence"]["trace_id"].startswith("chat_trace_")
+    assert trace_sources["chat_route_execution_trace"]["evidence"]["run_id"].startswith("chat_run_")
+    assert trace_sources["chat_route_execution_trace"]["evidence"]["route"] == "/chat/send"
+    assert trace_review["missing_true_execution_trace"] == ["model_or_tool_execution_span"]
     assert trace_review["primary_loop_evidence"]["primary_loop_evidence_ready"] is True
     assert trace_review["primary_loop_evidence"]["receipt_trace_kind"] == "receipt_backed_readback"
+    assert trace_review["primary_loop_evidence"]["chat_route_execution_trace_observed"] is True
     assert trace_review["poisoning_review"]["memory_poisoning_review_ready"] is True
     assert trace_review["read_only"] is True
     assert trace_review["writes_memory"] is False
@@ -1848,7 +1865,7 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decis
     assert trace_review["governance"]["receipt_trace_not_true_execution_trace"] is True
     assert trace_review["governance"]["reports_missing_true_execution_trace"] is True
     assert trace_review["next_smallest_truthful_gap"] == (
-        "stage7_context_feedback_memory_assistance_true_execution_trace_capture"
+        "stage7_context_feedback_memory_assistance_model_or_tool_execution_span_capture"
     )
 
 

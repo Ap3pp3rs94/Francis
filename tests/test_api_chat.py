@@ -363,6 +363,17 @@ def test_chat_send_projects_visible_redacted_telemetry_context(monkeypatch, tmp_
     body = sent.json()
 
     assert body["reply"] == "Telemetry context noted."
+    execution_trace = body["execution_trace"]
+    assert execution_trace["trace_kind"] == "chat_route_execution_trace"
+    assert execution_trace["trace_id"].startswith("chat_trace_")
+    assert execution_trace["run_id"].startswith("chat_run_")
+    assert execution_trace["route"] == "/chat/send"
+    assert execution_trace["method"] == "POST"
+    assert execution_trace["api_actor"] == "api.chat"
+    assert execution_trace["conversation_ledger_write"] is True
+    assert execution_trace["model_or_tool_execution_span_captured"] is False
+    assert execution_trace["grants_execution_authority"] is False
+    assert execution_trace["grants_mutation_authority"] is False
     context = body["telemetry_context"]
     assert context["kind"] == "francis.stage7.telemetry.context"
     assert context["surface"] == "chat"
@@ -381,7 +392,15 @@ def test_chat_send_projects_visible_redacted_telemetry_context(monkeypatch, tmp_
     assistant_entry = next(item for item in reversed(ledger_entries) if item["role"] == "assistant")
     user_entry = next(item for item in ledger_entries if item["role"] == "user")
     assert user_entry["meta"]["api_actor"] == "api.chat"
+    assert user_entry["meta"]["trace_id"] == execution_trace["trace_id"]
+    assert user_entry["meta"]["run_id"] == execution_trace["run_id"]
+    assert user_entry["meta"]["trace_kind"] == "chat_route_execution_trace"
+    assert user_entry["meta"]["execution_trace"] == execution_trace
     assert assistant_entry["meta"]["api_actor"] == "api.chat"
+    assert assistant_entry["meta"]["trace_id"] == execution_trace["trace_id"]
+    assert assistant_entry["meta"]["run_id"] == execution_trace["run_id"]
+    assert assistant_entry["meta"]["trace_kind"] == "chat_route_execution_trace"
+    assert assistant_entry["meta"]["execution_trace"] == execution_trace
     assert assistant_entry["meta"]["telemetry_context"]["kind"] == "francis.stage7.telemetry.context"
 
     combined = json.dumps({"body": body, "prompt": captured_prompts[0], "ledger": ledger_entries}, sort_keys=True)

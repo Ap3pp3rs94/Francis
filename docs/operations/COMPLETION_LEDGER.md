@@ -45884,6 +45884,46 @@ review:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-30 - Stage 7 feedback memory assistance chat route trace is captured
+
+Roadmap area: Stage 7 / Telemetry MVP, primary-loop execution trace capture
+for feedback-memory assistance.
+
+Material change:
+
+- `/chat/send` now creates a bounded `chat_route_execution_trace` with
+  `trace_id`, `run_id`, route, method, actor, and non-authority guards for the
+  existing chat ledger write.
+- The trace is written into both user and assistant conversation-ledger entries
+  and returned in the `/chat/send` response.
+- Feedback-memory assistance live-sample readback now exposes the chat route
+  trace handles, and the true-execution-trace review now distinguishes this
+  observed chat-route execution trace from the still-missing model/tool span.
+- The next smallest truthful gap advances to
+  `stage7_context_feedback_memory_assistance_model_or_tool_execution_span_capture`.
+- This does not add model calls, tool selection, execution authority, mutation
+  authority, memory writes, or feedback writes.
+
+Latest validation for Stage 7 feedback memory assistance chat route trace:
+
+- `python -m pytest tests/test_api_chat.py tests/test_api_telemetry.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 49 passed`
+- `python -m mypy src/francis/api/routes/chat.py
+  src/francis/chat/router.py src/francis/api/routes/telemetry.py`
+  Result: `passed`
+- `python -m ruff check src/francis/api/routes/chat.py
+  src/francis/chat/router.py src/francis/api/routes/telemetry.py
+  tests/test_api_chat.py tests/test_api_telemetry.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/chat.py
+  src/francis/chat/router.py src/francis/api/routes/telemetry.py
+  tests/test_api_chat.py tests/test_api_telemetry.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

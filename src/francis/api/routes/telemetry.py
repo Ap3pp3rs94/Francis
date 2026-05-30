@@ -1825,6 +1825,15 @@ def context_feedback_memory_assistance_operator_feedback_loop_primary_loop_evide
     memory_event_id = _redacted_line_text(
         memory.get("event_id") or action_quality.get("latest_memory_quality_event_id")
     )
+    chat_trace_id = _redacted_line_text(chat.get("trace_id"))
+    chat_run_id = _redacted_line_text(chat.get("run_id"))
+    chat_route_execution_trace_observed = (
+        chat.get("trace_kind") == "chat_route_execution_trace"
+        and bool(chat_trace_id)
+        and bool(chat_run_id)
+        and chat.get("route") == "/chat/send"
+        and chat.get("method") == "POST"
+    )
     primary_loop_evidence = [
         {
             "id": "interface",
@@ -1875,6 +1884,9 @@ def context_feedback_memory_assistance_operator_feedback_loop_primary_loop_evide
             "evidence": {
                 "live_sample_observed": bool(live_sample.get("live_sample_observed")),
                 "operator_decision": operator_decision.get("decision", ""),
+                "chat_route_execution_trace_observed": chat_route_execution_trace_observed,
+                "trace_id": chat_trace_id,
+                "run_id": chat_run_id,
             },
         },
         {
@@ -1920,7 +1932,10 @@ def context_feedback_memory_assistance_operator_feedback_loop_primary_loop_evide
         "required_count": len(primary_loop_evidence),
         "primary_loop_evidence": primary_loop_evidence,
         "receipt_trace_kind": "receipt_backed_readback",
-        "true_execution_trace_observed": False,
+        "true_execution_trace_observed": chat_route_execution_trace_observed,
+        "chat_route_execution_trace_observed": chat_route_execution_trace_observed,
+        "chat_route_trace_id": chat_trace_id,
+        "chat_route_run_id": chat_run_id,
         "operator_decision_receipt_id": receipt_id,
         "memory_quality_event_id": memory_event_id,
         "action_quality_review": action_quality,
@@ -2065,11 +2080,11 @@ def context_feedback_memory_assistance_operator_feedback_loop_memory_poisoning_r
             "ready": (
                 bool(primary_loop.get("primary_loop_evidence_ready"))
                 and primary_loop.get("receipt_trace_kind") == "receipt_backed_readback"
-                and primary_loop.get("true_execution_trace_observed") is False
             ),
             "evidence": {
                 "receipt_trace_kind": primary_loop.get("receipt_trace_kind", ""),
                 "true_execution_trace_observed": bool(primary_loop.get("true_execution_trace_observed")),
+                "chat_route_execution_trace_observed": bool(primary_loop.get("chat_route_execution_trace_observed")),
             },
         },
     ]
@@ -2158,6 +2173,17 @@ def context_feedback_memory_assistance_operator_feedback_loop_true_execution_tra
     chat: dict[str, Any] = chat_value if isinstance(chat_value, dict) else {}
     feedback_value = live_sample.get("feedback")
     feedback: dict[str, Any] = feedback_value if isinstance(feedback_value, dict) else {}
+    chat_trace_id = _redacted_line_text(chat.get("trace_id"))
+    chat_run_id = _redacted_line_text(chat.get("run_id"))
+    chat_artifact_dir = _redacted_line_text(chat.get("artifact_dir"))
+    chat_route_execution_trace_ready = (
+        chat.get("trace_kind") == "chat_route_execution_trace"
+        and bool(chat_trace_id)
+        and bool(chat_run_id)
+        and chat.get("route") == "/chat/send"
+        and chat.get("method") == "POST"
+    )
+    model_or_tool_span_ready = bool(chat.get("model_or_tool_execution_span_captured"))
 
     trace_sources = [
         {
@@ -2192,20 +2218,25 @@ def context_feedback_memory_assistance_operator_feedback_loop_true_execution_tra
             "evidence": {"memory_event_id": memory_event_id},
         },
         {
-            "id": "operation_execution_trace",
+            "id": "chat_route_execution_trace",
             "kind": "true_execution_trace",
-            "ready": False,
+            "ready": chat_route_execution_trace_ready,
             "evidence": {
-                "trace_id": "",
-                "run_id": "",
-                "artifact_dir": "",
-                "reason": "feedback_memory_assistance_loop_has_receipt_readbacks_but_no_operation_execution_span",
+                "trace_kind": chat.get("trace_kind", ""),
+                "trace_id": chat_trace_id,
+                "run_id": chat_run_id,
+                "artifact_dir": chat_artifact_dir,
+                "route": chat.get("route", ""),
+                "method": chat.get("method", ""),
+                "reason": "chat_route_wrote_bounded_execution_trace_to_conversation_ledger"
+                if chat_route_execution_trace_ready
+                else "feedback_memory_assistance_loop_has_receipt_readbacks_but_no_chat_route_trace",
             },
         },
         {
             "id": "model_or_tool_execution_span",
             "kind": "true_execution_trace",
-            "ready": False,
+            "ready": model_or_tool_span_ready,
             "evidence": {
                 "model_call_trace_id": "",
                 "tool_call_trace_id": "",
@@ -2233,9 +2264,15 @@ def context_feedback_memory_assistance_operator_feedback_loop_true_execution_tra
         "kind": "francis.stage7.telemetry.context_feedback_memory_assistance_true_execution_trace_review",
         "stage": "Stage 7 / Telemetry MVP",
         "source_id": "telemetry_context",
-        "status": "true_execution_trace_not_observed"
-        if review_ready and not true_execution_trace_observed
-        else "true_execution_trace_review_partial",
+        "status": (
+            "true_execution_trace_partially_observed"
+            if review_ready and true_execution_trace_observed and missing_true_execution_trace
+            else "true_execution_trace_not_observed"
+            if review_ready and not true_execution_trace_observed
+            else "true_execution_trace_review_ready"
+            if review_ready
+            else "true_execution_trace_review_partial"
+        ),
         "target": "feedback_memory_assistance_prompt_integration",
         "review_ready": review_ready,
         "true_execution_trace_observed": true_execution_trace_observed,
@@ -2254,6 +2291,7 @@ def context_feedback_memory_assistance_operator_feedback_loop_true_execution_tra
             "status": primary_loop.get("status", "unknown"),
             "primary_loop_evidence_ready": bool(primary_loop.get("primary_loop_evidence_ready")),
             "receipt_trace_kind": primary_loop.get("receipt_trace_kind", ""),
+            "chat_route_execution_trace_observed": bool(primary_loop.get("chat_route_execution_trace_observed")),
         },
         "read_only": True,
         "writes_memory": False,
@@ -2283,7 +2321,9 @@ def context_feedback_memory_assistance_operator_feedback_loop_true_execution_tra
             "grants_mutation_authority": False,
         },
         "next_smallest_truthful_gap": (
-            "stage7_context_feedback_memory_assistance_true_execution_trace_capture"
+            "stage7_context_feedback_memory_assistance_model_or_tool_execution_span_capture"
+            if review_ready and true_execution_trace_observed and missing_true_execution_trace
+            else "stage7_context_feedback_memory_assistance_true_execution_trace_capture"
             if review_ready and not true_execution_trace_observed
             else "stage7_context_feedback_memory_assistance_true_execution_trace_review"
         ),
@@ -2744,6 +2784,8 @@ def _feedback_memory_assistance_live_chat_evidence(*, limit: int) -> dict[str, A
         meta: dict[str, Any] = meta_value if isinstance(meta_value, dict) else {}
         telemetry_context_value = meta.get("telemetry_context")
         telemetry_context: dict[str, Any] = telemetry_context_value if isinstance(telemetry_context_value, dict) else {}
+        execution_trace_value = meta.get("execution_trace")
+        execution_trace: dict[str, Any] = execution_trace_value if isinstance(execution_trace_value, dict) else {}
         assistance_value = telemetry_context.get("feedback_memory_assistance_prompt_integration")
         assistance: dict[str, Any] = assistance_value if isinstance(assistance_value, dict) else {}
         if not assistance or assistance.get("applies_to_chat_now") is not True:
@@ -2755,6 +2797,13 @@ def _feedback_memory_assistance_live_chat_evidence(*, limit: int) -> dict[str, A
             "line_count": _safe_count(assistance.get("line_count")),
             "api_actor": _redacted_line_text(meta.get("api_actor")),
             "mode": _redacted_line_text(meta.get("mode")),
+            "trace_kind": _redacted_line_text(execution_trace.get("trace_kind") or meta.get("trace_kind")),
+            "trace_id": _redacted_line_text(execution_trace.get("trace_id") or meta.get("trace_id")),
+            "run_id": _redacted_line_text(execution_trace.get("run_id") or meta.get("run_id")),
+            "artifact_dir": _redacted_line_text(execution_trace.get("artifact_dir")),
+            "route": _redacted_line_text(execution_trace.get("route")) or "/chat/send",
+            "method": _redacted_line_text(execution_trace.get("method")) or "POST",
+            "model_or_tool_execution_span_captured": bool(execution_trace.get("model_or_tool_execution_span_captured")),
             "feedback_target_present": isinstance(assistance.get("feedback_target"), dict)
             and bool(assistance.get("feedback_target")),
             "telemetry_is_untrusted_input": bool(assistance.get("telemetry_is_untrusted_input")),
