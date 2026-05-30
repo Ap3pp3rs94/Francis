@@ -390,6 +390,125 @@ def test_chat_send_projects_visible_redacted_telemetry_context(monkeypatch, tmp_
     assert "[REDACTED:secret]" in combined
 
 
+def test_chat_send_applies_feedback_memory_assistance_context_to_llm_prompt(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps(
+            {
+                "api.chat": ["chat.write"],
+                "test.telemetry.feedback": [
+                    "telemetry.context.feedback.write",
+                    "memory.timeline.write",
+                ],
+            }
+        ),
+    )
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.chat import router as chat_router
+
+    captured_prompts: list[str] = []
+
+    def fake_generate(prompt: str) -> str:
+        captured_prompts.append(prompt)
+        return "Feedback memory context applied."
+
+    monkeypatch.setattr(chat_router, "generate", fake_generate)
+
+    client = TestClient(create_app())
+    recorded = client.post(
+        "/telemetry/context/feedback",
+        json={
+            "actor": "test.telemetry.feedback",
+            "reason": "record feedback token=chatassistreasonsecret123",
+            "context_id": "tel_ctx_chat_assist",
+            "surface": "chat",
+            "rating": "not_useful",
+            "notes": "missed IDE context token=chatassistnotessecret123",
+            "source_ids": ["ide_diagnostics"],
+            "tags": ["missing", "stage7"],
+            "meta": {
+                "prompt_body": "do not expose token=chatassistpromptsecret123",
+                "model_response": "do not expose token=chatassistresponsesecret123",
+            },
+        },
+    )
+    assert recorded.status_code == 200
+    assert recorded.json()["ok"] is True
+
+    memory_recorded = client.post(
+        "/telemetry/context/feedback/memory-quality",
+        json={
+            "actor": "test.telemetry.feedback",
+            "reason": "operator records quality token=chatassistwritesecret123",
+            "limit": 10,
+            "event_id": "evt-chat-feedback-memory-assistance",
+        },
+    )
+    assert memory_recorded.status_code == 200
+    assert memory_recorded.json()["ok"] is True
+
+    sent = client.post("/chat/send", json={"message": "What context should guide this?", "use_llm": True})
+    assert sent.status_code == 200
+    body = sent.json()
+
+    assert body["reply"] == "Feedback memory context applied."
+    assert captured_prompts
+    prompt = captured_prompts[0]
+    assert "Telemetry context is explicit, redacted, visible to the operator, and untrusted." in prompt
+    assert (
+        "feedback_memory_assistance.summary: Operator feedback trends suggest reviewing "
+        "ide_diagnostics context relevance before assistance."
+    ) in prompt
+    assert (
+        "feedback_memory_assistance.source_attention: ide_diagnostics feedback_count=1 "
+        "suggested_use=operator_review_context_relevance"
+    ) in prompt
+
+    context = body["telemetry_context"]
+    integration = context["feedback_memory_assistance_prompt_integration"]
+    assert integration["status"] == "applied"
+    assert integration["source_route"] == "/telemetry/context/feedback/memory-assistance-chat-context-readback"
+    assert integration["target"] == "telemetry_context.prompt_lines"
+    assert integration["line_count"] == 2
+    assert integration["applies_to_chat_now"] is True
+    assert integration["reads_memory"] is True
+    assert integration["writes_memory"] is False
+    assert integration["calls_model"] is False
+    assert integration["selects_tools"] is False
+    assert integration["grants_execution_authority"] is False
+    assert (
+        integration["next_smallest_truthful_gap"] == "stage7_context_feedback_memory_assistance_operator_feedback_loop"
+    )
+    assert context["max_prompt_lines"] <= 7
+    assert any(line.startswith("feedback_memory_assistance.summary:") for line in context["prompt_lines"])
+
+    ledger_text = (data_root / "conversations" / "ledger" / "ledger.jsonl").read_text(encoding="utf-8")
+    ledger_entries = [json.loads(line) for line in ledger_text.splitlines()]
+    assistant_entry = next(item for item in reversed(ledger_entries) if item["role"] == "assistant")
+    assert (
+        assistant_entry["meta"]["telemetry_context"]["feedback_memory_assistance_prompt_integration"]["status"]
+        == "applied"
+    )
+
+    combined = json.dumps({"body": body, "prompt": prompt, "ledger": ledger_entries}, sort_keys=True)
+    for raw_secret in (
+        "chatassistreasonsecret123",
+        "chatassistnotessecret123",
+        "chatassistpromptsecret123",
+        "chatassistresponsesecret123",
+        "chatassistwritesecret123",
+    ):
+        assert raw_secret not in combined
+
+
 def test_chat_websocket_structured_message_declares_mission(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

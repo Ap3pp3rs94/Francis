@@ -31,7 +31,7 @@ _MAX_PATHS = 5
 _MAX_LIMIT = 100
 _MAX_TEXT_LENGTH = 2_000
 _MAX_TAGS = 16
-_NEXT_CONTEXT_FEEDBACK_GAP = "stage7_context_feedback_memory_assistance_prompt_integration"
+_NEXT_CONTEXT_FEEDBACK_GAP = "stage7_context_feedback_memory_assistance_operator_feedback_loop"
 
 
 def telemetry_context_snapshot(*, surface: Any = "assist") -> dict[str, Any]:
@@ -476,7 +476,8 @@ def telemetry_context_feedback_memory_assistance_chat_context_contract() -> dict
             "read_only": True,
             "contract_only": True,
             "does_not_query_memory": True,
-            "does_not_change_chat_prompt_yet": True,
+            "chat_prompt_integration_enabled": True,
+            "prompt_integration_route": "/chat/send",
             "requires_separate_readback_before_prompt_injection": True,
             "telemetry_is_untrusted_input": True,
             "stores_prompt_body": False,
@@ -522,7 +523,9 @@ def telemetry_context_prompt_lines(context: dict[str, Any] | None) -> list[str]:
     lines = context.get("prompt_lines")
     if not isinstance(lines, list):
         return []
-    return [_redact_text(line).strip() for line in lines if _redact_text(line).strip()][:_MAX_CONTEXT_ITEMS]
+    max_prompt_lines = _safe_int(context.get("max_prompt_lines"), _MAX_CONTEXT_ITEMS)
+    limit = max(1, min(max_prompt_lines, _MAX_CONTEXT_ITEMS + 2))
+    return [_redact_text(line).strip() for line in lines if _redact_text(line).strip()][:limit]
 
 
 def _context_items(sources: list[Any]) -> list[dict[str, Any]]:

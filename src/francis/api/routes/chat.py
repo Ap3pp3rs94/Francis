@@ -180,6 +180,69 @@ def _chat_write_permission(actor: object, *, route: str, method: str) -> ApiPerm
     )
 
 
+def _chat_feedback_memory_assistance_context(telemetry_context: dict[str, Any]) -> dict[str, Any]:
+    context = dict(telemetry_context)
+    try:
+        from francis.api.routes.telemetry import context_feedback_memory_assistance_chat_context_readback
+
+        readback = context_feedback_memory_assistance_chat_context_readback(limit=20)
+    except Exception as exc:
+        log_api_exception(exc, route="chat.feedback_memory_assistance_context")
+        context["feedback_memory_assistance_prompt_integration"] = {
+            "status": "unavailable",
+            "applies_to_chat_now": False,
+            "line_count": 0,
+            "reason": api_error_code(),
+            "writes_memory": False,
+            "calls_model": False,
+            "selects_tools": False,
+            "grants_execution_authority": False,
+        }
+        return context
+
+    chat_context = _safe_dict(readback.get("chat_context"))
+    raw_lines_value = chat_context.get("lines")
+    raw_lines = raw_lines_value if isinstance(raw_lines_value, list) else []
+    assistance_lines = [
+        redact_secret_text(str(line).strip()).replace("\r", " ").replace("\n", " ").strip()
+        for line in raw_lines[:2]
+        if str(line).strip()
+    ]
+    existing_lines_value = context.get("prompt_lines")
+    existing_lines = existing_lines_value if isinstance(existing_lines_value, list) else []
+    prompt_lines = [
+        redact_secret_text(str(line).strip()).replace("\r", " ").replace("\n", " ").strip()
+        for line in existing_lines
+        if str(line).strip()
+    ]
+    for line in assistance_lines:
+        if line and line not in prompt_lines:
+            prompt_lines.append(line)
+
+    context["prompt_lines"] = prompt_lines
+    context["max_prompt_lines"] = min(len(prompt_lines), 7)
+    context["feedback_memory_assistance_prompt_integration"] = {
+        "status": "applied" if assistance_lines else "empty",
+        "source_route": "/telemetry/context/feedback/memory-assistance-chat-context-readback",
+        "target": chat_context.get("target") or "telemetry_context.prompt_lines",
+        "line_count": len(assistance_lines),
+        "max_context_lines": _safe_int(chat_context.get("max_context_lines") or 2),
+        "applies_to_chat_now": bool(assistance_lines),
+        "telemetry_is_untrusted_input": True,
+        "redacted_context_lines": True,
+        "reads_memory": bool(readback.get("reads_memory", True)),
+        "writes_memory": False,
+        "calls_model": False,
+        "mutates_prompt": True,
+        "selects_tools": False,
+        "trains_model": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop",
+    }
+    return context
+
+
 def _permission_denied(
     decision: ApiPermissionDecision,
     *,
@@ -437,7 +500,7 @@ def send(payload: ChatIn) -> dict[str, object]:
                 next_step="configure_actor_scope_before_writing_chat_ledger",
                 reply="Chat request denied by permission gate.",
             )
-        telemetry_context = telemetry_context_snapshot(surface="chat")
+        telemetry_context = _chat_feedback_memory_assistance_context(telemetry_context_snapshot(surface="chat"))
         return {
             "reply": handle(
                 payload.message,

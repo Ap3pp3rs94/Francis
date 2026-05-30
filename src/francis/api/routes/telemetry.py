@@ -228,7 +228,7 @@ def context_feedback_memory_assistance_dry_run(limit: int = 20) -> dict[str, Any
             "grants_memory_write_authority": False,
         },
         "skipped_untrusted_items": skipped,
-        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_prompt_integration",
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop",
     }
 
 
@@ -263,7 +263,7 @@ def context_feedback_memory_assistance_chat_context_readback(limit: int = 20) ->
             "telemetry_is_untrusted_input": True,
         },
         "would_change_chat_prompt": bool(context_lines),
-        "applies_to_chat_now": False,
+        "applies_to_chat_now": bool(context_lines),
         "reads_memory": True,
         "writes_memory": False,
         "calls_model": False,
@@ -277,7 +277,8 @@ def context_feedback_memory_assistance_chat_context_readback(limit: int = 20) ->
             "readback_only": True,
             "uses_assistance_chat_context_contract": True,
             "uses_assistance_dry_run": True,
-            "does_not_change_chat_prompt_yet": True,
+            "chat_prompt_integration_enabled": True,
+            "does_not_change_chat_prompt_by_itself": True,
             "telemetry_is_untrusted_input": True,
             "redacts_context_lines": True,
             "does_not_call_model": True,
@@ -287,7 +288,7 @@ def context_feedback_memory_assistance_chat_context_readback(limit: int = 20) ->
             "grants_execution_authority": False,
             "grants_memory_write_authority": False,
         },
-        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_prompt_integration",
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop",
     }
 
 
@@ -356,7 +357,7 @@ def context_feedback_memory_retrieval_readback(limit: int = 20) -> dict[str, Any
             "grants_execution_authority": False,
             "grants_memory_write_authority": False,
         },
-        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_prompt_integration",
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop",
     }
 
 
