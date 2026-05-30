@@ -101,6 +101,7 @@ import type {
 import {
   TelemetryApiError,
   TelemetryClient,
+  type TelemetryContextFeedbackMemoryAssistanceDryRun,
   type TelemetryContextFeedbackMemoryAssistancePolicy,
   type TelemetryContextFeedbackMemoryQualityRecord,
   type TelemetryContextFeedbackMemoryRetrievalReadback,
@@ -3966,6 +3967,10 @@ function SystemPanel(props: {
     useState<TelemetryContextFeedbackMemoryAssistancePolicy | null>(null);
   const [telemetryFeedbackMemoryAssistancePolicyError, setTelemetryFeedbackMemoryAssistancePolicyError] = useState<string | null>(null);
   const [telemetryFeedbackMemoryAssistancePolicyLoadedAt, setTelemetryFeedbackMemoryAssistancePolicyLoadedAt] = useState<number | null>(null);
+  const [telemetryFeedbackMemoryAssistanceDryRun, setTelemetryFeedbackMemoryAssistanceDryRun] =
+    useState<TelemetryContextFeedbackMemoryAssistanceDryRun | null>(null);
+  const [telemetryFeedbackMemoryAssistanceDryRunError, setTelemetryFeedbackMemoryAssistanceDryRunError] = useState<string | null>(null);
+  const [telemetryFeedbackMemoryAssistanceDryRunLoadedAt, setTelemetryFeedbackMemoryAssistanceDryRunLoadedAt] = useState<number | null>(null);
   const [telemetryFeedbackMemoryQualityBusy, setTelemetryFeedbackMemoryQualityBusy] = useState(false);
   const [telemetryFeedbackMemoryQualityNotice, setTelemetryFeedbackMemoryQualityNotice] = useState<{
     tone: "info" | "error";
@@ -4162,6 +4167,7 @@ function SystemPanel(props: {
         nextTelemetryFeedbackReview,
         nextTelemetryFeedbackMemoryReadback,
         nextTelemetryFeedbackMemoryAssistancePolicy,
+        nextTelemetryFeedbackMemoryAssistanceDryRun,
       ] =
         await Promise.allSettled([
         client.getSystemInfo(),
@@ -4186,6 +4192,7 @@ function SystemPanel(props: {
         telemetryClient.getContextFeedbackReview({ limit: 25 }),
         telemetryClient.getContextFeedbackMemoryRetrievalReadback({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistancePolicy(),
+        telemetryClient.getContextFeedbackMemoryAssistanceDryRun({ limit: 20 }),
       ]);
 
       const degradedFeeds: string[] = [];
@@ -4334,6 +4341,15 @@ function SystemPanel(props: {
       } else {
         setTelemetryFeedbackMemoryAssistancePolicyError(telemetryError(nextTelemetryFeedbackMemoryAssistancePolicy.reason));
         degradedFeeds.push("telemetry feedback memory assistance policy");
+      }
+
+      if (nextTelemetryFeedbackMemoryAssistanceDryRun.status === "fulfilled") {
+        setTelemetryFeedbackMemoryAssistanceDryRun(nextTelemetryFeedbackMemoryAssistanceDryRun.value);
+        setTelemetryFeedbackMemoryAssistanceDryRunError(null);
+        setTelemetryFeedbackMemoryAssistanceDryRunLoadedAt(refreshStartedAt);
+      } else {
+        setTelemetryFeedbackMemoryAssistanceDryRunError(telemetryError(nextTelemetryFeedbackMemoryAssistanceDryRun.reason));
+        degradedFeeds.push("telemetry feedback memory assistance dry run");
       }
 
       if (degradedFeeds.length > 0) {
@@ -6088,6 +6104,22 @@ function SystemPanel(props: {
     : telemetryFeedbackMemoryAssistancePolicy
       ? `${telemetryFeedbackMemoryAssistancePolicy.allowed_influence.length} allowed assistance influence${telemetryFeedbackMemoryAssistancePolicy.allowed_influence.length === 1 ? "" : "s"}; ${telemetryFeedbackMemoryAssistancePolicy.forbidden_influence.length} forbidden influence${telemetryFeedbackMemoryAssistancePolicy.forbidden_influence.length === 1 ? "" : "s"}.`
       : "Feedback memory assistance policy has not loaded yet.";
+  const telemetryFeedbackMemoryAssistanceDryRunStatus =
+    safeString(telemetryFeedbackMemoryAssistanceDryRun?.status).trim() ||
+    (telemetryFeedbackMemoryAssistanceDryRunError ? "unavailable" : "unloaded");
+  const telemetryFeedbackMemoryAssistanceDryRunTone = telemetryFeedbackMemoryAssistanceDryRunError
+    ? "blocked"
+    : telemetryFeedbackMemoryAssistanceDryRun
+      ? telemetryFeedbackMemoryAssistanceDryRun.event_count > 0
+        ? "running"
+        : "dormant"
+      : "standby";
+  const telemetryFeedbackMemoryAssistanceDryRunDetail = telemetryFeedbackMemoryAssistanceDryRunError
+    ? `Feedback memory assistance dry run could not refresh: ${telemetryFeedbackMemoryAssistanceDryRunError}`
+    : telemetryFeedbackMemoryAssistanceDryRun
+      ? `${telemetryFeedbackMemoryAssistanceDryRun.event_count} feedback-memory event${telemetryFeedbackMemoryAssistanceDryRun.event_count === 1 ? "" : "s"} projected without prompt, tool, model, or memory mutation.`
+      : "Feedback memory assistance dry run has not loaded yet.";
+  const latestTelemetryFeedbackMemoryAttention = telemetryFeedbackMemoryAssistanceDryRun?.source_attention[0] ?? null;
   const controlTone =
     controlModeId === "pilot"
       ? { bg: "#24160a", border: "#7a541b", color: "#ffd38a" }
@@ -11019,6 +11051,9 @@ function SystemPanel(props: {
             <span style={badgeStyle(telemetryFeedbackMemoryAssistancePolicyTone)}>
               Assistance {telemetryFeedbackMemoryAssistancePolicyStatus}
             </span>
+            <span style={badgeStyle(telemetryFeedbackMemoryAssistanceDryRunTone)}>
+              Dry run {telemetryFeedbackMemoryAssistanceDryRunStatus}
+            </span>
             <span style={badgeStyle(continuation.tone)}>{continuation.label}</span>
           </div>
         </div>
@@ -11059,6 +11094,11 @@ function SystemPanel(props: {
           style={{ fontSize: 12, color: telemetryFeedbackMemoryAssistancePolicyError ? "#ffcf9d" : THEME.text, marginTop: 8 }}
         >
           {telemetryFeedbackMemoryAssistancePolicyDetail}
+        </div>
+        <div
+          style={{ fontSize: 12, color: telemetryFeedbackMemoryAssistanceDryRunError ? "#ffcf9d" : THEME.text, marginTop: 8 }}
+        >
+          {telemetryFeedbackMemoryAssistanceDryRunDetail}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
           <button
@@ -11247,6 +11287,57 @@ function SystemPanel(props: {
               <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
                 untrusted <code>{telemetryFeedbackMemoryAssistancePolicy.assistance_guards.telemetry_is_untrusted_input === true ? "true" : "false"}</code>
               </div>
+            </div>
+          </div>
+        ) : null}
+        {telemetryFeedbackMemoryAssistanceDryRun ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+              gap: 8,
+              marginTop: 10,
+            }}
+          >
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Assistance dry run</div>
+              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
+                {telemetryFeedbackMemoryAssistanceDryRun.event_count}
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                dry run <code>{telemetryFeedbackMemoryAssistanceDryRun.dry_run_only ? "true" : "false"}</code>
+              </div>
+              {telemetryFeedbackMemoryAssistanceDryRunLoadedAt ? (
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                  Loaded {toLocaleTime(telemetryFeedbackMemoryAssistanceDryRunLoadedAt)}
+                </div>
+              ) : null}
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Dry-run posture</div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                model <code>{telemetryFeedbackMemoryAssistanceDryRun.calls_model ? "true" : "false"}</code>
+                {" / "}prompt <code>{telemetryFeedbackMemoryAssistanceDryRun.mutates_prompt ? "true" : "false"}</code>
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                tools <code>{telemetryFeedbackMemoryAssistanceDryRun.selects_tools ? "true" : "false"}</code>
+                {" / "}writes <code>{telemetryFeedbackMemoryAssistanceDryRun.writes_memory ? "true" : "false"}</code>
+              </div>
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Source attention</div>
+              {latestTelemetryFeedbackMemoryAttention ? (
+                <>
+                  <div style={{ fontSize: 12, color: THEME.text, marginTop: 6 }}>
+                    {safeString(latestTelemetryFeedbackMemoryAttention.source_id).trim() || "source"}
+                  </div>
+                  <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                    count <code>{safeNumber(latestTelemetryFeedbackMemoryAttention.feedback_count, 0)}</code>
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontSize: 12, color: THEME.muted, marginTop: 6 }}>No source attention projected.</div>
+              )}
             </div>
           </div>
         ) : null}

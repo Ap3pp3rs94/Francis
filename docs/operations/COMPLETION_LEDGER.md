@@ -44571,6 +44571,59 @@ Latest validation for Stage 7 feedback memory assistance policy:
   `grants_execution_authority=false`,
   `next_smallest_truthful_gap=stage7_context_feedback_memory_assistance_dry_run`.
 
+### 2026-05-30 - Stage 7 feedback memory assistance dry run is visible
+
+Roadmap area: Stage 7 / Telemetry MVP, read-only feedback-memory assistance
+projection.
+
+Material change:
+
+- Telemetry context feedback now exposes
+  `/telemetry/context/feedback/memory-assistance-dry-run`.
+- The dry run consumes only the filtered feedback-memory retrieval readback and
+  reduces it to bounded rating counts, source-attention projections, and event
+  references.
+- The dry run does not call a model, mutate prompts, select tools, write memory,
+  train, grant execution authority, or grant memory-write authority.
+- The chat UI telemetry client and Telemetry & Continuation surface now load and
+  display the dry-run posture, event count, top source attention, and mutation
+  denials.
+- `/telemetry/status`, `/telemetry/context`, feedback review, feedback
+  memory-quality, feedback memory-retrieval, and feedback assistance policy now
+  advance their next smallest truthful gap to
+  `stage7_context_feedback_memory_assistance_chat_context_contract`.
+
+Latest validation for Stage 7 feedback memory assistance dry run:
+
+- `python -m pytest tests/test_api_telemetry.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 24 passed`
+- `python -m mypy src/francis/telemetry/context.py
+  src/francis/telemetry/status.py src/francis/api/routes/telemetry.py`
+  Result: `passed`
+- `python -m ruff check src/francis/telemetry/context.py
+  src/francis/telemetry/status.py src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/telemetry/context.py
+  src/francis/telemetry/status.py src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `node --test --experimental-strip-types src/telemetry/index.test.ts` in
+  `apps/chat_ui`
+  Result: `passed; 12 passed`
+- `npm run test` in `apps/chat_ui`
+  Result: `passed; 120 passed`
+- `npm run build` in `apps/chat_ui`
+  Result: `passed`
+- Direct `/telemetry/context/feedback/memory-assistance-dry-run?limit=5`
+  readback
+  Result: `status=empty`, `event_count=0`, `dry_run_only=true`,
+  `reads_memory=true`, `writes_memory=false`, `calls_model=false`,
+  `mutates_prompt=false`, `selects_tools=false`,
+  `next_smallest_truthful_gap=stage7_context_feedback_memory_assistance_chat_context_contract`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

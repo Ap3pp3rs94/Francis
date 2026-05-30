@@ -182,6 +182,30 @@ export type TelemetryContextFeedbackMemoryAssistancePolicy = {
   next_smallest_truthful_gap: string;
 };
 
+export type TelemetryContextFeedbackMemoryAssistanceDryRun = {
+  ok: boolean;
+  kind: string;
+  stage: string;
+  source_id: string;
+  status: string;
+  event_count: number;
+  event_refs: Array<Record<string, unknown>>;
+  rating_counts: Record<string, number>;
+  source_attention: Array<Record<string, unknown>>;
+  assistance_projection: Record<string, unknown>;
+  dry_run_only: boolean;
+  reads_memory: boolean;
+  writes_memory: boolean;
+  trains_model: boolean;
+  calls_model: boolean;
+  mutates_prompt: boolean;
+  selects_tools: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+  governance: Record<string, unknown>;
+  next_smallest_truthful_gap: string;
+};
+
 export class TelemetryApiError extends Error {
   readonly status?: number;
   readonly url?: string;
@@ -327,6 +351,36 @@ export function parseTelemetryContextFeedbackMemoryAssistancePolicy(
     reads_memory: safeBoolean(raw.reads_memory, true),
     writes_memory: safeBoolean(raw.writes_memory, true),
     trains_model: safeBoolean(raw.trains_model, true),
+    grants_execution_authority: safeBoolean(raw.grants_execution_authority, true),
+    grants_mutation_authority: safeBoolean(raw.grants_mutation_authority, true),
+    governance: recordOrEmpty(raw.governance),
+    next_smallest_truthful_gap: safeString(raw.next_smallest_truthful_gap, ""),
+  };
+}
+
+export function parseTelemetryContextFeedbackMemoryAssistanceDryRun(
+  value: unknown,
+): TelemetryContextFeedbackMemoryAssistanceDryRun {
+  const raw = isRecord(value) ? value : {};
+
+  return {
+    ok: safeBoolean(raw.ok, false),
+    kind: safeString(raw.kind, ""),
+    stage: safeString(raw.stage, ""),
+    source_id: safeString(raw.source_id, ""),
+    status: safeString(raw.status, "unknown"),
+    event_count: safeNumber(raw.event_count, 0),
+    event_refs: Array.isArray(raw.event_refs) ? raw.event_refs.filter(isRecord) : [],
+    rating_counts: numberRecord(raw.rating_counts),
+    source_attention: Array.isArray(raw.source_attention) ? raw.source_attention.filter(isRecord) : [],
+    assistance_projection: recordOrEmpty(raw.assistance_projection),
+    dry_run_only: safeBoolean(raw.dry_run_only, false),
+    reads_memory: safeBoolean(raw.reads_memory, false),
+    writes_memory: safeBoolean(raw.writes_memory, true),
+    trains_model: safeBoolean(raw.trains_model, true),
+    calls_model: safeBoolean(raw.calls_model, true),
+    mutates_prompt: safeBoolean(raw.mutates_prompt, true),
+    selects_tools: safeBoolean(raw.selects_tools, true),
     grants_execution_authority: safeBoolean(raw.grants_execution_authority, true),
     grants_mutation_authority: safeBoolean(raw.grants_mutation_authority, true),
     governance: recordOrEmpty(raw.governance),
@@ -489,6 +543,41 @@ export class TelemetryClient {
       return parseTelemetryContextFeedbackMemoryAssistancePolicy(text ? JSON.parse(text) : {});
     } catch (err) {
       throw new TelemetryApiError("Telemetry context feedback memory assistance policy response was not valid JSON.", {
+        url,
+        cause: err,
+      });
+    }
+  }
+
+  async getContextFeedbackMemoryAssistanceDryRun(opts?: {
+    limit?: number;
+    signal?: AbortSignal;
+  }): Promise<TelemetryContextFeedbackMemoryAssistanceDryRun> {
+    const limit = clampLimit(opts?.limit, 20);
+    const url = this.url(`/telemetry/context/feedback/memory-assistance-dry-run?limit=${limit}`);
+    let response: Response;
+    try {
+      response = await fetch(url, { method: "GET", signal: opts?.signal });
+    } catch (err) {
+      throw new TelemetryApiError("Telemetry context feedback memory assistance dry-run request failed.", {
+        url,
+        cause: err,
+      });
+    }
+
+    const text = await response.text();
+    if (!response.ok) {
+      throw new TelemetryApiError(`HTTP ${response.status} for telemetry context feedback memory assistance dry-run request`, {
+        status: response.status,
+        url,
+        bodySnippet: text.slice(0, 500),
+      });
+    }
+
+    try {
+      return parseTelemetryContextFeedbackMemoryAssistanceDryRun(text ? JSON.parse(text) : {});
+    } catch (err) {
+      throw new TelemetryApiError("Telemetry context feedback memory assistance dry-run response was not valid JSON.", {
         url,
         cause: err,
       });

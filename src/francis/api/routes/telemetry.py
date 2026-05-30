@@ -126,6 +126,105 @@ def context_feedback_memory_assistance_policy() -> dict[str, Any]:
     return telemetry_context_feedback_memory_assistance_policy()
 
 
+@router.get("/context/feedback/memory-assistance-dry-run")
+def context_feedback_memory_assistance_dry_run(limit: int = 20) -> dict[str, Any]:
+    safe_limit = max(1, min(int(limit), 100))
+    policy = telemetry_context_feedback_memory_assistance_policy()
+    readback = context_feedback_memory_retrieval_readback(limit=safe_limit)
+    raw_items_value = readback.get("items")
+    raw_items: list[Any] = raw_items_value if isinstance(raw_items_value, list) else []
+    rating_counts = {"useful": 0, "not_useful": 0, "neutral": 0}
+    source_counts: dict[str, int] = {}
+    event_refs: list[dict[str, Any]] = []
+    skipped = 0
+
+    for item in raw_items:
+        if not isinstance(item, dict):
+            skipped += 1
+            continue
+        payload_value = item.get("payload")
+        payload: dict[str, Any] = payload_value if isinstance(payload_value, dict) else {}
+        _merge_known_counts(rating_counts, payload.get("rating_counts"), allowed_keys=rating_counts.keys())
+        _merge_count_map(source_counts, payload.get("source_counts"))
+        retention_value = item.get("retention")
+        retention: dict[str, Any] = retention_value if isinstance(retention_value, dict) else {}
+        event_refs.append(
+            {
+                "id": item.get("id", ""),
+                "kind": item.get("kind", ""),
+                "action_type": item.get("action_type", ""),
+                "classification": item.get("classification", ""),
+                "retention_policy": retention.get("policy", ""),
+            }
+        )
+
+    source_attention = [
+        {
+            "source_id": source_id,
+            "feedback_count": count,
+            "suggested_use": "operator_review_context_relevance",
+        }
+        for source_id, count in sorted(source_counts.items(), key=lambda value: (-value[1], value[0]))[:12]
+        if source_id and count > 0
+    ]
+    matched_count = len(event_refs)
+    status = "dry_run_ready" if matched_count > 0 else "empty"
+    return {
+        "ok": True,
+        "kind": "francis.stage7.telemetry.context_feedback_memory_assistance_dry_run",
+        "stage": "Stage 7 / Telemetry MVP",
+        "source_id": "telemetry_context",
+        "status": status,
+        "policy": policy,
+        "memory_readback": {
+            "route": "/telemetry/context/feedback/memory-retrieval-readback",
+            "status": readback.get("status", "unknown"),
+            "count": readback.get("count", 0),
+            "total": readback.get("total", 0),
+            "skipped_count": readback.get("skipped_count", 0),
+        },
+        "event_refs": event_refs,
+        "event_count": matched_count,
+        "rating_counts": rating_counts,
+        "source_attention": source_attention,
+        "assistance_projection": {
+            "summary": _assistance_projection_summary(
+                event_count=matched_count,
+                rating_counts=rating_counts,
+                source_attention=source_attention,
+            ),
+            "allowed_influence_applied": policy.get("allowed_influence", []),
+            "forbidden_influence_respected": policy.get("forbidden_influence", []),
+        },
+        "dry_run_only": True,
+        "reads_memory": True,
+        "writes_memory": False,
+        "trains_model": False,
+        "calls_model": False,
+        "mutates_prompt": False,
+        "selects_tools": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "dry_run_only": True,
+            "uses_memory_retrieval_readback": True,
+            "uses_assistance_policy": True,
+            "telemetry_is_untrusted_input": True,
+            "ignores_payload_instruction_text": True,
+            "does_not_call_model": True,
+            "does_not_mutate_prompt": True,
+            "does_not_select_tools": True,
+            "writes_memory": False,
+            "trains_model": False,
+            "grants_execution_authority": False,
+            "grants_memory_write_authority": False,
+        },
+        "skipped_untrusted_items": skipped,
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_chat_context_contract",
+    }
+
+
 @router.get("/context/feedback/memory-retrieval-readback")
 def context_feedback_memory_retrieval_readback(limit: int = 20) -> dict[str, Any]:
     safe_limit = max(1, min(int(limit), 100))
@@ -191,7 +290,7 @@ def context_feedback_memory_retrieval_readback(limit: int = 20) -> dict[str, Any
             "grants_execution_authority": False,
             "grants_memory_write_authority": False,
         },
-        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_dry_run",
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_chat_context_contract",
     }
 
 
@@ -292,6 +391,53 @@ def context_feedback_memory_quality_record(payload: TelemetryContextFeedbackMemo
             "grants_mutation_authority": False,
         },
     }
+
+
+def _merge_known_counts(target: dict[str, int], value: Any, *, allowed_keys: Any) -> None:
+    if not isinstance(value, dict):
+        return
+    allowed = {str(key) for key in allowed_keys}
+    for key, raw_count in value.items():
+        text_key = str(key)
+        if text_key not in allowed:
+            continue
+        target[text_key] = target.get(text_key, 0) + _safe_count(raw_count)
+
+
+def _merge_count_map(target: dict[str, int], value: Any) -> None:
+    if not isinstance(value, dict):
+        return
+    for key, raw_count in value.items():
+        text_key = str(key).strip()
+        if not text_key:
+            continue
+        target[text_key] = target.get(text_key, 0) + _safe_count(raw_count)
+
+
+def _safe_count(value: Any) -> int:
+    try:
+        count = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return max(count, 0)
+
+
+def _assistance_projection_summary(
+    *,
+    event_count: int,
+    rating_counts: dict[str, int],
+    source_attention: list[dict[str, Any]],
+) -> str:
+    if event_count <= 0:
+        return "No governed feedback-quality memory is available for assistance dry run."
+    misses = rating_counts.get("not_useful", 0)
+    useful = rating_counts.get("useful", 0)
+    top_source = source_attention[0]["source_id"] if source_attention else "telemetry_context"
+    if misses > useful:
+        return f"Operator feedback trends suggest reviewing {top_source} context relevance before assistance."
+    if useful > 0:
+        return f"Operator feedback trends support surfacing {top_source} as a relevant context source."
+    return f"Operator feedback memory is available for bounded {top_source} context review."
 
 
 @router.get("/terminal/scope")
