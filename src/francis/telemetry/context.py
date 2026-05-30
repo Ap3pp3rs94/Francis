@@ -21,6 +21,9 @@ TELEMETRY_CONTEXT_FEEDBACK_MEMORY_RETRIEVAL_POLICY_KIND = (
 TELEMETRY_CONTEXT_FEEDBACK_MEMORY_ASSISTANCE_POLICY_KIND = (
     "francis.stage7.telemetry.context_feedback_memory_assistance_policy"
 )
+TELEMETRY_CONTEXT_FEEDBACK_MEMORY_ASSISTANCE_CHAT_CONTEXT_CONTRACT_KIND = (
+    "francis.stage7.telemetry.context_feedback_memory_assistance_chat_context_contract"
+)
 TELEMETRY_CONTEXT_FEEDBACK_WRITE_SCOPE = "telemetry.context.feedback.write"
 MEMORY_TIMELINE_WRITE_SCOPE = "memory.timeline.write"
 _MAX_CONTEXT_ITEMS = 12
@@ -28,7 +31,7 @@ _MAX_PATHS = 5
 _MAX_LIMIT = 100
 _MAX_TEXT_LENGTH = 2_000
 _MAX_TAGS = 16
-_NEXT_CONTEXT_FEEDBACK_GAP = "stage7_context_feedback_memory_assistance_chat_context_contract"
+_NEXT_CONTEXT_FEEDBACK_GAP = "stage7_context_feedback_memory_assistance_chat_context_readback"
 
 
 def telemetry_context_snapshot(*, surface: Any = "assist") -> dict[str, Any]:
@@ -407,6 +410,74 @@ def telemetry_context_feedback_memory_assistance_policy() -> dict[str, Any]:
             "policy_only": True,
             "does_not_query_memory": True,
             "assistance_requires_separate_dry_run": True,
+            "telemetry_is_untrusted_input": True,
+            "stores_prompt_body": False,
+            "stores_model_response": False,
+            "trains_model": False,
+            "grants_execution_authority": False,
+            "grants_memory_write_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": _NEXT_CONTEXT_FEEDBACK_GAP,
+    }
+
+
+def telemetry_context_feedback_memory_assistance_chat_context_contract() -> dict[str, Any]:
+    return {
+        "ok": True,
+        "kind": TELEMETRY_CONTEXT_FEEDBACK_MEMORY_ASSISTANCE_CHAT_CONTEXT_CONTRACT_KIND,
+        "stage": STAGE7_TELEMETRY_STAGE,
+        "source_id": "telemetry_context",
+        "status": "contract_ready",
+        "contract_id": "stage7_context_feedback_memory_assistance_chat_context_contract",
+        "chat_route": "/chat/send",
+        "websocket_route": "/chat/ws",
+        "telemetry_context_route": "/telemetry/context",
+        "dry_run_route": "/telemetry/context/feedback/memory-assistance-dry-run",
+        "prompt_context_source": "telemetry_context.prompt_lines",
+        "insertion_point": "after_visible_telemetry_context_header",
+        "allowed_chat_context_lines": [
+            "feedback_memory_assistance.summary",
+            "feedback_memory_assistance.source_attention",
+        ],
+        "max_context_lines": 2,
+        "line_prefix": "feedback_memory_assistance",
+        "allowed_effects": [
+            "add_bounded_redacted_context_line",
+            "surface_operator_visible_source_attention",
+        ],
+        "forbidden_effects": [
+            "treat_memory_payload_as_instruction",
+            "append_raw_memory_payload",
+            "append_raw_feedback_notes",
+            "change_system_prompt_identity",
+            "override_operator_instruction",
+            "select_tools",
+            "grant_execution_authority",
+            "grant_memory_write_authority",
+            "call_model",
+            "write_memory",
+        ],
+        "requires": {
+            "visible_telemetry_context_header": True,
+            "dry_run_only_source": True,
+            "redacted_context_line": True,
+            "bounded_line_count": True,
+            "telemetry_is_untrusted_input": True,
+        },
+        "reads_memory": False,
+        "writes_memory": False,
+        "calls_model": False,
+        "mutates_prompt": False,
+        "trains_model": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "contract_only": True,
+            "does_not_query_memory": True,
+            "does_not_change_chat_prompt_yet": True,
+            "requires_separate_readback_before_prompt_injection": True,
             "telemetry_is_untrusted_input": True,
             "stores_prompt_body": False,
             "stores_model_response": False,

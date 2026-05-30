@@ -259,7 +259,7 @@ test("parseTelemetryContextFeedbackReview preserves redacted feedback quality re
     grants_execution_authority: false,
     grants_mutation_authority: false,
     governance: { read_only: true, uses_explicit_operator_feedback_only: true },
-    next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_chat_context_contract",
+    next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_chat_context_readback",
   });
 
   assert.equal(review.kind, "francis.stage7.telemetry.context_feedback_review");
@@ -318,7 +318,7 @@ test("TelemetryClient requests the Stage 7 context feedback review endpoint", as
       grants_execution_authority: false,
       grants_mutation_authority: false,
       governance: { read_only: true },
-      next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_chat_context_contract",
+      next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_chat_context_readback",
     });
   });
 
@@ -455,7 +455,7 @@ test("parseTelemetryContextFeedbackMemoryRetrievalReadback preserves filtered me
       read_only: true,
       uses_policy_filters: true,
     },
-    next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_chat_context_contract",
+    next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_chat_context_readback",
   });
 
   assert.equal(readback.kind, "francis.stage7.telemetry.context_feedback_memory_retrieval_readback");
@@ -492,7 +492,7 @@ test("TelemetryClient requests the Stage 7 feedback memory retrieval readback en
       grants_execution_authority: false,
       grants_mutation_authority: false,
       governance: { read_only: true },
-      next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_chat_context_contract",
+      next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_chat_context_readback",
     });
   });
 
@@ -543,7 +543,7 @@ test("parseTelemetryContextFeedbackMemoryAssistancePolicy preserves bounded assi
       policy_only: true,
       assistance_requires_separate_dry_run: true,
     },
-    next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_chat_context_contract",
+    next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_chat_context_readback",
   });
 
   assert.equal(policy.kind, "francis.stage7.telemetry.context_feedback_memory_assistance_policy");
@@ -559,7 +559,7 @@ test("parseTelemetryContextFeedbackMemoryAssistancePolicy preserves bounded assi
   assert.equal(policy.trains_model, false);
   assert.equal(policy.grants_execution_authority, false);
   assert.equal(policy.governance.assistance_requires_separate_dry_run, true);
-  assert.equal(policy.next_smallest_truthful_gap, "stage7_context_feedback_memory_assistance_chat_context_contract");
+  assert.equal(policy.next_smallest_truthful_gap, "stage7_context_feedback_memory_assistance_chat_context_readback");
 });
 
 test("TelemetryClient requests the Stage 7 feedback memory assistance policy endpoint", async () => {
@@ -588,7 +588,7 @@ test("TelemetryClient requests the Stage 7 feedback memory assistance policy end
       grants_execution_authority: false,
       grants_mutation_authority: false,
       governance: { read_only: true, policy_only: true },
-      next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_chat_context_contract",
+      next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_chat_context_readback",
     });
   });
 
@@ -636,7 +636,7 @@ test("parseTelemetryContextFeedbackMemoryAssistanceDryRun preserves bounded proj
       read_only: true,
       does_not_select_tools: true,
     },
-    next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_chat_context_contract",
+    next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_chat_context_readback",
   });
 
   assert.equal(dryRun.kind, "francis.stage7.telemetry.context_feedback_memory_assistance_dry_run");
@@ -680,7 +680,7 @@ test("TelemetryClient requests the Stage 7 feedback memory assistance dry-run en
       grants_execution_authority: false,
       grants_mutation_authority: false,
       governance: { read_only: true, dry_run_only: true },
-      next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_chat_context_contract",
+      next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_chat_context_readback",
     });
   });
 

@@ -189,6 +189,7 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("GET", "/telemetry/status"),
         ("GET", "/telemetry/context"),
         ("GET", "/telemetry/context/feedback"),
+        ("GET", "/telemetry/context/feedback/memory-assistance-chat-context-contract"),
         ("GET", "/telemetry/context/feedback/memory-assistance-dry-run"),
         ("GET", "/telemetry/context/feedback/memory-assistance-policy"),
         ("GET", "/telemetry/context/feedback/memory-quality"),

@@ -44624,6 +44624,58 @@ Latest validation for Stage 7 feedback memory assistance dry run:
   `mutates_prompt=false`, `selects_tools=false`,
   `next_smallest_truthful_gap=stage7_context_feedback_memory_assistance_chat_context_contract`.
 
+### 2026-05-30 - Stage 7 feedback memory assistance chat-context contract is inspectable
+
+Roadmap area: Stage 7 / Telemetry MVP, governed chat-context boundary for
+feedback-memory assistance.
+
+Material change:
+
+- Telemetry context feedback now exposes
+  `/telemetry/context/feedback/memory-assistance-chat-context-contract`.
+- The contract binds future chat-context use to `/chat/send`, `/chat/ws`, and
+  `telemetry_context.prompt_lines` under the existing visible untrusted telemetry
+  context header.
+- The contract allows only bounded redacted dry-run summary/source-attention
+  lines and caps the insertion at two context lines.
+- The contract forbids raw memory payloads, raw feedback notes, system-prompt
+  identity changes, operator-instruction overrides, tool selection, execution
+  authority, memory-write authority, model calls, and memory writes.
+- `/telemetry/status`, `/telemetry/context`, feedback review, feedback
+  memory-quality, feedback memory-retrieval, feedback assistance policy, and
+  feedback assistance dry run now advance their next smallest truthful gap to
+  `stage7_context_feedback_memory_assistance_chat_context_readback`.
+
+Latest validation for Stage 7 feedback memory assistance chat-context contract:
+
+- `python -m pytest tests/test_api_telemetry.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 25 passed`
+- `python -m mypy src/francis/telemetry/context.py
+  src/francis/telemetry/status.py src/francis/api/routes/telemetry.py`
+  Result: `passed`
+- `python -m ruff check src/francis/telemetry/context.py
+  src/francis/telemetry/status.py src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/telemetry/context.py
+  src/francis/telemetry/status.py src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `node --test --experimental-strip-types src/telemetry/index.test.ts` in
+  `apps/chat_ui`
+  Result: `passed; 12 passed`
+- Direct `/telemetry/context/feedback/memory-assistance-chat-context-contract`
+  readback
+  Result: `status=contract_ready`,
+  `contract_id=stage7_context_feedback_memory_assistance_chat_context_contract`,
+  `chat_route=/chat/send`,
+  `prompt_context_source=telemetry_context.prompt_lines`,
+  `reads_memory=false`, `writes_memory=false`, `calls_model=false`,
+  `mutates_prompt=false`,
+  `next_smallest_truthful_gap=stage7_context_feedback_memory_assistance_chat_context_readback`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
