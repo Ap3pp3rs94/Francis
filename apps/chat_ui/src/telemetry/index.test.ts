@@ -256,7 +256,7 @@ test("parseTelemetryContextFeedbackReview preserves redacted feedback quality re
     grants_execution_authority: false,
     grants_mutation_authority: false,
     governance: { read_only: true, uses_explicit_operator_feedback_only: true },
-    next_smallest_truthful_gap: "stage7_context_feedback_memory_retrieval_policy",
+    next_smallest_truthful_gap: "stage7_context_feedback_memory_retrieval_readback",
   });
 
   assert.equal(review.kind, "francis.stage7.telemetry.context_feedback_review");
@@ -315,7 +315,7 @@ test("TelemetryClient requests the Stage 7 context feedback review endpoint", as
       grants_execution_authority: false,
       grants_mutation_authority: false,
       governance: { read_only: true },
-      next_smallest_truthful_gap: "stage7_context_feedback_memory_retrieval_policy",
+      next_smallest_truthful_gap: "stage7_context_feedback_memory_retrieval_readback",
     });
   });
 

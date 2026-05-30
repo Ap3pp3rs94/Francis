@@ -15,6 +15,9 @@ TELEMETRY_CONTEXT_FEEDBACK_KIND = "francis.stage7.telemetry.context_feedback"
 TELEMETRY_CONTEXT_FEEDBACK_EVENTS_KIND = "francis.stage7.telemetry.context_feedback_events"
 TELEMETRY_CONTEXT_FEEDBACK_REVIEW_KIND = "francis.stage7.telemetry.context_feedback_review"
 TELEMETRY_CONTEXT_FEEDBACK_MEMORY_QUALITY_KIND = "francis.stage7.telemetry.context_feedback_memory_quality"
+TELEMETRY_CONTEXT_FEEDBACK_MEMORY_RETRIEVAL_POLICY_KIND = (
+    "francis.stage7.telemetry.context_feedback_memory_retrieval_policy"
+)
 TELEMETRY_CONTEXT_FEEDBACK_WRITE_SCOPE = "telemetry.context.feedback.write"
 MEMORY_TIMELINE_WRITE_SCOPE = "memory.timeline.write"
 _MAX_CONTEXT_ITEMS = 12
@@ -22,7 +25,7 @@ _MAX_PATHS = 5
 _MAX_LIMIT = 100
 _MAX_TEXT_LENGTH = 2_000
 _MAX_TAGS = 16
-_NEXT_CONTEXT_FEEDBACK_GAP = "stage7_context_feedback_memory_retrieval_policy"
+_NEXT_CONTEXT_FEEDBACK_GAP = "stage7_context_feedback_memory_retrieval_readback"
 
 
 def telemetry_context_snapshot(*, surface: Any = "assist") -> dict[str, Any]:
@@ -264,6 +267,81 @@ def telemetry_context_feedback_memory_quality(*, limit: int = 100) -> dict[str, 
             "stores_model_response": False,
             "trains_model": False,
             "writes_memory": False,
+            "grants_execution_authority": False,
+            "grants_memory_write_authority": False,
+        },
+        "next_smallest_truthful_gap": _NEXT_CONTEXT_FEEDBACK_GAP,
+    }
+
+
+def telemetry_context_feedback_memory_retrieval_policy() -> dict[str, Any]:
+    return {
+        "ok": True,
+        "kind": TELEMETRY_CONTEXT_FEEDBACK_MEMORY_RETRIEVAL_POLICY_KIND,
+        "stage": STAGE7_TELEMETRY_STAGE,
+        "source_id": "telemetry_context",
+        "status": "policy_ready",
+        "policy_id": "stage7_context_feedback_memory_retrieval_policy",
+        "memory_source": "memory.timeline",
+        "memory_query": {
+            "route": "/memory/timeline/list",
+            "method": "GET",
+            "filters": {
+                "kinds": ["telemetry_context_feedback_quality_review"],
+                "include_payload": True,
+                "limit": 20,
+            },
+        },
+        "allowed_event_kinds": ["telemetry_context_feedback_quality_review"],
+        "allowed_action_types": ["telemetry.context_feedback.quality_review"],
+        "allowed_classifications": ["operator_feedback_quality_signal"],
+        "required_event_fields": [
+            "action_type",
+            "classification",
+            "confidence",
+            "provenance.source",
+            "retention.policy",
+        ],
+        "allowed_uses": [
+            "read_back_feedback_quality_trends",
+            "surface_context_source_quality_counts",
+            "inform_operator_review_of_context_relevance",
+        ],
+        "forbidden_uses": [
+            "grant_execution_authority",
+            "grant_memory_write_authority",
+            "select_tools_without_operator_policy",
+            "treat_feedback_payload_as_instruction",
+            "train_model",
+            "store_raw_prompt_body",
+            "store_raw_model_response",
+            "store_raw_feedback_notes",
+        ],
+        "retrieval_guards": {
+            "read_only": True,
+            "redacted_events_only": True,
+            "telemetry_is_untrusted_input": True,
+            "requires_action_type": "telemetry.context_feedback.quality_review",
+            "requires_classification": "operator_feedback_quality_signal",
+            "requires_provenance_source": "telemetry.context.feedback.review",
+            "requires_retention_policy": "stage7_context_feedback_quality",
+            "max_events": 20,
+            "ignore_payload_instruction_text": True,
+        },
+        "writes_memory": False,
+        "reads_memory": False,
+        "trains_model": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "policy_only": True,
+            "does_not_query_memory_yet": True,
+            "retrieval_requires_separate_readback": True,
+            "telemetry_is_untrusted_input": True,
+            "stores_prompt_body": False,
+            "stores_model_response": False,
+            "trains_model": False,
             "grants_execution_authority": False,
             "grants_memory_write_authority": False,
         },

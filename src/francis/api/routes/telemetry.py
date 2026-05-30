@@ -12,6 +12,7 @@ from francis.telemetry.context import (
     TELEMETRY_CONTEXT_FEEDBACK_WRITE_SCOPE,
     record_telemetry_context_feedback,
     telemetry_context_feedback_memory_quality,
+    telemetry_context_feedback_memory_retrieval_policy,
     telemetry_context_feedback_review,
     telemetry_context_feedback_snapshot,
     telemetry_context_snapshot,
@@ -112,6 +113,11 @@ def context_feedback_review(limit: int = 100) -> dict[str, Any]:
 @router.get("/context/feedback/memory-quality")
 def context_feedback_memory_quality(limit: int = 100) -> dict[str, Any]:
     return telemetry_context_feedback_memory_quality(limit=limit)
+
+
+@router.get("/context/feedback/memory-retrieval-policy")
+def context_feedback_memory_retrieval_policy() -> dict[str, Any]:
+    return telemetry_context_feedback_memory_retrieval_policy()
 
 
 @router.post("/context/feedback/memory-quality")
