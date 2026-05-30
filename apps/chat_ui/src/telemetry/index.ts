@@ -804,6 +804,40 @@ export type TelemetryContextFeedbackMemoryAssistanceMemoryWriteContractHardening
   next_smallest_truthful_gap: string;
 };
 
+export type TelemetryContextFeedbackMemoryAssistanceStageClosureDecisionReadback = {
+  ok: boolean;
+  kind: string;
+  stage: string;
+  source_id: string;
+  status: string;
+  target: string;
+  items: Array<Record<string, unknown>>;
+  count: number;
+  total: number;
+  limit: number;
+  latest_receipt: Record<string, unknown>;
+  latest_receipt_id: string;
+  latest_decision: string;
+  latest_recorded_ts: number;
+  decision_counts: Record<string, number>;
+  receipt_readback_ready: boolean;
+  stage7_closed_by_receipt: boolean;
+  marks_runtime_stage_state: boolean;
+  redacted: boolean;
+  reads_receipts: boolean;
+  writes_receipts: boolean;
+  writes_memory: boolean;
+  writes_feedback: boolean;
+  sends_chat: boolean;
+  calls_model: boolean;
+  selects_tools: boolean;
+  trains_model: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+  governance: Record<string, unknown>;
+  next_smallest_truthful_gap: string;
+};
+
 export type TelemetryContextFeedbackMemoryAssistanceTrueExecutionTraceReview = {
   ok: boolean;
   kind: string;
@@ -1803,6 +1837,46 @@ export function parseTelemetryContextFeedbackMemoryAssistanceMemoryWriteContract
     writes_feedback: safeBoolean(raw.writes_feedback, true),
     writes_receipts: safeBoolean(raw.writes_receipts, true),
     mutates_prompt: safeBoolean(raw.mutates_prompt, true),
+    sends_chat: safeBoolean(raw.sends_chat, true),
+    calls_model: safeBoolean(raw.calls_model, true),
+    selects_tools: safeBoolean(raw.selects_tools, true),
+    trains_model: safeBoolean(raw.trains_model, true),
+    grants_execution_authority: safeBoolean(raw.grants_execution_authority, true),
+    grants_mutation_authority: safeBoolean(raw.grants_mutation_authority, true),
+    governance: recordOrEmpty(raw.governance),
+    next_smallest_truthful_gap: safeString(raw.next_smallest_truthful_gap, ""),
+  };
+}
+
+export function parseTelemetryContextFeedbackMemoryAssistanceStageClosureDecisionReadback(
+  value: unknown,
+): TelemetryContextFeedbackMemoryAssistanceStageClosureDecisionReadback {
+  const raw = isRecord(value) ? value : {};
+
+  return {
+    ok: safeBoolean(raw.ok, false),
+    kind: safeString(raw.kind, ""),
+    stage: safeString(raw.stage, ""),
+    source_id: safeString(raw.source_id, ""),
+    status: safeString(raw.status, "unknown"),
+    target: safeString(raw.target, ""),
+    items: Array.isArray(raw.items) ? raw.items.filter(isRecord) : [],
+    count: safeNumber(raw.count, 0),
+    total: safeNumber(raw.total, 0),
+    limit: safeNumber(raw.limit, 20),
+    latest_receipt: recordOrEmpty(raw.latest_receipt),
+    latest_receipt_id: safeString(raw.latest_receipt_id, ""),
+    latest_decision: safeString(raw.latest_decision, ""),
+    latest_recorded_ts: safeNumber(raw.latest_recorded_ts, 0),
+    decision_counts: safeNumberRecord(raw.decision_counts),
+    receipt_readback_ready: safeBoolean(raw.receipt_readback_ready, false),
+    stage7_closed_by_receipt: safeBoolean(raw.stage7_closed_by_receipt, false),
+    marks_runtime_stage_state: safeBoolean(raw.marks_runtime_stage_state, true),
+    redacted: safeBoolean(raw.redacted, false),
+    reads_receipts: safeBoolean(raw.reads_receipts, false),
+    writes_receipts: safeBoolean(raw.writes_receipts, true),
+    writes_memory: safeBoolean(raw.writes_memory, true),
+    writes_feedback: safeBoolean(raw.writes_feedback, true),
     sends_chat: safeBoolean(raw.sends_chat, true),
     calls_model: safeBoolean(raw.calls_model, true),
     selects_tools: safeBoolean(raw.selects_tools, true),
@@ -3027,6 +3101,54 @@ export class TelemetryClient {
     } catch (err) {
       throw new TelemetryApiError(
         "Telemetry feedback memory assistance memory write contract hardening review response was not valid JSON.",
+        {
+          url,
+          cause: err,
+        },
+      );
+    }
+  }
+
+  async getContextFeedbackMemoryAssistanceStageClosureDecisionReadback(opts?: {
+    limit?: number;
+    signal?: AbortSignal;
+  }): Promise<TelemetryContextFeedbackMemoryAssistanceStageClosureDecisionReadback> {
+    const limit = clampLimit(opts?.limit, 20);
+    const url = this.url(
+      `/telemetry/context/feedback/memory-assistance-feedback-loop-stage-closure-decisions?limit=${limit}`,
+    );
+    let response: Response;
+    try {
+      response = await fetch(url, { method: "GET", signal: opts?.signal });
+    } catch (err) {
+      throw new TelemetryApiError(
+        "Telemetry feedback memory assistance stage closure decision readback request failed.",
+        {
+          url,
+          cause: err,
+        },
+      );
+    }
+
+    const text = await response.text();
+    if (!response.ok) {
+      throw new TelemetryApiError(
+        `HTTP ${response.status} for telemetry feedback memory assistance stage closure decision readback request`,
+        {
+          status: response.status,
+          url,
+          bodySnippet: text.slice(0, 500),
+        },
+      );
+    }
+
+    try {
+      return parseTelemetryContextFeedbackMemoryAssistanceStageClosureDecisionReadback(
+        text ? JSON.parse(text) : {},
+      );
+    } catch (err) {
+      throw new TelemetryApiError(
+        "Telemetry feedback memory assistance stage closure decision readback response was not valid JSON.",
         {
           url,
           cause: err,

@@ -22,6 +22,7 @@ import {
   parseTelemetryContextFeedbackMemoryAssistanceOperatorContextSurfaceReview,
   parseTelemetryContextFeedbackMemoryAssistancePrimaryLoopEvidenceReview,
   parseTelemetryContextFeedbackMemoryAssistanceSensingIndicatorSummary,
+  parseTelemetryContextFeedbackMemoryAssistanceStageClosureDecisionReadback,
   parseTelemetryContextFeedbackMemoryAssistanceTerminalContextSignal,
   parseTelemetryContextFeedbackMemoryAssistanceTrueExecutionTraceReview,
   parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackReview,
@@ -2668,6 +2669,141 @@ test("TelemetryClient requests the memory write contract hardening review endpoi
     assert.deepEqual(requests, [
       {
         path: "/telemetry/context/feedback/memory-assistance-feedback-loop-memory-write-contract-hardening-review",
+        search: "?limit=30",
+        method: "GET",
+      },
+    ]);
+  } finally {
+    restore();
+  }
+});
+
+test("parseTelemetryContextFeedbackMemoryAssistanceStageClosureDecisionReadback preserves closure receipt guards", () => {
+  const readback = parseTelemetryContextFeedbackMemoryAssistanceStageClosureDecisionReadback({
+    ok: true,
+    kind: "francis.stage7.telemetry.stage7_operator_stage_closure_decision_receipts",
+    stage: "Stage 7 / Telemetry MVP",
+    source_id: "telemetry_context",
+    status: "stage_closure_decision_readback_ready",
+    target: "stage7_telemetry_mvp",
+    items: [
+      {
+        receipt_id: "stage7-close-1",
+        decision: "close_stage7",
+        recorded_ts: 1770000000,
+        marks_runtime_stage_state: false,
+      },
+    ],
+    count: 1,
+    total: 1,
+    limit: 20,
+    latest_receipt: {
+      receipt_id: "stage7-close-1",
+      decision: "close_stage7",
+      stage7_closed_by_receipt: true,
+      marks_runtime_stage_state: false,
+    },
+    latest_receipt_id: "stage7-close-1",
+    latest_decision: "close_stage7",
+    latest_recorded_ts: 1770000000,
+    decision_counts: {
+      close_stage7: 1,
+      do_not_close_stage7: 0,
+      needs_more_evidence: 0,
+    },
+    receipt_readback_ready: true,
+    stage7_closed_by_receipt: true,
+    marks_runtime_stage_state: false,
+    redacted: true,
+    reads_receipts: true,
+    writes_receipts: false,
+    writes_memory: false,
+    writes_feedback: false,
+    sends_chat: false,
+    calls_model: false,
+    selects_tools: false,
+    trains_model: false,
+    grants_execution_authority: false,
+    grants_mutation_authority: false,
+    governance: {
+      read_only: true,
+      stage_closure_decision_receipt_readback: true,
+      does_not_mutate_runtime_stage_state: true,
+    },
+    next_smallest_truthful_gap: "stage7_ledger_closure",
+  });
+
+  assert.equal(readback.status, "stage_closure_decision_readback_ready");
+  assert.equal(readback.count, 1);
+  assert.equal(readback.latest_receipt_id, "stage7-close-1");
+  assert.equal(readback.latest_decision, "close_stage7");
+  assert.equal(readback.decision_counts.close_stage7, 1);
+  assert.equal(readback.receipt_readback_ready, true);
+  assert.equal(readback.stage7_closed_by_receipt, true);
+  assert.equal(readback.marks_runtime_stage_state, false);
+  assert.equal(readback.reads_receipts, true);
+  assert.equal(readback.writes_receipts, false);
+  assert.equal(readback.writes_memory, false);
+  assert.equal(readback.calls_model, false);
+  assert.equal(readback.grants_execution_authority, false);
+  assert.equal(readback.governance.stage_closure_decision_receipt_readback, true);
+  assert.equal(readback.next_smallest_truthful_gap, "stage7_ledger_closure");
+});
+
+test("TelemetryClient requests the stage closure decision readback endpoint", async () => {
+  const requests: Array<{ path: string; search: string; method: string }> = [];
+  const restore = installFetch((url, init) => {
+    const parsed = new URL(url);
+    requests.push({ path: parsed.pathname, search: parsed.search, method: init?.method ?? "GET" });
+    return jsonResponse({
+      ok: true,
+      kind: "francis.stage7.telemetry.stage7_operator_stage_closure_decision_receipts",
+      stage: "Stage 7 / Telemetry MVP",
+      source_id: "telemetry_context",
+      status: "empty",
+      target: "stage7_telemetry_mvp",
+      items: [],
+      count: 0,
+      total: 0,
+      limit: 30,
+      latest_receipt: {},
+      latest_receipt_id: "",
+      latest_decision: "",
+      latest_recorded_ts: 0,
+      decision_counts: {
+        close_stage7: 0,
+        do_not_close_stage7: 0,
+        needs_more_evidence: 0,
+      },
+      receipt_readback_ready: false,
+      stage7_closed_by_receipt: false,
+      marks_runtime_stage_state: false,
+      redacted: true,
+      reads_receipts: true,
+      writes_receipts: false,
+      writes_memory: false,
+      writes_feedback: false,
+      sends_chat: false,
+      calls_model: false,
+      selects_tools: false,
+      trains_model: false,
+      grants_execution_authority: false,
+      grants_mutation_authority: false,
+      governance: { read_only: true, stage_closure_decision_receipt_readback: true },
+      next_smallest_truthful_gap: "stage7_operator_stage_closure_decision",
+    });
+  });
+
+  try {
+    const client = new TelemetryClient("http://127.0.0.1:8000/");
+    const readback = await client.getContextFeedbackMemoryAssistanceStageClosureDecisionReadback({ limit: 30 });
+
+    assert.equal(readback.status, "empty");
+    assert.equal(readback.count, 0);
+    assert.equal(readback.stage7_closed_by_receipt, false);
+    assert.deepEqual(requests, [
+      {
+        path: "/telemetry/context/feedback/memory-assistance-feedback-loop-stage-closure-decisions",
         search: "?limit=30",
         method: "GET",
       },

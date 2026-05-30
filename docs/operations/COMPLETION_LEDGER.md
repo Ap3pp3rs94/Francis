@@ -46289,6 +46289,37 @@ Latest validation for Stage 7 operator stage-closure decision:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-30 - Stage 7 closure decision receipt readback is visible in UI
+
+Roadmap area: Stage 7 / Telemetry MVP, operator-visible closure-readback surface
+for the feedback-memory assistance loop.
+
+Material change:
+
+- The chat UI telemetry client now reads the existing read-only route
+  `/telemetry/context/feedback/memory-assistance-feedback-loop-stage-closure-decisions`.
+- Telemetry & Continuation now displays stage-closure decision readback status
+  (`dormant`, `running`, `standby`, `blocked`), total and latest decision
+  counts, latest receipt guard posture, and latest closure decision metadata.
+- The UI adds no write button and does not write receipts, feedback, memory,
+  chat, prompts, model calls, tool calls, or authority.
+- This is read-only operator observability; it does not mark Stage 7 closed.
+  The true closure transition remains the operator-stage-closure-decision
+  contract path.
+- The next truthful gap stays unchanged (`stage7_operator_stage_closure_decision`)
+  because readback does not create a closure receipt.
+
+Latest validation for Stage 7 closure decision UI visibility:
+
+- `node --test --experimental-strip-types src/telemetry/index.test.ts`
+  Result: `passed; 60 passed`
+- `npm run test`
+  Result: `passed; 168 passed`
+- `npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

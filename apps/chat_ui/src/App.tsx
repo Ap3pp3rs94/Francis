@@ -119,6 +119,7 @@ import {
   type TelemetryContextFeedbackMemoryAssistanceGitContextSignal,
   type TelemetryContextFeedbackMemoryAssistanceIdeContextSignal,
   type TelemetryContextFeedbackMemoryAssistanceSensingIndicatorSummary,
+  type TelemetryContextFeedbackMemoryAssistanceStageClosureDecisionReadback,
   type TelemetryContextFeedbackMemoryAssistanceTerminalContextSignal,
   type TelemetryContextFeedbackMemoryAssistanceTrueExecutionTraceReview,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackMemoryReadback,
@@ -4339,6 +4340,18 @@ function SystemPanel(props: {
     setTelemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReviewLoadedAt,
   ] = useState<number | null>(null);
   const [
+    telemetryFeedbackMemoryAssistanceStageClosureDecisionReadback,
+    setTelemetryFeedbackMemoryAssistanceStageClosureDecisionReadback,
+  ] = useState<TelemetryContextFeedbackMemoryAssistanceStageClosureDecisionReadback | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceStageClosureDecisionReadbackError,
+    setTelemetryFeedbackMemoryAssistanceStageClosureDecisionReadbackError,
+  ] = useState<string | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceStageClosureDecisionReadbackLoadedAt,
+    setTelemetryFeedbackMemoryAssistanceStageClosureDecisionReadbackLoadedAt,
+  ] = useState<number | null>(null);
+  const [
     telemetryFeedbackMemoryAssistanceTrueExecutionTraceReview,
     setTelemetryFeedbackMemoryAssistanceTrueExecutionTraceReview,
   ] = useState<TelemetryContextFeedbackMemoryAssistanceTrueExecutionTraceReview | null>(null);
@@ -4583,6 +4596,7 @@ function SystemPanel(props: {
         nextTelemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview,
         nextTelemetryFeedbackMemoryAssistanceMemoryPoisoningReview,
         nextTelemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview,
+        nextTelemetryFeedbackMemoryAssistanceStageClosureDecisionReadback,
         nextTelemetryFeedbackMemoryAssistanceTrueExecutionTraceReview,
       ] =
         await Promise.allSettled([
@@ -4629,6 +4643,7 @@ function SystemPanel(props: {
         telemetryClient.getContextFeedbackMemoryAssistancePrimaryLoopEvidenceReview({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistanceMemoryPoisoningReview({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistanceMemoryWriteContractHardeningReview({ limit: 20 }),
+        telemetryClient.getContextFeedbackMemoryAssistanceStageClosureDecisionReadback({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistanceTrueExecutionTraceReview({ limit: 20 }),
       ]);
 
@@ -5005,6 +5020,19 @@ function SystemPanel(props: {
           telemetryError(nextTelemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview.reason),
         );
         degradedFeeds.push("telemetry feedback memory assistance memory write contract hardening review");
+      }
+
+      if (nextTelemetryFeedbackMemoryAssistanceStageClosureDecisionReadback.status === "fulfilled") {
+        setTelemetryFeedbackMemoryAssistanceStageClosureDecisionReadback(
+          nextTelemetryFeedbackMemoryAssistanceStageClosureDecisionReadback.value,
+        );
+        setTelemetryFeedbackMemoryAssistanceStageClosureDecisionReadbackError(null);
+        setTelemetryFeedbackMemoryAssistanceStageClosureDecisionReadbackLoadedAt(refreshStartedAt);
+      } else {
+        setTelemetryFeedbackMemoryAssistanceStageClosureDecisionReadbackError(
+          telemetryError(nextTelemetryFeedbackMemoryAssistanceStageClosureDecisionReadback.reason),
+        );
+        degradedFeeds.push("telemetry feedback memory assistance stage closure decision readback");
       }
 
       if (nextTelemetryFeedbackMemoryAssistanceTrueExecutionTraceReview.status === "fulfilled") {
@@ -7223,6 +7251,27 @@ function SystemPanel(props: {
       : telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview
         ? `Feedback memory assistance memory contract hardening ${telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview.status}; criteria ${telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview.ready_count}/${telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview.required_count}, contract events ${telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview.memory_contract_event_count}/${telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview.memory_event_count}.`
         : "Feedback memory assistance memory contract hardening has not loaded yet.";
+  const telemetryFeedbackMemoryAssistanceStageClosureDecisionReadbackStatus =
+    safeString(telemetryFeedbackMemoryAssistanceStageClosureDecisionReadback?.status).trim() ||
+    (telemetryFeedbackMemoryAssistanceStageClosureDecisionReadbackError ? "unavailable" : "unloaded");
+  const telemetryFeedbackMemoryAssistanceStageClosureDecisionReadbackTone =
+    telemetryFeedbackMemoryAssistanceStageClosureDecisionReadbackError
+      ? "blocked"
+      : telemetryFeedbackMemoryAssistanceStageClosureDecisionReadback
+        ? telemetryFeedbackMemoryAssistanceStageClosureDecisionReadback.stage7_closed_by_receipt
+          ? "running"
+          : telemetryFeedbackMemoryAssistanceStageClosureDecisionReadback.receipt_readback_ready
+            ? "dormant"
+            : "standby"
+        : "standby";
+  const telemetryFeedbackMemoryAssistanceStageClosureDecisionReadbackLatestDecision =
+    safeString(telemetryFeedbackMemoryAssistanceStageClosureDecisionReadback?.latest_decision).trim() || "none";
+  const telemetryFeedbackMemoryAssistanceStageClosureDecisionReadbackDetail =
+    telemetryFeedbackMemoryAssistanceStageClosureDecisionReadbackError
+      ? `Feedback memory assistance stage closure decision readback could not refresh: ${telemetryFeedbackMemoryAssistanceStageClosureDecisionReadbackError}`
+      : telemetryFeedbackMemoryAssistanceStageClosureDecisionReadback
+        ? `Feedback memory assistance stage closure decision ${telemetryFeedbackMemoryAssistanceStageClosureDecisionReadback.status}; receipts ${telemetryFeedbackMemoryAssistanceStageClosureDecisionReadback.count}/${telemetryFeedbackMemoryAssistanceStageClosureDecisionReadback.total}, latest ${telemetryFeedbackMemoryAssistanceStageClosureDecisionReadbackLatestDecision}.`
+        : "Feedback memory assistance stage closure decision readback has not loaded yet.";
   const telemetryFeedbackMemoryAssistanceTrueExecutionTraceReviewStatus =
     safeString(telemetryFeedbackMemoryAssistanceTrueExecutionTraceReview?.status).trim() ||
     (telemetryFeedbackMemoryAssistanceTrueExecutionTraceReviewError ? "unavailable" : "unloaded");
@@ -12232,6 +12281,9 @@ function SystemPanel(props: {
             <span style={badgeStyle(telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReviewTone)}>
               Memory contract {telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReviewStatus}
             </span>
+            <span style={badgeStyle(telemetryFeedbackMemoryAssistanceStageClosureDecisionReadbackTone)}>
+              Stage closure {telemetryFeedbackMemoryAssistanceStageClosureDecisionReadbackStatus}
+            </span>
             <span style={badgeStyle(telemetryFeedbackMemoryAssistanceTrueExecutionTraceReviewTone)}>
               Execution trace {telemetryFeedbackMemoryAssistanceTrueExecutionTraceReviewStatus}
             </span>
@@ -12444,6 +12496,15 @@ function SystemPanel(props: {
           }}
         >
           {telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReviewDetail}
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            color: telemetryFeedbackMemoryAssistanceStageClosureDecisionReadbackError ? "#ffcf9d" : THEME.text,
+            marginTop: 8,
+          }}
+        >
+          {telemetryFeedbackMemoryAssistanceStageClosureDecisionReadbackDetail}
         </div>
         <div
           style={{
@@ -13519,6 +13580,92 @@ function SystemPanel(props: {
                 {" / "}authority{" "}
                 <code>
                   {telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview.grants_execution_authority
+                    ? "true"
+                    : "false"}
+                </code>
+              </div>
+            </div>
+          </div>
+        ) : null}
+        {telemetryFeedbackMemoryAssistanceStageClosureDecisionReadback ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+              gap: 8,
+              marginTop: 10,
+            }}
+          >
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Stage closure decision</div>
+              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
+                {telemetryFeedbackMemoryAssistanceStageClosureDecisionReadback.count}/
+                {telemetryFeedbackMemoryAssistanceStageClosureDecisionReadback.total}
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                latest <code>{telemetryFeedbackMemoryAssistanceStageClosureDecisionReadbackLatestDecision}</code>
+              </div>
+              {telemetryFeedbackMemoryAssistanceStageClosureDecisionReadbackLoadedAt ? (
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                  Loaded {toLocaleTime(telemetryFeedbackMemoryAssistanceStageClosureDecisionReadbackLoadedAt)}
+                </div>
+              ) : null}
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Decision counts</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                {Object.entries(telemetryFeedbackMemoryAssistanceStageClosureDecisionReadback.decision_counts).map(
+                  ([decision, count]) => (
+                    <span
+                      key={`telemetry-stage-closure-decision-count-${decision}`}
+                      style={badgeStyle(count > 0 ? "running" : "dormant")}
+                    >
+                      {decision} {count}
+                    </span>
+                  ),
+                )}
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                next{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceStageClosureDecisionReadback.next_smallest_truthful_gap ||
+                    "stage7_operator_stage_closure_decision"}
+                </code>
+              </div>
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Latest receipt</div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 6 }}>
+                id{" "}
+                <code>
+                  {safeString(telemetryFeedbackMemoryAssistanceStageClosureDecisionReadback.latest_receipt.receipt_id).trim() ||
+                    "none"}
+                </code>
+              </div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 4 }}>
+                close{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceStageClosureDecisionReadback.stage7_closed_by_receipt ? "true" : "false"}
+                </code>
+                {" / "}runtime{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceStageClosureDecisionReadback.marks_runtime_stage_state ? "mutate" : "read"}
+                </code>
+              </div>
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Closure guards</div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 6 }}>
+                receipts{" "}
+                <code>{telemetryFeedbackMemoryAssistanceStageClosureDecisionReadback.writes_receipts ? "write" : "read"}</code>
+                {" / "}memory{" "}
+                <code>{telemetryFeedbackMemoryAssistanceStageClosureDecisionReadback.writes_memory ? "true" : "false"}</code>
+              </div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 4 }}>
+                model <code>{telemetryFeedbackMemoryAssistanceStageClosureDecisionReadback.calls_model ? "true" : "false"}</code>
+                {" / "}authority{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceStageClosureDecisionReadback.grants_execution_authority
                     ? "true"
                     : "false"}
                 </code>
