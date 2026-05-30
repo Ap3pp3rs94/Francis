@@ -106,6 +106,7 @@ import {
   type TelemetryContextFeedbackMemoryAssistanceDryRun,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopE2eAcceptanceAudit,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopE2eSample,
+  type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisionRecord,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorReview,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleReadback,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackMemoryReadback,
@@ -4204,6 +4205,18 @@ function SystemPanel(props: {
     text: string;
     record?: TelemetryContextFeedbackMemoryQualityRecord;
   } | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceLiveSampleDecisionBusy,
+    setTelemetryFeedbackMemoryAssistanceLiveSampleDecisionBusy,
+  ] = useState(false);
+  const [
+    telemetryFeedbackMemoryAssistanceLiveSampleDecisionNotice,
+    setTelemetryFeedbackMemoryAssistanceLiveSampleDecisionNotice,
+  ] = useState<{
+    tone: "info" | "error";
+    text: string;
+    record?: TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisionRecord;
+  } | null>(null);
   const [lensActionBusy, setLensActionBusy] = useState<
     ""
       | "host_supervision_authority_request"
@@ -4805,6 +4818,65 @@ function SystemPanel(props: {
       setTelemetryFeedbackMemoryAssistanceQualityBusy(false);
     }
   }, [refresh, telemetryClient, telemetryError, telemetryFeedbackMemoryAssistanceOperatorReview]);
+
+  const recordTelemetryFeedbackMemoryAssistanceLiveSampleOperatorDecision = useCallback(async () => {
+    if (
+      !telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview ||
+      !telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview.operator_review_ready
+    ) {
+      setTelemetryFeedbackMemoryAssistanceLiveSampleDecisionNotice({
+        tone: "error",
+        text: "Live sample evidence is not ready for an operator decision.",
+      });
+      return;
+    }
+
+    setTelemetryFeedbackMemoryAssistanceLiveSampleDecisionBusy(true);
+    setTelemetryFeedbackMemoryAssistanceLiveSampleDecisionNotice(null);
+    try {
+      const record =
+        await telemetryClient.recordContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecision({
+          actor: "chat_ui.system",
+          reason: "record feedback memory assistance live sample operator decision from operator UI",
+          decision: "accepted",
+          limit: 20,
+        });
+      if (!record.ok) {
+        const requiredScope = safeString(record.governance.required_scope).trim();
+        const reason = safeString(record.governance.reason).trim() || record.status;
+        setTelemetryFeedbackMemoryAssistanceLiveSampleDecisionNotice({
+          tone: "error",
+          text: requiredScope
+            ? `Live sample decision denied: ${reason}; required scope ${requiredScope}.`
+            : `Live sample decision denied: ${reason}.`,
+          record,
+        });
+        return;
+      }
+
+      if (!record.writes_receipt) {
+        setTelemetryFeedbackMemoryAssistanceLiveSampleDecisionNotice({
+          tone: "info",
+          text: `Live sample decision returned ${record.status}; no decision receipt was written.`,
+          record,
+        });
+        return;
+      }
+
+      setTelemetryFeedbackMemoryAssistanceLiveSampleDecisionNotice({
+        tone: "info",
+        text: record.receipt_id
+          ? `Live sample decision receipt recorded as ${record.receipt_id}.`
+          : "Live sample decision receipt recorded.",
+        record,
+      });
+      await refresh();
+    } catch (err) {
+      setTelemetryFeedbackMemoryAssistanceLiveSampleDecisionNotice({ tone: "error", text: telemetryError(err) });
+    } finally {
+      setTelemetryFeedbackMemoryAssistanceLiveSampleDecisionBusy(false);
+    }
+  }, [refresh, telemetryClient, telemetryError, telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview]);
 
   const requestLensHostSupervisionAuthority = useCallback(async () => {
     setLensActionBusy("host_supervision_authority_request");
@@ -6629,6 +6701,10 @@ function SystemPanel(props: {
       : telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview
         ? `Feedback memory assistance operator review ${telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview.status}; criteria ${telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview.ready_count}/${telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview.required_count}, decision required ${telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionRequired ? "true" : "false"}.`
         : "Feedback memory assistance live sample operator review has not loaded yet.";
+  const telemetryFeedbackMemoryAssistanceLiveSampleDecisionCanRecord = Boolean(
+    telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview?.operator_review_ready &&
+      !telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionRecorded,
+  );
   const controlTone =
     controlModeId === "pilot"
       ? { bg: "#24160a", border: "#7a541b", color: "#ffd38a" }
@@ -11720,6 +11796,21 @@ function SystemPanel(props: {
           <span style={badgeStyle(telemetryFeedbackMemoryAssistanceQualityCanRecord ? "running" : "dormant")}>
             feedback_memory_assistance
           </span>
+          <button
+            type="button"
+            style={buttonStyle}
+            disabled={
+              busy ||
+              telemetryFeedbackMemoryAssistanceLiveSampleDecisionBusy ||
+              !telemetryFeedbackMemoryAssistanceLiveSampleDecisionCanRecord
+            }
+            onClick={() => void recordTelemetryFeedbackMemoryAssistanceLiveSampleOperatorDecision()}
+          >
+            {telemetryFeedbackMemoryAssistanceLiveSampleDecisionBusy ? "Recording..." : "Accept live sample"}
+          </button>
+          <span style={badgeStyle(telemetryFeedbackMemoryAssistanceLiveSampleDecisionCanRecord ? "running" : "dormant")}>
+            telemetry.context.feedback.write
+          </span>
         </div>
         {telemetryFeedbackMemoryQualityNotice ? (
           <div
@@ -11741,6 +11832,17 @@ function SystemPanel(props: {
             }}
           >
             {telemetryFeedbackMemoryAssistanceQualityNotice.text}
+          </div>
+        ) : null}
+        {telemetryFeedbackMemoryAssistanceLiveSampleDecisionNotice ? (
+          <div
+            style={{
+              fontSize: 12,
+              color: telemetryFeedbackMemoryAssistanceLiveSampleDecisionNotice.tone === "error" ? "#ffcf9d" : THEME.text,
+              marginTop: 8,
+            }}
+          >
+            {telemetryFeedbackMemoryAssistanceLiveSampleDecisionNotice.text}
           </div>
         ) : null}
         {telemetryFeedbackMemoryAssistanceLoopSample ? (

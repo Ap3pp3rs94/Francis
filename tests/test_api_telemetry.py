@@ -1232,6 +1232,131 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_revie
     )
 
 
+def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decision_denies_without_scope(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    actor = "test.telemetry.live.decision.denied"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps({actor: []}))
+
+    client = TestClient(create_app())
+    response = client.post(
+        "/telemetry/context/feedback/memory-assistance-feedback-loop-live-sample-operator-decision",
+        json={
+            "actor": actor,
+            "reason": "operator accepts live sample",
+            "decision": "accepted",
+            "limit": 10,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["status"] == "denied"
+    assert body["governance"]["required_scope"] == "telemetry.context.feedback.write"
+    assert body["governance"]["grants_execution_authority"] is False
+    assert body["governance"]["grants_mutation_authority"] is False
+    assert not (
+        data_root / "logs" / "telemetry" / "context_feedback_memory_assistance_live_sample_decisions.jsonl"
+    ).exists()
+
+
+def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decision_records_receipt(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    actor = "test.telemetry.live.decision"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps(
+            {
+                actor: [
+                    "chat.write",
+                    "telemetry.context.feedback.write",
+                    "memory.timeline.write",
+                ]
+            }
+        ),
+    )
+
+    client = TestClient(create_app())
+    _seed_feedback_memory_assistance_live_sample(client, actor)
+    response = client.post(
+        "/telemetry/context/feedback/memory-assistance-feedback-loop-live-sample-operator-decision",
+        json={
+            "actor": actor,
+            "reason": "operator accepts live sample token=decisionsecret123",
+            "decision": "accepted",
+            "notes": "looks good token=notessecret123",
+            "limit": 10,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["status"] == "recorded"
+    assert body["writes_receipt"] is True
+    assert body["writes_memory"] is False
+    assert body["writes_feedback"] is False
+    assert body["sends_chat"] is False
+    assert body["calls_model"] is False
+    assert body["selects_tools"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["decision"] == "accepted"
+    receipt = body["receipt"]
+    assert (
+        receipt["kind"]
+        == "francis.stage7.telemetry.context_feedback_memory_assistance_live_sample_operator_decision_receipt"
+    )
+    assert receipt["receipt_id"] == body["receipt_id"]
+    assert receipt["actor"] == actor
+    assert receipt["decision"] == "accepted"
+    assert receipt["operator_review_ready"] is True
+    assert receipt["live_sample_observed"] is True
+    assert receipt["ready_count"] == receipt["required_count"] == 4
+    assert receipt["governance"]["permission_scope"] == "telemetry.context.feedback.write"
+    assert receipt["governance"]["explicit_operator_decision"] is True
+    assert receipt["governance"]["grants_execution_authority"] is False
+    assert receipt["governance"]["grants_mutation_authority"] is False
+    receipt_text = json.dumps(receipt, sort_keys=True)
+    assert "decisionsecret123" not in receipt_text
+    assert "notessecret123" not in receipt_text
+
+    readback = client.get(
+        "/telemetry/context/feedback/memory-assistance-feedback-loop-live-sample-operator-decisions?limit=10"
+    ).json()
+    assert readback["status"] == "decision_recorded"
+    assert readback["count"] == 1
+    assert readback["items"][0]["receipt_id"] == body["receipt_id"]
+    assert readback["writes_receipts"] is False
+    assert readback["writes_memory"] is False
+    assert readback["grants_execution_authority"] is False
+
+    review = client.get(
+        "/telemetry/context/feedback/memory-assistance-feedback-loop-live-sample-operator-review?limit=10"
+    ).json()
+    assert review["status"] == "operator_decision_recorded"
+    assert review["operator_decision"] == {
+        "required": False,
+        "recorded": True,
+        "decision": "accepted",
+        "receipt_id": body["receipt_id"],
+        "reason": "operator_review_decision_recorded",
+    }
+    assert review["latest_operator_decision"]["receipt_id"] == body["receipt_id"]
+    assert review["operator_decision_total"] == 1
+    assert review["next_smallest_truthful_gap"] == (
+        "stage7_context_feedback_memory_assistance_operator_feedback_loop_decision_receipt_readback"
+    )
+
+
 def test_telemetry_context_feedback_memory_quality_record_is_empty_without_events(
     monkeypatch,
     tmp_path: Path,

@@ -12,7 +12,10 @@ from francis.governance.redaction import redact_secret_text
 from francis.telemetry.context import (
     MEMORY_TIMELINE_WRITE_SCOPE,
     TELEMETRY_CONTEXT_FEEDBACK_WRITE_SCOPE,
+    feedback_memory_assistance_live_sample_operator_decision_count,
     read_telemetry_context_feedback,
+    read_feedback_memory_assistance_live_sample_operator_decisions,
+    record_feedback_memory_assistance_live_sample_operator_decision,
     record_telemetry_context_feedback,
     telemetry_context_feedback_memory_assistance_chat_context_contract,
     telemetry_context_feedback_memory_assistance_operator_feedback_memory_quality,
@@ -95,6 +98,14 @@ class TelemetryContextFeedbackMemoryQualityIn(BaseModel):
     reason: str = ""
     limit: int = 100
     event_id: str | None = None
+
+
+class TelemetryContextFeedbackMemoryAssistanceLiveSampleOperatorDecisionIn(BaseModel):
+    actor: str | None = None
+    reason: str = ""
+    decision: str = "needs_more_evidence"
+    notes: str = ""
+    limit: int = 20
 
 
 @router.get("/status")
@@ -899,7 +910,16 @@ def context_feedback_memory_assistance_operator_feedback_loop_live_sample_operat
     ready_count = _safe_count(readback.get("ready_count"))
     required_count = _safe_count(readback.get("required_count"))
     operator_review_ready = live_sample_observed and ready_count >= required_count and required_count > 0
-    status = "operator_review_ready" if operator_review_ready else "awaiting_live_sample_evidence"
+    decision_items = read_feedback_memory_assistance_live_sample_operator_decisions(limit=1)
+    latest_decision = decision_items[-1] if decision_items else {}
+    decision_recorded = bool(latest_decision)
+    status = (
+        "operator_decision_recorded"
+        if decision_recorded
+        else "operator_review_ready"
+        if operator_review_ready
+        else "awaiting_live_sample_evidence"
+    )
     acceptance_value = readback.get("acceptance")
     acceptance: dict[str, Any] = acceptance_value if isinstance(acceptance_value, dict) else {}
     chat_value = readback.get("chat")
@@ -949,6 +969,8 @@ def context_feedback_memory_assistance_operator_feedback_loop_live_sample_operat
             "status": readback.get("status", "unknown"),
             "next_smallest_truthful_gap": readback.get("next_smallest_truthful_gap", ""),
         },
+        "latest_operator_decision": latest_decision,
+        "operator_decision_total": feedback_memory_assistance_live_sample_operator_decision_count(),
         "evidence": {
             "acceptance": acceptance,
             "chat": chat,
@@ -956,12 +978,14 @@ def context_feedback_memory_assistance_operator_feedback_loop_live_sample_operat
             "memory": memory,
         },
         "operator_decision": {
-            "required": operator_review_ready,
-            "recorded": False,
-            "decision": "",
-            "receipt_id": "",
+            "required": operator_review_ready and not decision_recorded,
+            "recorded": decision_recorded,
+            "decision": latest_decision.get("decision", ""),
+            "receipt_id": latest_decision.get("receipt_id", ""),
             "reason": (
-                "operator_review_decision_not_recorded_by_read_only_projection"
+                "operator_review_decision_recorded"
+                if decision_recorded
+                else "operator_review_decision_not_recorded_by_read_only_projection"
                 if operator_review_ready
                 else "live_sample_evidence_required_before_operator_review"
             ),
@@ -993,10 +1017,149 @@ def context_feedback_memory_assistance_operator_feedback_loop_live_sample_operat
             "grants_memory_write_authority": False,
         },
         "next_smallest_truthful_gap": (
-            "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_decision"
-            if operator_review_ready
-            else "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run"
+            "stage7_context_feedback_memory_assistance_operator_feedback_loop_decision_receipt_readback"
+            if decision_recorded
+            else (
+                "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_decision"
+                if operator_review_ready
+                else "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run"
+            )
         ),
+    }
+
+
+@router.get("/context/feedback/memory-assistance-feedback-loop-live-sample-operator-decisions")
+def context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_decisions(
+    limit: int = 20,
+) -> dict[str, Any]:
+    safe_limit = max(1, min(int(limit), 100))
+    items = read_feedback_memory_assistance_live_sample_operator_decisions(limit=safe_limit)
+    total = feedback_memory_assistance_live_sample_operator_decision_count()
+    return {
+        "ok": True,
+        "kind": "francis.stage7.telemetry.context_feedback_memory_assistance_live_sample_operator_decision_receipts",
+        "stage": "Stage 7 / Telemetry MVP",
+        "source_id": "telemetry_context",
+        "status": "decision_recorded" if items else "empty",
+        "target": "feedback_memory_assistance_prompt_integration",
+        "items": items,
+        "count": len(items),
+        "total": total,
+        "limit": safe_limit,
+        "truncated": total > len(items),
+        "reads_receipts": True,
+        "writes_receipts": False,
+        "writes_memory": False,
+        "writes_feedback": False,
+        "sends_chat": False,
+        "calls_model": False,
+        "selects_tools": False,
+        "trains_model": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "operator_decision_receipt_readback": True,
+            "telemetry_is_untrusted_input": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": (
+            "stage7_context_feedback_memory_assistance_operator_feedback_loop_decision_receipt_readback"
+            if items
+            else "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_decision"
+        ),
+    }
+
+
+@router.post("/context/feedback/memory-assistance-feedback-loop-live-sample-operator-decision")
+def context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_decision_record(
+    payload: TelemetryContextFeedbackMemoryAssistanceLiveSampleOperatorDecisionIn,
+) -> dict[str, Any]:
+    route = "/telemetry/context/feedback/memory-assistance-feedback-loop-live-sample-operator-decision"
+    permission = _write_permission(
+        payload.actor,
+        required_scope=TELEMETRY_CONTEXT_FEEDBACK_WRITE_SCOPE,
+        route=route,
+        method="POST",
+    )
+    if not permission.allowed:
+        return _permission_denied(
+            permission,
+            source_id="telemetry_context",
+            required_scope=TELEMETRY_CONTEXT_FEEDBACK_WRITE_SCOPE,
+            next_step="configure_telemetry_context_feedback_write_scope_before_live_sample_operator_decision",
+        )
+
+    review = context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_review(limit=payload.limit)
+    if not review.get("operator_review_ready"):
+        return {
+            "ok": True,
+            "kind": "francis.stage7.telemetry.context_feedback_memory_assistance_live_sample_operator_decision.record",
+            "status": "awaiting_live_sample_evidence",
+            "source_id": "telemetry_context",
+            "target": "feedback_memory_assistance_prompt_integration",
+            "review": review,
+            "receipt": None,
+            "receipt_id": "",
+            "writes_receipt": False,
+            "writes_memory": False,
+            "writes_feedback": False,
+            "sends_chat": False,
+            "calls_model": False,
+            "selects_tools": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+            "governance": {
+                "required_scope": TELEMETRY_CONTEXT_FEEDBACK_WRITE_SCOPE,
+                "explicit_operator_decision": True,
+                "does_not_record_when_review_not_ready": True,
+                "grants_execution_authority": False,
+                "grants_mutation_authority": False,
+            },
+            "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run",
+        }
+
+    receipt = record_feedback_memory_assistance_live_sample_operator_decision(
+        actor=payload.actor,
+        reason=payload.reason,
+        decision=payload.decision,
+        notes=payload.notes,
+        review=review,
+    )
+    return {
+        "ok": True,
+        "kind": "francis.stage7.telemetry.context_feedback_memory_assistance_live_sample_operator_decision.record",
+        "status": "recorded",
+        "source_id": "telemetry_context",
+        "target": "feedback_memory_assistance_prompt_integration",
+        "review": review,
+        "receipt": receipt,
+        "receipt_id": receipt.get("receipt_id", ""),
+        "decision": receipt.get("decision", ""),
+        "writes_receipt": True,
+        "writes_memory": False,
+        "writes_feedback": False,
+        "sends_chat": False,
+        "calls_model": False,
+        "selects_tools": False,
+        "trains_model": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "required_scope": TELEMETRY_CONTEXT_FEEDBACK_WRITE_SCOPE,
+            "explicit_operator_decision": True,
+            "receipt_redacted_before_storage": True,
+            "telemetry_is_untrusted_input": True,
+            "does_not_write_memory": True,
+            "does_not_write_feedback": True,
+            "does_not_send_chat": True,
+            "does_not_call_model": True,
+            "does_not_select_tools": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_decision_receipt_readback",
     }
 
 
@@ -1655,6 +1818,9 @@ def _permission_denied(
             "required_scope": required_scope,
             "next_step": next_step,
             "evidence": decision.evidence,
+            "grants_execution_authority": False,
+            "grants_memory_write_authority": False,
+            "grants_mutation_authority": False,
         },
     }
 

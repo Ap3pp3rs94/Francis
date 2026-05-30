@@ -30,6 +30,9 @@ TELEMETRY_CONTEXT_FEEDBACK_MEMORY_ASSISTANCE_POLICY_KIND = (
 TELEMETRY_CONTEXT_FEEDBACK_MEMORY_ASSISTANCE_CHAT_CONTEXT_CONTRACT_KIND = (
     "francis.stage7.telemetry.context_feedback_memory_assistance_chat_context_contract"
 )
+TELEMETRY_CONTEXT_FEEDBACK_MEMORY_ASSISTANCE_LIVE_SAMPLE_OPERATOR_DECISION_KIND = (
+    "francis.stage7.telemetry.context_feedback_memory_assistance_live_sample_operator_decision_receipt"
+)
 TELEMETRY_CONTEXT_FEEDBACK_WRITE_SCOPE = "telemetry.context.feedback.write"
 MEMORY_TIMELINE_WRITE_SCOPE = "memory.timeline.write"
 _MAX_CONTEXT_ITEMS = 12
@@ -183,6 +186,70 @@ def telemetry_context_feedback_snapshot(*, limit: int = 20) -> dict[str, Any]:
             "grants_memory_write_authority": False,
         },
     }
+
+
+def record_feedback_memory_assistance_live_sample_operator_decision(
+    *,
+    actor: Any,
+    reason: Any,
+    decision: Any,
+    review: dict[str, Any],
+    notes: Any = "",
+) -> dict[str, Any]:
+    safe_decision = _safe_operator_decision(decision)
+    receipt_id = f"tel_fma_live_decision_{uuid.uuid4().hex[:12]}"
+    payload = {
+        "ok": True,
+        "kind": TELEMETRY_CONTEXT_FEEDBACK_MEMORY_ASSISTANCE_LIVE_SAMPLE_OPERATOR_DECISION_KIND,
+        "receipt_id": receipt_id,
+        "stage": STAGE7_TELEMETRY_STAGE,
+        "source_id": "telemetry_context",
+        "capture_mode": "explicit_operator_live_sample_review_decision",
+        "target": "feedback_memory_assistance_prompt_integration",
+        "actor": _redact_text(actor),
+        "reason": _redact_text(reason),
+        "decision": safe_decision,
+        "notes": _redact_text(notes)[:_MAX_TEXT_LENGTH],
+        "review_status": _redact_text(review.get("status")),
+        "operator_review_ready": bool(review.get("operator_review_ready")),
+        "live_sample_observed": bool(review.get("live_sample_observed")),
+        "ready_count": _safe_int(review.get("ready_count"), 0),
+        "required_count": _safe_int(review.get("required_count"), 0),
+        "recorded_ts": _now_s(),
+        "governance": {
+            "permission_scope": TELEMETRY_CONTEXT_FEEDBACK_WRITE_SCOPE,
+            "explicit_operator_decision": True,
+            "redacted_before_storage": True,
+            "telemetry_is_untrusted_input": True,
+            "stores_prompt_body": False,
+            "stores_model_response": False,
+            "trains_model": False,
+            "grants_execution_authority": False,
+            "grants_memory_write_authority": False,
+            "grants_mutation_authority": False,
+        },
+    }
+    _append_line(_live_sample_operator_decision_path(), payload)
+    audit_record(
+        "telemetry.context.feedback_memory_assistance.live_sample_operator_decision_recorded",
+        actor=payload["actor"],
+        reason=payload["reason"],
+        receipt_id=receipt_id,
+        decision=safe_decision,
+        target=payload["target"],
+    )
+    return payload
+
+
+def read_feedback_memory_assistance_live_sample_operator_decisions(*, limit: int = 20) -> list[dict[str, Any]]:
+    return _read_jsonl_tail(_live_sample_operator_decision_path(), limit=_safe_limit(limit))
+
+
+def feedback_memory_assistance_live_sample_operator_decision_count() -> int:
+    path = _live_sample_operator_decision_path()
+    if not path.exists():
+        return 0
+    return sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
 
 
 def telemetry_context_feedback_review(*, limit: int = 100) -> dict[str, Any]:
@@ -641,22 +708,7 @@ def telemetry_context_feedback_memory_assistance_chat_context_contract() -> dict
 
 
 def read_telemetry_context_feedback(*, limit: int = 20) -> list[dict[str, Any]]:
-    path = _feedback_path()
-    if not path.exists():
-        return []
-    items: list[dict[str, Any]] = []
-    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            payload = json.loads(line)
-        except Exception:
-            continue
-        if isinstance(payload, dict):
-            items.append(payload)
-    safe_limit = _safe_limit(limit)
-    return items[-safe_limit:]
+    return _read_jsonl_tail(_feedback_path(), limit=_safe_limit(limit))
 
 
 def telemetry_context_feedback_count() -> int:
@@ -1109,10 +1161,31 @@ def _feedback_path() -> Path:
     return data_dir() / "logs" / "telemetry" / "context_feedback.jsonl"
 
 
+def _live_sample_operator_decision_path() -> Path:
+    return data_dir() / "logs" / "telemetry" / "context_feedback_memory_assistance_live_sample_decisions.jsonl"
+
+
 def _append_line(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str) + "\n")
+
+
+def _read_jsonl_tail(path: Path, *, limit: int) -> list[dict[str, Any]]:
+    if not path.exists():
+        return []
+    items: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            payload = json.loads(line)
+        except Exception:
+            continue
+        if isinstance(payload, dict):
+            items.append(payload)
+    return items[-_safe_limit(limit) :]
 
 
 def _redact_jsonable(value: Any) -> Any:
@@ -1163,6 +1236,14 @@ def _safe_rating(value: Any) -> str:
     if text in {"useful", "not_useful", "neutral"}:
         return text
     return "neutral"
+
+
+def _safe_operator_decision(value: Any) -> str:
+    text = _redact_text(value).strip().lower()
+    normalized = text.replace("-", "_").replace(" ", "_")
+    if normalized in {"accepted", "rejected", "needs_more_evidence"}:
+        return normalized
+    return "needs_more_evidence"
 
 
 def _safe_limit(value: int) -> int:

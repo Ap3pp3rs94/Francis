@@ -45306,6 +45306,57 @@ review:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-30 - Stage 7 feedback memory assistance live sample decision writes a receipt
+
+Roadmap area: Stage 7 / Telemetry MVP, governed operator decision receipt for
+feedback-memory assistance live sample review.
+
+Material change:
+
+- Telemetry now exposes a governed POST decision route at
+  `/telemetry/context/feedback/memory-assistance-feedback-loop-live-sample-operator-decision`.
+- The decision route requires `telemetry.context.feedback.write`, records only
+  explicit operator decisions after the live sample review is ready, and writes
+  a redacted auditable receipt.
+- Telemetry now exposes read-only decision receipts at
+  `/telemetry/context/feedback/memory-assistance-feedback-loop-live-sample-operator-decisions`.
+- The live sample operator review now reports the latest decision receipt,
+  decision total, and advances its next smallest truthful gap to
+  `stage7_context_feedback_memory_assistance_operator_feedback_loop_decision_receipt_readback`
+  only after a receipt exists.
+- The Telemetry & Continuation panel now offers an `Accept live sample` control
+  wired to the governed decision route and shows the receipt readback status.
+- The route does not send chat, write feedback, write memory, call a model,
+  select tools, train a model, or grant execution or mutation authority.
+
+Latest validation for Stage 7 feedback memory assistance live sample decision:
+
+- `python -m pytest tests/test_api_telemetry.py tests/test_api_chat.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed`
+- `python -m mypy src/francis/api/routes/telemetry.py
+  src/francis/telemetry/context.py src/francis/telemetry/status.py
+  src/francis/api/routes/chat.py`
+  Result: `passed`
+- `python -m ruff check src/francis/api/routes/telemetry.py
+  src/francis/telemetry/context.py tests/test_api_telemetry.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/telemetry.py
+  src/francis/telemetry/context.py tests/test_api_telemetry.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `node --test --experimental-strip-types src/telemetry/index.test.ts` in
+  `apps/chat_ui`
+  Result: `passed; 34 passed`
+- `npm run test` in `apps/chat_ui`
+  Result: `passed; 142 passed`
+- `npm run build` in `apps/chat_ui`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

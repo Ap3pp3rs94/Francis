@@ -406,6 +406,29 @@ export type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSamp
   next_smallest_truthful_gap: string;
 };
 
+export type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisionRecord = {
+  ok: boolean;
+  kind: string;
+  status: string;
+  source_id: string;
+  target: string;
+  review: Record<string, unknown>;
+  receipt: Record<string, unknown> | null;
+  receipt_id: string;
+  decision: string;
+  writes_receipt: boolean;
+  writes_memory: boolean;
+  writes_feedback: boolean;
+  sends_chat: boolean;
+  calls_model: boolean;
+  selects_tools: boolean;
+  trains_model: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+  governance: Record<string, unknown>;
+  next_smallest_truthful_gap: string;
+};
+
 export type TelemetryContextFeedbackMemoryAssistancePolicy = {
   ok: boolean;
   kind: string;
@@ -892,6 +915,36 @@ export function parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoo
     reads_conversation_ledger: safeBoolean(raw.reads_conversation_ledger, false),
     reads_feedback: safeBoolean(raw.reads_feedback, false),
     reads_memory: safeBoolean(raw.reads_memory, false),
+    writes_memory: safeBoolean(raw.writes_memory, true),
+    writes_feedback: safeBoolean(raw.writes_feedback, true),
+    sends_chat: safeBoolean(raw.sends_chat, true),
+    calls_model: safeBoolean(raw.calls_model, true),
+    selects_tools: safeBoolean(raw.selects_tools, true),
+    trains_model: safeBoolean(raw.trains_model, true),
+    grants_execution_authority: safeBoolean(raw.grants_execution_authority, true),
+    grants_mutation_authority: safeBoolean(raw.grants_mutation_authority, true),
+    governance: recordOrEmpty(raw.governance),
+    next_smallest_truthful_gap: safeString(raw.next_smallest_truthful_gap, ""),
+  };
+}
+
+export function parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisionRecord(
+  value: unknown,
+): TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisionRecord {
+  const raw = isRecord(value) ? value : {};
+  const receipt = isRecord(raw.receipt) ? raw.receipt : null;
+
+  return {
+    ok: safeBoolean(raw.ok, false),
+    kind: safeString(raw.kind, ""),
+    status: safeString(raw.status, "unknown"),
+    source_id: safeString(raw.source_id, ""),
+    target: safeString(raw.target, ""),
+    review: recordOrEmpty(raw.review),
+    receipt,
+    receipt_id: safeString(raw.receipt_id, ""),
+    decision: safeString(raw.decision, ""),
+    writes_receipt: safeBoolean(raw.writes_receipt, false),
     writes_memory: safeBoolean(raw.writes_memory, true),
     writes_feedback: safeBoolean(raw.writes_feedback, true),
     sends_chat: safeBoolean(raw.sends_chat, true),
@@ -1555,6 +1608,63 @@ export class TelemetryClient {
     } catch (err) {
       throw new TelemetryApiError(
         "Telemetry feedback memory assistance live sample operator review response was not valid JSON.",
+        { url, cause: err },
+      );
+    }
+  }
+
+  async recordContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecision(opts: {
+    actor: string;
+    reason: string;
+    decision: "accepted" | "rejected" | "needs_more_evidence" | string;
+    notes?: string;
+    limit?: number;
+    signal?: AbortSignal;
+  }): Promise<TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisionRecord> {
+    const url = this.url(
+      "/telemetry/context/feedback/memory-assistance-feedback-loop-live-sample-operator-decision",
+    );
+    const body: Record<string, unknown> = {
+      actor: opts.actor,
+      reason: opts.reason,
+      decision: opts.decision,
+      notes: opts.notes ?? "",
+      limit: clampLimit(opts.limit, 20),
+    };
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+        signal: opts.signal,
+      });
+    } catch (err) {
+      throw new TelemetryApiError(
+        "Telemetry feedback memory assistance live sample operator decision request failed.",
+        { url, cause: err },
+      );
+    }
+
+    const text = await response.text();
+    if (!response.ok) {
+      throw new TelemetryApiError(
+        `HTTP ${response.status} for telemetry feedback memory assistance live sample operator decision request`,
+        {
+          status: response.status,
+          url,
+          bodySnippet: text.slice(0, 500),
+        },
+      );
+    }
+
+    try {
+      return parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisionRecord(
+        text ? JSON.parse(text) : {},
+      );
+    } catch (err) {
+      throw new TelemetryApiError(
+        "Telemetry feedback memory assistance live sample operator decision response was not valid JSON.",
         { url, cause: err },
       );
     }
