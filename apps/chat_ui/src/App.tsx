@@ -13400,10 +13400,47 @@ function SystemPanel(props: {
                   const id = safeString(item.id).trim() || "source";
                   const ready = Boolean(item.ready);
                   const kind = safeString(item.kind).trim();
+                  const evidence = isRecord(item.evidence) ? item.evidence : {};
+                  const traceId = safeString(evidence.trace_id).trim();
+                  const runId = safeString(evidence.run_id).trim();
+                  const modelTraceId = safeString(evidence.model_call_trace_id).trim();
+                  const toolTraceId = safeString(evidence.tool_call_trace_id).trim();
                   return (
-                    <span key={`telemetry-execution-trace-${id}`} style={badgeStyle(ready ? "running" : "dormant")}>
-                      {id} {kind === "true_execution_trace" ? "trace" : "receipt"}
-                    </span>
+                    <div
+                      key={`telemetry-execution-trace-${id}`}
+                      style={{
+                        padding: 0,
+                        minWidth: 180,
+                      }}
+                    >
+                      <span style={badgeStyle(ready ? "running" : "dormant")}>
+                        {id} {kind === "true_execution_trace" ? "trace" : "receipt"}
+                      </span>
+                      {traceId || runId || modelTraceId || toolTraceId ? (
+                        <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6, lineHeight: 1.45 }}>
+                          {traceId ? (
+                            <div>
+                              trace <code>{traceId}</code>
+                            </div>
+                          ) : null}
+                          {runId ? (
+                            <div>
+                              run <code>{runId}</code>
+                            </div>
+                          ) : null}
+                          {modelTraceId ? (
+                            <div>
+                              model <code>{modelTraceId}</code>
+                            </div>
+                          ) : null}
+                          {toolTraceId ? (
+                            <div>
+                              tool <code>{toolTraceId}</code>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
                   );
                 })}
               </div>

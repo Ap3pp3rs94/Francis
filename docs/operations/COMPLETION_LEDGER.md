@@ -45964,6 +45964,32 @@ Latest validation for Stage 7 feedback memory assistance model span:
   tests/test_api_contract_chat_ui.py`
   Result: `passed`
 
+### 2026-05-30 - Stage 7 feedback memory assistance trace handles are visible
+
+Roadmap area: Stage 7 / Telemetry MVP, UI return for feedback-memory
+assistance execution trace evidence.
+
+Material change:
+
+- The Telemetry & Continuation execution-trace card now shows available trace
+  handles from each trace source, including route trace, run, model-call trace,
+  and tool-call trace identifiers.
+- The UI remains on the existing truthful telemetry surface; this does not add
+  a new cosmetic view, fake trace state, or any mutation behavior.
+- The trace guard readback remains visible beside the handle readback so the
+  operator can see that the review surface reads trace evidence without sending
+  chat, writing memory, calling a model, selecting tools, or granting authority.
+
+Latest validation for Stage 7 feedback memory assistance trace UI return:
+
+- `node --test --experimental-strip-types src/telemetry/index.test.ts` in
+  `apps/chat_ui`
+  Result: `passed; 56 passed`
+- `npm run test` in `apps/chat_ui`
+  Result: `passed; 164 passed`
+- `npm run build` in `apps/chat_ui`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
