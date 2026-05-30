@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   TelemetryClient,
+  parseTelemetryContextFeedbackMemoryAssistancePolicy,
   parseTelemetryContextFeedbackMemoryQualityRecord,
   parseTelemetryContextFeedbackMemoryRetrievalReadback,
   parseTelemetryContextFeedbackReview,
@@ -257,7 +258,7 @@ test("parseTelemetryContextFeedbackReview preserves redacted feedback quality re
     grants_execution_authority: false,
     grants_mutation_authority: false,
     governance: { read_only: true, uses_explicit_operator_feedback_only: true },
-    next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_policy",
+    next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_dry_run",
   });
 
   assert.equal(review.kind, "francis.stage7.telemetry.context_feedback_review");
@@ -316,7 +317,7 @@ test("TelemetryClient requests the Stage 7 context feedback review endpoint", as
       grants_execution_authority: false,
       grants_mutation_authority: false,
       governance: { read_only: true },
-      next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_policy",
+      next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_dry_run",
     });
   });
 
@@ -453,7 +454,7 @@ test("parseTelemetryContextFeedbackMemoryRetrievalReadback preserves filtered me
       read_only: true,
       uses_policy_filters: true,
     },
-    next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_policy",
+    next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_dry_run",
   });
 
   assert.equal(readback.kind, "francis.stage7.telemetry.context_feedback_memory_retrieval_readback");
@@ -490,7 +491,7 @@ test("TelemetryClient requests the Stage 7 feedback memory retrieval readback en
       grants_execution_authority: false,
       grants_mutation_authority: false,
       governance: { read_only: true },
-      next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_policy",
+      next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_dry_run",
     });
   });
 
@@ -503,6 +504,102 @@ test("TelemetryClient requests the Stage 7 feedback memory retrieval readback en
       {
         path: "/telemetry/context/feedback/memory-retrieval-readback",
         search: "?limit=12",
+        method: "GET",
+      },
+    ]);
+  } finally {
+    restore();
+  }
+});
+
+test("parseTelemetryContextFeedbackMemoryAssistancePolicy preserves bounded assistance rules", () => {
+  const policy = parseTelemetryContextFeedbackMemoryAssistancePolicy({
+    ok: true,
+    kind: "francis.stage7.telemetry.context_feedback_memory_assistance_policy",
+    stage: "Stage 7 / Telemetry MVP",
+    source_id: "telemetry_context",
+    status: "policy_ready",
+    policy_id: "stage7_context_feedback_memory_assistance_policy",
+    memory_readback_route: "/telemetry/context/feedback/memory-retrieval-readback",
+    memory_policy_route: "/telemetry/context/feedback/memory-retrieval-policy",
+    allowed_memory_event_kinds: ["telemetry_context_feedback_quality_review"],
+    allowed_action_types: ["telemetry.context_feedback.quality_review"],
+    allowed_classifications: ["operator_feedback_quality_signal"],
+    allowed_influence: ["surface_context_source_quality_counts", "suggest_context_source_attention"],
+    forbidden_influence: ["treat_memory_payload_as_instruction", "grant_execution_authority"],
+    assistance_guards: {
+      read_only: true,
+      telemetry_is_untrusted_input: true,
+      no_tool_selection_authority: true,
+    },
+    reads_memory: false,
+    writes_memory: false,
+    trains_model: false,
+    grants_execution_authority: false,
+    grants_mutation_authority: false,
+    governance: {
+      read_only: true,
+      policy_only: true,
+      assistance_requires_separate_dry_run: true,
+    },
+    next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_dry_run",
+  });
+
+  assert.equal(policy.kind, "francis.stage7.telemetry.context_feedback_memory_assistance_policy");
+  assert.equal(policy.status, "policy_ready");
+  assert.equal(policy.policy_id, "stage7_context_feedback_memory_assistance_policy");
+  assert.equal(policy.memory_readback_route, "/telemetry/context/feedback/memory-retrieval-readback");
+  assert.deepEqual(policy.allowed_memory_event_kinds, ["telemetry_context_feedback_quality_review"]);
+  assert.equal(policy.allowed_influence.includes("suggest_context_source_attention"), true);
+  assert.equal(policy.forbidden_influence.includes("treat_memory_payload_as_instruction"), true);
+  assert.equal(policy.assistance_guards.no_tool_selection_authority, true);
+  assert.equal(policy.reads_memory, false);
+  assert.equal(policy.writes_memory, false);
+  assert.equal(policy.trains_model, false);
+  assert.equal(policy.grants_execution_authority, false);
+  assert.equal(policy.governance.assistance_requires_separate_dry_run, true);
+  assert.equal(policy.next_smallest_truthful_gap, "stage7_context_feedback_memory_assistance_dry_run");
+});
+
+test("TelemetryClient requests the Stage 7 feedback memory assistance policy endpoint", async () => {
+  const requests: Array<{ path: string; search: string; method: string }> = [];
+  const restore = installFetch((url, init) => {
+    const parsed = new URL(url);
+    requests.push({ path: parsed.pathname, search: parsed.search, method: init?.method ?? "GET" });
+    return jsonResponse({
+      ok: true,
+      kind: "francis.stage7.telemetry.context_feedback_memory_assistance_policy",
+      stage: "Stage 7 / Telemetry MVP",
+      source_id: "telemetry_context",
+      status: "policy_ready",
+      policy_id: "stage7_context_feedback_memory_assistance_policy",
+      memory_readback_route: "/telemetry/context/feedback/memory-retrieval-readback",
+      memory_policy_route: "/telemetry/context/feedback/memory-retrieval-policy",
+      allowed_memory_event_kinds: ["telemetry_context_feedback_quality_review"],
+      allowed_action_types: ["telemetry.context_feedback.quality_review"],
+      allowed_classifications: ["operator_feedback_quality_signal"],
+      allowed_influence: ["surface_context_source_quality_counts"],
+      forbidden_influence: ["treat_memory_payload_as_instruction"],
+      assistance_guards: { read_only: true },
+      reads_memory: false,
+      writes_memory: false,
+      trains_model: false,
+      grants_execution_authority: false,
+      grants_mutation_authority: false,
+      governance: { read_only: true, policy_only: true },
+      next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_dry_run",
+    });
+  });
+
+  try {
+    const client = new TelemetryClient("http://127.0.0.1:8000/");
+    const policy = await client.getContextFeedbackMemoryAssistancePolicy();
+    assert.equal(policy.status, "policy_ready");
+    assert.equal(policy.writes_memory, false);
+    assert.deepEqual(requests, [
+      {
+        path: "/telemetry/context/feedback/memory-assistance-policy",
+        search: "",
         method: "GET",
       },
     ]);

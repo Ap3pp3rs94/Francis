@@ -11,6 +11,7 @@ from francis.telemetry.context import (
     MEMORY_TIMELINE_WRITE_SCOPE,
     TELEMETRY_CONTEXT_FEEDBACK_WRITE_SCOPE,
     record_telemetry_context_feedback,
+    telemetry_context_feedback_memory_assistance_policy,
     telemetry_context_feedback_memory_quality,
     telemetry_context_feedback_memory_retrieval_policy,
     telemetry_context_feedback_review,
@@ -120,6 +121,11 @@ def context_feedback_memory_retrieval_policy() -> dict[str, Any]:
     return telemetry_context_feedback_memory_retrieval_policy()
 
 
+@router.get("/context/feedback/memory-assistance-policy")
+def context_feedback_memory_assistance_policy() -> dict[str, Any]:
+    return telemetry_context_feedback_memory_assistance_policy()
+
+
 @router.get("/context/feedback/memory-retrieval-readback")
 def context_feedback_memory_retrieval_readback(limit: int = 20) -> dict[str, Any]:
     safe_limit = max(1, min(int(limit), 100))
@@ -185,7 +191,7 @@ def context_feedback_memory_retrieval_readback(limit: int = 20) -> dict[str, Any
             "grants_execution_authority": False,
             "grants_memory_write_authority": False,
         },
-        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_policy",
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_dry_run",
     }
 
 

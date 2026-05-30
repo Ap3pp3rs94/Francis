@@ -44520,6 +44520,57 @@ Latest validation for Stage 7 feedback memory retrieval operator surface:
   `writes_memory=false`,
   `next_smallest_truthful_gap=stage7_context_feedback_memory_assistance_policy`.
 
+### 2026-05-30 - Stage 7 feedback memory assistance policy is visible
+
+Roadmap area: Stage 7 / Telemetry MVP, governed use of feedback-quality memory
+readbacks in assistance surfaces.
+
+Material change:
+
+- Telemetry context feedback now exposes the read-only
+  `/telemetry/context/feedback/memory-assistance-policy` endpoint.
+- The policy declares that feedback-quality memory may only influence
+  operator-visible context relevance summaries and source-attention signals.
+- The policy forbids treating memory payloads as instructions, selecting tools
+  without operator policy, granting execution or memory-write authority,
+  training, overriding operator instruction, or hiding source/policy readback.
+- The chat UI telemetry client and Telemetry & Continuation surface now load and
+  display this assistance policy alongside feedback review and memory readback.
+- `/telemetry/status`, `/telemetry/context`, feedback review, feedback
+  memory-quality, feedback memory-retrieval policy, and feedback memory-retrieval
+  readback now advance their next smallest truthful gap to
+  `stage7_context_feedback_memory_assistance_dry_run`.
+
+Latest validation for Stage 7 feedback memory assistance policy:
+
+- `python -m pytest tests/test_api_telemetry.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 23 passed`
+- `python -m mypy src/francis/telemetry/context.py
+  src/francis/telemetry/status.py src/francis/api/routes/telemetry.py`
+  Result: `passed`
+- `python -m ruff check src/francis/telemetry/context.py
+  src/francis/telemetry/status.py src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/telemetry/context.py
+  src/francis/telemetry/status.py src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `node --test --experimental-strip-types src/telemetry/index.test.ts` in
+  `apps/chat_ui`
+  Result: `passed; 10 passed`
+- `npm run test` in `apps/chat_ui`
+  Result: `passed; 118 passed`
+- `npm run build` in `apps/chat_ui`
+  Result: `passed`
+- Direct `/telemetry/context/feedback/memory-assistance-policy` readback
+  Result: `status=policy_ready`, `policy_id=stage7_context_feedback_memory_assistance_policy`,
+  `reads_memory=false`, `writes_memory=false`, `trains_model=false`,
+  `grants_execution_authority=false`,
+  `next_smallest_truthful_gap=stage7_context_feedback_memory_assistance_dry_run`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -101,6 +101,7 @@ import type {
 import {
   TelemetryApiError,
   TelemetryClient,
+  type TelemetryContextFeedbackMemoryAssistancePolicy,
   type TelemetryContextFeedbackMemoryQualityRecord,
   type TelemetryContextFeedbackMemoryRetrievalReadback,
   type TelemetryContextFeedbackReview,
@@ -3961,6 +3962,10 @@ function SystemPanel(props: {
     useState<TelemetryContextFeedbackMemoryRetrievalReadback | null>(null);
   const [telemetryFeedbackMemoryReadbackError, setTelemetryFeedbackMemoryReadbackError] = useState<string | null>(null);
   const [telemetryFeedbackMemoryReadbackLoadedAt, setTelemetryFeedbackMemoryReadbackLoadedAt] = useState<number | null>(null);
+  const [telemetryFeedbackMemoryAssistancePolicy, setTelemetryFeedbackMemoryAssistancePolicy] =
+    useState<TelemetryContextFeedbackMemoryAssistancePolicy | null>(null);
+  const [telemetryFeedbackMemoryAssistancePolicyError, setTelemetryFeedbackMemoryAssistancePolicyError] = useState<string | null>(null);
+  const [telemetryFeedbackMemoryAssistancePolicyLoadedAt, setTelemetryFeedbackMemoryAssistancePolicyLoadedAt] = useState<number | null>(null);
   const [telemetryFeedbackMemoryQualityBusy, setTelemetryFeedbackMemoryQualityBusy] = useState(false);
   const [telemetryFeedbackMemoryQualityNotice, setTelemetryFeedbackMemoryQualityNotice] = useState<{
     tone: "info" | "error";
@@ -4156,6 +4161,7 @@ function SystemPanel(props: {
         nextTelemetryStatus,
         nextTelemetryFeedbackReview,
         nextTelemetryFeedbackMemoryReadback,
+        nextTelemetryFeedbackMemoryAssistancePolicy,
       ] =
         await Promise.allSettled([
         client.getSystemInfo(),
@@ -4179,6 +4185,7 @@ function SystemPanel(props: {
         telemetryClient.getStatus(),
         telemetryClient.getContextFeedbackReview({ limit: 25 }),
         telemetryClient.getContextFeedbackMemoryRetrievalReadback({ limit: 20 }),
+        telemetryClient.getContextFeedbackMemoryAssistancePolicy(),
       ]);
 
       const degradedFeeds: string[] = [];
@@ -4318,6 +4325,15 @@ function SystemPanel(props: {
       } else {
         setTelemetryFeedbackMemoryReadbackError(telemetryError(nextTelemetryFeedbackMemoryReadback.reason));
         degradedFeeds.push("telemetry feedback memory readback");
+      }
+
+      if (nextTelemetryFeedbackMemoryAssistancePolicy.status === "fulfilled") {
+        setTelemetryFeedbackMemoryAssistancePolicy(nextTelemetryFeedbackMemoryAssistancePolicy.value);
+        setTelemetryFeedbackMemoryAssistancePolicyError(null);
+        setTelemetryFeedbackMemoryAssistancePolicyLoadedAt(refreshStartedAt);
+      } else {
+        setTelemetryFeedbackMemoryAssistancePolicyError(telemetryError(nextTelemetryFeedbackMemoryAssistancePolicy.reason));
+        degradedFeeds.push("telemetry feedback memory assistance policy");
       }
 
       if (degradedFeeds.length > 0) {
@@ -6059,6 +6075,19 @@ function SystemPanel(props: {
       ? `${telemetryFeedbackMemoryReadback.count} governed feedback-quality memory event${telemetryFeedbackMemoryReadback.count === 1 ? "" : "s"} matched; ${telemetryFeedbackMemoryReadback.skipped_count} skipped by policy.`
       : "Feedback memory retrieval readback has not loaded yet.";
   const latestTelemetryFeedbackMemoryEvent = telemetryFeedbackMemoryReadback?.items[0] ?? null;
+  const telemetryFeedbackMemoryAssistancePolicyStatus =
+    safeString(telemetryFeedbackMemoryAssistancePolicy?.status).trim() ||
+    (telemetryFeedbackMemoryAssistancePolicyError ? "unavailable" : "unloaded");
+  const telemetryFeedbackMemoryAssistancePolicyTone = telemetryFeedbackMemoryAssistancePolicyError
+    ? "blocked"
+    : telemetryFeedbackMemoryAssistancePolicy
+      ? "running"
+      : "standby";
+  const telemetryFeedbackMemoryAssistancePolicyDetail = telemetryFeedbackMemoryAssistancePolicyError
+    ? `Feedback memory assistance policy could not refresh: ${telemetryFeedbackMemoryAssistancePolicyError}`
+    : telemetryFeedbackMemoryAssistancePolicy
+      ? `${telemetryFeedbackMemoryAssistancePolicy.allowed_influence.length} allowed assistance influence${telemetryFeedbackMemoryAssistancePolicy.allowed_influence.length === 1 ? "" : "s"}; ${telemetryFeedbackMemoryAssistancePolicy.forbidden_influence.length} forbidden influence${telemetryFeedbackMemoryAssistancePolicy.forbidden_influence.length === 1 ? "" : "s"}.`
+      : "Feedback memory assistance policy has not loaded yet.";
   const controlTone =
     controlModeId === "pilot"
       ? { bg: "#24160a", border: "#7a541b", color: "#ffd38a" }
@@ -10987,6 +11016,9 @@ function SystemPanel(props: {
             <span style={badgeStyle(telemetryFeedbackMemoryReadbackTone)}>
               Memory {telemetryFeedbackMemoryReadbackStatus}
             </span>
+            <span style={badgeStyle(telemetryFeedbackMemoryAssistancePolicyTone)}>
+              Assistance {telemetryFeedbackMemoryAssistancePolicyStatus}
+            </span>
             <span style={badgeStyle(continuation.tone)}>{continuation.label}</span>
           </div>
         </div>
@@ -11022,6 +11054,11 @@ function SystemPanel(props: {
         </div>
         <div style={{ fontSize: 12, color: telemetryFeedbackMemoryReadbackError ? "#ffcf9d" : THEME.text, marginTop: 8 }}>
           {telemetryFeedbackMemoryReadbackDetail}
+        </div>
+        <div
+          style={{ fontSize: 12, color: telemetryFeedbackMemoryAssistancePolicyError ? "#ffcf9d" : THEME.text, marginTop: 8 }}
+        >
+          {telemetryFeedbackMemoryAssistancePolicyDetail}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
           <button
@@ -11161,6 +11198,55 @@ function SystemPanel(props: {
                   No governed feedback-quality memory events matched yet.
                 </div>
               )}
+            </div>
+          </div>
+        ) : null}
+        {telemetryFeedbackMemoryAssistancePolicy ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+              gap: 8,
+              marginTop: 10,
+            }}
+          >
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Assistance policy</div>
+              <div style={{ fontSize: 13, fontWeight: 700, marginTop: 4 }}>
+                {telemetryFeedbackMemoryAssistancePolicy.policy_id || "policy"}
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                next <code>{telemetryFeedbackMemoryAssistancePolicy.next_smallest_truthful_gap || "dry_run"}</code>
+              </div>
+              {telemetryFeedbackMemoryAssistancePolicyLoadedAt ? (
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                  Loaded {toLocaleTime(telemetryFeedbackMemoryAssistancePolicyLoadedAt)}
+                </div>
+              ) : null}
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Allowed influence</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                {telemetryFeedbackMemoryAssistancePolicy.allowed_influence.slice(0, 4).map((item) => (
+                  <span key={`telemetry-memory-assist-allow-${item}`} style={badgeStyle("running")}>
+                    {item}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Assistance guards</div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6 }}>
+                reads <code>{telemetryFeedbackMemoryAssistancePolicy.reads_memory ? "true" : "false"}</code>
+                {" / "}writes <code>{telemetryFeedbackMemoryAssistancePolicy.writes_memory ? "true" : "false"}</code>
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                trains <code>{telemetryFeedbackMemoryAssistancePolicy.trains_model ? "true" : "false"}</code>
+                {" / "}exec <code>{telemetryFeedbackMemoryAssistancePolicy.grants_execution_authority ? "true" : "false"}</code>
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                untrusted <code>{telemetryFeedbackMemoryAssistancePolicy.assistance_guards.telemetry_is_untrusted_input === true ? "true" : "false"}</code>
+              </div>
             </div>
           </div>
         ) : null}

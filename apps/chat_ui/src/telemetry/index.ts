@@ -158,6 +158,30 @@ export type TelemetryContextFeedbackMemoryRetrievalReadback = {
   next_smallest_truthful_gap: string;
 };
 
+export type TelemetryContextFeedbackMemoryAssistancePolicy = {
+  ok: boolean;
+  kind: string;
+  stage: string;
+  source_id: string;
+  status: string;
+  policy_id: string;
+  memory_readback_route: string;
+  memory_policy_route: string;
+  allowed_memory_event_kinds: string[];
+  allowed_action_types: string[];
+  allowed_classifications: string[];
+  allowed_influence: string[];
+  forbidden_influence: string[];
+  assistance_guards: Record<string, unknown>;
+  reads_memory: boolean;
+  writes_memory: boolean;
+  trains_model: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+  governance: Record<string, unknown>;
+  next_smallest_truthful_gap: string;
+};
+
 export class TelemetryApiError extends Error {
   readonly status?: number;
   readonly url?: string;
@@ -271,6 +295,36 @@ export function parseTelemetryContextFeedbackMemoryRetrievalReadback(
     skipped_count: safeNumber(raw.skipped_count, 0),
     items,
     reads_memory: safeBoolean(raw.reads_memory, false),
+    writes_memory: safeBoolean(raw.writes_memory, true),
+    trains_model: safeBoolean(raw.trains_model, true),
+    grants_execution_authority: safeBoolean(raw.grants_execution_authority, true),
+    grants_mutation_authority: safeBoolean(raw.grants_mutation_authority, true),
+    governance: recordOrEmpty(raw.governance),
+    next_smallest_truthful_gap: safeString(raw.next_smallest_truthful_gap, ""),
+  };
+}
+
+export function parseTelemetryContextFeedbackMemoryAssistancePolicy(
+  value: unknown,
+): TelemetryContextFeedbackMemoryAssistancePolicy {
+  const raw = isRecord(value) ? value : {};
+
+  return {
+    ok: safeBoolean(raw.ok, false),
+    kind: safeString(raw.kind, ""),
+    stage: safeString(raw.stage, ""),
+    source_id: safeString(raw.source_id, ""),
+    status: safeString(raw.status, "unknown"),
+    policy_id: safeString(raw.policy_id, ""),
+    memory_readback_route: safeString(raw.memory_readback_route, ""),
+    memory_policy_route: safeString(raw.memory_policy_route, ""),
+    allowed_memory_event_kinds: safeStringArray(raw.allowed_memory_event_kinds),
+    allowed_action_types: safeStringArray(raw.allowed_action_types),
+    allowed_classifications: safeStringArray(raw.allowed_classifications),
+    allowed_influence: safeStringArray(raw.allowed_influence),
+    forbidden_influence: safeStringArray(raw.forbidden_influence),
+    assistance_guards: recordOrEmpty(raw.assistance_guards),
+    reads_memory: safeBoolean(raw.reads_memory, true),
     writes_memory: safeBoolean(raw.writes_memory, true),
     trains_model: safeBoolean(raw.trains_model, true),
     grants_execution_authority: safeBoolean(raw.grants_execution_authority, true),
@@ -408,6 +462,36 @@ export class TelemetryClient {
       return parseTelemetryContextFeedbackMemoryRetrievalReadback(text ? JSON.parse(text) : {});
     } catch (err) {
       throw new TelemetryApiError("Telemetry context feedback memory retrieval readback response was not valid JSON.", { url, cause: err });
+    }
+  }
+
+  async getContextFeedbackMemoryAssistancePolicy(opts?: {
+    signal?: AbortSignal;
+  }): Promise<TelemetryContextFeedbackMemoryAssistancePolicy> {
+    const url = this.url("/telemetry/context/feedback/memory-assistance-policy");
+    let response: Response;
+    try {
+      response = await fetch(url, { method: "GET", signal: opts?.signal });
+    } catch (err) {
+      throw new TelemetryApiError("Telemetry context feedback memory assistance policy request failed.", { url, cause: err });
+    }
+
+    const text = await response.text();
+    if (!response.ok) {
+      throw new TelemetryApiError(`HTTP ${response.status} for telemetry context feedback memory assistance policy request`, {
+        status: response.status,
+        url,
+        bodySnippet: text.slice(0, 500),
+      });
+    }
+
+    try {
+      return parseTelemetryContextFeedbackMemoryAssistancePolicy(text ? JSON.parse(text) : {});
+    } catch (err) {
+      throw new TelemetryApiError("Telemetry context feedback memory assistance policy response was not valid JSON.", {
+        url,
+        cause: err,
+      });
     }
   }
 
