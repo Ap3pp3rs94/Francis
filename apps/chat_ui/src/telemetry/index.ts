@@ -710,6 +710,39 @@ export type TelemetryContextFeedbackMemoryAssistanceActionQualitySignalReview = 
   next_smallest_truthful_gap: string;
 };
 
+export type TelemetryContextFeedbackMemoryAssistancePrimaryLoopEvidenceReview = {
+  ok: boolean;
+  kind: string;
+  stage: string;
+  source_id: string;
+  status: string;
+  target: string;
+  primary_loop_evidence_ready: boolean;
+  ready_count: number;
+  required_count: number;
+  primary_loop_evidence: Array<Record<string, unknown>>;
+  receipt_trace_kind: string;
+  true_execution_trace_observed: boolean;
+  operator_decision_receipt_id: string;
+  memory_quality_event_id: string;
+  action_quality_review: Record<string, unknown>;
+  live_sample_readback: Record<string, unknown>;
+  operator_review: Record<string, unknown>;
+  outcome_review: Record<string, unknown>;
+  read_only: boolean;
+  writes_memory: boolean;
+  writes_feedback: boolean;
+  mutates_prompt: boolean;
+  sends_chat: boolean;
+  calls_model: boolean;
+  selects_tools: boolean;
+  trains_model: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+  governance: Record<string, unknown>;
+  next_smallest_truthful_gap: string;
+};
+
 export type TelemetryContextFeedbackMemoryAssistancePolicy = {
   ok: boolean;
   kind: string;
@@ -1558,6 +1591,47 @@ export function parseTelemetryContextFeedbackMemoryAssistanceActionQualitySignal
     capture_mode: safeString(raw.capture_mode, ""),
     read_only: safeBoolean(raw.read_only, false),
     model_scored_quality: safeBoolean(raw.model_scored_quality, true),
+    writes_memory: safeBoolean(raw.writes_memory, true),
+    writes_feedback: safeBoolean(raw.writes_feedback, true),
+    mutates_prompt: safeBoolean(raw.mutates_prompt, true),
+    sends_chat: safeBoolean(raw.sends_chat, true),
+    calls_model: safeBoolean(raw.calls_model, true),
+    selects_tools: safeBoolean(raw.selects_tools, true),
+    trains_model: safeBoolean(raw.trains_model, true),
+    grants_execution_authority: safeBoolean(raw.grants_execution_authority, true),
+    grants_mutation_authority: safeBoolean(raw.grants_mutation_authority, true),
+    governance: recordOrEmpty(raw.governance),
+    next_smallest_truthful_gap: safeString(raw.next_smallest_truthful_gap, ""),
+  };
+}
+
+export function parseTelemetryContextFeedbackMemoryAssistancePrimaryLoopEvidenceReview(
+  value: unknown,
+): TelemetryContextFeedbackMemoryAssistancePrimaryLoopEvidenceReview {
+  const raw = isRecord(value) ? value : {};
+
+  return {
+    ok: safeBoolean(raw.ok, false),
+    kind: safeString(raw.kind, ""),
+    stage: safeString(raw.stage, ""),
+    source_id: safeString(raw.source_id, ""),
+    status: safeString(raw.status, "unknown"),
+    target: safeString(raw.target, ""),
+    primary_loop_evidence_ready: safeBoolean(raw.primary_loop_evidence_ready, false),
+    ready_count: safeNumber(raw.ready_count, 0),
+    required_count: safeNumber(raw.required_count, 0),
+    primary_loop_evidence: Array.isArray(raw.primary_loop_evidence)
+      ? raw.primary_loop_evidence.filter(isRecord)
+      : [],
+    receipt_trace_kind: safeString(raw.receipt_trace_kind, ""),
+    true_execution_trace_observed: safeBoolean(raw.true_execution_trace_observed, false),
+    operator_decision_receipt_id: safeString(raw.operator_decision_receipt_id, ""),
+    memory_quality_event_id: safeString(raw.memory_quality_event_id, ""),
+    action_quality_review: recordOrEmpty(raw.action_quality_review),
+    live_sample_readback: recordOrEmpty(raw.live_sample_readback),
+    operator_review: recordOrEmpty(raw.operator_review),
+    outcome_review: recordOrEmpty(raw.outcome_review),
+    read_only: safeBoolean(raw.read_only, false),
     writes_memory: safeBoolean(raw.writes_memory, true),
     writes_feedback: safeBoolean(raw.writes_feedback, true),
     mutates_prompt: safeBoolean(raw.mutates_prompt, true),
@@ -2615,6 +2689,49 @@ export class TelemetryClient {
     } catch (err) {
       throw new TelemetryApiError(
         "Telemetry feedback memory assistance action quality review response was not valid JSON.",
+        {
+          url,
+          cause: err,
+        },
+      );
+    }
+  }
+
+  async getContextFeedbackMemoryAssistancePrimaryLoopEvidenceReview(opts?: {
+    limit?: number;
+    signal?: AbortSignal;
+  }): Promise<TelemetryContextFeedbackMemoryAssistancePrimaryLoopEvidenceReview> {
+    const limit = clampLimit(opts?.limit, 20);
+    const url = this.url(
+      `/telemetry/context/feedback/memory-assistance-feedback-loop-primary-loop-evidence-review?limit=${limit}`,
+    );
+    let response: Response;
+    try {
+      response = await fetch(url, { method: "GET", signal: opts?.signal });
+    } catch (err) {
+      throw new TelemetryApiError("Telemetry feedback memory assistance primary loop evidence request failed.", {
+        url,
+        cause: err,
+      });
+    }
+
+    const text = await response.text();
+    if (!response.ok) {
+      throw new TelemetryApiError(
+        `HTTP ${response.status} for telemetry feedback memory assistance primary loop evidence request`,
+        {
+          status: response.status,
+          url,
+          bodySnippet: text.slice(0, 500),
+        },
+      );
+    }
+
+    try {
+      return parseTelemetryContextFeedbackMemoryAssistancePrimaryLoopEvidenceReview(text ? JSON.parse(text) : {});
+    } catch (err) {
+      throw new TelemetryApiError(
+        "Telemetry feedback memory assistance primary loop evidence response was not valid JSON.",
         {
           url,
           cause: err,

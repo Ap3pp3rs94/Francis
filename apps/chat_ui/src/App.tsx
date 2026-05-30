@@ -113,6 +113,7 @@ import {
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorReview,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleReadback,
   type TelemetryContextFeedbackMemoryAssistanceOperatorContextSurfaceReview,
+  type TelemetryContextFeedbackMemoryAssistancePrimaryLoopEvidenceReview,
   type TelemetryContextFeedbackMemoryAssistanceGitContextSignal,
   type TelemetryContextFeedbackMemoryAssistanceIdeContextSignal,
   type TelemetryContextFeedbackMemoryAssistanceSensingIndicatorSummary,
@@ -4298,6 +4299,18 @@ function SystemPanel(props: {
     telemetryFeedbackMemoryAssistanceActionQualitySignalReviewLoadedAt,
     setTelemetryFeedbackMemoryAssistanceActionQualitySignalReviewLoadedAt,
   ] = useState<number | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview,
+    setTelemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview,
+  ] = useState<TelemetryContextFeedbackMemoryAssistancePrimaryLoopEvidenceReview | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReviewError,
+    setTelemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReviewError,
+  ] = useState<string | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReviewLoadedAt,
+    setTelemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReviewLoadedAt,
+  ] = useState<number | null>(null);
   const [telemetryFeedbackMemoryQualityBusy, setTelemetryFeedbackMemoryQualityBusy] = useState(false);
   const [telemetryFeedbackMemoryQualityNotice, setTelemetryFeedbackMemoryQualityNotice] = useState<{
     tone: "info" | "error";
@@ -4528,6 +4541,7 @@ function SystemPanel(props: {
         nextTelemetryFeedbackMemoryAssistanceSensingIndicatorSummary,
         nextTelemetryFeedbackMemoryAssistanceOperatorContextSurfaceReview,
         nextTelemetryFeedbackMemoryAssistanceActionQualitySignalReview,
+        nextTelemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview,
       ] =
         await Promise.allSettled([
         client.getSystemInfo(),
@@ -4570,6 +4584,7 @@ function SystemPanel(props: {
         telemetryClient.getContextFeedbackMemoryAssistanceSensingIndicatorSummary({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistanceOperatorContextSurfaceReview({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistanceActionQualitySignalReview({ limit: 20 }),
+        telemetryClient.getContextFeedbackMemoryAssistancePrimaryLoopEvidenceReview({ limit: 20 }),
       ]);
 
       const degradedFeeds: string[] = [];
@@ -4906,6 +4921,19 @@ function SystemPanel(props: {
           telemetryError(nextTelemetryFeedbackMemoryAssistanceActionQualitySignalReview.reason),
         );
         degradedFeeds.push("telemetry feedback memory assistance action quality signal review");
+      }
+
+      if (nextTelemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview.status === "fulfilled") {
+        setTelemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview(
+          nextTelemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview.value,
+        );
+        setTelemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReviewError(null);
+        setTelemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReviewLoadedAt(refreshStartedAt);
+      } else {
+        setTelemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReviewError(
+          telemetryError(nextTelemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview.reason),
+        );
+        degradedFeeds.push("telemetry feedback memory assistance primary loop evidence review");
       }
 
       if (degradedFeeds.length > 0) {
@@ -7060,6 +7088,23 @@ function SystemPanel(props: {
       : telemetryFeedbackMemoryAssistanceActionQualitySignalReview
         ? `Feedback memory assistance action quality ${telemetryFeedbackMemoryAssistanceActionQualitySignalReview.status}; signals ${telemetryFeedbackMemoryAssistanceActionQualitySignalReview.ready_signal_count}/${telemetryFeedbackMemoryAssistanceActionQualitySignalReview.signal_count}.`
         : "Feedback memory assistance action quality review has not loaded yet.";
+  const telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReviewStatus =
+    safeString(telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview?.status).trim() ||
+    (telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReviewError ? "unavailable" : "unloaded");
+  const telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReviewTone =
+    telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReviewError
+      ? "blocked"
+      : telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview
+        ? telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview.primary_loop_evidence_ready
+          ? "running"
+          : "dormant"
+        : "standby";
+  const telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReviewDetail =
+    telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReviewError
+      ? `Feedback memory assistance primary loop evidence could not refresh: ${telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReviewError}`
+      : telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview
+        ? `Feedback memory assistance primary loop ${telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview.status}; evidence ${telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview.ready_count}/${telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview.required_count}.`
+        : "Feedback memory assistance primary loop evidence has not loaded yet.";
   const telemetryFeedbackMemoryAssistanceLiveSampleDecisionCanRecord = Boolean(
     telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview?.operator_review_ready &&
       !telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionRecorded,
@@ -12043,6 +12088,9 @@ function SystemPanel(props: {
             <span style={badgeStyle(telemetryFeedbackMemoryAssistanceActionQualitySignalReviewTone)}>
               Action quality {telemetryFeedbackMemoryAssistanceActionQualitySignalReviewStatus}
             </span>
+            <span style={badgeStyle(telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReviewTone)}>
+              Primary loop {telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReviewStatus}
+            </span>
             <span style={badgeStyle(continuation.tone)}>{continuation.label}</span>
           </div>
         </div>
@@ -12225,6 +12273,15 @@ function SystemPanel(props: {
           }}
         >
           {telemetryFeedbackMemoryAssistanceActionQualitySignalReviewDetail}
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            color: telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReviewError ? "#ffcf9d" : THEME.text,
+            marginTop: 8,
+          }}
+        >
+          {telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReviewDetail}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
           <button
@@ -13034,6 +13091,87 @@ function SystemPanel(props: {
                 <code>{telemetryFeedbackMemoryAssistanceActionQualitySignalReview.writes_memory ? "true" : "false"}</code>
                 {" / "}model{" "}
                 <code>{telemetryFeedbackMemoryAssistanceActionQualitySignalReview.calls_model ? "true" : "false"}</code>
+              </div>
+            </div>
+          </div>
+        ) : null}
+        {telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+              gap: 8,
+              marginTop: 10,
+            }}
+          >
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Primary loop</div>
+              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
+                {telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview.ready_count}/
+                {telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview.required_count}
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                trace <code>{telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview.receipt_trace_kind}</code>
+              </div>
+              {telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReviewLoadedAt ? (
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                  Loaded {toLocaleTime(telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReviewLoadedAt)}
+                </div>
+              ) : null}
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Evidence</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                {telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview.primary_loop_evidence.map((item) => {
+                  const id = safeString(item.id).trim() || "evidence";
+                  const ready = Boolean(item.ready);
+                  return (
+                    <span key={`telemetry-primary-loop-${id}`} style={badgeStyle(ready ? "running" : "dormant")}>
+                      {id} {ready ? "ready" : "waiting"}
+                    </span>
+                  );
+                })}
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                next{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview.next_smallest_truthful_gap ||
+                    "primary_loop_evidence_review"}
+                </code>
+              </div>
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Receipt readback</div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 6 }}>
+                receipt{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview.operator_decision_receipt_id || "none"}
+                </code>
+              </div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 4 }}>
+                memory{" "}
+                <code>{telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview.memory_quality_event_id || "none"}</code>
+              </div>
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Loop guards</div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 6 }}>
+                execution trace{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview.true_execution_trace_observed
+                    ? "true"
+                    : "false"}
+                </code>
+                {" / "}prompt{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview.mutates_prompt ? "mutate" : "read"}
+                </code>
+              </div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 4 }}>
+                memory{" "}
+                <code>{telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview.writes_memory ? "true" : "false"}</code>
+                {" / "}model{" "}
+                <code>{telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview.calls_model ? "true" : "false"}</code>
               </div>
             </div>
           </div>

@@ -1790,6 +1790,175 @@ def context_feedback_memory_assistance_operator_feedback_loop_action_quality_sig
     }
 
 
+@router.get("/context/feedback/memory-assistance-feedback-loop-primary-loop-evidence-review")
+def context_feedback_memory_assistance_operator_feedback_loop_primary_loop_evidence_review(
+    limit: int = 20,
+) -> dict[str, Any]:
+    safe_limit = max(1, min(int(limit), 100))
+    action_quality = context_feedback_memory_assistance_operator_feedback_loop_action_quality_signal_review(
+        limit=safe_limit
+    )
+    live_sample = context_feedback_memory_assistance_operator_feedback_loop_live_sample_readback(limit=safe_limit)
+    operator_review = context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_review(
+        limit=safe_limit
+    )
+    outcome_review = (
+        context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_decision_outcome_review(
+            limit=safe_limit
+        )
+    )
+    chat_value = live_sample.get("chat")
+    chat: dict[str, Any] = chat_value if isinstance(chat_value, dict) else {}
+    feedback_value = live_sample.get("feedback")
+    feedback: dict[str, Any] = feedback_value if isinstance(feedback_value, dict) else {}
+    memory_value = live_sample.get("memory")
+    memory: dict[str, Any] = memory_value if isinstance(memory_value, dict) else {}
+    acceptance_value = live_sample.get("acceptance")
+    acceptance: dict[str, Any] = acceptance_value if isinstance(acceptance_value, dict) else {}
+    operator_decision_value = operator_review.get("operator_decision")
+    operator_decision: dict[str, Any] = operator_decision_value if isinstance(operator_decision_value, dict) else {}
+    receipt_id = _redacted_line_text(operator_decision.get("receipt_id") or outcome_review.get("latest_receipt_id"))
+    memory_event_id = _redacted_line_text(
+        memory.get("event_id") or action_quality.get("latest_memory_quality_event_id")
+    )
+    primary_loop_evidence = [
+        {
+            "id": "interface",
+            "label": "Interface",
+            "ready": bool(chat.get("feedback_target_present")),
+            "evidence": {
+                "route": "/chat/send",
+                "status": chat.get("status", "unknown"),
+                "line_count": _safe_count(chat.get("line_count")),
+            },
+        },
+        {
+            "id": "plan",
+            "label": "Plan",
+            "ready": bool(acceptance.get("acceptance_ready")),
+            "evidence": {
+                "route": "/telemetry/context/feedback/memory-assistance-feedback-loop-e2e-acceptance-audit",
+                "status": acceptance.get("status", "unknown"),
+            },
+        },
+        {
+            "id": "governance",
+            "label": "Governance",
+            "ready": (
+                action_quality.get("writes_memory") is False
+                and action_quality.get("writes_feedback") is False
+                and action_quality.get("calls_model") is False
+                and action_quality.get("grants_execution_authority") is False
+            ),
+            "evidence": {
+                "action_quality_read_only": bool(action_quality.get("read_only")),
+                "model_scored_quality": bool(action_quality.get("model_scored_quality")),
+            },
+        },
+        {
+            "id": "identity",
+            "label": "Identity",
+            "ready": bool(chat.get("api_actor")) and bool(feedback.get("surface")),
+            "evidence": {
+                "api_actor": chat.get("api_actor", ""),
+                "feedback_surface": feedback.get("surface", ""),
+            },
+        },
+        {
+            "id": "execution",
+            "label": "Execution",
+            "ready": bool(live_sample.get("live_sample_observed")) and bool(action_quality.get("accepted_live_sample")),
+            "evidence": {
+                "live_sample_observed": bool(live_sample.get("live_sample_observed")),
+                "operator_decision": operator_decision.get("decision", ""),
+            },
+        },
+        {
+            "id": "receipt_trace",
+            "label": "Receipt trace",
+            "ready": bool(receipt_id and memory_event_id),
+            "evidence": {
+                "receipt_id": receipt_id,
+                "memory_event_id": memory_event_id,
+                "trace_kind": "receipt_backed_readback",
+            },
+        },
+        {
+            "id": "memory",
+            "label": "Memory",
+            "ready": bool(memory_event_id),
+            "evidence": {
+                "event_id": memory_event_id,
+                "classification": memory.get("classification", ""),
+            },
+        },
+        {
+            "id": "ui_return",
+            "label": "UI return",
+            "ready": bool(action_quality.get("operator_surface_ready")),
+            "evidence": {
+                "surface": "Telemetry & Continuation",
+                "source": "apps/chat_ui/src/App.tsx",
+            },
+        },
+    ]
+    ready_count = sum(1 for item in primary_loop_evidence if item["ready"])
+    primary_loop_evidence_ready = ready_count == len(primary_loop_evidence)
+    return {
+        "ok": True,
+        "kind": "francis.stage7.telemetry.context_feedback_memory_assistance_primary_loop_evidence_review",
+        "stage": "Stage 7 / Telemetry MVP",
+        "source_id": "telemetry_context",
+        "status": "primary_loop_evidence_ready" if primary_loop_evidence_ready else "partial_primary_loop_evidence",
+        "target": "feedback_memory_assistance_prompt_integration",
+        "primary_loop_evidence_ready": primary_loop_evidence_ready,
+        "ready_count": ready_count,
+        "required_count": len(primary_loop_evidence),
+        "primary_loop_evidence": primary_loop_evidence,
+        "receipt_trace_kind": "receipt_backed_readback",
+        "true_execution_trace_observed": False,
+        "operator_decision_receipt_id": receipt_id,
+        "memory_quality_event_id": memory_event_id,
+        "action_quality_review": action_quality,
+        "live_sample_readback": live_sample,
+        "operator_review": operator_review,
+        "outcome_review": outcome_review,
+        "read_only": True,
+        "writes_memory": False,
+        "writes_feedback": False,
+        "mutates_prompt": False,
+        "sends_chat": False,
+        "calls_model": False,
+        "selects_tools": False,
+        "trains_model": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "primary_loop_evidence_review": True,
+            "receipt_trace_not_true_execution_trace": True,
+            "uses_existing_chat_route_evidence": True,
+            "uses_existing_feedback_route_evidence": True,
+            "uses_existing_memory_quality_route_evidence": True,
+            "uses_action_quality_signal_review": True,
+            "telemetry_is_untrusted_input": True,
+            "does_not_write_memory": True,
+            "does_not_write_feedback": True,
+            "does_not_mutate_prompt": True,
+            "does_not_send_chat": True,
+            "does_not_call_model": True,
+            "does_not_select_tools": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": (
+            "stage7_context_feedback_memory_assistance_memory_poisoning_review"
+            if primary_loop_evidence_ready
+            else "stage7_context_feedback_memory_assistance_primary_loop_evidence_review"
+        ),
+    }
+
+
 @router.post("/context/feedback/memory-assistance-feedback-loop-live-sample-operator-decision")
 def context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_decision_record(
     payload: TelemetryContextFeedbackMemoryAssistanceLiveSampleOperatorDecisionIn,

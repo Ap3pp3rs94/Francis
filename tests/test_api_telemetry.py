@@ -1712,6 +1712,56 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decis
         "stage7_context_feedback_memory_assistance_primary_loop_evidence_review"
     )
 
+    primary_loop = client.get(
+        "/telemetry/context/feedback/memory-assistance-feedback-loop-primary-loop-evidence-review?limit=10"
+    ).json()
+    assert primary_loop["ok"] is True
+    assert primary_loop["kind"] == (
+        "francis.stage7.telemetry.context_feedback_memory_assistance_primary_loop_evidence_review"
+    )
+    assert primary_loop["status"] == "primary_loop_evidence_ready"
+    assert primary_loop["primary_loop_evidence_ready"] is True
+    assert primary_loop["ready_count"] == primary_loop["required_count"] == 8
+    assert [item["id"] for item in primary_loop["primary_loop_evidence"]] == [
+        "interface",
+        "plan",
+        "governance",
+        "identity",
+        "execution",
+        "receipt_trace",
+        "memory",
+        "ui_return",
+    ]
+    assert all(item["ready"] is True for item in primary_loop["primary_loop_evidence"])
+    assert primary_loop["receipt_trace_kind"] == "receipt_backed_readback"
+    assert primary_loop["true_execution_trace_observed"] is False
+    assert primary_loop["operator_decision_receipt_id"] == body["receipt_id"]
+    assert primary_loop["memory_quality_event_id"]
+    assert primary_loop["action_quality_review"]["action_quality_signal_review_ready"] is True
+    assert primary_loop["live_sample_readback"]["live_sample_observed"] is True
+    assert primary_loop["operator_review"]["latest_operator_decision"]["receipt_id"] == body["receipt_id"]
+    assert primary_loop["outcome_review"]["outcome"] == "operator_accepted_current_live_sample"
+    primary_loop_text = json.dumps(primary_loop, sort_keys=True)
+    assert "terminalsignalsecret123" not in primary_loop_text
+    assert "idesignalsecret123" not in primary_loop_text
+    assert "idediagnosticsecret123" not in primary_loop_text
+    assert primary_loop["read_only"] is True
+    assert primary_loop["writes_memory"] is False
+    assert primary_loop["writes_feedback"] is False
+    assert primary_loop["mutates_prompt"] is False
+    assert primary_loop["sends_chat"] is False
+    assert primary_loop["calls_model"] is False
+    assert primary_loop["selects_tools"] is False
+    assert primary_loop["grants_execution_authority"] is False
+    assert primary_loop["grants_mutation_authority"] is False
+    assert primary_loop["governance"]["read_only"] is True
+    assert primary_loop["governance"]["primary_loop_evidence_review"] is True
+    assert primary_loop["governance"]["receipt_trace_not_true_execution_trace"] is True
+    assert primary_loop["governance"]["uses_action_quality_signal_review"] is True
+    assert primary_loop["next_smallest_truthful_gap"] == (
+        "stage7_context_feedback_memory_assistance_memory_poisoning_review"
+    )
+
 
 def test_telemetry_context_feedback_memory_quality_record_is_empty_without_events(
     monkeypatch,

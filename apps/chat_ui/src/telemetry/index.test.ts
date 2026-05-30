@@ -18,6 +18,7 @@ import {
   parseTelemetryContextFeedbackMemoryAssistanceGitContextSignal,
   parseTelemetryContextFeedbackMemoryAssistanceIdeContextSignal,
   parseTelemetryContextFeedbackMemoryAssistanceOperatorContextSurfaceReview,
+  parseTelemetryContextFeedbackMemoryAssistancePrimaryLoopEvidenceReview,
   parseTelemetryContextFeedbackMemoryAssistanceSensingIndicatorSummary,
   parseTelemetryContextFeedbackMemoryAssistanceTerminalContextSignal,
   parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackReview,
@@ -2253,6 +2254,138 @@ test("TelemetryClient requests the action quality signal review endpoint", async
     assert.deepEqual(requests, [
       {
         path: "/telemetry/context/feedback/memory-assistance-feedback-loop-action-quality-signal-review",
+        search: "?limit=30",
+        method: "GET",
+      },
+    ]);
+  } finally {
+    restore();
+  }
+});
+
+test("parseTelemetryContextFeedbackMemoryAssistancePrimaryLoopEvidenceReview preserves primary loop guards", () => {
+  const review = parseTelemetryContextFeedbackMemoryAssistancePrimaryLoopEvidenceReview({
+    ok: true,
+    kind: "francis.stage7.telemetry.context_feedback_memory_assistance_primary_loop_evidence_review",
+    stage: "Stage 7 / Telemetry MVP",
+    source_id: "telemetry_context",
+    status: "primary_loop_evidence_ready",
+    target: "feedback_memory_assistance_prompt_integration",
+    primary_loop_evidence_ready: true,
+    ready_count: 8,
+    required_count: 8,
+    primary_loop_evidence: [
+      { id: "interface", ready: true },
+      { id: "plan", ready: true },
+      { id: "governance", ready: true },
+      { id: "identity", ready: true },
+      { id: "execution", ready: true },
+      { id: "receipt_trace", ready: true },
+      { id: "memory", ready: true },
+      { id: "ui_return", ready: true },
+    ],
+    receipt_trace_kind: "receipt_backed_readback",
+    true_execution_trace_observed: false,
+    operator_decision_receipt_id: "opdec-feedback-memory-assistance-live-sample",
+    memory_quality_event_id: "evt-feedback-memory-assistance-live-sample",
+    action_quality_review: { action_quality_signal_review_ready: true },
+    live_sample_readback: { live_sample_observed: true },
+    operator_review: { operator_review_ready: true },
+    outcome_review: { outcome: "operator_accepted_current_live_sample" },
+    read_only: true,
+    writes_memory: false,
+    writes_feedback: false,
+    mutates_prompt: false,
+    sends_chat: false,
+    calls_model: false,
+    selects_tools: false,
+    trains_model: false,
+    grants_execution_authority: false,
+    grants_mutation_authority: false,
+    governance: {
+      read_only: true,
+      primary_loop_evidence_review: true,
+      receipt_trace_not_true_execution_trace: true,
+    },
+    next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_memory_poisoning_review",
+  });
+
+  assert.equal(review.status, "primary_loop_evidence_ready");
+  assert.equal(review.primary_loop_evidence_ready, true);
+  assert.equal(review.ready_count, 8);
+  assert.equal(review.required_count, 8);
+  assert.deepEqual(
+    review.primary_loop_evidence.map((item) => item.id),
+    ["interface", "plan", "governance", "identity", "execution", "receipt_trace", "memory", "ui_return"],
+  );
+  assert.equal(review.receipt_trace_kind, "receipt_backed_readback");
+  assert.equal(review.true_execution_trace_observed, false);
+  assert.equal(review.operator_decision_receipt_id, "opdec-feedback-memory-assistance-live-sample");
+  assert.equal(review.memory_quality_event_id, "evt-feedback-memory-assistance-live-sample");
+  assert.equal(review.read_only, true);
+  assert.equal(review.writes_memory, false);
+  assert.equal(review.writes_feedback, false);
+  assert.equal(review.calls_model, false);
+  assert.equal(review.grants_execution_authority, false);
+  assert.equal(review.governance.receipt_trace_not_true_execution_trace, true);
+});
+
+test("TelemetryClient requests the primary loop evidence review endpoint", async () => {
+  const requests: Array<{ path: string; search: string; method: string }> = [];
+  const restore = installFetch((url, init) => {
+    const parsed = new URL(url);
+    requests.push({ path: parsed.pathname, search: parsed.search, method: init?.method ?? "GET" });
+    return jsonResponse({
+      ok: true,
+      kind: "francis.stage7.telemetry.context_feedback_memory_assistance_primary_loop_evidence_review",
+      stage: "Stage 7 / Telemetry MVP",
+      source_id: "telemetry_context",
+      status: "primary_loop_evidence_ready",
+      target: "feedback_memory_assistance_prompt_integration",
+      primary_loop_evidence_ready: true,
+      ready_count: 8,
+      required_count: 8,
+      primary_loop_evidence: [
+        { id: "interface", ready: true },
+        { id: "plan", ready: true },
+        { id: "governance", ready: true },
+        { id: "identity", ready: true },
+        { id: "execution", ready: true },
+        { id: "receipt_trace", ready: true },
+        { id: "memory", ready: true },
+        { id: "ui_return", ready: true },
+      ],
+      receipt_trace_kind: "receipt_backed_readback",
+      true_execution_trace_observed: false,
+      operator_decision_receipt_id: "opdec-feedback-memory-assistance-live-sample",
+      memory_quality_event_id: "evt-feedback-memory-assistance-live-sample",
+      action_quality_review: { action_quality_signal_review_ready: true },
+      live_sample_readback: { live_sample_observed: true },
+      operator_review: { operator_review_ready: true },
+      outcome_review: { outcome: "operator_accepted_current_live_sample" },
+      read_only: true,
+      writes_memory: false,
+      writes_feedback: false,
+      mutates_prompt: false,
+      sends_chat: false,
+      calls_model: false,
+      selects_tools: false,
+      trains_model: false,
+      grants_execution_authority: false,
+      grants_mutation_authority: false,
+      governance: { read_only: true, primary_loop_evidence_review: true },
+      next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_memory_poisoning_review",
+    });
+  });
+
+  try {
+    const client = new TelemetryClient("http://127.0.0.1:8000/");
+    const review = await client.getContextFeedbackMemoryAssistancePrimaryLoopEvidenceReview({ limit: 30 });
+
+    assert.equal(review.primary_loop_evidence_ready, true);
+    assert.deepEqual(requests, [
+      {
+        path: "/telemetry/context/feedback/memory-assistance-feedback-loop-primary-loop-evidence-review",
         search: "?limit=30",
         method: "GET",
       },

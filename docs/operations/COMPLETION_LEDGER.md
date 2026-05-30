@@ -45724,6 +45724,57 @@ review:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-30 - Stage 7 feedback memory assistance primary loop evidence is reviewable
+
+Roadmap area: Stage 7 / Telemetry MVP, primary-loop evidence review after the
+feedback-memory assistance action-quality signal review.
+
+Material change:
+
+- Telemetry now exposes a read-only primary-loop evidence review at
+  `/telemetry/context/feedback/memory-assistance-feedback-loop-primary-loop-evidence-review`.
+- The review consumes action-quality signal review, live-sample readback,
+  operator review, and operator decision outcome review.
+- It reports evidence across interface, plan, governance, identity, execution,
+  receipt trace, memory, and UI return while explicitly marking the trace as
+  receipt-backed readback rather than a true execution trace.
+- The Telemetry & Continuation panel now fetches and displays primary-loop
+  evidence independently, including ready/required count, evidence badges,
+  receipt and memory ids, next truthful gap, and non-write/non-model guards.
+- The review remains read-only: it does not write memory, write feedback,
+  mutate prompt state, send chat, call a model, select tools, train a model, or
+  grant execution or mutation authority.
+
+Latest validation for Stage 7 feedback memory assistance primary-loop evidence
+review:
+
+- `python -m pytest
+  tests/test_api_telemetry.py::test_telemetry_context_feedback_memory_assistance_live_sample_operator_decision_records_receipt
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 2 passed`
+- `python -m pytest tests/test_api_telemetry.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed`
+- `python -m mypy src/francis/api/routes/telemetry.py`
+  Result: `passed`
+- `python -m ruff check src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `node --test --experimental-strip-types src/telemetry/index.test.ts` in
+  `apps/chat_ui`
+  Result: `passed; 52 passed`
+- `npm run test` in `apps/chat_ui`
+  Result: `passed; 160 passed`
+- `npm run build` in `apps/chat_ui`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
