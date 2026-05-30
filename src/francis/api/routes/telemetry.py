@@ -2183,7 +2183,11 @@ def context_feedback_memory_assistance_operator_feedback_loop_true_execution_tra
         and chat.get("route") == "/chat/send"
         and chat.get("method") == "POST"
     )
-    model_or_tool_span_ready = bool(chat.get("model_or_tool_execution_span_captured"))
+    model_call_trace_id = _redacted_line_text(chat.get("model_call_trace_id"))
+    tool_call_trace_id = _redacted_line_text(chat.get("tool_call_trace_id"))
+    model_or_tool_span_ready = bool(chat.get("model_or_tool_execution_span_captured")) and bool(
+        model_call_trace_id or tool_call_trace_id
+    )
 
     trace_sources = [
         {
@@ -2238,9 +2242,16 @@ def context_feedback_memory_assistance_operator_feedback_loop_true_execution_tra
             "kind": "true_execution_trace",
             "ready": model_or_tool_span_ready,
             "evidence": {
-                "model_call_trace_id": "",
-                "tool_call_trace_id": "",
-                "reason": "review_does_not_call_model_or_select_tools",
+                "model_call_trace_id": model_call_trace_id,
+                "model_call_kind": chat.get("model_call_kind", ""),
+                "model_call_requested": bool(chat.get("model_call_requested")),
+                "model_call_response_observed": bool(chat.get("model_call_response_observed")),
+                "tool_call_trace_id": tool_call_trace_id,
+                "tool_call_kind": chat.get("tool_call_kind", ""),
+                "tool_call_handled": bool(chat.get("tool_call_handled")),
+                "reason": "chat_route_captured_model_or_tool_execution_span"
+                if model_or_tool_span_ready
+                else "review_does_not_call_model_or_select_tools",
             },
         },
     ]
@@ -2803,6 +2814,13 @@ def _feedback_memory_assistance_live_chat_evidence(*, limit: int) -> dict[str, A
             "artifact_dir": _redacted_line_text(execution_trace.get("artifact_dir")),
             "route": _redacted_line_text(execution_trace.get("route")) or "/chat/send",
             "method": _redacted_line_text(execution_trace.get("method")) or "POST",
+            "model_call_trace_id": _redacted_line_text(execution_trace.get("model_call_trace_id")),
+            "model_call_kind": _redacted_line_text(execution_trace.get("model_call_kind")),
+            "model_call_requested": bool(execution_trace.get("model_call_requested")),
+            "model_call_response_observed": bool(execution_trace.get("model_call_response_observed")),
+            "tool_call_trace_id": _redacted_line_text(execution_trace.get("tool_call_trace_id")),
+            "tool_call_kind": _redacted_line_text(execution_trace.get("tool_call_kind")),
+            "tool_call_handled": bool(execution_trace.get("tool_call_handled")),
             "model_or_tool_execution_span_captured": bool(execution_trace.get("model_or_tool_execution_span_captured")),
             "feedback_target_present": isinstance(assistance.get("feedback_target"), dict)
             and bool(assistance.get("feedback_target")),

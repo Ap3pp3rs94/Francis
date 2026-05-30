@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from dataclasses import dataclass
 
 from francis.agent.local_actions import try_handle
@@ -62,16 +63,32 @@ def handle(
 
     action = try_handle(text)
     if action.handled:
+        if execution_trace is not None:
+            execution_trace["tool_call_trace_id"] = f"tool_span_{uuid.uuid4().hex[:16]}"
+            execution_trace["tool_call_kind"] = "local_action"
+            execution_trace["tool_call_handled"] = True
+            execution_trace["model_or_tool_execution_span_captured"] = True
         append("assistant", action.message, {"mode": "action", **ledger_meta})
         return action.message
 
     reply = ""
     if use_llm:
+        if execution_trace is not None:
+            execution_trace["model_call_trace_id"] = f"model_span_{uuid.uuid4().hex[:16]}"
+            execution_trace["model_call_kind"] = "llm_generate"
+            execution_trace["model_call_requested"] = True
+            execution_trace["model_call_provider"] = "francis.llm.client.generate"
+            execution_trace["model_or_tool_execution_span_captured"] = True
         prompt = _llm_prompt(text, telemetry_context=telemetry_context)
         try:
             reply = generate(prompt)
+            if execution_trace is not None:
+                execution_trace["model_call_response_observed"] = bool(reply)
         except Exception as exc:
             logger.error("LLM generation failed: %s", exc)
+            if execution_trace is not None:
+                execution_trace["model_call_error"] = "llm_generation_failed"
+                execution_trace["model_call_response_observed"] = False
             reply = ""
 
     if not reply:

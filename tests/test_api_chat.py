@@ -371,7 +371,11 @@ def test_chat_send_projects_visible_redacted_telemetry_context(monkeypatch, tmp_
     assert execution_trace["method"] == "POST"
     assert execution_trace["api_actor"] == "api.chat"
     assert execution_trace["conversation_ledger_write"] is True
-    assert execution_trace["model_or_tool_execution_span_captured"] is False
+    assert execution_trace["model_or_tool_execution_span_captured"] is True
+    assert execution_trace["model_call_trace_id"].startswith("model_span_")
+    assert execution_trace["model_call_kind"] == "llm_generate"
+    assert execution_trace["model_call_requested"] is True
+    assert execution_trace["model_call_response_observed"] is True
     assert execution_trace["grants_execution_authority"] is False
     assert execution_trace["grants_mutation_authority"] is False
     context = body["telemetry_context"]
@@ -395,7 +399,8 @@ def test_chat_send_projects_visible_redacted_telemetry_context(monkeypatch, tmp_
     assert user_entry["meta"]["trace_id"] == execution_trace["trace_id"]
     assert user_entry["meta"]["run_id"] == execution_trace["run_id"]
     assert user_entry["meta"]["trace_kind"] == "chat_route_execution_trace"
-    assert user_entry["meta"]["execution_trace"] == execution_trace
+    assert user_entry["meta"]["execution_trace"]["trace_id"] == execution_trace["trace_id"]
+    assert "model_call_trace_id" not in user_entry["meta"]["execution_trace"]
     assert assistant_entry["meta"]["api_actor"] == "api.chat"
     assert assistant_entry["meta"]["trace_id"] == execution_trace["trace_id"]
     assert assistant_entry["meta"]["run_id"] == execution_trace["run_id"]

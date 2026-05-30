@@ -943,7 +943,12 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_revie
     assert not data_root.exists()
 
 
-def _seed_feedback_memory_assistance_live_sample(client: TestClient, actor: str) -> None:
+def _seed_feedback_memory_assistance_live_sample(
+    client: TestClient,
+    actor: str,
+    *,
+    chat_use_llm: bool = False,
+) -> None:
     seed_feedback = client.post(
         "/telemetry/context/feedback",
         json={
@@ -981,12 +986,16 @@ def _seed_feedback_memory_assistance_live_sample(client: TestClient, actor: str)
         "/chat/send",
         json={
             "message": "What context should guide this work?",
-            "use_llm": False,
+            "use_llm": chat_use_llm,
             "api_actor": actor,
         },
     )
     assert chat.status_code == 200
     chat_body = chat.json()
+    if chat_use_llm:
+        execution_trace = chat_body["execution_trace"]
+        assert execution_trace["model_call_trace_id"].startswith("model_span_")
+        assert execution_trace["model_or_tool_execution_span_captured"] is True
     assistance = chat_body["telemetry_context"]["feedback_memory_assistance_prompt_integration"]
     assert assistance["applies_to_chat_now"] is True
     feedback_target = assistance["feedback_target"]
@@ -1191,7 +1200,15 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_revie
     )
 
     client = TestClient(create_app())
-    _seed_feedback_memory_assistance_live_sample(client, actor)
+    from francis.chat import router as chat_router
+
+    def fake_generate(prompt: str) -> str:
+        assert "feedback_memory_assistance.summary:" in prompt
+        return "Feedback memory assistance span observed."
+
+    monkeypatch.setattr(chat_router, "generate", fake_generate)
+
+    _seed_feedback_memory_assistance_live_sample(client, actor, chat_use_llm=True)
     response = client.get(
         "/telemetry/context/feedback/memory-assistance-feedback-loop-live-sample-operator-review?limit=10"
     )
@@ -1293,7 +1310,15 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decis
     )
 
     client = TestClient(create_app())
-    _seed_feedback_memory_assistance_live_sample(client, actor)
+    from francis.chat import router as chat_router
+
+    def fake_generate(prompt: str) -> str:
+        assert "feedback_memory_assistance.summary:" in prompt
+        return "Feedback memory assistance span observed."
+
+    monkeypatch.setattr(chat_router, "generate", fake_generate)
+
+    _seed_feedback_memory_assistance_live_sample(client, actor, chat_use_llm=True)
     terminal = client.post(
         "/telemetry/terminal/events",
         json={
@@ -1828,12 +1853,12 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decis
     assert trace_review["kind"] == (
         "francis.stage7.telemetry.context_feedback_memory_assistance_true_execution_trace_review"
     )
-    assert trace_review["status"] == "true_execution_trace_partially_observed"
+    assert trace_review["status"] == "true_execution_trace_review_ready"
     assert trace_review["review_ready"] is True
     assert trace_review["receipt_backed_trace_observed"] is True
     assert trace_review["receipt_backed_trace_count"] == 4
     assert trace_review["true_execution_trace_observed"] is True
-    assert trace_review["true_execution_trace_count"] == 1
+    assert trace_review["true_execution_trace_count"] == 2
     assert [item["id"] for item in trace_review["trace_sources"]] == [
         "chat_interface_readback",
         "operator_feedback_receipt",
@@ -1847,7 +1872,12 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decis
     assert trace_sources["chat_route_execution_trace"]["evidence"]["trace_id"].startswith("chat_trace_")
     assert trace_sources["chat_route_execution_trace"]["evidence"]["run_id"].startswith("chat_run_")
     assert trace_sources["chat_route_execution_trace"]["evidence"]["route"] == "/chat/send"
-    assert trace_review["missing_true_execution_trace"] == ["model_or_tool_execution_span"]
+    assert trace_sources["model_or_tool_execution_span"]["ready"] is True
+    assert trace_sources["model_or_tool_execution_span"]["evidence"]["model_call_trace_id"].startswith("model_span_")
+    assert trace_sources["model_or_tool_execution_span"]["evidence"]["model_call_kind"] == "llm_generate"
+    assert trace_sources["model_or_tool_execution_span"]["evidence"]["model_call_requested"] is True
+    assert trace_sources["model_or_tool_execution_span"]["evidence"]["model_call_response_observed"] is True
+    assert trace_review["missing_true_execution_trace"] == []
     assert trace_review["primary_loop_evidence"]["primary_loop_evidence_ready"] is True
     assert trace_review["primary_loop_evidence"]["receipt_trace_kind"] == "receipt_backed_readback"
     assert trace_review["primary_loop_evidence"]["chat_route_execution_trace_observed"] is True
@@ -1865,7 +1895,7 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decis
     assert trace_review["governance"]["receipt_trace_not_true_execution_trace"] is True
     assert trace_review["governance"]["reports_missing_true_execution_trace"] is True
     assert trace_review["next_smallest_truthful_gap"] == (
-        "stage7_context_feedback_memory_assistance_model_or_tool_execution_span_capture"
+        "stage7_context_feedback_memory_assistance_true_execution_trace_review"
     )
 
 
