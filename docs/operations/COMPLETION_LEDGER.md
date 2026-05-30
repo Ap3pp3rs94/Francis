@@ -44209,6 +44209,60 @@ Latest validation for Stage 7 context-feedback operator surface:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-29 - Stage 7 context feedback memory-quality candidate is read-only
+
+Roadmap area: Stage 7 / Telemetry MVP, context-feedback quality signals for
+future governed memory writes.
+
+Material change:
+
+- Telemetry context feedback now exposes a read-only memory-quality projection
+  at `/telemetry/context/feedback/memory-quality`.
+- The projection builds a bounded memory-timeline candidate only from explicit,
+  redacted operator feedback review data.
+- The candidate includes the memory write contract fields required by the
+  memory timeline: `action_type`, `provenance.source`, `classification`,
+  `confidence`, and `retention`.
+- The projection records the required write route and scope
+  (`/memory/timeline/record`, `memory.timeline.write`) but does not write
+  memory, grant memory-write authority, train a model, store raw prompt bodies,
+  store raw model responses, or include raw feedback notes/meta.
+- `/telemetry/status`, `/telemetry/context`, and the feedback review now
+  advance their next smallest truthful gap to
+  `stage7_context_feedback_memory_operator_write_decision`.
+
+Latest validation for Stage 7 context-feedback memory-quality candidate:
+
+- `python -m pytest tests/test_api_telemetry.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 17 passed`
+- `python -m pytest
+  tests/test_api_memory_timeline.py::test_memory_timeline_record_requires_typed_contract_before_persisting
+  tests/test_api_memory_timeline.py::test_memory_timeline_record_rejects_poisoning_payload_before_persisting
+  tests/test_api_memory_timeline.py::test_memory_timeline_record_rejects_nested_payload_poison_before_persisting
+  tests/test_api_memory_timeline.py::test_memory_timeline_record_rejects_invalid_confidence_before_persisting
+  tests/test_api_memory_timeline.py::test_memory_timeline_record_rejects_invalid_retention_ttl_before_persisting
+  -q --tb=short --maxfail=1`
+  Result: `passed; 5 passed`
+- `python -m mypy src/francis/telemetry/context.py
+  src/francis/telemetry/status.py src/francis/api/routes/telemetry.py`
+  Result: `passed`
+- `python -m ruff check src/francis/telemetry/context.py
+  src/francis/telemetry/status.py src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/telemetry/context.py
+  src/francis/telemetry/status.py src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- Direct `/telemetry/context/feedback/memory-quality?limit=10` readback
+  Result: `kind=francis.stage7.telemetry.context_feedback_memory_quality`,
+  `status=empty`, `writes_memory=false`, `required_scope=memory.timeline.write`,
+  `next_smallest_truthful_gap=stage7_context_feedback_memory_operator_write_decision`.
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -14,12 +14,15 @@ TELEMETRY_CONTEXT_KIND = "francis.stage7.telemetry.context"
 TELEMETRY_CONTEXT_FEEDBACK_KIND = "francis.stage7.telemetry.context_feedback"
 TELEMETRY_CONTEXT_FEEDBACK_EVENTS_KIND = "francis.stage7.telemetry.context_feedback_events"
 TELEMETRY_CONTEXT_FEEDBACK_REVIEW_KIND = "francis.stage7.telemetry.context_feedback_review"
+TELEMETRY_CONTEXT_FEEDBACK_MEMORY_QUALITY_KIND = "francis.stage7.telemetry.context_feedback_memory_quality"
 TELEMETRY_CONTEXT_FEEDBACK_WRITE_SCOPE = "telemetry.context.feedback.write"
+MEMORY_TIMELINE_WRITE_SCOPE = "memory.timeline.write"
 _MAX_CONTEXT_ITEMS = 12
 _MAX_PATHS = 5
 _MAX_LIMIT = 100
 _MAX_TEXT_LENGTH = 2_000
 _MAX_TAGS = 16
+_NEXT_CONTEXT_FEEDBACK_GAP = "stage7_context_feedback_memory_operator_write_decision"
 
 
 def telemetry_context_snapshot(*, surface: Any = "assist") -> dict[str, Any]:
@@ -70,7 +73,7 @@ def telemetry_context_snapshot(*, surface: Any = "assist") -> dict[str, Any]:
             "grants_execution_authority": False,
             "grants_memory_write_authority": False,
         },
-        "next_smallest_truthful_gap": "stage7_context_feedback_memory_quality_loop",
+        "next_smallest_truthful_gap": _NEXT_CONTEXT_FEEDBACK_GAP,
     }
 
 
@@ -219,7 +222,51 @@ def telemetry_context_feedback_review(*, limit: int = 100) -> dict[str, Any]:
             "grants_execution_authority": False,
             "grants_memory_write_authority": False,
         },
-        "next_smallest_truthful_gap": "stage7_context_feedback_memory_quality_loop",
+        "next_smallest_truthful_gap": _NEXT_CONTEXT_FEEDBACK_GAP,
+    }
+
+
+def telemetry_context_feedback_memory_quality(*, limit: int = 100) -> dict[str, Any]:
+    safe_limit = _safe_limit(limit)
+    review = telemetry_context_feedback_review(limit=safe_limit)
+    reviewed_event_count = _safe_int(review.get("reviewed_event_count"), 0)
+    candidate = _feedback_memory_write_candidate(review) if reviewed_event_count > 0 else {}
+    return {
+        "ok": True,
+        "kind": TELEMETRY_CONTEXT_FEEDBACK_MEMORY_QUALITY_KIND,
+        "stage": STAGE7_TELEMETRY_STAGE,
+        "source_id": "telemetry_context",
+        "status": "memory_candidate_ready" if candidate else "empty",
+        "capture_mode": "explicit_operator_feedback_memory_quality_review",
+        "review": review,
+        "memory_write_candidate": candidate,
+        "memory_write_route": "/memory/timeline/record",
+        "required_scope": MEMORY_TIMELINE_WRITE_SCOPE,
+        "operator_decision_required": bool(candidate),
+        "writes_memory": False,
+        "redacted": True,
+        "hidden_sensing": False,
+        "stores_prompt_body": False,
+        "stores_model_response": False,
+        "trains_model": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "on_request_only": True,
+            "uses_explicit_operator_feedback_only": True,
+            "telemetry_is_untrusted_input": True,
+            "candidate_only": True,
+            "operator_decision_required_before_memory_write": True,
+            "redacted_before_storage": True,
+            "stores_prompt_body": False,
+            "stores_model_response": False,
+            "trains_model": False,
+            "writes_memory": False,
+            "grants_execution_authority": False,
+            "grants_memory_write_authority": False,
+        },
+        "next_smallest_truthful_gap": _NEXT_CONTEXT_FEEDBACK_GAP,
     }
 
 
@@ -423,12 +470,108 @@ def _feedback_quality_signals(rating_counts: dict[str, int], *, reviewed_event_c
     return signals
 
 
+def _feedback_memory_write_candidate(review: dict[str, Any]) -> dict[str, Any]:
+    rating_counts = _safe_count_map(review.get("rating_counts"), allowed=("useful", "not_useful", "neutral"))
+    source_counts = _safe_count_map(review.get("source_counts"), limit=_MAX_CONTEXT_ITEMS)
+    tag_counts = _safe_count_map(review.get("tag_counts"), limit=_MAX_TAGS)
+    quality_signals = _safe_text_list(review.get("quality_signals"), limit=_MAX_TAGS)
+    latest_feedback = _safe_dict(review.get("latest_feedback"))
+    reviewed_event_count = _safe_int(review.get("reviewed_event_count"), 0)
+    total = _safe_int(review.get("total"), reviewed_event_count)
+    misses = rating_counts.get("not_useful", 0)
+    useful = rating_counts.get("useful", 0)
+    neutral = rating_counts.get("neutral", 0)
+
+    return {
+        "kind": "telemetry_context_feedback_quality_review",
+        "action_type": "telemetry.context_feedback.quality_review",
+        "classification": "operator_feedback_quality_signal",
+        "confidence": 0.75,
+        "provenance": {
+            "source": "telemetry.context.feedback.review",
+            "capture_mode": "explicit_operator_feedback_review",
+            "reviewed_event_count": reviewed_event_count,
+            "total": total,
+        },
+        "retention": {
+            "policy": "stage7_context_feedback_quality",
+            "class": "quality_signal",
+            "ttl_seconds": 2_592_000,
+        },
+        "title": "Telemetry context feedback quality review",
+        "message": _redact_text(
+            "Context feedback quality review: "
+            f"{reviewed_event_count} explicit operator feedback event"
+            f"{'' if reviewed_event_count == 1 else 's'}; "
+            f"useful={useful}; misses={misses}; neutral={neutral}."
+        ),
+        "tags": _safe_text_list(
+            ["stage7", "telemetry_context_feedback", "quality_review", *quality_signals],
+            limit=_MAX_TAGS,
+        ),
+        "payload": {
+            "rating_counts": rating_counts,
+            "source_counts": source_counts,
+            "tag_counts": tag_counts,
+            "quality_signals": quality_signals,
+            "latest_feedback": _feedback_review_item(latest_feedback) if latest_feedback else {},
+            "redacted": True,
+            "telemetry_is_untrusted_input": True,
+        },
+        "meta": {
+            "source": "telemetry.context.feedback.review",
+            "action_type": "telemetry.context_feedback.quality_review",
+            "classification": "operator_feedback_quality_signal",
+            "confidence": 0.75,
+            "retention_policy": "stage7_context_feedback_quality",
+            "retention_class": "quality_signal",
+            "ttl_seconds": 2_592_000,
+            "stores_prompt_body": False,
+            "stores_model_response": False,
+        },
+        "memory_write_contract": {
+            "would_satisfy_required_fields": True,
+            "required_fields": [
+                "action_type",
+                "provenance.source",
+                "classification",
+                "confidence",
+                "retention",
+            ],
+            "operator_decision_required": True,
+            "write_route": "/memory/timeline/record",
+            "required_scope": MEMORY_TIMELINE_WRITE_SCOPE,
+        },
+        "poisoning_guard": {
+            "raw_notes_included": False,
+            "raw_prompt_body_included": False,
+            "raw_model_response_included": False,
+            "telemetry_is_untrusted_input": True,
+        },
+        "writes_memory": False,
+        "grants_memory_write_authority": False,
+    }
+
+
 def _bounded_count_map(counts: dict[str, int], *, limit: int) -> dict[str, int]:
     return {
         key: count
         for key, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:limit]
         if key and count > 0
     }
+
+
+def _safe_count_map(value: Any, *, limit: int = _MAX_TAGS, allowed: tuple[str, ...] = ()) -> dict[str, int]:
+    source = value if isinstance(value, dict) else {}
+    counts: dict[str, int] = {}
+    keys = allowed or tuple(str(key) for key in source.keys())
+    for key in keys:
+        count = _safe_int(source.get(key), 0)
+        if count > 0 or key in allowed:
+            counts[_redact_text(key)] = max(0, count)
+    if allowed:
+        return {key: counts.get(key, 0) for key in allowed}
+    return _bounded_count_map(counts, limit=limit)
 
 
 def _feedback_path() -> Path:
