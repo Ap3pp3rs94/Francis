@@ -1671,6 +1671,125 @@ def context_feedback_memory_assistance_operator_feedback_loop_operator_context_s
     }
 
 
+@router.get("/context/feedback/memory-assistance-feedback-loop-action-quality-signal-review")
+def context_feedback_memory_assistance_operator_feedback_loop_action_quality_signal_review(
+    limit: int = 20,
+) -> dict[str, Any]:
+    safe_limit = max(1, min(int(limit), 100))
+    operator_surface = context_feedback_memory_assistance_operator_feedback_loop_operator_context_surface_review(
+        limit=safe_limit
+    )
+    feedback_review = context_feedback_memory_assistance_operator_feedback_review(limit=safe_limit)
+    memory_readback = context_feedback_memory_assistance_operator_feedback_memory_readback(limit=safe_limit)
+    outcome_review = (
+        context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_decision_outcome_review(
+            limit=safe_limit
+        )
+    )
+    quality_signals_value = feedback_review.get("quality_signals")
+    quality_signals = quality_signals_value if isinstance(quality_signals_value, list) else []
+    memory_items_value = memory_readback.get("items")
+    memory_items = memory_items_value if isinstance(memory_items_value, list) else []
+    latest_memory_item = memory_items[0] if memory_items and isinstance(memory_items[0], dict) else {}
+    reviewed_event_count = _safe_count(feedback_review.get("reviewed_event_count"))
+    memory_quality_event_count = _safe_count(memory_readback.get("count"))
+    accepted_live_sample = outcome_review.get("outcome") == "operator_accepted_current_live_sample"
+    operator_surface_ready = bool(operator_surface.get("operator_context_surface_ready"))
+    action_quality_signals = [
+        {
+            "id": "visible_operator_context_surface",
+            "ready": operator_surface_ready,
+            "source": "operator_context_surface_review",
+            "basis": "telemetry_continuation_panel_visible_sections",
+        },
+        {
+            "id": "accepted_live_sample_operator_decision",
+            "ready": bool(accepted_live_sample),
+            "source": "live_sample_operator_decision_outcome_review",
+            "basis": outcome_review.get("outcome", "unknown"),
+        },
+        {
+            "id": "explicit_operator_feedback_quality_signal",
+            "ready": reviewed_event_count > 0,
+            "source": "feedback_memory_assistance_operator_feedback_review",
+            "basis": f"reviewed_event_count:{reviewed_event_count}",
+        },
+        {
+            "id": "governed_memory_quality_signal_readback",
+            "ready": memory_quality_event_count > 0,
+            "source": "feedback_memory_assistance_operator_feedback_memory_readback",
+            "basis": f"memory_quality_event_count:{memory_quality_event_count}",
+        },
+    ]
+    ready_signal_count = sum(1 for signal in action_quality_signals if signal["ready"])
+    action_quality_signal_review_ready = ready_signal_count == len(action_quality_signals)
+    if action_quality_signal_review_ready:
+        status = "action_quality_signals_ready"
+    elif ready_signal_count > 0:
+        status = "partial_action_quality_signals"
+    else:
+        status = "awaiting_action_quality_signals"
+    return {
+        "ok": True,
+        "kind": "francis.stage7.telemetry.context_feedback_memory_assistance_action_quality_signal_review",
+        "stage": "Stage 7 / Telemetry MVP",
+        "source_id": "telemetry_context",
+        "status": status,
+        "target": "feedback_memory_assistance_prompt_integration",
+        "action_quality_signal_review_ready": action_quality_signal_review_ready,
+        "ready_signal_count": ready_signal_count,
+        "signal_count": len(action_quality_signals),
+        "action_quality_signals": action_quality_signals,
+        "quality_signals": quality_signals,
+        "reviewed_event_count": reviewed_event_count,
+        "memory_quality_event_count": memory_quality_event_count,
+        "latest_memory_quality_event_id": latest_memory_item.get("id", ""),
+        "rating_counts": feedback_review.get("rating_counts", {}),
+        "operator_surface_ready": operator_surface_ready,
+        "accepted_live_sample": bool(accepted_live_sample),
+        "operator_surface_review": operator_surface,
+        "feedback_review": feedback_review,
+        "memory_readback": memory_readback,
+        "outcome_review": outcome_review,
+        "capture_mode": "explicit_operator_feedback_and_receipt_readback",
+        "read_only": True,
+        "model_scored_quality": False,
+        "writes_memory": False,
+        "writes_feedback": False,
+        "mutates_prompt": False,
+        "sends_chat": False,
+        "calls_model": False,
+        "selects_tools": False,
+        "trains_model": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "action_quality_signal_review": True,
+            "uses_explicit_operator_feedback_only": True,
+            "uses_live_sample_operator_decision_receipt": True,
+            "uses_governed_memory_quality_readback": True,
+            "uses_operator_context_surface_review": True,
+            "telemetry_is_untrusted_input": True,
+            "model_scored_quality": False,
+            "does_not_write_memory": True,
+            "does_not_write_feedback": True,
+            "does_not_mutate_prompt": True,
+            "does_not_send_chat": True,
+            "does_not_call_model": True,
+            "does_not_select_tools": True,
+            "trains_model": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": (
+            "stage7_context_feedback_memory_assistance_primary_loop_evidence_review"
+            if action_quality_signal_review_ready
+            else "stage7_context_feedback_memory_assistance_action_quality_signal_review"
+        ),
+    }
+
+
 @router.post("/context/feedback/memory-assistance-feedback-loop-live-sample-operator-decision")
 def context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_decision_record(
     payload: TelemetryContextFeedbackMemoryAssistanceLiveSampleOperatorDecisionIn,

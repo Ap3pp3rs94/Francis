@@ -1660,6 +1660,58 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decis
         "stage7_context_feedback_memory_assistance_action_quality_signal_review"
     )
 
+    action_quality = client.get(
+        "/telemetry/context/feedback/memory-assistance-feedback-loop-action-quality-signal-review?limit=10"
+    ).json()
+    assert action_quality["ok"] is True
+    assert action_quality["kind"] == (
+        "francis.stage7.telemetry.context_feedback_memory_assistance_action_quality_signal_review"
+    )
+    assert action_quality["status"] == "action_quality_signals_ready"
+    assert action_quality["action_quality_signal_review_ready"] is True
+    assert action_quality["ready_signal_count"] == action_quality["signal_count"] == 4
+    assert [signal["id"] for signal in action_quality["action_quality_signals"]] == [
+        "visible_operator_context_surface",
+        "accepted_live_sample_operator_decision",
+        "explicit_operator_feedback_quality_signal",
+        "governed_memory_quality_signal_readback",
+    ]
+    assert all(signal["ready"] is True for signal in action_quality["action_quality_signals"])
+    assert action_quality["quality_signals"] == ["operator_reported_useful_feedback_memory_assistance"]
+    assert action_quality["reviewed_event_count"] >= 1
+    assert action_quality["memory_quality_event_count"] >= 1
+    assert action_quality["latest_memory_quality_event_id"]
+    assert action_quality["operator_surface_ready"] is True
+    assert action_quality["accepted_live_sample"] is True
+    assert action_quality["operator_surface_review"]["operator_context_surface_ready"] is True
+    assert action_quality["feedback_review"]["target"] == "feedback_memory_assistance_prompt_integration"
+    assert action_quality["memory_readback"]["target"] == "feedback_memory_assistance_prompt_integration"
+    assert action_quality["outcome_review"]["outcome"] == "operator_accepted_current_live_sample"
+    action_quality_text = json.dumps(action_quality, sort_keys=True)
+    assert "terminalsignalsecret123" not in action_quality_text
+    assert "idesignalsecret123" not in action_quality_text
+    assert "idediagnosticsecret123" not in action_quality_text
+    assert action_quality["capture_mode"] == "explicit_operator_feedback_and_receipt_readback"
+    assert action_quality["read_only"] is True
+    assert action_quality["model_scored_quality"] is False
+    assert action_quality["writes_memory"] is False
+    assert action_quality["writes_feedback"] is False
+    assert action_quality["mutates_prompt"] is False
+    assert action_quality["sends_chat"] is False
+    assert action_quality["calls_model"] is False
+    assert action_quality["selects_tools"] is False
+    assert action_quality["grants_execution_authority"] is False
+    assert action_quality["grants_mutation_authority"] is False
+    assert action_quality["governance"]["read_only"] is True
+    assert action_quality["governance"]["action_quality_signal_review"] is True
+    assert action_quality["governance"]["uses_explicit_operator_feedback_only"] is True
+    assert action_quality["governance"]["uses_live_sample_operator_decision_receipt"] is True
+    assert action_quality["governance"]["uses_governed_memory_quality_readback"] is True
+    assert action_quality["governance"]["model_scored_quality"] is False
+    assert action_quality["next_smallest_truthful_gap"] == (
+        "stage7_context_feedback_memory_assistance_primary_loop_evidence_review"
+    )
+
 
 def test_telemetry_context_feedback_memory_quality_record_is_empty_without_events(
     monkeypatch,

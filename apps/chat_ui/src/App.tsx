@@ -102,6 +102,7 @@ import {
   TelemetryApiError,
   TelemetryClient,
   type TelemetryContextFeedbackRecord,
+  type TelemetryContextFeedbackMemoryAssistanceActionQualitySignalReview,
   type TelemetryContextFeedbackMemoryAssistanceChatContextReadback,
   type TelemetryContextFeedbackMemoryAssistanceDryRun,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopE2eAcceptanceAudit,
@@ -4285,6 +4286,18 @@ function SystemPanel(props: {
     telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReviewLoadedAt,
     setTelemetryFeedbackMemoryAssistanceOperatorContextSurfaceReviewLoadedAt,
   ] = useState<number | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceActionQualitySignalReview,
+    setTelemetryFeedbackMemoryAssistanceActionQualitySignalReview,
+  ] = useState<TelemetryContextFeedbackMemoryAssistanceActionQualitySignalReview | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceActionQualitySignalReviewError,
+    setTelemetryFeedbackMemoryAssistanceActionQualitySignalReviewError,
+  ] = useState<string | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceActionQualitySignalReviewLoadedAt,
+    setTelemetryFeedbackMemoryAssistanceActionQualitySignalReviewLoadedAt,
+  ] = useState<number | null>(null);
   const [telemetryFeedbackMemoryQualityBusy, setTelemetryFeedbackMemoryQualityBusy] = useState(false);
   const [telemetryFeedbackMemoryQualityNotice, setTelemetryFeedbackMemoryQualityNotice] = useState<{
     tone: "info" | "error";
@@ -4514,6 +4527,7 @@ function SystemPanel(props: {
         nextTelemetryFeedbackMemoryAssistanceIdeContextSignal,
         nextTelemetryFeedbackMemoryAssistanceSensingIndicatorSummary,
         nextTelemetryFeedbackMemoryAssistanceOperatorContextSurfaceReview,
+        nextTelemetryFeedbackMemoryAssistanceActionQualitySignalReview,
       ] =
         await Promise.allSettled([
         client.getSystemInfo(),
@@ -4555,6 +4569,7 @@ function SystemPanel(props: {
         telemetryClient.getContextFeedbackMemoryAssistanceIdeContextSignal({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistanceSensingIndicatorSummary({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistanceOperatorContextSurfaceReview({ limit: 20 }),
+        telemetryClient.getContextFeedbackMemoryAssistanceActionQualitySignalReview({ limit: 20 }),
       ]);
 
       const degradedFeeds: string[] = [];
@@ -4878,6 +4893,19 @@ function SystemPanel(props: {
           telemetryError(nextTelemetryFeedbackMemoryAssistanceOperatorContextSurfaceReview.reason),
         );
         degradedFeeds.push("telemetry feedback memory assistance operator context surface review");
+      }
+
+      if (nextTelemetryFeedbackMemoryAssistanceActionQualitySignalReview.status === "fulfilled") {
+        setTelemetryFeedbackMemoryAssistanceActionQualitySignalReview(
+          nextTelemetryFeedbackMemoryAssistanceActionQualitySignalReview.value,
+        );
+        setTelemetryFeedbackMemoryAssistanceActionQualitySignalReviewError(null);
+        setTelemetryFeedbackMemoryAssistanceActionQualitySignalReviewLoadedAt(refreshStartedAt);
+      } else {
+        setTelemetryFeedbackMemoryAssistanceActionQualitySignalReviewError(
+          telemetryError(nextTelemetryFeedbackMemoryAssistanceActionQualitySignalReview.reason),
+        );
+        degradedFeeds.push("telemetry feedback memory assistance action quality signal review");
       }
 
       if (degradedFeeds.length > 0) {
@@ -7015,6 +7043,23 @@ function SystemPanel(props: {
       : telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReview
         ? `Feedback memory assistance operator surface ${telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReview.status}; sections ${telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReview.visible_section_count}/${telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReview.surface_section_count}.`
         : "Feedback memory assistance operator surface review has not loaded yet.";
+  const telemetryFeedbackMemoryAssistanceActionQualitySignalReviewStatus =
+    safeString(telemetryFeedbackMemoryAssistanceActionQualitySignalReview?.status).trim() ||
+    (telemetryFeedbackMemoryAssistanceActionQualitySignalReviewError ? "unavailable" : "unloaded");
+  const telemetryFeedbackMemoryAssistanceActionQualitySignalReviewTone =
+    telemetryFeedbackMemoryAssistanceActionQualitySignalReviewError
+      ? "blocked"
+      : telemetryFeedbackMemoryAssistanceActionQualitySignalReview
+        ? telemetryFeedbackMemoryAssistanceActionQualitySignalReview.action_quality_signal_review_ready
+          ? "running"
+          : "dormant"
+        : "standby";
+  const telemetryFeedbackMemoryAssistanceActionQualitySignalReviewDetail =
+    telemetryFeedbackMemoryAssistanceActionQualitySignalReviewError
+      ? `Feedback memory assistance action quality review could not refresh: ${telemetryFeedbackMemoryAssistanceActionQualitySignalReviewError}`
+      : telemetryFeedbackMemoryAssistanceActionQualitySignalReview
+        ? `Feedback memory assistance action quality ${telemetryFeedbackMemoryAssistanceActionQualitySignalReview.status}; signals ${telemetryFeedbackMemoryAssistanceActionQualitySignalReview.ready_signal_count}/${telemetryFeedbackMemoryAssistanceActionQualitySignalReview.signal_count}.`
+        : "Feedback memory assistance action quality review has not loaded yet.";
   const telemetryFeedbackMemoryAssistanceLiveSampleDecisionCanRecord = Boolean(
     telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview?.operator_review_ready &&
       !telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionRecorded,
@@ -11995,6 +12040,9 @@ function SystemPanel(props: {
             <span style={badgeStyle(telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReviewTone)}>
               Operator surface {telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReviewStatus}
             </span>
+            <span style={badgeStyle(telemetryFeedbackMemoryAssistanceActionQualitySignalReviewTone)}>
+              Action quality {telemetryFeedbackMemoryAssistanceActionQualitySignalReviewStatus}
+            </span>
             <span style={badgeStyle(continuation.tone)}>{continuation.label}</span>
           </div>
         </div>
@@ -12168,6 +12216,15 @@ function SystemPanel(props: {
           }}
         >
           {telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReviewDetail}
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            color: telemetryFeedbackMemoryAssistanceActionQualitySignalReviewError ? "#ffcf9d" : THEME.text,
+            marginTop: 8,
+          }}
+        >
+          {telemetryFeedbackMemoryAssistanceActionQualitySignalReviewDetail}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
           <button
@@ -12911,6 +12968,72 @@ function SystemPanel(props: {
                 <code>{telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReview.writes_memory ? "true" : "false"}</code>
                 {" / "}model{" "}
                 <code>{telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReview.calls_model ? "true" : "false"}</code>
+              </div>
+            </div>
+          </div>
+        ) : null}
+        {telemetryFeedbackMemoryAssistanceActionQualitySignalReview ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+              gap: 8,
+              marginTop: 10,
+            }}
+          >
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Action quality</div>
+              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
+                {telemetryFeedbackMemoryAssistanceActionQualitySignalReview.ready_signal_count}/
+                {telemetryFeedbackMemoryAssistanceActionQualitySignalReview.signal_count}
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                feedback <code>{telemetryFeedbackMemoryAssistanceActionQualitySignalReview.reviewed_event_count}</code>
+                {" / "}memory{" "}
+                <code>{telemetryFeedbackMemoryAssistanceActionQualitySignalReview.memory_quality_event_count}</code>
+              </div>
+              {telemetryFeedbackMemoryAssistanceActionQualitySignalReviewLoadedAt ? (
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                  Loaded {toLocaleTime(telemetryFeedbackMemoryAssistanceActionQualitySignalReviewLoadedAt)}
+                </div>
+              ) : null}
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Quality signals</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                {telemetryFeedbackMemoryAssistanceActionQualitySignalReview.action_quality_signals.map((signal) => {
+                  const id = safeString(signal.id).trim() || "signal";
+                  const ready = Boolean(signal.ready);
+                  return (
+                    <span key={`telemetry-action-quality-${id}`} style={badgeStyle(ready ? "running" : "dormant")}>
+                      {id} {ready ? "ready" : "waiting"}
+                    </span>
+                  );
+                })}
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                next{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceActionQualitySignalReview.next_smallest_truthful_gap ||
+                    "action_quality_signal_review"}
+                </code>
+              </div>
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Quality guards</div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 6 }}>
+                model scored{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceActionQualitySignalReview.model_scored_quality ? "true" : "false"}
+                </code>
+                {" / "}prompt{" "}
+                <code>{telemetryFeedbackMemoryAssistanceActionQualitySignalReview.mutates_prompt ? "mutate" : "read"}</code>
+              </div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 4 }}>
+                memory{" "}
+                <code>{telemetryFeedbackMemoryAssistanceActionQualitySignalReview.writes_memory ? "true" : "false"}</code>
+                {" / "}model{" "}
+                <code>{telemetryFeedbackMemoryAssistanceActionQualitySignalReview.calls_model ? "true" : "false"}</code>
               </div>
             </div>
           </div>

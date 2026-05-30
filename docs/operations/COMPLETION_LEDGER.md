@@ -45679,6 +45679,51 @@ surface review:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-30 - Stage 7 feedback memory assistance action-quality signals are reviewable
+
+Roadmap area: Stage 7 / Telemetry MVP, action-quality signal review after the
+feedback-memory assistance operator context surface review.
+
+Material change:
+
+- Telemetry now exposes a read-only action-quality signal review at
+  `/telemetry/context/feedback/memory-assistance-feedback-loop-action-quality-signal-review`.
+- The review consumes the operator context surface review, explicit operator
+  feedback review, governed memory-quality readback, and live-sample operator
+  decision outcome review.
+- The Telemetry & Continuation panel now fetches and displays action-quality
+  signal status independently, including ready/total signal count, feedback
+  event count, governed memory-quality event count, per-signal readiness badges,
+  next truthful gap, and non-scoring/non-write guards.
+- The review remains read-only: it does not model-score quality, mutate prompt
+  state, write memory, write feedback, send chat, call a model, select tools,
+  train a model, or grant execution or mutation authority.
+
+Latest validation for Stage 7 feedback memory assistance action-quality signal
+review:
+
+- `python -m pytest tests/test_api_telemetry.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed`
+- `python -m mypy src/francis/api/routes/telemetry.py`
+  Result: `passed`
+- `python -m ruff check src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `node --test --experimental-strip-types src/telemetry/index.test.ts` in
+  `apps/chat_ui`
+  Result: `passed; 50 passed`
+- `npm run test` in `apps/chat_ui`
+  Result: `passed; 158 passed`
+- `npm run build` in `apps/chat_ui`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

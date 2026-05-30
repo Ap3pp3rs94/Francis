@@ -672,6 +672,44 @@ export type TelemetryContextFeedbackMemoryAssistanceOperatorContextSurfaceReview
   next_smallest_truthful_gap: string;
 };
 
+export type TelemetryContextFeedbackMemoryAssistanceActionQualitySignalReview = {
+  ok: boolean;
+  kind: string;
+  stage: string;
+  source_id: string;
+  status: string;
+  target: string;
+  action_quality_signal_review_ready: boolean;
+  ready_signal_count: number;
+  signal_count: number;
+  action_quality_signals: Array<Record<string, unknown>>;
+  quality_signals: string[];
+  reviewed_event_count: number;
+  memory_quality_event_count: number;
+  latest_memory_quality_event_id: string;
+  rating_counts: Record<string, number>;
+  operator_surface_ready: boolean;
+  accepted_live_sample: boolean;
+  operator_surface_review: Record<string, unknown>;
+  feedback_review: Record<string, unknown>;
+  memory_readback: Record<string, unknown>;
+  outcome_review: Record<string, unknown>;
+  capture_mode: string;
+  read_only: boolean;
+  model_scored_quality: boolean;
+  writes_memory: boolean;
+  writes_feedback: boolean;
+  mutates_prompt: boolean;
+  sends_chat: boolean;
+  calls_model: boolean;
+  selects_tools: boolean;
+  trains_model: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+  governance: Record<string, unknown>;
+  next_smallest_truthful_gap: string;
+};
+
 export type TelemetryContextFeedbackMemoryAssistancePolicy = {
   ok: boolean;
   kind: string;
@@ -1477,6 +1515,52 @@ export function parseTelemetryContextFeedbackMemoryAssistanceOperatorContextSurf
     hidden_sensing: safeBoolean(raw.hidden_sensing, true),
     writes_memory: safeBoolean(raw.writes_memory, true),
     writes_feedback: safeBoolean(raw.writes_feedback, true),
+    sends_chat: safeBoolean(raw.sends_chat, true),
+    calls_model: safeBoolean(raw.calls_model, true),
+    selects_tools: safeBoolean(raw.selects_tools, true),
+    trains_model: safeBoolean(raw.trains_model, true),
+    grants_execution_authority: safeBoolean(raw.grants_execution_authority, true),
+    grants_mutation_authority: safeBoolean(raw.grants_mutation_authority, true),
+    governance: recordOrEmpty(raw.governance),
+    next_smallest_truthful_gap: safeString(raw.next_smallest_truthful_gap, ""),
+  };
+}
+
+export function parseTelemetryContextFeedbackMemoryAssistanceActionQualitySignalReview(
+  value: unknown,
+): TelemetryContextFeedbackMemoryAssistanceActionQualitySignalReview {
+  const raw = isRecord(value) ? value : {};
+
+  return {
+    ok: safeBoolean(raw.ok, false),
+    kind: safeString(raw.kind, ""),
+    stage: safeString(raw.stage, ""),
+    source_id: safeString(raw.source_id, ""),
+    status: safeString(raw.status, "unknown"),
+    target: safeString(raw.target, ""),
+    action_quality_signal_review_ready: safeBoolean(raw.action_quality_signal_review_ready, false),
+    ready_signal_count: safeNumber(raw.ready_signal_count, 0),
+    signal_count: safeNumber(raw.signal_count, 0),
+    action_quality_signals: Array.isArray(raw.action_quality_signals)
+      ? raw.action_quality_signals.filter(isRecord)
+      : [],
+    quality_signals: safeStringArray(raw.quality_signals),
+    reviewed_event_count: safeNumber(raw.reviewed_event_count, 0),
+    memory_quality_event_count: safeNumber(raw.memory_quality_event_count, 0),
+    latest_memory_quality_event_id: safeString(raw.latest_memory_quality_event_id, ""),
+    rating_counts: safeNumberRecord(raw.rating_counts),
+    operator_surface_ready: safeBoolean(raw.operator_surface_ready, false),
+    accepted_live_sample: safeBoolean(raw.accepted_live_sample, false),
+    operator_surface_review: recordOrEmpty(raw.operator_surface_review),
+    feedback_review: recordOrEmpty(raw.feedback_review),
+    memory_readback: recordOrEmpty(raw.memory_readback),
+    outcome_review: recordOrEmpty(raw.outcome_review),
+    capture_mode: safeString(raw.capture_mode, ""),
+    read_only: safeBoolean(raw.read_only, false),
+    model_scored_quality: safeBoolean(raw.model_scored_quality, true),
+    writes_memory: safeBoolean(raw.writes_memory, true),
+    writes_feedback: safeBoolean(raw.writes_feedback, true),
+    mutates_prompt: safeBoolean(raw.mutates_prompt, true),
     sends_chat: safeBoolean(raw.sends_chat, true),
     calls_model: safeBoolean(raw.calls_model, true),
     selects_tools: safeBoolean(raw.selects_tools, true),
@@ -2488,6 +2572,49 @@ export class TelemetryClient {
     } catch (err) {
       throw new TelemetryApiError(
         "Telemetry feedback memory assistance operator surface review response was not valid JSON.",
+        {
+          url,
+          cause: err,
+        },
+      );
+    }
+  }
+
+  async getContextFeedbackMemoryAssistanceActionQualitySignalReview(opts?: {
+    limit?: number;
+    signal?: AbortSignal;
+  }): Promise<TelemetryContextFeedbackMemoryAssistanceActionQualitySignalReview> {
+    const limit = clampLimit(opts?.limit, 20);
+    const url = this.url(
+      `/telemetry/context/feedback/memory-assistance-feedback-loop-action-quality-signal-review?limit=${limit}`,
+    );
+    let response: Response;
+    try {
+      response = await fetch(url, { method: "GET", signal: opts?.signal });
+    } catch (err) {
+      throw new TelemetryApiError("Telemetry feedback memory assistance action quality review request failed.", {
+        url,
+        cause: err,
+      });
+    }
+
+    const text = await response.text();
+    if (!response.ok) {
+      throw new TelemetryApiError(
+        `HTTP ${response.status} for telemetry feedback memory assistance action quality review request`,
+        {
+          status: response.status,
+          url,
+          bodySnippet: text.slice(0, 500),
+        },
+      );
+    }
+
+    try {
+      return parseTelemetryContextFeedbackMemoryAssistanceActionQualitySignalReview(text ? JSON.parse(text) : {});
+    } catch (err) {
+      throw new TelemetryApiError(
+        "Telemetry feedback memory assistance action quality review response was not valid JSON.",
         {
           url,
           cause: err,
