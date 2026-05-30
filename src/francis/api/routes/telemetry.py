@@ -2804,6 +2804,143 @@ def context_feedback_memory_assistance_operator_feedback_loop_operator_usage_ove
     }
 
 
+@router.get("/context/feedback/memory-assistance-feedback-loop-closure-readiness-review")
+def context_feedback_memory_assistance_operator_feedback_loop_closure_readiness_review(
+    limit: int = 20,
+) -> dict[str, Any]:
+    safe_limit = max(1, min(int(limit), 100))
+    usage = context_feedback_memory_assistance_operator_feedback_loop_operator_usage_over_time_review(limit=safe_limit)
+    usefulness = context_feedback_memory_assistance_operator_feedback_loop_multi_source_usefulness_review(
+        limit=safe_limit
+    )
+    done_review = context_feedback_memory_assistance_operator_feedback_loop_done_criteria_review(limit=safe_limit)
+    primary_loop = context_feedback_memory_assistance_operator_feedback_loop_primary_loop_evidence_review(
+        limit=safe_limit
+    )
+    readiness_criteria = [
+        {
+            "id": "primary_loop_evidence_ready",
+            "ready": bool(primary_loop.get("primary_loop_evidence_ready")),
+            "evidence": {
+                "status": primary_loop.get("status", "unknown"),
+                "ready_count": _safe_count(primary_loop.get("ready_count")),
+                "required_count": _safe_count(primary_loop.get("required_count")),
+            },
+        },
+        {
+            "id": "done_criteria_ready",
+            "ready": bool(done_review.get("done_criteria_ready")),
+            "evidence": {
+                "status": done_review.get("status", "unknown"),
+                "ready_count": _safe_count(done_review.get("ready_count")),
+                "required_count": _safe_count(done_review.get("required_count")),
+            },
+        },
+        {
+            "id": "multi_source_usefulness_ready",
+            "ready": bool(usefulness.get("multi_source_usefulness_ready")),
+            "evidence": {
+                "status": usefulness.get("status", "unknown"),
+                "ready_sources": usefulness.get("ready_sources", []),
+                "ready_count": _safe_count(usefulness.get("ready_count")),
+                "required_count": _safe_count(usefulness.get("required_count")),
+            },
+        },
+        {
+            "id": "operator_usage_over_time_ready",
+            "ready": bool(usage.get("operator_usage_over_time_ready")),
+            "evidence": {
+                "status": usage.get("status", "unknown"),
+                "operator_feedback_count": _safe_count(usage.get("operator_feedback_count")),
+                "operator_decision_count": _safe_count(usage.get("operator_decision_count")),
+                "usage_day_count": len(usage.get("usage_by_day", []))
+                if isinstance(usage.get("usage_by_day"), list)
+                else 0,
+            },
+        },
+        {
+            "id": "non_authorizing_review_guard",
+            "ready": (
+                usage.get("read_only") is True
+                and usefulness.get("read_only") is True
+                and done_review.get("read_only") is True
+                and usage.get("grants_execution_authority") is False
+                and usage.get("grants_mutation_authority") is False
+            ),
+            "evidence": {
+                "read_only": bool(usage.get("read_only")),
+                "writes_memory": bool(usage.get("writes_memory")),
+                "writes_feedback": bool(usage.get("writes_feedback")),
+                "grants_execution_authority": bool(usage.get("grants_execution_authority")),
+                "grants_mutation_authority": bool(usage.get("grants_mutation_authority")),
+            },
+        },
+        {
+            "id": "stage_closure_guard",
+            "ready": True,
+            "evidence": {
+                "marks_stage7_closed": False,
+                "requires_operator_stage_closure_decision": True,
+                "scope": "feedback_memory_assistance_loop_only",
+            },
+        },
+    ]
+    ready_count = sum(1 for criterion in readiness_criteria if criterion["ready"])
+    closure_readiness_ready = ready_count == len(readiness_criteria)
+    return {
+        "ok": True,
+        "kind": "francis.stage7.telemetry.context_feedback_memory_assistance_closure_readiness_review",
+        "stage": "Stage 7 / Telemetry MVP",
+        "source_id": "telemetry_context",
+        "status": "loop_closure_readiness_ready" if closure_readiness_ready else "loop_closure_readiness_partial",
+        "target": "feedback_memory_assistance_prompt_integration",
+        "feedback_memory_assistance_loop_closure_readiness_ready": closure_readiness_ready,
+        "ready_count": ready_count,
+        "required_count": len(readiness_criteria),
+        "criteria": readiness_criteria,
+        "review_scope": "feedback_memory_assistance_primary_loop",
+        "marks_stage7_closed": False,
+        "requires_operator_stage_closure_decision": True,
+        "read_only": True,
+        "writes_usage": False,
+        "writes_memory": False,
+        "writes_feedback": False,
+        "writes_receipts": False,
+        "mutates_prompt": False,
+        "sends_chat": False,
+        "calls_model": False,
+        "selects_tools": False,
+        "trains_model": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "closure_readiness_review": True,
+            "bounded_to_feedback_memory_assistance_loop": True,
+            "does_not_mark_stage7_closed": True,
+            "operator_stage_closure_decision_required": True,
+            "uses_primary_loop_evidence_review": True,
+            "uses_done_criteria_review": True,
+            "uses_multi_source_usefulness_review": True,
+            "uses_operator_usage_over_time_review": True,
+            "does_not_write_memory": True,
+            "does_not_write_feedback": True,
+            "does_not_write_receipts": True,
+            "does_not_send_chat": True,
+            "does_not_call_model": True,
+            "does_not_select_tools": True,
+            "telemetry_is_untrusted_input": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": (
+            "stage7_memory_write_contract_hardening_review"
+            if closure_readiness_ready
+            else "stage7_context_feedback_memory_assistance_closure_readiness_review"
+        ),
+    }
+
+
 @router.post("/context/feedback/memory-assistance-feedback-loop-live-sample-operator-decision")
 def context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_decision_record(
     payload: TelemetryContextFeedbackMemoryAssistanceLiveSampleOperatorDecisionIn,

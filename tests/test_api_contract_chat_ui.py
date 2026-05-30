@@ -205,6 +205,7 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("GET", "/telemetry/context/feedback/memory-assistance-feedback-loop-ide-context-signal"),
         ("GET", "/telemetry/context/feedback/memory-assistance-feedback-loop-memory-poisoning-review"),
         ("GET", "/telemetry/context/feedback/memory-assistance-feedback-loop-multi-source-usefulness-review"),
+        ("GET", "/telemetry/context/feedback/memory-assistance-feedback-loop-closure-readiness-review"),
         ("GET", "/telemetry/context/feedback/memory-assistance-feedback-loop-operator-usage-over-time-review"),
         ("GET", "/telemetry/context/feedback/memory-assistance-feedback-loop-operator-context-surface-review"),
         ("GET", "/telemetry/context/feedback/memory-assistance-feedback-loop-primary-loop-evidence-review"),

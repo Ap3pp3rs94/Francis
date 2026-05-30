@@ -46103,6 +46103,40 @@ time:
   tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
   Result: `passed; 3 files already formatted`
 
+### 2026-05-30 - Stage 7 feedback memory assistance closure readiness is reviewed
+
+Roadmap area: Stage 7 / Telemetry MVP, closure-readiness review for the
+feedback-memory assistance primary loop.
+
+Material change:
+
+- Telemetry now exposes a read-only closure-readiness review at
+  `/telemetry/context/feedback/memory-assistance-feedback-loop-closure-readiness-review`.
+- The review consumes the primary-loop evidence, done-criteria, multi-source
+  usefulness, and operator usage over time reviews.
+- It reports this feedback-memory assistance loop's closure readiness without
+  marking Stage 7 closed or making any stage transition decision.
+- It requires operator stage-closure decision outside this read-only review.
+- It does not write usage, memory, feedback, or receipts; it does not send
+  chat, call a model, select tools, train a model, or grant authority.
+- When ready, it points the next truthful gap at
+  `stage7_memory_write_contract_hardening_review`.
+
+Latest validation for Stage 7 feedback memory assistance closure readiness:
+
+- `python -m pytest tests/test_api_telemetry.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 41 passed`
+- `python -m mypy src/francis/api/routes/telemetry.py`
+  Result: `passed`
+- `python -m ruff check src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed; 3 files already formatted`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -2027,6 +2027,45 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decis
     assert usage["governance"]["does_not_record_operator_usage"] is True
     assert usage["next_smallest_truthful_gap"] == ("stage7_context_feedback_memory_assistance_closure_readiness_review")
 
+    closure = client.get(
+        "/telemetry/context/feedback/memory-assistance-feedback-loop-closure-readiness-review?limit=10"
+    ).json()
+    assert closure["ok"] is True
+    assert closure["kind"] == ("francis.stage7.telemetry.context_feedback_memory_assistance_closure_readiness_review")
+    assert closure["status"] == "loop_closure_readiness_ready"
+    assert closure["feedback_memory_assistance_loop_closure_readiness_ready"] is True
+    assert closure["ready_count"] == closure["required_count"] == 6
+    assert [item["id"] for item in closure["criteria"]] == [
+        "primary_loop_evidence_ready",
+        "done_criteria_ready",
+        "multi_source_usefulness_ready",
+        "operator_usage_over_time_ready",
+        "non_authorizing_review_guard",
+        "stage_closure_guard",
+    ]
+    assert all(item["ready"] is True for item in closure["criteria"])
+    closure_criteria = {item["id"]: item for item in closure["criteria"]}
+    assert closure_criteria["operator_usage_over_time_ready"]["evidence"]["operator_feedback_count"] == 2
+    assert closure_criteria["operator_usage_over_time_ready"]["evidence"]["operator_decision_count"] == 1
+    assert closure_criteria["stage_closure_guard"]["evidence"]["marks_stage7_closed"] is False
+    assert closure["review_scope"] == "feedback_memory_assistance_primary_loop"
+    assert closure["marks_stage7_closed"] is False
+    assert closure["requires_operator_stage_closure_decision"] is True
+    assert closure["read_only"] is True
+    assert closure["writes_usage"] is False
+    assert closure["writes_memory"] is False
+    assert closure["writes_feedback"] is False
+    assert closure["writes_receipts"] is False
+    assert closure["sends_chat"] is False
+    assert closure["calls_model"] is False
+    assert closure["selects_tools"] is False
+    assert closure["grants_execution_authority"] is False
+    assert closure["grants_mutation_authority"] is False
+    assert closure["governance"]["closure_readiness_review"] is True
+    assert closure["governance"]["does_not_mark_stage7_closed"] is True
+    assert closure["governance"]["operator_stage_closure_decision_required"] is True
+    assert closure["next_smallest_truthful_gap"] == ("stage7_memory_write_contract_hardening_review")
+
 
 def test_telemetry_context_feedback_memory_quality_record_is_empty_without_events(
     monkeypatch,
