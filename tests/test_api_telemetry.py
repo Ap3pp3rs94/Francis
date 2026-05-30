@@ -1614,6 +1614,52 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decis
         "stage7_context_feedback_memory_assistance_operator_context_surface_review"
     )
 
+    operator_surface = client.get(
+        "/telemetry/context/feedback/memory-assistance-feedback-loop-operator-context-surface-review?limit=10"
+    ).json()
+    assert operator_surface["ok"] is True
+    assert operator_surface["kind"] == (
+        "francis.stage7.telemetry.context_feedback_memory_assistance_operator_context_surface_review"
+    )
+    assert operator_surface["status"] == "operator_context_surface_ready"
+    assert operator_surface["operator_context_surface_ready"] is True
+    assert operator_surface["sensing_indicator_summary_ready"] is True
+    assert operator_surface["surface_id"] == "telemetry_continuation_panel"
+    assert operator_surface["surface_label"] == "Telemetry & Continuation"
+    assert operator_surface["visible_section_count"] == operator_surface["surface_section_count"]
+    assert operator_surface["indicator_ids"] == ["terminal_context", "git_context", "ide_context"]
+    assert [section["id"] for section in operator_surface["visible_sections"]] == [
+        "telemetry_feedback_memory_assistance_status_badges",
+        "terminal_context_signal_card",
+        "git_context_signal_card",
+        "ide_context_signal_card",
+        "sensing_indicator_summary_card",
+    ]
+    assert all(section["visible"] is True for section in operator_surface["visible_sections"])
+    assert operator_surface["sensing_indicator_summary"]["sensing_indicator_summary_ready"] is True
+    operator_surface_text = json.dumps(operator_surface, sort_keys=True)
+    assert "terminalsignalsecret123" not in operator_surface_text
+    assert "idesignalsecret123" not in operator_surface_text
+    assert "idediagnosticsecret123" not in operator_surface_text
+    assert operator_surface["read_only"] is True
+    assert operator_surface["hidden_sensing"] is False
+    assert operator_surface["writes_memory"] is False
+    assert operator_surface["writes_feedback"] is False
+    assert operator_surface["sends_chat"] is False
+    assert operator_surface["calls_model"] is False
+    assert operator_surface["selects_tools"] is False
+    assert operator_surface["grants_execution_authority"] is False
+    assert operator_surface["grants_mutation_authority"] is False
+    assert operator_surface["governance"]["read_only"] is True
+    assert operator_surface["governance"]["operator_surface_review"] is True
+    assert operator_surface["governance"]["uses_visible_sensing_indicator_summary"] is True
+    assert operator_surface["governance"]["does_not_start_terminal_capture"] is True
+    assert operator_surface["governance"]["does_not_start_git_watcher"] is True
+    assert operator_surface["governance"]["does_not_start_ide_integration"] is True
+    assert operator_surface["next_smallest_truthful_gap"] == (
+        "stage7_context_feedback_memory_assistance_action_quality_signal_review"
+    )
+
 
 def test_telemetry_context_feedback_memory_quality_record_is_empty_without_events(
     monkeypatch,

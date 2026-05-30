@@ -641,6 +641,37 @@ export type TelemetryContextFeedbackMemoryAssistanceSensingIndicatorSummary = {
   next_smallest_truthful_gap: string;
 };
 
+export type TelemetryContextFeedbackMemoryAssistanceOperatorContextSurfaceReview = {
+  ok: boolean;
+  kind: string;
+  stage: string;
+  source_id: string;
+  status: string;
+  target: string;
+  operator_context_surface_ready: boolean;
+  sensing_indicator_summary_ready: boolean;
+  surface_id: string;
+  surface_label: string;
+  surface_source: string;
+  visible_section_count: number;
+  surface_section_count: number;
+  visible_sections: Array<Record<string, unknown>>;
+  indicator_ids: string[];
+  sensing_indicator_summary: Record<string, unknown>;
+  read_only: boolean;
+  hidden_sensing: boolean;
+  writes_memory: boolean;
+  writes_feedback: boolean;
+  sends_chat: boolean;
+  calls_model: boolean;
+  selects_tools: boolean;
+  trains_model: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+  governance: Record<string, unknown>;
+  next_smallest_truthful_gap: string;
+};
+
 export type TelemetryContextFeedbackMemoryAssistancePolicy = {
   ok: boolean;
   kind: string;
@@ -1407,6 +1438,43 @@ export function parseTelemetryContextFeedbackMemoryAssistanceSensingIndicatorSum
     starts_terminal_capture: safeBoolean(raw.starts_terminal_capture, true),
     starts_git_watcher: safeBoolean(raw.starts_git_watcher, true),
     starts_ide_integration: safeBoolean(raw.starts_ide_integration, true),
+    writes_memory: safeBoolean(raw.writes_memory, true),
+    writes_feedback: safeBoolean(raw.writes_feedback, true),
+    sends_chat: safeBoolean(raw.sends_chat, true),
+    calls_model: safeBoolean(raw.calls_model, true),
+    selects_tools: safeBoolean(raw.selects_tools, true),
+    trains_model: safeBoolean(raw.trains_model, true),
+    grants_execution_authority: safeBoolean(raw.grants_execution_authority, true),
+    grants_mutation_authority: safeBoolean(raw.grants_mutation_authority, true),
+    governance: recordOrEmpty(raw.governance),
+    next_smallest_truthful_gap: safeString(raw.next_smallest_truthful_gap, ""),
+  };
+}
+
+export function parseTelemetryContextFeedbackMemoryAssistanceOperatorContextSurfaceReview(
+  value: unknown,
+): TelemetryContextFeedbackMemoryAssistanceOperatorContextSurfaceReview {
+  const raw = isRecord(value) ? value : {};
+
+  return {
+    ok: safeBoolean(raw.ok, false),
+    kind: safeString(raw.kind, ""),
+    stage: safeString(raw.stage, ""),
+    source_id: safeString(raw.source_id, ""),
+    status: safeString(raw.status, "unknown"),
+    target: safeString(raw.target, ""),
+    operator_context_surface_ready: safeBoolean(raw.operator_context_surface_ready, false),
+    sensing_indicator_summary_ready: safeBoolean(raw.sensing_indicator_summary_ready, false),
+    surface_id: safeString(raw.surface_id, ""),
+    surface_label: safeString(raw.surface_label, ""),
+    surface_source: safeString(raw.surface_source, ""),
+    visible_section_count: safeNumber(raw.visible_section_count, 0),
+    surface_section_count: safeNumber(raw.surface_section_count, 0),
+    visible_sections: Array.isArray(raw.visible_sections) ? raw.visible_sections.filter(isRecord) : [],
+    indicator_ids: safeStringArray(raw.indicator_ids),
+    sensing_indicator_summary: recordOrEmpty(raw.sensing_indicator_summary),
+    read_only: safeBoolean(raw.read_only, false),
+    hidden_sensing: safeBoolean(raw.hidden_sensing, true),
     writes_memory: safeBoolean(raw.writes_memory, true),
     writes_feedback: safeBoolean(raw.writes_feedback, true),
     sends_chat: safeBoolean(raw.sends_chat, true),
@@ -2377,6 +2445,49 @@ export class TelemetryClient {
     } catch (err) {
       throw new TelemetryApiError(
         "Telemetry feedback memory assistance sensing indicator response was not valid JSON.",
+        {
+          url,
+          cause: err,
+        },
+      );
+    }
+  }
+
+  async getContextFeedbackMemoryAssistanceOperatorContextSurfaceReview(opts?: {
+    limit?: number;
+    signal?: AbortSignal;
+  }): Promise<TelemetryContextFeedbackMemoryAssistanceOperatorContextSurfaceReview> {
+    const limit = clampLimit(opts?.limit, 20);
+    const url = this.url(
+      `/telemetry/context/feedback/memory-assistance-feedback-loop-operator-context-surface-review?limit=${limit}`,
+    );
+    let response: Response;
+    try {
+      response = await fetch(url, { method: "GET", signal: opts?.signal });
+    } catch (err) {
+      throw new TelemetryApiError("Telemetry feedback memory assistance operator surface review request failed.", {
+        url,
+        cause: err,
+      });
+    }
+
+    const text = await response.text();
+    if (!response.ok) {
+      throw new TelemetryApiError(
+        `HTTP ${response.status} for telemetry feedback memory assistance operator surface review request`,
+        {
+          status: response.status,
+          url,
+          bodySnippet: text.slice(0, 500),
+        },
+      );
+    }
+
+    try {
+      return parseTelemetryContextFeedbackMemoryAssistanceOperatorContextSurfaceReview(text ? JSON.parse(text) : {});
+    } catch (err) {
+      throw new TelemetryApiError(
+        "Telemetry feedback memory assistance operator surface review response was not valid JSON.",
         {
           url,
           cause: err,

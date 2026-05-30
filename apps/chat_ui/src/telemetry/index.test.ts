@@ -16,6 +16,7 @@ import {
   parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleReadback,
   parseTelemetryContextFeedbackMemoryAssistanceGitContextSignal,
   parseTelemetryContextFeedbackMemoryAssistanceIdeContextSignal,
+  parseTelemetryContextFeedbackMemoryAssistanceOperatorContextSurfaceReview,
   parseTelemetryContextFeedbackMemoryAssistanceSensingIndicatorSummary,
   parseTelemetryContextFeedbackMemoryAssistanceTerminalContextSignal,
   parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackReview,
@@ -2027,6 +2028,104 @@ test("TelemetryClient requests the sensing indicator summary endpoint", async ()
     assert.deepEqual(requests, [
       {
         path: "/telemetry/context/feedback/memory-assistance-feedback-loop-sensing-indicator-summary",
+        search: "?limit=30",
+        method: "GET",
+      },
+    ]);
+  } finally {
+    restore();
+  }
+});
+
+test("parseTelemetryContextFeedbackMemoryAssistanceOperatorContextSurfaceReview preserves visible surface guards", () => {
+  const review = parseTelemetryContextFeedbackMemoryAssistanceOperatorContextSurfaceReview({
+    ok: true,
+    kind: "francis.stage7.telemetry.context_feedback_memory_assistance_operator_context_surface_review",
+    stage: "Stage 7 / Telemetry MVP",
+    source_id: "telemetry_context",
+    status: "operator_context_surface_ready",
+    target: "feedback_memory_assistance_operator_surface",
+    operator_context_surface_ready: true,
+    sensing_indicator_summary_ready: true,
+    surface_id: "telemetry_continuation_panel",
+    surface_label: "Telemetry & Continuation",
+    surface_source: "apps/chat_ui/src/App.tsx",
+    visible_section_count: 5,
+    surface_section_count: 5,
+    visible_sections: [{ id: "sensing_indicator_summary_card", visible: true }],
+    indicator_ids: ["terminal_context", "git_context", "ide_context"],
+    sensing_indicator_summary: { sensing_indicator_summary_ready: true },
+    read_only: true,
+    hidden_sensing: false,
+    writes_memory: false,
+    writes_feedback: false,
+    sends_chat: false,
+    calls_model: false,
+    selects_tools: false,
+    trains_model: false,
+    grants_execution_authority: false,
+    grants_mutation_authority: false,
+    governance: { read_only: true, operator_surface_review: true },
+    next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_action_quality_signal_review",
+  });
+
+  assert.equal(review.status, "operator_context_surface_ready");
+  assert.equal(review.operator_context_surface_ready, true);
+  assert.equal(review.surface_id, "telemetry_continuation_panel");
+  assert.deepEqual(review.indicator_ids, ["terminal_context", "git_context", "ide_context"]);
+  assert.equal(review.visible_section_count, 5);
+  assert.equal(review.hidden_sensing, false);
+  assert.equal(review.writes_memory, false);
+  assert.equal(review.calls_model, false);
+  assert.equal(review.grants_execution_authority, false);
+  assert.equal(review.governance.operator_surface_review, true);
+});
+
+test("TelemetryClient requests the operator context surface review endpoint", async () => {
+  const requests: Array<{ path: string; search: string; method: string }> = [];
+  const restore = installFetch((url, init) => {
+    const parsed = new URL(url);
+    requests.push({ path: parsed.pathname, search: parsed.search, method: init?.method ?? "GET" });
+    return jsonResponse({
+      ok: true,
+      kind: "francis.stage7.telemetry.context_feedback_memory_assistance_operator_context_surface_review",
+      stage: "Stage 7 / Telemetry MVP",
+      source_id: "telemetry_context",
+      status: "operator_context_surface_ready",
+      target: "feedback_memory_assistance_operator_surface",
+      operator_context_surface_ready: true,
+      sensing_indicator_summary_ready: true,
+      surface_id: "telemetry_continuation_panel",
+      surface_label: "Telemetry & Continuation",
+      surface_source: "apps/chat_ui/src/App.tsx",
+      visible_section_count: 5,
+      surface_section_count: 5,
+      visible_sections: [{ id: "sensing_indicator_summary_card", visible: true }],
+      indicator_ids: ["terminal_context", "git_context", "ide_context"],
+      sensing_indicator_summary: { sensing_indicator_summary_ready: true },
+      read_only: true,
+      hidden_sensing: false,
+      writes_memory: false,
+      writes_feedback: false,
+      sends_chat: false,
+      calls_model: false,
+      selects_tools: false,
+      trains_model: false,
+      grants_execution_authority: false,
+      grants_mutation_authority: false,
+      governance: { read_only: true, operator_surface_review: true },
+      next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_action_quality_signal_review",
+    });
+  });
+
+  try {
+    const client = new TelemetryClient("http://127.0.0.1:8000/");
+    const review = await client.getContextFeedbackMemoryAssistanceOperatorContextSurfaceReview({ limit: 30 });
+
+    assert.equal(review.operator_context_surface_ready, true);
+    assert.deepEqual(requests, [
+      {
+        path: "/telemetry/context/feedback/memory-assistance-feedback-loop-operator-context-surface-review",
         search: "?limit=30",
         method: "GET",
       },

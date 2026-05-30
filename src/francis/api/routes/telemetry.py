@@ -1565,6 +1565,112 @@ def context_feedback_memory_assistance_operator_feedback_loop_sensing_indicator_
     }
 
 
+@router.get("/context/feedback/memory-assistance-feedback-loop-operator-context-surface-review")
+def context_feedback_memory_assistance_operator_feedback_loop_operator_context_surface_review(
+    limit: int = 20,
+) -> dict[str, Any]:
+    safe_limit = max(1, min(int(limit), 100))
+    sensing_summary = context_feedback_memory_assistance_operator_feedback_loop_sensing_indicator_summary(
+        limit=safe_limit
+    )
+    indicators_value = sensing_summary.get("indicators")
+    indicators: list[Any] = indicators_value if isinstance(indicators_value, list) else []
+    indicator_ids = [
+        str(indicator.get("id"))
+        for indicator in indicators
+        if isinstance(indicator, dict) and str(indicator.get("id", "")).strip()
+    ]
+    visible_sections = [
+        {
+            "id": "telemetry_feedback_memory_assistance_status_badges",
+            "label": "Telemetry status badges",
+            "visible": True,
+            "source": "apps/chat_ui/src/App.tsx",
+        },
+        {
+            "id": "terminal_context_signal_card",
+            "label": "Terminal context signal",
+            "visible": "terminal_context" in indicator_ids,
+            "source": "apps/chat_ui/src/App.tsx",
+        },
+        {
+            "id": "git_context_signal_card",
+            "label": "Git context signal",
+            "visible": "git_context" in indicator_ids,
+            "source": "apps/chat_ui/src/App.tsx",
+        },
+        {
+            "id": "ide_context_signal_card",
+            "label": "IDE context signal",
+            "visible": "ide_context" in indicator_ids,
+            "source": "apps/chat_ui/src/App.tsx",
+        },
+        {
+            "id": "sensing_indicator_summary_card",
+            "label": "Sensing indicator summary",
+            "visible": bool(sensing_summary.get("visible_sensing_indicators_ready")),
+            "source": "apps/chat_ui/src/App.tsx",
+        },
+    ]
+    visible_section_count = sum(1 for section in visible_sections if section["visible"])
+    operator_context_surface_ready = bool(
+        sensing_summary.get("sensing_indicator_summary_ready")
+        and visible_section_count == len(visible_sections)
+        and indicator_ids == ["terminal_context", "git_context", "ide_context"]
+    )
+    return {
+        "ok": True,
+        "kind": "francis.stage7.telemetry.context_feedback_memory_assistance_operator_context_surface_review",
+        "stage": "Stage 7 / Telemetry MVP",
+        "source_id": "telemetry_context",
+        "status": "operator_context_surface_ready"
+        if operator_context_surface_ready
+        else "awaiting_operator_context_surface",
+        "target": "feedback_memory_assistance_operator_surface",
+        "operator_context_surface_ready": operator_context_surface_ready,
+        "sensing_indicator_summary_ready": bool(sensing_summary.get("sensing_indicator_summary_ready")),
+        "surface_id": "telemetry_continuation_panel",
+        "surface_label": "Telemetry & Continuation",
+        "surface_source": "apps/chat_ui/src/App.tsx",
+        "visible_section_count": visible_section_count,
+        "surface_section_count": len(visible_sections),
+        "visible_sections": visible_sections,
+        "indicator_ids": indicator_ids,
+        "sensing_indicator_summary": sensing_summary,
+        "read_only": True,
+        "hidden_sensing": False,
+        "writes_memory": False,
+        "writes_feedback": False,
+        "sends_chat": False,
+        "calls_model": False,
+        "selects_tools": False,
+        "trains_model": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "operator_surface_review": True,
+            "uses_visible_sensing_indicator_summary": True,
+            "telemetry_is_untrusted_input": True,
+            "does_not_capture_background_activity": True,
+            "does_not_start_terminal_capture": True,
+            "does_not_start_git_watcher": True,
+            "does_not_start_ide_integration": True,
+            "does_not_write_memory": True,
+            "does_not_write_feedback": True,
+            "does_not_send_chat": True,
+            "does_not_call_model": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": (
+            "stage7_context_feedback_memory_assistance_action_quality_signal_review"
+            if operator_context_surface_ready
+            else "stage7_context_feedback_memory_assistance_operator_context_surface_review"
+        ),
+    }
+
+
 @router.post("/context/feedback/memory-assistance-feedback-loop-live-sample-operator-decision")
 def context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_decision_record(
     payload: TelemetryContextFeedbackMemoryAssistanceLiveSampleOperatorDecisionIn,

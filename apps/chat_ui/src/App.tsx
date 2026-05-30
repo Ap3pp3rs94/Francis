@@ -111,6 +111,7 @@ import {
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisionRecord,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorReview,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleReadback,
+  type TelemetryContextFeedbackMemoryAssistanceOperatorContextSurfaceReview,
   type TelemetryContextFeedbackMemoryAssistanceGitContextSignal,
   type TelemetryContextFeedbackMemoryAssistanceIdeContextSignal,
   type TelemetryContextFeedbackMemoryAssistanceSensingIndicatorSummary,
@@ -4272,6 +4273,18 @@ function SystemPanel(props: {
     telemetryFeedbackMemoryAssistanceSensingIndicatorSummaryLoadedAt,
     setTelemetryFeedbackMemoryAssistanceSensingIndicatorSummaryLoadedAt,
   ] = useState<number | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReview,
+    setTelemetryFeedbackMemoryAssistanceOperatorContextSurfaceReview,
+  ] = useState<TelemetryContextFeedbackMemoryAssistanceOperatorContextSurfaceReview | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReviewError,
+    setTelemetryFeedbackMemoryAssistanceOperatorContextSurfaceReviewError,
+  ] = useState<string | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReviewLoadedAt,
+    setTelemetryFeedbackMemoryAssistanceOperatorContextSurfaceReviewLoadedAt,
+  ] = useState<number | null>(null);
   const [telemetryFeedbackMemoryQualityBusy, setTelemetryFeedbackMemoryQualityBusy] = useState(false);
   const [telemetryFeedbackMemoryQualityNotice, setTelemetryFeedbackMemoryQualityNotice] = useState<{
     tone: "info" | "error";
@@ -4500,6 +4513,7 @@ function SystemPanel(props: {
         nextTelemetryFeedbackMemoryAssistanceGitContextSignal,
         nextTelemetryFeedbackMemoryAssistanceIdeContextSignal,
         nextTelemetryFeedbackMemoryAssistanceSensingIndicatorSummary,
+        nextTelemetryFeedbackMemoryAssistanceOperatorContextSurfaceReview,
       ] =
         await Promise.allSettled([
         client.getSystemInfo(),
@@ -4540,6 +4554,7 @@ function SystemPanel(props: {
         telemetryClient.getContextFeedbackMemoryAssistanceGitContextSignal({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistanceIdeContextSignal({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistanceSensingIndicatorSummary({ limit: 20 }),
+        telemetryClient.getContextFeedbackMemoryAssistanceOperatorContextSurfaceReview({ limit: 20 }),
       ]);
 
       const degradedFeeds: string[] = [];
@@ -4850,6 +4865,19 @@ function SystemPanel(props: {
           telemetryError(nextTelemetryFeedbackMemoryAssistanceSensingIndicatorSummary.reason),
         );
         degradedFeeds.push("telemetry feedback memory assistance sensing indicator summary");
+      }
+
+      if (nextTelemetryFeedbackMemoryAssistanceOperatorContextSurfaceReview.status === "fulfilled") {
+        setTelemetryFeedbackMemoryAssistanceOperatorContextSurfaceReview(
+          nextTelemetryFeedbackMemoryAssistanceOperatorContextSurfaceReview.value,
+        );
+        setTelemetryFeedbackMemoryAssistanceOperatorContextSurfaceReviewError(null);
+        setTelemetryFeedbackMemoryAssistanceOperatorContextSurfaceReviewLoadedAt(refreshStartedAt);
+      } else {
+        setTelemetryFeedbackMemoryAssistanceOperatorContextSurfaceReviewError(
+          telemetryError(nextTelemetryFeedbackMemoryAssistanceOperatorContextSurfaceReview.reason),
+        );
+        degradedFeeds.push("telemetry feedback memory assistance operator context surface review");
       }
 
       if (degradedFeeds.length > 0) {
@@ -6970,6 +6998,23 @@ function SystemPanel(props: {
       : telemetryFeedbackMemoryAssistanceSensingIndicatorSummary
         ? `Feedback memory assistance sensing indicators ${telemetryFeedbackMemoryAssistanceSensingIndicatorSummary.status}; ready ${telemetryFeedbackMemoryAssistanceSensingIndicatorSummary.ready_indicator_count}/${telemetryFeedbackMemoryAssistanceSensingIndicatorSummary.indicator_count}, visible ${telemetryFeedbackMemoryAssistanceSensingIndicatorSummary.visible_indicator_count}.`
         : "Feedback memory assistance sensing indicators have not loaded yet.";
+  const telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReviewStatus =
+    safeString(telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReview?.status).trim() ||
+    (telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReviewError ? "unavailable" : "unloaded");
+  const telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReviewTone =
+    telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReviewError
+      ? "blocked"
+      : telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReview
+        ? telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReview.operator_context_surface_ready
+          ? "running"
+          : "dormant"
+        : "standby";
+  const telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReviewDetail =
+    telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReviewError
+      ? `Feedback memory assistance operator surface review could not refresh: ${telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReviewError}`
+      : telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReview
+        ? `Feedback memory assistance operator surface ${telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReview.status}; sections ${telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReview.visible_section_count}/${telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReview.surface_section_count}.`
+        : "Feedback memory assistance operator surface review has not loaded yet.";
   const telemetryFeedbackMemoryAssistanceLiveSampleDecisionCanRecord = Boolean(
     telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview?.operator_review_ready &&
       !telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionRecorded,
@@ -11947,6 +11992,9 @@ function SystemPanel(props: {
             <span style={badgeStyle(telemetryFeedbackMemoryAssistanceSensingIndicatorSummaryTone)}>
               Sensing indicators {telemetryFeedbackMemoryAssistanceSensingIndicatorSummaryStatus}
             </span>
+            <span style={badgeStyle(telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReviewTone)}>
+              Operator surface {telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReviewStatus}
+            </span>
             <span style={badgeStyle(continuation.tone)}>{continuation.label}</span>
           </div>
         </div>
@@ -12111,6 +12159,15 @@ function SystemPanel(props: {
           }}
         >
           {telemetryFeedbackMemoryAssistanceSensingIndicatorSummaryDetail}
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            color: telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReviewError ? "#ffcf9d" : THEME.text,
+            marginTop: 8,
+          }}
+        >
+          {telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReviewDetail}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
           <button
@@ -12785,6 +12842,75 @@ function SystemPanel(props: {
                 memory <code>{telemetryFeedbackMemoryAssistanceSensingIndicatorSummary.writes_memory ? "true" : "false"}</code>
                 {" / "}model{" "}
                 <code>{telemetryFeedbackMemoryAssistanceSensingIndicatorSummary.calls_model ? "true" : "false"}</code>
+              </div>
+            </div>
+          </div>
+        ) : null}
+        {telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReview ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+              gap: 8,
+              marginTop: 10,
+            }}
+          >
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Operator surface</div>
+              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
+                {telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReview.operator_context_surface_ready
+                  ? "ready"
+                  : "waiting"}
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                sections{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReview.visible_section_count}/
+                  {telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReview.surface_section_count}
+                </code>
+              </div>
+              {telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReviewLoadedAt ? (
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                  Loaded {toLocaleTime(telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReviewLoadedAt)}
+                </div>
+              ) : null}
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Surface sections</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                {telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReview.visible_sections.map((section) => {
+                  const id = safeString(section.id).trim() || "section";
+                  const visible = Boolean(section.visible);
+                  return (
+                    <span key={`telemetry-surface-${id}`} style={badgeStyle(visible ? "running" : "dormant")}>
+                      {id} {visible ? "visible" : "waiting"}
+                    </span>
+                  );
+                })}
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                next{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReview.next_smallest_truthful_gap ||
+                    "operator_context_surface_review"}
+                </code>
+              </div>
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Surface guards</div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 6 }}>
+                hidden sensing{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReview.hidden_sensing ? "true" : "false"}
+                </code>
+                {" / "}read-only{" "}
+                <code>{telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReview.read_only ? "true" : "false"}</code>
+              </div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 4 }}>
+                memory{" "}
+                <code>{telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReview.writes_memory ? "true" : "false"}</code>
+                {" / "}model{" "}
+                <code>{telemetryFeedbackMemoryAssistanceOperatorContextSurfaceReview.calls_model ? "true" : "false"}</code>
               </div>
             </div>
           </div>
