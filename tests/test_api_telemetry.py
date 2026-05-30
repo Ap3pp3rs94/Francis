@@ -1332,12 +1332,23 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decis
     readback = client.get(
         "/telemetry/context/feedback/memory-assistance-feedback-loop-live-sample-operator-decisions?limit=10"
     ).json()
-    assert readback["status"] == "decision_recorded"
+    assert readback["status"] == "decision_receipt_readback_ready"
     assert readback["count"] == 1
     assert readback["items"][0]["receipt_id"] == body["receipt_id"]
+    assert readback["latest_receipt"]["receipt_id"] == body["receipt_id"]
+    assert readback["latest_receipt_id"] == body["receipt_id"]
+    assert readback["latest_decision"] == "accepted"
+    assert readback["decision_counts"] == {"accepted": 1, "rejected": 0, "needs_more_evidence": 0}
+    assert readback["receipt_readback_ready"] is True
+    assert readback["redacted"] is True
     assert readback["writes_receipts"] is False
     assert readback["writes_memory"] is False
     assert readback["grants_execution_authority"] is False
+    assert readback["governance"]["receipt_readback_ready"] is True
+    assert readback["governance"]["redacted_before_storage"] is True
+    assert readback["next_smallest_truthful_gap"] == (
+        "stage7_context_feedback_memory_assistance_operator_feedback_loop_decision_outcome_review"
+    )
 
     review = client.get(
         "/telemetry/context/feedback/memory-assistance-feedback-loop-live-sample-operator-review?limit=10"

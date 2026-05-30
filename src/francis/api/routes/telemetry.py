@@ -1035,18 +1035,33 @@ def context_feedback_memory_assistance_operator_feedback_loop_live_sample_operat
     safe_limit = max(1, min(int(limit), 100))
     items = read_feedback_memory_assistance_live_sample_operator_decisions(limit=safe_limit)
     total = feedback_memory_assistance_live_sample_operator_decision_count()
+    latest_receipt = items[-1] if items else {}
+    decision_counts = {"accepted": 0, "rejected": 0, "needs_more_evidence": 0}
+    for item in items:
+        decision = str(item.get("decision", "needs_more_evidence"))
+        if decision not in decision_counts:
+            decision = "needs_more_evidence"
+        decision_counts[decision] += 1
+    readback_ready = bool(latest_receipt)
     return {
         "ok": True,
         "kind": "francis.stage7.telemetry.context_feedback_memory_assistance_live_sample_operator_decision_receipts",
         "stage": "Stage 7 / Telemetry MVP",
         "source_id": "telemetry_context",
-        "status": "decision_recorded" if items else "empty",
+        "status": "decision_receipt_readback_ready" if readback_ready else "empty",
         "target": "feedback_memory_assistance_prompt_integration",
         "items": items,
         "count": len(items),
         "total": total,
         "limit": safe_limit,
         "truncated": total > len(items),
+        "latest_receipt": latest_receipt,
+        "latest_receipt_id": latest_receipt.get("receipt_id", ""),
+        "latest_decision": latest_receipt.get("decision", ""),
+        "latest_recorded_ts": latest_receipt.get("recorded_ts", 0),
+        "decision_counts": decision_counts,
+        "receipt_readback_ready": readback_ready,
+        "redacted": True,
         "reads_receipts": True,
         "writes_receipts": False,
         "writes_memory": False,
@@ -1060,13 +1075,15 @@ def context_feedback_memory_assistance_operator_feedback_loop_live_sample_operat
         "governance": {
             "read_only": True,
             "operator_decision_receipt_readback": True,
+            "receipt_readback_ready": readback_ready,
+            "redacted_before_storage": True,
             "telemetry_is_untrusted_input": True,
             "grants_execution_authority": False,
             "grants_mutation_authority": False,
         },
         "next_smallest_truthful_gap": (
-            "stage7_context_feedback_memory_assistance_operator_feedback_loop_decision_receipt_readback"
-            if items
+            "stage7_context_feedback_memory_assistance_operator_feedback_loop_decision_outcome_review"
+            if readback_ready
             else "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_decision"
         ),
     }

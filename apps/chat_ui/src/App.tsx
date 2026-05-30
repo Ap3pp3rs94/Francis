@@ -106,6 +106,7 @@ import {
   type TelemetryContextFeedbackMemoryAssistanceDryRun,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopE2eAcceptanceAudit,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopE2eSample,
+  type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisionReadback,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisionRecord,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorReview,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleReadback,
@@ -4193,6 +4194,20 @@ function SystemPanel(props: {
     telemetryFeedbackMemoryAssistanceLiveSampleOperatorReviewLoadedAt,
     setTelemetryFeedbackMemoryAssistanceLiveSampleOperatorReviewLoadedAt,
   ] = useState<number | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions,
+    setTelemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions,
+  ] = useState<TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisionReadback | null>(
+    null,
+  );
+  const [
+    telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionsError,
+    setTelemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionsError,
+  ] = useState<string | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionsLoadedAt,
+    setTelemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionsLoadedAt,
+  ] = useState<number | null>(null);
   const [telemetryFeedbackMemoryQualityBusy, setTelemetryFeedbackMemoryQualityBusy] = useState(false);
   const [telemetryFeedbackMemoryQualityNotice, setTelemetryFeedbackMemoryQualityNotice] = useState<{
     tone: "info" | "error";
@@ -4415,6 +4430,7 @@ function SystemPanel(props: {
         nextTelemetryFeedbackMemoryAssistanceAcceptanceAudit,
         nextTelemetryFeedbackMemoryAssistanceLiveSampleReadback,
         nextTelemetryFeedbackMemoryAssistanceLiveSampleOperatorReview,
+        nextTelemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions,
       ] =
         await Promise.allSettled([
         client.getSystemInfo(),
@@ -4447,6 +4463,7 @@ function SystemPanel(props: {
         telemetryClient.getContextFeedbackMemoryAssistanceOperatorFeedbackLoopE2eAcceptanceAudit({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleReadback({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorReview({ limit: 20 }),
+        telemetryClient.getContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisions({ limit: 20 }),
       ]);
 
       const degradedFeeds: string[] = [];
@@ -4683,6 +4700,19 @@ function SystemPanel(props: {
           telemetryError(nextTelemetryFeedbackMemoryAssistanceLiveSampleOperatorReview.reason),
         );
         degradedFeeds.push("telemetry feedback memory assistance live sample operator review");
+      }
+
+      if (nextTelemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions.status === "fulfilled") {
+        setTelemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions(
+          nextTelemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions.value,
+        );
+        setTelemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionsError(null);
+        setTelemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionsLoadedAt(refreshStartedAt);
+      } else {
+        setTelemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionsError(
+          telemetryError(nextTelemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions.reason),
+        );
+        degradedFeeds.push("telemetry feedback memory assistance live sample decision receipts");
       }
 
       if (degradedFeeds.length > 0) {
@@ -6701,6 +6731,23 @@ function SystemPanel(props: {
       : telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview
         ? `Feedback memory assistance operator review ${telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview.status}; criteria ${telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview.ready_count}/${telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview.required_count}, decision required ${telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionRequired ? "true" : "false"}.`
         : "Feedback memory assistance live sample operator review has not loaded yet.";
+  const telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionsStatus =
+    safeString(telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions?.status).trim() ||
+    (telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionsError ? "unavailable" : "unloaded");
+  const telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionsTone =
+    telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionsError
+      ? "blocked"
+      : telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions
+        ? telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions.receipt_readback_ready
+          ? "running"
+          : "dormant"
+        : "standby";
+  const telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionsDetail =
+    telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionsError
+      ? `Feedback memory assistance decision receipts could not refresh: ${telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionsError}`
+      : telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions
+        ? `Feedback memory assistance decision receipts ${telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions.status}; total ${telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions.total}, latest ${telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions.latest_decision || "none"}.`
+        : "Feedback memory assistance decision receipts have not loaded yet.";
   const telemetryFeedbackMemoryAssistanceLiveSampleDecisionCanRecord = Boolean(
     telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview?.operator_review_ready &&
       !telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionRecorded,
@@ -11660,6 +11707,9 @@ function SystemPanel(props: {
             <span style={badgeStyle(telemetryFeedbackMemoryAssistanceLiveSampleOperatorReviewTone)}>
               Sample review {telemetryFeedbackMemoryAssistanceLiveSampleOperatorReviewStatus}
             </span>
+            <span style={badgeStyle(telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionsTone)}>
+              Decision receipts {telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionsStatus}
+            </span>
             <span style={badgeStyle(continuation.tone)}>{continuation.label}</span>
           </div>
         </div>
@@ -11768,6 +11818,15 @@ function SystemPanel(props: {
           }}
         >
           {telemetryFeedbackMemoryAssistanceLiveSampleOperatorReviewDetail}
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            color: telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionsError ? "#ffcf9d" : THEME.text,
+            marginTop: 8,
+          }}
+        >
+          {telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionsDetail}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
           <button
@@ -12055,6 +12114,77 @@ function SystemPanel(props: {
               <div style={{ fontSize: 12, color: THEME.text, marginTop: 4 }}>
                 memory <code>{telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview.writes_memory ? "true" : "false"}</code>
                 {" / "}model <code>{telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview.calls_model ? "true" : "false"}</code>
+              </div>
+            </div>
+          </div>
+        ) : null}
+        {telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+              gap: 8,
+              marginTop: 10,
+            }}
+          >
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Decision receipts</div>
+              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
+                {telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions.total}
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                latest{" "}
+                <code>{telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions.latest_decision || "none"}</code>
+                {" / "}ready{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions.receipt_readback_ready ? "true" : "false"}
+                </code>
+              </div>
+              {telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionsLoadedAt ? (
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                  Loaded {toLocaleTime(telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionsLoadedAt)}
+                </div>
+              ) : null}
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Latest receipt</div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 6 }}>
+                id{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions.latest_receipt_id || "missing"}
+                </code>
+              </div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 4 }}>
+                accepted{" "}
+                <code>
+                  {safeNumber(telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions.decision_counts.accepted, 0)}
+                </code>
+                {" / "}rejected{" "}
+                <code>
+                  {safeNumber(telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions.decision_counts.rejected, 0)}
+                </code>
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                next{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions.next_smallest_truthful_gap ||
+                    "decision_receipt_readback"}
+                </code>
+              </div>
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Receipt guards</div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 6 }}>
+                receipts{" "}
+                <code>{telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions.writes_receipts ? "write" : "read"}</code>
+                {" / "}feedback{" "}
+                <code>{telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions.writes_feedback ? "true" : "false"}</code>
+              </div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 4 }}>
+                memory{" "}
+                <code>{telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions.writes_memory ? "true" : "false"}</code>
+                {" / "}model{" "}
+                <code>{telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions.calls_model ? "true" : "false"}</code>
               </div>
             </div>
           </div>

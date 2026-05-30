@@ -429,6 +429,39 @@ export type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSamp
   next_smallest_truthful_gap: string;
 };
 
+export type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisionReadback = {
+  ok: boolean;
+  kind: string;
+  stage: string;
+  source_id: string;
+  status: string;
+  target: string;
+  items: Array<Record<string, unknown>>;
+  count: number;
+  total: number;
+  limit: number;
+  truncated: boolean;
+  latest_receipt: Record<string, unknown>;
+  latest_receipt_id: string;
+  latest_decision: string;
+  latest_recorded_ts: number;
+  decision_counts: Record<string, number>;
+  receipt_readback_ready: boolean;
+  redacted: boolean;
+  reads_receipts: boolean;
+  writes_receipts: boolean;
+  writes_memory: boolean;
+  writes_feedback: boolean;
+  sends_chat: boolean;
+  calls_model: boolean;
+  selects_tools: boolean;
+  trains_model: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+  governance: Record<string, unknown>;
+  next_smallest_truthful_gap: string;
+};
+
 export type TelemetryContextFeedbackMemoryAssistancePolicy = {
   ok: boolean;
   kind: string;
@@ -945,6 +978,45 @@ export function parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoo
     receipt_id: safeString(raw.receipt_id, ""),
     decision: safeString(raw.decision, ""),
     writes_receipt: safeBoolean(raw.writes_receipt, false),
+    writes_memory: safeBoolean(raw.writes_memory, true),
+    writes_feedback: safeBoolean(raw.writes_feedback, true),
+    sends_chat: safeBoolean(raw.sends_chat, true),
+    calls_model: safeBoolean(raw.calls_model, true),
+    selects_tools: safeBoolean(raw.selects_tools, true),
+    trains_model: safeBoolean(raw.trains_model, true),
+    grants_execution_authority: safeBoolean(raw.grants_execution_authority, true),
+    grants_mutation_authority: safeBoolean(raw.grants_mutation_authority, true),
+    governance: recordOrEmpty(raw.governance),
+    next_smallest_truthful_gap: safeString(raw.next_smallest_truthful_gap, ""),
+  };
+}
+
+export function parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisionReadback(
+  value: unknown,
+): TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisionReadback {
+  const raw = isRecord(value) ? value : {};
+
+  return {
+    ok: safeBoolean(raw.ok, false),
+    kind: safeString(raw.kind, ""),
+    stage: safeString(raw.stage, ""),
+    source_id: safeString(raw.source_id, ""),
+    status: safeString(raw.status, "unknown"),
+    target: safeString(raw.target, ""),
+    items: Array.isArray(raw.items) ? raw.items.filter(isRecord) : [],
+    count: safeNumber(raw.count, 0),
+    total: safeNumber(raw.total, 0),
+    limit: safeNumber(raw.limit, 20),
+    truncated: safeBoolean(raw.truncated, false),
+    latest_receipt: recordOrEmpty(raw.latest_receipt),
+    latest_receipt_id: safeString(raw.latest_receipt_id, ""),
+    latest_decision: safeString(raw.latest_decision, ""),
+    latest_recorded_ts: safeNumber(raw.latest_recorded_ts, 0),
+    decision_counts: safeNumberRecord(raw.decision_counts),
+    receipt_readback_ready: safeBoolean(raw.receipt_readback_ready, false),
+    redacted: safeBoolean(raw.redacted, false),
+    reads_receipts: safeBoolean(raw.reads_receipts, false),
+    writes_receipts: safeBoolean(raw.writes_receipts, true),
     writes_memory: safeBoolean(raw.writes_memory, true),
     writes_feedback: safeBoolean(raw.writes_feedback, true),
     sends_chat: safeBoolean(raw.sends_chat, true),
@@ -1670,6 +1742,51 @@ export class TelemetryClient {
     }
   }
 
+  async getContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisions(opts?: {
+    limit?: number;
+    signal?: AbortSignal;
+  }): Promise<TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisionReadback> {
+    const limit = clampLimit(opts?.limit, 20);
+    const url = this.url(
+      `/telemetry/context/feedback/memory-assistance-feedback-loop-live-sample-operator-decisions?limit=${limit}`,
+    );
+    let response: Response;
+    try {
+      response = await fetch(url, { method: "GET", signal: opts?.signal });
+    } catch (err) {
+      throw new TelemetryApiError(
+        "Telemetry feedback memory assistance live sample operator decisions request failed.",
+        {
+          url,
+          cause: err,
+        },
+      );
+    }
+
+    const text = await response.text();
+    if (!response.ok) {
+      throw new TelemetryApiError(
+        `HTTP ${response.status} for telemetry feedback memory assistance live sample operator decisions request`,
+        {
+          status: response.status,
+          url,
+          bodySnippet: text.slice(0, 500),
+        },
+      );
+    }
+
+    try {
+      return parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisionReadback(
+        text ? JSON.parse(text) : {},
+      );
+    } catch (err) {
+      throw new TelemetryApiError(
+        "Telemetry feedback memory assistance live sample operator decisions response was not valid JSON.",
+        { url, cause: err },
+      );
+    }
+  }
+
   async getContextFeedbackMemoryAssistancePolicy(opts?: {
     signal?: AbortSignal;
   }): Promise<TelemetryContextFeedbackMemoryAssistancePolicy> {
@@ -1994,6 +2111,15 @@ function safeNumber(value: unknown, fallback: number): number {
     if (Number.isFinite(parsed)) return parsed;
   }
   return fallback;
+}
+
+function safeNumberRecord(value: unknown): Record<string, number> {
+  if (!isRecord(value)) return {};
+  const result: Record<string, number> = {};
+  for (const [key, item] of Object.entries(value)) {
+    result[key] = safeNumber(item, 0);
+  }
+  return result;
 }
 
 function safeNumberOrUndefined(value: unknown): number | undefined {
