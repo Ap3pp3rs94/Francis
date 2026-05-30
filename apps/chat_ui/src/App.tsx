@@ -112,6 +112,7 @@ import {
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorReview,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleReadback,
   type TelemetryContextFeedbackMemoryAssistanceGitContextSignal,
+  type TelemetryContextFeedbackMemoryAssistanceIdeContextSignal,
   type TelemetryContextFeedbackMemoryAssistanceTerminalContextSignal,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackMemoryReadback,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackReview,
@@ -4248,6 +4249,16 @@ function SystemPanel(props: {
     telemetryFeedbackMemoryAssistanceGitContextSignalLoadedAt,
     setTelemetryFeedbackMemoryAssistanceGitContextSignalLoadedAt,
   ] = useState<number | null>(null);
+  const [telemetryFeedbackMemoryAssistanceIdeContextSignal, setTelemetryFeedbackMemoryAssistanceIdeContextSignal] =
+    useState<TelemetryContextFeedbackMemoryAssistanceIdeContextSignal | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceIdeContextSignalError,
+    setTelemetryFeedbackMemoryAssistanceIdeContextSignalError,
+  ] = useState<string | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceIdeContextSignalLoadedAt,
+    setTelemetryFeedbackMemoryAssistanceIdeContextSignalLoadedAt,
+  ] = useState<number | null>(null);
   const [telemetryFeedbackMemoryQualityBusy, setTelemetryFeedbackMemoryQualityBusy] = useState(false);
   const [telemetryFeedbackMemoryQualityNotice, setTelemetryFeedbackMemoryQualityNotice] = useState<{
     tone: "info" | "error";
@@ -4474,6 +4485,7 @@ function SystemPanel(props: {
         nextTelemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReview,
         nextTelemetryFeedbackMemoryAssistanceTerminalContextSignal,
         nextTelemetryFeedbackMemoryAssistanceGitContextSignal,
+        nextTelemetryFeedbackMemoryAssistanceIdeContextSignal,
       ] =
         await Promise.allSettled([
         client.getSystemInfo(),
@@ -4512,6 +4524,7 @@ function SystemPanel(props: {
         }),
         telemetryClient.getContextFeedbackMemoryAssistanceTerminalContextSignal({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistanceGitContextSignal({ limit: 20 }),
+        telemetryClient.getContextFeedbackMemoryAssistanceIdeContextSignal({ limit: 20 }),
       ]);
 
       const degradedFeeds: string[] = [];
@@ -4798,6 +4811,17 @@ function SystemPanel(props: {
           telemetryError(nextTelemetryFeedbackMemoryAssistanceGitContextSignal.reason),
         );
         degradedFeeds.push("telemetry feedback memory assistance git context signal");
+      }
+
+      if (nextTelemetryFeedbackMemoryAssistanceIdeContextSignal.status === "fulfilled") {
+        setTelemetryFeedbackMemoryAssistanceIdeContextSignal(nextTelemetryFeedbackMemoryAssistanceIdeContextSignal.value);
+        setTelemetryFeedbackMemoryAssistanceIdeContextSignalError(null);
+        setTelemetryFeedbackMemoryAssistanceIdeContextSignalLoadedAt(refreshStartedAt);
+      } else {
+        setTelemetryFeedbackMemoryAssistanceIdeContextSignalError(
+          telemetryError(nextTelemetryFeedbackMemoryAssistanceIdeContextSignal.reason),
+        );
+        degradedFeeds.push("telemetry feedback memory assistance IDE context signal");
       }
 
       if (degradedFeeds.length > 0) {
@@ -6884,6 +6908,23 @@ function SystemPanel(props: {
       : telemetryFeedbackMemoryAssistanceGitContextSignal
         ? `Feedback memory assistance git context ${telemetryFeedbackMemoryAssistanceGitContextSignal.status}; branch ${telemetryFeedbackMemoryAssistanceGitContextSignal.branch || "unknown"}, changed ${telemetryFeedbackMemoryAssistanceGitContextSignal.changed_count}.`
         : "Feedback memory assistance git context signal has not loaded yet.";
+  const telemetryFeedbackMemoryAssistanceIdeContextSignalStatus =
+    safeString(telemetryFeedbackMemoryAssistanceIdeContextSignal?.status).trim() ||
+    (telemetryFeedbackMemoryAssistanceIdeContextSignalError ? "unavailable" : "unloaded");
+  const telemetryFeedbackMemoryAssistanceIdeContextSignalTone =
+    telemetryFeedbackMemoryAssistanceIdeContextSignalError
+      ? "blocked"
+      : telemetryFeedbackMemoryAssistanceIdeContextSignal
+        ? telemetryFeedbackMemoryAssistanceIdeContextSignal.ide_context_signal_ready
+          ? "running"
+          : "dormant"
+        : "standby";
+  const telemetryFeedbackMemoryAssistanceIdeContextSignalDetail =
+    telemetryFeedbackMemoryAssistanceIdeContextSignalError
+      ? `Feedback memory assistance IDE context signal could not refresh: ${telemetryFeedbackMemoryAssistanceIdeContextSignalError}`
+      : telemetryFeedbackMemoryAssistanceIdeContextSignal
+        ? `Feedback memory assistance IDE context ${telemetryFeedbackMemoryAssistanceIdeContextSignal.status}; events ${telemetryFeedbackMemoryAssistanceIdeContextSignal.ide_event_count}, context lines ${telemetryFeedbackMemoryAssistanceIdeContextSignal.ide_context_line_count}.`
+        : "Feedback memory assistance IDE context signal has not loaded yet.";
   const telemetryFeedbackMemoryAssistanceLiveSampleDecisionCanRecord = Boolean(
     telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview?.operator_review_ready &&
       !telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionRecorded,
@@ -11855,6 +11896,9 @@ function SystemPanel(props: {
             <span style={badgeStyle(telemetryFeedbackMemoryAssistanceGitContextSignalTone)}>
               Git signal {telemetryFeedbackMemoryAssistanceGitContextSignalStatus}
             </span>
+            <span style={badgeStyle(telemetryFeedbackMemoryAssistanceIdeContextSignalTone)}>
+              IDE signal {telemetryFeedbackMemoryAssistanceIdeContextSignalStatus}
+            </span>
             <span style={badgeStyle(continuation.tone)}>{continuation.label}</span>
           </div>
         </div>
@@ -12001,6 +12045,15 @@ function SystemPanel(props: {
           }}
         >
           {telemetryFeedbackMemoryAssistanceGitContextSignalDetail}
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            color: telemetryFeedbackMemoryAssistanceIdeContextSignalError ? "#ffcf9d" : THEME.text,
+            marginTop: 8,
+          }}
+        >
+          {telemetryFeedbackMemoryAssistanceIdeContextSignalDetail}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
           <button
@@ -12553,6 +12606,61 @@ function SystemPanel(props: {
               <div style={{ fontSize: 12, color: THEME.text, marginTop: 4 }}>
                 memory <code>{telemetryFeedbackMemoryAssistanceGitContextSignal.writes_memory ? "true" : "false"}</code>
                 {" / "}model <code>{telemetryFeedbackMemoryAssistanceGitContextSignal.calls_model ? "true" : "false"}</code>
+              </div>
+            </div>
+          </div>
+        ) : null}
+        {telemetryFeedbackMemoryAssistanceIdeContextSignal ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+              gap: 8,
+              marginTop: 10,
+            }}
+          >
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>IDE signal</div>
+              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
+                {telemetryFeedbackMemoryAssistanceIdeContextSignal.ide_context_signal_ready ? "ready" : "waiting"}
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                events <code>{telemetryFeedbackMemoryAssistanceIdeContextSignal.ide_event_count}</code>
+                {" / "}lines <code>{telemetryFeedbackMemoryAssistanceIdeContextSignal.ide_context_line_count}</code>
+              </div>
+              {telemetryFeedbackMemoryAssistanceIdeContextSignalLoadedAt ? (
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                  Loaded {toLocaleTime(telemetryFeedbackMemoryAssistanceIdeContextSignalLoadedAt)}
+                </div>
+              ) : null}
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>IDE readback</div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 6 }}>
+                latest{" "}
+                <code>
+                  {safeString(telemetryFeedbackMemoryAssistanceIdeContextSignal.latest_ide_diagnostic.event_id).trim() ||
+                    "missing"}
+                </code>
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                next{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceIdeContextSignal.next_smallest_truthful_gap || "ide_context_signal"}
+                </code>
+              </div>
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>IDE guards</div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 6 }}>
+                diagnostics{" "}
+                <code>{telemetryFeedbackMemoryAssistanceIdeContextSignal.writes_ide_diagnostics ? "write" : "read"}</code>
+                {" / "}contents{" "}
+                <code>{telemetryFeedbackMemoryAssistanceIdeContextSignal.captures_file_contents ? "true" : "false"}</code>
+              </div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 4 }}>
+                memory <code>{telemetryFeedbackMemoryAssistanceIdeContextSignal.writes_memory ? "true" : "false"}</code>
+                {" / "}model <code>{telemetryFeedbackMemoryAssistanceIdeContextSignal.calls_model ? "true" : "false"}</code>
               </div>
             </div>
           </div>

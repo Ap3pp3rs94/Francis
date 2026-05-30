@@ -1278,6 +1278,7 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decis
                 actor: [
                     "chat.write",
                     "telemetry.terminal.write",
+                    "telemetry.ide_diagnostics.write",
                     "telemetry.context.feedback.write",
                     "memory.timeline.write",
                 ]
@@ -1305,6 +1306,29 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decis
     terminal_body = terminal.json()
     assert terminal_body["ok"] is True
     assert terminal_body["item"]["source_id"] == "terminal"
+    ide = client.post(
+        "/telemetry/ide-diagnostics/events",
+        json={
+            "actor": actor,
+            "reason": "record IDE signal for accepted live sample",
+            "source": "vscode",
+            "workspace": "D:/Francis",
+            "file": "src/francis/token=idesignalsecret123.py",
+            "diagnostics": [
+                {
+                    "severity": "warning",
+                    "code": "W900",
+                    "message": "review telemetry context token=idediagnosticsecret123",
+                }
+            ],
+            "operation_id": "op_stage7_ide_signal",
+            "tags": ["stage7", "feedback_memory_assistance"],
+        },
+    )
+    assert ide.status_code == 200
+    ide_body = ide.json()
+    assert ide_body["ok"] is True
+    assert ide_body["item"]["source_id"] == "ide_diagnostics"
     response = client.post(
         "/telemetry/context/feedback/memory-assistance-feedback-loop-live-sample-operator-decision",
         json={
@@ -1500,6 +1524,46 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decis
     assert git_signal["governance"]["does_not_git_pull"] is True
     assert git_signal["governance"]["does_not_git_push"] is True
     assert git_signal["next_smallest_truthful_gap"] == ("stage7_context_feedback_memory_assistance_ide_context_signal")
+
+    ide_signal = client.get(
+        "/telemetry/context/feedback/memory-assistance-feedback-loop-ide-context-signal?limit=10"
+    ).json()
+    assert ide_signal["ok"] is True
+    assert ide_signal["kind"] == "francis.stage7.telemetry.context_feedback_memory_assistance_ide_context_signal"
+    assert ide_signal["status"] == "ide_context_signal_ready"
+    assert ide_signal["ide_context_signal_ready"] is True
+    assert ide_signal["git_context_signal_ready"] is True
+    assert ide_signal["ide_event_ready"] is True
+    assert ide_signal["ide_event_count"] == 1
+    assert ide_signal["ide_context_line_count"] == 1
+    assert ide_signal["ide_context_items"][0]["source_id"] == "ide_diagnostics"
+    assert ide_signal["latest_ide_diagnostic"]["event_id"] == ide_body["item"]["event_id"]
+    assert ide_signal["latest_ide_diagnostic"]["highest_severity"] == "warning"
+    assert ide_signal["git_context_signal"]["git_context_signal_ready"] is True
+    ide_signal_text = json.dumps(ide_signal, sort_keys=True)
+    assert "idesignalsecret123" not in ide_signal_text
+    assert "idediagnosticsecret123" not in ide_signal_text
+    assert ide_signal["reads_ide_context"] is True
+    assert ide_signal["reads_ide_diagnostics"] is True
+    assert ide_signal["writes_ide_diagnostics"] is False
+    assert ide_signal["captures_file_contents"] is False
+    assert ide_signal["stores_file_contents"] is False
+    assert ide_signal["starts_ide_integration"] is False
+    assert ide_signal["writes_memory"] is False
+    assert ide_signal["writes_feedback"] is False
+    assert ide_signal["sends_chat"] is False
+    assert ide_signal["calls_model"] is False
+    assert ide_signal["selects_tools"] is False
+    assert ide_signal["grants_execution_authority"] is False
+    assert ide_signal["grants_mutation_authority"] is False
+    assert ide_signal["governance"]["read_only"] is True
+    assert ide_signal["governance"]["ide_context_signal_projection"] is True
+    assert ide_signal["governance"]["does_not_record_ide_diagnostic"] is True
+    assert ide_signal["governance"]["does_not_capture_file_contents"] is True
+    assert ide_signal["governance"]["does_not_start_ide_integration"] is True
+    assert ide_signal["next_smallest_truthful_gap"] == (
+        "stage7_context_feedback_memory_assistance_sensing_indicator_summary"
+    )
 
 
 def test_telemetry_context_feedback_memory_quality_record_is_empty_without_events(

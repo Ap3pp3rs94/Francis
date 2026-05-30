@@ -15,6 +15,7 @@ import {
   parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorReview,
   parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleReadback,
   parseTelemetryContextFeedbackMemoryAssistanceGitContextSignal,
+  parseTelemetryContextFeedbackMemoryAssistanceIdeContextSignal,
   parseTelemetryContextFeedbackMemoryAssistanceTerminalContextSignal,
   parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackReview,
   parseTelemetryContextFeedbackMemoryAssistanceChatContextReadback,
@@ -1800,6 +1801,114 @@ test("TelemetryClient requests the git context signal endpoint", async () => {
     assert.deepEqual(requests, [
       {
         path: "/telemetry/context/feedback/memory-assistance-feedback-loop-git-context-signal",
+        search: "?limit=30",
+        method: "GET",
+      },
+    ]);
+  } finally {
+    restore();
+  }
+});
+
+test("parseTelemetryContextFeedbackMemoryAssistanceIdeContextSignal preserves IDE guards", () => {
+  const signal = parseTelemetryContextFeedbackMemoryAssistanceIdeContextSignal({
+    ok: true,
+    kind: "francis.stage7.telemetry.context_feedback_memory_assistance_ide_context_signal",
+    stage: "Stage 7 / Telemetry MVP",
+    source_id: "telemetry_context",
+    status: "ide_context_signal_ready",
+    target: "feedback_memory_assistance_prompt_integration",
+    ide_context_signal_ready: true,
+    git_context_signal_ready: true,
+    ide_event_ready: true,
+    ide_event_count: 1,
+    ide_context_line_count: 1,
+    ide_context_items: [{ source_id: "ide_diagnostics", event_id: "tel_ide_123" }],
+    ide_context_lines: ["ide_diagnostics: IDE diagnostics warning, count 1"],
+    latest_ide_diagnostic: { event_id: "tel_ide_123", highest_severity: "warning" },
+    git_context_signal: { git_context_signal_ready: true },
+    reads_ide_context: true,
+    reads_ide_diagnostics: true,
+    reads_git_context_signal: true,
+    writes_ide_diagnostics: false,
+    captures_file_contents: false,
+    stores_file_contents: false,
+    starts_ide_integration: false,
+    writes_memory: false,
+    writes_feedback: false,
+    sends_chat: false,
+    calls_model: false,
+    selects_tools: false,
+    trains_model: false,
+    grants_execution_authority: false,
+    grants_mutation_authority: false,
+    governance: { read_only: true, ide_context_signal_projection: true },
+    next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_sensing_indicator_summary",
+  });
+
+  assert.equal(signal.status, "ide_context_signal_ready");
+  assert.equal(signal.ide_context_signal_ready, true);
+  assert.equal(signal.ide_event_count, 1);
+  assert.equal(signal.latest_ide_diagnostic.event_id, "tel_ide_123");
+  assert.equal(signal.ide_context_lines[0]?.startsWith("ide_diagnostics:"), true);
+  assert.equal(signal.reads_ide_context, true);
+  assert.equal(signal.writes_ide_diagnostics, false);
+  assert.equal(signal.captures_file_contents, false);
+  assert.equal(signal.stores_file_contents, false);
+  assert.equal(signal.starts_ide_integration, false);
+  assert.equal(signal.grants_execution_authority, false);
+  assert.equal(signal.governance.ide_context_signal_projection, true);
+});
+
+test("TelemetryClient requests the IDE context signal endpoint", async () => {
+  const requests: Array<{ path: string; search: string; method: string }> = [];
+  const restore = installFetch((url, init) => {
+    const parsed = new URL(url);
+    requests.push({ path: parsed.pathname, search: parsed.search, method: init?.method ?? "GET" });
+    return jsonResponse({
+      ok: true,
+      kind: "francis.stage7.telemetry.context_feedback_memory_assistance_ide_context_signal",
+      stage: "Stage 7 / Telemetry MVP",
+      source_id: "telemetry_context",
+      status: "ide_context_signal_ready",
+      target: "feedback_memory_assistance_prompt_integration",
+      ide_context_signal_ready: true,
+      git_context_signal_ready: true,
+      ide_event_ready: true,
+      ide_event_count: 1,
+      ide_context_line_count: 1,
+      ide_context_items: [{ source_id: "ide_diagnostics", event_id: "tel_ide_123" }],
+      ide_context_lines: ["ide_diagnostics: IDE diagnostics warning, count 1"],
+      latest_ide_diagnostic: { event_id: "tel_ide_123", highest_severity: "warning" },
+      git_context_signal: { git_context_signal_ready: true },
+      reads_ide_context: true,
+      reads_ide_diagnostics: true,
+      reads_git_context_signal: true,
+      writes_ide_diagnostics: false,
+      captures_file_contents: false,
+      stores_file_contents: false,
+      starts_ide_integration: false,
+      writes_memory: false,
+      writes_feedback: false,
+      sends_chat: false,
+      calls_model: false,
+      selects_tools: false,
+      trains_model: false,
+      grants_execution_authority: false,
+      grants_mutation_authority: false,
+      governance: { read_only: true, ide_context_signal_projection: true },
+      next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_sensing_indicator_summary",
+    });
+  });
+
+  try {
+    const client = new TelemetryClient("http://127.0.0.1:8000/");
+    const signal = await client.getContextFeedbackMemoryAssistanceIdeContextSignal({ limit: 30 });
+
+    assert.equal(signal.ide_context_signal_ready, true);
+    assert.deepEqual(requests, [
+      {
+        path: "/telemetry/context/feedback/memory-assistance-feedback-loop-ide-context-signal",
         search: "?limit=30",
         method: "GET",
       },

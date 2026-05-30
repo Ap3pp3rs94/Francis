@@ -570,6 +570,41 @@ export type TelemetryContextFeedbackMemoryAssistanceGitContextSignal = {
   next_smallest_truthful_gap: string;
 };
 
+export type TelemetryContextFeedbackMemoryAssistanceIdeContextSignal = {
+  ok: boolean;
+  kind: string;
+  stage: string;
+  source_id: string;
+  status: string;
+  target: string;
+  ide_context_signal_ready: boolean;
+  git_context_signal_ready: boolean;
+  ide_event_ready: boolean;
+  ide_event_count: number;
+  ide_context_line_count: number;
+  ide_context_items: Array<Record<string, unknown>>;
+  ide_context_lines: string[];
+  latest_ide_diagnostic: Record<string, unknown>;
+  git_context_signal: Record<string, unknown>;
+  reads_ide_context: boolean;
+  reads_ide_diagnostics: boolean;
+  reads_git_context_signal: boolean;
+  writes_ide_diagnostics: boolean;
+  captures_file_contents: boolean;
+  stores_file_contents: boolean;
+  starts_ide_integration: boolean;
+  writes_memory: boolean;
+  writes_feedback: boolean;
+  sends_chat: boolean;
+  calls_model: boolean;
+  selects_tools: boolean;
+  trains_model: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+  governance: Record<string, unknown>;
+  next_smallest_truthful_gap: string;
+};
+
 export type TelemetryContextFeedbackMemoryAssistancePolicy = {
   ok: boolean;
   kind: string;
@@ -1253,6 +1288,47 @@ export function parseTelemetryContextFeedbackMemoryAssistanceGitContextSignal(
     runs_git_fetch: safeBoolean(raw.runs_git_fetch, true),
     runs_git_pull: safeBoolean(raw.runs_git_pull, true),
     runs_git_push: safeBoolean(raw.runs_git_push, true),
+    writes_memory: safeBoolean(raw.writes_memory, true),
+    writes_feedback: safeBoolean(raw.writes_feedback, true),
+    sends_chat: safeBoolean(raw.sends_chat, true),
+    calls_model: safeBoolean(raw.calls_model, true),
+    selects_tools: safeBoolean(raw.selects_tools, true),
+    trains_model: safeBoolean(raw.trains_model, true),
+    grants_execution_authority: safeBoolean(raw.grants_execution_authority, true),
+    grants_mutation_authority: safeBoolean(raw.grants_mutation_authority, true),
+    governance: recordOrEmpty(raw.governance),
+    next_smallest_truthful_gap: safeString(raw.next_smallest_truthful_gap, ""),
+  };
+}
+
+export function parseTelemetryContextFeedbackMemoryAssistanceIdeContextSignal(
+  value: unknown,
+): TelemetryContextFeedbackMemoryAssistanceIdeContextSignal {
+  const raw = isRecord(value) ? value : {};
+
+  return {
+    ok: safeBoolean(raw.ok, false),
+    kind: safeString(raw.kind, ""),
+    stage: safeString(raw.stage, ""),
+    source_id: safeString(raw.source_id, ""),
+    status: safeString(raw.status, "unknown"),
+    target: safeString(raw.target, ""),
+    ide_context_signal_ready: safeBoolean(raw.ide_context_signal_ready, false),
+    git_context_signal_ready: safeBoolean(raw.git_context_signal_ready, false),
+    ide_event_ready: safeBoolean(raw.ide_event_ready, false),
+    ide_event_count: safeNumber(raw.ide_event_count, 0),
+    ide_context_line_count: safeNumber(raw.ide_context_line_count, 0),
+    ide_context_items: Array.isArray(raw.ide_context_items) ? raw.ide_context_items.filter(isRecord) : [],
+    ide_context_lines: safeStringArray(raw.ide_context_lines),
+    latest_ide_diagnostic: recordOrEmpty(raw.latest_ide_diagnostic),
+    git_context_signal: recordOrEmpty(raw.git_context_signal),
+    reads_ide_context: safeBoolean(raw.reads_ide_context, false),
+    reads_ide_diagnostics: safeBoolean(raw.reads_ide_diagnostics, false),
+    reads_git_context_signal: safeBoolean(raw.reads_git_context_signal, false),
+    writes_ide_diagnostics: safeBoolean(raw.writes_ide_diagnostics, true),
+    captures_file_contents: safeBoolean(raw.captures_file_contents, true),
+    stores_file_contents: safeBoolean(raw.stores_file_contents, true),
+    starts_ide_integration: safeBoolean(raw.starts_ide_integration, true),
     writes_memory: safeBoolean(raw.writes_memory, true),
     writes_feedback: safeBoolean(raw.writes_feedback, true),
     sends_chat: safeBoolean(raw.sends_chat, true),
@@ -2142,6 +2218,46 @@ export class TelemetryClient {
       return parseTelemetryContextFeedbackMemoryAssistanceGitContextSignal(text ? JSON.parse(text) : {});
     } catch (err) {
       throw new TelemetryApiError("Telemetry feedback memory assistance git context signal response was not valid JSON.", {
+        url,
+        cause: err,
+      });
+    }
+  }
+
+  async getContextFeedbackMemoryAssistanceIdeContextSignal(opts?: {
+    limit?: number;
+    signal?: AbortSignal;
+  }): Promise<TelemetryContextFeedbackMemoryAssistanceIdeContextSignal> {
+    const limit = clampLimit(opts?.limit, 20);
+    const url = this.url(
+      `/telemetry/context/feedback/memory-assistance-feedback-loop-ide-context-signal?limit=${limit}`,
+    );
+    let response: Response;
+    try {
+      response = await fetch(url, { method: "GET", signal: opts?.signal });
+    } catch (err) {
+      throw new TelemetryApiError("Telemetry feedback memory assistance IDE context signal request failed.", {
+        url,
+        cause: err,
+      });
+    }
+
+    const text = await response.text();
+    if (!response.ok) {
+      throw new TelemetryApiError(
+        `HTTP ${response.status} for telemetry feedback memory assistance IDE context signal request`,
+        {
+          status: response.status,
+          url,
+          bodySnippet: text.slice(0, 500),
+        },
+      );
+    }
+
+    try {
+      return parseTelemetryContextFeedbackMemoryAssistanceIdeContextSignal(text ? JSON.parse(text) : {});
+    } catch (err) {
+      throw new TelemetryApiError("Telemetry feedback memory assistance IDE context signal response was not valid JSON.", {
         url,
         cause: err,
       });

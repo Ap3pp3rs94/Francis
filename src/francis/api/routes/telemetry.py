@@ -1355,6 +1355,96 @@ def context_feedback_memory_assistance_operator_feedback_loop_git_context_signal
     }
 
 
+@router.get("/context/feedback/memory-assistance-feedback-loop-ide-context-signal")
+def context_feedback_memory_assistance_operator_feedback_loop_ide_context_signal(
+    limit: int = 20,
+) -> dict[str, Any]:
+    safe_limit = max(1, min(int(limit), 100))
+    git_signal = context_feedback_memory_assistance_operator_feedback_loop_git_context_signal(limit=safe_limit)
+    context_snapshot = telemetry_context_snapshot(surface="feedback_memory_assistance_ide_context_signal")
+    ide_events = ide_diagnostics_events_snapshot(limit=safe_limit)
+    context_items_value = context_snapshot.get("context_items")
+    context_items: list[Any] = context_items_value if isinstance(context_items_value, list) else []
+    prompt_lines_value = context_snapshot.get("prompt_lines")
+    prompt_lines: list[Any] = prompt_lines_value if isinstance(prompt_lines_value, list) else []
+    ide_context_items = [
+        item for item in context_items if isinstance(item, dict) and item.get("source_id") == "ide_diagnostics"
+    ]
+    ide_context_lines = [
+        str(line)
+        for line in prompt_lines
+        if isinstance(line, str) and line.strip().lower().startswith("ide_diagnostics:")
+    ]
+    ide_items_value = ide_events.get("items")
+    ide_items: list[Any] = ide_items_value if isinstance(ide_items_value, list) else []
+    latest_ide_diagnostic = ide_items[-1] if ide_items and isinstance(ide_items[-1], dict) else {}
+    git_signal_ready = bool(git_signal.get("git_context_signal_ready"))
+    ide_event_ready = bool(latest_ide_diagnostic)
+    ide_signal_ready = bool(git_signal_ready and ide_event_ready and ide_context_items and ide_context_lines)
+    if ide_signal_ready:
+        status = "ide_context_signal_ready"
+    elif not git_signal_ready:
+        status = "awaiting_git_context_signal"
+    elif not ide_event_ready:
+        status = "awaiting_ide_diagnostic_event"
+    else:
+        status = "awaiting_ide_context_projection"
+    return {
+        "ok": True,
+        "kind": "francis.stage7.telemetry.context_feedback_memory_assistance_ide_context_signal",
+        "stage": "Stage 7 / Telemetry MVP",
+        "source_id": "telemetry_context",
+        "status": status,
+        "target": "feedback_memory_assistance_prompt_integration",
+        "ide_context_signal_ready": ide_signal_ready,
+        "git_context_signal_ready": git_signal_ready,
+        "ide_event_ready": ide_event_ready,
+        "ide_event_count": ide_events.get("total", 0),
+        "ide_context_line_count": len(ide_context_lines),
+        "ide_context_items": ide_context_items,
+        "ide_context_lines": ide_context_lines,
+        "latest_ide_diagnostic": latest_ide_diagnostic,
+        "git_context_signal": git_signal,
+        "reads_ide_context": True,
+        "reads_ide_diagnostics": True,
+        "reads_git_context_signal": True,
+        "writes_ide_diagnostics": False,
+        "captures_file_contents": False,
+        "stores_file_contents": False,
+        "starts_ide_integration": False,
+        "writes_memory": False,
+        "writes_feedback": False,
+        "sends_chat": False,
+        "calls_model": False,
+        "selects_tools": False,
+        "trains_model": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "ide_context_signal_projection": True,
+            "uses_git_context_signal": True,
+            "uses_redacted_ide_diagnostic_events": True,
+            "telemetry_is_untrusted_input": True,
+            "does_not_record_ide_diagnostic": True,
+            "does_not_capture_file_contents": True,
+            "does_not_store_file_contents": True,
+            "does_not_start_ide_integration": True,
+            "does_not_write_memory": True,
+            "does_not_write_feedback": True,
+            "does_not_send_chat": True,
+            "does_not_call_model": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": (
+            "stage7_context_feedback_memory_assistance_sensing_indicator_summary"
+            if ide_signal_ready
+            else "stage7_context_feedback_memory_assistance_ide_context_signal"
+        ),
+    }
+
+
 @router.post("/context/feedback/memory-assistance-feedback-loop-live-sample-operator-decision")
 def context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_decision_record(
     payload: TelemetryContextFeedbackMemoryAssistanceLiveSampleOperatorDecisionIn,
