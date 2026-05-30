@@ -7,7 +7,9 @@ param(
   [int]$ForegroundRunSeconds = 15,
 
   [ValidateRange(5, 120)]
-  [int]$LiveOperatorStartupTimeoutSeconds = 60
+  [int]$LiveOperatorStartupTimeoutSeconds = 60,
+
+  [string]$DataDir = ''
 )
 
 Set-StrictMode -Version 2
@@ -515,12 +517,21 @@ $LiveOperatorProofPath = Join-Path $PSScriptRoot 'lens-live-operator-proof.ps1'
 $TrayPreflightPath = Join-Path $PSScriptRoot 'lens-tray-preflight.ps1'
 $OverlayPreflightPath = Join-Path $PSScriptRoot 'lens-overlay-preflight.ps1'
 $SummonPreflightPath = Join-Path $PSScriptRoot 'lens-summon-preflight.ps1'
-$ReadbackDataRoot = [System.IO.Path]::GetFullPath(
-  (Join-Path ([System.IO.Path]::GetTempPath()) ("francis-lens-resident-surface-proof\" + [guid]::NewGuid().ToString('N') + "\data"))
-)
+$ReadbackDataRoot = ''
+if ([string]::IsNullOrWhiteSpace($DataDir)) {
+  $ReadbackDataRoot = [System.IO.Path]::GetFullPath(
+    (Join-Path ([System.IO.Path]::GetTempPath()) ("francis-lens-resident-surface-proof\" + [guid]::NewGuid().ToString('N') + "\data"))
+  )
+} else {
+  $ReadbackDataRoot = [System.IO.Path]::GetFullPath($DataDir)
+}
 New-Item -ItemType Directory -Force -Path $ReadbackDataRoot | Out-Null
 
-$LiveResidentSurfaceReadback = Invoke-ResidentSurfaceReadback
+$LiveResidentSurfaceReadback = if ([string]::IsNullOrWhiteSpace($DataDir)) {
+  Invoke-ResidentSurfaceReadback
+} else {
+  Invoke-ResidentSurfaceReadback -DataDir $ReadbackDataRoot
+}
 $ResidentSurfaceReadback = Invoke-ResidentSurfaceReadback -DataDir $ReadbackDataRoot
 $ForegroundSurfaceReadback = Invoke-ForegroundResidentSurfaceReadback -PowerShellPath $PowerShellPath -RunSeconds $ForegroundRunSeconds
 $HostPreflight = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $HostPreflightPath -ScriptArgs @('-Mode', 'Status')

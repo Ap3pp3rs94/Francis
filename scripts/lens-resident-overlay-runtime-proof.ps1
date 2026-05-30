@@ -283,6 +283,9 @@ $ResidentSurfaceRetryRunSeconds = 0
 $ResidentSurfaceInitialStatus = ''
 $ResidentSurfaceRetryReason = ''
 $ResidentSurfaceArgs = @('-Mode', 'Status', '-ForegroundRunSeconds', [string]$ResidentSurfaceForegroundRunSeconds)
+if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
+  $ResidentSurfaceArgs += @('-DataDir', $DataDir)
+}
 
 $CachedResidentSurfaceResult = Read-CachedJsonScriptResult -Path $CachedResidentSurfaceProofPath
 if ($null -ne $CachedResidentSurfaceResult) {
@@ -301,6 +304,9 @@ if ($null -ne $CachedResidentSurfaceResult) {
     $ResidentSurfaceEffectiveRunSeconds = $ResidentSurfaceRetryRunSeconds
     $ResidentSurfaceEffectiveTimeoutSeconds = [Math]::Max(190, ($ResidentSurfaceRetryRunSeconds * 2) + 150)
     $ResidentSurfaceRetryArgs = @('-Mode', 'Status', '-ForegroundRunSeconds', [string]$ResidentSurfaceRetryRunSeconds)
+    if (-not [string]::IsNullOrWhiteSpace($DataDir)) {
+      $ResidentSurfaceRetryArgs += @('-DataDir', $DataDir)
+    }
     $ResidentSurfaceResult = Invoke-JsonScript -PowerShellPath $PowerShellPath -ScriptPath $ResidentSurfaceProofPath -ScriptArgs $ResidentSurfaceRetryArgs -TimeoutSeconds $ResidentSurfaceEffectiveTimeoutSeconds
   }
 }

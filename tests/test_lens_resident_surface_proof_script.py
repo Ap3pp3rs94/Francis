@@ -38,6 +38,14 @@ def _run_proof(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def test_lens_resident_surface_proof_accepts_isolated_data_dir_contract() -> None:
+    script = (_repo_root() / "scripts" / "lens-resident-surface-proof.ps1").read_text(encoding="utf-8")
+
+    assert "[string]$DataDir = ''" in script
+    assert "$ReadbackDataRoot = [System.IO.Path]::GetFullPath($DataDir)" in script
+    assert "Invoke-ResidentSurfaceReadback -DataDir $ReadbackDataRoot" in script
+
+
 def test_lens_resident_surface_proof_composes_blocked_surface_without_authority() -> None:
     proc = _run_proof("-Mode", "Status")
 

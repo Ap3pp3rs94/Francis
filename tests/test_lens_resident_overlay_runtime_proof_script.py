@@ -152,3 +152,10 @@ def test_lens_resident_overlay_runtime_proof_observes_boundary_without_authority
     }
 
     assert (data_dir / "runtime" / "lens-host" / "status.json").is_file()
+
+
+def test_lens_resident_overlay_runtime_proof_passes_data_dir_to_surface_child() -> None:
+    script = (_repo_root() / "scripts" / "lens-resident-overlay-runtime-proof.ps1").read_text(encoding="utf-8")
+
+    assert "$ResidentSurfaceArgs += @('-DataDir', $DataDir)" in script
+    assert "$ResidentSurfaceRetryArgs += @('-DataDir', $DataDir)" in script

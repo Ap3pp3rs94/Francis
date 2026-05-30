@@ -44070,6 +44070,49 @@ Latest validation for generic chat write gating:
   "permission_and_policy_gated":59,"permission_gated":80,
   "read_projection_using_post":1}`
 
+### 2026-05-29 - Resident overlay runtime proof uses isolated surface readback
+
+Roadmap area: Stage 6 / Lens MVP, truthful resident-overlay runtime proof
+evidence under local and CI validation.
+
+Material change:
+
+- `lens-resident-surface-proof.ps1` now accepts an optional `-DataDir` and uses
+  that root for resident-surface readback when supplied.
+- `lens-resident-overlay-runtime-proof.ps1` passes its `-DataDir` into the
+  resident-surface child proof, including retry execution.
+- The resident-overlay boundary proof no longer leaks live workstation
+  resident-surface state into pytest's isolated runtime root.
+- This is proof isolation only; it does not mark Stage 6 closed, grant resident
+  claim authority, open overlays, bind hotkeys, supervise a resident host, or
+  claim summon-anywhere behavior.
+
+Latest validation for resident overlay proof isolation:
+
+- `python -m pytest
+  tests/test_lens_resident_overlay_runtime_proof_script.py::test_lens_resident_overlay_runtime_proof_observes_boundary_without_authority
+  tests/test_lens_resident_overlay_runtime_proof_script.py::test_lens_resident_overlay_runtime_proof_passes_data_dir_to_surface_child
+  tests/test_lens_resident_surface_proof_script.py::test_lens_resident_surface_proof_accepts_isolated_data_dir_contract
+  -q --tb=short --maxfail=1`
+  Result: `passed; 3 passed`
+- `python -m pytest tests/test_lens_resident_overlay_runtime_proof_script.py
+  tests/test_lens_resident_surface_proof_script.py -q --tb=short --maxfail=1`
+  Result: `passed; 4 passed`
+- PowerShell parser check for `scripts/lens-resident-surface-proof.ps1` and
+  `scripts/lens-resident-overlay-runtime-proof.ps1`
+  Result: `passed`
+- `python -m ruff check tests/test_lens_resident_overlay_runtime_proof_script.py
+  tests/test_lens_resident_surface_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests/test_lens_resident_overlay_runtime_proof_script.py
+  tests/test_lens_resident_surface_proof_script.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+- `./scripts/check.ps1`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
