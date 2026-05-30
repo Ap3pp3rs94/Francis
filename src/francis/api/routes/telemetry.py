@@ -5,8 +5,10 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from francis.api.routes.memory_timeline import record_memory_timeline_payload
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.telemetry.context import (
+    MEMORY_TIMELINE_WRITE_SCOPE,
     TELEMETRY_CONTEXT_FEEDBACK_WRITE_SCOPE,
     record_telemetry_context_feedback,
     telemetry_context_feedback_memory_quality,
@@ -80,6 +82,13 @@ class TelemetryContextFeedbackIn(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
+class TelemetryContextFeedbackMemoryQualityIn(BaseModel):
+    actor: str | None = None
+    reason: str = ""
+    limit: int = 100
+    event_id: str | None = None
+
+
 @router.get("/status")
 def status() -> dict[str, Any]:
     return telemetry_status_snapshot()
@@ -103,6 +112,105 @@ def context_feedback_review(limit: int = 100) -> dict[str, Any]:
 @router.get("/context/feedback/memory-quality")
 def context_feedback_memory_quality(limit: int = 100) -> dict[str, Any]:
     return telemetry_context_feedback_memory_quality(limit=limit)
+
+
+@router.post("/context/feedback/memory-quality")
+def context_feedback_memory_quality_record(payload: TelemetryContextFeedbackMemoryQualityIn) -> dict[str, Any]:
+    permission = _write_permission(
+        payload.actor,
+        required_scope=MEMORY_TIMELINE_WRITE_SCOPE,
+        route="/telemetry/context/feedback/memory-quality",
+        method="POST",
+    )
+    if not permission.allowed:
+        return _permission_denied(
+            permission,
+            source_id="telemetry_context",
+            required_scope=MEMORY_TIMELINE_WRITE_SCOPE,
+            next_step="configure_memory_timeline_write_actor_scope_before_recording_feedback_quality",
+        )
+
+    quality = telemetry_context_feedback_memory_quality(limit=payload.limit)
+    candidate = quality.get("memory_write_candidate") if isinstance(quality.get("memory_write_candidate"), dict) else {}
+    if not candidate:
+        return {
+            "ok": True,
+            "kind": "francis.stage7.telemetry.context_feedback_memory_quality.record",
+            "status": "empty",
+            "source_id": "telemetry_context",
+            "quality": quality,
+            "memory_event": None,
+            "writes_memory": False,
+            "governance": {
+                "required_scope": MEMORY_TIMELINE_WRITE_SCOPE,
+                "explicit_operator_decision": True,
+                "empty_review_does_not_write_memory": True,
+                "grants_execution_authority": False,
+                "grants_mutation_authority": False,
+            },
+        }
+
+    event_payload = dict(candidate)
+    if payload.event_id:
+        event_payload["id"] = payload.event_id
+    event_payload["request_actor"] = payload.actor
+    event_payload["actor"] = payload.actor
+    event_payload["scope"] = "telemetry.context.feedback"
+    event_payload["severity"] = "info"
+    candidate_meta = candidate.get("meta")
+    event_meta = dict(candidate_meta) if isinstance(candidate_meta, dict) else {}
+    event_meta.update(
+        {
+            "reason": payload.reason,
+            "source_id": "telemetry_context",
+            "explicit_operator_decision": True,
+            "feedback_memory_quality_route": "/telemetry/context/feedback/memory-quality",
+        }
+    )
+    event_payload["meta"] = event_meta
+    memory_event = record_memory_timeline_payload(
+        event_payload,
+        route="/telemetry/context/feedback/memory-quality",
+        method="POST",
+    )
+    if not memory_event.get("ok"):
+        return {
+            "ok": False,
+            "kind": "francis.stage7.telemetry.context_feedback_memory_quality.record",
+            "status": "denied",
+            "source_id": "telemetry_context",
+            "quality": quality,
+            "memory_event": memory_event,
+            "writes_memory": False,
+            "governance": {
+                "required_scope": MEMORY_TIMELINE_WRITE_SCOPE,
+                "explicit_operator_decision": True,
+                "memory_timeline_contract_enforced": True,
+                "grants_execution_authority": False,
+                "grants_mutation_authority": False,
+            },
+        }
+
+    return {
+        "ok": True,
+        "kind": "francis.stage7.telemetry.context_feedback_memory_quality.record",
+        "status": "recorded",
+        "source_id": "telemetry_context",
+        "quality": quality,
+        "memory_event": memory_event,
+        "memory_event_id": memory_event.get("id"),
+        "writes_memory": True,
+        "governance": {
+            "required_scope": MEMORY_TIMELINE_WRITE_SCOPE,
+            "explicit_operator_decision": True,
+            "memory_timeline_contract_enforced": True,
+            "stores_prompt_body": False,
+            "stores_model_response": False,
+            "trains_model": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+    }
 
 
 @router.get("/terminal/scope")

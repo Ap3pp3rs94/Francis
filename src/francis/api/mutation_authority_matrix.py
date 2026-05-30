@@ -227,6 +227,17 @@ _RULES: tuple[AuthorityRule, ...] = (
         governance_maturity="approval_and_receipt_gated",
     ),
     AuthorityRule(
+        family="telemetry_context_feedback_memory_quality",
+        prefixes=("/telemetry/context/feedback/memory-quality",),
+        required_actor="payload.actor",
+        required_scope="memory.timeline.write",
+        approval_requirement="not_required_scope_gate_only; explicit operator decision payload required",
+        receipt_behavior="memory timeline event record with telemetry feedback quality aggregate",
+        denial_behavior="api_permission_denied via permission_gate before memory timeline write",
+        governance_maturity="permission_gated",
+        notes="GET remains read-only; POST writes only bounded aggregate feedback quality through the memory timeline contract.",
+    ),
+    AuthorityRule(
         family="telemetry_context_feedback",
         prefixes=("/telemetry/context/feedback",),
         required_actor="payload.actor",

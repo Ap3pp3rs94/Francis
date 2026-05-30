@@ -22,7 +22,7 @@ _MAX_PATHS = 5
 _MAX_LIMIT = 100
 _MAX_TEXT_LENGTH = 2_000
 _MAX_TAGS = 16
-_NEXT_CONTEXT_FEEDBACK_GAP = "stage7_context_feedback_memory_operator_write_decision"
+_NEXT_CONTEXT_FEEDBACK_GAP = "stage7_context_feedback_memory_operator_surface"
 
 
 def telemetry_context_snapshot(*, surface: Any = "assist") -> dict[str, Any]:
@@ -241,6 +241,7 @@ def telemetry_context_feedback_memory_quality(*, limit: int = 100) -> dict[str, 
         "review": review,
         "memory_write_candidate": candidate,
         "memory_write_route": "/memory/timeline/record",
+        "memory_quality_record_route": "/telemetry/context/feedback/memory-quality",
         "required_scope": MEMORY_TIMELINE_WRITE_SCOPE,
         "operator_decision_required": bool(candidate),
         "writes_memory": False,

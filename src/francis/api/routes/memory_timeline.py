@@ -1194,11 +1194,15 @@ def export_timeline(
 @router.post("/record")
 @router.post("/create")
 def record_timeline_event(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    return record_memory_timeline_payload(payload, route=request.url.path, method=request.method)
+
+
+def record_memory_timeline_payload(payload: dict[str, Any], *, route: str, method: str) -> dict[str, Any]:
     try:
         permission = _memory_timeline_write_permission(
             _memory_timeline_write_actor(payload),
-            route=request.url.path,
-            method=request.method,
+            route=route,
+            method=method,
         )
         if not permission.allowed:
             return _permission_denied(permission)

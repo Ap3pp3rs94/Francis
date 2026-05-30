@@ -79,6 +79,14 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
     assert terminal["required_scope"] == "telemetry.terminal.write"
     assert terminal["governance_maturity"] == "permission_gated"
 
+    feedback_memory = entries["/telemetry/context/feedback/memory-quality"]
+    assert feedback_memory["family"] == "telemetry_context_feedback_memory_quality"
+    assert feedback_memory["required_actor"] == "payload.actor"
+    assert feedback_memory["required_scope"] == "memory.timeline.write"
+    assert feedback_memory["governance_maturity"] == "permission_gated"
+    assert "memory timeline" in feedback_memory["receipt_behavior"]
+    assert "permission_gate" in feedback_memory["denial_behavior"]
+
     attachment = entries["/attachments/upload"]
     assert attachment["family"] == "attachments"
     assert attachment["required_actor"] == "multipart request_actor, actor, or api.attachments default"

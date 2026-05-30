@@ -44263,6 +44263,66 @@ Latest validation for Stage 7 context-feedback memory-quality candidate:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-29 - Stage 7 context feedback memory-quality write is explicit
+
+Roadmap area: Stage 7 / Telemetry MVP, governed memory-quality writeback for
+context-feedback quality signals.
+
+Material change:
+
+- `/telemetry/context/feedback/memory-quality` now supports an explicit POST
+  route for writing the bounded feedback-quality candidate to the memory
+  timeline.
+- The POST route requires `memory.timeline.write`, records the API actor as the
+  memory timeline `request_actor`, and routes through the existing memory
+  timeline write contract instead of bypassing it.
+- Empty feedback review does not write memory.
+- Recorded memory events include only aggregate rating/source/tag counts,
+  quality signals, latest redacted feedback handles, action type, provenance,
+  classification, confidence, and retention.
+- Raw feedback notes, prompt bodies, model responses, and raw meta blobs are not
+  persisted by the memory-quality write route.
+- The mutating-route authority matrix now gives the POST route its own
+  `telemetry_context_feedback_memory_quality` authority row instead of treating
+  it as ordinary feedback capture.
+- `/telemetry/status`, `/telemetry/context`, and feedback memory-quality
+  readback now advance their next smallest truthful gap to
+  `stage7_context_feedback_memory_operator_surface`.
+
+Latest validation for Stage 7 context-feedback memory-quality write:
+
+- `python -m pytest tests/test_api_telemetry.py
+  tests/test_api_memory_timeline.py::test_memory_timeline_record_requires_typed_contract_before_persisting
+  tests/test_api_memory_timeline.py::test_memory_timeline_record_rejects_poisoning_payload_before_persisting
+  tests/test_api_memory_timeline.py::test_memory_timeline_record_rejects_nested_payload_poison_before_persisting
+  tests/test_api_memory_timeline.py::test_memory_timeline_record_rejects_invalid_confidence_before_persisting
+  tests/test_api_memory_timeline.py::test_memory_timeline_record_rejects_invalid_retention_ttl_before_persisting
+  tests/test_api_mutating_route_authority_matrix.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed`
+- `python -m mypy src/francis/api/routes/memory_timeline.py
+  src/francis/api/routes/telemetry.py src/francis/telemetry/context.py
+  src/francis/telemetry/status.py src/francis/api/mutation_authority_matrix.py`
+  Result: `passed`
+- `python -m ruff check src/francis/api/routes/memory_timeline.py
+  src/francis/api/routes/telemetry.py src/francis/telemetry/context.py
+  src/francis/telemetry/status.py src/francis/api/mutation_authority_matrix.py
+  tests/test_api_telemetry.py tests/test_api_mutating_route_authority_matrix.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/memory_timeline.py
+  src/francis/api/routes/telemetry.py src/francis/telemetry/context.py
+  src/francis/telemetry/status.py src/francis/api/mutation_authority_matrix.py
+  tests/test_api_telemetry.py tests/test_api_mutating_route_authority_matrix.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- Direct `/telemetry/context/feedback/memory-quality?limit=5` readback
+  Result:
+  `next_smallest_truthful_gap=stage7_context_feedback_memory_operator_surface`.
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
