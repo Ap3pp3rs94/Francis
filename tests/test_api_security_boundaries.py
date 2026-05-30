@@ -50,6 +50,7 @@ def test_operator_posture_guard_sanitizes_snapshot_errors(monkeypatch) -> None:
 def test_chat_send_sanitizes_handler_exceptions(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps({"api.chat": ["chat.write"]}))
 
     from fastapi.testclient import TestClient
 

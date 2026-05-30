@@ -2767,7 +2767,7 @@ export default function App() {
         const res = await fetch(`${baseUrl}/chat/send`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: trimmed, use_llm: true }),
+          body: JSON.stringify({ message: trimmed, use_llm: true, api_actor: "chat_ui.chat" }),
         });
         if (!res.ok) {
           setError(`HTTP ${res.status}`);

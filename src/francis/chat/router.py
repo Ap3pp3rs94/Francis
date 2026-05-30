@@ -41,15 +41,21 @@ def parse_mission_ingress(text: str) -> MissionIngressIntent | None:
     return None
 
 
-def handle(text: str, use_llm: bool = False, telemetry_context: dict[str, object] | None = None) -> str:
+def handle(
+    text: str,
+    use_llm: bool = False,
+    telemetry_context: dict[str, object] | None = None,
+    api_actor: str = "",
+) -> str:
     if not isinstance(text, str):
         logger.warning("handle received non-string input")
         text = str(text)
-    append("user", text, {})
+    ledger_meta: dict[str, object] = {"api_actor": api_actor} if api_actor else {}
+    append("user", text, ledger_meta)
 
     action = try_handle(text)
     if action.handled:
-        append("assistant", action.message, {"mode": "action"})
+        append("assistant", action.message, {"mode": "action", **ledger_meta})
         return action.message
 
     reply = ""
@@ -64,6 +70,8 @@ def handle(text: str, use_llm: bool = False, telemetry_context: dict[str, object
     if not reply:
         reply = _fallback_reply(text, llm_requested=use_llm)
     meta: dict[str, object] = {"mode": "llm" if use_llm else "stub"}
+    if api_actor:
+        meta["api_actor"] = api_actor
     if telemetry_context:
         meta["telemetry_context"] = telemetry_context
     append("assistant", reply, meta)

@@ -44012,6 +44012,64 @@ Latest validation for approval request write gating:
   "conditional_permission_gate":1,"permission_and_policy_gated":59,
   "permission_gated":79,"read_projection_using_post":1}`
 
+### 2026-05-29 - Generic chat ledger writes require API actor scope
+
+Roadmap area: Phase 2 / P3_GOVERNANCE -> P2_IDENTITY -> P1_INTERFACE,
+operator chat ingress governance for conversation-ledger mutation.
+
+Material change:
+
+- Generic HTTP `POST /chat/send` now requires an API actor with `chat.write`
+  before calling the generic chat handler that writes conversation-ledger
+  entries.
+- Generic chat actor identity is accepted from `request_actor`, `api_actor`, or
+  `actor`, with `api.chat` as the default API actor.
+- Denied generic chat writes return `api_permission_denied` with permission-gate
+  governance evidence and do not create `data/conversations/ledger/ledger.jsonl`.
+- Successful generic chat ledger entries now carry bounded `api_actor`
+  provenance on both user and assistant ledger rows.
+- `/mission` chat ingress remains on the existing internal `chat.send` actor and
+  `missions.write` gate; the new `chat.write` scope does not grant mission
+  declaration authority.
+- The chat UI sends `api_actor: "chat_ui.chat"` for generic chat requests.
+- The mutating-route authority matrix now reports `/chat/send` as
+  `permission_gated`; the previous `conditional_permission_gate` bucket is gone.
+
+Latest validation for generic chat write gating:
+
+- `python -m pytest tests/test_api_chat.py
+  tests/test_api_memory_timeline.py::test_memory_timeline_projects_chat_mission_ingress_loop_metadata
+  tests/test_api_memory_timeline.py::test_memory_timeline_projects_chat_mission_ingress_permission_gate
+  tests/test_api_mission_loop_contract.py::test_chat_ingress_advances_to_terminal_memory_receipt
+  tests/test_api_mutating_route_authority_matrix.py
+  tests/test_api_security_boundaries.py::test_chat_send_sanitizes_handler_exceptions
+  -q --tb=short --maxfail=1`
+  Result: `passed; 13 passed`
+- `npm run test` in `apps/chat_ui`
+  Result: `passed; 110 passed`
+- `npm run build` in `apps/chat_ui`
+  Result: `passed`
+- `python -m ruff check src/francis/api/routes/chat.py
+  src/francis/chat/router.py src/francis/api/mutation_authority_matrix.py
+  tests/conftest.py tests/test_api_chat.py
+  tests/test_api_mutating_route_authority_matrix.py
+  tests/test_api_security_boundaries.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/chat.py
+  src/francis/chat/router.py src/francis/api/mutation_authority_matrix.py
+  tests/conftest.py tests/test_api_chat.py
+  tests/test_api_mutating_route_authority_matrix.py
+  tests/test_api_security_boundaries.py`
+  Result: `passed`
+- `python -m mypy src/francis/api/routes/chat.py src/francis/chat/router.py
+  src/francis/api/mutation_authority_matrix.py`
+  Result: `passed`
+- Direct `/system/mutating-route-authority-matrix` readback:
+  Result: `status=covered`, `missing_total=0`, `total=171`,
+  `maturity_counts={"approval_and_receipt_gated":31,
+  "permission_and_policy_gated":59,"permission_gated":80,
+  "read_projection_using_post":1}`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

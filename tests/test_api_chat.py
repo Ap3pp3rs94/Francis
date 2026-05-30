@@ -285,11 +285,50 @@ def test_chat_mission_command_denies_unscoped_actor_before_mutation(monkeypatch,
     assert not task_root.exists() or not any(task_root.iterdir())
 
 
+def test_chat_send_denies_unscoped_generic_chat_before_ledger_write(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    sent = client.post(
+        "/chat/send",
+        json={"message": "hello from unscoped generic chat", "use_llm": False, "api_actor": "test.chat.write"},
+    )
+
+    assert sent.status_code == 200
+    body = sent.json()
+    assert body["ok"] is False
+    assert body["mode"] == "chat"
+    assert body["status"] == "denied"
+    assert body["error"] == "api_permission_denied"
+    assert body["reply"] == "Chat request denied by permission gate."
+    assert body["governance"]["gate"] == "permission_gate"
+    assert body["governance"]["reason"] == "missing_scopes"
+    assert body["governance"]["next_step"] == "configure_actor_scope_before_writing_chat_ledger"
+    assert body["governance"]["evidence"]["actor_present"] is True
+    assert body["governance"]["evidence"]["required_scope_count"] == 1
+
+    ledger_path = data_root / "conversations" / "ledger" / "ledger.jsonl"
+    assert not ledger_path.exists()
+
+
 def test_chat_send_projects_visible_redacted_telemetry_context(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
     monkeypatch.setenv(
-        "FRANCIS_API_ACTOR_SCOPES", json.dumps({"test.telemetry.ide": ["telemetry.ide_diagnostics.write"]})
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps(
+            {
+                "api.chat": ["chat.write"],
+                "test.telemetry.ide": ["telemetry.ide_diagnostics.write"],
+            }
+        ),
     )
 
     from fastapi.testclient import TestClient
@@ -340,6 +379,9 @@ def test_chat_send_projects_visible_redacted_telemetry_context(monkeypatch, tmp_
     ledger_text = (data_root / "conversations" / "ledger" / "ledger.jsonl").read_text(encoding="utf-8")
     ledger_entries = [json.loads(line) for line in ledger_text.splitlines()]
     assistant_entry = next(item for item in reversed(ledger_entries) if item["role"] == "assistant")
+    user_entry = next(item for item in ledger_entries if item["role"] == "user")
+    assert user_entry["meta"]["api_actor"] == "api.chat"
+    assert assistant_entry["meta"]["api_actor"] == "api.chat"
     assert assistant_entry["meta"]["telemetry_context"]["kind"] == "francis.stage7.telemetry.context"
 
     combined = json.dumps({"body": body, "prompt": captured_prompts[0], "ledger": ledger_entries}, sort_keys=True)

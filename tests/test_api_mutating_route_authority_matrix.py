@@ -137,6 +137,17 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
     assert "permission_gate" in industrial["denial_behavior"]
     assert "exact-action" in industrial["approval_requirement"]
 
+    chat = entries["/chat/send"]
+    assert chat["family"] == "chat"
+    assert chat["required_actor"] == (
+        "payload.request_actor, payload.api_actor, payload.actor, or api.chat default for generic chat; internal "
+        "chat.send for /mission ingress"
+    )
+    assert chat["required_scope"] == "chat.write for generic chat; missions.write for /mission ingress"
+    assert chat["governance_maturity"] == "permission_gated"
+    assert "generic ledger write" in chat["denial_behavior"]
+    assert "mission declaration authority" in chat["notes"]
+
     read_batch = entries["/operations/get_many"]
     assert read_batch["family"] == "operations_read_batch"
     assert read_batch["required_actor"] == "none"

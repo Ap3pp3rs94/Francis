@@ -75,12 +75,13 @@ _RULES: tuple[AuthorityRule, ...] = (
     AuthorityRule(
         family="chat",
         prefixes=("/chat/send",),
-        required_actor="internal chat mission actor for /mission ingress; generic chat has no write actor",
-        required_scope="missions.write for /mission ingress only",
+        required_actor="payload.request_actor, payload.api_actor, payload.actor, or api.chat default for generic chat; internal chat.send for /mission ingress",
+        required_scope="chat.write for generic chat; missions.write for /mission ingress",
         approval_requirement="mission gates apply after /mission ingress; generic chat does not approve",
         receipt_behavior="conversation ledger; mission ingress can create mission/operation receipts",
-        denial_behavior="permission_gate or operator_posture denial for mission ingress",
-        governance_maturity="conditional_permission_gate",
+        denial_behavior="api_permission_denied via permission_gate before generic ledger write; permission_gate or operator_posture denial for mission ingress",
+        governance_maturity="permission_gated",
+        notes="Generic chat ledger writes are scoped separately from mission declaration authority.",
     ),
     AuthorityRule(
         family="attachments",

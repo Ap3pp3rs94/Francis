@@ -21,6 +21,7 @@ from francis.telemetry.context import telemetry_context_snapshot
 router = APIRouter()
 manager = ConnectionManager()
 _CHAT_MISSION_ACTOR = "chat.send"
+_CHAT_WRITE_SCOPE = "chat.write"
 _MISSION_WRITE_SCOPE = "missions.write"
 
 
@@ -32,6 +33,9 @@ def health() -> dict[str, object]:
 class ChatIn(BaseModel):
     message: str
     use_llm: bool = False
+    actor: str | None = None
+    request_actor: str | None = None
+    api_actor: str | None = None
 
 
 def _safe_dict(value: object) -> dict[str, object]:
@@ -162,20 +166,39 @@ def _mission_write_permission(actor: object, *, route: str, method: str) -> ApiP
     )
 
 
-def _permission_denied(decision: ApiPermissionDecision) -> dict[str, object]:
+def _chat_actor(payload: ChatIn) -> str:
+    actor = (payload.request_actor or payload.api_actor or payload.actor or "").strip()
+    return actor or "api.chat"
+
+
+def _chat_write_permission(actor: object, *, route: str, method: str) -> ApiPermissionDecision:
+    return ApiPermissionGate.from_env().check(
+        actor_id=actor,
+        required_scopes=[_CHAT_WRITE_SCOPE],
+        route=route,
+        method=method,
+    )
+
+
+def _permission_denied(
+    decision: ApiPermissionDecision,
+    *,
+    next_step: str = "configure_actor_scope_before_declaring_chat_missions",
+    reply: str = "Mission declaration denied by permission gate.",
+) -> dict[str, object]:
     governance = {
         "gate": "permission_gate",
         "reason": decision.reason,
-        "next_step": "configure_actor_scope_before_declaring_chat_missions",
+        "next_step": next_step,
         "evidence": decision.evidence,
     }
     return {
         "ok": False,
-        "mode": "mission_ingress",
+        "mode": "chat",
         "status": "denied",
         "error": "api_permission_denied",
         "governance": governance,
-        "reply": "Mission declaration denied by permission gate.",
+        "reply": reply,
     }
 
 
@@ -304,7 +327,12 @@ def _mission_ingress_reply(
 
     permission = _mission_write_permission(_CHAT_MISSION_ACTOR, route=route, method=method)
     if not permission.allowed:
-        denied = _permission_denied(permission)
+        denied = _permission_denied(
+            permission,
+            next_step="configure_actor_scope_before_declaring_chat_missions",
+            reply="Mission declaration denied by permission gate.",
+        )
+        denied["mode"] = "mission_ingress"
         append(
             "assistant",
             str(denied["reply"]),
@@ -401,9 +429,22 @@ def send(payload: ChatIn) -> dict[str, object]:
         mission_reply = _mission_ingress_reply(payload, route="/chat/send", method="POST")
         if mission_reply is not None:
             return mission_reply
+        actor = _chat_actor(payload)
+        permission = _chat_write_permission(actor, route="/chat/send", method="POST")
+        if not permission.allowed:
+            return _permission_denied(
+                permission,
+                next_step="configure_actor_scope_before_writing_chat_ledger",
+                reply="Chat request denied by permission gate.",
+            )
         telemetry_context = telemetry_context_snapshot(surface="chat")
         return {
-            "reply": handle(payload.message, use_llm=payload.use_llm, telemetry_context=telemetry_context),
+            "reply": handle(
+                payload.message,
+                use_llm=payload.use_llm,
+                telemetry_context=telemetry_context,
+                api_actor=actor,
+            ),
             "telemetry_context": telemetry_context,
         }
     except Exception as exc:
