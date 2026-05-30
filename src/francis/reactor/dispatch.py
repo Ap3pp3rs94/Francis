@@ -97,8 +97,8 @@ def _mission_write_permission(actor: str) -> tuple[bool, dict[str, Any]]:
 def _posture_block(action_label: str) -> str:
     try:
         operator_state = operator_mode_snapshot()
-    except Exception as exc:
-        _LOG.exception("Reactor operator posture snapshot failed", exc_info=(type(exc), exc, exc.__traceback__))
+    except Exception:
+        _LOG.exception("Reactor operator posture snapshot failed", exc_info=True)
         return f"Execution is blocked until operator posture can be verified: {_INTERNAL_API_ERROR}"
 
     if not bool(operator_state.get("ok")):

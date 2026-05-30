@@ -180,8 +180,6 @@ def _artifact_file_path(path: Path) -> Path:
 
 def _ensure_artifact_run_dir(run_id: str) -> Path:
     target = _artifact_run_dir(run_id)
-    # CodeQL false positive: target is constrained by _artifact_run_dir to the supervised_exec artifact root.
-    # codeql[py/path-injection]
     target.mkdir(parents=True, exist_ok=True)
     return target
 
@@ -232,24 +230,16 @@ def _write_redacted_text(path: Path, value: str) -> None:
 
 def _write_display_artifact_json(run_id: str, filename: str, obj: Any) -> None:
     target = _artifact_file(run_id, filename)
-    # CodeQL false positive: target is constrained by _artifact_file to an allowlisted artifact filename.
-    # codeql[py/path-injection]
     target.parent.mkdir(parents=True, exist_ok=True)
     display_text = _display_safe_json_text(obj)
-    # CodeQL false positive: display_text is redacted and target is bounded by _artifact_file.
-    # codeql[py/path-injection]
     # codeql[py/clear-text-storage-sensitive-data]
     target.write_text(display_text, encoding="utf-8")
 
 
 def _write_display_artifact_text(run_id: str, filename: str, value: str) -> None:
     target = _artifact_file(run_id, filename)
-    # CodeQL false positive: target is constrained by _artifact_file to an allowlisted artifact filename.
-    # codeql[py/path-injection]
     target.parent.mkdir(parents=True, exist_ok=True)
     display_text = redact_secret_text(value or "")
-    # CodeQL false positive: display_text is redacted and target is bounded by _artifact_file.
-    # codeql[py/path-injection]
     target.write_text(display_text, encoding="utf-8")
 
 
@@ -317,32 +307,40 @@ def _validated_cwd(cwd_raw: Any) -> tuple[str, str]:
     return str(_real_path(repo_root())), "cwd_outside_allowed_root"
 
 
-def _parse_command_args(user_command: str) -> tuple[list[str], str]:
+def _parse_command_args(user_command: str) -> tuple[list[str], str, int, str]:
     command = _safe_str(user_command).strip()
     if not command:
-        return [], "missing_user_command"
+        return [], "", 0, "missing_user_command"
     if any(token in command for token in _FORBIDDEN_COMMAND_TOKENS):
-        return [], "unsupported_shell_syntax"
+        return [], "", 0, "unsupported_shell_syntax"
     try:
         args = shlex.split(command, posix=os.name != "nt")
     except ValueError:
-        return [], "invalid_command_syntax"
+        return [], "", 0, "invalid_command_syntax"
     if not args:
-        return [], "missing_user_command"
+        return [], "", 0, "missing_user_command"
 
     executable = Path(args[0]).name.lower()
     if executable not in _ALLOWED_EXECUTABLES:
-        return [], "unsupported_command"
+        return [], "", 0, "unsupported_command"
+
+    requested_executable = executable
+    requested_argument_count = max(0, len(args) - 1)
 
     if executable == "echo":
-        return [
-            sys.executable,
-            "-c",
-            "import sys; print(' '.join(sys.argv[1:]))",
-            *args[1:],
-        ], ""
+        return (
+            [
+                sys.executable,
+                "-c",
+                "import sys; print(' '.join(sys.argv[1:]))",
+                *args[1:],
+            ],
+            requested_executable,
+            requested_argument_count,
+            "",
+        )
 
-    return args, ""
+    return args, requested_executable, requested_argument_count, ""
 
 
 def _normalize_string_list(value: Any) -> list[str]:
@@ -356,16 +354,21 @@ def _normalize_string_list(value: Any) -> list[str]:
     return out
 
 
-def _command_artifact_metadata(*, user_command: str, command_args: list[str], cwd: str) -> dict[str, Any]:
-    raw_parts = shlex.split(user_command, posix=os.name != "nt") if user_command else []
-    requested_executable = Path(raw_parts[0]).name.lower() if raw_parts else ""
+def _command_artifact_metadata(
+    *,
+    user_command: str,
+    requested_executable: str,
+    command_args: list[str],
+    requested_argument_count: int,
+    cwd: str,
+) -> dict[str, Any]:
     execution_executable = Path(command_args[0]).name.lower() if command_args else ""
     cwd_path = Path(cwd)
     return {
         "command_preview": redact_secret_text(user_command),
         "requested_executable": requested_executable,
         "execution_executable": execution_executable,
-        "argument_count": max(0, len(raw_parts) - 1),
+        "argument_count": requested_argument_count,
         "execution_argument_count": max(0, len(command_args) - 1),
         "cwd_validated": True,
         "cwd_policy": "allowed_root_checked",
@@ -472,7 +475,7 @@ def run_supervised_exec(inputs: dict[str, Any], objective: str) -> dict[str, Any
     cwd, cwd_error = _validated_cwd(inputs.get("cwd"))
     if cwd_error:
         return {"kind": "supervised_exec.result", "ok": False, "status": "invalid", "error": cwd_error}
-    command_args, command_error = _parse_command_args(user_command)
+    command_args, requested_executable, requested_argument_count, command_error = _parse_command_args(user_command)
     if command_error:
         return {"kind": "supervised_exec.result", "ok": False, "status": "invalid", "error": command_error}
     timeout_sec = _normalize_timeout_sec(inputs.get("timeout_sec"))
@@ -661,7 +664,13 @@ def run_supervised_exec(inputs: dict[str, Any], objective: str) -> dict[str, Any
             "kind": "supervised_exec.plan",
             "approval_id": approval_id,
             "objective": redact_secret_text(objective),
-            "command": _command_artifact_metadata(user_command=user_command, command_args=command_args, cwd=cwd),
+            "command": _command_artifact_metadata(
+                user_command=user_command,
+                requested_executable=requested_executable,
+                command_args=command_args,
+                requested_argument_count=requested_argument_count,
+                cwd=cwd,
+            ),
             "timeout_sec": timeout_sec,
             "expected_artifacts": expected_artifacts,
             "prechecks": prechecks,
@@ -690,7 +699,13 @@ def run_supervised_exec(inputs: dict[str, Any], objective: str) -> dict[str, Any
                 "kind": "supervised_exec.run_result",
                 "approval_id": approval_id,
                 "objective": redact_secret_text(objective),
-                "command": _command_artifact_metadata(user_command=user_command, command_args=command_args, cwd=cwd),
+                "command": _command_artifact_metadata(
+                    user_command=user_command,
+                    requested_executable=requested_executable,
+                    command_args=command_args,
+                    requested_argument_count=requested_argument_count,
+                    cwd=cwd,
+                ),
                 "timeout_sec": timeout_sec,
                 "elapsed_sec": dt,
                 "exit_code": int(proc.returncode),
@@ -714,7 +729,13 @@ def run_supervised_exec(inputs: dict[str, Any], objective: str) -> dict[str, Any
                 "kind": "supervised_exec.run_result",
                 "approval_id": approval_id,
                 "objective": redact_secret_text(objective),
-                "command": _command_artifact_metadata(user_command=user_command, command_args=command_args, cwd=cwd),
+                "command": _command_artifact_metadata(
+                    user_command=user_command,
+                    requested_executable=requested_executable,
+                    command_args=command_args,
+                    requested_argument_count=requested_argument_count,
+                    cwd=cwd,
+                ),
                 "timeout_sec": timeout_sec,
                 "elapsed_sec": dt,
                 "exit_code": None,

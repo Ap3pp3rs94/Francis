@@ -143,8 +143,8 @@ def _git(args: list[str], *, cwd: Path) -> dict[str, Any]:
             timeout=_GIT_TIMEOUT_SECONDS,
             check=False,
         )
-    except Exception as exc:
-        _LOG.exception("Git telemetry snapshot command failed", exc_info=(type(exc), exc, exc.__traceback__))
+    except Exception:
+        _LOG.exception("Git telemetry snapshot command failed", exc_info=True)
         return {"ok": False, "stdout": "", "stderr": "", "error": _INTERNAL_API_ERROR}
 
     return {

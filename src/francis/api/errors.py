@@ -16,7 +16,7 @@ def api_error_code(*, code: str = _ERROR_CODE) -> str:
 
 def log_api_exception(exc: BaseException, *, route: str = "") -> None:
     route_text = f" route={route}" if route else ""
-    _LOG.exception("API boundary exception%s", route_text, exc_info=(type(exc), exc, exc.__traceback__))
+    _LOG.exception("API boundary exception%s", route_text, exc_info=True)
 
 
 def api_error_message(exc: BaseException, *, code: str = _ERROR_CODE, route: str = "") -> str:
@@ -25,7 +25,7 @@ def api_error_message(exc: BaseException, *, code: str = _ERROR_CODE, route: str
 
 
 async def sanitized_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    _LOG.exception("Unhandled API exception route=%s", request.url.path, exc_info=(type(exc), exc, exc.__traceback__))
+    _LOG.exception("Unhandled API exception route=%s", request.url.path, exc_info=True)
     return JSONResponse(
         status_code=500,
         content={

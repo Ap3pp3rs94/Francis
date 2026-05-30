@@ -1,22 +1,34 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, cast
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 
-def _workflow() -> dict:
+def _workflow() -> dict[Any, Any]:
     workflow_path = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "ci.yml"
-    return yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    if not isinstance(workflow, dict):
+        raise ValueError("ci workflow must be a mapping")
+    return cast(dict[Any, Any], workflow)
 
 
-def _step_by_name(steps: list[dict], name: str) -> dict:
+def _step_by_name(steps: list[dict[str, Any]], name: str) -> dict[str, Any]:
     return next(step for step in steps if step.get("name") == name)
 
 
-def _workflow_triggers(workflow: dict) -> dict:
+def _workflow_triggers(workflow: dict[Any, Any]) -> dict[str, Any]:
     # PyYAML still treats the GitHub Actions "on" key as a YAML 1.1 boolean.
-    return workflow.get("on", workflow.get(True))
+    if "on" in workflow:
+        triggers = workflow["on"]
+    elif True in workflow:
+        triggers = workflow[True]
+    else:
+        raise ValueError("ci workflow triggers missing")
+    if isinstance(triggers, dict):
+        return cast(dict[str, Any], triggers)
+    raise ValueError("ci workflow triggers must be a mapping")
 
 
 def test_ci_workflow_triggers_cancel_stale_runs() -> None:

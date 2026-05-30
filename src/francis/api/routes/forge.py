@@ -83,14 +83,11 @@ def _atomic_write_record_json(collection: str, record_id: str, obj: dict[str, An
     if resolved_path is None:
         return None
     # CodeQL false positive: resolved_path is built from an allowlisted collection and safe record id.
-    # codeql[py/path-injection]
     resolved_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = resolved_path.with_suffix(resolved_path.suffix + ".tmp")
     # CodeQL false positive: tmp is derived from resolved_path after collection-root containment.
-    # codeql[py/path-injection]
     tmp.write_text(json.dumps(obj, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
     # CodeQL false positive: both paths are constrained under the same collection root.
-    # codeql[py/path-injection]
     os.replace(tmp, resolved_path)
     return resolved_path
 
@@ -205,7 +202,6 @@ def _read_json_record(path: Path, collection: str) -> dict[str, Any] | None:
         return None
     try:
         # CodeQL false positive: resolved_path is accepted only by _collection_path containment and suffix checks.
-        # codeql[py/path-injection]
         raw = json.loads(resolved_path.read_text(encoding="utf-8", errors="replace"))
     except Exception:
         return None
@@ -241,7 +237,6 @@ def _read_raw_record(path: Path, collection: str) -> dict[str, Any] | None:
         return None
     try:
         # CodeQL false positive: resolved_path is accepted only by _collection_path containment and suffix checks.
-        # codeql[py/path-injection]
         raw = json.loads(resolved_path.read_text(encoding="utf-8", errors="replace"))
     except Exception:
         return None
@@ -480,7 +475,6 @@ def _get_collection(collection: str, id: str) -> dict[str, Any]:
     if path is None:
         return {"ok": False, "error": "invalid_id", "item": None}
     # CodeQL false positive: path is built from an allowlisted collection and safe record id.
-    # codeql[py/path-injection]
     if not path.exists() or not path.is_file():
         return {"ok": False, "error": "not_found", "item": None}
     item = _read_json_record(path, collection)
@@ -650,7 +644,6 @@ def decide_proposal(payload: ProposalDecisionIn, request: Request) -> dict[str, 
     if proposal_path is None:
         return {"ok": False, "applied": False, "error": "invalid_id", "item": None}
     # CodeQL false positive: proposal_path is built from the proposals collection and a safe record id.
-    # codeql[py/path-injection]
     if not proposal_path.exists() or not proposal_path.is_file():
         return {"ok": False, "applied": False, "error": "not_found", "item": None}
 

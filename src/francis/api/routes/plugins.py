@@ -758,10 +758,8 @@ def _plugin_promotion_quality(
     readme_path = _generated_child_path(plugin_dir, "README.md") if plugin_dir is not None else None
     docs: Any = payload_meta.get("docs") or payload_meta.get("documentation") or []
     # CodeQL false positive: readme_path is constrained under the exact generated plugin directory.
-    # codeql[py/path-injection]
     if not docs and readme_path is not None and readme_path.exists():
         # CodeQL false positive: readme_path is constrained under the exact generated plugin directory.
-        # codeql[py/path-injection]
         docs = [str(readme_path.resolve())]
     return {
         "summary": payload_meta.get("summary")
@@ -808,10 +806,8 @@ def _plugin_promotion_readiness(
     readme_path = _generated_child_path(plugin_dir, "README.md") if plugin_dir is not None else None
     docs = payload_meta.get("docs") or payload_meta.get("documentation") or []
     # CodeQL false positive: readme_path is constrained under the exact generated plugin directory.
-    # codeql[py/path-injection]
     if not _has_readiness_value(docs) and readme_path is not None and readme_path.exists():
         # CodeQL false positive: readme_path is constrained under the exact generated plugin directory.
-        # codeql[py/path-injection]
         docs = [str(readme_path.resolve())]
 
     risk_tier = _safe_str(payload_meta.get("risk_tier")).strip().lower() or _plugin_risk_tier(staged)
@@ -1375,13 +1371,11 @@ def _delete_plugin(registry: dict[str, Any], plugin_id: str) -> bool:
 
 def _parse_simple_yaml(path: Path) -> dict[str, str]:
     # CodeQL false positive: callers pass paths returned by _generated_child_path.
-    # codeql[py/path-injection]
     if not path.exists() or not path.is_file():
         return {}
     out: dict[str, str] = {}
     try:
         # CodeQL false positive: callers pass paths returned by _generated_child_path.
-        # codeql[py/path-injection]
         for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
             stripped = line.strip()
             if not stripped or stripped.startswith("#") or ":" not in stripped:
@@ -1448,7 +1442,6 @@ def _generated_registry_snapshot_path(plugin_dir: Path) -> Path:
 def _load_generated_contract(plugin_dir: Path) -> PluginSpec | None:
     spec_path = _generated_contract_path(plugin_dir)
     # CodeQL false positive: spec_path is constrained under plugin_dir by _required_generated_child_path.
-    # codeql[py/path-injection]
     if not spec_path.exists() or not spec_path.is_file():
         return None
     return PluginLoader(spec_dir=plugin_dir).load(spec_path)
@@ -1457,12 +1450,10 @@ def _load_generated_contract(plugin_dir: Path) -> PluginSpec | None:
 def _read_generated_registry_snapshot(plugin_dir: Path) -> dict[str, Any]:
     snapshot_path = _generated_registry_snapshot_path(plugin_dir)
     # CodeQL false positive: snapshot_path is constrained under plugin_dir by _required_generated_child_path.
-    # codeql[py/path-injection]
     if not snapshot_path.exists() or not snapshot_path.is_file():
         return {}
     try:
         # CodeQL false positive: snapshot_path is constrained under plugin_dir by _required_generated_child_path.
-        # codeql[py/path-injection]
         raw = json.loads(snapshot_path.read_text(encoding="utf-8", errors="replace"))
     except Exception:
         return {}
@@ -1542,7 +1533,6 @@ def _record_from_generated_contract(
         "attestation": spec.attestation,
         "contract_source_path": spec.source_path or str(_generated_contract_path(plugin_dir)),
         # CodeQL false positive: snapshot_path is constrained under plugin_dir by _required_generated_child_path.
-        # codeql[py/path-injection]
         "registry_snapshot_path": str(snapshot_path.resolve()) if snapshot_path.exists() else "",
     }
     tags = _merge_unique_tags(current.get("tags"), [spec.origin], list(spec.capabilities), ["generated"])
@@ -1561,10 +1551,8 @@ def _record_from_generated_contract(
             "installed_ts": int(current.get("installed_ts") or now_s),
             "updated_ts": now_s,
             # CodeQL false positive: plugin_dir is constrained by _generated_plugin_dir to plugins/generated/<plugin_id>.
-            # codeql[py/path-injection]
             "generated_dir": str(plugin_dir.resolve()),
             # CodeQL false positive: artifact_path is constrained by _plugin_artifact_path/artifact-root conventions.
-            # codeql[py/path-injection]
             "artifact_zip": str(artifact_path.resolve()) if artifact_path.exists() else "",
             "capabilities": _capabilities_from_contract(plugin_id, spec),
             "tags": tags,
@@ -1581,7 +1569,6 @@ def _read_generated_details(plugin_id: str, plugin: dict[str, Any]) -> dict[str,
     if plugin_dir is None:
         return {}
     # CodeQL false positive: plugin_dir is constrained by _generated_plugin_dir to plugins/generated/<plugin_id>.
-    # codeql[py/path-injection]
     if not plugin_dir.exists() or not plugin_dir.is_dir():
         return {}
 
@@ -1599,17 +1586,14 @@ def _read_generated_details(plugin_id: str, plugin: dict[str, Any]) -> dict[str,
     readme_path = _generated_child_path(plugin_dir, "README.md")
     readme = (
         # CodeQL false positive: readme_path is constrained under plugin_dir by _generated_child_path.
-        # codeql[py/path-injection]
         readme_path.read_text(encoding="utf-8", errors="replace")
         # CodeQL false positive: readme_path is constrained under plugin_dir by _generated_child_path.
-        # codeql[py/path-injection]
         if readme_path is not None and readme_path.exists()
         else ""
     )
 
     files: list[str] = []
     # CodeQL false positive: plugin_dir is constrained by _generated_plugin_dir to plugins/generated/<plugin_id>.
-    # codeql[py/path-injection]
     for p in plugin_dir.rglob("*"):
         if p.is_file():
             relative_file = _generated_relative_file(plugin_dir, p)
@@ -1657,7 +1641,6 @@ def _ensure_plugin_from_generated(registry: dict[str, Any], plugin_id: str) -> b
     if plugin_dir is None:
         return False
     # CodeQL false positive: plugin_dir is constrained by _generated_plugin_dir to plugins/generated/<plugin_id>.
-    # codeql[py/path-injection]
     if not plugin_dir.exists() or not plugin_dir.is_dir():
         return False
 
@@ -1690,10 +1673,8 @@ def _ensure_plugin_from_generated(registry: dict[str, Any], plugin_id: str) -> b
                 "installed_ts": int(current.get("installed_ts") or now_s),
                 "updated_ts": now_s,
                 # CodeQL false positive: plugin_dir is constrained by _generated_plugin_dir to plugins/generated/<plugin_id>.
-                # codeql[py/path-injection]
                 "generated_dir": str(plugin_dir.resolve()),
                 # CodeQL false positive: artifact_path is constrained by artifact-root/plugin id conventions.
-                # codeql[py/path-injection]
                 "artifact_zip": str(artifact_path.resolve()) if artifact_path.exists() else "",
                 "tags": _parse_tags(current.get("tags")) or ["generated"],
                 "meta": {
@@ -2212,11 +2193,9 @@ def download(plugin_id: str):
     if path is None:
         return {"ok": False, "error": "artifact_path_invalid"}
     # CodeQL false positive: path is constrained by _plugin_artifact_path to data/artifacts/plugins/<plugin_id>.zip.
-    # codeql[py/path-injection]
     if not path.exists():
         return {"ok": False, "error": "not_found"}
     # CodeQL false positive: path is constrained by _plugin_artifact_path to data/artifacts/plugins/<plugin_id>.zip.
-    # codeql[py/path-injection]
     return FileResponse(path, filename=path.name)
 
 
@@ -2379,7 +2358,6 @@ def get_plugin(id: str) -> dict[str, object]:
                     )
                     is not None
                     # CodeQL false positive: artifact_path is constrained by _plugin_artifact_path.
-                    # codeql[py/path-injection]
                     and artifact_path.exists()
                 ),
                 "spec_exists": bool(isinstance(details.get("contract"), dict) and details.get("contract")),
@@ -2823,20 +2801,16 @@ def uninstall_plugin(payload: PluginUninstallIn, request: Request) -> dict[str, 
         if generated_dir:
             generated_path = _generated_plugin_dir(plugin_id, generated_dir)
             # CodeQL false positive: generated_path is constrained to the exact generated plugin directory.
-            # codeql[py/path-injection]
             if generated_path is not None and generated_path.exists():
                 # CodeQL false positive: generated_path is constrained to the exact generated plugin directory.
-                # codeql[py/path-injection]
                 shutil.rmtree(generated_path, ignore_errors=True)
 
         if artifact_zip:
             artifact_path = _plugin_artifact_path(plugin_id, artifact_zip)
             # CodeQL false positive: artifact_path is constrained to data/artifacts/plugins/<plugin_id>.zip.
-            # codeql[py/path-injection]
             if artifact_path is not None and artifact_path.exists():
                 try:
                     # CodeQL false positive: artifact_path is constrained to data/artifacts/plugins/<plugin_id>.zip.
-                    # codeql[py/path-injection]
                     artifact_path.unlink()
                 except OSError:
                     pass
