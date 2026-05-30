@@ -2336,7 +2336,172 @@ def context_feedback_memory_assistance_operator_feedback_loop_true_execution_tra
             if review_ready and true_execution_trace_observed and missing_true_execution_trace
             else "stage7_context_feedback_memory_assistance_true_execution_trace_capture"
             if review_ready and not true_execution_trace_observed
-            else "stage7_context_feedback_memory_assistance_true_execution_trace_review"
+            else "stage7_context_feedback_memory_assistance_done_criteria_review"
+        ),
+    }
+
+
+@router.get("/context/feedback/memory-assistance-feedback-loop-done-criteria-review")
+def context_feedback_memory_assistance_operator_feedback_loop_done_criteria_review(
+    limit: int = 20,
+) -> dict[str, Any]:
+    safe_limit = max(1, min(int(limit), 100))
+    trace_review = context_feedback_memory_assistance_operator_feedback_loop_true_execution_trace_review(
+        limit=safe_limit
+    )
+    action_quality = context_feedback_memory_assistance_operator_feedback_loop_action_quality_signal_review(
+        limit=safe_limit
+    )
+    primary_loop = context_feedback_memory_assistance_operator_feedback_loop_primary_loop_evidence_review(
+        limit=safe_limit
+    )
+    sensing_summary = context_feedback_memory_assistance_operator_feedback_loop_sensing_indicator_summary(
+        limit=safe_limit
+    )
+    context_snapshot = telemetry_context_snapshot(surface="feedback_memory_assistance_done_criteria_review")
+    policy = telemetry_context_feedback_memory_assistance_policy()
+    policy_governance_value = policy.get("governance")
+    policy_governance: dict[str, Any] = policy_governance_value if isinstance(policy_governance_value, dict) else {}
+    policy_forbidden_value = policy.get("forbidden_influence")
+    policy_forbidden: list[Any] = policy_forbidden_value if isinstance(policy_forbidden_value, list) else []
+    primary_loop_items_value = primary_loop.get("primary_loop_evidence")
+    primary_loop_items: list[Any] = primary_loop_items_value if isinstance(primary_loop_items_value, list) else []
+    ui_return_ready = any(
+        isinstance(item, dict) and item.get("id") == "ui_return" and item.get("ready") is True
+        for item in primary_loop_items
+    )
+    criteria = [
+        {
+            "id": "useful_action_quality",
+            "ready": bool(action_quality.get("action_quality_signal_review_ready"))
+            and bool(action_quality.get("quality_signals")),
+            "evidence": {
+                "status": action_quality.get("status", "unknown"),
+                "quality_signals": action_quality.get("quality_signals", []),
+                "accepted_live_sample": bool(action_quality.get("accepted_live_sample")),
+            },
+        },
+        {
+            "id": "scoped_lawful_policy",
+            "ready": (
+                policy.get("status") == "policy_ready"
+                and "grant_execution_authority" in policy_forbidden
+                and policy.get("grants_execution_authority") is False
+                and policy.get("grants_mutation_authority") is False
+                and policy_governance.get("grants_memory_write_authority") is False
+            ),
+            "evidence": {
+                "policy_id": policy.get("policy_id", ""),
+                "forbidden_influence": policy_forbidden,
+            },
+        },
+        {
+            "id": "redacted_context",
+            "ready": (
+                context_snapshot.get("redacted") is True
+                and context_snapshot.get("stores_raw_events") is False
+                and policy_governance.get("stores_prompt_body") is False
+                and policy_governance.get("stores_model_response") is False
+            ),
+            "evidence": {
+                "context_status": context_snapshot.get("status", "unknown"),
+                "redacted": bool(context_snapshot.get("redacted")),
+                "stores_raw_events": bool(context_snapshot.get("stores_raw_events")),
+            },
+        },
+        {
+            "id": "visible_non_invasive_sensing",
+            "ready": (
+                context_snapshot.get("visible_indicator") is True
+                and context_snapshot.get("hidden_sensing") is False
+                and sensing_summary.get("visible_sensing_indicators_ready") is True
+            ),
+            "evidence": {
+                "visible_indicator": bool(context_snapshot.get("visible_indicator")),
+                "hidden_sensing": bool(context_snapshot.get("hidden_sensing")),
+                "sensing_status": sensing_summary.get("status", "unknown"),
+            },
+        },
+        {
+            "id": "traceable_primary_loop",
+            "ready": (
+                trace_review.get("review_ready") is True
+                and trace_review.get("true_execution_trace_observed") is True
+                and _safe_count(trace_review.get("true_execution_trace_count")) >= 2
+                and not trace_review.get("missing_true_execution_trace")
+            ),
+            "evidence": {
+                "trace_status": trace_review.get("status", "unknown"),
+                "receipt_backed_trace_count": _safe_count(trace_review.get("receipt_backed_trace_count")),
+                "true_execution_trace_count": _safe_count(trace_review.get("true_execution_trace_count")),
+                "missing_true_execution_trace": trace_review.get("missing_true_execution_trace", []),
+            },
+        },
+        {
+            "id": "ui_return_visible",
+            "ready": ui_return_ready,
+            "evidence": {
+                "surface": "Telemetry & Continuation",
+                "source": "apps/chat_ui/src/App.tsx",
+                "trace_handles_visible": True,
+            },
+        },
+    ]
+    ready_count = sum(1 for criterion in criteria if criterion["ready"])
+    done_criteria_ready = ready_count == len(criteria)
+    return {
+        "ok": True,
+        "kind": "francis.stage7.telemetry.context_feedback_memory_assistance_done_criteria_review",
+        "stage": "Stage 7 / Telemetry MVP",
+        "source_id": "telemetry_context",
+        "status": "done_criteria_ready" if done_criteria_ready else "partial_done_criteria",
+        "target": "feedback_memory_assistance_prompt_integration",
+        "done_criteria_ready": done_criteria_ready,
+        "ready_count": ready_count,
+        "required_count": len(criteria),
+        "criteria": criteria,
+        "trace_review": {
+            "route": "/telemetry/context/feedback/memory-assistance-feedback-loop-true-execution-trace-review",
+            "status": trace_review.get("status", "unknown"),
+            "true_execution_trace_count": _safe_count(trace_review.get("true_execution_trace_count")),
+        },
+        "roadmap_done_language": [
+            "telemetry_is_useful_scoped_and_redacted",
+            "action_quality_improves_with_context",
+            "relevance_feels_lawful_not_mysterious",
+            "user_does_not_feel_spied_on",
+        ],
+        "read_only": True,
+        "writes_memory": False,
+        "writes_feedback": False,
+        "mutates_prompt": False,
+        "sends_chat": False,
+        "calls_model": False,
+        "selects_tools": False,
+        "trains_model": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "done_criteria_review": True,
+            "bounded_to_feedback_memory_assistance_loop": True,
+            "does_not_mark_stage7_closed": True,
+            "uses_existing_trace_review": True,
+            "uses_existing_action_quality_review": True,
+            "uses_existing_sensing_summary": True,
+            "telemetry_is_untrusted_input": True,
+            "does_not_write_memory": True,
+            "does_not_write_feedback": True,
+            "does_not_send_chat": True,
+            "does_not_call_model": True,
+            "does_not_select_tools": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": (
+            "stage7_telemetry_multi_source_usefulness_review"
+            if done_criteria_ready
+            else "stage7_context_feedback_memory_assistance_done_criteria_review"
         ),
     }
 

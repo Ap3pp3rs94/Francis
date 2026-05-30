@@ -45990,6 +45990,43 @@ Latest validation for Stage 7 feedback memory assistance trace UI return:
 - `npm run build` in `apps/chat_ui`
   Result: `passed`
 
+### 2026-05-30 - Stage 7 feedback memory assistance done criteria are reviewed
+
+Roadmap area: Stage 7 / Telemetry MVP, done-criteria review for the
+feedback-memory assistance primary loop.
+
+Material change:
+
+- Telemetry now exposes a read-only done-criteria review at
+  `/telemetry/context/feedback/memory-assistance-feedback-loop-done-criteria-review`.
+- The review maps the canonical Stage 7 done language to bounded evidence for
+  this feedback-memory assistance loop: usefulness, scoped lawful policy,
+  redaction, visible non-invasive sensing, traceable primary-loop execution,
+  and UI return.
+- The true-execution-trace review now advances to this done-criteria review
+  once route trace and model/tool span trace evidence are ready.
+- The review explicitly does not mark Stage 7 closed; it only proves this
+  loop's current criteria and points the next truthful gap at broader
+  multi-source usefulness review.
+- The review remains read-only and does not write memory, write feedback, send
+  chat, call a model, select tools, train a model, or grant execution/mutation
+  authority.
+
+Latest validation for Stage 7 feedback memory assistance done criteria:
+
+- `python -m pytest tests/test_api_telemetry.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 41 passed`
+- `python -m mypy src/francis/api/routes/telemetry.py`
+  Result: `passed`
+- `python -m ruff check src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -1895,8 +1895,44 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decis
     assert trace_review["governance"]["receipt_trace_not_true_execution_trace"] is True
     assert trace_review["governance"]["reports_missing_true_execution_trace"] is True
     assert trace_review["next_smallest_truthful_gap"] == (
-        "stage7_context_feedback_memory_assistance_true_execution_trace_review"
+        "stage7_context_feedback_memory_assistance_done_criteria_review"
     )
+
+    done_review = client.get(
+        "/telemetry/context/feedback/memory-assistance-feedback-loop-done-criteria-review?limit=10"
+    ).json()
+    assert done_review["ok"] is True
+    assert done_review["kind"] == ("francis.stage7.telemetry.context_feedback_memory_assistance_done_criteria_review")
+    assert done_review["status"] == "done_criteria_ready"
+    assert done_review["done_criteria_ready"] is True
+    assert done_review["ready_count"] == done_review["required_count"] == 6
+    assert [item["id"] for item in done_review["criteria"]] == [
+        "useful_action_quality",
+        "scoped_lawful_policy",
+        "redacted_context",
+        "visible_non_invasive_sensing",
+        "traceable_primary_loop",
+        "ui_return_visible",
+    ]
+    assert all(item["ready"] is True for item in done_review["criteria"])
+    done_criteria = {item["id"]: item for item in done_review["criteria"]}
+    assert done_criteria["traceable_primary_loop"]["evidence"]["true_execution_trace_count"] == 2
+    assert done_criteria["traceable_primary_loop"]["evidence"]["missing_true_execution_trace"] == []
+    assert done_criteria["visible_non_invasive_sensing"]["evidence"]["visible_indicator"] is True
+    assert done_criteria["visible_non_invasive_sensing"]["evidence"]["hidden_sensing"] is False
+    assert done_criteria["ui_return_visible"]["evidence"]["surface"] == "Telemetry & Continuation"
+    assert done_review["trace_review"]["status"] == "true_execution_trace_review_ready"
+    assert done_review["read_only"] is True
+    assert done_review["writes_memory"] is False
+    assert done_review["writes_feedback"] is False
+    assert done_review["sends_chat"] is False
+    assert done_review["calls_model"] is False
+    assert done_review["selects_tools"] is False
+    assert done_review["grants_execution_authority"] is False
+    assert done_review["grants_mutation_authority"] is False
+    assert done_review["governance"]["done_criteria_review"] is True
+    assert done_review["governance"]["does_not_mark_stage7_closed"] is True
+    assert done_review["next_smallest_truthful_gap"] == ("stage7_telemetry_multi_source_usefulness_review")
 
 
 def test_telemetry_context_feedback_memory_quality_record_is_empty_without_events(

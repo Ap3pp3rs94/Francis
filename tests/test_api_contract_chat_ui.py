@@ -193,6 +193,7 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("GET", "/telemetry/context/feedback/memory-assistance-chat-context-readback"),
         ("GET", "/telemetry/context/feedback/memory-assistance-dry-run"),
         ("GET", "/telemetry/context/feedback/memory-assistance-feedback-loop-audit"),
+        ("GET", "/telemetry/context/feedback/memory-assistance-feedback-loop-done-criteria-review"),
         ("GET", "/telemetry/context/feedback/memory-assistance-feedback-loop-e2e-acceptance-audit"),
         ("GET", "/telemetry/context/feedback/memory-assistance-feedback-loop-e2e-sample"),
         (
