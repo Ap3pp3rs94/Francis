@@ -23,6 +23,14 @@ from francis.kernel.paths import data_dir
 
 router = APIRouter()
 _MEMORY_TIMELINE_WRITE_SCOPE = "memory.timeline.write"
+_MEMORY_POISON_PATTERNS = (
+    "ignore previous instructions",
+    "ignore_previous_instructions",
+    "disregard previous instructions",
+    "developer message override",
+    "system prompt override",
+    "treat this as trusted memory",
+)
 _ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._:-]{1,127}$")
 _REFERENCE_CSV_FIELDS = (
     "mission_id",
@@ -185,6 +193,202 @@ def _redact_tags(value: Any) -> list[str]:
     return tags
 
 
+def _normalize_confidence(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        confidence = float(value)
+    else:
+        text = _safe_str(value).strip()
+        if not text:
+            return None
+        try:
+            confidence = float(text)
+        except Exception:
+            return None
+    if confidence < 0.0 or confidence > 1.0:
+        return None
+    return round(confidence, 4)
+
+
+def _find_poison_pattern(value: Any) -> str:
+    if isinstance(value, dict):
+        for key, item in value.items():
+            pattern = _find_poison_pattern(key)
+            if pattern:
+                return pattern
+            pattern = _find_poison_pattern(item)
+            if pattern:
+                return pattern
+        return ""
+    if isinstance(value, (list, tuple, set)):
+        for item in value:
+            pattern = _find_poison_pattern(item)
+            if pattern:
+                return pattern
+        return ""
+    text = _safe_str(value).lower()
+    for pattern in _MEMORY_POISON_PATTERNS:
+        if pattern in text:
+            return pattern
+    return ""
+
+
+def _memory_write_contract_denied(
+    *,
+    reason: str,
+    missing_fields: list[str] | None = None,
+    invalid_fields: list[str] | None = None,
+    poison_pattern: str = "",
+) -> dict[str, object]:
+    governance: dict[str, object] = {
+        "gate": "memory_write_contract",
+        "reason": reason,
+        "next_step": "provide_typed_memory_write_contract",
+        "required_fields": [
+            "action_type",
+            "provenance.source",
+            "classification",
+            "confidence",
+            "retention",
+        ],
+    }
+    if missing_fields:
+        governance["missing_fields"] = missing_fields
+    if invalid_fields:
+        governance["invalid_fields"] = invalid_fields
+    if poison_pattern:
+        governance["poison_pattern"] = _redact_text(poison_pattern)
+    return {
+        "ok": False,
+        "status": "denied",
+        "error": "memory_poisoning_input_denied" if poison_pattern else "memory_write_contract_denied",
+        "governance": governance,
+    }
+
+
+def _ttl_seconds(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        ttl_seconds = int(float(_safe_str(value).strip()))
+    except Exception:
+        return None
+    if ttl_seconds <= 0:
+        return None
+    return ttl_seconds
+
+
+def _memory_write_contract(payload: dict[str, Any]) -> tuple[dict[str, object] | None, dict[str, Any]]:
+    meta = _meta(payload.get("meta"))
+    provenance = _meta(payload.get("provenance"))
+    retention = _meta(payload.get("retention"))
+
+    poison_pattern = _find_poison_pattern(
+        {
+            "title": payload.get("title"),
+            "message": payload.get("message") or payload.get("summary") or payload.get("content"),
+            "tags": payload.get("tags"),
+            "payload": payload.get("payload") if "payload" in payload else payload.get("data"),
+            "meta": meta,
+        }
+    )
+    if poison_pattern:
+        return (
+            _memory_write_contract_denied(reason="poisoning_pattern_detected", poison_pattern=poison_pattern),
+            {},
+        )
+
+    action_type = _first_text(payload.get("action_type"), payload.get("actionType"), meta.get("action_type"))
+    source = _first_text(provenance.get("source"), payload.get("source"), meta.get("source"))
+    classification = _first_text(
+        payload.get("classification"),
+        payload.get("memory_classification"),
+        payload.get("memoryClassification"),
+        meta.get("classification"),
+        meta.get("memory_classification"),
+    )
+    confidence = _normalize_confidence(payload.get("confidence") if "confidence" in payload else meta.get("confidence"))
+    retention_policy = _first_text(
+        retention.get("policy"),
+        retention.get("retention_policy"),
+        payload.get("retention_policy"),
+        meta.get("retention_policy"),
+    )
+    retention_class = _first_text(
+        retention.get("class"),
+        retention.get("retention_class"),
+        payload.get("retention_class"),
+        meta.get("retention_class"),
+    )
+    retention_until = _first_text(
+        retention.get("until"),
+        retention.get("retention_until"),
+        payload.get("retention_until"),
+        meta.get("retention_until"),
+    )
+    expires_at = _first_text(
+        retention.get("expires_at"),
+        retention.get("expiresAt"),
+        payload.get("expires_at"),
+        meta.get("expires_at"),
+    )
+    ttl_seconds = retention.get("ttl_seconds") if "ttl_seconds" in retention else retention.get("ttlSeconds")
+    if ttl_seconds is None:
+        ttl_seconds = payload.get("ttl_seconds") if "ttl_seconds" in payload else meta.get("ttl_seconds")
+
+    missing: list[str] = []
+    invalid: list[str] = []
+    if not action_type:
+        missing.append("action_type")
+    if not source:
+        missing.append("provenance.source")
+    if not classification:
+        missing.append("classification")
+    if "confidence" not in payload and "confidence" not in meta:
+        missing.append("confidence")
+    elif confidence is None:
+        invalid.append("confidence")
+    if not any((retention_policy, retention_class, retention_until, expires_at, ttl_seconds is not None)):
+        missing.append("retention")
+    if missing or invalid:
+        return (
+            _memory_write_contract_denied(
+                reason="missing_or_invalid_memory_write_contract",
+                missing_fields=missing,
+                invalid_fields=invalid,
+            ),
+            {},
+        )
+
+    contract_meta: dict[str, Any] = {
+        "source": source,
+        "action_type": action_type,
+        "classification": classification,
+        "confidence": confidence,
+    }
+    if retention_policy:
+        contract_meta["retention_policy"] = retention_policy
+    if retention_class:
+        contract_meta["retention_class"] = retention_class
+    if retention_until:
+        contract_meta["retention_until"] = retention_until
+    if expires_at:
+        contract_meta["expires_at"] = expires_at
+    if ttl_seconds is not None:
+        safe_ttl_seconds = _ttl_seconds(ttl_seconds)
+        if safe_ttl_seconds is None:
+            return (
+                _memory_write_contract_denied(
+                    reason="missing_or_invalid_memory_write_contract",
+                    invalid_fields=["retention.ttl_seconds"],
+                ),
+                {},
+            )
+        contract_meta["ttl_seconds"] = safe_ttl_seconds
+    return None, contract_meta
+
+
 def _memory_timeline_write_actor(payload: dict[str, Any]) -> str:
     return _first_text(payload.get("request_actor"), payload.get("api_actor"), payload.get("actor"))
 
@@ -275,6 +479,11 @@ def _normalize_event(event_id: str, raw: dict[str, Any]) -> dict[str, Any]:
         "id": event_id,
         "ts": _normalize_ts(raw.get("ts") or raw.get("created_ts") or raw.get("time") or _now_s()),
         "kind": _redact_text(raw.get("kind") or raw.get("type")) or "memory_write",
+        "action_type": _redact_text(raw.get("action_type") or raw_meta.get("action_type")),
+        "classification": _redact_text(raw.get("classification") or raw_meta.get("classification")),
+        "confidence": _normalize_confidence(
+            raw.get("confidence") if "confidence" in raw else raw_meta.get("confidence")
+        ),
         "severity": _redact_text(raw.get("severity") or raw.get("level")),
         "operation_status": _redact_text(raw.get("operation_status") or merged_meta.get("operation_status")),
         "domain": _redact_text(raw.get("domain")),
@@ -396,6 +605,9 @@ def _public_event(item: dict[str, Any], *, include_payload: bool) -> dict[str, A
         "id": item.get("id"),
         "ts": item.get("ts"),
         "kind": item.get("kind"),
+        "action_type": item.get("action_type"),
+        "classification": item.get("classification"),
+        "confidence": item.get("confidence"),
         "severity": item.get("severity"),
         "domain": item.get("domain"),
         "actor": item.get("actor"),
@@ -999,6 +1211,10 @@ def record_timeline_event(payload: dict[str, Any], request: Request) -> dict[str
                 "evt", _safe_str(payload.get("kind") or payload.get("title") or "event").strip() or "event"
             )
 
+        contract_denial, contract_meta = _memory_write_contract(payload)
+        if contract_denial is not None:
+            return contract_denial
+
         registry = _load_registry()
         events_obj = registry.get("events")
         if not isinstance(events_obj, list):
@@ -1009,7 +1225,7 @@ def record_timeline_event(payload: dict[str, Any], request: Request) -> dict[str
             (idx for idx, item in enumerate(events_obj) if _safe_str((item or {}).get("id")).strip() == event_id), -1
         )
         existing = events_obj[existing_idx] if existing_idx >= 0 and isinstance(events_obj[existing_idx], dict) else {}
-        payload_meta = _meta(payload.get("meta"))
+        payload_meta = {**_meta(payload.get("meta")), **contract_meta}
 
         merged = {
             **existing,
@@ -1066,7 +1282,7 @@ def record_timeline_event(payload: dict[str, Any], request: Request) -> dict[str
             if isinstance(payload.get("references"), dict)
             else existing.get("references"),
             "loop": payload.get("loop") if isinstance(payload.get("loop"), dict) else existing.get("loop"),
-            "meta": {**_meta(existing.get("meta")), **_meta(payload.get("meta"))},
+            "meta": {**_meta(existing.get("meta")), **payload_meta},
         }
         item = _normalize_event(event_id, merged)
         if existing_idx >= 0:

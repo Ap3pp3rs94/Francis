@@ -138,8 +138,10 @@ INDUSTRIAL_WRITE_TEST_ACTORS = (
     "industrial_api",
     "operator:a",
     "operator:b",
+    "operator:queue",
     "operator:redaction",
     "operator:params",
+    "operator:world_state",
     "test.industrial.write",
 )
 

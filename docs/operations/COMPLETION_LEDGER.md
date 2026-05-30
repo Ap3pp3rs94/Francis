@@ -43900,6 +43900,69 @@ Latest validation for industrial write gating:
   "conditional_permission_gate":1,
   "permission_and_policy_gated":59,"permission_gated":78,
   "read_projection_using_post":1}`
+- CI follow-up: GitHub CI run `26668611759` failed because the new industrial
+  write gate correctly denied existing approval-projection test actors
+  `operator:queue` and `operator:world_state`. The test actor scope policy now
+  grants those existing industrial fixture actors `industrial.write`.
+- `python -m pytest
+  tests/test_api_approvals.py::test_approval_list_surfaces_exact_action_context_for_industrial_request
+  tests/test_api_system_settings.py::test_system_world_state_surfaces_exact_action_context_for_industrial_pending_approval
+  tests/test_api_industrial.py tests/test_api_memory_timeline.py
+  tests/test_api_mutating_route_authority_matrix.py -q --tb=short --maxfail=1`
+  Result: `passed; 33 passed`
+
+### 2026-05-29 - Memory timeline writes require typed contract and reject poisoning patterns
+
+Roadmap area: Phase 2 / P8_MEMORY -> P3_GOVERNANCE -> P7_EXECUTION,
+typed memory-write governance and poisoning resistance.
+
+Material change:
+
+- Direct `POST /memory/timeline/record` and `/memory/timeline/create` writes now
+  require a typed memory-write contract after API actor scope passes and before
+  persistence.
+- Required direct-write contract fields are `action_type`, `provenance.source`,
+  `classification`, `confidence`, and `retention`.
+- Accepted contract metadata is normalized into persisted event metadata and
+  projected back through timeline read APIs as `action_type`, `classification`,
+  `confidence`, `provenance`, and existing retention readback.
+- Scoped writes with missing or invalid contract fields, including out-of-range
+  confidence and non-positive retention TTLs, return
+  `memory_write_contract_denied` and do not create
+  `data/memory/timeline/_events.json`.
+- Scoped writes carrying known memory-poisoning instruction patterns in title,
+  message, tags, payload, or metadata return `memory_poisoning_input_denied`
+  and do not persist.
+- Existing actor-scope checks, redaction, reference projection, loop projection,
+  continuity-ledger projection, and CSV/JSON export behavior remain intact.
+
+Latest validation for typed memory writes:
+
+- `python -m pytest tests/test_api_memory_timeline.py
+  tests/test_api_mutating_route_authority_matrix.py -q --tb=short --maxfail=1`
+  Result: `passed; 15 passed`
+- `python -m pytest
+  tests/test_api_approvals.py::test_approval_list_surfaces_exact_action_context_for_industrial_request
+  tests/test_api_system_settings.py::test_system_world_state_surfaces_exact_action_context_for_industrial_pending_approval
+  tests/test_api_industrial.py tests/test_api_memory_timeline.py
+  tests/test_api_mutating_route_authority_matrix.py -q --tb=short --maxfail=1`
+  Result: `passed; 33 passed`
+- `python -m ruff check src/francis/api/routes/industrial.py
+  src/francis/api/routes/memory_timeline.py
+  src/francis/api/mutation_authority_matrix.py tests/conftest.py
+  tests/test_api_industrial.py tests/test_api_memory_timeline.py
+  tests/test_api_mutating_route_authority_matrix.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/industrial.py
+  src/francis/api/routes/memory_timeline.py
+  src/francis/api/mutation_authority_matrix.py tests/conftest.py
+  tests/test_api_industrial.py tests/test_api_memory_timeline.py
+  tests/test_api_mutating_route_authority_matrix.py`
+  Result: `passed`
+- `python -m mypy src/francis/api/routes/industrial.py
+  src/francis/api/routes/memory_timeline.py
+  src/francis/api/mutation_authority_matrix.py`
+  Result: `passed`
 
 ## 6. Update rule
 
