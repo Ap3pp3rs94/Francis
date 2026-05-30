@@ -44113,6 +44113,59 @@ Latest validation for resident overlay proof isolation:
 - `./scripts/check.ps1`
   Result: `passed`
 
+### 2026-05-29 - Stage 6 Lens live closure audit reaches ready-to-close
+
+Roadmap area: Stage 6 / Lens MVP, summon-anywhere and system-resident
+presence through live governed runtime readback.
+
+Material change:
+
+- Austin's active delegated-operator authority for `codex.builder` was used to
+  refresh the bounded Stage 6 Lens runtime path without manual UI approval
+  churn.
+- Live governed execution receipts were written for the OS binding, tray,
+  overlay, and summon surfaces:
+  - OS binding execution receipt: `losbe_1780113315_a46bbb0f179f`
+  - Tray presence execution receipt: `ltpe_1780113316_266bf364e0f2`
+  - Overlay window execution receipt: `lowe_1780113321_387a21eb62f4`
+  - Summon action execution receipt: `lsae_1780113498_cca0f550c3fa`
+- The summon action was re-executed after the live hotkey, tray, overlay, and
+  resident-host readbacks were present, producing `summon_anywhere=true` and
+  `os_level_summon=true`.
+- Direct `/lens/status?limit=1`, `lens-stage6-checkpoint.ps1`, and
+  `lens-stage6-completion-audit.ps1` now agree that Stage 6 has five ready
+  closure criteria and zero blockers.
+- Stage 6 is closure-ready from the current live audit evidence. This does not
+  grant Stage 7 capability by itself; Stage 7 work should advance from its own
+  roadmap gates.
+
+Latest validation for Stage 6 live closure:
+
+- Direct `/lens/status?limit=1` readback through `TestClient(create_app())`
+  with `FRANCIS_ENV_PROFILE=workstation`
+  Result: `status=ready_to_close`, `ready_to_close=true`,
+  `ready_total=5`, `blocked_total=0`,
+  `ready_criteria=["summon_anywhere","helpful_not_noisy",
+  "mode_visibility","pilot_visibility_groundwork",
+  "system_resident_presence"]`,
+  `next_smallest_truthful_gap=stage6_lens_completion_audit`
+- `./scripts/lens-stage6-checkpoint.ps1 -Mode Status`
+  Result: `status=ready_to_close`, `ready_to_close=true`,
+  `ready_total=5`, `blocked_total=0`, `blocker_total=0`,
+  `next_smallest_truthful_gap=stage6_lens_completion_audit`
+- `./scripts/lens-stage6-completion-audit.ps1 -Mode Status
+  -AllowLaunchOnHotkey -ChildProofTimeoutSeconds 240`
+  Result: `status=ready_to_close`, `stage_state=closure_ready`,
+  `ready_to_close=true`, `can_close_stage6=true`,
+  `transition_allowed=true`, `ready_total=5`, `blocked_total=0`,
+  `blocker_total=0`, `remaining_stage6_acceptance_blockers=[]`,
+  `stage6_completion_reviewed=true`,
+  `next_smallest_truthful_gap=stage6_ledger_closure`
+- GitHub Actions current `main` evidence before this ledger update:
+  `ci` run `26672060210` passed on Ubuntu 3.12, Ubuntu 3.13, Windows 3.12,
+  and Windows 3.13; `CodeQL Advanced` run `26672060208` passed for actions,
+  JavaScript/TypeScript, and Python; open code-scanning alerts reported `0`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
