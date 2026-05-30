@@ -113,6 +113,7 @@ import {
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorReview,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleReadback,
   type TelemetryContextFeedbackMemoryAssistanceMemoryPoisoningReview,
+  type TelemetryContextFeedbackMemoryAssistanceMemoryWriteContractHardeningReview,
   type TelemetryContextFeedbackMemoryAssistanceOperatorContextSurfaceReview,
   type TelemetryContextFeedbackMemoryAssistancePrimaryLoopEvidenceReview,
   type TelemetryContextFeedbackMemoryAssistanceGitContextSignal,
@@ -4326,6 +4327,18 @@ function SystemPanel(props: {
     setTelemetryFeedbackMemoryAssistanceMemoryPoisoningReviewLoadedAt,
   ] = useState<number | null>(null);
   const [
+    telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview,
+    setTelemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview,
+  ] = useState<TelemetryContextFeedbackMemoryAssistanceMemoryWriteContractHardeningReview | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReviewError,
+    setTelemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReviewError,
+  ] = useState<string | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReviewLoadedAt,
+    setTelemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReviewLoadedAt,
+  ] = useState<number | null>(null);
+  const [
     telemetryFeedbackMemoryAssistanceTrueExecutionTraceReview,
     setTelemetryFeedbackMemoryAssistanceTrueExecutionTraceReview,
   ] = useState<TelemetryContextFeedbackMemoryAssistanceTrueExecutionTraceReview | null>(null);
@@ -4569,6 +4582,7 @@ function SystemPanel(props: {
         nextTelemetryFeedbackMemoryAssistanceActionQualitySignalReview,
         nextTelemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview,
         nextTelemetryFeedbackMemoryAssistanceMemoryPoisoningReview,
+        nextTelemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview,
         nextTelemetryFeedbackMemoryAssistanceTrueExecutionTraceReview,
       ] =
         await Promise.allSettled([
@@ -4614,6 +4628,7 @@ function SystemPanel(props: {
         telemetryClient.getContextFeedbackMemoryAssistanceActionQualitySignalReview({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistancePrimaryLoopEvidenceReview({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistanceMemoryPoisoningReview({ limit: 20 }),
+        telemetryClient.getContextFeedbackMemoryAssistanceMemoryWriteContractHardeningReview({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistanceTrueExecutionTraceReview({ limit: 20 }),
       ]);
 
@@ -4977,6 +4992,19 @@ function SystemPanel(props: {
           telemetryError(nextTelemetryFeedbackMemoryAssistanceMemoryPoisoningReview.reason),
         );
         degradedFeeds.push("telemetry feedback memory assistance memory poisoning review");
+      }
+
+      if (nextTelemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview.status === "fulfilled") {
+        setTelemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview(
+          nextTelemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview.value,
+        );
+        setTelemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReviewError(null);
+        setTelemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReviewLoadedAt(refreshStartedAt);
+      } else {
+        setTelemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReviewError(
+          telemetryError(nextTelemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview.reason),
+        );
+        degradedFeeds.push("telemetry feedback memory assistance memory write contract hardening review");
       }
 
       if (nextTelemetryFeedbackMemoryAssistanceTrueExecutionTraceReview.status === "fulfilled") {
@@ -7178,6 +7206,23 @@ function SystemPanel(props: {
       : telemetryFeedbackMemoryAssistanceMemoryPoisoningReview
         ? `Feedback memory assistance poisoning ${telemetryFeedbackMemoryAssistanceMemoryPoisoningReview.status}; controls ${telemetryFeedbackMemoryAssistanceMemoryPoisoningReview.ready_count}/${telemetryFeedbackMemoryAssistanceMemoryPoisoningReview.required_count}.`
         : "Feedback memory assistance poisoning review has not loaded yet.";
+  const telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReviewStatus =
+    safeString(telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview?.status).trim() ||
+    (telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReviewError ? "unavailable" : "unloaded");
+  const telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReviewTone =
+    telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReviewError
+      ? "blocked"
+      : telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview
+        ? telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview.memory_write_contract_hardening_ready
+          ? "running"
+          : "dormant"
+        : "standby";
+  const telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReviewDetail =
+    telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReviewError
+      ? `Feedback memory assistance memory contract hardening could not refresh: ${telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReviewError}`
+      : telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview
+        ? `Feedback memory assistance memory contract hardening ${telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview.status}; criteria ${telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview.ready_count}/${telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview.required_count}, contract events ${telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview.memory_contract_event_count}/${telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview.memory_event_count}.`
+        : "Feedback memory assistance memory contract hardening has not loaded yet.";
   const telemetryFeedbackMemoryAssistanceTrueExecutionTraceReviewStatus =
     safeString(telemetryFeedbackMemoryAssistanceTrueExecutionTraceReview?.status).trim() ||
     (telemetryFeedbackMemoryAssistanceTrueExecutionTraceReviewError ? "unavailable" : "unloaded");
@@ -12184,6 +12229,9 @@ function SystemPanel(props: {
             <span style={badgeStyle(telemetryFeedbackMemoryAssistanceMemoryPoisoningReviewTone)}>
               Poisoning review {telemetryFeedbackMemoryAssistanceMemoryPoisoningReviewStatus}
             </span>
+            <span style={badgeStyle(telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReviewTone)}>
+              Memory contract {telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReviewStatus}
+            </span>
             <span style={badgeStyle(telemetryFeedbackMemoryAssistanceTrueExecutionTraceReviewTone)}>
               Execution trace {telemetryFeedbackMemoryAssistanceTrueExecutionTraceReviewStatus}
             </span>
@@ -12387,6 +12435,15 @@ function SystemPanel(props: {
           }}
         >
           {telemetryFeedbackMemoryAssistanceMemoryPoisoningReviewDetail}
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            color: telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReviewError ? "#ffcf9d" : THEME.text,
+            marginTop: 8,
+          }}
+        >
+          {telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReviewDetail}
         </div>
         <div
           style={{
@@ -13365,6 +13422,106 @@ function SystemPanel(props: {
                 model <code>{telemetryFeedbackMemoryAssistanceMemoryPoisoningReview.calls_model ? "true" : "false"}</code>
                 {" / "}tools{" "}
                 <code>{telemetryFeedbackMemoryAssistanceMemoryPoisoningReview.selects_tools ? "true" : "false"}</code>
+              </div>
+            </div>
+          </div>
+        ) : null}
+        {telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+              gap: 8,
+              marginTop: 10,
+            }}
+          >
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Memory contract</div>
+              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
+                {telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview.ready_count}/
+                {telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview.required_count}
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                contract events{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview.memory_contract_event_count}/
+                  {telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview.memory_event_count}
+                </code>
+              </div>
+              {telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReviewLoadedAt ? (
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                  Loaded {toLocaleTime(telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReviewLoadedAt)}
+                </div>
+              ) : null}
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Required fields</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                {telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview.required_memory_contract_fields.map(
+                  (field) => (
+                    <span key={`telemetry-memory-contract-field-${field}`} style={badgeStyle("running")}>
+                      {field}
+                    </span>
+                  ),
+                )}
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                next{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview.next_smallest_truthful_gap ||
+                    "memory_contract_hardening"}
+                </code>
+              </div>
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Criteria</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                {telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview.criteria.map((item) => {
+                  const id = safeString(item.id).trim() || "criterion";
+                  const ready = Boolean(item.ready);
+                  return (
+                    <span key={`telemetry-memory-contract-criterion-${id}`} style={badgeStyle(ready ? "running" : "dormant")}>
+                      {id} {ready ? "ready" : "waiting"}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Contract guards</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                {Object.entries(
+                  telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview.sample_denial_controls,
+                ).map(([key, value]) => {
+                  const denial = safeString(value).trim() || "unknown";
+                  return (
+                    <span key={`telemetry-memory-contract-denial-${key}`} style={badgeStyle(denial.includes("denied") ? "running" : "dormant")}>
+                      {key}
+                    </span>
+                  );
+                })}
+              </div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 8 }}>
+                memory{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview.writes_memory ? "true" : "false"}
+                </code>
+                {" / "}receipts{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview.writes_receipts ? "true" : "false"}
+                </code>
+              </div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 4 }}>
+                model{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview.calls_model ? "true" : "false"}
+                </code>
+                {" / "}authority{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceMemoryWriteContractHardeningReview.grants_execution_authority
+                    ? "true"
+                    : "false"}
+                </code>
               </div>
             </div>
           </div>

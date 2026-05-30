@@ -774,6 +774,36 @@ export type TelemetryContextFeedbackMemoryAssistanceMemoryPoisoningReview = {
   next_smallest_truthful_gap: string;
 };
 
+export type TelemetryContextFeedbackMemoryAssistanceMemoryWriteContractHardeningReview = {
+  ok: boolean;
+  kind: string;
+  stage: string;
+  source_id: string;
+  status: string;
+  target: string;
+  memory_write_contract_hardening_ready: boolean;
+  ready_count: number;
+  required_count: number;
+  criteria: Array<Record<string, unknown>>;
+  required_memory_contract_fields: string[];
+  memory_contract_event_count: number;
+  memory_event_count: number;
+  sample_denial_controls: Record<string, unknown>;
+  read_only: boolean;
+  writes_memory: boolean;
+  writes_feedback: boolean;
+  writes_receipts: boolean;
+  mutates_prompt: boolean;
+  sends_chat: boolean;
+  calls_model: boolean;
+  selects_tools: boolean;
+  trains_model: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+  governance: Record<string, unknown>;
+  next_smallest_truthful_gap: string;
+};
+
 export type TelemetryContextFeedbackMemoryAssistanceTrueExecutionTraceReview = {
   ok: boolean;
   kind: string;
@@ -1736,6 +1766,42 @@ export function parseTelemetryContextFeedbackMemoryAssistanceMemoryPoisoningRevi
     executes_poison_probe: safeBoolean(raw.executes_poison_probe, true),
     writes_memory: safeBoolean(raw.writes_memory, true),
     writes_feedback: safeBoolean(raw.writes_feedback, true),
+    mutates_prompt: safeBoolean(raw.mutates_prompt, true),
+    sends_chat: safeBoolean(raw.sends_chat, true),
+    calls_model: safeBoolean(raw.calls_model, true),
+    selects_tools: safeBoolean(raw.selects_tools, true),
+    trains_model: safeBoolean(raw.trains_model, true),
+    grants_execution_authority: safeBoolean(raw.grants_execution_authority, true),
+    grants_mutation_authority: safeBoolean(raw.grants_mutation_authority, true),
+    governance: recordOrEmpty(raw.governance),
+    next_smallest_truthful_gap: safeString(raw.next_smallest_truthful_gap, ""),
+  };
+}
+
+export function parseTelemetryContextFeedbackMemoryAssistanceMemoryWriteContractHardeningReview(
+  value: unknown,
+): TelemetryContextFeedbackMemoryAssistanceMemoryWriteContractHardeningReview {
+  const raw = isRecord(value) ? value : {};
+
+  return {
+    ok: safeBoolean(raw.ok, false),
+    kind: safeString(raw.kind, ""),
+    stage: safeString(raw.stage, ""),
+    source_id: safeString(raw.source_id, ""),
+    status: safeString(raw.status, "unknown"),
+    target: safeString(raw.target, ""),
+    memory_write_contract_hardening_ready: safeBoolean(raw.memory_write_contract_hardening_ready, false),
+    ready_count: safeNumber(raw.ready_count, 0),
+    required_count: safeNumber(raw.required_count, 0),
+    criteria: Array.isArray(raw.criteria) ? raw.criteria.filter(isRecord) : [],
+    required_memory_contract_fields: safeStringArray(raw.required_memory_contract_fields),
+    memory_contract_event_count: safeNumber(raw.memory_contract_event_count, 0),
+    memory_event_count: safeNumber(raw.memory_event_count, 0),
+    sample_denial_controls: recordOrEmpty(raw.sample_denial_controls),
+    read_only: safeBoolean(raw.read_only, false),
+    writes_memory: safeBoolean(raw.writes_memory, true),
+    writes_feedback: safeBoolean(raw.writes_feedback, true),
+    writes_receipts: safeBoolean(raw.writes_receipts, true),
     mutates_prompt: safeBoolean(raw.mutates_prompt, true),
     sends_chat: safeBoolean(raw.sends_chat, true),
     calls_model: safeBoolean(raw.calls_model, true),
@@ -2913,6 +2979,54 @@ export class TelemetryClient {
     } catch (err) {
       throw new TelemetryApiError(
         "Telemetry feedback memory assistance poisoning review response was not valid JSON.",
+        {
+          url,
+          cause: err,
+        },
+      );
+    }
+  }
+
+  async getContextFeedbackMemoryAssistanceMemoryWriteContractHardeningReview(opts?: {
+    limit?: number;
+    signal?: AbortSignal;
+  }): Promise<TelemetryContextFeedbackMemoryAssistanceMemoryWriteContractHardeningReview> {
+    const limit = clampLimit(opts?.limit, 20);
+    const url = this.url(
+      `/telemetry/context/feedback/memory-assistance-feedback-loop-memory-write-contract-hardening-review?limit=${limit}`,
+    );
+    let response: Response;
+    try {
+      response = await fetch(url, { method: "GET", signal: opts?.signal });
+    } catch (err) {
+      throw new TelemetryApiError(
+        "Telemetry feedback memory assistance memory write contract hardening review request failed.",
+        {
+          url,
+          cause: err,
+        },
+      );
+    }
+
+    const text = await response.text();
+    if (!response.ok) {
+      throw new TelemetryApiError(
+        `HTTP ${response.status} for telemetry feedback memory assistance memory write contract hardening review request`,
+        {
+          status: response.status,
+          url,
+          bodySnippet: text.slice(0, 500),
+        },
+      );
+    }
+
+    try {
+      return parseTelemetryContextFeedbackMemoryAssistanceMemoryWriteContractHardeningReview(
+        text ? JSON.parse(text) : {},
+      );
+    } catch (err) {
+      throw new TelemetryApiError(
+        "Telemetry feedback memory assistance memory write contract hardening review response was not valid JSON.",
         {
           url,
           cause: err,

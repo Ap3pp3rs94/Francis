@@ -18,6 +18,7 @@ import {
   parseTelemetryContextFeedbackMemoryAssistanceGitContextSignal,
   parseTelemetryContextFeedbackMemoryAssistanceIdeContextSignal,
   parseTelemetryContextFeedbackMemoryAssistanceMemoryPoisoningReview,
+  parseTelemetryContextFeedbackMemoryAssistanceMemoryWriteContractHardeningReview,
   parseTelemetryContextFeedbackMemoryAssistanceOperatorContextSurfaceReview,
   parseTelemetryContextFeedbackMemoryAssistancePrimaryLoopEvidenceReview,
   parseTelemetryContextFeedbackMemoryAssistanceSensingIndicatorSummary,
@@ -2515,6 +2516,158 @@ test("TelemetryClient requests the memory poisoning review endpoint", async () =
     assert.deepEqual(requests, [
       {
         path: "/telemetry/context/feedback/memory-assistance-feedback-loop-memory-poisoning-review",
+        search: "?limit=30",
+        method: "GET",
+      },
+    ]);
+  } finally {
+    restore();
+  }
+});
+
+test("parseTelemetryContextFeedbackMemoryAssistanceMemoryWriteContractHardeningReview preserves contract guards", () => {
+  const review = parseTelemetryContextFeedbackMemoryAssistanceMemoryWriteContractHardeningReview({
+    ok: true,
+    kind: "francis.stage7.telemetry.memory_write_contract_hardening_review",
+    stage: "Stage 7 / Telemetry MVP",
+    source_id: "telemetry_context",
+    status: "memory_write_contract_hardening_ready",
+    target: "feedback_memory_assistance_prompt_integration",
+    memory_write_contract_hardening_ready: true,
+    ready_count: 6,
+    required_count: 6,
+    criteria: [
+      { id: "closure_readiness_backstop", ready: true },
+      { id: "required_memory_contract_fields", ready: true },
+      { id: "targeted_memory_events_have_contract", ready: true },
+      { id: "feedback_memory_assistance_identity_bounded", ready: true },
+      { id: "poisoning_denial_controls_ready", ready: true },
+      { id: "non_authorizing_memory_review_guard", ready: true },
+    ],
+    required_memory_contract_fields: [
+      "action_type",
+      "provenance.source",
+      "classification",
+      "confidence",
+      "retention",
+    ],
+    memory_contract_event_count: 2,
+    memory_event_count: 2,
+    sample_denial_controls: {
+      missing_contract_error: "memory_write_contract_denied",
+      invalid_confidence_error: "memory_write_contract_denied",
+      invalid_retention_error: "memory_write_contract_denied",
+      poisoning_error: "memory_poisoning_input_denied",
+    },
+    read_only: true,
+    writes_memory: false,
+    writes_feedback: false,
+    writes_receipts: false,
+    mutates_prompt: false,
+    sends_chat: false,
+    calls_model: false,
+    selects_tools: false,
+    trains_model: false,
+    grants_execution_authority: false,
+    grants_mutation_authority: false,
+    governance: {
+      read_only: true,
+      memory_write_contract_hardening_review: true,
+      requires_action_type: true,
+      requires_provenance_source: true,
+      requires_classification: true,
+      requires_confidence: true,
+      requires_retention: true,
+    },
+    next_smallest_truthful_gap: "stage7_memory_contract_operator_surface_review",
+  });
+
+  assert.equal(review.status, "memory_write_contract_hardening_ready");
+  assert.equal(review.memory_write_contract_hardening_ready, true);
+  assert.equal(review.ready_count, 6);
+  assert.equal(review.required_count, 6);
+  assert.deepEqual(
+    review.criteria.map((item) => item.id),
+    [
+      "closure_readiness_backstop",
+      "required_memory_contract_fields",
+      "targeted_memory_events_have_contract",
+      "feedback_memory_assistance_identity_bounded",
+      "poisoning_denial_controls_ready",
+      "non_authorizing_memory_review_guard",
+    ],
+  );
+  assert.deepEqual(review.required_memory_contract_fields, [
+    "action_type",
+    "provenance.source",
+    "classification",
+    "confidence",
+    "retention",
+  ]);
+  assert.equal(review.memory_contract_event_count, 2);
+  assert.equal(review.memory_event_count, 2);
+  assert.equal(review.sample_denial_controls.missing_contract_error, "memory_write_contract_denied");
+  assert.equal(review.writes_memory, false);
+  assert.equal(review.writes_receipts, false);
+  assert.equal(review.calls_model, false);
+  assert.equal(review.grants_execution_authority, false);
+  assert.equal(review.governance.memory_write_contract_hardening_review, true);
+  assert.equal(review.governance.requires_retention, true);
+});
+
+test("TelemetryClient requests the memory write contract hardening review endpoint", async () => {
+  const requests: Array<{ path: string; search: string; method: string }> = [];
+  const restore = installFetch((url, init) => {
+    const parsed = new URL(url);
+    requests.push({ path: parsed.pathname, search: parsed.search, method: init?.method ?? "GET" });
+    return jsonResponse({
+      ok: true,
+      kind: "francis.stage7.telemetry.memory_write_contract_hardening_review",
+      stage: "Stage 7 / Telemetry MVP",
+      source_id: "telemetry_context",
+      status: "memory_write_contract_hardening_ready",
+      target: "feedback_memory_assistance_prompt_integration",
+      memory_write_contract_hardening_ready: true,
+      ready_count: 6,
+      required_count: 6,
+      criteria: [{ id: "closure_readiness_backstop", ready: true }],
+      required_memory_contract_fields: [
+        "action_type",
+        "provenance.source",
+        "classification",
+        "confidence",
+        "retention",
+      ],
+      memory_contract_event_count: 2,
+      memory_event_count: 2,
+      sample_denial_controls: {
+        missing_contract_error: "memory_write_contract_denied",
+        poisoning_error: "memory_poisoning_input_denied",
+      },
+      read_only: true,
+      writes_memory: false,
+      writes_feedback: false,
+      writes_receipts: false,
+      mutates_prompt: false,
+      sends_chat: false,
+      calls_model: false,
+      selects_tools: false,
+      trains_model: false,
+      grants_execution_authority: false,
+      grants_mutation_authority: false,
+      governance: { read_only: true, memory_write_contract_hardening_review: true },
+      next_smallest_truthful_gap: "stage7_memory_contract_operator_surface_review",
+    });
+  });
+
+  try {
+    const client = new TelemetryClient("http://127.0.0.1:8000/");
+    const review = await client.getContextFeedbackMemoryAssistanceMemoryWriteContractHardeningReview({ limit: 30 });
+
+    assert.equal(review.memory_write_contract_hardening_ready, true);
+    assert.deepEqual(requests, [
+      {
+        path: "/telemetry/context/feedback/memory-assistance-feedback-loop-memory-write-contract-hardening-review",
         search: "?limit=30",
         method: "GET",
       },

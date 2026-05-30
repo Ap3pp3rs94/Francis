@@ -46181,6 +46181,37 @@ Latest validation for Stage 7 memory write contract hardening:
   tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
   Result: `passed; 3 files already formatted`
 
+### 2026-05-30 - Stage 7 memory contract hardening is visible in Telemetry & Continuation
+
+Roadmap area: Stage 7 / Telemetry MVP, operator-visible memory-write contract
+hardening for the feedback-memory assistance primary loop.
+
+Material change:
+
+- The chat UI telemetry client now reads the existing read-only
+  `/telemetry/context/feedback/memory-assistance-feedback-loop-memory-write-contract-hardening-review`
+  endpoint.
+- Telemetry & Continuation now shows the memory contract hardening status,
+  criteria count, targeted memory contract event count, required contract
+  fields, denial-control readbacks, next truthful gap, and non-authorizing
+  guard posture.
+- This is a UI return for the validated review only; it does not write memory,
+  feedback, receipts, chat, prompts, model calls, tools, or authority.
+- The next truthful gap remains
+  `stage7_memory_contract_operator_surface_review`; this entry does not mark
+  Stage 7 closed.
+
+Latest validation for Stage 7 memory contract operator visibility:
+
+- `node --test --experimental-strip-types src/telemetry/index.test.ts`
+  Result: `passed; 58 passed`
+- `npm run test`
+  Result: `passed; 166 passed`
+- `npm run build`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
