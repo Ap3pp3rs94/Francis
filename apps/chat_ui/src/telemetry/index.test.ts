@@ -14,6 +14,7 @@ import {
   parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisionRecord,
   parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorReview,
   parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleReadback,
+  parseTelemetryContextFeedbackMemoryAssistanceGitContextSignal,
   parseTelemetryContextFeedbackMemoryAssistanceTerminalContextSignal,
   parseTelemetryContextFeedbackMemoryAssistanceOperatorFeedbackReview,
   parseTelemetryContextFeedbackMemoryAssistanceChatContextReadback,
@@ -1677,6 +1678,128 @@ test("TelemetryClient requests the terminal context signal endpoint", async () =
     assert.deepEqual(requests, [
       {
         path: "/telemetry/context/feedback/memory-assistance-feedback-loop-terminal-context-signal",
+        search: "?limit=30",
+        method: "GET",
+      },
+    ]);
+  } finally {
+    restore();
+  }
+});
+
+test("parseTelemetryContextFeedbackMemoryAssistanceGitContextSignal preserves git guards", () => {
+  const signal = parseTelemetryContextFeedbackMemoryAssistanceGitContextSignal({
+    ok: true,
+    kind: "francis.stage7.telemetry.context_feedback_memory_assistance_git_context_signal",
+    stage: "Stage 7 / Telemetry MVP",
+    source_id: "telemetry_context",
+    status: "git_context_signal_ready",
+    target: "feedback_memory_assistance_prompt_integration",
+    git_context_signal_ready: true,
+    terminal_context_signal_ready: true,
+    git_snapshot_ready: true,
+    branch: "main",
+    head: "abc123",
+    upstream: "origin/main",
+    dirty: true,
+    changed_count: 1,
+    changed_paths: [{ status: "M", path: "src/francis/telemetry/git.py" }],
+    git_context_line_count: 1,
+    git_context_items: [{ source_id: "git", branch: "main" }],
+    git_context_lines: ["git: git branch main, changed 1; dirty"],
+    git_snapshot: { source_id: "git", status: "snapshot_ready" },
+    terminal_context_signal: { terminal_context_signal_ready: true },
+    reads_git_context: true,
+    reads_git_status: true,
+    reads_terminal_context_signal: true,
+    writes_git_state: false,
+    starts_git_watcher: false,
+    runs_git_fetch: false,
+    runs_git_pull: false,
+    runs_git_push: false,
+    writes_memory: false,
+    writes_feedback: false,
+    sends_chat: false,
+    calls_model: false,
+    selects_tools: false,
+    trains_model: false,
+    grants_execution_authority: false,
+    grants_mutation_authority: false,
+    governance: { read_only: true, git_context_signal_projection: true },
+    next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_ide_context_signal",
+  });
+
+  assert.equal(signal.status, "git_context_signal_ready");
+  assert.equal(signal.git_context_signal_ready, true);
+  assert.equal(signal.git_snapshot_ready, true);
+  assert.equal(signal.branch, "main");
+  assert.equal(signal.changed_paths[0]?.path, "src/francis/telemetry/git.py");
+  assert.equal(signal.git_context_lines[0]?.startsWith("git:"), true);
+  assert.equal(signal.reads_git_context, true);
+  assert.equal(signal.writes_git_state, false);
+  assert.equal(signal.starts_git_watcher, false);
+  assert.equal(signal.runs_git_fetch, false);
+  assert.equal(signal.runs_git_pull, false);
+  assert.equal(signal.runs_git_push, false);
+  assert.equal(signal.grants_execution_authority, false);
+  assert.equal(signal.governance.git_context_signal_projection, true);
+});
+
+test("TelemetryClient requests the git context signal endpoint", async () => {
+  const requests: Array<{ path: string; search: string; method: string }> = [];
+  const restore = installFetch((url, init) => {
+    const parsed = new URL(url);
+    requests.push({ path: parsed.pathname, search: parsed.search, method: init?.method ?? "GET" });
+    return jsonResponse({
+      ok: true,
+      kind: "francis.stage7.telemetry.context_feedback_memory_assistance_git_context_signal",
+      stage: "Stage 7 / Telemetry MVP",
+      source_id: "telemetry_context",
+      status: "git_context_signal_ready",
+      target: "feedback_memory_assistance_prompt_integration",
+      git_context_signal_ready: true,
+      terminal_context_signal_ready: true,
+      git_snapshot_ready: true,
+      branch: "main",
+      head: "abc123",
+      upstream: "origin/main",
+      dirty: true,
+      changed_count: 1,
+      changed_paths: [{ status: "M", path: "src/francis/telemetry/git.py" }],
+      git_context_line_count: 1,
+      git_context_items: [{ source_id: "git", branch: "main" }],
+      git_context_lines: ["git: git branch main, changed 1; dirty"],
+      git_snapshot: { source_id: "git", status: "snapshot_ready" },
+      terminal_context_signal: { terminal_context_signal_ready: true },
+      reads_git_context: true,
+      reads_git_status: true,
+      reads_terminal_context_signal: true,
+      writes_git_state: false,
+      starts_git_watcher: false,
+      runs_git_fetch: false,
+      runs_git_pull: false,
+      runs_git_push: false,
+      writes_memory: false,
+      writes_feedback: false,
+      sends_chat: false,
+      calls_model: false,
+      selects_tools: false,
+      trains_model: false,
+      grants_execution_authority: false,
+      grants_mutation_authority: false,
+      governance: { read_only: true, git_context_signal_projection: true },
+      next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_ide_context_signal",
+    });
+  });
+
+  try {
+    const client = new TelemetryClient("http://127.0.0.1:8000/");
+    const signal = await client.getContextFeedbackMemoryAssistanceGitContextSignal({ limit: 30 });
+
+    assert.equal(signal.git_context_signal_ready, true);
+    assert.deepEqual(requests, [
+      {
+        path: "/telemetry/context/feedback/memory-assistance-feedback-loop-git-context-signal",
         search: "?limit=30",
         method: "GET",
       },

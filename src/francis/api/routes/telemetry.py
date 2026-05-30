@@ -1263,6 +1263,98 @@ def context_feedback_memory_assistance_operator_feedback_loop_terminal_context_s
     }
 
 
+@router.get("/context/feedback/memory-assistance-feedback-loop-git-context-signal")
+def context_feedback_memory_assistance_operator_feedback_loop_git_context_signal(
+    limit: int = 20,
+) -> dict[str, Any]:
+    safe_limit = max(1, min(int(limit), 100))
+    terminal_signal = context_feedback_memory_assistance_operator_feedback_loop_terminal_context_signal(
+        limit=safe_limit
+    )
+    context_snapshot = telemetry_context_snapshot(surface="feedback_memory_assistance_git_context_signal")
+    git_snapshot = git_status_snapshot(limit=safe_limit)
+    context_items_value = context_snapshot.get("context_items")
+    context_items: list[Any] = context_items_value if isinstance(context_items_value, list) else []
+    prompt_lines_value = context_snapshot.get("prompt_lines")
+    prompt_lines: list[Any] = prompt_lines_value if isinstance(prompt_lines_value, list) else []
+    git_context_items = [item for item in context_items if isinstance(item, dict) and item.get("source_id") == "git"]
+    git_context_lines = [
+        str(line) for line in prompt_lines if isinstance(line, str) and line.strip().lower().startswith("git:")
+    ]
+    git_snapshot_ready = bool(git_snapshot.get("active")) and git_snapshot.get("status") == "snapshot_ready"
+    terminal_signal_ready = bool(terminal_signal.get("terminal_context_signal_ready"))
+    git_signal_ready = bool(terminal_signal_ready and git_snapshot_ready and git_context_items and git_context_lines)
+    if git_signal_ready:
+        status = "git_context_signal_ready"
+    elif not terminal_signal_ready:
+        status = "awaiting_terminal_context_signal"
+    elif not git_snapshot_ready:
+        status = "awaiting_git_status_snapshot"
+    else:
+        status = "awaiting_git_context_projection"
+    return {
+        "ok": True,
+        "kind": "francis.stage7.telemetry.context_feedback_memory_assistance_git_context_signal",
+        "stage": "Stage 7 / Telemetry MVP",
+        "source_id": "telemetry_context",
+        "status": status,
+        "target": "feedback_memory_assistance_prompt_integration",
+        "git_context_signal_ready": git_signal_ready,
+        "terminal_context_signal_ready": terminal_signal_ready,
+        "git_snapshot_ready": git_snapshot_ready,
+        "branch": git_snapshot.get("branch", ""),
+        "head": git_snapshot.get("head", ""),
+        "upstream": git_snapshot.get("upstream", ""),
+        "dirty": bool(git_snapshot.get("dirty")),
+        "changed_count": git_snapshot.get("changed_count", 0),
+        "changed_paths": git_snapshot.get("changed_paths", []),
+        "git_context_line_count": len(git_context_lines),
+        "git_context_items": git_context_items,
+        "git_context_lines": git_context_lines,
+        "git_snapshot": git_snapshot,
+        "terminal_context_signal": terminal_signal,
+        "reads_git_context": True,
+        "reads_git_status": True,
+        "reads_terminal_context_signal": True,
+        "writes_git_state": False,
+        "starts_git_watcher": False,
+        "runs_git_fetch": False,
+        "runs_git_pull": False,
+        "runs_git_push": False,
+        "writes_memory": False,
+        "writes_feedback": False,
+        "sends_chat": False,
+        "calls_model": False,
+        "selects_tools": False,
+        "trains_model": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "git_context_signal_projection": True,
+            "uses_terminal_context_signal": True,
+            "uses_git_status_snapshot": True,
+            "on_request_only": True,
+            "telemetry_is_untrusted_input": True,
+            "does_not_start_git_watcher": True,
+            "does_not_git_fetch": True,
+            "does_not_git_pull": True,
+            "does_not_git_push": True,
+            "does_not_write_memory": True,
+            "does_not_write_feedback": True,
+            "does_not_send_chat": True,
+            "does_not_call_model": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": (
+            "stage7_context_feedback_memory_assistance_ide_context_signal"
+            if git_signal_ready
+            else "stage7_context_feedback_memory_assistance_git_context_signal"
+        ),
+    }
+
+
 @router.post("/context/feedback/memory-assistance-feedback-loop-live-sample-operator-decision")
 def context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_decision_record(
     payload: TelemetryContextFeedbackMemoryAssistanceLiveSampleOperatorDecisionIn,

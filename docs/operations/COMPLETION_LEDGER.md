@@ -45504,6 +45504,48 @@ signal:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-30 - Stage 7 feedback memory assistance git context signal is visible
+
+Roadmap area: Stage 7 / Telemetry MVP, git-context signal readback after the
+feedback-memory assistance terminal context signal.
+
+Material change:
+
+- Telemetry now exposes a read-only git context signal at
+  `/telemetry/context/feedback/memory-assistance-feedback-loop-git-context-signal`.
+- The signal combines the terminal-context signal with the existing on-request
+  git status snapshot and bounded prompt-context lines.
+- The Telemetry & Continuation panel now fetches and displays the git context
+  signal independently, including branch, head, dirty state, changed count,
+  next truthful gap, and non-watcher/non-git-mutation guards.
+- The signal remains read-only: it does not start a git watcher, fetch, pull,
+  push, write git state, write memory, write feedback, send chat, call a model,
+  select tools, train a model, or grant execution or mutation authority.
+
+Latest validation for Stage 7 feedback memory assistance git context signal:
+
+- `python -m pytest tests/test_api_telemetry.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed`
+- `python -m mypy src/francis/api/routes/telemetry.py`
+  Result: `passed`
+- `python -m ruff check src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `node --test --experimental-strip-types src/telemetry/index.test.ts` in
+  `apps/chat_ui`
+  Result: `passed; 42 passed`
+- `npm run test` in `apps/chat_ui`
+  Result: `passed; 150 passed`
+- `npm run build` in `apps/chat_ui`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

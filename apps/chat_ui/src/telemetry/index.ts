@@ -529,6 +529,47 @@ export type TelemetryContextFeedbackMemoryAssistanceTerminalContextSignal = {
   next_smallest_truthful_gap: string;
 };
 
+export type TelemetryContextFeedbackMemoryAssistanceGitContextSignal = {
+  ok: boolean;
+  kind: string;
+  stage: string;
+  source_id: string;
+  status: string;
+  target: string;
+  git_context_signal_ready: boolean;
+  terminal_context_signal_ready: boolean;
+  git_snapshot_ready: boolean;
+  branch: string;
+  head: string;
+  upstream: string;
+  dirty: boolean;
+  changed_count: number;
+  changed_paths: Array<{ status: string; path: string }>;
+  git_context_line_count: number;
+  git_context_items: Array<Record<string, unknown>>;
+  git_context_lines: string[];
+  git_snapshot: Record<string, unknown>;
+  terminal_context_signal: Record<string, unknown>;
+  reads_git_context: boolean;
+  reads_git_status: boolean;
+  reads_terminal_context_signal: boolean;
+  writes_git_state: boolean;
+  starts_git_watcher: boolean;
+  runs_git_fetch: boolean;
+  runs_git_pull: boolean;
+  runs_git_push: boolean;
+  writes_memory: boolean;
+  writes_feedback: boolean;
+  sends_chat: boolean;
+  calls_model: boolean;
+  selects_tools: boolean;
+  trains_model: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+  governance: Record<string, unknown>;
+  next_smallest_truthful_gap: string;
+};
+
 export type TelemetryContextFeedbackMemoryAssistancePolicy = {
   ok: boolean;
   kind: string;
@@ -1169,6 +1210,55 @@ export function parseTelemetryContextFeedbackMemoryAssistanceTerminalContextSign
     trains_model: safeBoolean(raw.trains_model, true),
     captures_terminal_streams: safeBoolean(raw.captures_terminal_streams, true),
     stores_stdout_stderr: safeBoolean(raw.stores_stdout_stderr, true),
+    grants_execution_authority: safeBoolean(raw.grants_execution_authority, true),
+    grants_mutation_authority: safeBoolean(raw.grants_mutation_authority, true),
+    governance: recordOrEmpty(raw.governance),
+    next_smallest_truthful_gap: safeString(raw.next_smallest_truthful_gap, ""),
+  };
+}
+
+export function parseTelemetryContextFeedbackMemoryAssistanceGitContextSignal(
+  value: unknown,
+): TelemetryContextFeedbackMemoryAssistanceGitContextSignal {
+  const raw = isRecord(value) ? value : {};
+
+  return {
+    ok: safeBoolean(raw.ok, false),
+    kind: safeString(raw.kind, ""),
+    stage: safeString(raw.stage, ""),
+    source_id: safeString(raw.source_id, ""),
+    status: safeString(raw.status, "unknown"),
+    target: safeString(raw.target, ""),
+    git_context_signal_ready: safeBoolean(raw.git_context_signal_ready, false),
+    terminal_context_signal_ready: safeBoolean(raw.terminal_context_signal_ready, false),
+    git_snapshot_ready: safeBoolean(raw.git_snapshot_ready, false),
+    branch: safeString(raw.branch, ""),
+    head: safeString(raw.head, ""),
+    upstream: safeString(raw.upstream, ""),
+    dirty: safeBoolean(raw.dirty, false),
+    changed_count: safeNumber(raw.changed_count, 0),
+    changed_paths: Array.isArray(raw.changed_paths)
+      ? raw.changed_paths.map(parseGitChangedPath).filter((item): item is { status: string; path: string } => item !== null)
+      : [],
+    git_context_line_count: safeNumber(raw.git_context_line_count, 0),
+    git_context_items: Array.isArray(raw.git_context_items) ? raw.git_context_items.filter(isRecord) : [],
+    git_context_lines: safeStringArray(raw.git_context_lines),
+    git_snapshot: recordOrEmpty(raw.git_snapshot),
+    terminal_context_signal: recordOrEmpty(raw.terminal_context_signal),
+    reads_git_context: safeBoolean(raw.reads_git_context, false),
+    reads_git_status: safeBoolean(raw.reads_git_status, false),
+    reads_terminal_context_signal: safeBoolean(raw.reads_terminal_context_signal, false),
+    writes_git_state: safeBoolean(raw.writes_git_state, true),
+    starts_git_watcher: safeBoolean(raw.starts_git_watcher, true),
+    runs_git_fetch: safeBoolean(raw.runs_git_fetch, true),
+    runs_git_pull: safeBoolean(raw.runs_git_pull, true),
+    runs_git_push: safeBoolean(raw.runs_git_push, true),
+    writes_memory: safeBoolean(raw.writes_memory, true),
+    writes_feedback: safeBoolean(raw.writes_feedback, true),
+    sends_chat: safeBoolean(raw.sends_chat, true),
+    calls_model: safeBoolean(raw.calls_model, true),
+    selects_tools: safeBoolean(raw.selects_tools, true),
+    trains_model: safeBoolean(raw.trains_model, true),
     grants_execution_authority: safeBoolean(raw.grants_execution_authority, true),
     grants_mutation_authority: safeBoolean(raw.grants_mutation_authority, true),
     governance: recordOrEmpty(raw.governance),
@@ -2015,6 +2105,46 @@ export class TelemetryClient {
         "Telemetry feedback memory assistance terminal context signal response was not valid JSON.",
         { url, cause: err },
       );
+    }
+  }
+
+  async getContextFeedbackMemoryAssistanceGitContextSignal(opts?: {
+    limit?: number;
+    signal?: AbortSignal;
+  }): Promise<TelemetryContextFeedbackMemoryAssistanceGitContextSignal> {
+    const limit = clampLimit(opts?.limit, 20);
+    const url = this.url(
+      `/telemetry/context/feedback/memory-assistance-feedback-loop-git-context-signal?limit=${limit}`,
+    );
+    let response: Response;
+    try {
+      response = await fetch(url, { method: "GET", signal: opts?.signal });
+    } catch (err) {
+      throw new TelemetryApiError("Telemetry feedback memory assistance git context signal request failed.", {
+        url,
+        cause: err,
+      });
+    }
+
+    const text = await response.text();
+    if (!response.ok) {
+      throw new TelemetryApiError(
+        `HTTP ${response.status} for telemetry feedback memory assistance git context signal request`,
+        {
+          status: response.status,
+          url,
+          bodySnippet: text.slice(0, 500),
+        },
+      );
+    }
+
+    try {
+      return parseTelemetryContextFeedbackMemoryAssistanceGitContextSignal(text ? JSON.parse(text) : {});
+    } catch (err) {
+      throw new TelemetryApiError("Telemetry feedback memory assistance git context signal response was not valid JSON.", {
+        url,
+        cause: err,
+      });
     }
   }
 

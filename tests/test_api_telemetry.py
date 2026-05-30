@@ -1463,6 +1463,44 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decis
         "stage7_context_feedback_memory_assistance_git_context_signal"
     )
 
+    git_signal = client.get(
+        "/telemetry/context/feedback/memory-assistance-feedback-loop-git-context-signal?limit=10"
+    ).json()
+    assert git_signal["ok"] is True
+    assert git_signal["kind"] == "francis.stage7.telemetry.context_feedback_memory_assistance_git_context_signal"
+    assert git_signal["status"] == "git_context_signal_ready"
+    assert git_signal["git_context_signal_ready"] is True
+    assert git_signal["terminal_context_signal_ready"] is True
+    assert git_signal["git_snapshot_ready"] is True
+    assert git_signal["branch"]
+    assert git_signal["head"]
+    assert git_signal["changed_count"] >= len(git_signal["changed_paths"])
+    assert git_signal["git_context_line_count"] == 1
+    assert git_signal["git_context_items"][0]["source_id"] == "git"
+    assert git_signal["git_snapshot"]["source_id"] == "git"
+    assert git_signal["terminal_context_signal"]["latest_receipt_id"] == body["receipt_id"]
+    assert git_signal["reads_git_context"] is True
+    assert git_signal["reads_git_status"] is True
+    assert git_signal["writes_git_state"] is False
+    assert git_signal["starts_git_watcher"] is False
+    assert git_signal["runs_git_fetch"] is False
+    assert git_signal["runs_git_pull"] is False
+    assert git_signal["runs_git_push"] is False
+    assert git_signal["writes_memory"] is False
+    assert git_signal["writes_feedback"] is False
+    assert git_signal["sends_chat"] is False
+    assert git_signal["calls_model"] is False
+    assert git_signal["selects_tools"] is False
+    assert git_signal["grants_execution_authority"] is False
+    assert git_signal["grants_mutation_authority"] is False
+    assert git_signal["governance"]["read_only"] is True
+    assert git_signal["governance"]["git_context_signal_projection"] is True
+    assert git_signal["governance"]["does_not_start_git_watcher"] is True
+    assert git_signal["governance"]["does_not_git_fetch"] is True
+    assert git_signal["governance"]["does_not_git_pull"] is True
+    assert git_signal["governance"]["does_not_git_push"] is True
+    assert git_signal["next_smallest_truthful_gap"] == ("stage7_context_feedback_memory_assistance_ide_context_signal")
+
 
 def test_telemetry_context_feedback_memory_quality_record_is_empty_without_events(
     monkeypatch,

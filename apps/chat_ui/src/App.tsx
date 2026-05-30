@@ -111,6 +111,7 @@ import {
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisionRecord,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorReview,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleReadback,
+  type TelemetryContextFeedbackMemoryAssistanceGitContextSignal,
   type TelemetryContextFeedbackMemoryAssistanceTerminalContextSignal,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackMemoryReadback,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackReview,
@@ -4237,6 +4238,16 @@ function SystemPanel(props: {
     telemetryFeedbackMemoryAssistanceTerminalContextSignalLoadedAt,
     setTelemetryFeedbackMemoryAssistanceTerminalContextSignalLoadedAt,
   ] = useState<number | null>(null);
+  const [telemetryFeedbackMemoryAssistanceGitContextSignal, setTelemetryFeedbackMemoryAssistanceGitContextSignal] =
+    useState<TelemetryContextFeedbackMemoryAssistanceGitContextSignal | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceGitContextSignalError,
+    setTelemetryFeedbackMemoryAssistanceGitContextSignalError,
+  ] = useState<string | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceGitContextSignalLoadedAt,
+    setTelemetryFeedbackMemoryAssistanceGitContextSignalLoadedAt,
+  ] = useState<number | null>(null);
   const [telemetryFeedbackMemoryQualityBusy, setTelemetryFeedbackMemoryQualityBusy] = useState(false);
   const [telemetryFeedbackMemoryQualityNotice, setTelemetryFeedbackMemoryQualityNotice] = useState<{
     tone: "info" | "error";
@@ -4462,6 +4473,7 @@ function SystemPanel(props: {
         nextTelemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisions,
         nextTelemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionOutcomeReview,
         nextTelemetryFeedbackMemoryAssistanceTerminalContextSignal,
+        nextTelemetryFeedbackMemoryAssistanceGitContextSignal,
       ] =
         await Promise.allSettled([
         client.getSystemInfo(),
@@ -4499,6 +4511,7 @@ function SystemPanel(props: {
           limit: 20,
         }),
         telemetryClient.getContextFeedbackMemoryAssistanceTerminalContextSignal({ limit: 20 }),
+        telemetryClient.getContextFeedbackMemoryAssistanceGitContextSignal({ limit: 20 }),
       ]);
 
       const degradedFeeds: string[] = [];
@@ -4774,6 +4787,17 @@ function SystemPanel(props: {
           telemetryError(nextTelemetryFeedbackMemoryAssistanceTerminalContextSignal.reason),
         );
         degradedFeeds.push("telemetry feedback memory assistance terminal context signal");
+      }
+
+      if (nextTelemetryFeedbackMemoryAssistanceGitContextSignal.status === "fulfilled") {
+        setTelemetryFeedbackMemoryAssistanceGitContextSignal(nextTelemetryFeedbackMemoryAssistanceGitContextSignal.value);
+        setTelemetryFeedbackMemoryAssistanceGitContextSignalError(null);
+        setTelemetryFeedbackMemoryAssistanceGitContextSignalLoadedAt(refreshStartedAt);
+      } else {
+        setTelemetryFeedbackMemoryAssistanceGitContextSignalError(
+          telemetryError(nextTelemetryFeedbackMemoryAssistanceGitContextSignal.reason),
+        );
+        degradedFeeds.push("telemetry feedback memory assistance git context signal");
       }
 
       if (degradedFeeds.length > 0) {
@@ -6843,6 +6867,23 @@ function SystemPanel(props: {
       : telemetryFeedbackMemoryAssistanceTerminalContextSignal
         ? `Feedback memory assistance terminal context ${telemetryFeedbackMemoryAssistanceTerminalContextSignal.status}; terminal events ${telemetryFeedbackMemoryAssistanceTerminalContextSignal.terminal_event_count}, context lines ${telemetryFeedbackMemoryAssistanceTerminalContextSignal.terminal_context_line_count}.`
         : "Feedback memory assistance terminal context signal has not loaded yet.";
+  const telemetryFeedbackMemoryAssistanceGitContextSignalStatus =
+    safeString(telemetryFeedbackMemoryAssistanceGitContextSignal?.status).trim() ||
+    (telemetryFeedbackMemoryAssistanceGitContextSignalError ? "unavailable" : "unloaded");
+  const telemetryFeedbackMemoryAssistanceGitContextSignalTone =
+    telemetryFeedbackMemoryAssistanceGitContextSignalError
+      ? "blocked"
+      : telemetryFeedbackMemoryAssistanceGitContextSignal
+        ? telemetryFeedbackMemoryAssistanceGitContextSignal.git_context_signal_ready
+          ? "running"
+          : "dormant"
+        : "standby";
+  const telemetryFeedbackMemoryAssistanceGitContextSignalDetail =
+    telemetryFeedbackMemoryAssistanceGitContextSignalError
+      ? `Feedback memory assistance git context signal could not refresh: ${telemetryFeedbackMemoryAssistanceGitContextSignalError}`
+      : telemetryFeedbackMemoryAssistanceGitContextSignal
+        ? `Feedback memory assistance git context ${telemetryFeedbackMemoryAssistanceGitContextSignal.status}; branch ${telemetryFeedbackMemoryAssistanceGitContextSignal.branch || "unknown"}, changed ${telemetryFeedbackMemoryAssistanceGitContextSignal.changed_count}.`
+        : "Feedback memory assistance git context signal has not loaded yet.";
   const telemetryFeedbackMemoryAssistanceLiveSampleDecisionCanRecord = Boolean(
     telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview?.operator_review_ready &&
       !telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionRecorded,
@@ -11811,6 +11852,9 @@ function SystemPanel(props: {
             <span style={badgeStyle(telemetryFeedbackMemoryAssistanceTerminalContextSignalTone)}>
               Terminal signal {telemetryFeedbackMemoryAssistanceTerminalContextSignalStatus}
             </span>
+            <span style={badgeStyle(telemetryFeedbackMemoryAssistanceGitContextSignalTone)}>
+              Git signal {telemetryFeedbackMemoryAssistanceGitContextSignalStatus}
+            </span>
             <span style={badgeStyle(continuation.tone)}>{continuation.label}</span>
           </div>
         </div>
@@ -11948,6 +11992,15 @@ function SystemPanel(props: {
           }}
         >
           {telemetryFeedbackMemoryAssistanceTerminalContextSignalDetail}
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            color: telemetryFeedbackMemoryAssistanceGitContextSignalError ? "#ffcf9d" : THEME.text,
+            marginTop: 8,
+          }}
+        >
+          {telemetryFeedbackMemoryAssistanceGitContextSignalDetail}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
           <button
@@ -12448,6 +12501,58 @@ function SystemPanel(props: {
               <div style={{ fontSize: 12, color: THEME.text, marginTop: 4 }}>
                 memory <code>{telemetryFeedbackMemoryAssistanceTerminalContextSignal.writes_memory ? "true" : "false"}</code>
                 {" / "}model <code>{telemetryFeedbackMemoryAssistanceTerminalContextSignal.calls_model ? "true" : "false"}</code>
+              </div>
+            </div>
+          </div>
+        ) : null}
+        {telemetryFeedbackMemoryAssistanceGitContextSignal ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+              gap: 8,
+              marginTop: 10,
+            }}
+          >
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Git signal</div>
+              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
+                {telemetryFeedbackMemoryAssistanceGitContextSignal.git_context_signal_ready ? "ready" : "waiting"}
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                branch <code>{telemetryFeedbackMemoryAssistanceGitContextSignal.branch || "unknown"}</code>
+                {" / "}changed <code>{telemetryFeedbackMemoryAssistanceGitContextSignal.changed_count}</code>
+              </div>
+              {telemetryFeedbackMemoryAssistanceGitContextSignalLoadedAt ? (
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                  Loaded {toLocaleTime(telemetryFeedbackMemoryAssistanceGitContextSignalLoadedAt)}
+                </div>
+              ) : null}
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Git readback</div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 6 }}>
+                head <code>{telemetryFeedbackMemoryAssistanceGitContextSignal.head || "missing"}</code>
+                {" / "}dirty <code>{telemetryFeedbackMemoryAssistanceGitContextSignal.dirty ? "true" : "false"}</code>
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                next{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceGitContextSignal.next_smallest_truthful_gap || "git_context_signal"}
+                </code>
+              </div>
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Git guards</div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 6 }}>
+                watcher{" "}
+                <code>{telemetryFeedbackMemoryAssistanceGitContextSignal.starts_git_watcher ? "start" : "read"}</code>
+                {" / "}fetch{" "}
+                <code>{telemetryFeedbackMemoryAssistanceGitContextSignal.runs_git_fetch ? "true" : "false"}</code>
+              </div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 4 }}>
+                memory <code>{telemetryFeedbackMemoryAssistanceGitContextSignal.writes_memory ? "true" : "false"}</code>
+                {" / "}model <code>{telemetryFeedbackMemoryAssistanceGitContextSignal.calls_model ? "true" : "false"}</code>
               </div>
             </div>
           </div>
