@@ -117,6 +117,18 @@ export type TelemetryContextFeedbackReview = {
   next_smallest_truthful_gap: string;
 };
 
+export type TelemetryContextFeedbackMemoryQualityRecord = {
+  ok: boolean;
+  kind: string;
+  status: string;
+  source_id: string;
+  memory_event_id: string;
+  writes_memory: boolean;
+  quality: Record<string, unknown>;
+  memory_event: Record<string, unknown> | null;
+  governance: Record<string, unknown>;
+};
+
 export class TelemetryApiError extends Error {
   readonly status?: number;
   readonly url?: string;
@@ -190,6 +202,25 @@ export function parseTelemetryContextFeedbackReview(value: unknown): TelemetryCo
   };
 }
 
+export function parseTelemetryContextFeedbackMemoryQualityRecord(
+  value: unknown,
+): TelemetryContextFeedbackMemoryQualityRecord {
+  const raw = isRecord(value) ? value : {};
+  const memoryEvent = recordOrEmpty(raw.memory_event);
+
+  return {
+    ok: safeBoolean(raw.ok, false),
+    kind: safeString(raw.kind, ""),
+    status: safeString(raw.status, "unknown"),
+    source_id: safeString(raw.source_id, ""),
+    memory_event_id: safeString(raw.memory_event_id, ""),
+    writes_memory: safeBoolean(raw.writes_memory, false),
+    quality: recordOrEmpty(raw.quality),
+    memory_event: Object.keys(memoryEvent).length > 0 ? memoryEvent : null,
+    governance: recordOrEmpty(raw.governance),
+  };
+}
+
 export class TelemetryClient {
   readonly baseUrl: string;
 
@@ -245,6 +276,50 @@ export class TelemetryClient {
       return parseTelemetryContextFeedbackReview(text ? JSON.parse(text) : {});
     } catch (err) {
       throw new TelemetryApiError("Telemetry context feedback review response was not valid JSON.", { url, cause: err });
+    }
+  }
+
+  async recordContextFeedbackMemoryQuality(opts: {
+    actor: string;
+    reason: string;
+    limit?: number;
+    event_id?: string;
+    signal?: AbortSignal;
+  }): Promise<TelemetryContextFeedbackMemoryQualityRecord> {
+    const url = this.url("/telemetry/context/feedback/memory-quality");
+    const body: Record<string, unknown> = {
+      actor: opts.actor,
+      reason: opts.reason,
+      limit: clampLimit(opts.limit, 25),
+    };
+    const eventId = opts.event_id?.trim();
+    if (eventId) body.event_id = eventId;
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+        signal: opts.signal,
+      });
+    } catch (err) {
+      throw new TelemetryApiError("Telemetry context feedback memory-quality record request failed.", { url, cause: err });
+    }
+
+    const text = await response.text();
+    if (!response.ok) {
+      throw new TelemetryApiError(`HTTP ${response.status} for telemetry context feedback memory-quality record request`, {
+        status: response.status,
+        url,
+        bodySnippet: text.slice(0, 500),
+      });
+    }
+
+    try {
+      return parseTelemetryContextFeedbackMemoryQualityRecord(text ? JSON.parse(text) : {});
+    } catch (err) {
+      throw new TelemetryApiError("Telemetry context feedback memory-quality record response was not valid JSON.", { url, cause: err });
     }
   }
 

@@ -101,6 +101,7 @@ import type {
 import {
   TelemetryApiError,
   TelemetryClient,
+  type TelemetryContextFeedbackMemoryQualityRecord,
   type TelemetryContextFeedbackReview,
   type TelemetryStatusSnapshot,
 } from "./telemetry";
@@ -3955,6 +3956,12 @@ function SystemPanel(props: {
   const [telemetryFeedbackReview, setTelemetryFeedbackReview] = useState<TelemetryContextFeedbackReview | null>(null);
   const [telemetryFeedbackReviewError, setTelemetryFeedbackReviewError] = useState<string | null>(null);
   const [telemetryFeedbackReviewLoadedAt, setTelemetryFeedbackReviewLoadedAt] = useState<number | null>(null);
+  const [telemetryFeedbackMemoryQualityBusy, setTelemetryFeedbackMemoryQualityBusy] = useState(false);
+  const [telemetryFeedbackMemoryQualityNotice, setTelemetryFeedbackMemoryQualityNotice] = useState<{
+    tone: "info" | "error";
+    text: string;
+    record?: TelemetryContextFeedbackMemoryQualityRecord;
+  } | null>(null);
   const [lensActionBusy, setLensActionBusy] = useState<
     ""
       | "host_supervision_authority_request"
@@ -4319,6 +4326,60 @@ function SystemPanel(props: {
     telemetryClient,
     telemetryError,
   ]);
+
+  const recordTelemetryFeedbackMemoryQuality = useCallback(async () => {
+    if (!telemetryFeedbackReview || telemetryFeedbackReview.reviewed_event_count <= 0) {
+      setTelemetryFeedbackMemoryQualityNotice({
+        tone: "error",
+        text: "No explicit context feedback is available to record as a memory-quality signal.",
+      });
+      return;
+    }
+
+    setTelemetryFeedbackMemoryQualityBusy(true);
+    setTelemetryFeedbackMemoryQualityNotice(null);
+    try {
+      const record = await telemetryClient.recordContextFeedbackMemoryQuality({
+        actor: "chat_ui.system",
+        reason: "record telemetry context feedback memory quality from operator UI",
+        limit: 25,
+      });
+      if (!record.ok) {
+        const requiredScope = safeString(record.governance.required_scope).trim();
+        const reason = safeString(record.governance.reason).trim() || record.status;
+        setTelemetryFeedbackMemoryQualityNotice({
+          tone: "error",
+          text: requiredScope
+            ? `Memory-quality write denied: ${reason}; required scope ${requiredScope}.`
+            : `Memory-quality write denied: ${reason}.`,
+          record,
+        });
+        return;
+      }
+
+      if (!record.writes_memory) {
+        setTelemetryFeedbackMemoryQualityNotice({
+          tone: "info",
+          text: `Memory-quality write returned ${record.status}; no memory event was written.`,
+          record,
+        });
+        return;
+      }
+
+      setTelemetryFeedbackMemoryQualityNotice({
+        tone: "info",
+        text: record.memory_event_id
+          ? `Memory-quality signal recorded as ${record.memory_event_id}.`
+          : "Memory-quality signal recorded.",
+        record,
+      });
+      await refresh();
+    } catch (err) {
+      setTelemetryFeedbackMemoryQualityNotice({ tone: "error", text: telemetryError(err) });
+    } finally {
+      setTelemetryFeedbackMemoryQualityBusy(false);
+    }
+  }, [refresh, telemetryClient, telemetryError, telemetryFeedbackReview]);
 
   const requestLensHostSupervisionAuthority = useCallback(async () => {
     setLensActionBusy("host_supervision_authority_request");
@@ -5963,6 +6024,9 @@ function SystemPanel(props: {
       : "Context feedback quality review has not loaded yet.";
   const telemetryFeedbackRatingCounts = telemetryFeedbackReview?.rating_counts ?? {};
   const latestTelemetryFeedback = telemetryFeedbackReview?.latest_feedback ?? null;
+  const telemetryFeedbackMemoryQualityCanRecord = Boolean(
+    telemetryFeedbackReview && telemetryFeedbackReview.reviewed_event_count > 0,
+  );
   const controlTone =
     controlModeId === "pilot"
       ? { bg: "#24160a", border: "#7a541b", color: "#ffd38a" }
@@ -10921,6 +10985,30 @@ function SystemPanel(props: {
         <div style={{ fontSize: 12, color: telemetryFeedbackReviewError ? "#ffcf9d" : THEME.text, marginTop: 8 }}>
           {telemetryFeedbackDetail}
         </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+          <button
+            type="button"
+            style={buttonStyle}
+            disabled={busy || telemetryFeedbackMemoryQualityBusy || !telemetryFeedbackMemoryQualityCanRecord}
+            onClick={() => void recordTelemetryFeedbackMemoryQuality()}
+          >
+            {telemetryFeedbackMemoryQualityBusy ? "Recording..." : "Record quality memory"}
+          </button>
+          <span style={badgeStyle(telemetryFeedbackMemoryQualityCanRecord ? "running" : "dormant")}>
+            memory.timeline.write
+          </span>
+        </div>
+        {telemetryFeedbackMemoryQualityNotice ? (
+          <div
+            style={{
+              fontSize: 12,
+              color: telemetryFeedbackMemoryQualityNotice.tone === "error" ? "#ffcf9d" : THEME.text,
+              marginTop: 8,
+            }}
+          >
+            {telemetryFeedbackMemoryQualityNotice.text}
+          </div>
+        ) : null}
         {telemetryFeedbackReview ? (
           <div
             style={{

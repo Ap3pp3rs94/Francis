@@ -44323,6 +44323,57 @@ Latest validation for Stage 7 context-feedback memory-quality write:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-29 - Stage 7 feedback memory-quality write reaches operator surface
+
+Roadmap area: Stage 7 / Telemetry MVP, visible governed context-feedback
+memory-quality writeback.
+
+Material change:
+
+- The chat UI telemetry client now supports the governed POST
+  `/telemetry/context/feedback/memory-quality` route.
+- The Telemetry & Continuation surface exposes a bounded operator action for
+  recording explicit context-feedback quality into the memory timeline.
+- The UI sends the existing `chat_ui.system` actor and surfaces permission-gate
+  denials truthfully when `memory.timeline.write` is not configured.
+- The action does not write prompt bodies, raw model responses, raw notes, or
+  raw feedback meta; those guarantees remain enforced by the backend memory
+  timeline contract.
+- `/telemetry/status`, `/telemetry/context`, feedback review, and feedback
+  memory-quality readback now advance their next smallest truthful gap to
+  `stage7_context_feedback_memory_retrieval_policy`.
+
+Latest validation for Stage 7 feedback memory-quality operator surface:
+
+- `node --test --experimental-strip-types src/telemetry/index.test.ts` in
+  `apps/chat_ui`
+  Result: `passed; 6 passed`
+- `npm run test` in `apps/chat_ui`
+  Result: `passed; 114 passed`
+- `npm run build` in `apps/chat_ui`
+  Result: `passed`
+- `python -m pytest tests/test_api_telemetry.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 20 passed`
+- `python -m mypy src/francis/telemetry/context.py
+  src/francis/telemetry/status.py src/francis/api/routes/telemetry.py`
+  Result: `passed`
+- `python -m ruff check src/francis/telemetry/context.py
+  src/francis/telemetry/status.py src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/telemetry/context.py
+  src/francis/telemetry/status.py src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- Direct `/telemetry/context/feedback/memory-quality?limit=5` readback
+  Result: `status=empty`, `required_scope=memory.timeline.write`,
+  `writes_memory=false`,
+  `next_smallest_truthful_gap=stage7_context_feedback_memory_retrieval_policy`.
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

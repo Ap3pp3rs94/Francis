@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { TelemetryClient, parseTelemetryContextFeedbackReview, parseTelemetryStatus } from "./index.ts";
+import {
+  TelemetryClient,
+  parseTelemetryContextFeedbackMemoryQualityRecord,
+  parseTelemetryContextFeedbackReview,
+  parseTelemetryStatus,
+} from "./index.ts";
 
 type FetchHandler = (url: string, init?: RequestInit) => Response | Promise<Response>;
 
@@ -251,7 +256,7 @@ test("parseTelemetryContextFeedbackReview preserves redacted feedback quality re
     grants_execution_authority: false,
     grants_mutation_authority: false,
     governance: { read_only: true, uses_explicit_operator_feedback_only: true },
-    next_smallest_truthful_gap: "stage7_context_feedback_memory_quality_loop",
+    next_smallest_truthful_gap: "stage7_context_feedback_memory_retrieval_policy",
   });
 
   assert.equal(review.kind, "francis.stage7.telemetry.context_feedback_review");
@@ -310,7 +315,7 @@ test("TelemetryClient requests the Stage 7 context feedback review endpoint", as
       grants_execution_authority: false,
       grants_mutation_authority: false,
       governance: { read_only: true },
-      next_smallest_truthful_gap: "stage7_context_feedback_memory_quality_loop",
+      next_smallest_truthful_gap: "stage7_context_feedback_memory_retrieval_policy",
     });
   });
 
@@ -320,6 +325,94 @@ test("TelemetryClient requests the Stage 7 context feedback review endpoint", as
     assert.equal(review.status, "empty");
     assert.deepEqual(requests, [
       { path: "/telemetry/context/feedback/review", search: "?limit=25", method: "GET" },
+    ]);
+  } finally {
+    restore();
+  }
+});
+
+test("parseTelemetryContextFeedbackMemoryQualityRecord preserves governed write readback", () => {
+  const record = parseTelemetryContextFeedbackMemoryQualityRecord({
+    ok: true,
+    kind: "francis.stage7.telemetry.context_feedback_memory_quality.record",
+    status: "recorded",
+    source_id: "telemetry_context",
+    memory_event_id: "evt-feedback-quality",
+    writes_memory: true,
+    quality: {
+      status: "memory_candidate_ready",
+      memory_write_candidate: {
+        action_type: "telemetry.context_feedback.quality_review",
+      },
+    },
+    memory_event: {
+      id: "evt-feedback-quality",
+      item: {
+        action_type: "telemetry.context_feedback.quality_review",
+      },
+    },
+    governance: {
+      required_scope: "memory.timeline.write",
+      explicit_operator_decision: true,
+      memory_timeline_contract_enforced: true,
+    },
+  });
+
+  assert.equal(record.ok, true);
+  assert.equal(record.status, "recorded");
+  assert.equal(record.source_id, "telemetry_context");
+  assert.equal(record.memory_event_id, "evt-feedback-quality");
+  assert.equal(record.writes_memory, true);
+  assert.equal(record.governance.required_scope, "memory.timeline.write");
+  assert.equal(record.governance.explicit_operator_decision, true);
+  assert.equal(record.memory_event?.id, "evt-feedback-quality");
+  assert.equal(record.quality.status, "memory_candidate_ready");
+});
+
+test("TelemetryClient records Stage 7 context feedback memory quality through the governed POST route", async () => {
+  const requests: Array<{ path: string; method: string; body: Record<string, unknown> }> = [];
+  const restore = installFetch((url, init) => {
+    const parsed = new URL(url);
+    const body = JSON.parse(init?.body?.toString() ?? "{}") as Record<string, unknown>;
+    requests.push({ path: parsed.pathname, method: init?.method ?? "GET", body });
+    return jsonResponse({
+      ok: true,
+      kind: "francis.stage7.telemetry.context_feedback_memory_quality.record",
+      status: "recorded",
+      source_id: "telemetry_context",
+      memory_event_id: "evt-from-ui",
+      writes_memory: true,
+      quality: { status: "memory_candidate_ready" },
+      memory_event: { id: "evt-from-ui" },
+      governance: {
+        required_scope: "memory.timeline.write",
+        explicit_operator_decision: true,
+        memory_timeline_contract_enforced: true,
+      },
+    });
+  });
+
+  try {
+    const client = new TelemetryClient("http://127.0.0.1:8000/");
+    const record = await client.recordContextFeedbackMemoryQuality({
+      actor: "chat_ui.system",
+      reason: "record telemetry context feedback memory quality from operator UI",
+      limit: 25,
+      event_id: "evt-from-ui",
+    });
+    assert.equal(record.status, "recorded");
+    assert.equal(record.memory_event_id, "evt-from-ui");
+    assert.deepEqual(requests, [
+      {
+        path: "/telemetry/context/feedback/memory-quality",
+        method: "POST",
+        body: {
+          actor: "chat_ui.system",
+          reason: "record telemetry context feedback memory quality from operator UI",
+          limit: 25,
+          event_id: "evt-from-ui",
+        },
+      },
     ]);
   } finally {
     restore();
