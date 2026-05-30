@@ -250,7 +250,7 @@ def context_feedback_memory_assistance_dry_run(limit: int = 20) -> dict[str, Any
             "grants_memory_write_authority": False,
         },
         "skipped_untrusted_items": skipped,
-        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_memory_ui_recording",
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_audit",
     }
 
 
@@ -310,7 +310,7 @@ def context_feedback_memory_assistance_chat_context_readback(limit: int = 20) ->
             "grants_execution_authority": False,
             "grants_memory_write_authority": False,
         },
-        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_memory_ui_recording",
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_audit",
     }
 
 
@@ -389,7 +389,7 @@ def context_feedback_memory_assistance_operator_feedback_memory_readback(limit: 
             "grants_execution_authority": False,
             "grants_memory_write_authority": False,
         },
-        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_memory_ui_recording",
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_audit",
     }
 
 
@@ -458,7 +458,7 @@ def context_feedback_memory_retrieval_readback(limit: int = 20) -> dict[str, Any
             "grants_execution_authority": False,
             "grants_memory_write_authority": False,
         },
-        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_memory_ui_recording",
+        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_audit",
     }
 
 

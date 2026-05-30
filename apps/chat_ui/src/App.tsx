@@ -104,6 +104,7 @@ import {
   type TelemetryContextFeedbackRecord,
   type TelemetryContextFeedbackMemoryAssistanceChatContextReadback,
   type TelemetryContextFeedbackMemoryAssistanceDryRun,
+  type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackMemoryReadback,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackReview,
   type TelemetryContextFeedbackMemoryAssistancePolicy,
   type TelemetryContextFeedbackMemoryQualityRecord,
@@ -4141,8 +4142,24 @@ function SystemPanel(props: {
     useState<string | null>(null);
   const [telemetryFeedbackMemoryAssistanceOperatorReviewLoadedAt, setTelemetryFeedbackMemoryAssistanceOperatorReviewLoadedAt] =
     useState<number | null>(null);
+  const [telemetryFeedbackMemoryAssistanceOperatorMemoryReadback, setTelemetryFeedbackMemoryAssistanceOperatorMemoryReadback] =
+    useState<TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackMemoryReadback | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceOperatorMemoryReadbackError,
+    setTelemetryFeedbackMemoryAssistanceOperatorMemoryReadbackError,
+  ] = useState<string | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceOperatorMemoryReadbackLoadedAt,
+    setTelemetryFeedbackMemoryAssistanceOperatorMemoryReadbackLoadedAt,
+  ] = useState<number | null>(null);
   const [telemetryFeedbackMemoryQualityBusy, setTelemetryFeedbackMemoryQualityBusy] = useState(false);
   const [telemetryFeedbackMemoryQualityNotice, setTelemetryFeedbackMemoryQualityNotice] = useState<{
+    tone: "info" | "error";
+    text: string;
+    record?: TelemetryContextFeedbackMemoryQualityRecord;
+  } | null>(null);
+  const [telemetryFeedbackMemoryAssistanceQualityBusy, setTelemetryFeedbackMemoryAssistanceQualityBusy] = useState(false);
+  const [telemetryFeedbackMemoryAssistanceQualityNotice, setTelemetryFeedbackMemoryAssistanceQualityNotice] = useState<{
     tone: "info" | "error";
     text: string;
     record?: TelemetryContextFeedbackMemoryQualityRecord;
@@ -4340,6 +4357,7 @@ function SystemPanel(props: {
         nextTelemetryFeedbackMemoryAssistanceDryRun,
         nextTelemetryFeedbackMemoryAssistanceChatContext,
         nextTelemetryFeedbackMemoryAssistanceOperatorReview,
+        nextTelemetryFeedbackMemoryAssistanceOperatorMemoryReadback,
       ] =
         await Promise.allSettled([
         client.getSystemInfo(),
@@ -4367,6 +4385,7 @@ function SystemPanel(props: {
         telemetryClient.getContextFeedbackMemoryAssistanceDryRun({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistanceChatContextReadback({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistanceOperatorFeedbackReview({ limit: 25 }),
+        telemetryClient.getContextFeedbackMemoryAssistanceOperatorFeedbackMemoryReadback({ limit: 20 }),
       ]);
 
       const degradedFeeds: string[] = [];
@@ -4546,6 +4565,19 @@ function SystemPanel(props: {
         degradedFeeds.push("telemetry feedback memory assistance operator review");
       }
 
+      if (nextTelemetryFeedbackMemoryAssistanceOperatorMemoryReadback.status === "fulfilled") {
+        setTelemetryFeedbackMemoryAssistanceOperatorMemoryReadback(
+          nextTelemetryFeedbackMemoryAssistanceOperatorMemoryReadback.value,
+        );
+        setTelemetryFeedbackMemoryAssistanceOperatorMemoryReadbackError(null);
+        setTelemetryFeedbackMemoryAssistanceOperatorMemoryReadbackLoadedAt(refreshStartedAt);
+      } else {
+        setTelemetryFeedbackMemoryAssistanceOperatorMemoryReadbackError(
+          telemetryError(nextTelemetryFeedbackMemoryAssistanceOperatorMemoryReadback.reason),
+        );
+        degradedFeeds.push("telemetry feedback memory assistance operator memory readback");
+      }
+
       if (degradedFeeds.length > 0) {
         setRefreshNotice(`Refresh completed with degraded feeds: ${degradedFeeds.join(", ")}.`);
       }
@@ -4622,6 +4654,63 @@ function SystemPanel(props: {
       setTelemetryFeedbackMemoryQualityBusy(false);
     }
   }, [refresh, telemetryClient, telemetryError, telemetryFeedbackReview]);
+
+  const recordTelemetryFeedbackMemoryAssistanceQuality = useCallback(async () => {
+    if (
+      !telemetryFeedbackMemoryAssistanceOperatorReview ||
+      telemetryFeedbackMemoryAssistanceOperatorReview.reviewed_event_count <= 0
+    ) {
+      setTelemetryFeedbackMemoryAssistanceQualityNotice({
+        tone: "error",
+        text: "No feedback-memory assistance operator feedback is available to record as a memory-quality signal.",
+      });
+      return;
+    }
+
+    setTelemetryFeedbackMemoryAssistanceQualityBusy(true);
+    setTelemetryFeedbackMemoryAssistanceQualityNotice(null);
+    try {
+      const record = await telemetryClient.recordContextFeedbackMemoryAssistanceOperatorFeedbackMemoryQuality({
+        actor: "chat_ui.system",
+        reason: "record feedback memory assistance operator feedback memory quality from operator UI",
+        limit: 25,
+      });
+      if (!record.ok) {
+        const requiredScope = safeString(record.governance.required_scope).trim();
+        const reason = safeString(record.governance.reason).trim() || record.status;
+        setTelemetryFeedbackMemoryAssistanceQualityNotice({
+          tone: "error",
+          text: requiredScope
+            ? `Assistance memory-quality write denied: ${reason}; required scope ${requiredScope}.`
+            : `Assistance memory-quality write denied: ${reason}.`,
+          record,
+        });
+        return;
+      }
+
+      if (!record.writes_memory) {
+        setTelemetryFeedbackMemoryAssistanceQualityNotice({
+          tone: "info",
+          text: `Assistance memory-quality write returned ${record.status}; no memory event was written.`,
+          record,
+        });
+        return;
+      }
+
+      setTelemetryFeedbackMemoryAssistanceQualityNotice({
+        tone: "info",
+        text: record.memory_event_id
+          ? `Assistance memory-quality signal recorded as ${record.memory_event_id}.`
+          : "Assistance memory-quality signal recorded.",
+        record,
+      });
+      await refresh();
+    } catch (err) {
+      setTelemetryFeedbackMemoryAssistanceQualityNotice({ tone: "error", text: telemetryError(err) });
+    } finally {
+      setTelemetryFeedbackMemoryAssistanceQualityBusy(false);
+    }
+  }, [refresh, telemetryClient, telemetryError, telemetryFeedbackMemoryAssistanceOperatorReview]);
 
   const requestLensHostSupervisionAuthority = useCallback(async () => {
     setLensActionBusy("host_supervision_authority_request");
@@ -6346,6 +6435,27 @@ function SystemPanel(props: {
     : telemetryFeedbackMemoryAssistanceOperatorReview
       ? `${telemetryFeedbackMemoryAssistanceOperatorReview.reviewed_event_count} targeted operator feedback event${telemetryFeedbackMemoryAssistanceOperatorReview.reviewed_event_count === 1 ? "" : "s"} reviewed; useful ${safeNumber(telemetryFeedbackMemoryAssistanceOperatorReview.rating_counts.useful, 0)}, missed ${safeNumber(telemetryFeedbackMemoryAssistanceOperatorReview.rating_counts.not_useful, 0)}, neutral ${safeNumber(telemetryFeedbackMemoryAssistanceOperatorReview.rating_counts.neutral, 0)}.`
       : "Feedback memory assistance operator review has not loaded yet.";
+  const telemetryFeedbackMemoryAssistanceQualityCanRecord = Boolean(
+    telemetryFeedbackMemoryAssistanceOperatorReview &&
+      telemetryFeedbackMemoryAssistanceOperatorReview.reviewed_event_count > 0,
+  );
+  const telemetryFeedbackMemoryAssistanceOperatorMemoryReadbackStatus =
+    safeString(telemetryFeedbackMemoryAssistanceOperatorMemoryReadback?.status).trim() ||
+    (telemetryFeedbackMemoryAssistanceOperatorMemoryReadbackError ? "unavailable" : "unloaded");
+  const telemetryFeedbackMemoryAssistanceOperatorMemoryReadbackTone =
+    telemetryFeedbackMemoryAssistanceOperatorMemoryReadbackError
+      ? "blocked"
+      : telemetryFeedbackMemoryAssistanceOperatorMemoryReadback
+        ? telemetryFeedbackMemoryAssistanceOperatorMemoryReadback.count > 0
+          ? "running"
+          : "dormant"
+        : "standby";
+  const telemetryFeedbackMemoryAssistanceOperatorMemoryReadbackDetail =
+    telemetryFeedbackMemoryAssistanceOperatorMemoryReadbackError
+      ? `Feedback memory assistance operator memory readback could not refresh: ${telemetryFeedbackMemoryAssistanceOperatorMemoryReadbackError}`
+      : telemetryFeedbackMemoryAssistanceOperatorMemoryReadback
+        ? `${telemetryFeedbackMemoryAssistanceOperatorMemoryReadback.count} targeted feedback-memory assistance quality event${telemetryFeedbackMemoryAssistanceOperatorMemoryReadback.count === 1 ? "" : "s"} matched; ${telemetryFeedbackMemoryAssistanceOperatorMemoryReadback.skipped_count} skipped by policy.`
+        : "Feedback memory assistance operator memory readback has not loaded yet.";
   const controlTone =
     controlModeId === "pilot"
       ? { bg: "#24160a", border: "#7a541b", color: "#ffd38a" }
@@ -11286,6 +11396,9 @@ function SystemPanel(props: {
             <span style={badgeStyle(telemetryFeedbackMemoryAssistanceOperatorReviewTone)}>
               Assist review {telemetryFeedbackMemoryAssistanceOperatorReviewStatus}
             </span>
+            <span style={badgeStyle(telemetryFeedbackMemoryAssistanceOperatorMemoryReadbackTone)}>
+              Assist memory {telemetryFeedbackMemoryAssistanceOperatorMemoryReadbackStatus}
+            </span>
             <span style={badgeStyle(continuation.tone)}>{continuation.label}</span>
           </div>
         </div>
@@ -11350,6 +11463,15 @@ function SystemPanel(props: {
         >
           {telemetryFeedbackMemoryAssistanceOperatorReviewDetail}
         </div>
+        <div
+          style={{
+            fontSize: 12,
+            color: telemetryFeedbackMemoryAssistanceOperatorMemoryReadbackError ? "#ffcf9d" : THEME.text,
+            marginTop: 8,
+          }}
+        >
+          {telemetryFeedbackMemoryAssistanceOperatorMemoryReadbackDetail}
+        </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
           <button
             type="button"
@@ -11362,6 +11484,21 @@ function SystemPanel(props: {
           <span style={badgeStyle(telemetryFeedbackMemoryQualityCanRecord ? "running" : "dormant")}>
             memory.timeline.write
           </span>
+          <button
+            type="button"
+            style={buttonStyle}
+            disabled={
+              busy ||
+              telemetryFeedbackMemoryAssistanceQualityBusy ||
+              !telemetryFeedbackMemoryAssistanceQualityCanRecord
+            }
+            onClick={() => void recordTelemetryFeedbackMemoryAssistanceQuality()}
+          >
+            {telemetryFeedbackMemoryAssistanceQualityBusy ? "Recording..." : "Record assistance memory"}
+          </button>
+          <span style={badgeStyle(telemetryFeedbackMemoryAssistanceQualityCanRecord ? "running" : "dormant")}>
+            feedback_memory_assistance
+          </span>
         </div>
         {telemetryFeedbackMemoryQualityNotice ? (
           <div
@@ -11372,6 +11509,17 @@ function SystemPanel(props: {
             }}
           >
             {telemetryFeedbackMemoryQualityNotice.text}
+          </div>
+        ) : null}
+        {telemetryFeedbackMemoryAssistanceQualityNotice ? (
+          <div
+            style={{
+              fontSize: 12,
+              color: telemetryFeedbackMemoryAssistanceQualityNotice.tone === "error" ? "#ffcf9d" : THEME.text,
+              marginTop: 8,
+            }}
+          >
+            {telemetryFeedbackMemoryAssistanceQualityNotice.text}
           </div>
         ) : null}
         {telemetryFeedbackReview ? (
