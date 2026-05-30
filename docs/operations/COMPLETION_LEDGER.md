@@ -45775,6 +45775,63 @@ review:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-30 - Stage 7 feedback memory assistance poisoning review is inspectable
+
+Roadmap area: Stage 7 / Telemetry MVP, memory poisoning resistance for the
+feedback-memory assistance primary loop.
+
+Material change:
+
+- Telemetry now exposes a read-only poisoning review at
+  `/telemetry/context/feedback/memory-assistance-feedback-loop-memory-poisoning-review`.
+- The review consumes primary-loop evidence, the assistance policy, the
+  assistance memory readback, and the dry-run governance posture.
+- The review uses the memory timeline poison-pattern detector for static sample
+  readbacks and scans accepted feedback-memory assistance memory items for
+  detected poisoning patterns without writing memory or executing a poison
+  probe.
+- The Telemetry & Continuation panel now fetches and displays poisoning-review
+  status independently, including ready/required control count, poison-control
+  badges, static sample indicators, detected item count, next truthful gap, and
+  non-write/non-model guards.
+- The review remains read-only: it does not execute poison probes, write memory,
+  write feedback, mutate prompt state, send chat, call a model, select tools,
+  train a model, or grant execution or mutation authority.
+
+Latest validation for Stage 7 feedback memory assistance poisoning review:
+
+- `python -m pytest
+  tests/test_api_telemetry.py::test_telemetry_context_feedback_memory_assistance_live_sample_operator_decision_records_receipt
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  tests/test_api_memory_timeline.py::test_memory_timeline_record_rejects_poisoning_payload_before_persisting
+  tests/test_api_memory_timeline.py::test_memory_timeline_record_rejects_nested_payload_poison_before_persisting
+  -q --tb=short --maxfail=1`
+  Result: `passed; 4 passed`
+- `python -m pytest tests/test_api_telemetry.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  tests/test_api_memory_timeline.py::test_memory_timeline_record_rejects_poisoning_payload_before_persisting
+  tests/test_api_memory_timeline.py::test_memory_timeline_record_rejects_nested_payload_poison_before_persisting
+  -q --tb=short --maxfail=1`
+  Result: `passed`
+- `python -m mypy src/francis/api/routes/telemetry.py
+  src/francis/api/routes/memory_timeline.py`
+  Result: `passed`
+- `python -m ruff check src/francis/api/routes/telemetry.py
+  src/francis/api/routes/memory_timeline.py tests/test_api_telemetry.py
+  tests/test_api_contract_chat_ui.py tests/test_api_memory_timeline.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/telemetry.py
+  src/francis/api/routes/memory_timeline.py tests/test_api_telemetry.py
+  tests/test_api_contract_chat_ui.py tests/test_api_memory_timeline.py`
+  Result: `passed`
+- `node --test --experimental-strip-types src/telemetry/index.test.ts` in
+  `apps/chat_ui`
+  Result: `passed; 54 passed`
+- `npm run test` in `apps/chat_ui`
+  Result: `passed; 162 passed`
+- `npm run build` in `apps/chat_ui`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

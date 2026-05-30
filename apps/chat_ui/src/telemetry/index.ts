@@ -743,6 +743,37 @@ export type TelemetryContextFeedbackMemoryAssistancePrimaryLoopEvidenceReview = 
   next_smallest_truthful_gap: string;
 };
 
+export type TelemetryContextFeedbackMemoryAssistanceMemoryPoisoningReview = {
+  ok: boolean;
+  kind: string;
+  stage: string;
+  source_id: string;
+  status: string;
+  target: string;
+  memory_poisoning_review_ready: boolean;
+  ready_count: number;
+  required_count: number;
+  poisoning_controls: Array<Record<string, unknown>>;
+  poison_pattern_samples: Array<Record<string, unknown>>;
+  detected_poisoned_memory_items: Array<Record<string, unknown>>;
+  detected_poisoned_memory_item_count: number;
+  primary_loop_evidence: Record<string, unknown>;
+  memory_readback: Record<string, unknown>;
+  read_only: boolean;
+  executes_poison_probe: boolean;
+  writes_memory: boolean;
+  writes_feedback: boolean;
+  mutates_prompt: boolean;
+  sends_chat: boolean;
+  calls_model: boolean;
+  selects_tools: boolean;
+  trains_model: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+  governance: Record<string, unknown>;
+  next_smallest_truthful_gap: string;
+};
+
 export type TelemetryContextFeedbackMemoryAssistancePolicy = {
   ok: boolean;
   kind: string;
@@ -1632,6 +1663,47 @@ export function parseTelemetryContextFeedbackMemoryAssistancePrimaryLoopEvidence
     operator_review: recordOrEmpty(raw.operator_review),
     outcome_review: recordOrEmpty(raw.outcome_review),
     read_only: safeBoolean(raw.read_only, false),
+    writes_memory: safeBoolean(raw.writes_memory, true),
+    writes_feedback: safeBoolean(raw.writes_feedback, true),
+    mutates_prompt: safeBoolean(raw.mutates_prompt, true),
+    sends_chat: safeBoolean(raw.sends_chat, true),
+    calls_model: safeBoolean(raw.calls_model, true),
+    selects_tools: safeBoolean(raw.selects_tools, true),
+    trains_model: safeBoolean(raw.trains_model, true),
+    grants_execution_authority: safeBoolean(raw.grants_execution_authority, true),
+    grants_mutation_authority: safeBoolean(raw.grants_mutation_authority, true),
+    governance: recordOrEmpty(raw.governance),
+    next_smallest_truthful_gap: safeString(raw.next_smallest_truthful_gap, ""),
+  };
+}
+
+export function parseTelemetryContextFeedbackMemoryAssistanceMemoryPoisoningReview(
+  value: unknown,
+): TelemetryContextFeedbackMemoryAssistanceMemoryPoisoningReview {
+  const raw = isRecord(value) ? value : {};
+
+  return {
+    ok: safeBoolean(raw.ok, false),
+    kind: safeString(raw.kind, ""),
+    stage: safeString(raw.stage, ""),
+    source_id: safeString(raw.source_id, ""),
+    status: safeString(raw.status, "unknown"),
+    target: safeString(raw.target, ""),
+    memory_poisoning_review_ready: safeBoolean(raw.memory_poisoning_review_ready, false),
+    ready_count: safeNumber(raw.ready_count, 0),
+    required_count: safeNumber(raw.required_count, 0),
+    poisoning_controls: Array.isArray(raw.poisoning_controls) ? raw.poisoning_controls.filter(isRecord) : [],
+    poison_pattern_samples: Array.isArray(raw.poison_pattern_samples)
+      ? raw.poison_pattern_samples.filter(isRecord)
+      : [],
+    detected_poisoned_memory_items: Array.isArray(raw.detected_poisoned_memory_items)
+      ? raw.detected_poisoned_memory_items.filter(isRecord)
+      : [],
+    detected_poisoned_memory_item_count: safeNumber(raw.detected_poisoned_memory_item_count, 0),
+    primary_loop_evidence: recordOrEmpty(raw.primary_loop_evidence),
+    memory_readback: recordOrEmpty(raw.memory_readback),
+    read_only: safeBoolean(raw.read_only, false),
+    executes_poison_probe: safeBoolean(raw.executes_poison_probe, true),
     writes_memory: safeBoolean(raw.writes_memory, true),
     writes_feedback: safeBoolean(raw.writes_feedback, true),
     mutates_prompt: safeBoolean(raw.mutates_prompt, true),
@@ -2732,6 +2804,49 @@ export class TelemetryClient {
     } catch (err) {
       throw new TelemetryApiError(
         "Telemetry feedback memory assistance primary loop evidence response was not valid JSON.",
+        {
+          url,
+          cause: err,
+        },
+      );
+    }
+  }
+
+  async getContextFeedbackMemoryAssistanceMemoryPoisoningReview(opts?: {
+    limit?: number;
+    signal?: AbortSignal;
+  }): Promise<TelemetryContextFeedbackMemoryAssistanceMemoryPoisoningReview> {
+    const limit = clampLimit(opts?.limit, 20);
+    const url = this.url(
+      `/telemetry/context/feedback/memory-assistance-feedback-loop-memory-poisoning-review?limit=${limit}`,
+    );
+    let response: Response;
+    try {
+      response = await fetch(url, { method: "GET", signal: opts?.signal });
+    } catch (err) {
+      throw new TelemetryApiError("Telemetry feedback memory assistance poisoning review request failed.", {
+        url,
+        cause: err,
+      });
+    }
+
+    const text = await response.text();
+    if (!response.ok) {
+      throw new TelemetryApiError(
+        `HTTP ${response.status} for telemetry feedback memory assistance poisoning review request`,
+        {
+          status: response.status,
+          url,
+          bodySnippet: text.slice(0, 500),
+        },
+      );
+    }
+
+    try {
+      return parseTelemetryContextFeedbackMemoryAssistanceMemoryPoisoningReview(text ? JSON.parse(text) : {});
+    } catch (err) {
+      throw new TelemetryApiError(
+        "Telemetry feedback memory assistance poisoning review response was not valid JSON.",
         {
           url,
           cause: err,

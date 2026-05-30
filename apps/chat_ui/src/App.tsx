@@ -112,6 +112,7 @@ import {
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorDecisionRecord,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleOperatorReview,
   type TelemetryContextFeedbackMemoryAssistanceOperatorFeedbackLoopLiveSampleReadback,
+  type TelemetryContextFeedbackMemoryAssistanceMemoryPoisoningReview,
   type TelemetryContextFeedbackMemoryAssistanceOperatorContextSurfaceReview,
   type TelemetryContextFeedbackMemoryAssistancePrimaryLoopEvidenceReview,
   type TelemetryContextFeedbackMemoryAssistanceGitContextSignal,
@@ -4311,6 +4312,18 @@ function SystemPanel(props: {
     telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReviewLoadedAt,
     setTelemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReviewLoadedAt,
   ] = useState<number | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceMemoryPoisoningReview,
+    setTelemetryFeedbackMemoryAssistanceMemoryPoisoningReview,
+  ] = useState<TelemetryContextFeedbackMemoryAssistanceMemoryPoisoningReview | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceMemoryPoisoningReviewError,
+    setTelemetryFeedbackMemoryAssistanceMemoryPoisoningReviewError,
+  ] = useState<string | null>(null);
+  const [
+    telemetryFeedbackMemoryAssistanceMemoryPoisoningReviewLoadedAt,
+    setTelemetryFeedbackMemoryAssistanceMemoryPoisoningReviewLoadedAt,
+  ] = useState<number | null>(null);
   const [telemetryFeedbackMemoryQualityBusy, setTelemetryFeedbackMemoryQualityBusy] = useState(false);
   const [telemetryFeedbackMemoryQualityNotice, setTelemetryFeedbackMemoryQualityNotice] = useState<{
     tone: "info" | "error";
@@ -4542,6 +4555,7 @@ function SystemPanel(props: {
         nextTelemetryFeedbackMemoryAssistanceOperatorContextSurfaceReview,
         nextTelemetryFeedbackMemoryAssistanceActionQualitySignalReview,
         nextTelemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview,
+        nextTelemetryFeedbackMemoryAssistanceMemoryPoisoningReview,
       ] =
         await Promise.allSettled([
         client.getSystemInfo(),
@@ -4585,6 +4599,7 @@ function SystemPanel(props: {
         telemetryClient.getContextFeedbackMemoryAssistanceOperatorContextSurfaceReview({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistanceActionQualitySignalReview({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistancePrimaryLoopEvidenceReview({ limit: 20 }),
+        telemetryClient.getContextFeedbackMemoryAssistanceMemoryPoisoningReview({ limit: 20 }),
       ]);
 
       const degradedFeeds: string[] = [];
@@ -4934,6 +4949,19 @@ function SystemPanel(props: {
           telemetryError(nextTelemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview.reason),
         );
         degradedFeeds.push("telemetry feedback memory assistance primary loop evidence review");
+      }
+
+      if (nextTelemetryFeedbackMemoryAssistanceMemoryPoisoningReview.status === "fulfilled") {
+        setTelemetryFeedbackMemoryAssistanceMemoryPoisoningReview(
+          nextTelemetryFeedbackMemoryAssistanceMemoryPoisoningReview.value,
+        );
+        setTelemetryFeedbackMemoryAssistanceMemoryPoisoningReviewError(null);
+        setTelemetryFeedbackMemoryAssistanceMemoryPoisoningReviewLoadedAt(refreshStartedAt);
+      } else {
+        setTelemetryFeedbackMemoryAssistanceMemoryPoisoningReviewError(
+          telemetryError(nextTelemetryFeedbackMemoryAssistanceMemoryPoisoningReview.reason),
+        );
+        degradedFeeds.push("telemetry feedback memory assistance memory poisoning review");
       }
 
       if (degradedFeeds.length > 0) {
@@ -7105,6 +7133,23 @@ function SystemPanel(props: {
       : telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview
         ? `Feedback memory assistance primary loop ${telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview.status}; evidence ${telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview.ready_count}/${telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview.required_count}.`
         : "Feedback memory assistance primary loop evidence has not loaded yet.";
+  const telemetryFeedbackMemoryAssistanceMemoryPoisoningReviewStatus =
+    safeString(telemetryFeedbackMemoryAssistanceMemoryPoisoningReview?.status).trim() ||
+    (telemetryFeedbackMemoryAssistanceMemoryPoisoningReviewError ? "unavailable" : "unloaded");
+  const telemetryFeedbackMemoryAssistanceMemoryPoisoningReviewTone =
+    telemetryFeedbackMemoryAssistanceMemoryPoisoningReviewError
+      ? "blocked"
+      : telemetryFeedbackMemoryAssistanceMemoryPoisoningReview
+        ? telemetryFeedbackMemoryAssistanceMemoryPoisoningReview.memory_poisoning_review_ready
+          ? "running"
+          : "dormant"
+        : "standby";
+  const telemetryFeedbackMemoryAssistanceMemoryPoisoningReviewDetail =
+    telemetryFeedbackMemoryAssistanceMemoryPoisoningReviewError
+      ? `Feedback memory assistance poisoning review could not refresh: ${telemetryFeedbackMemoryAssistanceMemoryPoisoningReviewError}`
+      : telemetryFeedbackMemoryAssistanceMemoryPoisoningReview
+        ? `Feedback memory assistance poisoning ${telemetryFeedbackMemoryAssistanceMemoryPoisoningReview.status}; controls ${telemetryFeedbackMemoryAssistanceMemoryPoisoningReview.ready_count}/${telemetryFeedbackMemoryAssistanceMemoryPoisoningReview.required_count}.`
+        : "Feedback memory assistance poisoning review has not loaded yet.";
   const telemetryFeedbackMemoryAssistanceLiveSampleDecisionCanRecord = Boolean(
     telemetryFeedbackMemoryAssistanceLiveSampleOperatorReview?.operator_review_ready &&
       !telemetryFeedbackMemoryAssistanceLiveSampleOperatorDecisionRecorded,
@@ -12091,6 +12136,9 @@ function SystemPanel(props: {
             <span style={badgeStyle(telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReviewTone)}>
               Primary loop {telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReviewStatus}
             </span>
+            <span style={badgeStyle(telemetryFeedbackMemoryAssistanceMemoryPoisoningReviewTone)}>
+              Poisoning review {telemetryFeedbackMemoryAssistanceMemoryPoisoningReviewStatus}
+            </span>
             <span style={badgeStyle(continuation.tone)}>{continuation.label}</span>
           </div>
         </div>
@@ -12282,6 +12330,15 @@ function SystemPanel(props: {
           }}
         >
           {telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReviewDetail}
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            color: telemetryFeedbackMemoryAssistanceMemoryPoisoningReviewError ? "#ffcf9d" : THEME.text,
+            marginTop: 8,
+          }}
+        >
+          {telemetryFeedbackMemoryAssistanceMemoryPoisoningReviewDetail}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
           <button
@@ -13172,6 +13229,85 @@ function SystemPanel(props: {
                 <code>{telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview.writes_memory ? "true" : "false"}</code>
                 {" / "}model{" "}
                 <code>{telemetryFeedbackMemoryAssistancePrimaryLoopEvidenceReview.calls_model ? "true" : "false"}</code>
+              </div>
+            </div>
+          </div>
+        ) : null}
+        {telemetryFeedbackMemoryAssistanceMemoryPoisoningReview ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+              gap: 8,
+              marginTop: 10,
+            }}
+          >
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Poisoning review</div>
+              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
+                {telemetryFeedbackMemoryAssistanceMemoryPoisoningReview.ready_count}/
+                {telemetryFeedbackMemoryAssistanceMemoryPoisoningReview.required_count}
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                detected{" "}
+                <code>{telemetryFeedbackMemoryAssistanceMemoryPoisoningReview.detected_poisoned_memory_item_count}</code>
+              </div>
+              {telemetryFeedbackMemoryAssistanceMemoryPoisoningReviewLoadedAt ? (
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                  Loaded {toLocaleTime(telemetryFeedbackMemoryAssistanceMemoryPoisoningReviewLoadedAt)}
+                </div>
+              ) : null}
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Poison controls</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                {telemetryFeedbackMemoryAssistanceMemoryPoisoningReview.poisoning_controls.map((item) => {
+                  const id = safeString(item.id).trim() || "control";
+                  const ready = Boolean(item.ready);
+                  return (
+                    <span key={`telemetry-poisoning-control-${id}`} style={badgeStyle(ready ? "running" : "dormant")}>
+                      {id} {ready ? "ready" : "waiting"}
+                    </span>
+                  );
+                })}
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                next{" "}
+                <code>
+                  {telemetryFeedbackMemoryAssistanceMemoryPoisoningReview.next_smallest_truthful_gap ||
+                    "memory_poisoning_review"}
+                </code>
+              </div>
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Poison samples</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                {telemetryFeedbackMemoryAssistanceMemoryPoisoningReview.poison_pattern_samples.map((item) => {
+                  const id = safeString(item.id).trim() || "sample";
+                  const pattern = safeString(item.detected_pattern).trim() || "missing";
+                  return (
+                    <span key={`telemetry-poisoning-sample-${id}`} style={badgeStyle(pattern === "missing" ? "blocked" : "running")}>
+                      {id}
+                    </span>
+                  );
+                })}
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+                probe <code>{telemetryFeedbackMemoryAssistanceMemoryPoisoningReview.executes_poison_probe ? "exec" : "static"}</code>
+              </div>
+            </div>
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ fontSize: 11, color: THEME.muted }}>Poisoning guards</div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 6 }}>
+                memory{" "}
+                <code>{telemetryFeedbackMemoryAssistanceMemoryPoisoningReview.writes_memory ? "true" : "false"}</code>
+                {" / "}prompt{" "}
+                <code>{telemetryFeedbackMemoryAssistanceMemoryPoisoningReview.mutates_prompt ? "mutate" : "read"}</code>
+              </div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 4 }}>
+                model <code>{telemetryFeedbackMemoryAssistanceMemoryPoisoningReview.calls_model ? "true" : "false"}</code>
+                {" / "}tools{" "}
+                <code>{telemetryFeedbackMemoryAssistanceMemoryPoisoningReview.selects_tools ? "true" : "false"}</code>
               </div>
             </div>
           </div>

@@ -17,6 +17,7 @@ import {
   parseTelemetryContextFeedbackMemoryAssistanceActionQualitySignalReview,
   parseTelemetryContextFeedbackMemoryAssistanceGitContextSignal,
   parseTelemetryContextFeedbackMemoryAssistanceIdeContextSignal,
+  parseTelemetryContextFeedbackMemoryAssistanceMemoryPoisoningReview,
   parseTelemetryContextFeedbackMemoryAssistanceOperatorContextSurfaceReview,
   parseTelemetryContextFeedbackMemoryAssistancePrimaryLoopEvidenceReview,
   parseTelemetryContextFeedbackMemoryAssistanceSensingIndicatorSummary,
@@ -2386,6 +2387,133 @@ test("TelemetryClient requests the primary loop evidence review endpoint", async
     assert.deepEqual(requests, [
       {
         path: "/telemetry/context/feedback/memory-assistance-feedback-loop-primary-loop-evidence-review",
+        search: "?limit=30",
+        method: "GET",
+      },
+    ]);
+  } finally {
+    restore();
+  }
+});
+
+test("parseTelemetryContextFeedbackMemoryAssistanceMemoryPoisoningReview preserves poisoning guards", () => {
+  const review = parseTelemetryContextFeedbackMemoryAssistanceMemoryPoisoningReview({
+    ok: true,
+    kind: "francis.stage7.telemetry.context_feedback_memory_assistance_memory_poisoning_review",
+    stage: "Stage 7 / Telemetry MVP",
+    source_id: "telemetry_context",
+    status: "memory_poisoning_review_ready",
+    target: "feedback_memory_assistance_prompt_integration",
+    memory_poisoning_review_ready: true,
+    ready_count: 5,
+    required_count: 5,
+    poisoning_controls: [
+      { id: "memory_timeline_write_contract", ready: true },
+      { id: "poison_pattern_detection", ready: true },
+      { id: "untrusted_payload_influence_blocked", ready: true },
+      { id: "existing_memory_readback_clean", ready: true },
+      { id: "primary_loop_receipt_trace_bounded", ready: true },
+    ],
+    poison_pattern_samples: [
+      { id: "ignore_previous_instructions", detected_pattern: "ignore previous instructions" },
+      { id: "system_prompt_override", detected_pattern: "system prompt override" },
+    ],
+    detected_poisoned_memory_items: [],
+    detected_poisoned_memory_item_count: 0,
+    primary_loop_evidence: { primary_loop_evidence_ready: true },
+    memory_readback: { count: 1 },
+    read_only: true,
+    executes_poison_probe: false,
+    writes_memory: false,
+    writes_feedback: false,
+    mutates_prompt: false,
+    sends_chat: false,
+    calls_model: false,
+    selects_tools: false,
+    trains_model: false,
+    grants_execution_authority: false,
+    grants_mutation_authority: false,
+    governance: { read_only: true, memory_poisoning_review: true },
+    next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_true_execution_trace_review",
+  });
+
+  assert.equal(review.status, "memory_poisoning_review_ready");
+  assert.equal(review.memory_poisoning_review_ready, true);
+  assert.equal(review.ready_count, 5);
+  assert.equal(review.required_count, 5);
+  assert.deepEqual(
+    review.poisoning_controls.map((item) => item.id),
+    [
+      "memory_timeline_write_contract",
+      "poison_pattern_detection",
+      "untrusted_payload_influence_blocked",
+      "existing_memory_readback_clean",
+      "primary_loop_receipt_trace_bounded",
+    ],
+  );
+  assert.equal(review.poison_pattern_samples.length, 2);
+  assert.equal(review.detected_poisoned_memory_item_count, 0);
+  assert.equal(review.executes_poison_probe, false);
+  assert.equal(review.writes_memory, false);
+  assert.equal(review.calls_model, false);
+  assert.equal(review.grants_execution_authority, false);
+  assert.equal(review.governance.memory_poisoning_review, true);
+});
+
+test("TelemetryClient requests the memory poisoning review endpoint", async () => {
+  const requests: Array<{ path: string; search: string; method: string }> = [];
+  const restore = installFetch((url, init) => {
+    const parsed = new URL(url);
+    requests.push({ path: parsed.pathname, search: parsed.search, method: init?.method ?? "GET" });
+    return jsonResponse({
+      ok: true,
+      kind: "francis.stage7.telemetry.context_feedback_memory_assistance_memory_poisoning_review",
+      stage: "Stage 7 / Telemetry MVP",
+      source_id: "telemetry_context",
+      status: "memory_poisoning_review_ready",
+      target: "feedback_memory_assistance_prompt_integration",
+      memory_poisoning_review_ready: true,
+      ready_count: 5,
+      required_count: 5,
+      poisoning_controls: [
+        { id: "memory_timeline_write_contract", ready: true },
+        { id: "poison_pattern_detection", ready: true },
+        { id: "untrusted_payload_influence_blocked", ready: true },
+        { id: "existing_memory_readback_clean", ready: true },
+        { id: "primary_loop_receipt_trace_bounded", ready: true },
+      ],
+      poison_pattern_samples: [
+        { id: "ignore_previous_instructions", detected_pattern: "ignore previous instructions" },
+        { id: "system_prompt_override", detected_pattern: "system prompt override" },
+      ],
+      detected_poisoned_memory_items: [],
+      detected_poisoned_memory_item_count: 0,
+      primary_loop_evidence: { primary_loop_evidence_ready: true },
+      memory_readback: { count: 1 },
+      read_only: true,
+      executes_poison_probe: false,
+      writes_memory: false,
+      writes_feedback: false,
+      mutates_prompt: false,
+      sends_chat: false,
+      calls_model: false,
+      selects_tools: false,
+      trains_model: false,
+      grants_execution_authority: false,
+      grants_mutation_authority: false,
+      governance: { read_only: true, memory_poisoning_review: true },
+      next_smallest_truthful_gap: "stage7_context_feedback_memory_assistance_true_execution_trace_review",
+    });
+  });
+
+  try {
+    const client = new TelemetryClient("http://127.0.0.1:8000/");
+    const review = await client.getContextFeedbackMemoryAssistanceMemoryPoisoningReview({ limit: 30 });
+
+    assert.equal(review.memory_poisoning_review_ready, true);
+    assert.deepEqual(requests, [
+      {
+        path: "/telemetry/context/feedback/memory-assistance-feedback-loop-memory-poisoning-review",
         search: "?limit=30",
         method: "GET",
       },

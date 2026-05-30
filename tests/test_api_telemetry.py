@@ -1762,6 +1762,51 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decis
         "stage7_context_feedback_memory_assistance_memory_poisoning_review"
     )
 
+    poisoning = client.get(
+        "/telemetry/context/feedback/memory-assistance-feedback-loop-memory-poisoning-review?limit=10"
+    ).json()
+    assert poisoning["ok"] is True
+    assert poisoning["kind"] == ("francis.stage7.telemetry.context_feedback_memory_assistance_memory_poisoning_review")
+    assert poisoning["status"] == "memory_poisoning_review_ready"
+    assert poisoning["memory_poisoning_review_ready"] is True
+    assert poisoning["ready_count"] == poisoning["required_count"] == 5
+    assert [item["id"] for item in poisoning["poisoning_controls"]] == [
+        "memory_timeline_write_contract",
+        "poison_pattern_detection",
+        "untrusted_payload_influence_blocked",
+        "existing_memory_readback_clean",
+        "primary_loop_receipt_trace_bounded",
+    ]
+    assert all(item["ready"] is True for item in poisoning["poisoning_controls"])
+    assert [item["detected_pattern"] for item in poisoning["poison_pattern_samples"]] == [
+        "ignore previous instructions",
+        "system prompt override",
+    ]
+    assert all(
+        item["expected_error"] == "memory_poisoning_input_denied" for item in poisoning["poison_pattern_samples"]
+    )
+    assert poisoning["detected_poisoned_memory_items"] == []
+    assert poisoning["detected_poisoned_memory_item_count"] == 0
+    assert poisoning["primary_loop_evidence"]["primary_loop_evidence_ready"] is True
+    assert poisoning["memory_readback"]["count"] >= 1
+    assert poisoning["read_only"] is True
+    assert poisoning["executes_poison_probe"] is False
+    assert poisoning["writes_memory"] is False
+    assert poisoning["writes_feedback"] is False
+    assert poisoning["mutates_prompt"] is False
+    assert poisoning["sends_chat"] is False
+    assert poisoning["calls_model"] is False
+    assert poisoning["selects_tools"] is False
+    assert poisoning["grants_execution_authority"] is False
+    assert poisoning["grants_mutation_authority"] is False
+    assert poisoning["governance"]["read_only"] is True
+    assert poisoning["governance"]["memory_poisoning_review"] is True
+    assert poisoning["governance"]["uses_memory_timeline_poison_detector"] is True
+    assert poisoning["governance"]["does_not_execute_poison_probe"] is True
+    assert poisoning["next_smallest_truthful_gap"] == (
+        "stage7_context_feedback_memory_assistance_true_execution_trace_review"
+    )
+
 
 def test_telemetry_context_feedback_memory_quality_record_is_empty_without_events(
     monkeypatch,

@@ -234,6 +234,10 @@ def _find_poison_pattern(value: Any) -> str:
     return ""
 
 
+def find_memory_poison_pattern(value: Any) -> str:
+    return _find_poison_pattern(value)
+
+
 def _memory_write_contract_denied(
     *,
     reason: str,
