@@ -2066,6 +2066,68 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_operator_decis
     assert closure["governance"]["operator_stage_closure_decision_required"] is True
     assert closure["next_smallest_truthful_gap"] == ("stage7_memory_write_contract_hardening_review")
 
+    memory_contract = client.get(
+        "/telemetry/context/feedback/memory-assistance-feedback-loop-memory-write-contract-hardening-review?limit=10"
+    ).json()
+    assert memory_contract["ok"] is True
+    assert memory_contract["kind"] == "francis.stage7.telemetry.memory_write_contract_hardening_review"
+    assert memory_contract["status"] == "memory_write_contract_hardening_ready"
+    assert memory_contract["memory_write_contract_hardening_ready"] is True
+    assert memory_contract["ready_count"] == memory_contract["required_count"] == 6
+    assert memory_contract["required_memory_contract_fields"] == [
+        "action_type",
+        "provenance.source",
+        "classification",
+        "confidence",
+        "retention",
+    ]
+    assert memory_contract["memory_event_count"] == 2
+    assert memory_contract["memory_contract_event_count"] == 2
+    assert [item["id"] for item in memory_contract["criteria"]] == [
+        "closure_readiness_backstop",
+        "required_memory_contract_fields",
+        "targeted_memory_events_have_contract",
+        "feedback_memory_assistance_identity_bounded",
+        "poisoning_denial_controls_ready",
+        "non_authorizing_memory_review_guard",
+    ]
+    assert all(item["ready"] is True for item in memory_contract["criteria"])
+    memory_contract_criteria = {item["id"]: item for item in memory_contract["criteria"]}
+    assert memory_contract_criteria["targeted_memory_events_have_contract"]["evidence"]["memory_event_count"] == 2
+    assert (
+        memory_contract_criteria["feedback_memory_assistance_identity_bounded"]["evidence"]["action_type"]
+        == "telemetry.context_feedback.memory_assistance_operator_feedback_review"
+    )
+    assert (
+        memory_contract_criteria["feedback_memory_assistance_identity_bounded"]["evidence"]["classification"]
+        == "operator_feedback_memory_assistance_quality_signal"
+    )
+    assert memory_contract_criteria["poisoning_denial_controls_ready"]["evidence"]["expected_error"] == (
+        "memory_poisoning_input_denied"
+    )
+    assert memory_contract["sample_denial_controls"] == {
+        "missing_contract_error": "memory_write_contract_denied",
+        "invalid_confidence_error": "memory_write_contract_denied",
+        "invalid_retention_error": "memory_write_contract_denied",
+        "poisoning_error": "memory_poisoning_input_denied",
+    }
+    assert memory_contract["read_only"] is True
+    assert memory_contract["writes_memory"] is False
+    assert memory_contract["writes_feedback"] is False
+    assert memory_contract["writes_receipts"] is False
+    assert memory_contract["sends_chat"] is False
+    assert memory_contract["calls_model"] is False
+    assert memory_contract["selects_tools"] is False
+    assert memory_contract["grants_execution_authority"] is False
+    assert memory_contract["grants_mutation_authority"] is False
+    assert memory_contract["governance"]["memory_write_contract_hardening_review"] is True
+    assert memory_contract["governance"]["requires_action_type"] is True
+    assert memory_contract["governance"]["requires_provenance_source"] is True
+    assert memory_contract["governance"]["requires_classification"] is True
+    assert memory_contract["governance"]["requires_confidence"] is True
+    assert memory_contract["governance"]["requires_retention"] is True
+    assert memory_contract["next_smallest_truthful_gap"] == ("stage7_memory_contract_operator_surface_review")
+
 
 def test_telemetry_context_feedback_memory_quality_record_is_empty_without_events(
     monkeypatch,

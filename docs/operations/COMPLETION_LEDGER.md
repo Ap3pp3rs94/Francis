@@ -46137,6 +46137,50 @@ Latest validation for Stage 7 feedback memory assistance closure readiness:
   tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
   Result: `passed; 3 files already formatted`
 
+### 2026-05-30 - Stage 7 memory write contract hardening is reviewed
+
+Roadmap area: Stage 7 / Telemetry MVP, memory-write contract hardening for the
+feedback-memory assistance primary loop.
+
+Material change:
+
+- Telemetry now exposes a read-only memory write contract hardening review at
+  `/telemetry/context/feedback/memory-assistance-feedback-loop-memory-write-contract-hardening-review`.
+- The review consumes the feedback-memory assistance closure-readiness review,
+  memory poisoning review, memory assistance policy, and targeted memory
+  readback.
+- It verifies that targeted feedback-memory assistance memory events carry
+  action type, provenance source, classification, confidence, and retention.
+- It verifies the expected action type, classification, and retention policy
+  remain bounded to the feedback-memory assistance quality signal.
+- It surfaces the denial controls expected from `/memory/timeline/record` for
+  missing contracts, invalid confidence, invalid retention, and poisoning
+  payloads.
+- It does not write memory, feedback, or receipts; it does not send chat, call
+  a model, select tools, train a model, or grant authority.
+- When ready, it points the next truthful gap at
+  `stage7_memory_contract_operator_surface_review`.
+
+Latest validation for Stage 7 memory write contract hardening:
+
+- `python -m pytest tests/test_api_telemetry.py
+  tests/test_api_memory_timeline.py::test_memory_timeline_record_requires_typed_contract_before_persisting
+  tests/test_api_memory_timeline.py::test_memory_timeline_record_rejects_poisoning_payload_before_persisting
+  tests/test_api_memory_timeline.py::test_memory_timeline_record_rejects_invalid_confidence_before_persisting
+  tests/test_api_memory_timeline.py::test_memory_timeline_record_rejects_invalid_retention_ttl_before_persisting
+  tests/test_api_memory_timeline.py::test_memory_timeline_record_rejects_nested_payload_poison_before_persisting
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed`
+- `python -m mypy src/francis/api/routes/telemetry.py`
+  Result: `passed`
+- `python -m ruff check src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed; 3 files already formatted`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

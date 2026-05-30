@@ -2941,6 +2941,186 @@ def context_feedback_memory_assistance_operator_feedback_loop_closure_readiness_
     }
 
 
+@router.get("/context/feedback/memory-assistance-feedback-loop-memory-write-contract-hardening-review")
+def context_feedback_memory_assistance_operator_feedback_loop_memory_write_contract_hardening_review(
+    limit: int = 20,
+) -> dict[str, Any]:
+    safe_limit = max(1, min(int(limit), 100))
+    closure = context_feedback_memory_assistance_operator_feedback_loop_closure_readiness_review(limit=safe_limit)
+    poisoning = context_feedback_memory_assistance_operator_feedback_loop_memory_poisoning_review(limit=safe_limit)
+    policy = telemetry_context_feedback_memory_assistance_policy()
+    memory_readback = context_feedback_memory_assistance_operator_feedback_memory_readback(limit=safe_limit)
+    memory_items_value = memory_readback.get("items")
+    memory_items: list[Any] = memory_items_value if isinstance(memory_items_value, list) else []
+    required_fields = ["action_type", "provenance.source", "classification", "confidence", "retention"]
+    contract_event_count = sum(
+        1 for item in memory_items if isinstance(item, dict) and _memory_contract_event_ready(item)
+    )
+    expected_action_type = "telemetry.context_feedback.memory_assistance_operator_feedback_review"
+    expected_classification = "operator_feedback_memory_assistance_quality_signal"
+    expected_retention_policy = "stage7_feedback_memory_assistance_operator_feedback_quality"
+    expected_identity_ready = all(
+        isinstance(item, dict)
+        and item.get("action_type") == expected_action_type
+        and item.get("classification") == expected_classification
+        and isinstance(item.get("retention"), dict)
+        and item["retention"].get("policy") == expected_retention_policy
+        for item in memory_items
+    )
+    policy_allowed_actions_value = policy.get("allowed_action_types")
+    policy_allowed_actions: list[Any] = (
+        policy_allowed_actions_value if isinstance(policy_allowed_actions_value, list) else []
+    )
+    policy_allowed_classifications_value = policy.get("allowed_classifications")
+    policy_allowed_classifications: list[Any] = (
+        policy_allowed_classifications_value if isinstance(policy_allowed_classifications_value, list) else []
+    )
+    assistance_guards_value = policy.get("assistance_guards")
+    assistance_guards: dict[str, Any] = assistance_guards_value if isinstance(assistance_guards_value, dict) else {}
+    policy_allowed_retention_value = assistance_guards.get("allowed_retention_policies")
+    policy_allowed_retention: list[Any] = (
+        policy_allowed_retention_value if isinstance(policy_allowed_retention_value, list) else []
+    )
+    poisoning_samples_value = poisoning.get("poison_pattern_samples")
+    poisoning_samples: list[Any] = poisoning_samples_value if isinstance(poisoning_samples_value, list) else []
+    poisoning_controls_ready = (
+        bool(poisoning.get("memory_poisoning_review_ready"))
+        and len(poisoning_samples) >= 2
+        and all(
+            isinstance(item, dict) and item.get("expected_error") == "memory_poisoning_input_denied"
+            for item in poisoning_samples
+        )
+    )
+    criteria = [
+        {
+            "id": "closure_readiness_backstop",
+            "ready": bool(closure.get("feedback_memory_assistance_loop_closure_readiness_ready")),
+            "evidence": {
+                "status": closure.get("status", "unknown"),
+                "ready_count": _safe_count(closure.get("ready_count")),
+                "required_count": _safe_count(closure.get("required_count")),
+            },
+        },
+        {
+            "id": "required_memory_contract_fields",
+            "ready": all(field in required_fields for field in required_fields),
+            "evidence": {"required_fields": required_fields},
+        },
+        {
+            "id": "targeted_memory_events_have_contract",
+            "ready": len(memory_items) > 0 and contract_event_count == len(memory_items),
+            "evidence": {
+                "memory_event_count": len(memory_items),
+                "contract_event_count": contract_event_count,
+                "readback_status": memory_readback.get("status", "unknown"),
+            },
+        },
+        {
+            "id": "feedback_memory_assistance_identity_bounded",
+            "ready": bool(memory_items)
+            and expected_identity_ready
+            and expected_action_type in policy_allowed_actions
+            and expected_classification in policy_allowed_classifications
+            and expected_retention_policy in policy_allowed_retention,
+            "evidence": {
+                "action_type": expected_action_type,
+                "classification": expected_classification,
+                "retention_policy": expected_retention_policy,
+            },
+        },
+        {
+            "id": "poisoning_denial_controls_ready",
+            "ready": poisoning_controls_ready,
+            "evidence": {
+                "poisoning_review_status": poisoning.get("status", "unknown"),
+                "sample_count": len(poisoning_samples),
+                "expected_error": "memory_poisoning_input_denied",
+            },
+        },
+        {
+            "id": "non_authorizing_memory_review_guard",
+            "ready": (
+                memory_readback.get("writes_memory") is False
+                and poisoning.get("writes_memory") is False
+                and closure.get("writes_memory") is False
+                and closure.get("grants_execution_authority") is False
+                and closure.get("grants_mutation_authority") is False
+            ),
+            "evidence": {
+                "readback_writes_memory": bool(memory_readback.get("writes_memory")),
+                "poisoning_writes_memory": bool(poisoning.get("writes_memory")),
+                "closure_grants_execution_authority": bool(closure.get("grants_execution_authority")),
+                "closure_grants_mutation_authority": bool(closure.get("grants_mutation_authority")),
+            },
+        },
+    ]
+    ready_count = sum(1 for criterion in criteria if criterion["ready"])
+    memory_write_contract_hardening_ready = ready_count == len(criteria)
+    return {
+        "ok": True,
+        "kind": "francis.stage7.telemetry.memory_write_contract_hardening_review",
+        "stage": "Stage 7 / Telemetry MVP",
+        "source_id": "telemetry_context",
+        "status": (
+            "memory_write_contract_hardening_ready"
+            if memory_write_contract_hardening_ready
+            else "memory_write_contract_hardening_partial"
+        ),
+        "target": "feedback_memory_assistance_prompt_integration",
+        "memory_write_contract_hardening_ready": memory_write_contract_hardening_ready,
+        "ready_count": ready_count,
+        "required_count": len(criteria),
+        "criteria": criteria,
+        "required_memory_contract_fields": required_fields,
+        "memory_contract_event_count": contract_event_count,
+        "memory_event_count": len(memory_items),
+        "sample_denial_controls": {
+            "missing_contract_error": "memory_write_contract_denied",
+            "invalid_confidence_error": "memory_write_contract_denied",
+            "invalid_retention_error": "memory_write_contract_denied",
+            "poisoning_error": "memory_poisoning_input_denied",
+        },
+        "read_only": True,
+        "writes_memory": False,
+        "writes_feedback": False,
+        "writes_receipts": False,
+        "mutates_prompt": False,
+        "sends_chat": False,
+        "calls_model": False,
+        "selects_tools": False,
+        "trains_model": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "memory_write_contract_hardening_review": True,
+            "bounded_to_feedback_memory_assistance_loop": True,
+            "uses_memory_timeline_contract_readback": True,
+            "uses_memory_poisoning_review": True,
+            "uses_closure_readiness_review": True,
+            "requires_action_type": True,
+            "requires_provenance_source": True,
+            "requires_classification": True,
+            "requires_confidence": True,
+            "requires_retention": True,
+            "telemetry_is_untrusted_input": True,
+            "does_not_write_memory": True,
+            "does_not_write_feedback": True,
+            "does_not_write_receipts": True,
+            "does_not_send_chat": True,
+            "does_not_call_model": True,
+            "does_not_select_tools": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": (
+            "stage7_memory_contract_operator_surface_review"
+            if memory_write_contract_hardening_ready
+            else "stage7_memory_write_contract_hardening_review"
+        ),
+    }
+
+
 @router.post("/context/feedback/memory-assistance-feedback-loop-live-sample-operator-decision")
 def context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_decision_record(
     payload: TelemetryContextFeedbackMemoryAssistanceLiveSampleOperatorDecisionIn,
@@ -3349,6 +3529,20 @@ def _usage_day(value: Any) -> str:
     if timestamp <= 0:
         return "unknown"
     return datetime.fromtimestamp(timestamp, tz=UTC).date().isoformat()
+
+
+def _memory_contract_event_ready(item: dict[str, Any]) -> bool:
+    provenance_value = item.get("provenance")
+    provenance: dict[str, Any] = provenance_value if isinstance(provenance_value, dict) else {}
+    retention_value = item.get("retention")
+    retention: dict[str, Any] = retention_value if isinstance(retention_value, dict) else {}
+    return (
+        bool(_redacted_line_text(item.get("action_type")))
+        and bool(_redacted_line_text(provenance.get("source")))
+        and bool(_redacted_line_text(item.get("classification")))
+        and item.get("confidence") is not None
+        and bool(retention)
+    )
 
 
 def _assistance_projection_summary(
