@@ -273,5 +273,6 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("POST", "/away/stage-closure-decision"),
         ("GET", "/apprenticeship/status"),
         ("GET", "/apprenticeship/teaching-session-contract"),
+        ("GET", "/apprenticeship/replay-generalization-contract"),
     ]
     _assert_has_endpoints(routes, endpoints)

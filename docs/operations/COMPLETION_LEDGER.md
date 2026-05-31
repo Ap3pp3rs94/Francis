@@ -48051,6 +48051,56 @@ Latest validation for Stage 11 teaching-session contract:
   status_next=stage11_replay_generalization_contract;
   contract_next=stage11_replay_generalization_contract`.
 
+### 2026-05-31 - Stage 11 replay/generalization contract is bounded
+
+Roadmap area: Stage 11 / Apprenticeship, replay and generalization contract.
+
+Material change:
+
+- Added read-only GET `/apprenticeship/replay-generalization-contract`.
+- `/apprenticeship/status` now marks `replay_generalization_flow` ready and
+  advances the next smallest truthful gap to
+  `stage11_skillization_artifact_contract`.
+- The replay contract requires operator-supplied demonstration steps, intent
+  label readback, bounded replay plan, assumption register, and operator replay
+  review.
+- The generalization contract requires variable inputs, stable steps, optional
+  branches, validation checkpoints, and failure handling.
+- The contract denies literal macro playback, unreviewed generalization,
+  background replay execution, and silent skill promotion.
+- The contract does not execute replay, promote a skill, write receipts, write
+  memory, capture screen/audio/keystrokes, enable passive learning, run tools,
+  run shell, run git, start processes, or grant authority.
+
+Latest validation for Stage 11 replay/generalization contract:
+
+- `python -m pytest tests/test_api_apprenticeship.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 5 tests passed`
+- `python -m mypy src/francis/apprenticeship.py
+  src/francis/api/routes/apprenticeship.py`
+  Result: `passed`
+- `python -m ruff check src/francis/apprenticeship.py
+  src/francis/api/routes/apprenticeship.py tests/test_api_apprenticeship.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/apprenticeship.py
+  src/francis/api/routes/apprenticeship.py tests/test_api_apprenticeship.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed; 4 files already formatted`
+- Live local read-only route/readback:
+  GET `/apprenticeship/status` and GET
+  `/apprenticeship/replay-generalization-contract`.
+  Result: `status=stage11_groundwork_ready;
+  replay_ready=true;
+  ready_count=3; required_count=5;
+  contract_status=ready; contract_ready=true;
+  replay_requirements=5; generalization_requirements=5;
+  executes_replay=false; promotes_skill=false;
+  status_next=stage11_skillization_artifact_contract;
+  contract_next=stage11_skillization_artifact_contract`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

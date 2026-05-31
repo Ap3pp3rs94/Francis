@@ -91,10 +91,10 @@ def test_apprenticeship_status_starts_stage11_groundwork_after_stage10_closure(
     assert body["stage10_closed_by_receipt"] is True
     assert body["stage10_latest_closure_receipt_id"] == "away_stage10_closure_apprenticeship_test"
     assert body["stage10_next_smallest_truthful_gap"] == "stage10_ledger_closure"
-    assert body["ready_count"] == 2
+    assert body["ready_count"] == 3
     assert body["required_count"] == 5
     assert body["teaching_session_ready"] is True
-    assert body["replay_generalization_ready"] is False
+    assert body["replay_generalization_ready"] is True
     assert body["skillization_ready"] is False
     assert body["forge_handoff_ready"] is False
     assert body["reads_receipts"] is True
@@ -123,12 +123,13 @@ def test_apprenticeship_status_starts_stage11_groundwork_after_stage10_closure(
     assert body["routes"]["status"] == "/apprenticeship/status"
     assert body["routes"]["stage10_closure_readback"] == "/away/stage-closure-decisions"
     assert body["routes"]["teaching_session_contract"] == "/apprenticeship/teaching-session-contract"
-    assert body["next_smallest_truthful_gap"] == "stage11_replay_generalization_contract"
+    assert body["routes"]["replay_generalization_contract"] == "/apprenticeship/replay-generalization-contract"
+    assert body["next_smallest_truthful_gap"] == "stage11_skillization_artifact_contract"
 
     deliverables = {item["id"]: item for item in body["deliverables"]}
     assert deliverables["stage10_ledger_closure_backstop"]["ready"] is True
     assert deliverables["teaching_session_ux"]["ready"] is True
-    assert deliverables["replay_generalization_flow"]["ready"] is False
+    assert deliverables["replay_generalization_flow"]["ready"] is True
     assert deliverables["skillization_artifacts"]["ready"] is False
     assert deliverables["forge_ready_outputs"]["ready"] is False
 
@@ -203,3 +204,85 @@ def test_apprenticeship_teaching_session_contract_is_explicit_and_non_capturing(
     assert checks["capture_boundaries_deny_passive_learning"]["passed"] is True
     assert checks["ambient_capture_denied"]["passed"] is True
     assert checks["operator_supplied_steps_only"]["passed"] is True
+
+
+def test_apprenticeship_replay_generalization_contract_is_bounded_and_reviewed(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage10_closure_receipt(data_root, receipt_id="away_stage10_closure_replay_contract_test")
+
+    response = TestClient(create_app()).get("/apprenticeship/replay-generalization-contract")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "francis.stage11.apprenticeship.replay_generalization_contract"
+    assert body["status"] == "ready"
+    assert body["teaching_session_contract_ready"] is True
+    assert body["replay_generalization_contract_ready"] is True
+    assert body["pipeline_position"] == ["replay", "generalize"]
+    assert body["replay_requirement_count"] == 5
+    assert body["generalization_requirement_count"] == 5
+    assert set(body["denied_modes"]) == {
+        "background_replay_execution",
+        "literal_macro_playback",
+        "silent_skill_promotion",
+        "unreviewed_generalization",
+    }
+    assert body["reads_receipts"] is True
+    assert body["writes_receipts"] is False
+    assert body["writes_memory"] is False
+    assert body["captures_screen"] is False
+    assert body["captures_audio"] is False
+    assert body["captures_keystrokes"] is False
+    assert body["passive_learning_enabled"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["starts_processes"] is False
+    assert body["executes_replay"] is False
+    assert body["promotes_skill"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["governance"]["read_only"] is True
+    assert body["governance"]["contract_only"] is True
+    assert body["governance"]["requires_teaching_session_contract"] is True
+    assert body["governance"]["bounded_replay_only"] is True
+    assert body["governance"]["operator_replay_review_required"] is True
+    assert body["governance"]["generalization_review_required"] is True
+    assert body["governance"]["literal_macro_playback_denied"] is True
+    assert body["governance"]["background_replay_execution_denied"] is True
+    assert body["governance"]["silent_skill_promotion_denied"] is True
+    assert body["governance"]["does_not_write_memory"] is True
+    assert body["governance"]["does_not_run_tools"] is True
+    assert body["next_smallest_truthful_gap"] == "stage11_skillization_artifact_contract"
+
+    replay_requirements = {item["id"]: item for item in body["replay_requirements"]}
+    assert set(replay_requirements) == {
+        "assumption_register",
+        "bounded_replay_plan",
+        "intent_label_readback",
+        "operator_replay_review",
+        "operator_supplied_demonstration_steps",
+    }
+    assert all(item["required"] for item in replay_requirements.values())
+
+    generalization_requirements = {item["id"]: item for item in body["generalization_requirements"]}
+    assert set(generalization_requirements) == {
+        "failure_handling",
+        "optional_branches",
+        "stable_steps",
+        "validation_checkpoints",
+        "variable_inputs",
+    }
+    assert all(item["required"] for item in generalization_requirements.values())
+
+    checks = {item["id"]: item for item in body["checks"]}
+    assert checks["teaching_session_contract_ready"]["passed"] is True
+    assert checks["bounded_replay_requirements_declared"]["passed"] is True
+    assert checks["generalization_requirements_declared"]["passed"] is True
+    assert checks["macro_playback_denied"]["passed"] is True
+    assert checks["unreviewed_execution_denied"]["passed"] is True
