@@ -106,6 +106,7 @@ def test_takeover_control_transfer_receipt_and_panic_stop_are_auditable(monkeypa
                 "codex.builder": [
                     "takeover.control.write",
                     "takeover.panic.write",
+                    "takeover.handback.write",
                 ],
             }
         ),
@@ -207,10 +208,61 @@ def test_takeover_control_transfer_receipt_and_panic_stop_are_auditable(monkeypa
     assert final_status["panic_stop_ready"] is False
     assert final_status["latest_panic_stop_receipt"]["receipt_id"] == panic_body["receipt_id"]
     assert final_status["deliverables"]["panic_stop"] is True
+    assert final_status["deliverables"]["handback_summary"] is False
+
+    handback = client.post(
+        "/takeover/handback-summary",
+        json={
+            "actor": "codex.builder",
+            "reason": "operator handback token=handbackreasonsecret123",
+            "summary": "Pilot returned control after proof check token=handbacksummarysecret123",
+            "validation_outcome": "targeted takeover tests passed",
+            "remaining_uncertainty": "CI not checked in this unit test",
+            "next_recommendation": "review operator surface",
+        },
+    )
+
+    assert handback.status_code == 200
+    handback_body = handback.json()
+    assert handback_body["ok"] is True
+    assert handback_body["status"] == "recorded"
+    assert handback_body["writes_receipt"] is True
+    assert handback_body["control_transferred_back"] is True
+    assert handback_body["writes_tasks"] is False
+    assert handback_body["writes_memory"] is False
+    assert handback_body["runs_tools"] is False
+    assert handback_body["runs_shell"] is False
+    assert handback_body["grants_execution_authority"] is False
+
+    handback_receipt = handback_body["receipt"]
+    assert handback_receipt["kind"] == "francis.stage9.takeover.handback_summary_receipt"
+    assert handback_receipt["control_transfer_receipt_id"] == transfer_body["receipt_id"]
+    assert handback_receipt["panic_stop_receipt_id"] == panic_body["receipt_id"]
+    assert handback_receipt["control_transferred_back"] is True
+    assert handback_receipt["control_mode_after"] == "assist"
+    assert handback_receipt["was_active_at_handback"] is False
+    assert handback_receipt["governance"]["required_scope"] == "takeover.handback.write"
+    assert handback_receipt["governance"]["requires_control_transfer_receipt"] is True
+    assert handback_receipt["governance"]["proof_handles_included"] is True
+    assert handback_receipt["governance"]["grants_execution_authority"] is False
+    handback_text = json.dumps(handback_receipt, sort_keys=True)
+    assert "handbackreasonsecret123" not in handback_text
+    assert "handbacksummarysecret123" not in handback_text
+
+    handback_status = client.get("/takeover/status").json()
+    assert handback_status["control_mode"]["id"] == "assist"
+    assert handback_status["control_transfer_active"] is False
+    assert handback_status["handback_summary_ready"] is True
+    assert handback_status["latest_handback_summary_receipt"]["receipt_id"] == handback_body["receipt_id"]
+    assert handback_status["deliverables"]["handback_summary"] is True
+    assert handback_status["next_smallest_truthful_gap"] == "stage9_operator_surface_contract"
 
     transfer_receipts = client.get("/takeover/control-transfer-receipts").json()
     panic_receipts = client.get("/takeover/panic-stop-receipts").json()
+    handback_receipts = client.get("/takeover/handback-summaries").json()
     assert transfer_receipts["count"] == 1
     assert panic_receipts["count"] == 1
+    assert handback_receipts["count"] == 1
     assert transfer_receipts["items"][0]["receipt_id"] == transfer_body["receipt_id"]
     assert panic_receipts["items"][0]["receipt_id"] == panic_body["receipt_id"]
+    assert handback_receipts["items"][0]["receipt_id"] == handback_body["receipt_id"]

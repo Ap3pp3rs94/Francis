@@ -20,9 +20,11 @@ TAKEOVER_STATUS_KIND = "francis.stage9.takeover.status"
 TAKEOVER_ACTION_FEED_KIND = "francis.stage9.takeover.action_feed"
 TAKEOVER_CONTROL_TRANSFER_RECEIPT_KIND = "francis.stage9.takeover.control_transfer_receipt"
 TAKEOVER_PANIC_STOP_RECEIPT_KIND = "francis.stage9.takeover.panic_stop_receipt"
+TAKEOVER_HANDBACK_SUMMARY_RECEIPT_KIND = "francis.stage9.takeover.handback_summary_receipt"
 
 TAKEOVER_CONTROL_TRANSFER_SCOPE = "takeover.control.write"
 TAKEOVER_PANIC_STOP_SCOPE = "takeover.panic.write"
+TAKEOVER_HANDBACK_SUMMARY_SCOPE = "takeover.handback.write"
 
 _ALLOWED_ENV_PROFILES = {"dev", "workstation", "local", "test"}
 
@@ -35,10 +37,16 @@ def takeover_status_snapshot(*, limit: int = 10) -> dict[str, Any]:
     action_feed = takeover_action_feed(limit=safe_limit)
     transfers = read_takeover_control_transfer_receipts(limit=10)
     panic_receipts = read_takeover_panic_stop_receipts(limit=10)
-    active_transfer = _active_control_transfer(transfers=transfers, panic_receipts=panic_receipts)
+    handback_receipts = read_takeover_handback_summary_receipts(limit=10)
+    active_transfer = _active_control_transfer(
+        transfers=transfers,
+        panic_receipts=panic_receipts,
+        handback_receipts=handback_receipts,
+    )
     stage8_closed = bool(stage8.get("stage8_closed_by_receipt"))
     pilot_visible = _safe_text(control_mode.get("id")) == "pilot"
     control_transfer_ready = stage8_closed and not bool(active_transfer)
+    handback_ready = bool(handback_receipts)
     return {
         "ok": True,
         "kind": TAKEOVER_STATUS_KIND,
@@ -54,14 +62,16 @@ def takeover_status_snapshot(*, limit: int = 10) -> dict[str, Any]:
         "active_session_id": _safe_text(active_transfer.get("session_id")) if active_transfer else "",
         "latest_control_transfer_receipt": transfers[-1] if transfers else {},
         "latest_panic_stop_receipt": panic_receipts[-1] if panic_receipts else {},
+        "latest_handback_summary_receipt": handback_receipts[-1] if handback_receipts else {},
         "panic_stop_ready": bool(active_transfer),
         "handback_required": bool(active_transfer),
+        "handback_summary_ready": handback_ready,
         "action_feed": action_feed,
         "deliverables": {
             "control_transfer_flow": bool(transfers),
             "live_action_feed": True,
             "panic_stop": bool(panic_receipts),
-            "handback_summary": False,
+            "handback_summary": handback_ready,
             "pilot_visibility": pilot_visible or bool(transfers),
         },
         "reads_receipts": True,
@@ -85,6 +95,10 @@ def takeover_status_snapshot(*, limit: int = 10) -> dict[str, Any]:
         },
         "next_smallest_truthful_gap": "stage9_handback_summary_receipts"
         if active_transfer
+        else "stage9_handback_summary_receipts"
+        if transfers and not handback_ready
+        else "stage9_operator_surface_contract"
+        if handback_ready
         else "stage9_control_transfer_receipts"
         if stage8_closed
         else "stage8_ledger_closure",
@@ -249,7 +263,12 @@ def record_takeover_panic_stop(
     env_profile = _env_profile()
     transfers = read_takeover_control_transfer_receipts(limit=10)
     panic_receipts = read_takeover_panic_stop_receipts(limit=10)
-    active_transfer = _active_control_transfer(transfers=transfers, panic_receipts=panic_receipts)
+    handback_receipts = read_takeover_handback_summary_receipts(limit=10)
+    active_transfer = _active_control_transfer(
+        transfers=transfers,
+        panic_receipts=panic_receipts,
+        handback_receipts=handback_receipts,
+    )
     session_id = _safe_text(active_transfer.get("session_id")) if active_transfer else ""
     receipt_id = f"takeover_panic_{uuid.uuid4().hex[:12]}"
     safe_actor = _redacted_text(actor)[:240]
@@ -317,6 +336,137 @@ def record_takeover_panic_stop(
     return receipt
 
 
+def record_takeover_handback_summary(
+    *,
+    actor: Any,
+    reason: Any,
+    summary: Any = "",
+    validation_outcome: Any = "",
+    remaining_uncertainty: Any = "",
+    next_recommendation: Any = "",
+    operation_limit: int = 10,
+) -> dict[str, Any]:
+    env_profile = _env_profile()
+    if env_profile not in _ALLOWED_ENV_PROFILES:
+        return _blocked_no_receipt(
+            status="blocked_environment_profile",
+            reason="takeover_handback_dev_or_workstation_only",
+            required_scope=TAKEOVER_HANDBACK_SUMMARY_SCOPE,
+        )
+
+    transfers = read_takeover_control_transfer_receipts(limit=10)
+    if not transfers:
+        return _blocked_no_receipt(
+            status="awaiting_control_transfer_receipt",
+            reason="control_transfer_receipt_required_before_handback",
+            required_scope=TAKEOVER_HANDBACK_SUMMARY_SCOPE,
+        )
+
+    panic_receipts = read_takeover_panic_stop_receipts(limit=10)
+    handback_receipts = read_takeover_handback_summary_receipts(limit=10)
+    active_transfer = _active_control_transfer(
+        transfers=transfers,
+        panic_receipts=panic_receipts,
+        handback_receipts=handback_receipts,
+    )
+    latest_transfer = active_transfer or transfers[-1]
+    session_id = _safe_text(latest_transfer.get("session_id"))
+    transfer_ts = _safe_int(latest_transfer.get("recorded_ts"), 0)
+    related_panic = _latest_receipt_for_session(
+        receipts=panic_receipts,
+        session_id=session_id,
+        since_ts=transfer_ts,
+    )
+    action_feed = takeover_action_feed(limit=operation_limit)
+    receipt_id = f"takeover_handback_{uuid.uuid4().hex[:12]}"
+    safe_actor = _redacted_text(actor)[:240]
+    safe_reason = _redacted_text(reason)[:500]
+    safe_summary = _redacted_text(summary)[:800]
+    safe_validation = _redacted_text(validation_outcome)[:500]
+    safe_uncertainty = _redacted_text(remaining_uncertainty)[:500]
+    safe_next = _redacted_text(next_recommendation)[:500]
+
+    set_control_mode(
+        "assist",
+        reason=safe_reason or "stage9_takeover_handback_summary",
+        actor=safe_actor,
+        meta={
+            "handback_receipt_id": receipt_id,
+            "takeover_session_id": session_id,
+            "control_transfer_receipt_id": _safe_text(latest_transfer.get("receipt_id")),
+        },
+    )
+
+    receipt = {
+        "ok": True,
+        "kind": TAKEOVER_HANDBACK_SUMMARY_RECEIPT_KIND,
+        "receipt_id": receipt_id,
+        "session_id": session_id,
+        "stage": STAGE9_TAKEOVER_STAGE,
+        "source_id": "takeover",
+        "target": "pilot_mode",
+        "actor": safe_actor,
+        "reason": safe_reason,
+        "summary": safe_summary,
+        "validation_outcome": safe_validation,
+        "remaining_uncertainty": safe_uncertainty,
+        "next_recommendation": safe_next,
+        "env_profile": env_profile,
+        "control_transfer_receipt_id": _safe_text(latest_transfer.get("receipt_id")),
+        "panic_stop_receipt_id": _safe_text(related_panic.get("receipt_id")),
+        "control_transferred_back": True,
+        "control_mode_after": "assist",
+        "was_active_at_handback": bool(active_transfer),
+        "action_feed_count": _safe_int(action_feed.get("count"), 0),
+        "action_feed_operation_ids": [_safe_text(item.get("id")) for item in _as_list(action_feed.get("items"))[:5]],
+        "changed_artifacts": _bounded_unique_texts(
+            [_safe_text(item.get("artifact_dir")) for item in _as_list(action_feed.get("items"))],
+            limit=10,
+        ),
+        "trace_ids": _bounded_unique_texts(
+            [_safe_text(item.get("trace_id")) for item in _as_list(action_feed.get("items"))],
+            limit=10,
+        ),
+        "run_ids": _bounded_unique_texts(
+            [_safe_text(item.get("run_id")) for item in _as_list(action_feed.get("items"))],
+            limit=10,
+        ),
+        "recorded_ts": _now_s(),
+        "writes_control_mode": True,
+        "writes_receipt": True,
+        "writes_tasks": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "cancels_operations": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "required_scope": TAKEOVER_HANDBACK_SUMMARY_SCOPE,
+            "handback_summary": True,
+            "requires_control_transfer_receipt": True,
+            "proof_handles_included": True,
+            "control_transferred_back": True,
+            "execution_still_uses_executor_governance": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": "stage9_operator_surface_contract",
+    }
+    _append_jsonl(_handback_summary_path(), receipt)
+    audit_record(
+        "takeover.handback_summary_recorded",
+        actor=safe_actor,
+        reason=safe_reason,
+        receipt_id=receipt_id,
+        session_id=session_id,
+        control_transfer_receipt_id=receipt["control_transfer_receipt_id"],
+    )
+    return receipt
+
+
 def read_takeover_control_transfer_receipts(*, limit: int = 20) -> list[dict[str, Any]]:
     return _read_jsonl_tail(_control_transfer_path(), limit=_safe_limit(limit, default=20))
 
@@ -325,10 +475,15 @@ def read_takeover_panic_stop_receipts(*, limit: int = 20) -> list[dict[str, Any]
     return _read_jsonl_tail(_panic_stop_path(), limit=_safe_limit(limit, default=20))
 
 
+def read_takeover_handback_summary_receipts(*, limit: int = 20) -> list[dict[str, Any]]:
+    return _read_jsonl_tail(_handback_summary_path(), limit=_safe_limit(limit, default=20))
+
+
 def _active_control_transfer(
     *,
     transfers: list[dict[str, Any]],
     panic_receipts: list[dict[str, Any]],
+    handback_receipts: list[dict[str, Any]],
 ) -> dict[str, Any]:
     for transfer in reversed(transfers):
         if not bool(transfer.get("control_transfer_active")):
@@ -343,6 +498,14 @@ def _active_control_transfer(
             ):
                 stopped = True
                 break
+        if not stopped:
+            for handback in handback_receipts:
+                if (
+                    _safe_text(handback.get("session_id")) == session_id
+                    and _safe_int(handback.get("recorded_ts"), 0) >= transfer_ts
+                ):
+                    stopped = True
+                    break
         if not stopped:
             return transfer
     return {}
@@ -406,6 +569,39 @@ def _control_transfer_path() -> Path:
 
 def _panic_stop_path() -> Path:
     return data_dir() / "logs" / "takeover" / "panic_stop_receipts.jsonl"
+
+
+def _handback_summary_path() -> Path:
+    return data_dir() / "logs" / "takeover" / "handback_summary_receipts.jsonl"
+
+
+def _latest_receipt_for_session(
+    *,
+    receipts: list[dict[str, Any]],
+    session_id: str,
+    since_ts: int,
+) -> dict[str, Any]:
+    matches = [
+        receipt
+        for receipt in receipts
+        if _safe_text(receipt.get("session_id")) == session_id and _safe_int(receipt.get("recorded_ts"), 0) >= since_ts
+    ]
+    if not matches:
+        return {}
+    matches.sort(key=lambda item: _safe_int(item.get("recorded_ts"), 0))
+    return matches[-1]
+
+
+def _bounded_unique_texts(values: list[str], *, limit: int) -> list[str]:
+    out: list[str] = []
+    for value in values:
+        text = _safe_text(value)
+        if not text or text in out:
+            continue
+        out.append(text)
+        if len(out) >= limit:
+            break
+    return out
 
 
 def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:

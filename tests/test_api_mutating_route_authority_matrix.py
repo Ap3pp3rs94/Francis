@@ -129,6 +129,14 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
     assert "panic-stop receipt" in takeover_panic["receipt_behavior"]
     assert "separate governed path" in takeover_panic["notes"]
 
+    takeover_handback = entries["/takeover/handback-summary"]
+    assert takeover_handback["family"] == "takeover"
+    assert takeover_handback["required_actor"] == "payload.actor"
+    assert takeover_handback["required_scope"] == "takeover.handback.write"
+    assert takeover_handback["governance_maturity"] == "permission_gated"
+    assert "control-transfer receipt" in takeover_handback["approval_requirement"]
+    assert "without executing work" in takeover_handback["notes"]
+
     memory = entries["/memory/timeline/record"]
     assert memory["family"] == "memory_timeline"
     assert memory["required_actor"] == "payload.request_actor, payload.api_actor, or payload.actor"

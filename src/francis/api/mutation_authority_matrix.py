@@ -65,6 +65,17 @@ _RULES: tuple[AuthorityRule, ...] = (
         notes="Panic stop revokes Pilot control mode; operation cancellation remains a separate governed path.",
     ),
     AuthorityRule(
+        family="takeover",
+        prefixes=("/takeover/handback-summary",),
+        required_actor="payload.actor",
+        required_scope="takeover.handback.write",
+        approval_requirement="control-transfer receipt required before handback summary",
+        receipt_behavior="stage9 takeover handback-summary receipt",
+        denial_behavior="api_permission_denied via permission_gate before handback-summary receipt write",
+        governance_maturity="permission_gated",
+        notes="Handback summary transfers control back to Assist and reports proof handles without executing work.",
+    ),
+    AuthorityRule(
         family="supervised_exec",
         prefixes=("/operations/supervised-exec",),
         required_actor="payload.actor",

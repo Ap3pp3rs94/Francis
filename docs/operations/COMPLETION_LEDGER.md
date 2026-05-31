@@ -47197,6 +47197,73 @@ Latest validation for Stage 9 Takeover control-transfer and panic-stop receipts:
   after_status=ready; after_mode=assist; after_active=false;
   after_next=stage9_control_transfer_receipts`.
 
+### 2026-05-31 - Stage 9 takeover handback summaries are receipt-backed
+
+Roadmap area: Stage 9 / Takeover (Pilot Mode), proof-backed handback.
+
+Material change:
+
+- Added read-only `/takeover/handback-summaries`.
+- Added governed write route `/takeover/handback-summary`.
+- Handback summary requires `takeover.handback.write`, a prior control-transfer
+  receipt, and a dev/workstation/local/test environment profile before it writes
+  a `francis.stage9.takeover.handback_summary_receipt`.
+- The handback receipt references the control-transfer receipt, related
+  panic-stop receipt when present, action-feed operation ids, trace ids, run ids,
+  changed artifact handles, validation outcome, remaining uncertainty, and next
+  recommendation.
+- Handback returns control mode to `assist` and marks
+  `control_transferred_back=true`.
+- `/takeover/status` now exposes `latest_handback_summary_receipt`,
+  `handback_summary_ready`, and a truthful Stage 9 next gap of
+  `stage9_operator_surface_contract` after handback proof is present.
+- Handback does not run tools, run shell, run git, start processes, write tasks,
+  write memory, cancel operations, grant execution authority, or grant mutation
+  authority. Existing executor and operation governance still own execution.
+- The mutating-route authority matrix now covers `/takeover/handback-summary`.
+- Live local normal handback proof recorded control-transfer receipt
+  `takeover_transfer_55051bbdefae`, session `pilot_76d40aa04a3e`, then
+  handback receipt `takeover_handback_0f57469c4e4b`; final Takeover status was
+  `ready`, `control_transfer_active=false`, `handback_summary_ready=true`, and
+  `control_mode=assist`.
+
+Latest validation for Stage 9 Takeover handback summaries:
+
+- `python -m pytest tests/test_api_takeover.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  tests/test_api_mutating_route_authority_matrix.py -q --tb=short --maxfail=1`
+  Result: `passed; 6 selected tests passed`
+- `python -m mypy src/francis/takeover.py
+  src/francis/api/routes/takeover.py`
+  Result: `passed`
+- `python -m ruff check src/francis/takeover.py
+  src/francis/api/routes/takeover.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_takeover.py
+  tests/test_api_contract_chat_ui.py tests/test_api_mutating_route_authority_matrix.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/takeover.py
+  src/francis/api/routes/takeover.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_takeover.py
+  tests/test_api_contract_chat_ui.py tests/test_api_mutating_route_authority_matrix.py`
+  Result: `passed; 6 files already formatted`
+- `git diff --check`
+  Result: `passed`
+- Live local route/readback:
+  GET `/takeover/status`, POST `/takeover/control-transfer`,
+  GET `/takeover/status`, POST `/takeover/handback-summary`, and final
+  GET `/takeover/status`.
+  Result: `before_status=ready; before_mode=assist;
+  transfer_status=recorded;
+  transfer_receipt_id=takeover_transfer_55051bbdefae;
+  transfer_session_id=pilot_76d40aa04a3e; active_status=pilot_active;
+  active_mode=pilot; active_handback_required=true;
+  handback_status=recorded;
+  handback_receipt_id=takeover_handback_0f57469c4e4b;
+  handback_session_id=pilot_76d40aa04a3e;
+  handback_control_transferred_back=true; after_status=ready;
+  after_mode=assist; after_active=false; after_handback_ready=true;
+  after_next=stage9_operator_surface_contract`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
