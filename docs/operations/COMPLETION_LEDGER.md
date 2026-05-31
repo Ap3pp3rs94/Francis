@@ -49852,6 +49852,65 @@ Latest validation for Stage 13 browser readback completion-review readiness:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-31 - Stage 13 Trust Calibration closes by receipt
+
+Roadmap area: Stage 13 / Trust Calibration, explicit closure after truthful
+completion review.
+
+Material change:
+
+- The governed Stage 13 closure decision route recorded
+  `trust_calibration_stage13_closure_ed03c99cbab7`.
+- The closure decision used actor `codex.builder` with scoped authority
+  `trust_calibration.stage13.closure.write` after the completion review had
+  already reached `stage13_completion_review_ready=true`.
+- The receipt decision is `close_stage13`; it records
+  `completion_review_ready=true`, `ready_count=7`, `required_count=7`,
+  `blockers=[]`, and the prior browser visual readback receipt
+  `trust_calibration_browser_visual_bd3c38a7eaf9`.
+- `/trust-calibration/status` now reports
+  `status=stage13_closed_by_receipt`, `stage13_closed_by_receipt=true`, and
+  `next_smallest_truthful_gap=stage13_ledger_closure`.
+- `/trust-calibration/stage-closure-decisions` reports
+  `status=closed`, `latest_decision=close_stage13`, and
+  `latest_receipt_id=trust_calibration_stage13_closure_ed03c99cbab7`.
+- The closure receipt does not mutate runtime stage state, write memory,
+  score model output, change UI confidence, launch browsers, capture screens,
+  run tools, run shell, run git, or grant execution or mutation authority.
+
+Latest validation for Stage 13 receipt closure:
+
+- Scoped local `TestClient` POST to
+  `/trust-calibration/stage-closure-decision` with actor `codex.builder`.
+  Result: `ok=true; status=recorded;
+  receipt_id=trust_calibration_stage13_closure_ed03c99cbab7;
+  decision=close_stage13; stage13_closed_by_receipt=true;
+  completion_review_ready=true; writes_receipt=true;
+  writes_memory=false; runs_tools=false; runs_shell=false; runs_git=false;
+  next_smallest_truthful_gap=stage13_ledger_closure`.
+- Direct local `TestClient` readback of GET `/trust-calibration/status`.
+  Result: `status=stage13_closed_by_receipt;
+  stage13_closed_by_receipt=true;
+  stage13_latest_closure_receipt_id=trust_calibration_stage13_closure_ed03c99cbab7;
+  next_smallest_truthful_gap=stage13_ledger_closure`.
+- Direct local `TestClient` readback of GET
+  `/trust-calibration/stage-closure-decisions?limit=1`.
+  Result: `status=closed; latest_decision=close_stage13;
+  latest_receipt_id=trust_calibration_stage13_closure_ed03c99cbab7;
+  stage13_closed_by_receipt=true;
+  next_smallest_truthful_gap=stage13_ledger_closure`.
+- `python -m pytest tests/test_api_trust_calibration.py -q --tb=short`
+  Result: `passed; 4 passed`
+- `python -m mypy src/francis/trust_calibration.py
+  src/francis/api/routes/trust_calibration.py`
+  Result: `passed`
+- `python -m ruff check src/francis/trust_calibration.py
+  src/francis/api/routes/trust_calibration.py tests/test_api_trust_calibration.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/trust_calibration.py
+  src/francis/api/routes/trust_calibration.py tests/test_api_trust_calibration.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
