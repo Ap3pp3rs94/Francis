@@ -299,5 +299,6 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("POST", "/knowledge-fabric/stage-closure-decision"),
         ("GET", "/trust-calibration/status"),
         ("GET", "/trust-calibration/confidence-rules-contract"),
+        ("GET", "/trust-calibration/verification-gate-contract"),
     ]
     _assert_has_endpoints(routes, endpoints)

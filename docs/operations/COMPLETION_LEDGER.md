@@ -49040,6 +49040,66 @@ Latest validation for Stage 13 confidence rules contract:
   scores_model_output=false; changes_ui_confidence=false;
   writes_memory=false; runs_tools=false`.
 
+### 2026-05-31 - Stage 13 verification gates contract is read-only
+
+Roadmap area: Stage 13 / Trust Calibration, verification gates.
+
+Material change:
+
+- Added read-only GET `/trust-calibration/verification-gate-contract`.
+- `/trust-calibration/status` now reports verification-gate readiness after
+  the Stage 12 closure receipt and confidence rules contract are readable.
+- The verification contract defines six trust-sensitive claim gates: current
+  state claims, done/closure claims, retrieval-backed claims,
+  authority/action claims, stale or conflicting evidence claims, and blocked
+  state preservation.
+- The contract requires explicit receipts, current route readbacks, local
+  evidence citations, trace lineage, operator decisions, recency readbacks,
+  permission-gate readbacks, and blocked-state readbacks according to claim
+  type.
+- The contract maps missing receipts and missing authority to `blocked`, maps
+  missing current readbacks and stale/conflicting evidence to `uncertain`, and
+  prevents blocked states from being laundered into progress claims.
+- This surface is still contract-only. It does not enforce runtime claims,
+  score model output, change UI confidence, write memory, write receipts, run
+  tools, run shell, run git, or grant authority.
+- `/trust-calibration/status` advances the next smallest truthful gap to
+  `stage13_anti_overclaim_policy` after the verification-gate contract is
+  ready.
+
+Latest validation for Stage 13 verification gates contract:
+
+- `python -m pytest tests/test_api_trust_calibration.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 3 passed`
+- `python -m mypy src/francis/trust_calibration.py
+  src/francis/api/routes/trust_calibration.py src/francis/api/app.py`
+  Result: `passed`
+- `python -m ruff check src/francis/trust_calibration.py
+  src/francis/api/routes/trust_calibration.py src/francis/api/app.py
+  tests/test_api_trust_calibration.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/trust_calibration.py
+  src/francis/api/routes/trust_calibration.py src/francis/api/app.py
+  tests/test_api_trust_calibration.py tests/test_api_contract_chat_ui.py`
+  Result: `passed; 5 files already formatted`
+- Live local TestClient route/readback against an isolated data root:
+  GET `/trust-calibration/verification-gate-contract` before Stage 12 closure,
+  write one Stage 12 Knowledge Fabric closure receipt fixture, GET
+  `/trust-calibration/status`, and GET
+  `/trust-calibration/verification-gate-contract`.
+  Result: `blocked_status=blocked; blocked_ready=false;
+  blocked_next=stage12_ledger_closure;
+  ready_status=stage13_verification_gate_contract_ready; ready_count=3;
+  ready_next=stage13_anti_overclaim_policy;
+  route=/trust-calibration/verification-gate-contract;
+  contract_status=ready; contract_ready=true; gate_count=6;
+  done_gate_max=confirmed;
+  blocked_gate_denial=do_not_launder_blocked_state_into_progress;
+  enforces_runtime_claims=false; scores_model_output=false;
+  changes_ui_confidence=false; writes_memory=false; runs_tools=false`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

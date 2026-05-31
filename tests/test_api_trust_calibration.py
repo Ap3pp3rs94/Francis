@@ -68,9 +68,11 @@ def test_trust_calibration_status_blocks_until_stage12_closure(monkeypatch, tmp_
     assert body["required_count"] == 5
     assert body["routes"]["status"] == "/trust-calibration/status"
     assert body["routes"]["confidence_rules_contract"] == "/trust-calibration/confidence-rules-contract"
+    assert body["routes"]["verification_gate_contract"] == "/trust-calibration/verification-gate-contract"
     assert body["routes"]["stage12_closure_readback"] == "/knowledge-fabric/stage-closure-decisions"
     assert body["governance"]["read_only"] is True
     assert body["governance"]["requires_stage12_ledger_closure"] is True
+    assert body["governance"]["does_not_enforce_runtime_claims"] is True
     assert body["governance"]["does_not_score_model_output"] is True
     assert body["governance"]["does_not_change_ui_confidence"] is True
     assert body["governance"]["does_not_write_memory"] is True
@@ -85,6 +87,17 @@ def test_trust_calibration_status_blocks_until_stage12_closure(monkeypatch, tmp_
     assert contract["changes_ui_confidence"] is False
     assert contract["writes_memory"] is False
     assert contract["next_smallest_truthful_gap"] == "stage12_ledger_closure"
+
+    verification = TestClient(create_app()).get("/trust-calibration/verification-gate-contract").json()
+    assert verification["status"] == "blocked"
+    assert verification["verification_gate_contract_ready"] is False
+    assert verification["confidence_rules_contract_ready"] is False
+    assert verification["stage12_closed_by_receipt"] is False
+    assert verification["gate_count"] == 6
+    assert verification["enforces_runtime_claims"] is False
+    assert verification["scores_model_output"] is False
+    assert verification["changes_ui_confidence"] is False
+    assert verification["next_smallest_truthful_gap"] == "stage12_ledger_closure"
 
 
 def test_trust_calibration_confidence_rules_contract_ready_after_stage12_closure(
@@ -139,10 +152,57 @@ def test_trust_calibration_confidence_rules_contract_ready_after_stage12_closure
     assert "evidence_is_stale" in rules["uncertain"]["allowed_when"]
     assert rules["blocked"]["failure_mode_prevented"] == "fake_done_or_fake_autonomy"
 
+    verification = client.get("/trust-calibration/verification-gate-contract").json()
+    assert verification["ok"] is True
+    assert verification["kind"] == "francis.stage13.trust_calibration.verification_gate_contract"
+    assert verification["status"] == "ready"
+    assert verification["verification_gate_contract_ready"] is True
+    assert verification["confidence_rules_contract_ready"] is True
+    assert verification["stage12_closed_by_receipt"] is True
+    assert verification["stage12_latest_closure_receipt_id"] == "knowledge_fabric_stage12_closure_tc_test"
+    assert verification["gate_count"] == 6
+    assert verification["required_claim_strengths"] == ["confirmed", "likely", "uncertain", "blocked"]
+    assert verification["denial_behavior"]["missing_receipt"] == "blocked"
+    assert verification["denial_behavior"]["missing_current_readback"] == "uncertain"
+    assert verification["denial_behavior"]["stale_evidence"] == "uncertain"
+    assert verification["denial_behavior"]["missing_authority"] == "blocked"
+    assert verification["writes_memory"] is False
+    assert verification["writes_receipts"] is False
+    assert verification["scores_model_output"] is False
+    assert verification["changes_ui_confidence"] is False
+    assert verification["enforces_runtime_claims"] is False
+    assert verification["runs_tools"] is False
+    assert verification["runs_shell"] is False
+    assert verification["runs_git"] is False
+    assert verification["grants_execution_authority"] is False
+    assert verification["grants_mutation_authority"] is False
+    assert verification["governance"]["contract_only"] is True
+    assert verification["governance"]["does_not_enforce_runtime_claims"] is True
+    assert verification["next_smallest_truthful_gap"] == "stage13_anti_overclaim_policy"
+
+    gates = {item["id"]: item for item in verification["gates"]}
+    assert set(gates) == {
+        "current_state_claim_gate",
+        "done_or_closure_claim_gate",
+        "retrieval_backed_claim_gate",
+        "authority_or_action_claim_gate",
+        "stale_or_conflicting_evidence_gate",
+        "blocked_state_preservation_gate",
+    }
+    done_gate = gates["done_or_closure_claim_gate"]
+    assert "completion_review_or_stage_closure_readback" in done_gate["required_inputs"]
+    assert done_gate["allows_max_strength"] == "confirmed"
+    assert done_gate["downgrade_when_missing"] == "blocked"
+    assert gates["retrieval_backed_claim_gate"]["allows_max_strength"] == "likely"
+    blocked_gate = gates["blocked_state_preservation_gate"]
+    assert blocked_gate["allows_max_strength"] == "blocked"
+    assert blocked_gate["denial_behavior"] == "do_not_launder_blocked_state_into_progress"
+
     status = client.get("/trust-calibration/status").json()
-    assert status["status"] == "stage13_confidence_rules_contract_ready"
+    assert status["status"] == "stage13_verification_gate_contract_ready"
     assert status["stage12_closed_by_receipt"] is True
     assert status["confidence_rules_contract_ready"] is True
-    assert status["ready_count"] == 2
+    assert status["verification_gates_ready"] is True
+    assert status["ready_count"] == 3
     assert status["required_count"] == 5
-    assert status["next_smallest_truthful_gap"] == "stage13_verification_gate_contract"
+    assert status["next_smallest_truthful_gap"] == "stage13_anti_overclaim_policy"
