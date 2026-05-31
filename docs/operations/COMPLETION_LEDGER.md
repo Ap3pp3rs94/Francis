@@ -48101,6 +48101,58 @@ Latest validation for Stage 11 replay/generalization contract:
   status_next=stage11_skillization_artifact_contract;
   contract_next=stage11_skillization_artifact_contract`.
 
+### 2026-05-31 - Stage 11 skillization artifact contract is Forge-ready but non-promoting
+
+Roadmap area: Stage 11 / Apprenticeship, skillization artifact contract.
+
+Material change:
+
+- Added read-only GET `/apprenticeship/skillization-artifact-contract`.
+- `/apprenticeship/status` now marks `skillization_artifacts` ready and
+  advances the next smallest truthful gap to `stage11_forge_handoff_contract`.
+- The skillization contract declares the Forge-ready artifact structure:
+  pattern summary, parameterization, usage scope, decision logic, validation
+  expectations, risk-tier candidate, documentation draft, and test candidate
+  structure.
+- The contract distinguishes preference adaptation, workflow understanding,
+  candidate reusable skill, and Forge-worthy promoted capability without
+  promoting any of them.
+- The contract denies automatic promotion, silent authority growth, unreviewed
+  capability creation, and memory writes without operator review.
+- The contract does not create a capability, promote to Forge, write a skill
+  artifact, write receipts, write memory, run tools, run shell, run git, start
+  processes, or grant authority.
+
+Latest validation for Stage 11 skillization artifact contract:
+
+- `python -m pytest tests/test_api_apprenticeship.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 6 tests passed`
+- `python -m mypy src/francis/apprenticeship.py
+  src/francis/api/routes/apprenticeship.py`
+  Result: `passed`
+- `python -m ruff check src/francis/apprenticeship.py
+  src/francis/api/routes/apprenticeship.py tests/test_api_apprenticeship.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/apprenticeship.py
+  src/francis/api/routes/apprenticeship.py tests/test_api_apprenticeship.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed; 4 files already formatted`
+- Live local read-only route/readback:
+  GET `/apprenticeship/status` and GET
+  `/apprenticeship/skillization-artifact-contract`.
+  Result: `status=stage11_groundwork_ready;
+  skillization_ready=true;
+  ready_count=4; required_count=5;
+  contract_status=ready; contract_ready=true;
+  artifact_fields=8; classification_options=4;
+  writes_skill_artifact=false; creates_capability=false;
+  promotes_to_forge=false;
+  status_next=stage11_forge_handoff_contract;
+  contract_next=stage11_forge_handoff_contract`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

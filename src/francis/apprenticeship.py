@@ -8,6 +8,7 @@ STAGE11_APPRENTICESHIP_STAGE = "Stage 11 / Apprenticeship"
 APPRENTICESHIP_STATUS_KIND = "francis.stage11.apprenticeship.status"
 APPRENTICESHIP_TEACHING_SESSION_CONTRACT_KIND = "francis.stage11.apprenticeship.teaching_session_contract"
 APPRENTICESHIP_REPLAY_GENERALIZATION_CONTRACT_KIND = "francis.stage11.apprenticeship.replay_generalization_contract"
+APPRENTICESHIP_SKILLIZATION_ARTIFACT_CONTRACT_KIND = "francis.stage11.apprenticeship.skillization_artifact_contract"
 
 
 def apprenticeship_status_snapshot() -> dict[str, Any]:
@@ -17,10 +18,13 @@ def apprenticeship_status_snapshot() -> dict[str, Any]:
     teaching_session_ready = bool(teaching_session.get("teaching_session_contract_ready"))
     replay_generalization = apprenticeship_replay_generalization_contract()
     replay_generalization_ready = bool(replay_generalization.get("replay_generalization_contract_ready"))
+    skillization_artifact = apprenticeship_skillization_artifact_contract()
+    skillization_ready = bool(skillization_artifact.get("skillization_artifact_contract_ready"))
     deliverables = _apprenticeship_deliverables(
         stage10_closed=stage10_closed,
         teaching_session_ready=teaching_session_ready,
         replay_generalization_ready=replay_generalization_ready,
+        skillization_ready=skillization_ready,
     )
     ready_count = sum(1 for item in deliverables if bool(item.get("ready")))
     required_count = len(deliverables)
@@ -38,7 +42,7 @@ def apprenticeship_status_snapshot() -> dict[str, Any]:
         "required_count": required_count,
         "teaching_session_ready": teaching_session_ready,
         "replay_generalization_ready": replay_generalization_ready,
-        "skillization_ready": False,
+        "skillization_ready": skillization_ready,
         "forge_handoff_ready": False,
         "reads_receipts": True,
         "writes_receipts": False,
@@ -77,14 +81,14 @@ def apprenticeship_status_snapshot() -> dict[str, Any]:
             "stage10_closure_readback": "/away/stage-closure-decisions",
             "teaching_session_contract": "/apprenticeship/teaching-session-contract",
             "replay_generalization_contract": "/apprenticeship/replay-generalization-contract",
+            "skillization_artifact_contract": "/apprenticeship/skillization-artifact-contract",
         },
-        "next_smallest_truthful_gap": "stage11_skillization_artifact_contract"
-        if stage10_closed and replay_generalization_ready
-        else "stage11_replay_generalization_contract"
-        if stage10_closed and teaching_session_ready
-        else "stage11_teaching_session_contract"
-        if stage10_closed
-        else "stage10_ledger_closure",
+        "next_smallest_truthful_gap": _apprenticeship_next_gap(
+            stage10_closed=stage10_closed,
+            teaching_session_ready=teaching_session_ready,
+            replay_generalization_ready=replay_generalization_ready,
+            skillization_ready=skillization_ready,
+        ),
     }
 
 
@@ -349,11 +353,139 @@ def apprenticeship_replay_generalization_contract() -> dict[str, Any]:
     }
 
 
+def apprenticeship_skillization_artifact_contract() -> dict[str, Any]:
+    replay_generalization = apprenticeship_replay_generalization_contract()
+    replay_ready = bool(replay_generalization.get("replay_generalization_contract_ready"))
+    artifact_schema = [
+        {
+            "id": "pattern_summary",
+            "label": "Pattern summary",
+            "required": True,
+            "status": "declared",
+        },
+        {
+            "id": "parameterization",
+            "label": "Parameterization",
+            "required": True,
+            "status": "declared",
+        },
+        {
+            "id": "usage_scope",
+            "label": "Usage scope",
+            "required": True,
+            "status": "declared",
+        },
+        {
+            "id": "decision_logic",
+            "label": "Decision logic",
+            "required": True,
+            "status": "declared",
+        },
+        {
+            "id": "validation_expectations",
+            "label": "Validation expectations",
+            "required": True,
+            "status": "declared",
+        },
+        {
+            "id": "risk_tier_candidate",
+            "label": "Risk-tier candidate",
+            "required": True,
+            "status": "declared",
+        },
+        {
+            "id": "documentation_draft",
+            "label": "Documentation draft",
+            "required": True,
+            "status": "declared",
+        },
+        {
+            "id": "test_candidate_structure",
+            "label": "Test candidate structure",
+            "required": True,
+            "status": "declared",
+        },
+    ]
+    classification_options = [
+        "preference_adaptation",
+        "workflow_understanding",
+        "candidate_reusable_skill",
+        "forge_worthy_promoted_capability",
+    ]
+    denied_modes = [
+        "automatic_promotion",
+        "silent_authority_growth",
+        "unreviewed_capability_creation",
+        "memory_write_without_operator_review",
+    ]
+    checks = _skillization_artifact_contract_checks(
+        replay_ready=replay_ready,
+        artifact_schema=artifact_schema,
+        classification_options=classification_options,
+        denied_modes=denied_modes,
+    )
+    ready = all(bool(check.get("passed")) for check in checks)
+    return {
+        "ok": True,
+        "kind": APPRENTICESHIP_SKILLIZATION_ARTIFACT_CONTRACT_KIND,
+        "stage": STAGE11_APPRENTICESHIP_STAGE,
+        "source_id": "apprenticeship",
+        "status": "ready" if ready else "blocked",
+        "replay_generalization_contract_ready": replay_ready,
+        "skillization_artifact_contract_ready": ready,
+        "pipeline_position": ["skillize"],
+        "artifact_schema": artifact_schema,
+        "artifact_field_count": len(artifact_schema),
+        "classification_options": classification_options,
+        "classification_option_count": len(classification_options),
+        "denied_modes": denied_modes,
+        "checks": checks,
+        "reads_receipts": True,
+        "writes_receipts": False,
+        "writes_memory": False,
+        "writes_skill_artifact": False,
+        "captures_screen": False,
+        "captures_audio": False,
+        "captures_keystrokes": False,
+        "passive_learning_enabled": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "creates_capability": False,
+        "promotes_to_forge": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "contract_only": True,
+            "requires_replay_generalization_contract": True,
+            "operator_review_required_before_artifact_write": True,
+            "forge_promotion_requires_governed_handoff": True,
+            "automatic_promotion_denied": True,
+            "silent_authority_growth_denied": True,
+            "unreviewed_capability_creation_denied": True,
+            "does_not_write_receipts": True,
+            "does_not_write_memory": True,
+            "does_not_write_skill_artifact": True,
+            "does_not_run_tools": True,
+            "does_not_run_shell": True,
+            "does_not_run_git": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": "stage11_forge_handoff_contract"
+        if ready
+        else "stage11_skillization_artifact_contract",
+    }
+
+
 def _apprenticeship_deliverables(
     *,
     stage10_closed: bool,
     teaching_session_ready: bool,
     replay_generalization_ready: bool,
+    skillization_ready: bool,
 ) -> list[dict[str, Any]]:
     return [
         {
@@ -377,8 +509,8 @@ def _apprenticeship_deliverables(
         {
             "id": "skillization_artifacts",
             "label": "Skillization artifacts",
-            "ready": False,
-            "evidence": "stage11_skillization_artifact_contract",
+            "ready": skillization_ready,
+            "evidence": "/apprenticeship/skillization-artifact-contract",
         },
         {
             "id": "forge_ready_outputs",
@@ -386,6 +518,77 @@ def _apprenticeship_deliverables(
             "ready": False,
             "evidence": "stage11_forge_handoff_contract",
         },
+    ]
+
+
+def _apprenticeship_next_gap(
+    *,
+    stage10_closed: bool,
+    teaching_session_ready: bool,
+    replay_generalization_ready: bool,
+    skillization_ready: bool,
+) -> str:
+    if not stage10_closed:
+        return "stage10_ledger_closure"
+    if not teaching_session_ready:
+        return "stage11_teaching_session_contract"
+    if not replay_generalization_ready:
+        return "stage11_replay_generalization_contract"
+    if not skillization_ready:
+        return "stage11_skillization_artifact_contract"
+    return "stage11_forge_handoff_contract"
+
+
+def _skillization_artifact_contract_checks(
+    *,
+    replay_ready: bool,
+    artifact_schema: list[dict[str, Any]],
+    classification_options: list[str],
+    denied_modes: list[str],
+) -> list[dict[str, Any]]:
+    schema_ids = {_safe_text(item.get("id")) for item in artifact_schema if bool(item.get("required"))}
+    classifications = {_safe_text(item) for item in classification_options}
+    denied = {_safe_text(item) for item in denied_modes}
+    return [
+        _check(
+            "replay_generalization_contract_ready",
+            passed=replay_ready,
+            evidence="/apprenticeship/replay-generalization-contract",
+        ),
+        _check(
+            "forge_ready_artifact_schema_declared",
+            passed={
+                "pattern_summary",
+                "parameterization",
+                "usage_scope",
+                "decision_logic",
+                "validation_expectations",
+                "risk_tier_candidate",
+                "documentation_draft",
+                "test_candidate_structure",
+            }.issubset(schema_ids),
+            evidence=str(len(artifact_schema)),
+        ),
+        _check(
+            "learning_classifications_declared",
+            passed={
+                "preference_adaptation",
+                "workflow_understanding",
+                "candidate_reusable_skill",
+                "forge_worthy_promoted_capability",
+            }.issubset(classifications),
+            evidence=str(len(classification_options)),
+        ),
+        _check(
+            "automatic_promotion_denied",
+            passed="automatic_promotion" in denied and "silent_authority_growth" in denied,
+            evidence="automatic_promotion_and_silent_authority_growth_denied",
+        ),
+        _check(
+            "artifact_write_requires_operator_review",
+            passed="unreviewed_capability_creation" in denied and "memory_write_without_operator_review" in denied,
+            evidence="unreviewed_artifact_and_memory_write_denied",
+        ),
     ]
 
 
