@@ -113,6 +113,7 @@ def test_trust_calibration_status_blocks_until_stage12_closure(monkeypatch, tmp_
     assert body["routes"]["ui_state_coherence"] == "/trust-calibration/ui-state-coherence"
     assert body["routes"]["operator_browser_visual_readbacks"] == "/trust-calibration/operator-browser-visual-readbacks"
     assert body["routes"]["operator_browser_visual_readback"] == "/trust-calibration/operator-browser-visual-readback"
+    assert body["routes"]["completion_review"] == "/trust-calibration/completion-review"
     assert body["routes"]["claim_evaluation"] == "/trust-calibration/evaluate-claim"
     assert body["routes"]["stage12_closure_readback"] == "/knowledge-fabric/stage-closure-decisions"
     assert body["governance"]["read_only"] is True
@@ -453,6 +454,7 @@ def test_trust_calibration_confidence_rules_contract_ready_after_stage12_closure
     assert status["latest_operator_browser_visual_readback_receipt_id"] == ""
     assert status["ready_count"] == 6
     assert status["required_count"] == 7
+    assert status["routes"]["completion_review"] == "/trust-calibration/completion-review"
     assert status["next_smallest_truthful_gap"] == "stage13_operator_browser_visual_readback"
 
     blocked_eval = client.post(
@@ -536,6 +538,70 @@ def test_trust_calibration_confidence_rules_contract_ready_after_stage12_closure
     assert uncertain_eval["downgraded"] is True
     assert uncertain_eval["missing_verification"] == ["current_evidence_or_conflict_resolution"]
     assert uncertain_eval["surface_obligation"] == "state_uncertainty_and_next_check"
+
+
+def test_trust_calibration_completion_review_blocks_until_browser_visual_readback(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    repo_root = tmp_path / "repo"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    _write_stage13_ui_coherence_sources(repo_root)
+    _write_stage12_closure_receipt(data_root, receipt_id="knowledge_fabric_stage12_closure_review_test")
+
+    response = TestClient(create_app()).get("/trust-calibration/completion-review")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "francis.stage13.trust_calibration.completion_review"
+    assert body["stage"] == "Stage 13 / Trust Calibration"
+    assert body["status"] == "blocked"
+    assert body["stage13_completion_review_ready"] is False
+    assert body["stage_closure_decision_required"] is False
+    assert body["stage12_closed_by_receipt"] is True
+    assert body["stage12_latest_closure_receipt_id"] == "knowledge_fabric_stage12_closure_review_test"
+    assert body["confidence_rules_contract_ready"] is True
+    assert body["verification_gates_ready"] is True
+    assert body["anti_overclaim_policy_ready"] is True
+    assert body["calibrated_claim_logic_ready"] is True
+    assert body["runtime_claim_integration_ready"] is True
+    assert body["ui_state_coherence_review_ready"] is True
+    assert body["operator_browser_visual_readback_observed"] is False
+    assert body["latest_operator_browser_visual_readback_receipt_id"] == ""
+    assert body["ready_count"] == 6
+    assert body["required_count"] == 7
+    assert body["blockers"] == ["operator_browser_visual_readback_observed", "all_deliverables_ready"]
+    assert body["reads_receipts"] is True
+    assert body["writes_receipts"] is False
+    assert body["writes_memory"] is False
+    assert body["scores_model_output"] is False
+    assert body["changes_ui_confidence"] is False
+    assert body["enforces_runtime_claims"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["launches_browser"] is False
+    assert body["captures_screen"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["marks_stage_closed"] is False
+    assert body["governance"]["completion_review_only"] is True
+    assert body["governance"]["requires_operator_browser_visual_readback"] is True
+    assert body["governance"]["does_not_launch_browser"] is True
+    assert body["governance"]["does_not_capture_screen"] is True
+    assert body["governance"]["does_not_mark_stage_closed"] is True
+    assert body["routes"]["completion_review"] == "/trust-calibration/completion-review"
+    assert body["next_smallest_truthful_gap"] == "stage13_operator_browser_visual_readback"
+
+    checks = {item["id"]: item for item in body["checks"]}
+    assert checks["stage12_ledger_closure_backstop"]["status"] == "ready"
+    assert checks["ui_state_coherence_review_ready"]["status"] == "ready"
+    assert checks["operator_browser_visual_readback_observed"]["status"] == "blocked"
+    assert checks["all_deliverables_ready"]["status"] == "blocked"
+    assert checks["stage_not_marked_closed_by_review"]["status"] == "ready"
 
 
 def test_trust_calibration_operator_browser_visual_readback_receipt_advances_browser_gap(
@@ -644,3 +710,28 @@ def test_trust_calibration_operator_browser_visual_readback_receipt_advances_bro
     assert status["ready_count"] == 7
     assert status["required_count"] == 7
     assert status["next_smallest_truthful_gap"] == "stage13_completion_review"
+
+    completion_review = client.get("/trust-calibration/completion-review").json()
+    assert completion_review["ok"] is True
+    assert completion_review["kind"] == "francis.stage13.trust_calibration.completion_review"
+    assert completion_review["status"] == "ready"
+    assert completion_review["stage13_completion_review_ready"] is True
+    assert completion_review["stage_closure_decision_required"] is True
+    assert completion_review["operator_browser_visual_readback_observed"] is True
+    assert completion_review["latest_operator_browser_visual_readback_receipt_id"] == receipt["receipt_id"]
+    assert completion_review["ready_count"] == 7
+    assert completion_review["required_count"] == 7
+    assert completion_review["blockers"] == []
+    assert completion_review["writes_receipts"] is False
+    assert completion_review["writes_memory"] is False
+    assert completion_review["runs_tools"] is False
+    assert completion_review["runs_shell"] is False
+    assert completion_review["runs_git"] is False
+    assert completion_review["launches_browser"] is False
+    assert completion_review["captures_screen"] is False
+    assert completion_review["marks_stage_closed"] is False
+    assert completion_review["governance"]["completion_review_only"] is True
+    assert completion_review["governance"]["stage_closure_decision_required"] is True
+    assert completion_review["governance"]["does_not_mark_stage_closed"] is True
+    assert completion_review["next_smallest_truthful_gap"] == "stage13_stage_closure_decision"
+    assert all(item["passed"] for item in completion_review["checks"])

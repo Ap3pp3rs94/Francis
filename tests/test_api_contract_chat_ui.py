@@ -304,6 +304,7 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("GET", "/trust-calibration/calibrated-claim-logic"),
         ("GET", "/trust-calibration/ui-state-coherence"),
         ("GET", "/trust-calibration/operator-browser-visual-readbacks"),
+        ("GET", "/trust-calibration/completion-review"),
         ("POST", "/trust-calibration/operator-browser-visual-readback"),
         ("POST", "/trust-calibration/evaluate-claim"),
     ]

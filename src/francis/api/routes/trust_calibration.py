@@ -12,6 +12,7 @@ from francis.trust_calibration import (
     trust_calibration_anti_overclaim_policy,
     trust_calibration_calibrated_claim_logic,
     trust_calibration_claim_evaluation,
+    trust_calibration_completion_review,
     trust_calibration_confidence_rules_contract,
     trust_calibration_operator_browser_visual_readback_receipts,
     trust_calibration_status_snapshot,
@@ -107,6 +108,11 @@ def ui_state_coherence() -> dict[str, Any]:
 @router.get("/operator-browser-visual-readbacks")
 def operator_browser_visual_readbacks(limit: int = 20) -> dict[str, Any]:
     return trust_calibration_operator_browser_visual_readback_receipts(limit=limit)
+
+
+@router.get("/completion-review")
+def completion_review() -> dict[str, Any]:
+    return trust_calibration_completion_review()
 
 
 @router.post("/operator-browser-visual-readback")

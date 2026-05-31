@@ -49544,6 +49544,50 @@ Latest validation for Stage 13 browser visual readback receipt path:
   browser_readback_status=empty;
   next_smallest_truthful_gap=stage13_operator_browser_visual_readback`.
 
+### 2026-05-31 - Stage 13 completion review is explicit and read-only
+
+Roadmap area: Stage 13 / Trust Calibration, no false done and no UI confidence
+laundering.
+
+Material change:
+
+- Added read-only route `/trust-calibration/completion-review`.
+- The review consumes `/trust-calibration/status` deliverables and reports a
+  Stage 13 completion gate without writing receipts, memory, tasks, shell state,
+  git state, browser captures, UI confidence, or runtime stage state.
+- Without an operator browser visual readback receipt, the review stays blocked
+  with `blockers=["operator_browser_visual_readback_observed",
+  "all_deliverables_ready"]` and
+  `next_smallest_truthful_gap=stage13_operator_browser_visual_readback`.
+- After a scoped operator browser visual readback receipt, the review becomes
+  ready and advances only to `stage13_stage_closure_decision`; it still does
+  not mark Stage 13 closed.
+
+Latest validation for Stage 13 completion review:
+
+- `python -m pytest tests/test_api_trust_calibration.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed`
+- `python -m mypy src/francis/trust_calibration.py
+  src/francis/api/routes/trust_calibration.py`
+  Result: `passed`
+- `python -m ruff check src/francis/trust_calibration.py
+  src/francis/api/routes/trust_calibration.py tests/test_api_trust_calibration.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/trust_calibration.py
+  src/francis/api/routes/trust_calibration.py tests/test_api_trust_calibration.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- Direct local `TestClient` readback of GET
+  `/trust-calibration/completion-review`.
+  Result: `status=blocked; stage13_completion_review_ready=false;
+  ready_count=6; required_count=7;
+  blockers=["operator_browser_visual_readback_observed",
+  "all_deliverables_ready"];
+  next_smallest_truthful_gap=stage13_operator_browser_visual_readback`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

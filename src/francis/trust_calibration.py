@@ -18,6 +18,7 @@ TRUST_CALIBRATION_ANTI_OVERCLAIM_POLICY_KIND = "francis.stage13.trust_calibratio
 TRUST_CALIBRATION_CALIBRATED_CLAIM_LOGIC_KIND = "francis.stage13.trust_calibration.calibrated_claim_logic"
 TRUST_CALIBRATION_CLAIM_EVALUATION_KIND = "francis.stage13.trust_calibration.claim_evaluation"
 TRUST_CALIBRATION_UI_STATE_COHERENCE_KIND = "francis.stage13.trust_calibration.ui_state_coherence_review"
+TRUST_CALIBRATION_COMPLETION_REVIEW_KIND = "francis.stage13.trust_calibration.completion_review"
 TRUST_CALIBRATION_OPERATOR_BROWSER_VISUAL_READBACK_RECEIPT_KIND = (
     "francis.stage13.trust_calibration.operator_browser_visual_readback_receipt"
 )
@@ -159,6 +160,7 @@ def trust_calibration_status_snapshot() -> dict[str, Any]:
             "ui_state_coherence": "/trust-calibration/ui-state-coherence",
             "operator_browser_visual_readbacks": "/trust-calibration/operator-browser-visual-readbacks",
             "operator_browser_visual_readback": "/trust-calibration/operator-browser-visual-readback",
+            "completion_review": "/trust-calibration/completion-review",
             "claim_evaluation": "/trust-calibration/evaluate-claim",
             "stage12_closure_readback": "/knowledge-fabric/stage-closure-decisions",
         },
@@ -934,6 +936,119 @@ def trust_calibration_ui_state_coherence_review() -> dict[str, Any]:
     }
 
 
+def trust_calibration_completion_review() -> dict[str, Any]:
+    status = trust_calibration_status_snapshot()
+    deliverables = [item for item in status.get("deliverables", []) if isinstance(item, Mapping)]
+    ready_count = _safe_int(status.get("ready_count"))
+    required_count = _safe_int(status.get("required_count"))
+    checks = [
+        _review_check(
+            "stage12_ledger_closure_backstop",
+            passed=bool(status.get("stage12_closed_by_receipt")),
+            evidence=_safe_text(status.get("stage12_latest_closure_receipt_id"))
+            or "/knowledge-fabric/stage-closure-decisions",
+        ),
+        _review_check(
+            "confidence_rules_contract_ready",
+            passed=bool(status.get("confidence_rules_contract_ready")),
+            evidence="/trust-calibration/confidence-rules-contract",
+        ),
+        _review_check(
+            "verification_gates_ready",
+            passed=bool(status.get("verification_gates_ready")),
+            evidence="/trust-calibration/verification-gate-contract",
+        ),
+        _review_check(
+            "anti_overclaim_policy_ready",
+            passed=bool(status.get("anti_overclaim_policy_ready")),
+            evidence="/trust-calibration/anti-overclaim-policy",
+        ),
+        _review_check(
+            "calibrated_claim_logic_ready",
+            passed=bool(status.get("calibrated_claim_logic_ready")),
+            evidence="/trust-calibration/calibrated-claim-logic",
+        ),
+        _review_check(
+            "ui_state_coherence_review_ready",
+            passed=bool(status.get("ui_state_coherence_review_ready")),
+            evidence="/trust-calibration/ui-state-coherence",
+        ),
+        _review_check(
+            "operator_browser_visual_readback_observed",
+            passed=bool(status.get("operator_browser_visual_readback_observed")),
+            evidence=_safe_text(status.get("latest_operator_browser_visual_readback_receipt_id"))
+            or "/trust-calibration/operator-browser-visual-readbacks",
+        ),
+        _review_check(
+            "all_deliverables_ready",
+            passed=bool(deliverables)
+            and ready_count == required_count
+            and required_count >= 1
+            and all(bool(item.get("ready")) for item in deliverables),
+            evidence="trust_calibration.status.deliverables",
+        ),
+        _review_check(
+            "stage_not_marked_closed_by_review",
+            passed=True,
+            evidence="completion_review_is_read_only",
+        ),
+    ]
+    review_ready = all(bool(check.get("passed")) for check in checks)
+    blockers = [str(check["id"]) for check in checks if not bool(check.get("passed"))]
+    return {
+        "ok": True,
+        "kind": TRUST_CALIBRATION_COMPLETION_REVIEW_KIND,
+        "stage": STAGE13_TRUST_CALIBRATION_STAGE,
+        "source_id": "trust_calibration",
+        "status": "ready" if review_ready else "blocked",
+        "stage13_completion_review_ready": review_ready,
+        "stage_closure_decision_required": review_ready,
+        "stage12_closed_by_receipt": bool(status.get("stage12_closed_by_receipt")),
+        "stage12_latest_closure_receipt_id": _safe_text(status.get("stage12_latest_closure_receipt_id")),
+        "confidence_rules_contract_ready": bool(status.get("confidence_rules_contract_ready")),
+        "verification_gates_ready": bool(status.get("verification_gates_ready")),
+        "anti_overclaim_policy_ready": bool(status.get("anti_overclaim_policy_ready")),
+        "calibrated_claim_logic_ready": bool(status.get("calibrated_claim_logic_ready")),
+        "runtime_claim_integration_ready": bool(status.get("runtime_claim_integration_ready")),
+        "ui_state_coherence_review_ready": bool(status.get("ui_state_coherence_review_ready")),
+        "operator_browser_visual_readback_observed": bool(status.get("operator_browser_visual_readback_observed")),
+        "latest_operator_browser_visual_readback_receipt_id": _safe_text(
+            status.get("latest_operator_browser_visual_readback_receipt_id")
+        ),
+        "ready_count": ready_count,
+        "required_count": required_count,
+        "checks": checks,
+        "blockers": blockers,
+        "reads_receipts": True,
+        "writes_receipts": False,
+        "writes_memory": False,
+        "scores_model_output": False,
+        "changes_ui_confidence": False,
+        "enforces_runtime_claims": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "marks_stage_closed": False,
+        "governance": {
+            **_trust_calibration_governance(),
+            "completion_review_only": True,
+            "stage_closure_decision_required": review_ready,
+            "requires_operator_browser_visual_readback": True,
+            "does_not_launch_browser": True,
+            "does_not_capture_screen": True,
+            "does_not_mark_stage_closed": True,
+        },
+        "routes": status.get("routes", {}),
+        "next_smallest_truthful_gap": "stage13_stage_closure_decision"
+        if review_ready
+        else _safe_text(status.get("next_smallest_truthful_gap")) or "stage13_operator_browser_visual_readback",
+    }
+
+
 def trust_calibration_operator_browser_visual_readback_receipts(*, limit: int = 20) -> dict[str, Any]:
     safe_limit = _safe_limit(limit)
     items = _read_jsonl_tail(_operator_browser_visual_readback_receipt_path(), limit=safe_limit)
@@ -1187,6 +1302,22 @@ def _deliverable(
         "status": status,
         "next_smallest_truthful_gap": next_gap,
     }
+
+
+def _review_check(check_id: str, *, passed: bool, evidence: str) -> dict[str, Any]:
+    return {
+        "id": check_id,
+        "passed": passed,
+        "status": "ready" if passed else "blocked",
+        "evidence": evidence,
+    }
+
+
+def _safe_int(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _safe_text(value: Any) -> str:
