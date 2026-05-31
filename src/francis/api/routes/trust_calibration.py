@@ -7,6 +7,7 @@ from fastapi import APIRouter
 from francis.trust_calibration import (
     trust_calibration_anti_overclaim_policy,
     trust_calibration_calibrated_claim_logic,
+    trust_calibration_claim_evaluation,
     trust_calibration_confidence_rules_contract,
     trust_calibration_status_snapshot,
     trust_calibration_verification_gate_contract,
@@ -38,3 +39,8 @@ def anti_overclaim_policy() -> dict[str, Any]:
 @router.get("/calibrated-claim-logic")
 def calibrated_claim_logic() -> dict[str, Any]:
     return trust_calibration_calibrated_claim_logic()
+
+
+@router.post("/evaluate-claim")
+def evaluate_claim(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    return trust_calibration_claim_evaluation(payload)

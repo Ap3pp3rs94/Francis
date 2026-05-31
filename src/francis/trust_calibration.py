@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Mapping
 
 from francis.knowledge_fabric import knowledge_fabric_stage12_operator_stage_closure_decision_readback
 
@@ -10,6 +10,7 @@ TRUST_CALIBRATION_CONFIDENCE_RULES_CONTRACT_KIND = "francis.stage13.trust_calibr
 TRUST_CALIBRATION_VERIFICATION_GATE_CONTRACT_KIND = "francis.stage13.trust_calibration.verification_gate_contract"
 TRUST_CALIBRATION_ANTI_OVERCLAIM_POLICY_KIND = "francis.stage13.trust_calibration.anti_overclaim_policy"
 TRUST_CALIBRATION_CALIBRATED_CLAIM_LOGIC_KIND = "francis.stage13.trust_calibration.calibrated_claim_logic"
+TRUST_CALIBRATION_CLAIM_EVALUATION_KIND = "francis.stage13.trust_calibration.claim_evaluation"
 
 
 def trust_calibration_status_snapshot() -> dict[str, Any]:
@@ -23,6 +24,7 @@ def trust_calibration_status_snapshot() -> dict[str, Any]:
     anti_overclaim_policy_ready = bool(anti_overclaim_policy.get("anti_overclaim_policy_ready"))
     calibrated_claim_logic = trust_calibration_calibrated_claim_logic()
     calibrated_claim_logic_ready = bool(calibrated_claim_logic.get("calibrated_claim_logic_ready"))
+    runtime_claim_integration_ready = calibrated_claim_logic_ready
     deliverables = [
         _deliverable(
             "stage12_ledger_closure_backstop",
@@ -66,7 +68,7 @@ def trust_calibration_status_snapshot() -> dict[str, Any]:
         "kind": TRUST_CALIBRATION_STATUS_KIND,
         "stage": STAGE13_TRUST_CALIBRATION_STAGE,
         "source_id": "trust_calibration",
-        "status": "stage13_calibrated_claim_logic_contract_ready"
+        "status": "stage13_runtime_claim_evaluator_ready"
         if (
             stage12_closed
             and confidence_rules_ready
@@ -87,6 +89,7 @@ def trust_calibration_status_snapshot() -> dict[str, Any]:
         "verification_gates_ready": verification_gates_ready,
         "anti_overclaim_policy_ready": anti_overclaim_policy_ready,
         "calibrated_claim_logic_ready": calibrated_claim_logic_ready,
+        "runtime_claim_integration_ready": runtime_claim_integration_ready,
         "deliverables": deliverables,
         "ready_count": ready_count,
         "required_count": len(deliverables),
@@ -96,10 +99,11 @@ def trust_calibration_status_snapshot() -> dict[str, Any]:
             "verification_gate_contract": "/trust-calibration/verification-gate-contract",
             "anti_overclaim_policy": "/trust-calibration/anti-overclaim-policy",
             "calibrated_claim_logic": "/trust-calibration/calibrated-claim-logic",
+            "claim_evaluation": "/trust-calibration/evaluate-claim",
             "stage12_closure_readback": "/knowledge-fabric/stage-closure-decisions",
         },
         "governance": _trust_calibration_governance(),
-        "next_smallest_truthful_gap": "stage13_runtime_claim_integration"
+        "next_smallest_truthful_gap": "stage13_ui_state_coherence"
         if (
             stage12_closed
             and confidence_rules_ready
@@ -678,6 +682,71 @@ def trust_calibration_calibrated_claim_logic() -> dict[str, Any]:
     }
 
 
+def trust_calibration_claim_evaluation(payload: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    body = payload if isinstance(payload, Mapping) else {}
+    claim_logic = trust_calibration_calibrated_claim_logic()
+    runtime_ready = bool(claim_logic.get("calibrated_claim_logic_ready"))
+    evidence = _safe_mapping(body.get("evidence"))
+    requested_strength = _safe_claim_strength(body.get("requested_claim_strength"))
+    claim_text = _bounded_text(body.get("claim_text"), limit=280)
+    claim_scope = _bounded_text(body.get("claim_scope"), limit=120)
+    result = _evaluate_claim_strength(evidence=evidence, runtime_ready=runtime_ready)
+    rule = _claim_logic_rule(claim_logic, result["claim_strength"])
+    missing_verification = _missing_verification(evidence=evidence, claim_strength=result["claim_strength"])
+    supplied_missing = _safe_text_list(evidence.get("missing_verification"), limit=8)
+    for item in supplied_missing:
+        if item not in missing_verification:
+            missing_verification.append(item)
+    return {
+        "ok": True,
+        "kind": TRUST_CALIBRATION_CLAIM_EVALUATION_KIND,
+        "stage": STAGE13_TRUST_CALIBRATION_STAGE,
+        "source_id": "trust_calibration",
+        "status": "evaluated" if runtime_ready else "blocked",
+        "runtime_claim_integration_ready": runtime_ready,
+        "calibrated_claim_logic_ready": runtime_ready,
+        "anti_overclaim_policy_ready": bool(claim_logic.get("anti_overclaim_policy_ready")),
+        "verification_gate_contract_ready": bool(claim_logic.get("verification_gate_contract_ready")),
+        "confidence_rules_contract_ready": bool(claim_logic.get("confidence_rules_contract_ready")),
+        "stage12_closed_by_receipt": bool(claim_logic.get("stage12_closed_by_receipt")),
+        "stage12_latest_closure_receipt_id": _safe_text(claim_logic.get("stage12_latest_closure_receipt_id")),
+        "claim_text": claim_text,
+        "claim_scope": claim_scope,
+        "requested_claim_strength": requested_strength,
+        "claim_strength": result["claim_strength"],
+        "condition": result["condition"],
+        "reason": result["reason"],
+        "downgraded": _strength_rank(result["claim_strength"]) < _strength_rank(requested_strength),
+        "missing_verification": missing_verification,
+        "surface_obligation": result["surface_obligation"],
+        "allowed_surface_language": list(rule.get("allowed_surface_language", [])),
+        "forbidden_surface_language": list(rule.get("forbidden_surface_language", [])),
+        "ui_state": _safe_text(rule.get("ui_state")),
+        "must_cite": bool(rule.get("must_cite")),
+        "must_name_missing_verification": bool(rule.get("must_name_missing_verification")),
+        "next_smallest_truthful_gap": _bounded_text(evidence.get("next_smallest_truthful_gap"), limit=120)
+        or result["next_smallest_truthful_gap"],
+        "evaluates_supplied_evidence_only": True,
+        "writes_memory": False,
+        "writes_receipts": False,
+        "scores_model_output": False,
+        "changes_ui_confidence": False,
+        "enforces_runtime_claims": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            **_trust_calibration_governance(),
+            "evaluates_supplied_evidence_only": True,
+            "read_only_evaluation": True,
+            "accepts_untrusted_input": True,
+            "does_not_persist_evaluation": True,
+        },
+    }
+
+
 def _trust_calibration_governance() -> dict[str, Any]:
     return {
         "read_only": True,
@@ -719,3 +788,148 @@ def _safe_text(value: Any) -> str:
         return str(value)
     except Exception:
         return ""
+
+
+def _safe_mapping(value: Any) -> Mapping[str, Any]:
+    if isinstance(value, Mapping):
+        return value
+    return {}
+
+
+def _safe_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    if isinstance(value, (int, float)):
+        return value != 0
+    return False
+
+
+def _bounded_text(value: Any, *, limit: int) -> str:
+    text = " ".join(_safe_text(value).split())
+    return text[:limit]
+
+
+def _safe_text_list(value: Any, *, limit: int) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    items: list[str] = []
+    for item in value:
+        text = _bounded_text(item, limit=80)
+        if text and text not in items:
+            items.append(text)
+        if len(items) >= limit:
+            break
+    return items
+
+
+def _safe_claim_strength(value: Any) -> str:
+    text = _bounded_text(value, limit=40).lower()
+    if text in {"confirmed", "likely", "uncertain", "blocked"}:
+        return text
+    return ""
+
+
+def _evaluate_claim_strength(*, evidence: Mapping[str, Any], runtime_ready: bool) -> dict[str, str]:
+    if not runtime_ready:
+        return {
+            "claim_strength": "blocked",
+            "condition": "trust_calibration_contracts_not_ready",
+            "reason": "stage12_ledger_closure_missing",
+            "surface_obligation": "state_blocker_without_implying_progress",
+            "next_smallest_truthful_gap": "stage12_ledger_closure",
+        }
+    if _safe_bool(evidence.get("current_readback_reports_blocked")) or _safe_bool(
+        evidence.get("blocked_state_readback")
+    ):
+        return {
+            "claim_strength": "blocked",
+            "condition": "current_readback_reports_blocked",
+            "reason": "blocked_state_readback_present",
+            "surface_obligation": "preserve_blocked_state_and_name_next_gap",
+            "next_smallest_truthful_gap": "resolve_blocked_state_before_progress_claim",
+        }
+    if (
+        _safe_bool(evidence.get("required_authority_absent"))
+        or _safe_bool(evidence.get("required_receipt_or_gate_missing"))
+        or evidence.get("safe_execution_precondition_met") is False
+    ):
+        return {
+            "claim_strength": "blocked",
+            "condition": "authority_or_required_receipt_missing",
+            "reason": "missing_authority_receipt_or_precondition",
+            "surface_obligation": "state_missing_authority_or_receipt",
+            "next_smallest_truthful_gap": "obtain_required_authority_or_receipt",
+        }
+    if (
+        (_safe_bool(evidence.get("current_route_readback")) or _safe_bool(evidence.get("explicit_receipt")))
+        and _safe_bool(evidence.get("recency_readback"))
+        and _safe_bool(evidence.get("claim_scope_matches_evidence_scope"))
+        and not _safe_bool(evidence.get("conflicting_evidence"))
+        and not _safe_bool(evidence.get("stale_evidence"))
+    ):
+        return {
+            "claim_strength": "confirmed",
+            "condition": "current_receipt_or_readback_and_no_conflict",
+            "reason": "current_evidence_supports_claim",
+            "surface_obligation": "cite_current_evidence",
+            "next_smallest_truthful_gap": "none_for_this_claim",
+        }
+    if _safe_bool(evidence.get("supporting_evidence")) and not _safe_bool(evidence.get("conflicting_evidence")):
+        return {
+            "claim_strength": "likely",
+            "condition": "supporting_evidence_with_missing_verification",
+            "reason": "supporting_evidence_missing_full_verification",
+            "surface_obligation": "name_missing_verification",
+            "next_smallest_truthful_gap": "run_or_cite_missing_verification",
+        }
+    return {
+        "claim_strength": "uncertain",
+        "condition": "stale_or_conflicting_or_missing_evidence",
+        "reason": "missing_stale_or_conflicting_evidence",
+        "surface_obligation": "state_uncertainty_and_next_check",
+        "next_smallest_truthful_gap": "collect_current_evidence",
+    }
+
+
+def _claim_logic_rule(claim_logic: Mapping[str, Any], claim_strength: str) -> Mapping[str, Any]:
+    rules = claim_logic.get("claim_logic_rules")
+    if isinstance(rules, list):
+        for rule in rules:
+            if isinstance(rule, Mapping) and _safe_text(rule.get("claim_strength")) == claim_strength:
+                return rule
+    return {}
+
+
+def _missing_verification(*, evidence: Mapping[str, Any], claim_strength: str) -> list[str]:
+    if claim_strength == "confirmed":
+        required = {
+            "current_route_readback_or_explicit_receipt": _safe_bool(evidence.get("current_route_readback"))
+            or _safe_bool(evidence.get("explicit_receipt")),
+            "recency_readback": _safe_bool(evidence.get("recency_readback")),
+            "claim_scope_matches_evidence_scope": _safe_bool(evidence.get("claim_scope_matches_evidence_scope")),
+            "conflict_check": not _safe_bool(evidence.get("conflicting_evidence")),
+        }
+        return [key for key, present in required.items() if not present]
+    if claim_strength == "likely":
+        required = {
+            "current_route_readback_or_explicit_receipt": _safe_bool(evidence.get("current_route_readback"))
+            or _safe_bool(evidence.get("explicit_receipt")),
+            "recency_readback": _safe_bool(evidence.get("recency_readback")),
+            "claim_scope_matches_evidence_scope": _safe_bool(evidence.get("claim_scope_matches_evidence_scope")),
+        }
+        return [key for key, present in required.items() if not present]
+    if claim_strength == "uncertain":
+        return ["current_evidence_or_conflict_resolution"]
+    if claim_strength == "blocked":
+        if _safe_bool(evidence.get("required_authority_absent")):
+            return ["required_authority"]
+        if _safe_bool(evidence.get("required_receipt_or_gate_missing")):
+            return ["required_receipt_or_gate"]
+        return ["blocked_state_resolution"]
+    return []
+
+
+def _strength_rank(value: str) -> int:
+    return {"": 0, "blocked": 1, "uncertain": 2, "likely": 3, "confirmed": 4}.get(value, 0)

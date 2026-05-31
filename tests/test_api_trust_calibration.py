@@ -71,6 +71,7 @@ def test_trust_calibration_status_blocks_until_stage12_closure(monkeypatch, tmp_
     assert body["routes"]["verification_gate_contract"] == "/trust-calibration/verification-gate-contract"
     assert body["routes"]["anti_overclaim_policy"] == "/trust-calibration/anti-overclaim-policy"
     assert body["routes"]["calibrated_claim_logic"] == "/trust-calibration/calibrated-claim-logic"
+    assert body["routes"]["claim_evaluation"] == "/trust-calibration/evaluate-claim"
     assert body["routes"]["stage12_closure_readback"] == "/knowledge-fabric/stage-closure-decisions"
     assert body["governance"]["read_only"] is True
     assert body["governance"]["requires_stage12_ledger_closure"] is True
@@ -126,6 +127,31 @@ def test_trust_calibration_status_blocks_until_stage12_closure(monkeypatch, tmp_
     assert calibrated["scores_model_output"] is False
     assert calibrated["changes_ui_confidence"] is False
     assert calibrated["next_smallest_truthful_gap"] == "stage12_ledger_closure"
+
+    evaluation = (
+        TestClient(create_app())
+        .post(
+            "/trust-calibration/evaluate-claim",
+            json={
+                "claim_text": "Stage 13 is done",
+                "requested_claim_strength": "confirmed",
+                "evidence": {"current_route_readback": True},
+            },
+        )
+        .json()
+    )
+    assert evaluation["status"] == "blocked"
+    assert evaluation["runtime_claim_integration_ready"] is False
+    assert evaluation["claim_strength"] == "blocked"
+    assert evaluation["reason"] == "stage12_ledger_closure_missing"
+    assert evaluation["downgraded"] is True
+    assert evaluation["missing_verification"] == ["blocked_state_resolution"]
+    assert evaluation["evaluates_supplied_evidence_only"] is True
+    assert evaluation["writes_memory"] is False
+    assert evaluation["writes_receipts"] is False
+    assert evaluation["scores_model_output"] is False
+    assert evaluation["changes_ui_confidence"] is False
+    assert evaluation["enforces_runtime_claims"] is False
 
 
 def test_trust_calibration_confidence_rules_contract_ready_after_stage12_closure(
@@ -337,12 +363,95 @@ def test_trust_calibration_confidence_rules_contract_ready_after_stage12_closure
     assert decision_table["stale_or_conflicting_or_missing_evidence"]["claim_strength"] == "uncertain"
 
     status = client.get("/trust-calibration/status").json()
-    assert status["status"] == "stage13_calibrated_claim_logic_contract_ready"
+    assert status["status"] == "stage13_runtime_claim_evaluator_ready"
     assert status["stage12_closed_by_receipt"] is True
     assert status["confidence_rules_contract_ready"] is True
     assert status["verification_gates_ready"] is True
     assert status["anti_overclaim_policy_ready"] is True
     assert status["calibrated_claim_logic_ready"] is True
+    assert status["runtime_claim_integration_ready"] is True
     assert status["ready_count"] == 5
     assert status["required_count"] == 5
-    assert status["next_smallest_truthful_gap"] == "stage13_runtime_claim_integration"
+    assert status["next_smallest_truthful_gap"] == "stage13_ui_state_coherence"
+
+    blocked_eval = client.post(
+        "/trust-calibration/evaluate-claim",
+        json={
+            "claim_text": "Stage can close",
+            "claim_scope": "stage_closure",
+            "requested_claim_strength": "confirmed",
+            "evidence": {
+                "current_readback_reports_blocked": True,
+                "next_smallest_truthful_gap": "stage13_ui_state_coherence",
+            },
+        },
+    ).json()
+    assert blocked_eval["status"] == "evaluated"
+    assert blocked_eval["runtime_claim_integration_ready"] is True
+    assert blocked_eval["claim_strength"] == "blocked"
+    assert blocked_eval["condition"] == "current_readback_reports_blocked"
+    assert blocked_eval["downgraded"] is True
+    assert blocked_eval["surface_obligation"] == "preserve_blocked_state_and_name_next_gap"
+    assert blocked_eval["ui_state"] == "blocked_signal_required"
+    assert blocked_eval["next_smallest_truthful_gap"] == "stage13_ui_state_coherence"
+    assert blocked_eval["writes_memory"] is False
+    assert blocked_eval["writes_receipts"] is False
+    assert blocked_eval["enforces_runtime_claims"] is False
+    assert blocked_eval["governance"]["read_only_evaluation"] is True
+    assert blocked_eval["governance"]["does_not_persist_evaluation"] is True
+
+    confirmed_eval = client.post(
+        "/trust-calibration/evaluate-claim",
+        json={
+            "claim_text": "Completion review is ready",
+            "claim_scope": "completion_review",
+            "requested_claim_strength": "confirmed",
+            "evidence": {
+                "current_route_readback": True,
+                "recency_readback": True,
+                "claim_scope_matches_evidence_scope": True,
+                "conflicting_evidence": False,
+                "stale_evidence": False,
+            },
+        },
+    ).json()
+    assert confirmed_eval["claim_strength"] == "confirmed"
+    assert confirmed_eval["downgraded"] is False
+    assert confirmed_eval["missing_verification"] == []
+    assert confirmed_eval["must_cite"] is True
+    assert confirmed_eval["ui_state"] == "strong_signal_allowed_only_with_current_evidence"
+    assert "confirmed" in confirmed_eval["allowed_surface_language"]
+    assert "should_be_done" in confirmed_eval["forbidden_surface_language"]
+
+    likely_eval = client.post(
+        "/trust-calibration/evaluate-claim",
+        json={
+            "claim_text": "CI appears healthy",
+            "claim_scope": "ci_state",
+            "requested_claim_strength": "confirmed",
+            "evidence": {
+                "supporting_evidence": True,
+                "conflicting_evidence": False,
+                "missing_verification": ["current_actions_run_readback"],
+            },
+        },
+    ).json()
+    assert likely_eval["claim_strength"] == "likely"
+    assert likely_eval["downgraded"] is True
+    assert "current_actions_run_readback" in likely_eval["missing_verification"]
+    assert likely_eval["must_name_missing_verification"] is True
+    assert likely_eval["ui_state"] == "cautious_signal_only"
+
+    uncertain_eval = client.post(
+        "/trust-calibration/evaluate-claim",
+        json={
+            "claim_text": "Runtime is current",
+            "claim_scope": "runtime_readback",
+            "requested_claim_strength": "likely",
+            "evidence": {"stale_evidence": True},
+        },
+    ).json()
+    assert uncertain_eval["claim_strength"] == "uncertain"
+    assert uncertain_eval["downgraded"] is True
+    assert uncertain_eval["missing_verification"] == ["current_evidence_or_conflict_resolution"]
+    assert uncertain_eval["surface_obligation"] == "state_uncertainty_and_next_check"

@@ -49223,6 +49223,68 @@ Latest validation for Stage 13 calibrated claim logic:
   enforces_runtime_claims=false; scores_model_output=false;
   changes_ui_confidence=false; writes_memory=false; runs_tools=false`.
 
+### 2026-05-31 - Stage 13 runtime claim evaluator is read-only
+
+Roadmap area: Stage 13 / Trust Calibration, runtime claim integration.
+
+Material change:
+
+- Added read-only POST `/trust-calibration/evaluate-claim`.
+- The evaluator consumes supplied claim text, requested claim strength, claim
+  scope, and explicit evidence flags, then returns the calibrated claim
+  strength without writing memory, writing receipts, scoring model output,
+  changing UI confidence, running tools, running shell, running git, or granting
+  authority.
+- The evaluator blocks until the Stage 12 closure receipt and all Stage 13
+  trust-calibration contracts are readable.
+- The evaluator preserves blocked states before progress claims, maps missing
+  authority or missing receipts to `blocked`, maps current readback or explicit
+  receipt plus recency and no conflict to `confirmed`, maps supporting evidence
+  with missing verification to `likely`, and maps stale/conflicting/missing
+  evidence to `uncertain`.
+- The result includes downgraded status, missing verification, allowed and
+  forbidden surface language, UI state obligation, citation obligation, and the
+  next smallest truthful gap for the claim.
+- `/trust-calibration/status` now reports `runtime_claim_integration_ready`
+  and advances the next smallest truthful gap to `stage13_ui_state_coherence`
+  after the runtime evaluator is ready.
+
+Latest validation for Stage 13 runtime claim evaluator:
+
+- `python -m pytest tests/test_api_trust_calibration.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 3 passed`
+- `python -m mypy src/francis/trust_calibration.py
+  src/francis/api/routes/trust_calibration.py src/francis/api/app.py`
+  Result: `passed`
+- `python -m ruff check src/francis/trust_calibration.py
+  src/francis/api/routes/trust_calibration.py src/francis/api/app.py
+  tests/test_api_trust_calibration.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/trust_calibration.py
+  src/francis/api/routes/trust_calibration.py src/francis/api/app.py
+  tests/test_api_trust_calibration.py tests/test_api_contract_chat_ui.py`
+  Result: `passed; 5 files already formatted`
+- Live local TestClient route/readback against an isolated data root:
+  POST `/trust-calibration/evaluate-claim` before Stage 12 closure, write one
+  Stage 12 Knowledge Fabric closure receipt fixture, GET
+  `/trust-calibration/status`, then POST `/trust-calibration/evaluate-claim`
+  for blocked, confirmed, likely, and uncertain evidence shapes.
+  Result: `pre_status=blocked; pre_strength=blocked;
+  pre_reason=stage12_ledger_closure_missing;
+  status_status=stage13_runtime_claim_evaluator_ready;
+  status_runtime_ready=true; status_next=stage13_ui_state_coherence;
+  blocked_strength=blocked; blocked_downgraded=true;
+  blocked_next=stage13_ui_state_coherence; confirmed_strength=confirmed;
+  confirmed_missing=[]; confirmed_ui=strong_signal_allowed_only_with_current_evidence;
+  likely_strength=likely; likely_missing_has_actions=true;
+  uncertain_strength=uncertain;
+  uncertain_obligation=state_uncertainty_and_next_check;
+  evaluates_supplied_evidence_only=true; writes_memory=false;
+  writes_receipts=false; enforces_runtime_claims=false;
+  changes_ui_confidence=false`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
