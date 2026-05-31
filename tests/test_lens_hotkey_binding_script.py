@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import subprocess
+import re
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,10 @@ def _powershell() -> str:
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
+
+
+def _normalized_contains(source: str, snippet: str) -> bool:
+    return re.sub(r"\s+", " ", source).find(re.sub(r"\s+", " ", snippet)) >= 0
 
 
 def test_lens_hotkey_binding_start_timeout_stops_started_child_process() -> None:
@@ -215,6 +220,19 @@ def test_lens_hotkey_binding_start_refuses_default_blocked_config(tmp_path: Path
     assert payload["governance"]["local_process_launch_authority"] is False
     assert payload["governance"]["mutation_authority_granted"] is False
     assert not (data_dir / "runtime" / "lens-hotkey" / "lens-hotkey.pid").exists()
+
+
+def test_lens_hotkey_binding_start_clears_stale_bound_runtime_before_rebind() -> None:
+    source = (_repo_root() / "scripts" / "lens-hotkey-binding.ps1").read_text(encoding="utf-8")
+
+    assert _normalized_contains(
+        source,
+        "if (-not [bool]$Existing.ready -and -not [bool]$Existing.process_alive -and [string]$Existing.runtime_status)",
+    )
+    assert "$RuntimeRoot = Join-Path $DataRoot 'runtime\\lens-hotkey'" in source
+    assert "Remove-Item -LiteralPath (Join-Path $RuntimeRoot 'status.json')" in source
+    assert "Remove-Item -LiteralPath (Join-Path $RuntimeRoot 'lens-hotkey.pid')" in source
+    assert "Get-HotkeyRuntimeReadback -Root $DataRoot" in source
 
 
 def test_lens_hotkey_binding_run_refuses_default_blocked_config(tmp_path: Path) -> None:

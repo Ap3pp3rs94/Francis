@@ -685,6 +685,15 @@ if (-not $RunningOnWindows) {
 }
 
 $Existing = Get-HotkeyRuntimeReadback -Root $DataRoot
+if (-not [bool]$Existing.ready -and -not [bool]$Existing.process_alive -and [string]$Existing.runtime_status) {
+  $RuntimeStatus = [string]$Existing.runtime_status
+  if ($RuntimeStatus -ne 'missing') {
+    $RuntimeRoot = Join-Path $DataRoot 'runtime\lens-hotkey'
+    Remove-Item -LiteralPath (Join-Path $RuntimeRoot 'status.json') -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath (Join-Path $RuntimeRoot 'lens-hotkey.pid') -Force -ErrorAction SilentlyContinue
+    $Existing = Get-HotkeyRuntimeReadback -Root $DataRoot
+  }
+}
 if ([bool]$Existing.ready) {
   New-StatusPayload -Root $DataRoot -ModeName $ModeName -StatusOverride 'already_running' | ConvertTo-Json -Depth 8
   exit 0
