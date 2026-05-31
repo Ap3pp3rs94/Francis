@@ -49734,6 +49734,48 @@ Latest validation for Stage 13 browser visual readback UI action:
   operator_browser_visual_readback_observed=false;
   next_smallest_truthful_gap=stage13_operator_browser_visual_readback`.
 
+### 2026-05-31 - Stage 13 browser visual readback runner is bounded
+
+Roadmap area: Stage 13 / Trust Calibration, operator/browser visual readback
+for UI confidence claims.
+
+Material change:
+
+- Added `scripts/trust-calibration-browser-readback.mjs`, a bounded local
+  browser-readback runner for the ORB/System Stage 13 card.
+- The runner prints an inspectable contract with the required actor,
+  permission scope, UI surface id, receipt route, and required browser-visible
+  signals before any receipt can be written.
+- The runner opens the real Vite shell and clicks the existing
+  `Record visual readback` UI action only after the Stage 13 card visibly
+  exposes claim guards, missing verification, forbidden-language readback,
+  side-effect denial, and the next truthful gap.
+- The runner does not mark Stage 13 closed, write memory, grant authority,
+  or write a receipt unless the browser-visible guard signals and the UI action
+  both succeed.
+- Current local sandbox browser execution still does not produce the receipt:
+  the runner returned `status=browser_readback_runner_timeout`,
+  `writes_receipt=false`, and
+  `next_smallest_truthful_gap=stage13_operator_browser_visual_readback`.
+
+Latest validation for Stage 13 browser visual readback runner:
+
+- `node --check scripts/trust-calibration-browser-readback.mjs`
+  Result: `passed`
+- `node scripts/trust-calibration-browser-readback.mjs --print-contract`
+  Result: `passed; contract emitted`
+- `python -m pytest tests/test_trust_calibration_browser_readback_script.py
+  -q --tb=short`
+  Result: `passed; 2 passed`
+- `python -m ruff check tests/test_trust_calibration_browser_readback_script.py`
+  Result: `passed`
+- `python -m ruff format --check
+  tests/test_trust_calibration_browser_readback_script.py`
+  Result: `passed`
+- `node scripts/trust-calibration-browser-readback.mjs --timeout-ms 3000`
+  Result: `failed as expected in this sandbox;
+  status=browser_readback_runner_timeout; writes_receipt=false`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
