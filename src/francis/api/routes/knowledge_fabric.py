@@ -8,6 +8,7 @@ from francis.knowledge_fabric import (
     knowledge_fabric_artifact_index_contract,
     knowledge_fabric_artifact_index_projection,
     knowledge_fabric_local_evidence_citations,
+    knowledge_fabric_retention_model,
     knowledge_fabric_retrieval_preview,
     knowledge_fabric_status_snapshot,
 )
@@ -57,6 +58,21 @@ def local_evidence_citations(
     ledger_limit: int = 100,
 ) -> dict[str, Any]:
     return knowledge_fabric_local_evidence_citations(
+        query=query,
+        limit=limit,
+        memory_limit=memory_limit,
+        ledger_limit=ledger_limit,
+    )
+
+
+@router.get("/retention-model")
+def retention_model(
+    query: str = "",
+    limit: int = 10,
+    memory_limit: int = 100,
+    ledger_limit: int = 100,
+) -> dict[str, Any]:
+    return knowledge_fabric_retention_model(
         query=query,
         limit=limit,
         memory_limit=memory_limit,

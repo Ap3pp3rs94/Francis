@@ -14,6 +14,7 @@ KNOWLEDGE_FABRIC_ARTIFACT_INDEX_CONTRACT_KIND = "francis.stage12.knowledge_fabri
 KNOWLEDGE_FABRIC_ARTIFACT_INDEX_PROJECTION_KIND = "francis.stage12.knowledge_fabric.artifact_index_projection"
 KNOWLEDGE_FABRIC_RETRIEVAL_PREVIEW_KIND = "francis.stage12.knowledge_fabric.retrieval_preview"
 KNOWLEDGE_FABRIC_LOCAL_EVIDENCE_CITATIONS_KIND = "francis.stage12.knowledge_fabric.local_evidence_citations"
+KNOWLEDGE_FABRIC_RETENTION_MODEL_KIND = "francis.stage12.knowledge_fabric.retention_model"
 
 
 def knowledge_fabric_status_snapshot() -> dict[str, Any]:
@@ -27,6 +28,8 @@ def knowledge_fabric_status_snapshot() -> dict[str, Any]:
     retrieval_layer_ready = bool(retrieval_preview.get("retrieval_layer_ready"))
     local_citations = knowledge_fabric_local_evidence_citations(query="", limit=1, memory_limit=5, ledger_limit=5)
     local_evidence_citations_ready = bool(local_citations.get("local_evidence_citations_ready"))
+    retention_model = knowledge_fabric_retention_model(query="", limit=1, memory_limit=5, ledger_limit=5)
+    retention_model_ready = bool(retention_model.get("retention_model_ready"))
     deliverables = [
         _deliverable(
             "stage11_ledger_closure_backstop",
@@ -66,8 +69,8 @@ def knowledge_fabric_status_snapshot() -> dict[str, Any]:
         _deliverable(
             "retention_model",
             "Indexed artifacts carry retention policy and expiry posture",
-            False,
-            "pending",
+            retention_model_ready,
+            "ready" if retention_model_ready else "pending",
             "stage12_retention_model",
         ),
     ]
@@ -77,7 +80,14 @@ def knowledge_fabric_status_snapshot() -> dict[str, Any]:
         "kind": KNOWLEDGE_FABRIC_STATUS_KIND,
         "stage": STAGE12_KNOWLEDGE_FABRIC_STAGE,
         "source_id": "knowledge_fabric",
-        "status": "stage12_local_evidence_citation_surface_ready"
+        "status": "stage12_retention_model_ready"
+        if stage11_closed
+        and artifact_contract_ready
+        and artifact_projection_ready
+        and retrieval_layer_ready
+        and local_evidence_citations_ready
+        and retention_model_ready
+        else "stage12_local_evidence_citation_surface_ready"
         if stage11_closed
         and artifact_contract_ready
         and artifact_projection_ready
@@ -98,7 +108,7 @@ def knowledge_fabric_status_snapshot() -> dict[str, Any]:
         "artifact_indexing_active": False,
         "retrieval_layer_ready": retrieval_layer_ready,
         "local_evidence_citations_ready": local_evidence_citations_ready,
-        "retention_model_ready": False,
+        "retention_model_ready": retention_model_ready,
         "deliverables": deliverables,
         "ready_count": ready_count,
         "required_count": len(deliverables),
@@ -108,6 +118,7 @@ def knowledge_fabric_status_snapshot() -> dict[str, Any]:
             "artifact_index_projection": "/knowledge-fabric/artifact-index-projection",
             "retrieval_preview": "/knowledge-fabric/retrieval-preview",
             "local_evidence_citations": "/knowledge-fabric/local-evidence-citations",
+            "retention_model": "/knowledge-fabric/retention-model",
             "memory_timeline": "/memory/timeline/list",
             "artifact_inspection": "/artifacts/inspect",
             "continuity_ledger": "/continuity/ledger",
@@ -117,10 +128,19 @@ def knowledge_fabric_status_snapshot() -> dict[str, Any]:
             "requires_stage11_ledger_closure": True,
             "does_not_index_files": True,
             "does_not_write_memory": True,
+            "does_not_delete_data": True,
+            "does_not_mutate_retention": True,
             "does_not_replicate_data": True,
             "does_not_grant_authority": True,
         },
-        "next_smallest_truthful_gap": "stage12_retention_model"
+        "next_smallest_truthful_gap": "stage12_completion_review"
+        if stage11_closed
+        and artifact_contract_ready
+        and artifact_projection_ready
+        and retrieval_layer_ready
+        and local_evidence_citations_ready
+        and retention_model_ready
+        else "stage12_retention_model"
         if stage11_closed
         and artifact_contract_ready
         and artifact_projection_ready
@@ -133,6 +153,87 @@ def knowledge_fabric_status_snapshot() -> dict[str, Any]:
         else "stage12_artifact_index_projection"
         if stage11_closed and artifact_contract_ready
         else "stage11_ledger_closure",
+    }
+
+
+def knowledge_fabric_retention_model(
+    *,
+    query: Any = "",
+    limit: int = 10,
+    memory_limit: int = 100,
+    ledger_limit: int = 100,
+) -> dict[str, Any]:
+    safe_query = _redact_text(query)[:500]
+    safe_limit = _safe_limit(limit, default=10)
+    citations = knowledge_fabric_local_evidence_citations(
+        query=query,
+        limit=limit,
+        memory_limit=memory_limit,
+        ledger_limit=ledger_limit,
+    )
+    if not bool(citations.get("local_evidence_citations_ready")):
+        return {
+            "ok": True,
+            "kind": KNOWLEDGE_FABRIC_RETENTION_MODEL_KIND,
+            "stage": STAGE12_KNOWLEDGE_FABRIC_STAGE,
+            "source_id": "knowledge_fabric",
+            "status": "blocked",
+            "query": safe_query,
+            "retention_model_ready": False,
+            "local_evidence_citations_ready": False,
+            "stage11_closed_by_receipt": bool(citations.get("stage11_closed_by_receipt")),
+            "items": [],
+            "total": 0,
+            "limit": safe_limit,
+            "truncated": False,
+            "retention_declared_count": 0,
+            "retention_missing_count": 0,
+            "retention_policy_counts": {},
+            "writes_memory": False,
+            "writes_index": False,
+            "generates_answer": False,
+            "uses_model": False,
+            "scans_files": False,
+            "replicates_data": False,
+            "deletes_data": False,
+            "mutates_retention": False,
+            "grants_authority": False,
+            "governance": _retention_model_governance(),
+            "next_smallest_truthful_gap": _safe_text(citations.get("next_smallest_truthful_gap"))
+            or "stage12_local_evidence_citation_surface",
+        }
+
+    items = [_retention_model_item(item) for item in _as_list(citations.get("citations")) if isinstance(item, dict)]
+    declared_count = sum(1 for item in items if bool(item.get("retention_declared")))
+    return {
+        "ok": True,
+        "kind": KNOWLEDGE_FABRIC_RETENTION_MODEL_KIND,
+        "stage": STAGE12_KNOWLEDGE_FABRIC_STAGE,
+        "source_id": "knowledge_fabric",
+        "status": "ready" if items else "empty",
+        "query": safe_query,
+        "retention_model_ready": True,
+        "local_evidence_citations_ready": True,
+        "stage11_closed_by_receipt": bool(citations.get("stage11_closed_by_receipt")),
+        "items": items,
+        "total": len(items),
+        "citation_total": _safe_int(citations.get("total")),
+        "limit": safe_limit,
+        "truncated": bool(citations.get("truncated")),
+        "retention_declared_count": declared_count,
+        "retention_missing_count": max(0, len(items) - declared_count),
+        "retention_policy_counts": _count_by(items, "retention_policy"),
+        "writes_memory": False,
+        "writes_index": False,
+        "generates_answer": False,
+        "uses_model": False,
+        "scans_files": False,
+        "replicates_data": False,
+        "deletes_data": False,
+        "mutates_retention": False,
+        "grants_authority": False,
+        "governance": _retention_model_governance(),
+        "next_smallest_truthful_gap": "stage12_completion_review",
     }
 
 
@@ -742,6 +843,58 @@ def _local_evidence_citation_governance() -> dict[str, Any]:
         "does_not_scan_files": True,
         "does_not_replicate_data": True,
         "grants_authority": False,
+    }
+
+
+def _retention_model_governance() -> dict[str, Any]:
+    return {
+        "read_only": True,
+        "requires_local_evidence_citations": True,
+        "retention_model_only": True,
+        "local_evidence_only": True,
+        "does_not_delete_data": True,
+        "does_not_mutate_retention": True,
+        "does_not_generate_answer": True,
+        "does_not_call_model": True,
+        "does_not_write_index": True,
+        "does_not_write_memory": True,
+        "does_not_scan_files": True,
+        "does_not_replicate_data": True,
+        "grants_authority": False,
+    }
+
+
+def _retention_model_item(item: dict[str, Any]) -> dict[str, Any]:
+    retention = _as_dict(item.get("retention"))
+    retention_policy = _redact_text(_first_text(retention.get("policy"), retention.get("retention_policy")))
+    retention_class = _redact_text(_first_text(retention.get("class"), retention.get("retention_class")))
+    retention_until = _redact_text(
+        _first_text(retention.get("until"), retention.get("retention_until"), retention.get("expires_at"))
+    )
+    ttl_seconds = _safe_int(retention.get("ttl_seconds"))
+    retention_declared = bool(retention_policy or retention_class or retention_until or ttl_seconds > 0)
+    return {
+        "citation_id": _redact_text(item.get("citation_id")),
+        "artifact_class": _redact_text(item.get("artifact_class")),
+        "source_route": _redact_text(item.get("source_route")),
+        "reference_id": _redact_text(item.get("reference_id")),
+        "local_handle": _redact_text(item.get("local_handle")),
+        "retention_policy": retention_policy,
+        "retention_class": retention_class,
+        "retention_until": retention_until,
+        "ttl_seconds": ttl_seconds,
+        "retention_declared": retention_declared,
+        "retention_status": "declared" if retention_declared else "missing",
+        "retention": {
+            "policy": retention_policy,
+            "class": retention_class,
+            "until": retention_until,
+            "ttl_seconds": ttl_seconds,
+        },
+        "observed_ts": _safe_int(item.get("observed_ts")),
+        "redacted": True,
+        "deletion_candidate": False,
+        "citation_ready": bool(item.get("citation_ready")),
     }
 
 

@@ -68,12 +68,15 @@ def test_knowledge_fabric_status_blocks_until_stage11_closure(monkeypatch, tmp_p
     assert body["routes"]["artifact_index_contract"] == "/knowledge-fabric/artifact-index-contract"
     assert body["routes"]["artifact_index_projection"] == "/knowledge-fabric/artifact-index-projection"
     assert body["routes"]["local_evidence_citations"] == "/knowledge-fabric/local-evidence-citations"
+    assert body["routes"]["retention_model"] == "/knowledge-fabric/retention-model"
     assert body["routes"]["memory_timeline"] == "/memory/timeline/list"
     assert body["routes"]["artifact_inspection"] == "/artifacts/inspect"
     assert body["governance"]["read_only"] is True
     assert body["governance"]["requires_stage11_ledger_closure"] is True
     assert body["governance"]["does_not_index_files"] is True
     assert body["governance"]["does_not_write_memory"] is True
+    assert body["governance"]["does_not_delete_data"] is True
+    assert body["governance"]["does_not_mutate_retention"] is True
     assert body["governance"]["does_not_replicate_data"] is True
     assert body["next_smallest_truthful_gap"] == "stage11_ledger_closure"
     assert not data_root.exists()
@@ -142,15 +145,16 @@ def test_knowledge_fabric_artifact_index_contract_is_read_only_after_stage11_clo
     assert all(item["index_status"] == "contract_only" for item in classes.values())
 
     status = client.get("/knowledge-fabric/status").json()
-    assert status["status"] == "stage12_local_evidence_citation_surface_ready"
+    assert status["status"] == "stage12_retention_model_ready"
     assert status["artifact_index_contract_ready"] is True
     assert status["artifact_index_projection_ready"] is True
     assert status["artifact_index_projection_count"] == 0
     assert status["retrieval_layer_ready"] is True
     assert status["local_evidence_citations_ready"] is True
-    assert status["ready_count"] == 5
+    assert status["retention_model_ready"] is True
+    assert status["ready_count"] == 6
     assert status["required_count"] == 6
-    assert status["next_smallest_truthful_gap"] == "stage12_retention_model"
+    assert status["next_smallest_truthful_gap"] == "stage12_completion_review"
 
 
 def test_knowledge_fabric_artifact_index_projection_projects_local_citations(
@@ -318,11 +322,52 @@ def test_knowledge_fabric_artifact_index_projection_projects_local_citations(
     assert "ledgerprojectionsecret123" not in json.dumps(citation_surface, sort_keys=True)
     assert citation_surface["next_smallest_truthful_gap"] == "stage12_retention_model"
 
+    retention_model = client.get("/knowledge-fabric/retention-model?query=ledger&limit=5").json()
+    assert retention_model["ok"] is True
+    assert retention_model["kind"] == "francis.stage12.knowledge_fabric.retention_model"
+    assert retention_model["status"] == "ready"
+    assert retention_model["query"] == "ledger"
+    assert retention_model["retention_model_ready"] is True
+    assert retention_model["local_evidence_citations_ready"] is True
+    assert retention_model["stage11_closed_by_receipt"] is True
+    assert retention_model["total"] == 1
+    assert retention_model["citation_total"] == 1
+    assert retention_model["retention_declared_count"] == 1
+    assert retention_model["retention_missing_count"] == 0
+    assert retention_model["retention_policy_counts"] == {"mission_trace": 1}
+    assert retention_model["writes_memory"] is False
+    assert retention_model["writes_index"] is False
+    assert retention_model["generates_answer"] is False
+    assert retention_model["uses_model"] is False
+    assert retention_model["scans_files"] is False
+    assert retention_model["replicates_data"] is False
+    assert retention_model["deletes_data"] is False
+    assert retention_model["mutates_retention"] is False
+    assert retention_model["grants_authority"] is False
+    assert retention_model["governance"]["retention_model_only"] is True
+    assert retention_model["governance"]["does_not_delete_data"] is True
+    assert retention_model["governance"]["does_not_mutate_retention"] is True
+    retention = retention_model["items"][0]
+    assert retention["citation_id"] == citation["citation_id"]
+    assert retention["artifact_class"] == "execution_traces"
+    assert retention["source_route"] == "/continuity/ledger"
+    assert retention["reference_id"] == "trace-ledger-kf"
+    assert retention["retention_policy"] == "mission_trace"
+    assert retention["retention_class"] == ""
+    assert retention["retention_until"] == ""
+    assert retention["ttl_seconds"] == 0
+    assert retention["retention_declared"] is True
+    assert retention["retention_status"] == "declared"
+    assert retention["deletion_candidate"] is False
+    assert "ledgerprojectionsecret123" not in json.dumps(retention_model, sort_keys=True)
+    assert retention_model["next_smallest_truthful_gap"] == "stage12_completion_review"
+
     status = client.get("/knowledge-fabric/status").json()
-    assert status["status"] == "stage12_local_evidence_citation_surface_ready"
+    assert status["status"] == "stage12_retention_model_ready"
     assert status["retrieval_layer_ready"] is True
     assert status["local_evidence_citations_ready"] is True
-    assert status["next_smallest_truthful_gap"] == "stage12_retention_model"
+    assert status["retention_model_ready"] is True
+    assert status["next_smallest_truthful_gap"] == "stage12_completion_review"
 
 
 def test_knowledge_fabric_artifact_index_projection_blocks_without_stage11_closure(
@@ -370,3 +415,21 @@ def test_knowledge_fabric_artifact_index_projection_blocks_without_stage11_closu
     assert citations["uses_model"] is False
     assert citations["scans_files"] is False
     assert citations["next_smallest_truthful_gap"] == "stage11_ledger_closure"
+
+    retention = TestClient(create_app()).get("/knowledge-fabric/retention-model?query=anything").json()
+    assert retention["status"] == "blocked"
+    assert retention["retention_model_ready"] is False
+    assert retention["local_evidence_citations_ready"] is False
+    assert retention["items"] == []
+    assert retention["retention_declared_count"] == 0
+    assert retention["retention_missing_count"] == 0
+    assert retention["retention_policy_counts"] == {}
+    assert retention["writes_memory"] is False
+    assert retention["writes_index"] is False
+    assert retention["generates_answer"] is False
+    assert retention["uses_model"] is False
+    assert retention["scans_files"] is False
+    assert retention["deletes_data"] is False
+    assert retention["mutates_retention"] is False
+    assert retention["governance"]["requires_local_evidence_citations"] is True
+    assert retention["next_smallest_truthful_gap"] == "stage11_ledger_closure"

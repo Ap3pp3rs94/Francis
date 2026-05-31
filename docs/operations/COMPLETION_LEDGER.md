@@ -48823,6 +48823,55 @@ Latest validation for Stage 12 local evidence citation surface:
   status_status=stage12_local_evidence_citation_surface_ready;
   status_local_citations_ready=true; status_next=stage12_retention_model`.
 
+### 2026-05-31 - Stage 12 retention model is inspectable and read-only
+
+Roadmap area: Stage 12 / Knowledge Fabric, retention model.
+
+Material change:
+
+- Added read-only GET `/knowledge-fabric/retention-model`.
+- The retention model is blocked until local evidence citations are ready.
+- The retention model projects citation retention metadata into an operator
+  inspectable readback with citation id, artifact class, source route, reference
+  id, local handle, retention policy, retention class, retention-until, TTL,
+  declaration status, and deletion-candidate posture.
+- `/knowledge-fabric/status` now reports `stage12_retention_model_ready` and
+  advances the next smallest truthful gap to `stage12_completion_review`.
+- The retention model does not delete data, mutate retention policy, call a
+  model, generate answer claims, write memory, write an index, scan files,
+  replicate data, or grant authority.
+
+Latest validation for Stage 12 retention model:
+
+- `python -m pytest tests/test_api_knowledge_fabric.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 5 passed`
+- `python -m mypy src/francis/knowledge_fabric.py
+  src/francis/api/routes/knowledge_fabric.py src/francis/api/app.py`
+  Result: `passed`
+- `python -m ruff check src/francis/knowledge_fabric.py
+  src/francis/api/routes/knowledge_fabric.py src/francis/api/app.py
+  tests/test_api_knowledge_fabric.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/knowledge_fabric.py
+  src/francis/api/routes/knowledge_fabric.py src/francis/api/app.py
+  tests/test_api_knowledge_fabric.py tests/test_api_contract_chat_ui.py`
+  Result: `passed; 5 files already formatted`
+- Live local TestClient route/readback against an isolated data root:
+  write a Stage 11 closure receipt fixture, write one memory timeline trace
+  event, append one continuity ledger trace event, GET
+  `/knowledge-fabric/retention-model?query=ledger&limit=5`, and GET
+  `/knowledge-fabric/status`.
+  Result: `retention_status=ready; retention_ready=true;
+  retention_total=1; retention_declared_count=1; retention_missing_count=0;
+  retention_policy_counts={"mission_trace":1};
+  first_reference_id=trace-ledger-retention;
+  first_retention_policy=mission_trace; deletes_data=false;
+  mutates_retention=false; uses_model=false; writes_memory=false;
+  writes_index=false; status_status=stage12_retention_model_ready;
+  status_retention_ready=true; status_next=stage12_completion_review`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
