@@ -49439,6 +49439,59 @@ Latest validation for Stage 13 runtime evaluator unblock:
   runtime_claim_integration_ready=true; evaluation_status=evaluated;
   evaluation_strength=likely; evaluation_next=stage13_ui_state_coherence`.
 
+### 2026-05-31 - Stage 13 UI state coherence review reaches read-only API surface
+
+Roadmap area: Stage 13 / Trust Calibration, UI and state coherence around
+confidence.
+
+Material change:
+
+- Added a read-only `/trust-calibration/ui-state-coherence` review endpoint.
+- The review inspects the existing chat UI source contract for the Stage 13
+  operator-shell card, bounded claim request, claim guard readbacks, and
+  trust-dashboard presentation model.
+- `/trust-calibration/status` now includes `ui_state_coherence_review_ready`,
+  `operator_browser_visual_readback_observed`, the UI-coherence route, and a
+  sixth deliverable for UI state coherence.
+- When Stage 12 closure, confidence rules, verification gates,
+  anti-overclaim policy, calibrated claim logic, and UI coherence all read back
+  ready, the next smallest truthful gap advances to
+  `stage13_operator_browser_visual_readback`.
+- This does not claim browser proof or Stage 13 closure. It does not write
+  memory, write receipts, score model output, change UI confidence, enforce
+  runtime claims, launch a browser, run tools, run shell, run git, or grant
+  execution or mutation authority.
+
+Latest validation for Stage 13 UI state coherence review:
+
+- `python -m pytest tests/test_api_trust_calibration.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed`
+- `python -m mypy src/francis/trust_calibration.py
+  src/francis/api/routes/trust_calibration.py`
+  Result: `passed`
+- `python -m ruff check src/francis/trust_calibration.py
+  src/francis/api/routes/trust_calibration.py tests/test_api_trust_calibration.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/trust_calibration.py
+  src/francis/api/routes/trust_calibration.py tests/test_api_trust_calibration.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `node --test --experimental-strip-types src/trust_dashboard/index.test.ts`
+  from `apps/chat_ui/`
+  Result: `passed; 6 passed`
+- `npm run build` from `apps/chat_ui/`
+  Result: `passed`
+- Direct local `TestClient` readback of GET `/trust-calibration/status` and GET
+  `/trust-calibration/ui-state-coherence`.
+  Result: `status=stage13_ui_state_coherence_ready; ready_count=6;
+  required_count=6; ui_state_coherence_review_ready=true;
+  operator_browser_visual_readback_observed=false; ui_review_status=ready;
+  source_contract_ready_count=4; source_contract_count=4;
+  next_smallest_truthful_gap=stage13_operator_browser_visual_readback`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

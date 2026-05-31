@@ -46,6 +46,43 @@ def _write_stage12_closure_receipt(
     )
 
 
+def _write_stage13_ui_coherence_sources(repo_root: Path) -> None:
+    app_path = repo_root / "apps" / "chat_ui" / "src" / "App.tsx"
+    dashboard_path = repo_root / "apps" / "chat_ui" / "src" / "trust_dashboard" / "index.ts"
+    app_path.parent.mkdir(parents=True, exist_ok=True)
+    dashboard_path.parent.mkdir(parents=True, exist_ok=True)
+    app_path.write_text(
+        """
+        trustClient.evaluateClaim({
+          claim_text: "Stage 13 trust calibration claim state is visible in the operator shell",
+          claim_scope: "stage13_ui_state_coherence",
+          requested_claim_strength: "likely",
+          evidence: {
+            missing_verification: ["operator_browser_visual_readback"],
+          },
+        });
+        <span>Trust calibration</span>
+        <div id="francis-trust-calibration">Stage 13 calibration</div>
+        trustCalibrationPresentation.strong_claim_allowed;
+        trustCalibrationPresentation.must_name_missing_verification;
+        trustCalibrationPresentation.runtime_claim_integration_ready;
+        trustCalibrationPresentation.side_effects_denied;
+        """,
+        encoding="utf-8",
+    )
+    dashboard_path.write_text(
+        """
+        export type TrustCalibrationPresentation = {
+          strong_claim_allowed: boolean;
+          must_name_missing_verification: boolean;
+          side_effects_denied: boolean;
+          next_smallest_truthful_gap: "stage13_ui_state_coherence";
+        };
+        """,
+        encoding="utf-8",
+    )
+
+
 def test_trust_calibration_status_blocks_until_stage12_closure(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
@@ -64,13 +101,16 @@ def test_trust_calibration_status_blocks_until_stage12_closure(monkeypatch, tmp_
     assert body["verification_gates_ready"] is False
     assert body["anti_overclaim_policy_ready"] is False
     assert body["calibrated_claim_logic_ready"] is False
+    assert body["ui_state_coherence_review_ready"] is False
+    assert body["operator_browser_visual_readback_observed"] is False
     assert body["ready_count"] == 0
-    assert body["required_count"] == 5
+    assert body["required_count"] == 6
     assert body["routes"]["status"] == "/trust-calibration/status"
     assert body["routes"]["confidence_rules_contract"] == "/trust-calibration/confidence-rules-contract"
     assert body["routes"]["verification_gate_contract"] == "/trust-calibration/verification-gate-contract"
     assert body["routes"]["anti_overclaim_policy"] == "/trust-calibration/anti-overclaim-policy"
     assert body["routes"]["calibrated_claim_logic"] == "/trust-calibration/calibrated-claim-logic"
+    assert body["routes"]["ui_state_coherence"] == "/trust-calibration/ui-state-coherence"
     assert body["routes"]["claim_evaluation"] == "/trust-calibration/evaluate-claim"
     assert body["routes"]["stage12_closure_readback"] == "/knowledge-fabric/stage-closure-decisions"
     assert body["governance"]["read_only"] is True
@@ -159,7 +199,10 @@ def test_trust_calibration_confidence_rules_contract_ready_after_stage12_closure
     tmp_path: Path,
 ) -> None:
     data_root = tmp_path / "francis_data"
+    repo_root = tmp_path / "repo"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    _write_stage13_ui_coherence_sources(repo_root)
     _write_stage12_closure_receipt(data_root, receipt_id="knowledge_fabric_stage12_closure_tc_test")
 
     client = TestClient(create_app())
@@ -362,17 +405,50 @@ def test_trust_calibration_confidence_rules_contract_ready_after_stage12_closure
     assert decision_table["supporting_evidence_with_missing_verification"]["claim_strength"] == "likely"
     assert decision_table["stale_or_conflicting_or_missing_evidence"]["claim_strength"] == "uncertain"
 
+    ui_review = client.get("/trust-calibration/ui-state-coherence").json()
+    assert ui_review["ok"] is True
+    assert ui_review["kind"] == "francis.stage13.trust_calibration.ui_state_coherence_review"
+    assert ui_review["status"] == "ready"
+    assert ui_review["ui_state_coherence_review_ready"] is True
+    assert ui_review["runtime_claim_integration_ready"] is True
+    assert ui_review["stage12_closed_by_receipt"] is True
+    assert ui_review["stage12_latest_closure_receipt_id"] == "knowledge_fabric_stage12_closure_tc_test"
+    assert ui_review["source_contract_count"] == 4
+    assert ui_review["source_contract_ready_count"] == 4
+    assert ui_review["operator_shell_card_observed"] is True
+    assert ui_review["bounded_shell_claim_request_observed"] is True
+    assert ui_review["claim_guard_readback_observed"] is True
+    assert ui_review["presentation_model_observed"] is True
+    assert ui_review["browser_visual_readback_required"] is True
+    assert ui_review["operator_browser_visual_readback_observed"] is False
+    assert ui_review["missing_verification"] == ["operator_browser_visual_readback"]
+    assert ui_review["writes_memory"] is False
+    assert ui_review["writes_receipts"] is False
+    assert ui_review["runs_tools"] is False
+    assert ui_review["runs_shell"] is False
+    assert ui_review["runs_git"] is False
+    assert ui_review["grants_execution_authority"] is False
+    assert ui_review["grants_mutation_authority"] is False
+    assert ui_review["governance"]["static_source_readback_only"] is True
+    assert ui_review["governance"]["browser_visual_readback_required"] is True
+    assert ui_review["governance"]["does_not_launch_browser"] is True
+    assert ui_review["governance"]["does_not_mark_stage_closed"] is True
+    assert ui_review["next_smallest_truthful_gap"] == "stage13_operator_browser_visual_readback"
+    assert all(item["observed"] for item in ui_review["source_contracts"])
+
     status = client.get("/trust-calibration/status").json()
-    assert status["status"] == "stage13_runtime_claim_evaluator_ready"
+    assert status["status"] == "stage13_ui_state_coherence_ready"
     assert status["stage12_closed_by_receipt"] is True
     assert status["confidence_rules_contract_ready"] is True
     assert status["verification_gates_ready"] is True
     assert status["anti_overclaim_policy_ready"] is True
     assert status["calibrated_claim_logic_ready"] is True
     assert status["runtime_claim_integration_ready"] is True
-    assert status["ready_count"] == 5
-    assert status["required_count"] == 5
-    assert status["next_smallest_truthful_gap"] == "stage13_ui_state_coherence"
+    assert status["ui_state_coherence_review_ready"] is True
+    assert status["operator_browser_visual_readback_observed"] is False
+    assert status["ready_count"] == 6
+    assert status["required_count"] == 6
+    assert status["next_smallest_truthful_gap"] == "stage13_operator_browser_visual_readback"
 
     blocked_eval = client.post(
         "/trust-calibration/evaluate-claim",

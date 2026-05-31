@@ -10,6 +10,7 @@ from francis.trust_calibration import (
     trust_calibration_claim_evaluation,
     trust_calibration_confidence_rules_contract,
     trust_calibration_status_snapshot,
+    trust_calibration_ui_state_coherence_review,
     trust_calibration_verification_gate_contract,
 )
 
@@ -39,6 +40,11 @@ def anti_overclaim_policy() -> dict[str, Any]:
 @router.get("/calibrated-claim-logic")
 def calibrated_claim_logic() -> dict[str, Any]:
     return trust_calibration_calibrated_claim_logic()
+
+
+@router.get("/ui-state-coherence")
+def ui_state_coherence() -> dict[str, Any]:
+    return trust_calibration_ui_state_coherence_review()
 
 
 @router.post("/evaluate-claim")

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+from francis.kernel.paths import repo_root
 from francis.knowledge_fabric import knowledge_fabric_stage12_operator_stage_closure_decision_readback
 
 STAGE13_TRUST_CALIBRATION_STAGE = "Stage 13 / Trust Calibration"
@@ -11,6 +12,7 @@ TRUST_CALIBRATION_VERIFICATION_GATE_CONTRACT_KIND = "francis.stage13.trust_calib
 TRUST_CALIBRATION_ANTI_OVERCLAIM_POLICY_KIND = "francis.stage13.trust_calibration.anti_overclaim_policy"
 TRUST_CALIBRATION_CALIBRATED_CLAIM_LOGIC_KIND = "francis.stage13.trust_calibration.calibrated_claim_logic"
 TRUST_CALIBRATION_CLAIM_EVALUATION_KIND = "francis.stage13.trust_calibration.claim_evaluation"
+TRUST_CALIBRATION_UI_STATE_COHERENCE_KIND = "francis.stage13.trust_calibration.ui_state_coherence_review"
 
 
 def trust_calibration_status_snapshot() -> dict[str, Any]:
@@ -25,6 +27,8 @@ def trust_calibration_status_snapshot() -> dict[str, Any]:
     calibrated_claim_logic = trust_calibration_calibrated_claim_logic()
     calibrated_claim_logic_ready = bool(calibrated_claim_logic.get("calibrated_claim_logic_ready"))
     runtime_claim_integration_ready = calibrated_claim_logic_ready
+    ui_state_coherence = trust_calibration_ui_state_coherence_review()
+    ui_state_coherence_ready = bool(ui_state_coherence.get("ui_state_coherence_review_ready"))
     deliverables = [
         _deliverable(
             "stage12_ledger_closure_backstop",
@@ -61,6 +65,13 @@ def trust_calibration_status_snapshot() -> dict[str, Any]:
             "ready" if calibrated_claim_logic_ready else "pending",
             "stage13_calibrated_claim_logic",
         ),
+        _deliverable(
+            "ui_state_coherence",
+            "Operator shell exposes calibrated claim state without laundering confidence",
+            ui_state_coherence_ready,
+            "ready" if ui_state_coherence_ready else "pending",
+            "stage13_ui_state_coherence",
+        ),
     ]
     ready_count = sum(1 for item in deliverables if bool(item["ready"]))
     return {
@@ -68,7 +79,16 @@ def trust_calibration_status_snapshot() -> dict[str, Any]:
         "kind": TRUST_CALIBRATION_STATUS_KIND,
         "stage": STAGE13_TRUST_CALIBRATION_STAGE,
         "source_id": "trust_calibration",
-        "status": "stage13_runtime_claim_evaluator_ready"
+        "status": "stage13_ui_state_coherence_ready"
+        if (
+            stage12_closed
+            and confidence_rules_ready
+            and verification_gates_ready
+            and anti_overclaim_policy_ready
+            and calibrated_claim_logic_ready
+            and ui_state_coherence_ready
+        )
+        else "stage13_runtime_claim_evaluator_ready"
         if (
             stage12_closed
             and confidence_rules_ready
@@ -90,6 +110,10 @@ def trust_calibration_status_snapshot() -> dict[str, Any]:
         "anti_overclaim_policy_ready": anti_overclaim_policy_ready,
         "calibrated_claim_logic_ready": calibrated_claim_logic_ready,
         "runtime_claim_integration_ready": runtime_claim_integration_ready,
+        "ui_state_coherence_review_ready": ui_state_coherence_ready,
+        "operator_browser_visual_readback_observed": bool(
+            ui_state_coherence.get("operator_browser_visual_readback_observed")
+        ),
         "deliverables": deliverables,
         "ready_count": ready_count,
         "required_count": len(deliverables),
@@ -99,11 +123,21 @@ def trust_calibration_status_snapshot() -> dict[str, Any]:
             "verification_gate_contract": "/trust-calibration/verification-gate-contract",
             "anti_overclaim_policy": "/trust-calibration/anti-overclaim-policy",
             "calibrated_claim_logic": "/trust-calibration/calibrated-claim-logic",
+            "ui_state_coherence": "/trust-calibration/ui-state-coherence",
             "claim_evaluation": "/trust-calibration/evaluate-claim",
             "stage12_closure_readback": "/knowledge-fabric/stage-closure-decisions",
         },
         "governance": _trust_calibration_governance(),
-        "next_smallest_truthful_gap": "stage13_ui_state_coherence"
+        "next_smallest_truthful_gap": "stage13_operator_browser_visual_readback"
+        if (
+            stage12_closed
+            and confidence_rules_ready
+            and verification_gates_ready
+            and anti_overclaim_policy_ready
+            and calibrated_claim_logic_ready
+            and ui_state_coherence_ready
+        )
+        else "stage13_ui_state_coherence"
         if (
             stage12_closed
             and confidence_rules_ready
@@ -747,6 +781,106 @@ def trust_calibration_claim_evaluation(payload: Mapping[str, Any] | None = None)
     }
 
 
+def trust_calibration_ui_state_coherence_review() -> dict[str, Any]:
+    claim_logic = trust_calibration_calibrated_claim_logic()
+    runtime_ready = bool(claim_logic.get("calibrated_claim_logic_ready"))
+    root = repo_root()
+    app_path = root / "apps" / "chat_ui" / "src" / "App.tsx"
+    dashboard_path = root / "apps" / "chat_ui" / "src" / "trust_dashboard" / "index.ts"
+    app_text = _read_source_text(app_path)
+    dashboard_text = _read_source_text(dashboard_path)
+    source_contracts = [
+        _source_contract(
+            "operator_shell_card",
+            "apps/chat_ui/src/App.tsx",
+            app_text,
+            [
+                'id="francis-trust-calibration"',
+                "Stage 13 calibration",
+                "Trust calibration",
+            ],
+        ),
+        _source_contract(
+            "bounded_shell_claim_request",
+            "apps/chat_ui/src/App.tsx",
+            app_text,
+            [
+                "Stage 13 trust calibration claim state is visible in the operator shell",
+                'claim_scope: "stage13_ui_state_coherence"',
+                'requested_claim_strength: "likely"',
+                'missing_verification: ["operator_browser_visual_readback"]',
+            ],
+        ),
+        _source_contract(
+            "claim_guard_readback",
+            "apps/chat_ui/src/App.tsx",
+            app_text,
+            [
+                "trustCalibrationPresentation.strong_claim_allowed",
+                "trustCalibrationPresentation.must_name_missing_verification",
+                "trustCalibrationPresentation.runtime_claim_integration_ready",
+                "trustCalibrationPresentation.side_effects_denied",
+            ],
+        ),
+        _source_contract(
+            "presentation_model",
+            "apps/chat_ui/src/trust_dashboard/index.ts",
+            dashboard_text,
+            [
+                "export type TrustCalibrationPresentation",
+                "strong_claim_allowed",
+                "must_name_missing_verification",
+                "side_effects_denied",
+                "stage13_ui_state_coherence",
+            ],
+        ),
+    ]
+    source_ready = all(bool(item["observed"]) for item in source_contracts)
+    review_ready = runtime_ready and source_ready
+    return {
+        "ok": True,
+        "kind": TRUST_CALIBRATION_UI_STATE_COHERENCE_KIND,
+        "stage": STAGE13_TRUST_CALIBRATION_STAGE,
+        "source_id": "trust_calibration",
+        "status": "ready" if review_ready else "blocked",
+        "ui_state_coherence_review_ready": review_ready,
+        "runtime_claim_integration_ready": runtime_ready,
+        "calibrated_claim_logic_ready": runtime_ready,
+        "stage12_closed_by_receipt": bool(claim_logic.get("stage12_closed_by_receipt")),
+        "stage12_latest_closure_receipt_id": _safe_text(claim_logic.get("stage12_latest_closure_receipt_id")),
+        "source_contracts": source_contracts,
+        "source_contract_count": len(source_contracts),
+        "source_contract_ready_count": sum(1 for item in source_contracts if bool(item["observed"])),
+        "operator_shell_card_observed": bool(source_contracts[0]["observed"]),
+        "bounded_shell_claim_request_observed": bool(source_contracts[1]["observed"]),
+        "claim_guard_readback_observed": bool(source_contracts[2]["observed"]),
+        "presentation_model_observed": bool(source_contracts[3]["observed"]),
+        "browser_visual_readback_required": True,
+        "operator_browser_visual_readback_observed": False,
+        "missing_verification": ["operator_browser_visual_readback"],
+        "writes_memory": False,
+        "writes_receipts": False,
+        "scores_model_output": False,
+        "changes_ui_confidence": False,
+        "enforces_runtime_claims": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            **_trust_calibration_governance(),
+            "static_source_readback_only": True,
+            "browser_visual_readback_required": True,
+            "does_not_launch_browser": True,
+            "does_not_mark_stage_closed": True,
+        },
+        "next_smallest_truthful_gap": "stage13_operator_browser_visual_readback"
+        if review_ready
+        else "stage13_ui_state_coherence",
+    }
+
+
 def _trust_calibration_governance() -> dict[str, Any]:
     return {
         "read_only": True,
@@ -763,6 +897,30 @@ def _trust_calibration_governance() -> dict[str, Any]:
         "grants_execution_authority": False,
         "grants_mutation_authority": False,
     }
+
+
+def _source_contract(
+    contract_id: str,
+    source_path: str,
+    source_text: str,
+    required_tokens: list[str],
+) -> dict[str, Any]:
+    missing = [token for token in required_tokens if token not in source_text]
+    return {
+        "id": contract_id,
+        "source_path": source_path,
+        "observed": len(missing) == 0,
+        "required_tokens": required_tokens,
+        "missing_tokens": missing,
+    }
+
+
+def _read_source_text(path: Any, *, limit: int = 800_000) -> str:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    return text[:limit]
 
 
 def _deliverable(
