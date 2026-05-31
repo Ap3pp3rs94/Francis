@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from francis.api.errors import sanitized_exception_handler
 from francis.api.routes import (
     apprenticeship,
+    adversarial_hardening,
     approvals,
     artifacts,
     attachments,
@@ -90,6 +91,7 @@ def create_app() -> FastAPI:
     app.include_router(apprenticeship.router, prefix="/apprenticeship", tags=["apprenticeship"])
     app.include_router(knowledge_fabric.router, prefix="/knowledge-fabric", tags=["knowledge_fabric"])
     app.include_router(trust_calibration.router, prefix="/trust-calibration", tags=["trust_calibration"])
+    app.include_router(adversarial_hardening.router, prefix="/adversarial-hardening", tags=["adversarial_hardening"])
     app.include_router(industrial.router, prefix="/industrial", tags=["industrial"])
     app.include_router(digital_twin.router, prefix="/digital_twin", tags=["digital_twin"])
 

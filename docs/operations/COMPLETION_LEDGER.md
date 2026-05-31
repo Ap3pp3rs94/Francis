@@ -49911,6 +49911,64 @@ Latest validation for Stage 13 receipt closure:
   src/francis/api/routes/trust_calibration.py tests/test_api_trust_calibration.py`
   Result: `passed`
 
+### 2026-05-31 - Stage 14 Adversarial Hardening starts with injection containment
+
+Roadmap area: Stage 14 / Adversarial Hardening, injection containment and
+content/authority separation.
+
+Material change:
+
+- Added read-only `/adversarial-hardening/status`.
+- Added read-only
+  `/adversarial-hardening/injection-containment-contract`.
+- Stage 14 status now consumes the Stage 13 Trust Calibration closure receipt
+  before claiming any Stage 14 readiness.
+- The injection-containment contract uses the existing adversarial components:
+  input sanitizer, output verifier, poisoning detector, and containment policy
+  defaults.
+- The contract proves hostile content remains untrusted input and cannot grant
+  authority. It detects prompt-injection signals, dangerous command-output
+  signals, and poisoning signals without writing receipts, memory, quarantine
+  records, shell state, git state, or runtime authority.
+- Current readback reports
+  `status=stage14_injection_containment_contract_ready`,
+  `stage13_closed_by_receipt=true`,
+  `injection_containment_contract_ready=true`, `ready_count=2`,
+  `required_count=5`, and
+  `next_smallest_truthful_gap=stage14_quarantine_model_contract`.
+
+Latest validation for Stage 14 injection containment:
+
+- Direct local `TestClient` readback of GET
+  `/adversarial-hardening/status` and GET
+  `/adversarial-hardening/injection-containment-contract`.
+  Result: `status=stage14_injection_containment_contract_ready;
+  stage13_latest_closure_receipt_id=trust_calibration_stage13_closure_ed03c99cbab7;
+  injection_containment_contract_ready=true; ready_count=2;
+  required_count=5;
+  next_smallest_truthful_gap=stage14_quarantine_model_contract;
+  input_signal_codes=[pi_ignore_rules, pi_system_prompt, pi_reveal_secrets,
+  pi_tool_override, pi_high_instruction_density];
+  output_signal_codes=[cmd_rm_rf_root, dex_curl_pipe_sh];
+  poisoning_signal_codes=[trigger_injection, label_flip]`.
+- `python -m pytest tests/test_api_adversarial_hardening.py -q --tb=short`
+  Result: `passed; 2 passed`
+- `python -m pytest
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short`
+  Result: `passed; 1 passed`
+- `python -m mypy src/francis/adversarial_hardening.py
+  src/francis/api/routes/adversarial_hardening.py src/francis/api/app.py`
+  Result: `passed`
+- `python -m ruff check src/francis/adversarial_hardening.py
+  src/francis/api/routes/adversarial_hardening.py src/francis/api/app.py
+  tests/test_api_adversarial_hardening.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/adversarial_hardening.py
+  src/francis/api/routes/adversarial_hardening.py src/francis/api/app.py
+  tests/test_api_adversarial_hardening.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
