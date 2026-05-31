@@ -49969,6 +49969,65 @@ Latest validation for Stage 14 injection containment:
   tests/test_api_adversarial_hardening.py`
   Result: `passed`
 
+### 2026-05-31 - Stage 14 quarantine model contract is read-only and approval-bound
+
+Roadmap area: Stage 14 / Adversarial Hardening, quarantine model for
+suspicious or blocked inputs.
+
+Material change:
+
+- Added read-only
+  `/adversarial-hardening/quarantine-model-contract`.
+- Stage 14 status now advances from
+  `stage14_injection_containment_contract_ready` to
+  `stage14_quarantine_model_contract_ready` when the quarantine model contract
+  is present.
+- The contract binds Stage 14 to the existing web-learning quarantine model
+  instead of creating a parallel quarantine system.
+- The contract names required review-item, record, and event fields for
+  evidence-backed quarantine items, including `evidence`, `quarantine_id`, and
+  correlation metadata.
+- The decision model is explicit: `keep`, `release`, and `delete` are the
+  bounded actions; destructive `delete` requires exact-action approval through
+  `web_learning.quarantine.delete` and retains the existing missing/mismatched
+  approval refresh protections.
+- The route remains read-only: it does not write quarantine records, receipts,
+  memory, shell state, git state, browser state, or runtime authority.
+- Current readback reports
+  `status=stage14_quarantine_model_contract_ready`,
+  `quarantine_model_contract_ready=true`, `ready_count=3`,
+  `required_count=5`, and
+  `next_smallest_truthful_gap=stage14_red_team_regression_suite`.
+
+Latest validation for Stage 14 quarantine model contract:
+
+- Direct local `TestClient` readback of GET
+  `/adversarial-hardening/status` and GET
+  `/adversarial-hardening/quarantine-model-contract`.
+  Result: `status=stage14_quarantine_model_contract_ready;
+  stage13_closed_by_receipt=true;
+  injection_containment_contract_ready=true;
+  quarantine_model_contract_ready=true; ready_count=3; required_count=5;
+  next_smallest_truthful_gap=stage14_red_team_regression_suite;
+  destructive_disposition_requires_approval=true;
+  approval_action=web_learning.quarantine.delete;
+  decision_actions=[keep, release, delete]`.
+- `python -m pytest tests/test_api_adversarial_hardening.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short`
+  Result: `passed; 4 passed`
+- `python -m mypy src/francis/adversarial_hardening.py
+  src/francis/api/routes/adversarial_hardening.py`
+  Result: `passed`
+- `python -m ruff check src/francis/adversarial_hardening.py
+  src/francis/api/routes/adversarial_hardening.py
+  tests/test_api_adversarial_hardening.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/adversarial_hardening.py
+  src/francis/api/routes/adversarial_hardening.py
+  tests/test_api_adversarial_hardening.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -13,6 +13,7 @@ ADVERSARIAL_HARDENING_STATUS_KIND = "francis.stage14.adversarial_hardening.statu
 ADVERSARIAL_HARDENING_INJECTION_CONTAINMENT_KIND = (
     "francis.stage14.adversarial_hardening.injection_containment_contract"
 )
+ADVERSARIAL_HARDENING_QUARANTINE_MODEL_KIND = "francis.stage14.adversarial_hardening.quarantine_model_contract"
 
 
 def adversarial_hardening_status_snapshot() -> dict[str, Any]:
@@ -20,6 +21,8 @@ def adversarial_hardening_status_snapshot() -> dict[str, Any]:
     stage13_closed = bool(stage13.get("stage13_closed_by_receipt"))
     injection_contract = adversarial_hardening_injection_containment_contract()
     injection_ready = bool(injection_contract.get("injection_containment_contract_ready"))
+    quarantine_contract = adversarial_hardening_quarantine_model_contract()
+    quarantine_ready = bool(quarantine_contract.get("quarantine_model_contract_ready"))
     deliverables = [
         _deliverable(
             "stage13_ledger_closure_backstop",
@@ -38,8 +41,8 @@ def adversarial_hardening_status_snapshot() -> dict[str, Any]:
         _deliverable(
             "quarantine_model",
             "Suspicious inputs become evidence-backed quarantine or review items",
-            False,
-            "pending",
+            quarantine_ready,
+            "ready" if quarantine_ready else "pending",
             "stage14_quarantine_model_contract",
         ),
         _deliverable(
@@ -63,7 +66,9 @@ def adversarial_hardening_status_snapshot() -> dict[str, Any]:
         "kind": ADVERSARIAL_HARDENING_STATUS_KIND,
         "stage": STAGE14_ADVERSARIAL_HARDENING_STAGE,
         "source_id": "adversarial_hardening",
-        "status": "stage14_injection_containment_contract_ready"
+        "status": "stage14_quarantine_model_contract_ready"
+        if stage13_closed and injection_ready and quarantine_ready
+        else "stage14_injection_containment_contract_ready"
         if stage13_closed and injection_ready
         else "awaiting_stage13_ledger_closure"
         if not stage13_closed
@@ -71,7 +76,7 @@ def adversarial_hardening_status_snapshot() -> dict[str, Any]:
         "stage13_closed_by_receipt": stage13_closed,
         "stage13_latest_closure_receipt_id": _safe_text(stage13.get("latest_receipt_id")),
         "injection_containment_contract_ready": injection_ready,
-        "quarantine_model_contract_ready": False,
+        "quarantine_model_contract_ready": quarantine_ready,
         "red_team_suite_ready": False,
         "policy_bypass_regression_suite_ready": False,
         "deliverables": deliverables,
@@ -80,10 +85,13 @@ def adversarial_hardening_status_snapshot() -> dict[str, Any]:
         "routes": {
             "status": "/adversarial-hardening/status",
             "injection_containment_contract": "/adversarial-hardening/injection-containment-contract",
+            "quarantine_model_contract": "/adversarial-hardening/quarantine-model-contract",
             "stage13_closure_readback": "/trust-calibration/stage-closure-decisions",
         },
         "governance": _governance(),
-        "next_smallest_truthful_gap": "stage14_quarantine_model_contract"
+        "next_smallest_truthful_gap": "stage14_red_team_regression_suite"
+        if stage13_closed and injection_ready and quarantine_ready
+        else "stage14_quarantine_model_contract"
         if stage13_closed and injection_ready
         else "stage14_injection_containment_contract"
         if stage13_closed
@@ -178,6 +186,135 @@ def adversarial_hardening_injection_containment_contract() -> dict[str, Any]:
         if injection_ready
         else "stage13_ledger_closure"
         if not stage13_closed
+        else "stage14_injection_containment_contract",
+    }
+
+
+def adversarial_hardening_quarantine_model_contract() -> dict[str, Any]:
+    injection_contract = adversarial_hardening_injection_containment_contract()
+    injection_ready = bool(injection_contract.get("injection_containment_contract_ready"))
+    review_item_fields = [
+        "id",
+        "ts",
+        "url",
+        "reason",
+        "status",
+        "record_id",
+        "domain",
+        "source",
+        "evidence",
+        "meta",
+    ]
+    record_fields = [
+        "id",
+        "ts",
+        "url",
+        "status",
+        "method",
+        "domain",
+        "source",
+        "summary",
+        "quarantine_id",
+        "error",
+        "meta",
+    ]
+    event_fields = [
+        "ts",
+        "kind",
+        "url",
+        "record_id",
+        "status",
+        "message",
+        "quarantine_id",
+        "actor",
+        "domain",
+        "source",
+        "correlation_id",
+    ]
+    read_routes = [
+        "/web_learning/quarantine",
+        "/web_learning/quarantine/items",
+        "/web_learning/quarantine/export",
+        "/web_learning/export/quarantine",
+    ]
+    decision_routes = [
+        "/web_learning/quarantine/decide",
+        "/web_learning/quarantine/resolve",
+        "/web_learning/quarantine/{item_id}/decide",
+        "/web_learning/quarantine/{item_id}",
+    ]
+    destructive_action_guards = {
+        "delete_requires_exact_action_approval": True,
+        "approval_action": "web_learning.quarantine.delete",
+        "refreshes_missing_approval": True,
+        "refreshes_mismatched_approval": True,
+        "denies_rejected_approval": True,
+        "records_approval_id_on_quarantine_item": True,
+    }
+    quarantine_ready = (
+        injection_ready
+        and len(review_item_fields) == 10
+        and len(record_fields) == 11
+        and len(event_fields) == 11
+        and len(read_routes) == 4
+        and len(decision_routes) == 4
+        and all(destructive_action_guards.values())
+    )
+    return {
+        "ok": True,
+        "kind": ADVERSARIAL_HARDENING_QUARANTINE_MODEL_KIND,
+        "stage": STAGE14_ADVERSARIAL_HARDENING_STAGE,
+        "source_id": "adversarial_hardening",
+        "status": "ready"
+        if quarantine_ready
+        else "blocked_injection_containment_contract"
+        if not injection_ready
+        else "blocked",
+        "stage13_closed_by_receipt": bool(injection_contract.get("stage13_closed_by_receipt")),
+        "stage13_latest_closure_receipt_id": _safe_text(injection_contract.get("stage13_latest_closure_receipt_id")),
+        "injection_containment_contract_ready": injection_ready,
+        "quarantine_model_contract_ready": quarantine_ready,
+        "suspicious_input_becomes_review_item": True,
+        "blocked_input_held_with_evidence": True,
+        "destructive_disposition_requires_approval": True,
+        "review_item_contract": {
+            "status_values": ["quarantined", "kept", "released", "deleted", "blocked"],
+            "required_fields": review_item_fields,
+            "evidence_field_required": True,
+            "correlation_id_source": "request_id",
+        },
+        "record_contract": {
+            "required_fields": record_fields,
+            "blocked_summary": "Blocked by policy and held in quarantine.",
+            "links_quarantine_id": True,
+        },
+        "event_contract": {
+            "required_fields": event_fields,
+            "required_event_kinds": ["policy_block", "quarantine", "approval_requested", "approval_resolved"],
+            "append_only_registry_events": True,
+        },
+        "decision_contract": {
+            "allowed_actions": ["keep", "release", "delete"],
+            "delete_requires_exact_approval": True,
+            "release_preserves_record_for_review": True,
+            "keep_preserves_quarantine_item": True,
+            "delete_marks_record_failed": True,
+        },
+        "destructive_action_guards": destructive_action_guards,
+        "routes": {
+            "read": read_routes,
+            "decision": decision_routes,
+            "source_status": "/web_learning/status",
+        },
+        "source_contracts": [
+            "src/francis/api/routes/web_learning.py",
+            "tests/test_api_web_learning.py",
+            "docs/WEB_ACCESS.md",
+            "docs/ADVERSARIAL_ROBUSTNESS.md",
+        ],
+        "governance": _governance(),
+        "next_smallest_truthful_gap": "stage14_red_team_regression_suite"
+        if quarantine_ready
         else "stage14_injection_containment_contract",
     }
 

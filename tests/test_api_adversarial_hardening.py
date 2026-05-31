@@ -65,6 +65,7 @@ def test_adversarial_hardening_status_blocks_until_stage13_closure(monkeypatch, 
     assert body["stage13_closed_by_receipt"] is False
     assert body["stage13_latest_closure_receipt_id"] == ""
     assert body["injection_containment_contract_ready"] is False
+    assert body["quarantine_model_contract_ready"] is False
     assert body["ready_count"] == 0
     assert body["required_count"] == 5
     assert body["governance"]["read_only"] is True
@@ -117,10 +118,53 @@ def test_adversarial_hardening_injection_contract_is_ready_after_stage13_closure
     assert contract["next_smallest_truthful_gap"] == "stage14_quarantine_model_contract"
 
     status = client.get("/adversarial-hardening/status").json()
-    assert status["status"] == "stage14_injection_containment_contract_ready"
+    assert status["status"] == "stage14_quarantine_model_contract_ready"
     assert status["stage13_closed_by_receipt"] is True
     assert status["injection_containment_contract_ready"] is True
-    assert status["quarantine_model_contract_ready"] is False
-    assert status["ready_count"] == 2
+    assert status["quarantine_model_contract_ready"] is True
+    assert status["ready_count"] == 3
     assert status["required_count"] == 5
-    assert status["next_smallest_truthful_gap"] == "stage14_quarantine_model_contract"
+    assert status["next_smallest_truthful_gap"] == "stage14_red_team_regression_suite"
+
+
+def test_adversarial_hardening_quarantine_model_contract_is_read_only_and_approval_bound(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage13_closure_receipt(data_root)
+
+    client = TestClient(create_app())
+    contract = client.get("/adversarial-hardening/quarantine-model-contract").json()
+
+    assert contract["ok"] is True
+    assert contract["kind"] == "francis.stage14.adversarial_hardening.quarantine_model_contract"
+    assert contract["status"] == "ready"
+    assert contract["stage13_closed_by_receipt"] is True
+    assert contract["stage13_latest_closure_receipt_id"] == "trust_calibration_stage13_closure_test"
+    assert contract["injection_containment_contract_ready"] is True
+    assert contract["quarantine_model_contract_ready"] is True
+    assert contract["suspicious_input_becomes_review_item"] is True
+    assert contract["blocked_input_held_with_evidence"] is True
+    assert contract["destructive_disposition_requires_approval"] is True
+    assert "evidence" in contract["review_item_contract"]["required_fields"]
+    assert "quarantine_id" in contract["record_contract"]["required_fields"]
+    assert "approval_requested" in contract["event_contract"]["required_event_kinds"]
+    assert "approval_resolved" in contract["event_contract"]["required_event_kinds"]
+    assert contract["decision_contract"]["allowed_actions"] == ["keep", "release", "delete"]
+    assert contract["decision_contract"]["delete_requires_exact_approval"] is True
+    assert contract["decision_contract"]["delete_marks_record_failed"] is True
+    assert contract["destructive_action_guards"]["approval_action"] == "web_learning.quarantine.delete"
+    assert contract["destructive_action_guards"]["refreshes_missing_approval"] is True
+    assert contract["destructive_action_guards"]["refreshes_mismatched_approval"] is True
+    assert "/web_learning/quarantine" in contract["routes"]["read"]
+    assert "/web_learning/quarantine/{item_id}/decide" in contract["routes"]["decision"]
+    assert "src/francis/api/routes/web_learning.py" in contract["source_contracts"]
+    assert contract["governance"]["read_only"] is True
+    assert contract["governance"]["does_not_write_quarantine"] is True
+    assert contract["governance"]["does_not_write_memory"] is True
+    assert contract["governance"]["does_not_run_tools"] is True
+    assert contract["governance"]["grants_execution_authority"] is False
+    assert contract["governance"]["grants_mutation_authority"] is False
+    assert contract["next_smallest_truthful_gap"] == "stage14_red_team_regression_suite"

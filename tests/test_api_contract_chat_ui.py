@@ -309,5 +309,8 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("POST", "/trust-calibration/operator-browser-visual-readback"),
         ("POST", "/trust-calibration/stage-closure-decision"),
         ("POST", "/trust-calibration/evaluate-claim"),
+        ("GET", "/adversarial-hardening/status"),
+        ("GET", "/adversarial-hardening/injection-containment-contract"),
+        ("GET", "/adversarial-hardening/quarantine-model-contract"),
     ]
     _assert_has_endpoints(routes, endpoints)
