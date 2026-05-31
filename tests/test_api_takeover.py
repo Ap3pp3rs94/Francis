@@ -57,6 +57,8 @@ def test_takeover_status_blocks_without_stage8_closure(monkeypatch, tmp_path: Pa
     assert body["control_transfer_ready"] is False
     assert body["control_transfer_active"] is False
     assert body["panic_stop_ready"] is False
+    assert body["operator_surface_contract_ready"] is False
+    assert body["operator_surface_contract_route"] == "/takeover/operator-surface-contract"
     assert body["writes_receipts"] is False
     assert body["writes_tasks"] is False
     assert body["runs_shell"] is False
@@ -255,7 +257,41 @@ def test_takeover_control_transfer_receipt_and_panic_stop_are_auditable(monkeypa
     assert handback_status["handback_summary_ready"] is True
     assert handback_status["latest_handback_summary_receipt"]["receipt_id"] == handback_body["receipt_id"]
     assert handback_status["deliverables"]["handback_summary"] is True
-    assert handback_status["next_smallest_truthful_gap"] == "stage9_operator_surface_contract"
+    assert handback_status["operator_surface_contract_ready"] is True
+    assert handback_status["operator_surface_contract_route"] == "/takeover/operator-surface-contract"
+    assert handback_status["next_smallest_truthful_gap"] == "stage9_panic_operation_cancellation"
+
+    surface_contract = client.get("/takeover/operator-surface-contract").json()
+    assert surface_contract["ok"] is True
+    assert surface_contract["kind"] == "francis.stage9.takeover.operator_surface_contract"
+    assert surface_contract["status"] == "ready"
+    assert surface_contract["operator_surface_contract_ready"] is True
+    assert surface_contract["latest_control_transfer_receipt_id"] == transfer_body["receipt_id"]
+    assert surface_contract["latest_panic_stop_receipt_id"] == panic_body["receipt_id"]
+    assert surface_contract["latest_handback_summary_receipt_id"] == handback_body["receipt_id"]
+    assert surface_contract["routes"]["status"] == "/takeover/status"
+    assert surface_contract["routes"]["panic_stop"] == "/takeover/panic-stop"
+    assert surface_contract["routes"]["handback_summary"] == "/takeover/handback-summary"
+    assert surface_contract["reads_receipts"] is True
+    assert surface_contract["writes_receipts"] is False
+    assert surface_contract["writes_tasks"] is False
+    assert surface_contract["writes_memory"] is False
+    assert surface_contract["runs_tools"] is False
+    assert surface_contract["runs_shell"] is False
+    assert surface_contract["grants_execution_authority"] is False
+    assert surface_contract["grants_mutation_authority"] is False
+    assert surface_contract["governance"]["read_only"] is True
+    assert surface_contract["governance"]["surface_contract_only"] is True
+    assert surface_contract["next_smallest_truthful_gap"] == "stage9_panic_operation_cancellation"
+    checks = {item["id"]: item for item in surface_contract["checks"]}
+    assert checks["stage8_closure_receipt_visible"]["passed"] is True
+    assert checks["control_transfer_receipt_visible"]["passed"] is True
+    assert checks["panic_stop_receipt_visible"]["passed"] is True
+    assert checks["handback_summary_receipt_visible"]["passed"] is True
+    assert checks["live_action_feed_visible"]["passed"] is True
+    assert checks["pilot_visibility_visible"]["passed"] is True
+    assert checks["next_gap_visible"]["passed"] is True
+    assert checks["no_authority_escalation"]["passed"] is True
 
     transfer_receipts = client.get("/takeover/control-transfer-receipts").json()
     panic_receipts = client.get("/takeover/panic-stop-receipts").json()

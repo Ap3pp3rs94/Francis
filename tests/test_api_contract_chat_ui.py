@@ -249,6 +249,7 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("POST", "/executor/substrate/stage-closure-decision"),
         ("GET", "/takeover/status"),
         ("GET", "/takeover/action-feed"),
+        ("GET", "/takeover/operator-surface-contract"),
         ("GET", "/takeover/control-transfer-receipts"),
         ("GET", "/takeover/panic-stop-receipts"),
         ("GET", "/takeover/handback-summaries"),

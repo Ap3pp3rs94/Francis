@@ -47300,6 +47300,48 @@ Latest validation for Stage 9 Takeover operator surface:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-31 - Stage 9 takeover operator surface contract is auditable
+
+Roadmap area: Stage 9 / Takeover (Pilot Mode), operator surface contract.
+
+Material change:
+
+- Added read-only `/takeover/operator-surface-contract`.
+- `/takeover/status` now exposes `operator_surface_contract_route` and
+  `operator_surface_contract_ready`.
+- The surface contract checks that Stage 8 closure, control-transfer receipt,
+  panic-stop receipt, handback-summary receipt, live action-feed route, Pilot
+  visibility, next truthful gap, and no-authority-escalation posture are all
+  inspectable.
+- When the operator surface contract is satisfied, Takeover advances its next
+  smallest truthful gap to `stage9_panic_operation_cancellation`.
+- This is a review/readback surface only. It does not run tools, start
+  processes, write receipts, write tasks, write memory, cancel operations,
+  grant execution authority, grant mutation authority, or mark Stage 9 closed.
+
+Latest validation for Stage 9 Takeover operator surface contract:
+
+- `python -m pytest tests/test_api_takeover.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 4 tests passed`
+- `python -m mypy src/francis/takeover.py
+  src/francis/api/routes/takeover.py`
+  Result: `passed`
+- `python -m ruff check src/francis/takeover.py
+  src/francis/api/routes/takeover.py tests/test_api_takeover.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/takeover.py
+  src/francis/api/routes/takeover.py tests/test_api_takeover.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed; 4 files already formatted`
+- Live local route/readback:
+  GET `/takeover/status` and GET `/takeover/operator-surface-contract`.
+  Result: `status_surface_ready=true; surface_status=ready;
+  surface_ready=true; status_next=stage9_panic_operation_cancellation;
+  surface_next=stage9_panic_operation_cancellation`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
