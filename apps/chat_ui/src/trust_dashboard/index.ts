@@ -231,6 +231,60 @@ export type TrustAdjustResponse = {
   meta?: Record<string, unknown>;
 };
 
+export type TrustCalibrationClaimStrength = "confirmed" | "likely" | "uncertain" | "blocked" | string;
+
+export type TrustCalibrationEvidence = {
+  current_route_readback?: boolean;
+  explicit_receipt?: boolean;
+  recency_readback?: boolean;
+  claim_scope_matches_evidence_scope?: boolean;
+  conflicting_evidence?: boolean;
+  stale_evidence?: boolean;
+  supporting_evidence?: boolean;
+  current_readback_reports_blocked?: boolean;
+  blocked_state_readback?: boolean;
+  required_authority_absent?: boolean;
+  required_receipt_or_gate_missing?: boolean;
+  safe_execution_precondition_met?: boolean;
+  next_smallest_truthful_gap?: string;
+  missing_verification?: string[];
+  [key: string]: unknown;
+};
+
+export type TrustCalibrationClaimEvaluationRequest = {
+  claim_text: string;
+  claim_scope?: string;
+  requested_claim_strength?: TrustCalibrationClaimStrength;
+  evidence?: TrustCalibrationEvidence;
+};
+
+export type TrustCalibrationClaimEvaluation = {
+  ok: boolean;
+  status: string;
+  claim_strength: TrustCalibrationClaimStrength;
+  requested_claim_strength?: TrustCalibrationClaimStrength;
+  downgraded: boolean;
+  reason: string;
+  condition: string;
+  ui_state: string;
+  surface_obligation: string;
+  citation_obligation: string;
+  missing_verification: string[];
+  allowed_surface_language: string[];
+  forbidden_surface_language: string[];
+  next_smallest_truthful_gap: string;
+  runtime_claim_integration_ready: boolean;
+  evaluates_supplied_evidence_only: boolean;
+  writes_memory: boolean;
+  writes_receipts: boolean;
+  scores_model_output: boolean;
+  changes_ui_confidence: boolean;
+  enforces_runtime_claims: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+  governance?: Record<string, unknown>;
+};
+
 const DEFAULT_TRUST_MUTATION_ACTOR = "chat_ui.trust";
 
 export class TrustApiError extends Error {
@@ -657,6 +711,42 @@ function parseTrustPolicy(raw: unknown): TrustPolicy | null {
   return policy;
 }
 
+function parseTrustCalibrationClaimEvaluation(raw: unknown): TrustCalibrationClaimEvaluation | null {
+  if (!isRecord(raw)) return null;
+
+  const claimStrength = safeString(raw.claim_strength, "").trim();
+  if (!claimStrength) return null;
+
+  const requestedClaimStrength = safeString(raw.requested_claim_strength, "").trim();
+
+  return {
+    ok: safeBool(raw.ok, true),
+    status: safeString(raw.status, ""),
+    claim_strength: claimStrength,
+    requested_claim_strength: requestedClaimStrength || undefined,
+    downgraded: safeBool(raw.downgraded, false),
+    reason: safeString(raw.reason, ""),
+    condition: safeString(raw.condition, ""),
+    ui_state: safeString(raw.ui_state, ""),
+    surface_obligation: safeString(raw.surface_obligation, ""),
+    citation_obligation: safeString(raw.citation_obligation, ""),
+    missing_verification: safeStringArray(raw.missing_verification) ?? [],
+    allowed_surface_language: safeStringArray(raw.allowed_surface_language) ?? [],
+    forbidden_surface_language: safeStringArray(raw.forbidden_surface_language) ?? [],
+    next_smallest_truthful_gap: safeString(raw.next_smallest_truthful_gap, ""),
+    runtime_claim_integration_ready: safeBool(raw.runtime_claim_integration_ready, false),
+    evaluates_supplied_evidence_only: safeBool(raw.evaluates_supplied_evidence_only, false),
+    writes_memory: safeBool(raw.writes_memory, false),
+    writes_receipts: safeBool(raw.writes_receipts, false),
+    scores_model_output: safeBool(raw.scores_model_output, false),
+    changes_ui_confidence: safeBool(raw.changes_ui_confidence, false),
+    enforces_runtime_claims: safeBool(raw.enforces_runtime_claims, false),
+    grants_execution_authority: safeBool(raw.grants_execution_authority, false),
+    grants_mutation_authority: safeBool(raw.grants_mutation_authority, false),
+    governance: isRecord(raw.governance) ? (raw.governance as Record<string, unknown>) : undefined,
+  };
+}
+
 /* -------------------------------------------------------------------------------------------------
  * endpoints (overrideable)
  * ------------------------------------------------------------------------------------------------- */
@@ -666,6 +756,12 @@ export type TrustEndpoints = {
   history: (q?: TrustHistoryParams) => string[];
   events: (q?: TrustEventsParams) => string[];
   policy: () => string[];
+
+  /**
+   * Read-only evaluator: POST body supplies a claim and explicit evidence.
+   * The backend returns calibrated language/UI obligations without mutating state.
+   */
+  claimEvaluation: () => string[];
 
   /**
    * Mutations (approval/policy gated server-side).
@@ -712,6 +808,8 @@ export function defaultTrustEndpoints(): TrustEndpoints {
     },
 
     policy: () => ["/trust/policy", "/trust/config", "/trust/settings", "/system/trust/policy", "/system/trust/config"],
+
+    claimEvaluation: () => ["/trust-calibration/evaluate-claim"],
 
     adjust: () => ["/trust/adjust", "/trust/mutate", "/trust/set", "/system/trust/adjust", "/system/trust/mutate"],
   };
@@ -976,6 +1074,41 @@ export class TrustClient {
     return parsed;
   }
 
+  async evaluateClaim(
+    req: TrustCalibrationClaimEvaluationRequest,
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<TrustCalibrationClaimEvaluation> {
+    const claimText = (req?.claim_text ?? "").trim();
+    if (!claimText) throw new Error("TrustClient.evaluateClaim requires req.claim_text");
+
+    const requestedClaimStrength = safeString(req.requested_claim_strength, "").trim();
+    const claimScope = safeString(req.claim_scope, "").trim();
+    const body = {
+      claim_text: claimText,
+      claim_scope: claimScope || undefined,
+      requested_claim_strength: requestedClaimStrength || undefined,
+      evidence: isRecord(req.evidence) ? req.evidence : {},
+    };
+
+    const { json, res } = await this.fetchFirstOk(this.endpoints.claimEvaluation(), {
+      ...this.init(opts),
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+    const parsed = parseTrustCalibrationClaimEvaluation(json);
+    if (!parsed) {
+      throw new TrustApiError("Invalid trust calibration claim evaluation response.", {
+        status: res.status,
+      });
+    }
+    if (!parsed.ok) {
+      throw new TrustApiError(parsed.reason || parsed.status || "Trust calibration claim evaluation failed.", {
+        status: res.status,
+      });
+    }
+    return parsed;
+  }
+
   async adjust(
     req: TrustAdjustRequest,
     opts?: { signal?: AbortSignal; timeoutMs?: number },
@@ -1025,6 +1158,25 @@ export class TrustClient {
 /* -------------------------------------------------------------------------------------------------
  * UI helpers (still framework-agnostic)
  * ------------------------------------------------------------------------------------------------- */
+
+export type TrustCalibrationUiSignal = "confirmed" | "likely" | "uncertain" | "blocked" | "missing";
+
+export function trustCalibrationUiSignal(
+  evaluation?: TrustCalibrationClaimEvaluation | null,
+): TrustCalibrationUiSignal {
+  if (!evaluation) return "missing";
+
+  const strength = safeString(evaluation.claim_strength, "").trim().toLowerCase();
+  if (strength === "confirmed" || strength === "likely" || strength === "uncertain" || strength === "blocked") {
+    return strength;
+  }
+
+  const uiState = safeString(evaluation.ui_state, "").trim().toLowerCase();
+  if (uiState.includes("blocked")) return "blocked";
+  if (uiState.includes("cautious") || uiState.includes("likely")) return "likely";
+  if (uiState.includes("uncertain") || uiState.includes("neutral")) return "uncertain";
+  return "uncertain";
+}
 
 export function formatTrustLevel(level: number): string {
   if (!Number.isFinite(level)) return "—";

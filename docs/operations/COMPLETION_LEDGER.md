@@ -49285,6 +49285,39 @@ Latest validation for Stage 13 runtime claim evaluator:
   writes_receipts=false; enforces_runtime_claims=false;
   changes_ui_confidence=false`.
 
+### 2026-05-31 - Stage 13 claim evaluator reaches the trust dashboard client
+
+Roadmap area: Stage 13 / Trust Calibration, UI and state coherence around
+confidence.
+
+Material change:
+
+- The chat UI trust dashboard protocol layer now exposes
+  `TrustClient.evaluateClaim(...)` against POST
+  `/trust-calibration/evaluate-claim`.
+- The client method treats claim evaluation as a read-only calibration request;
+  it does not require `mutationsEnabled`, does not write memory or receipts, and
+  does not grant execution or mutation authority.
+- The frontend parser preserves evaluator readbacks for `claim_strength`,
+  `requested_claim_strength`, downgrade status, reason, condition, UI-state
+  obligation, surface/citation obligations, missing verification, allowed and
+  forbidden surface language, next truthful gap, governance flags, and no-side-
+  effect flags.
+- Added `trustCalibrationUiSignal(...)` so UI surfaces can map evaluator output
+  to a stable `confirmed`, `likely`, `uncertain`, `blocked`, or `missing`
+  signal without laundering blocked or uncertain states into completion claims.
+- This is a client/protocol bridge for truthful UI state. It does not yet render
+  a full operator-facing trust calibration panel, HUD confidence badge, or ORB
+  confidence affordance.
+
+Latest validation for Stage 13 trust dashboard claim evaluation:
+
+- `node --test --experimental-strip-types src/trust_dashboard/index.test.ts`
+  from `apps/chat_ui/`
+  Result: `passed; 4 passed`
+- `npm run build` from `apps/chat_ui/`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
