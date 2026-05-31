@@ -78,7 +78,7 @@ def test_away_status_projects_stage10_groundwork_after_stage9_closure(monkeypatc
     assert body["stage9_latest_closure_receipt_id"] == "takeover_stage9_closure_away_test"
     assert body["stage9_next_smallest_truthful_gap"] == "stage9_ledger_closure"
     assert body["away_declared"] is False
-    assert body["away_mode_ready"] is False
+    assert body["away_mode_ready"] is True
     assert body["reads_receipts"] is True
     assert body["writes_receipts"] is False
     assert body["writes_tasks"] is False
@@ -94,7 +94,8 @@ def test_away_status_projects_stage10_groundwork_after_stage9_closure(monkeypatc
     assert body["routes"]["safe_task_classes"] == "/away/safe-task-classes"
     assert body["routes"]["autonomy_budgets"] == "/away/autonomy-budgets"
     assert body["routes"]["shift_report"] == "/away/shift-report"
-    assert body["next_smallest_truthful_gap"] == "stage10_return_briefing_flow"
+    assert body["routes"]["return_briefing"] == "/away/return-briefing"
+    assert body["next_smallest_truthful_gap"] == "stage10_completion_review"
 
     deliverables = {item["id"]: item for item in body["deliverables"]}
     assert deliverables["stage9_ledger_closure_backstop"]["ready"] is True
@@ -103,7 +104,7 @@ def test_away_status_projects_stage10_groundwork_after_stage9_closure(monkeypatc
     assert deliverables["away_safe_task_classes"]["ready"] is True
     assert deliverables["autonomy_budgets"]["ready"] is True
     assert deliverables["shift_reports"]["ready"] is True
-    assert deliverables["return_briefing_flow"]["ready"] is False
+    assert deliverables["return_briefing_flow"]["ready"] is True
 
 
 def test_away_safe_task_classes_are_readonly_and_gated(monkeypatch, tmp_path: Path) -> None:
@@ -270,3 +271,53 @@ def test_away_shift_report_is_readonly_and_receipt_grounded(monkeypatch, tmp_pat
     assert checks["required_sections_present"]["passed"] is True
     assert checks["sections_have_summaries"]["passed"] is True
     assert checks["read_only_report"]["passed"] is True
+
+
+def test_away_return_briefing_flow_is_readonly_and_operator_led(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage9_closure_receipt(data_root, receipt_id="takeover_stage9_closure_return_briefing_test")
+
+    response = TestClient(create_app()).get("/away/return-briefing")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "francis.stage10.away.return_briefing"
+    assert body["status"] == "ready"
+    assert body["return_briefing_ready"] is True
+    assert body["shift_report_ready"] is True
+    assert body["continuity_headline"]
+    assert body["step_count"] == 4
+    assert body["writes_receipts"] is False
+    assert body["writes_tasks"] is False
+    assert body["writes_memory"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["starts_processes"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["governance"]["read_only"] is True
+    assert body["governance"]["return_briefing_flow_only"] is True
+    assert body["governance"]["operator_reentry_decision_required"] is True
+    assert body["governance"]["does_not_claim_background_progress"] is True
+    assert body["governance"]["does_not_activate_away_autonomy"] is True
+    assert body["next_smallest_truthful_gap"] == "stage10_completion_review"
+
+    steps = {item["id"]: item for item in body["steps"]}
+    assert set(steps) == {
+        "choose_control_mode",
+        "resume_continuity_focus",
+        "review_pending_approvals",
+        "review_shift_report",
+    }
+    assert steps["review_shift_report"]["route"] == "/away/shift-report"
+    assert steps["review_pending_approvals"]["action"] == "operator_review"
+    assert steps["choose_control_mode"]["action"] == "operator_decision"
+
+    checks = {item["id"]: item for item in body["checks"]}
+    assert checks["shift_report_ready"]["passed"] is True
+    assert checks["continuity_headline_available"]["passed"] is True
+    assert checks["required_reentry_steps_present"]["passed"] is True
+    assert checks["operator_decision_required"]["passed"] is True

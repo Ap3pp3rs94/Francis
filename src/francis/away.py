@@ -10,6 +10,7 @@ AWAY_STATUS_KIND = "francis.stage10.away.status"
 AWAY_SAFE_TASK_CLASSES_KIND = "francis.stage10.away.safe_task_classes"
 AWAY_AUTONOMY_BUDGETS_KIND = "francis.stage10.away.autonomy_budgets"
 AWAY_SHIFT_REPORT_KIND = "francis.stage10.away.shift_report"
+AWAY_RETURN_BRIEFING_KIND = "francis.stage10.away.return_briefing"
 
 _AWAY_SAFE_TASK_CLASSES: tuple[dict[str, Any], ...] = (
     {
@@ -80,6 +81,7 @@ def away_status_snapshot() -> dict[str, Any]:
     safe_task_classes = away_safe_task_classes_review()
     autonomy_budgets = away_autonomy_budgets_review()
     shift_report = away_shift_report_snapshot()
+    return_briefing = away_return_briefing_snapshot()
     control_mode = _as_dict(operator.get("control_mode"))
     backlog = _as_dict(operator.get("backlog"))
     continuity = _as_dict(operator.get("continuity"))
@@ -89,6 +91,7 @@ def away_status_snapshot() -> dict[str, Any]:
         safe_task_classes_ready=bool(safe_task_classes.get("away_safe_task_classes_ready")),
         autonomy_budgets_ready=bool(autonomy_budgets.get("autonomy_budgets_ready")),
         shift_report_ready=bool(shift_report.get("shift_report_ready")),
+        return_briefing_ready=bool(return_briefing.get("return_briefing_ready")),
         operator=operator,
         backlog=backlog,
         continuity=continuity,
@@ -142,8 +145,11 @@ def away_status_snapshot() -> dict[str, Any]:
             "safe_task_classes": "/away/safe-task-classes",
             "autonomy_budgets": "/away/autonomy-budgets",
             "shift_report": "/away/shift-report",
+            "return_briefing": "/away/return-briefing",
         },
-        "next_smallest_truthful_gap": "stage10_return_briefing_flow"
+        "next_smallest_truthful_gap": "stage10_completion_review"
+        if stage9_closed and bool(return_briefing.get("return_briefing_ready"))
+        else "stage10_return_briefing_flow"
         if stage9_closed and bool(shift_report.get("shift_report_ready"))
         else "stage10_shift_reports"
         if stage9_closed and bool(autonomy_budgets.get("autonomy_budgets_ready"))
@@ -346,12 +352,90 @@ def away_shift_report_snapshot() -> dict[str, Any]:
     }
 
 
+def away_return_briefing_snapshot() -> dict[str, Any]:
+    shift_report = away_shift_report_snapshot()
+    operator = operator_mode_snapshot()
+    continuity = _as_dict(operator.get("continuity"))
+    steps = [
+        {
+            "id": "review_shift_report",
+            "label": "Review shift report",
+            "route": "/away/shift-report",
+            "action": "read",
+        },
+        {
+            "id": "review_pending_approvals",
+            "label": "Review pending approvals",
+            "route": "/approvals/pending",
+            "action": "operator_review",
+        },
+        {
+            "id": "resume_continuity_focus",
+            "label": "Resume continuity focus",
+            "route": "/continuity/briefing",
+            "action": "read",
+        },
+        {
+            "id": "choose_control_mode",
+            "label": "Choose control mode",
+            "route": "/system/operator_mode",
+            "action": "operator_decision",
+        },
+    ]
+    checks = _return_briefing_checks(
+        shift_report_ready=bool(shift_report.get("shift_report_ready")),
+        continuity=continuity,
+        steps=steps,
+    )
+    ready = all(bool(check.get("passed")) for check in checks)
+    return {
+        "ok": True,
+        "kind": AWAY_RETURN_BRIEFING_KIND,
+        "stage": STAGE10_AWAY_STAGE,
+        "source_id": "away",
+        "status": "ready" if ready else "blocked",
+        "return_briefing_ready": ready,
+        "shift_report_ready": bool(shift_report.get("shift_report_ready")),
+        "continuity_headline": _safe_text(continuity.get("headline")),
+        "steps": steps,
+        "step_count": len(steps),
+        "checks": checks,
+        "reads_receipts": True,
+        "writes_receipts": False,
+        "writes_tasks": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "return_briefing_flow_only": True,
+            "operator_reentry_decision_required": True,
+            "does_not_claim_background_progress": True,
+            "does_not_activate_away_autonomy": True,
+            "does_not_write_receipts": True,
+            "does_not_write_tasks": True,
+            "does_not_write_memory": True,
+            "does_not_run_tools": True,
+            "does_not_run_shell": True,
+            "does_not_run_git": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": "stage10_completion_review" if ready else "stage10_return_briefing_flow",
+    }
+
+
 def _away_deliverables(
     *,
     stage9_closed: bool,
     safe_task_classes_ready: bool,
     autonomy_budgets_ready: bool,
     shift_report_ready: bool,
+    return_briefing_ready: bool,
     operator: dict[str, Any],
     backlog: dict[str, Any],
     continuity: dict[str, Any],
@@ -407,8 +491,8 @@ def _away_deliverables(
         {
             "id": "return_briefing_flow",
             "label": "Return briefing flow",
-            "ready": False,
-            "evidence": "not_implemented_yet",
+            "ready": return_briefing_ready,
+            "evidence": "/away/return-briefing",
         },
     ]
 
@@ -588,6 +672,42 @@ def _shift_report_checks(*, budgets_ready: bool, sections: list[dict[str, Any]])
             "read_only_report",
             passed=True,
             evidence="projection_only",
+        ),
+    ]
+
+
+def _return_briefing_checks(
+    *,
+    shift_report_ready: bool,
+    continuity: dict[str, Any],
+    steps: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    step_ids = {_safe_text(item.get("id")) for item in steps}
+    return [
+        _check(
+            "shift_report_ready",
+            passed=shift_report_ready,
+            evidence="/away/shift-report",
+        ),
+        _check(
+            "continuity_headline_available",
+            passed=bool(_safe_text(continuity.get("headline"))),
+            evidence="operator_mode.continuity.headline",
+        ),
+        _check(
+            "required_reentry_steps_present",
+            passed={
+                "review_shift_report",
+                "review_pending_approvals",
+                "resume_continuity_focus",
+                "choose_control_mode",
+            }.issubset(step_ids),
+            evidence=str(len(steps)),
+        ),
+        _check(
+            "operator_decision_required",
+            passed=any(_safe_text(item.get("action")) == "operator_decision" for item in steps),
+            evidence="/system/operator_mode",
         ),
     ]
 

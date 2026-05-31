@@ -47753,6 +47753,50 @@ Latest validation for Stage 10 Away shift report:
   status_next=stage10_return_briefing_flow;
   report_next=stage10_return_briefing_flow`.
 
+### 2026-05-31 - Stage 10 return briefing flow is operator-led
+
+Roadmap area: Stage 10 / Away Mode, return briefing flow.
+
+Material change:
+
+- Added read-only GET `/away/return-briefing`.
+- The return briefing flow includes explicit operator re-entry steps: review the
+  shift report, review pending approvals, resume continuity focus, and choose
+  control mode.
+- The flow requires the shift report and continuity headline, and it includes an
+  explicit operator decision step before control mode changes.
+- The route is projection-only: it does not claim background progress, activate
+  Away autonomy, write receipts, write tasks, write memory, run tools, run
+  shell, run git, start processes, or grant execution/mutation authority.
+- `/away/status` now marks `return_briefing_flow` ready and reports all 8 Stage
+  10 deliverables ready. The next smallest truthful gap is
+  `stage10_completion_review`.
+
+Latest validation for Stage 10 Away return briefing:
+
+- `python -m pytest tests/test_api_away.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 7 tests passed`
+- `python -m mypy src/francis/away.py
+  src/francis/api/routes/away.py`
+  Result: `passed`
+- `python -m ruff check src/francis/away.py
+  src/francis/api/routes/away.py tests/test_api_away.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/away.py
+  src/francis/api/routes/away.py tests/test_api_away.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed; 4 files already formatted`
+- Live local read-only route/readback:
+  GET `/away/status` and GET `/away/return-briefing`.
+  Result: `status=stage10_groundwork_ready;
+  away_ready=true; return_ready=true;
+  step_count=4; ready_count=8; required_count=8;
+  status_next=stage10_completion_review;
+  briefing_next=stage10_completion_review`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
