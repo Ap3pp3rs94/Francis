@@ -49318,6 +49318,42 @@ Latest validation for Stage 13 trust dashboard claim evaluation:
 - `npm run build` from `apps/chat_ui/`
   Result: `passed`
 
+### 2026-05-31 - Stage 13 trust calibration presentation model is bounded
+
+Roadmap area: Stage 13 / Trust Calibration, UI and state coherence around
+confidence.
+
+Material change:
+
+- Added `presentTrustCalibrationClaimEvaluation(...)` to the chat UI trust
+  dashboard protocol layer.
+- The presentation model converts evaluator output into a stable UI signal,
+  badge status, headline, detail, surface obligation, citation obligation,
+  missing-verification list, allowed/forbidden surface language, next truthful
+  gap, and explicit guard flags.
+- Missing evaluator readback now has a first-class presentation state:
+  `signal=missing`, `badge_status=dormant`, missing verification
+  `trust_calibration_claim_evaluation`, and forbidden language
+  `done`, `closed`, and `confirmed`.
+- Blocked evaluator output stays blocked in the presentation model and denies
+  strong claims even when the requested claim strength was stronger.
+- The presentation model also preserves side-effect denial readbacks so UI
+  surfaces can show that claim calibration does not write memory, write
+  receipts, change UI confidence, enforce runtime claims, or grant execution or
+  mutation authority.
+- This remains a framework-agnostic presentation contract. It does not yet add
+  a rendered trust-calibration card to the main App shell.
+
+Latest validation for Stage 13 trust calibration presentation:
+
+- `node --test --experimental-strip-types src/trust_dashboard/index.test.ts`
+  from `apps/chat_ui/`
+  Result: `passed; 6 passed`
+- `npm run build` from `apps/chat_ui/`
+  Result: `passed`
+- `npm run test` from `apps/chat_ui/`
+  Result: `passed; 179 passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

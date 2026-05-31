@@ -1161,6 +1161,26 @@ export class TrustClient {
 
 export type TrustCalibrationUiSignal = "confirmed" | "likely" | "uncertain" | "blocked" | "missing";
 
+export type TrustCalibrationPresentation = {
+  signal: TrustCalibrationUiSignal;
+  badge_status: "ready" | "running" | "dormant" | "blocked";
+  badge_label: string;
+  headline: string;
+  detail: string;
+  surface_obligation: string;
+  citation_obligation: string;
+  next_smallest_truthful_gap: string;
+  missing_verification: string[];
+  allowed_surface_language: string[];
+  forbidden_surface_language: string[];
+  downgraded: boolean;
+  runtime_claim_integration_ready: boolean;
+  strong_claim_allowed: boolean;
+  blocked_claim_required: boolean;
+  must_name_missing_verification: boolean;
+  side_effects_denied: boolean;
+};
+
 export function trustCalibrationUiSignal(
   evaluation?: TrustCalibrationClaimEvaluation | null,
 ): TrustCalibrationUiSignal {
@@ -1176,6 +1196,78 @@ export function trustCalibrationUiSignal(
   if (uiState.includes("cautious") || uiState.includes("likely")) return "likely";
   if (uiState.includes("uncertain") || uiState.includes("neutral")) return "uncertain";
   return "uncertain";
+}
+
+export function presentTrustCalibrationClaimEvaluation(
+  evaluation?: TrustCalibrationClaimEvaluation | null,
+): TrustCalibrationPresentation {
+  const signal = trustCalibrationUiSignal(evaluation);
+  if (!evaluation) {
+    return {
+      signal,
+      badge_status: "dormant",
+      badge_label: "not loaded",
+      headline: "No calibration readback",
+      detail: "The UI has no trust calibration evaluator response for this claim yet.",
+      surface_obligation: "load_evaluator_readback_before_confidence_claim",
+      citation_obligation: "none_until_readback_loaded",
+      next_smallest_truthful_gap: "stage13_ui_state_coherence",
+      missing_verification: ["trust_calibration_claim_evaluation"],
+      allowed_surface_language: ["not evaluated"],
+      forbidden_surface_language: ["done", "closed", "confirmed"],
+      downgraded: false,
+      runtime_claim_integration_ready: false,
+      strong_claim_allowed: false,
+      blocked_claim_required: false,
+      must_name_missing_verification: true,
+      side_effects_denied: true,
+    };
+  }
+
+  const missingVerification = evaluation.missing_verification;
+  const sideEffectsDenied =
+    !evaluation.writes_memory &&
+    !evaluation.writes_receipts &&
+    !evaluation.changes_ui_confidence &&
+    !evaluation.enforces_runtime_claims &&
+    !evaluation.grants_execution_authority &&
+    !evaluation.grants_mutation_authority;
+  const badgeStatus =
+    signal === "confirmed" ? "ready" : signal === "likely" ? "running" : signal === "blocked" ? "blocked" : "dormant";
+  const headline =
+    signal === "confirmed"
+      ? "Confirmed by current evidence"
+      : signal === "likely"
+        ? "Likely with named verification gap"
+        : signal === "blocked"
+          ? "Blocked; progress claim denied"
+          : "Uncertain; next check required";
+  const detail =
+    evaluation.reason ||
+    evaluation.condition ||
+    evaluation.surface_obligation ||
+    evaluation.next_smallest_truthful_gap ||
+    "No evaluator reason provided.";
+
+  return {
+    signal,
+    badge_status: badgeStatus,
+    badge_label: signal,
+    headline,
+    detail,
+    surface_obligation: evaluation.surface_obligation,
+    citation_obligation: evaluation.citation_obligation,
+    next_smallest_truthful_gap: evaluation.next_smallest_truthful_gap,
+    missing_verification: missingVerification,
+    allowed_surface_language: evaluation.allowed_surface_language,
+    forbidden_surface_language: evaluation.forbidden_surface_language,
+    downgraded: evaluation.downgraded,
+    runtime_claim_integration_ready: evaluation.runtime_claim_integration_ready,
+    strong_claim_allowed: signal === "confirmed" && !evaluation.downgraded && missingVerification.length === 0,
+    blocked_claim_required: signal === "blocked",
+    must_name_missing_verification: missingVerification.length > 0,
+    side_effects_denied: sideEffectsDenied,
+  };
 }
 
 export function formatTrustLevel(level: number): string {

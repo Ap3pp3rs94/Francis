@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { TrustApiError, TrustClient, trustCalibrationUiSignal } from "./index.ts";
+import {
+  TrustApiError,
+  TrustClient,
+  presentTrustCalibrationClaimEvaluation,
+  trustCalibrationUiSignal,
+} from "./index.ts";
 
 type FetchHandler = (url: string, init?: RequestInit) => Response | Promise<Response>;
 
@@ -177,4 +182,58 @@ test("TrustClient.evaluateClaim rejects malformed calibration responses", async 
   } finally {
     restoreFetch();
   }
+});
+
+test("presentTrustCalibrationClaimEvaluation preserves blocked and missing-verification obligations", () => {
+  const presentation = presentTrustCalibrationClaimEvaluation({
+    ok: true,
+    status: "evaluated",
+    claim_strength: "blocked",
+    requested_claim_strength: "confirmed",
+    downgraded: true,
+    reason: "current_readback_reports_blocked",
+    condition: "blocked_state_readback",
+    ui_state: "blocked_signal_required",
+    surface_obligation: "state_blocker_before_progress",
+    citation_obligation: "cite_current_blocking_readback",
+    missing_verification: ["blocked_state_resolution"],
+    allowed_surface_language: ["blocked until live readback clears"],
+    forbidden_surface_language: ["done", "closed", "ready"],
+    next_smallest_truthful_gap: "stage13_ui_state_coherence",
+    runtime_claim_integration_ready: true,
+    evaluates_supplied_evidence_only: true,
+    writes_memory: false,
+    writes_receipts: false,
+    scores_model_output: false,
+    changes_ui_confidence: false,
+    enforces_runtime_claims: false,
+    grants_execution_authority: false,
+    grants_mutation_authority: false,
+  });
+
+  assert.equal(presentation.signal, "blocked");
+  assert.equal(presentation.badge_status, "blocked");
+  assert.equal(presentation.headline, "Blocked; progress claim denied");
+  assert.equal(presentation.detail, "current_readback_reports_blocked");
+  assert.equal(presentation.strong_claim_allowed, false);
+  assert.equal(presentation.blocked_claim_required, true);
+  assert.equal(presentation.must_name_missing_verification, true);
+  assert.equal(presentation.side_effects_denied, true);
+  assert.deepEqual(presentation.forbidden_surface_language, ["done", "closed", "ready"]);
+  assert.deepEqual(presentation.missing_verification, ["blocked_state_resolution"]);
+});
+
+test("presentTrustCalibrationClaimEvaluation does not fabricate confidence before readback", () => {
+  const presentation = presentTrustCalibrationClaimEvaluation(null);
+
+  assert.equal(presentation.signal, "missing");
+  assert.equal(presentation.badge_status, "dormant");
+  assert.equal(presentation.badge_label, "not loaded");
+  assert.equal(presentation.strong_claim_allowed, false);
+  assert.equal(presentation.blocked_claim_required, false);
+  assert.equal(presentation.must_name_missing_verification, true);
+  assert.equal(presentation.runtime_claim_integration_ready, false);
+  assert.equal(presentation.next_smallest_truthful_gap, "stage13_ui_state_coherence");
+  assert.deepEqual(presentation.missing_verification, ["trust_calibration_claim_evaluation"]);
+  assert.deepEqual(presentation.forbidden_surface_language, ["done", "closed", "confirmed"]);
 });
