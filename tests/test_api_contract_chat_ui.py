@@ -300,5 +300,6 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("GET", "/trust-calibration/status"),
         ("GET", "/trust-calibration/confidence-rules-contract"),
         ("GET", "/trust-calibration/verification-gate-contract"),
+        ("GET", "/trust-calibration/anti-overclaim-policy"),
     ]
     _assert_has_endpoints(routes, endpoints)

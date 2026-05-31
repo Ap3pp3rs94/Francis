@@ -49100,6 +49100,65 @@ Latest validation for Stage 13 verification gates contract:
   enforces_runtime_claims=false; scores_model_output=false;
   changes_ui_confidence=false; writes_memory=false; runs_tools=false`.
 
+### 2026-05-31 - Stage 13 anti-overclaim policy is inspectable
+
+Roadmap area: Stage 13 / Trust Calibration, anti-hallucination and
+anti-overclaim policy.
+
+Material change:
+
+- Added read-only GET `/trust-calibration/anti-overclaim-policy`.
+- `/trust-calibration/status` now reports anti-overclaim policy readiness after
+  the Stage 12 closure receipt, confidence rules contract, and verification
+  gate contract are readable.
+- The policy defines seven bounded anti-overclaim rules: no false done, no fake
+  certainty, stale evidence guard, UI confidence laundering guard, blocked state
+  preservation, authority claim guard, and useful uncertainty.
+- Each policy names the verification gate it depends on, required surface
+  behavior, forbidden overclaim patterns, and the fallback claim strength.
+- The policy explicitly prevents false done, fake certainty, smooth
+  overclaiming, likely/confirmed mismatch, UI confidence laundering, stale
+  evidence as current proof, and blocked-state laundering into progress.
+- This surface remains contract-only. It does not enforce runtime claims, score
+  model output, change UI confidence, write memory, write receipts, run tools,
+  run shell, run git, or grant authority.
+- `/trust-calibration/status` advances the next smallest truthful gap to
+  `stage13_calibrated_claim_logic` after the anti-overclaim policy is ready.
+
+Latest validation for Stage 13 anti-overclaim policy:
+
+- `python -m pytest tests/test_api_trust_calibration.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 3 passed`
+- `python -m mypy src/francis/trust_calibration.py
+  src/francis/api/routes/trust_calibration.py src/francis/api/app.py`
+  Result: `passed`
+- `python -m ruff check src/francis/trust_calibration.py
+  src/francis/api/routes/trust_calibration.py src/francis/api/app.py
+  tests/test_api_trust_calibration.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/trust_calibration.py
+  src/francis/api/routes/trust_calibration.py src/francis/api/app.py
+  tests/test_api_trust_calibration.py tests/test_api_contract_chat_ui.py`
+  Result: `passed; 5 files already formatted`
+- Live local TestClient route/readback against an isolated data root:
+  GET `/trust-calibration/anti-overclaim-policy` before Stage 12 closure, write
+  one Stage 12 Knowledge Fabric closure receipt fixture, GET
+  `/trust-calibration/status`, and GET
+  `/trust-calibration/anti-overclaim-policy`.
+  Result: `blocked_status=blocked; blocked_ready=false;
+  blocked_next=stage12_ledger_closure;
+  ready_status=stage13_anti_overclaim_policy_ready; ready_count=4;
+  ready_next=stage13_calibrated_claim_logic;
+  route=/trust-calibration/anti-overclaim-policy; policy_status=ready;
+  policy_ready=true; policy_count=7; prevents_false_done=true;
+  prevents_ui_laundering=true;
+  no_false_done_gate=done_or_closure_claim_gate;
+  authority_guard_gate=authority_or_action_claim_gate;
+  enforces_runtime_claims=false; scores_model_output=false;
+  changes_ui_confidence=false; writes_memory=false; runs_tools=false`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

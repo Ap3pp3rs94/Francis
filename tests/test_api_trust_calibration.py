@@ -69,6 +69,7 @@ def test_trust_calibration_status_blocks_until_stage12_closure(monkeypatch, tmp_
     assert body["routes"]["status"] == "/trust-calibration/status"
     assert body["routes"]["confidence_rules_contract"] == "/trust-calibration/confidence-rules-contract"
     assert body["routes"]["verification_gate_contract"] == "/trust-calibration/verification-gate-contract"
+    assert body["routes"]["anti_overclaim_policy"] == "/trust-calibration/anti-overclaim-policy"
     assert body["routes"]["stage12_closure_readback"] == "/knowledge-fabric/stage-closure-decisions"
     assert body["governance"]["read_only"] is True
     assert body["governance"]["requires_stage12_ledger_closure"] is True
@@ -98,6 +99,18 @@ def test_trust_calibration_status_blocks_until_stage12_closure(monkeypatch, tmp_
     assert verification["scores_model_output"] is False
     assert verification["changes_ui_confidence"] is False
     assert verification["next_smallest_truthful_gap"] == "stage12_ledger_closure"
+
+    anti_overclaim = TestClient(create_app()).get("/trust-calibration/anti-overclaim-policy").json()
+    assert anti_overclaim["status"] == "blocked"
+    assert anti_overclaim["anti_overclaim_policy_ready"] is False
+    assert anti_overclaim["verification_gate_contract_ready"] is False
+    assert anti_overclaim["confidence_rules_contract_ready"] is False
+    assert anti_overclaim["stage12_closed_by_receipt"] is False
+    assert anti_overclaim["policy_count"] == 7
+    assert anti_overclaim["enforces_runtime_claims"] is False
+    assert anti_overclaim["scores_model_output"] is False
+    assert anti_overclaim["changes_ui_confidence"] is False
+    assert anti_overclaim["next_smallest_truthful_gap"] == "stage12_ledger_closure"
 
 
 def test_trust_calibration_confidence_rules_contract_ready_after_stage12_closure(
@@ -198,11 +211,69 @@ def test_trust_calibration_confidence_rules_contract_ready_after_stage12_closure
     assert blocked_gate["allows_max_strength"] == "blocked"
     assert blocked_gate["denial_behavior"] == "do_not_launder_blocked_state_into_progress"
 
+    anti_overclaim = client.get("/trust-calibration/anti-overclaim-policy").json()
+    assert anti_overclaim["ok"] is True
+    assert anti_overclaim["kind"] == "francis.stage13.trust_calibration.anti_overclaim_policy"
+    assert anti_overclaim["status"] == "ready"
+    assert anti_overclaim["anti_overclaim_policy_ready"] is True
+    assert anti_overclaim["verification_gate_contract_ready"] is True
+    assert anti_overclaim["confidence_rules_contract_ready"] is True
+    assert anti_overclaim["stage12_closed_by_receipt"] is True
+    assert anti_overclaim["stage12_latest_closure_receipt_id"] == "knowledge_fabric_stage12_closure_tc_test"
+    assert anti_overclaim["policy_count"] == 7
+    assert anti_overclaim["required_claim_strengths"] == ["confirmed", "likely", "uncertain", "blocked"]
+    assert anti_overclaim["required_verification_gates"] == [
+        "current_state_claim_gate",
+        "done_or_closure_claim_gate",
+        "retrieval_backed_claim_gate",
+        "authority_or_action_claim_gate",
+        "stale_or_conflicting_evidence_gate",
+        "blocked_state_preservation_gate",
+    ]
+    assert "false_done" in anti_overclaim["failure_modes_prevented"]
+    assert "fake_certainty" in anti_overclaim["failure_modes_prevented"]
+    assert "ui_confidence_laundering" in anti_overclaim["failure_modes_prevented"]
+    assert "blocked_state_laundered_into_progress" in anti_overclaim["failure_modes_prevented"]
+    assert anti_overclaim["surface_obligations"]["confirmed"] == "cite_current_evidence_and_receipt_or_readback"
+    assert anti_overclaim["surface_obligations"]["likely"] == "name_missing_verification"
+    assert anti_overclaim["surface_obligations"]["blocked"] == "state_blocker_without_implying_progress"
+    assert anti_overclaim["writes_memory"] is False
+    assert anti_overclaim["writes_receipts"] is False
+    assert anti_overclaim["scores_model_output"] is False
+    assert anti_overclaim["changes_ui_confidence"] is False
+    assert anti_overclaim["enforces_runtime_claims"] is False
+    assert anti_overclaim["runs_tools"] is False
+    assert anti_overclaim["runs_shell"] is False
+    assert anti_overclaim["runs_git"] is False
+    assert anti_overclaim["grants_execution_authority"] is False
+    assert anti_overclaim["grants_mutation_authority"] is False
+    assert anti_overclaim["governance"]["contract_only"] is True
+    assert anti_overclaim["governance"]["does_not_enforce_runtime_claims"] is True
+    assert anti_overclaim["next_smallest_truthful_gap"] == "stage13_calibrated_claim_logic"
+
+    policies = {item["id"]: item for item in anti_overclaim["policies"]}
+    assert set(policies) == {
+        "no_false_done",
+        "no_fake_certainty",
+        "stale_evidence_guard",
+        "ui_confidence_laundering_guard",
+        "blocked_state_preservation",
+        "authority_claim_guard",
+        "useful_uncertainty",
+    }
+    assert policies["no_false_done"]["required_gate"] == "done_or_closure_claim_gate"
+    assert "call_done_from_partial_test_pass" in policies["no_false_done"]["forbidden"]
+    assert policies["stale_evidence_guard"]["fallback_claim_strength"] == "uncertain"
+    assert "make_uncertain_state_look_confirmed" in policies["ui_confidence_laundering_guard"]["forbidden"]
+    assert policies["blocked_state_preservation"]["fallback_claim_strength"] == "blocked"
+    assert policies["authority_claim_guard"]["required_gate"] == "authority_or_action_claim_gate"
+
     status = client.get("/trust-calibration/status").json()
-    assert status["status"] == "stage13_verification_gate_contract_ready"
+    assert status["status"] == "stage13_anti_overclaim_policy_ready"
     assert status["stage12_closed_by_receipt"] is True
     assert status["confidence_rules_contract_ready"] is True
     assert status["verification_gates_ready"] is True
-    assert status["ready_count"] == 3
+    assert status["anti_overclaim_policy_ready"] is True
+    assert status["ready_count"] == 4
     assert status["required_count"] == 5
-    assert status["next_smallest_truthful_gap"] == "stage13_anti_overclaim_policy"
+    assert status["next_smallest_truthful_gap"] == "stage13_calibrated_claim_logic"
