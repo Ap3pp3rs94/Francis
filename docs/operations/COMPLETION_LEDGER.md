@@ -46420,6 +46420,83 @@ Latest validation for Stage 7 feedback memory assistance live sample run:
   `memory.timeline.write`.
   Result: `live_sample_observed=true; ready_count=4; required_count=4`.
 
+### 2026-05-30 - Stage 7 feedback memory assistance closes by receipt
+
+Roadmap area: Stage 7 / Telemetry MVP, receipt-backed closure for the
+feedback-memory assistance primary loop.
+
+Material change:
+
+- Ran a second governed live sample as `codex.builder` with `use_llm=true` so
+  the chat route captured a true model execution span in addition to the
+  existing chat-route execution trace. The local model endpoint was unavailable,
+  so the sample used the existing fallback reply path while still recording the
+  attempted model span truthfully.
+- The true execution trace review now reports
+  `status=true_execution_trace_review_ready`, `true_execution_trace_count=2`,
+  and `missing_true_execution_trace=[]`.
+- The done criteria review reports `status=done_criteria_ready`,
+  `ready_count=6`, and `required_count=6`.
+- The multi-source usefulness review reports
+  `status=multi_source_usefulness_ready`, `ready_count=6`, and
+  `required_count=6`.
+- The operator usage-over-time review reports
+  `status=operator_usage_over_time_ready`.
+- The closure readiness review reports `status=loop_closure_readiness_ready`,
+  `ready_count=6`, and `required_count=6`.
+- The memory write contract hardening review reports
+  `status=memory_write_contract_hardening_ready`, `ready_count=6`, and
+  `required_count=6`.
+- The memory contract operator surface review reports
+  `status=memory_contract_operator_surface_ready` and advances the next gap to
+  `stage7_operator_stage_closure_decision`.
+- Under operator delegation receipt `opdel_2a7e1182b90a5c98bea67233661065ba`,
+  `codex.builder` recorded a Stage 7 closure decision through
+  `POST /telemetry/context/feedback/memory-assistance-feedback-loop-stage-closure-decision`.
+  The new receipt is `tel_stage7_closure_e4c216a895a6`.
+- The Stage 7 closure decision readback reports
+  `status=stage_closure_decision_readback_ready`,
+  `latest_decision=close_stage7`, `stage7_closed_by_receipt=true`,
+  `marks_runtime_stage_state=false`, and
+  `next_smallest_truthful_gap=stage7_ledger_closure`.
+
+Latest validation for Stage 7 feedback memory assistance closure receipt:
+
+- Live local route run:
+  `POST /telemetry/context/feedback/memory-assistance-feedback-loop-live-sample-run`
+  as `codex.builder` with `chat.write`, `telemetry.context.feedback.write`, and
+  `memory.timeline.write`, `use_llm=true`, and
+  `FRANCIS_OLLAMA_BASE_URL=http://127.0.0.1:9`.
+  Result: `live_sample_observed=true; calls_model=true;
+  model_or_tool_execution_span_captured=true; model_call_response_observed=false`.
+- Live local route run:
+  `POST /telemetry/context/feedback/memory-assistance-feedback-loop-live-sample-operator-decision`
+  as `codex.builder` with `telemetry.context.feedback.write`.
+  Result: `status=recorded; decision=accepted;
+  receipt_id=tel_fma_live_decision_814cee59542f`.
+- Live local readbacks:
+  `/telemetry/context/feedback/memory-assistance-feedback-loop-true-execution-trace-review`,
+  `/telemetry/context/feedback/memory-assistance-feedback-loop-done-criteria-review`,
+  `/telemetry/context/feedback/memory-assistance-feedback-loop-multi-source-usefulness-review`,
+  `/telemetry/context/feedback/memory-assistance-feedback-loop-operator-usage-over-time-review`,
+  `/telemetry/context/feedback/memory-assistance-feedback-loop-closure-readiness-review`,
+  `/telemetry/context/feedback/memory-assistance-feedback-loop-memory-write-contract-hardening-review`,
+  and
+  `/telemetry/context/feedback/memory-assistance-feedback-loop-memory-contract-operator-surface-review`.
+  Result: all reported their ready status for the feedback-memory assistance
+  loop.
+- Live local route run:
+  `POST /telemetry/context/feedback/memory-assistance-feedback-loop-stage-closure-decision`
+  as `codex.builder` with `telemetry.stage7.closure.write`.
+  Result: `status=recorded; decision=close_stage7;
+  receipt_id=tel_stage7_closure_e4c216a895a6; stage7_closed_by_receipt=true;
+  marks_runtime_stage_state=false`.
+- Live local readback:
+  `/telemetry/context/feedback/memory-assistance-feedback-loop-stage-closure-decisions`.
+  Result: `status=stage_closure_decision_readback_ready;
+  latest_decision=close_stage7; stage7_closed_by_receipt=true;
+  next_smallest_truthful_gap=stage7_ledger_closure`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
