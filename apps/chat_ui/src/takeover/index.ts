@@ -8,6 +8,13 @@ export type TakeoverReceipt = {
   reason?: string;
   scope?: string;
   summary?: string;
+  action?: string;
+  goal?: string;
+  operation_id?: string;
+  operation_status?: string;
+  trace_id?: string;
+  run_id?: string;
+  output_kind?: string;
   validation_outcome?: string;
   remaining_uncertainty?: string;
   next_recommendation?: string;
@@ -19,6 +26,7 @@ export type TakeoverReceipt = {
   control_transfer_active?: boolean;
   revoked_control_transfer?: boolean;
   handback_required?: boolean;
+  live_action_executed?: boolean;
   recorded_ts?: number;
   action_feed_operation_ids?: string[];
   changed_artifacts?: string[];
@@ -53,9 +61,11 @@ export type TakeoverStatusSnapshot = {
   latest_control_transfer_receipt?: TakeoverReceipt;
   latest_panic_stop_receipt?: TakeoverReceipt;
   latest_handback_summary_receipt?: TakeoverReceipt;
+  latest_live_action_receipt?: TakeoverReceipt;
   panic_stop_ready?: boolean;
   handback_required?: boolean;
   handback_summary_ready?: boolean;
+  live_delegated_action_ready?: boolean;
   action_feed?: TakeoverActionFeed;
   deliverables?: {
     control_transfer_flow?: boolean;
@@ -63,6 +73,7 @@ export type TakeoverStatusSnapshot = {
     panic_stop?: boolean;
     handback_summary?: boolean;
     pilot_visibility?: boolean;
+    live_delegated_action_runtime?: boolean;
   };
   next_smallest_truthful_gap?: string;
 };
@@ -128,6 +139,13 @@ function parseReceipt(raw: unknown): TakeoverReceipt | undefined {
     reason: safeString(raw.reason) || undefined,
     scope: safeString(raw.scope) || undefined,
     summary: safeString(raw.summary) || undefined,
+    action: safeString(raw.action) || undefined,
+    goal: safeString(raw.goal) || undefined,
+    operation_id: safeString(raw.operation_id) || undefined,
+    operation_status: safeString(raw.operation_status) || undefined,
+    trace_id: safeString(raw.trace_id) || undefined,
+    run_id: safeString(raw.run_id) || undefined,
+    output_kind: safeString(raw.output_kind) || undefined,
     validation_outcome: safeString(raw.validation_outcome) || undefined,
     remaining_uncertainty: safeString(raw.remaining_uncertainty) || undefined,
     next_recommendation: safeString(raw.next_recommendation) || undefined,
@@ -139,6 +157,7 @@ function parseReceipt(raw: unknown): TakeoverReceipt | undefined {
     control_transfer_active: safeBoolean(raw.control_transfer_active),
     revoked_control_transfer: safeBoolean(raw.revoked_control_transfer),
     handback_required: safeBoolean(raw.handback_required),
+    live_action_executed: safeBoolean(raw.live_action_executed),
     recorded_ts: safeNumber(raw.recorded_ts, Number.NaN) || undefined,
     action_feed_operation_ids: safeStringArray(raw.action_feed_operation_ids),
     changed_artifacts: safeStringArray(raw.changed_artifacts),
@@ -205,9 +224,11 @@ export function parseTakeoverStatusSnapshot(raw: unknown): TakeoverStatusSnapsho
     latest_control_transfer_receipt: parseReceipt(raw.latest_control_transfer_receipt),
     latest_panic_stop_receipt: parseReceipt(raw.latest_panic_stop_receipt),
     latest_handback_summary_receipt: parseReceipt(raw.latest_handback_summary_receipt),
+    latest_live_action_receipt: parseReceipt(raw.latest_live_action_receipt),
     panic_stop_ready: safeBoolean(raw.panic_stop_ready),
     handback_required: safeBoolean(raw.handback_required),
     handback_summary_ready: safeBoolean(raw.handback_summary_ready),
+    live_delegated_action_ready: safeBoolean(raw.live_delegated_action_ready),
     action_feed: parseActionFeed(raw.action_feed),
     deliverables: {
       control_transfer_flow: safeBoolean(deliverables.control_transfer_flow),
@@ -215,6 +236,7 @@ export function parseTakeoverStatusSnapshot(raw: unknown): TakeoverStatusSnapsho
       panic_stop: safeBoolean(deliverables.panic_stop),
       handback_summary: safeBoolean(deliverables.handback_summary),
       pilot_visibility: safeBoolean(deliverables.pilot_visibility),
+      live_delegated_action_runtime: safeBoolean(deliverables.live_delegated_action_runtime),
     },
     next_smallest_truthful_gap: safeString(raw.next_smallest_truthful_gap) || undefined,
   };

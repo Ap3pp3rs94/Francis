@@ -69,6 +69,17 @@ _RULES: tuple[AuthorityRule, ...] = (
     ),
     AuthorityRule(
         family="takeover",
+        prefixes=("/takeover/delegated-action",),
+        required_actor="payload.actor",
+        required_scope="takeover.action.write",
+        approval_requirement="active Stage 9 control-transfer receipt required before delegated action execution",
+        receipt_behavior="stage9 takeover live-action receipt",
+        denial_behavior="api_permission_denied via permission_gate before delegated action execution",
+        governance_maturity="permission_gated",
+        notes="Delegated action is limited to allowlisted executor operations and does not run shell or grant authority.",
+    ),
+    AuthorityRule(
+        family="takeover",
         prefixes=("/takeover/handback-summary",),
         required_actor="payload.actor",
         required_scope="takeover.handback.write",

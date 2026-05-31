@@ -70,6 +70,16 @@ test("parseTakeoverStatusSnapshot preserves handback proof handles", () => {
       run_ids: ["run_alpha"],
       control_transferred_back: true,
     },
+    latest_live_action_receipt: {
+      kind: "francis.stage9.takeover.live_action_receipt",
+      receipt_id: "takeover_live_action_alpha",
+      session_id: "pilot_alpha",
+      control_transfer_receipt_id: "takeover_transfer_alpha",
+      action: "plan.create",
+      operation_id: "tsk_alpha",
+      trace_id: "trace_alpha",
+      run_id: "run_alpha",
+    },
     action_feed: {
       items: [
         {
@@ -91,8 +101,9 @@ test("parseTakeoverStatusSnapshot preserves handback proof handles", () => {
       panic_stop: true,
       handback_summary: true,
       pilot_visibility: true,
+      live_delegated_action_runtime: true,
     },
-    next_smallest_truthful_gap: "stage9_operator_surface_contract",
+    next_smallest_truthful_gap: "stage9_completion_review",
   });
 
   assert.equal(parsed.ok, true);
@@ -106,10 +117,14 @@ test("parseTakeoverStatusSnapshot preserves handback proof handles", () => {
   assert.equal(parsed.latest_handback_summary_receipt?.panic_stop_receipt_id, "takeover_panic_alpha");
   assert.equal(parsed.latest_handback_summary_receipt?.changed_artifacts?.[0], "D:/Francis/file.py");
   assert.equal(parsed.latest_handback_summary_receipt?.trace_ids?.[0], "trace_alpha");
+  assert.equal(parsed.latest_live_action_receipt?.receipt_id, "takeover_live_action_alpha");
+  assert.equal(parsed.latest_live_action_receipt?.operation_id, "tsk_alpha");
+  assert.equal(parsed.latest_live_action_receipt?.trace_id, "trace_alpha");
   assert.equal(parsed.action_feed?.items[0]?.id, "tsk_alpha");
   assert.equal(parsed.action_feed?.items[0]?.meta?.objective, "Advance pilot work");
   assert.equal(parsed.deliverables?.handback_summary, true);
-  assert.equal(parsed.next_smallest_truthful_gap, "stage9_operator_surface_contract");
+  assert.equal(parsed.deliverables?.live_delegated_action_runtime, true);
+  assert.equal(parsed.next_smallest_truthful_gap, "stage9_completion_review");
 });
 
 test("TakeoverClient.getStatus requests the bounded takeover status route", async () => {

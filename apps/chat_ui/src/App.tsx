@@ -7524,6 +7524,7 @@ function SystemPanel(props: {
   const latestTakeoverTransfer = takeoverStatus?.latest_control_transfer_receipt;
   const latestTakeoverPanic = takeoverStatus?.latest_panic_stop_receipt;
   const latestTakeoverHandback = takeoverStatus?.latest_handback_summary_receipt;
+  const latestTakeoverLiveAction = takeoverStatus?.latest_live_action_receipt;
   const takeoverStatusLabel = safeString(takeoverStatus?.status).trim() || (controlModeId === "pilot" ? "pilot_active" : "standby");
   const takeoverControlModeId = safeString(takeoverStatus?.control_mode?.id).trim();
   const takeoverControlModeLabel = safeString(takeoverStatus?.control_mode?.label).trim() || takeoverControlModeId || controlModeId;
@@ -7534,6 +7535,7 @@ function SystemPanel(props: {
   const takeoverSessionId =
     safeString(takeoverStatus?.active_session_id).trim() ||
     safeString(latestTakeoverHandback?.session_id).trim() ||
+    safeString(latestTakeoverLiveAction?.session_id).trim() ||
     safeString(latestTakeoverPanic?.session_id).trim() ||
     safeString(latestTakeoverTransfer?.session_id).trim();
   const pilotActive = Boolean(takeoverStatus?.control_transfer_active) || controlModeId === "pilot";
@@ -7543,10 +7545,14 @@ function SystemPanel(props: {
   const takeoverNextRecommendation = safeString(latestTakeoverHandback?.next_recommendation).trim();
   const takeoverProofReceipts = [
     { label: "transfer", id: safeString(latestTakeoverTransfer?.receipt_id).trim() },
+    { label: "live", id: safeString(latestTakeoverLiveAction?.receipt_id).trim() },
     { label: "panic", id: safeString(latestTakeoverPanic?.receipt_id).trim() },
     { label: "handback", id: safeString(latestTakeoverHandback?.receipt_id).trim() },
   ].filter((item) => item.id);
   const takeoverProofHandles = [
+    { label: "operation", id: safeString(latestTakeoverLiveAction?.operation_id).trim() },
+    { label: "trace", id: safeString(latestTakeoverLiveAction?.trace_id).trim() },
+    { label: "run", id: safeString(latestTakeoverLiveAction?.run_id).trim() },
     ...(latestTakeoverHandback?.trace_ids ?? []).map((id) => ({ label: "trace", id })),
     ...(latestTakeoverHandback?.run_ids ?? []).map((id) => ({ label: "run", id })),
     ...(latestTakeoverHandback?.changed_artifacts ?? []).map((id) => ({ label: "artifact", id })),

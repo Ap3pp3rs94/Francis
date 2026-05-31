@@ -9,12 +9,15 @@ from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPer
 from francis.takeover import (
     TAKEOVER_CONTROL_TRANSFER_SCOPE,
     TAKEOVER_HANDBACK_SUMMARY_SCOPE,
+    TAKEOVER_LIVE_ACTION_SCOPE,
     TAKEOVER_PANIC_STOP_SCOPE,
     read_takeover_control_transfer_receipts,
     read_takeover_handback_summary_receipts,
+    read_takeover_live_action_receipts,
     read_takeover_panic_stop_receipts,
     record_takeover_control_transfer,
     record_takeover_handback_summary,
+    record_takeover_live_action,
     record_takeover_panic_stop,
     takeover_action_feed,
     takeover_operator_surface_contract,
@@ -44,6 +47,15 @@ class TakeoverHandbackSummaryIn(BaseModel):
     validation_outcome: str = Field(default="", max_length=500)
     remaining_uncertainty: str = Field(default="", max_length=500)
     next_recommendation: str = Field(default="", max_length=500)
+    operation_limit: int = 10
+
+
+class TakeoverDelegatedActionIn(BaseModel):
+    actor: str = Field(default="", max_length=240)
+    reason: str = Field(default="takeover_delegated_action", max_length=500)
+    action: str = Field(default="plan.create", max_length=120)
+    goal: str = Field(default="", max_length=800)
+    mission_id: str = Field(default="", max_length=160)
     operation_limit: int = 10
 
 
@@ -159,6 +171,24 @@ def handback_summaries(limit: int = 20) -> dict[str, Any]:
     }
 
 
+@router.get("/delegated-action-receipts")
+def delegated_action_receipts(limit: int = 20) -> dict[str, Any]:
+    items = read_takeover_live_action_receipts(limit=limit)
+    return {
+        "ok": True,
+        "kind": "francis.stage9.takeover.live_action_receipts",
+        "source_id": "takeover",
+        "status": "ready" if items else "empty",
+        "items": items,
+        "count": len(items),
+        "reads_receipts": True,
+        "writes_receipts": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "next_smallest_truthful_gap": "stage9_completion_review" if items else "stage9_live_delegated_action_runtime",
+    }
+
+
 @router.post("/control-transfer")
 def control_transfer(request: Request, payload: TakeoverControlTransferIn) -> dict[str, Any]:
     route = "/takeover/control-transfer"
@@ -262,6 +292,63 @@ def handback_summary(request: Request, payload: TakeoverHandbackSummaryIn) -> di
             "grants_mutation_authority": False,
         },
         "next_smallest_truthful_gap": receipt.get("next_smallest_truthful_gap", "stage9_operator_surface_contract"),
+    }
+
+
+@router.post("/delegated-action")
+def delegated_action(request: Request, payload: TakeoverDelegatedActionIn) -> dict[str, Any]:
+    route = "/takeover/delegated-action"
+    permission = _write_permission(
+        payload.actor,
+        required_scope=TAKEOVER_LIVE_ACTION_SCOPE,
+        route=route,
+        method="POST",
+    )
+    if not permission.allowed:
+        return _permission_denied(
+            permission,
+            required_scope=TAKEOVER_LIVE_ACTION_SCOPE,
+            next_step="configure_takeover_action_write_scope_before_delegated_action",
+        )
+    receipt = record_takeover_live_action(
+        actor=payload.actor,
+        reason=payload.reason,
+        action=payload.action,
+        goal=payload.goal,
+        mission_id=payload.mission_id,
+        operation_limit=payload.operation_limit,
+    )
+    return {
+        "ok": bool(receipt.get("ok")),
+        "kind": "francis.stage9.takeover.live_action.record",
+        "status": "recorded" if receipt.get("receipt_id") else receipt.get("status", "blocked"),
+        "source_id": "takeover",
+        "receipt": receipt if receipt.get("receipt_id") else None,
+        "receipt_id": receipt.get("receipt_id", ""),
+        "session_id": receipt.get("session_id", ""),
+        "operation_id": receipt.get("operation_id", ""),
+        "operation_status": receipt.get("operation_status", ""),
+        "trace_id": receipt.get("trace_id", ""),
+        "run_id": receipt.get("run_id", ""),
+        "writes_receipt": bool(receipt.get("writes_receipt")),
+        "writes_tasks": bool(receipt.get("writes_tasks")),
+        "writes_memory": bool(receipt.get("writes_memory")),
+        "runs_executor_operation": bool(receipt.get("runs_executor_operation")),
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "required_scope": TAKEOVER_LIVE_ACTION_SCOPE,
+            "route": str(request.url.path),
+            "active_control_transfer_required": True,
+            "execution_still_uses_executor_governance": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": receipt.get("next_smallest_truthful_gap", "stage9_live_delegated_action_runtime"),
     }
 
 

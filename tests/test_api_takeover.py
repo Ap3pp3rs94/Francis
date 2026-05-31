@@ -108,6 +108,7 @@ def test_takeover_control_transfer_receipt_and_panic_stop_are_auditable(monkeypa
                 "codex.builder": [
                     "operations.write",
                     "takeover.control.write",
+                    "takeover.action.write",
                     "takeover.panic.write",
                     "takeover.handback.write",
                 ],
@@ -189,6 +190,56 @@ def test_takeover_control_transfer_receipt_and_panic_stop_are_auditable(monkeypa
     assert status["deliverables"]["live_action_feed"] is True
     assert status["deliverables"]["panic_stop"] is False
     assert status["deliverables"]["handback_summary"] is False
+    assert status["deliverables"]["live_delegated_action_runtime"] is False
+
+    live_action = client.post(
+        "/takeover/delegated-action",
+        json={
+            "actor": "codex.builder",
+            "reason": "run live takeover action token=liveactionreasonsecret123",
+            "goal": "Build a proof-backed takeover plan token=liveactiongoalsecret123",
+            "action": "plan.create",
+        },
+    )
+
+    assert live_action.status_code == 200
+    live_action_body = live_action.json()
+    assert live_action_body["ok"] is True
+    assert live_action_body["status"] == "recorded"
+    assert live_action_body["writes_receipt"] is True
+    assert live_action_body["writes_tasks"] is True
+    assert live_action_body["writes_memory"] is False
+    assert live_action_body["runs_executor_operation"] is True
+    assert live_action_body["runs_shell"] is False
+    assert live_action_body["runs_git"] is False
+    assert live_action_body["grants_execution_authority"] is False
+    assert live_action_body["grants_mutation_authority"] is False
+    assert live_action_body["session_id"] == transfer_body["session_id"]
+    assert live_action_body["operation_status"] == "succeeded"
+    assert str(live_action_body["trace_id"]).startswith("trace_")
+    assert str(live_action_body["run_id"]).startswith("run_")
+    assert live_action_body["next_smallest_truthful_gap"] == "stage9_completion_review"
+
+    live_action_receipt = live_action_body["receipt"]
+    assert live_action_receipt["kind"] == "francis.stage9.takeover.live_action_receipt"
+    assert live_action_receipt["control_transfer_receipt_id"] == transfer_body["receipt_id"]
+    assert live_action_receipt["operation_id"] == live_action_body["operation_id"]
+    assert live_action_receipt["action"] == "plan.create"
+    assert live_action_receipt["live_action_executed"] is True
+    assert live_action_receipt["output_kind"] == "plan.create.result"
+    assert live_action_receipt["governance"]["required_scope"] == "takeover.action.write"
+    assert live_action_receipt["governance"]["active_control_transfer_required"] is True
+    assert live_action_receipt["governance"]["action_allowlisted"] is True
+    assert live_action_receipt["governance"]["execution_still_uses_executor_governance"] is True
+    live_action_text = json.dumps(live_action_receipt, sort_keys=True)
+    assert "liveactionreasonsecret123" not in live_action_text
+    assert "liveactiongoalsecret123" not in live_action_text
+
+    live_status = client.get("/takeover/status").json()
+    assert live_status["control_transfer_active"] is True
+    assert live_status["live_delegated_action_ready"] is True
+    assert live_status["latest_live_action_receipt"]["receipt_id"] == live_action_body["receipt_id"]
+    assert live_status["deliverables"]["live_delegated_action_runtime"] is True
 
     panic = client.post(
         "/takeover/panic-stop",
@@ -208,7 +259,7 @@ def test_takeover_control_transfer_receipt_and_panic_stop_are_auditable(monkeypa
     assert panic_body["runs_shell"] is False
     assert panic_body["cancels_operations"] is True
     assert panic_body["operation_cancellation_reviewed"] is True
-    assert panic_body["operation_cancel_attempt_count"] == 1
+    assert panic_body["operation_cancel_attempt_count"] == 2
     assert panic_body["operation_cancelled_count"] == 1
     assert panic_body["grants_execution_authority"] is False
     assert panic_body["session_id"] == transfer_body["session_id"]
@@ -220,11 +271,14 @@ def test_takeover_control_transfer_receipt_and_panic_stop_are_auditable(monkeypa
     assert panic_receipt["revoked_control_transfer"] is True
     assert panic_receipt["cancels_operations"] is True
     assert panic_receipt["operation_cancellation_reviewed"] is True
-    assert panic_receipt["operation_cancel_attempt_count"] == 1
+    assert panic_receipt["operation_cancel_attempt_count"] == 2
     assert panic_receipt["operation_cancelled_count"] == 1
     assert panic_receipt["operation_cancel_results"][0]["operation_id"] == operation_id
     assert panic_receipt["operation_cancel_results"][0]["previous_status"] == "queued"
     assert panic_receipt["operation_cancel_results"][0]["cancelled"] is True
+    assert panic_receipt["operation_cancel_results"][1]["operation_id"] == live_action_body["operation_id"]
+    assert panic_receipt["operation_cancel_results"][1]["previous_status"] == "succeeded"
+    assert panic_receipt["operation_cancel_results"][1]["cancelled"] is False
     assert panic_receipt["governance"]["required_scope"] == "takeover.panic.write"
     assert panic_receipt["governance"]["revokes_pilot_control_mode"] is True
     assert panic_receipt["governance"]["cancels_only_control_transfer_action_feed_operations"] is True
@@ -241,6 +295,7 @@ def test_takeover_control_transfer_receipt_and_panic_stop_are_auditable(monkeypa
     assert final_status["latest_panic_stop_receipt"]["receipt_id"] == panic_body["receipt_id"]
     assert final_status["deliverables"]["panic_stop"] is True
     assert final_status["deliverables"]["handback_summary"] is False
+    assert final_status["deliverables"]["live_delegated_action_runtime"] is True
 
     handback = client.post(
         "/takeover/handback-summary",
@@ -287,9 +342,11 @@ def test_takeover_control_transfer_receipt_and_panic_stop_are_auditable(monkeypa
     assert handback_status["handback_summary_ready"] is True
     assert handback_status["latest_handback_summary_receipt"]["receipt_id"] == handback_body["receipt_id"]
     assert handback_status["deliverables"]["handback_summary"] is True
+    assert handback_status["deliverables"]["live_delegated_action_runtime"] is True
+    assert handback_status["latest_live_action_receipt"]["receipt_id"] == live_action_body["receipt_id"]
     assert handback_status["operator_surface_contract_ready"] is True
     assert handback_status["operator_surface_contract_route"] == "/takeover/operator-surface-contract"
-    assert handback_status["next_smallest_truthful_gap"] == "stage9_live_delegated_action_runtime"
+    assert handback_status["next_smallest_truthful_gap"] == "stage9_completion_review"
 
     surface_contract = client.get("/takeover/operator-surface-contract").json()
     assert surface_contract["ok"] is True
@@ -299,7 +356,10 @@ def test_takeover_control_transfer_receipt_and_panic_stop_are_auditable(monkeypa
     assert surface_contract["latest_control_transfer_receipt_id"] == transfer_body["receipt_id"]
     assert surface_contract["latest_panic_stop_receipt_id"] == panic_body["receipt_id"]
     assert surface_contract["latest_handback_summary_receipt_id"] == handback_body["receipt_id"]
+    assert surface_contract["latest_live_action_receipt_id"] == live_action_body["receipt_id"]
     assert surface_contract["routes"]["status"] == "/takeover/status"
+    assert surface_contract["routes"]["delegated_action"] == "/takeover/delegated-action"
+    assert surface_contract["routes"]["delegated_action_receipts"] == "/takeover/delegated-action-receipts"
     assert surface_contract["routes"]["panic_stop"] == "/takeover/panic-stop"
     assert surface_contract["routes"]["handback_summary"] == "/takeover/handback-summary"
     assert surface_contract["reads_receipts"] is True
@@ -312,7 +372,7 @@ def test_takeover_control_transfer_receipt_and_panic_stop_are_auditable(monkeypa
     assert surface_contract["grants_mutation_authority"] is False
     assert surface_contract["governance"]["read_only"] is True
     assert surface_contract["governance"]["surface_contract_only"] is True
-    assert surface_contract["next_smallest_truthful_gap"] == "stage9_live_delegated_action_runtime"
+    assert surface_contract["next_smallest_truthful_gap"] == "stage9_completion_review"
     checks = {item["id"]: item for item in surface_contract["checks"]}
     assert checks["stage8_closure_receipt_visible"]["passed"] is True
     assert checks["control_transfer_receipt_visible"]["passed"] is True
@@ -326,9 +386,12 @@ def test_takeover_control_transfer_receipt_and_panic_stop_are_auditable(monkeypa
     transfer_receipts = client.get("/takeover/control-transfer-receipts").json()
     panic_receipts = client.get("/takeover/panic-stop-receipts").json()
     handback_receipts = client.get("/takeover/handback-summaries").json()
+    live_action_receipts = client.get("/takeover/delegated-action-receipts").json()
     assert transfer_receipts["count"] == 1
     assert panic_receipts["count"] == 1
     assert handback_receipts["count"] == 1
+    assert live_action_receipts["count"] == 1
     assert transfer_receipts["items"][0]["receipt_id"] == transfer_body["receipt_id"]
     assert panic_receipts["items"][0]["receipt_id"] == panic_body["receipt_id"]
     assert handback_receipts["items"][0]["receipt_id"] == handback_body["receipt_id"]
+    assert live_action_receipts["items"][0]["receipt_id"] == live_action_body["receipt_id"]

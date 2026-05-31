@@ -47400,6 +47400,82 @@ Latest validation for Stage 9 Takeover panic operation cancellation:
   surface_status=ready;
   surface_next=stage9_live_delegated_action_runtime`.
 
+### 2026-05-31 - Stage 9 takeover live delegated action runs through executor
+
+Roadmap area: Stage 9 / Takeover (Pilot Mode), live delegated action runtime.
+
+Material change:
+
+- Added governed POST `/takeover/delegated-action`.
+- Added read-only GET `/takeover/delegated-action-receipts`.
+- A Takeover delegated action now requires an active control-transfer receipt,
+  `takeover.action.write`, dev/workstation/local/test environment posture, and
+  an allowlisted action. The initial allowlist is intentionally narrow:
+  `plan.create`.
+- The route creates an operation through the existing operations runtime, runs it
+  through the existing executor path, and writes a
+  `francis.stage9.takeover.live_action_receipt` with operation id, status,
+  trace id, run id, output kind, session id, and linked control-transfer
+  receipt id.
+- `/takeover/status` now exposes `latest_live_action_receipt`,
+  `live_delegated_action_ready`, and
+  `deliverables.live_delegated_action_runtime`.
+- Panic-stop cancellation now also accounts for live-action receipts from the
+  active Takeover session, while still staying bounded to receipted Takeover
+  operation ids.
+- The chat UI Takeover client preserves the live-action receipt fields, and the
+  ORB Takeover Feed includes the live-action receipt plus operation, trace, and
+  run handles in its proof chips.
+- When live delegated action runtime is present after the prior Stage 9 gates,
+  Takeover advances its next smallest truthful gap to
+  `stage9_completion_review`.
+- This does not grant shell, git, process-start, execution-authority, mutation-
+  authority, or stage-closure authority. The delegated action is still routed
+  through the existing executor governance path.
+
+Latest validation for Stage 9 Takeover live delegated action runtime:
+
+- `python -m pytest tests/test_api_takeover.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  tests/test_api_mutating_route_authority_matrix.py -q --tb=short --maxfail=1`
+  Result: `passed; 6 tests passed`
+- `python -m mypy src/francis/takeover.py
+  src/francis/api/routes/takeover.py
+  src/francis/api/mutation_authority_matrix.py`
+  Result: `passed`
+- `python -m ruff check src/francis/takeover.py
+  src/francis/api/routes/takeover.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_takeover.py
+  tests/test_api_contract_chat_ui.py
+  tests/test_api_mutating_route_authority_matrix.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/takeover.py
+  src/francis/api/routes/takeover.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_takeover.py
+  tests/test_api_contract_chat_ui.py
+  tests/test_api_mutating_route_authority_matrix.py`
+  Result: `passed; 6 files already formatted`
+- `node --test --experimental-strip-types src/takeover/index.test.ts`
+  Result: `passed; 2 tests passed`
+- `npm run test`
+  Result: `passed; 170 tests passed`
+- `npm run build`
+  Result: `passed`
+- Live local route/readback:
+  POST `/takeover/control-transfer`, POST `/takeover/delegated-action`, POST
+  `/takeover/panic-stop`, POST `/takeover/handback-summary`, GET
+  `/takeover/delegated-action-receipts`, and GET `/takeover/status`.
+  Result: `transfer_receipt_id=takeover_transfer_c5ed5bc205c0;
+  live_action_receipt_id=takeover_live_action_9c0138c55cd5;
+  operation_id=tsk_20260531_055055_3c5ee515;
+  operation_status=succeeded;
+  trace_id=trace_0f38699792644dd4;
+  run_id=run_1780206655_624a066b;
+  panic_attempt_count=6; panic_cancelled_count=0;
+  handback_receipt_id=takeover_handback_a8b79b765fd6;
+  receipt_count=1; live_ready=true;
+  status_next=stage9_completion_review`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
