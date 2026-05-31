@@ -49159,6 +49159,70 @@ Latest validation for Stage 13 anti-overclaim policy:
   enforces_runtime_claims=false; scores_model_output=false;
   changes_ui_confidence=false; writes_memory=false; runs_tools=false`.
 
+### 2026-05-31 - Stage 13 calibrated claim logic contract is inspectable
+
+Roadmap area: Stage 13 / Trust Calibration, calibrated claim logic.
+
+Material change:
+
+- Added read-only GET `/trust-calibration/calibrated-claim-logic`.
+- `/trust-calibration/status` now reports calibrated claim logic readiness after
+  the Stage 12 closure receipt, confidence rules contract, verification gate
+  contract, and anti-overclaim policy are readable.
+- The claim logic contract maps `confirmed`, `likely`, `uncertain`, and
+  `blocked` strengths to required inputs, allowed surface language, forbidden
+  surface language, UI state obligations, citation requirements, and missing
+  verification behavior.
+- The decision order preserves blocked states before progress claims, checks
+  authority and receipts before action claims, checks recency and conflicts
+  before confirmed claims, and requires missing verification to be named before
+  likely or uncertain language.
+- The decision table keeps current blocked readbacks and missing authority or
+  receipts as `blocked`, allows current receipt/readback plus no conflict as
+  `confirmed`, maps supporting evidence with missing verification to `likely`,
+  and maps stale/conflicting/missing evidence to `uncertain`.
+- This surface remains contract-only. It does not enforce runtime claims, score
+  model output, change UI confidence, write memory, write receipts, run tools,
+  run shell, run git, or grant authority.
+- `/trust-calibration/status` advances the next smallest truthful gap to
+  `stage13_runtime_claim_integration` after the calibrated claim logic contract
+  is ready.
+
+Latest validation for Stage 13 calibrated claim logic:
+
+- `python -m pytest tests/test_api_trust_calibration.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 3 passed`
+- `python -m mypy src/francis/trust_calibration.py
+  src/francis/api/routes/trust_calibration.py src/francis/api/app.py`
+  Result: `passed`
+- `python -m ruff check src/francis/trust_calibration.py
+  src/francis/api/routes/trust_calibration.py src/francis/api/app.py
+  tests/test_api_trust_calibration.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/trust_calibration.py
+  src/francis/api/routes/trust_calibration.py src/francis/api/app.py
+  tests/test_api_trust_calibration.py tests/test_api_contract_chat_ui.py`
+  Result: `passed; 5 files already formatted`
+- Live local TestClient route/readback against an isolated data root:
+  GET `/trust-calibration/calibrated-claim-logic` before Stage 12 closure,
+  write one Stage 12 Knowledge Fabric closure receipt fixture, GET
+  `/trust-calibration/status`, and GET
+  `/trust-calibration/calibrated-claim-logic`.
+  Result: `blocked_status=blocked; blocked_ready=false;
+  blocked_next=stage12_ledger_closure;
+  ready_status=stage13_calibrated_claim_logic_contract_ready;
+  ready_count=5; ready_next=stage13_runtime_claim_integration;
+  route=/trust-calibration/calibrated-claim-logic;
+  claim_logic_status=ready; claim_logic_ready=true; rule_count=4;
+  confirmed_ui_state=strong_signal_allowed_only_with_current_evidence;
+  likely_names_missing_verification=true;
+  blocked_decision_strength=blocked;
+  runtime_integration_status=contract_only_not_enforced;
+  enforces_runtime_claims=false; scores_model_output=false;
+  changes_ui_confidence=false; writes_memory=false; runs_tools=false`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

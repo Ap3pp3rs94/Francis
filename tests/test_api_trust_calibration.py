@@ -70,6 +70,7 @@ def test_trust_calibration_status_blocks_until_stage12_closure(monkeypatch, tmp_
     assert body["routes"]["confidence_rules_contract"] == "/trust-calibration/confidence-rules-contract"
     assert body["routes"]["verification_gate_contract"] == "/trust-calibration/verification-gate-contract"
     assert body["routes"]["anti_overclaim_policy"] == "/trust-calibration/anti-overclaim-policy"
+    assert body["routes"]["calibrated_claim_logic"] == "/trust-calibration/calibrated-claim-logic"
     assert body["routes"]["stage12_closure_readback"] == "/knowledge-fabric/stage-closure-decisions"
     assert body["governance"]["read_only"] is True
     assert body["governance"]["requires_stage12_ledger_closure"] is True
@@ -111,6 +112,20 @@ def test_trust_calibration_status_blocks_until_stage12_closure(monkeypatch, tmp_
     assert anti_overclaim["scores_model_output"] is False
     assert anti_overclaim["changes_ui_confidence"] is False
     assert anti_overclaim["next_smallest_truthful_gap"] == "stage12_ledger_closure"
+
+    calibrated = TestClient(create_app()).get("/trust-calibration/calibrated-claim-logic").json()
+    assert calibrated["status"] == "blocked"
+    assert calibrated["calibrated_claim_logic_ready"] is False
+    assert calibrated["anti_overclaim_policy_ready"] is False
+    assert calibrated["verification_gate_contract_ready"] is False
+    assert calibrated["confidence_rules_contract_ready"] is False
+    assert calibrated["stage12_closed_by_receipt"] is False
+    assert calibrated["claim_logic_rule_count"] == 4
+    assert calibrated["runtime_integration_status"] == "contract_only_not_enforced"
+    assert calibrated["enforces_runtime_claims"] is False
+    assert calibrated["scores_model_output"] is False
+    assert calibrated["changes_ui_confidence"] is False
+    assert calibrated["next_smallest_truthful_gap"] == "stage12_ledger_closure"
 
 
 def test_trust_calibration_confidence_rules_contract_ready_after_stage12_closure(
@@ -268,12 +283,66 @@ def test_trust_calibration_confidence_rules_contract_ready_after_stage12_closure
     assert policies["blocked_state_preservation"]["fallback_claim_strength"] == "blocked"
     assert policies["authority_claim_guard"]["required_gate"] == "authority_or_action_claim_gate"
 
+    calibrated = client.get("/trust-calibration/calibrated-claim-logic").json()
+    assert calibrated["ok"] is True
+    assert calibrated["kind"] == "francis.stage13.trust_calibration.calibrated_claim_logic"
+    assert calibrated["status"] == "ready"
+    assert calibrated["calibrated_claim_logic_ready"] is True
+    assert calibrated["anti_overclaim_policy_ready"] is True
+    assert calibrated["verification_gate_contract_ready"] is True
+    assert calibrated["confidence_rules_contract_ready"] is True
+    assert calibrated["stage12_closed_by_receipt"] is True
+    assert calibrated["stage12_latest_closure_receipt_id"] == "knowledge_fabric_stage12_closure_tc_test"
+    assert calibrated["claim_logic_rule_count"] == 4
+    assert calibrated["decision_order"] == [
+        "blocked_state_preservation_before_progress",
+        "authority_and_receipt_gates_before_action_claims",
+        "recency_and_conflict_checks_before_confirmed_claims",
+        "evidence_scope_match_before_strong_language",
+        "missing_verification_named_before_likely_or_uncertain_language",
+    ]
+    assert "orb" in calibrated["surface_targets"]
+    assert "hud" in calibrated["surface_targets"]
+    assert "chat_ui" in calibrated["surface_targets"]
+    assert calibrated["runtime_integration_status"] == "contract_only_not_enforced"
+    assert calibrated["writes_memory"] is False
+    assert calibrated["writes_receipts"] is False
+    assert calibrated["scores_model_output"] is False
+    assert calibrated["changes_ui_confidence"] is False
+    assert calibrated["enforces_runtime_claims"] is False
+    assert calibrated["runs_tools"] is False
+    assert calibrated["runs_shell"] is False
+    assert calibrated["runs_git"] is False
+    assert calibrated["grants_execution_authority"] is False
+    assert calibrated["grants_mutation_authority"] is False
+    assert calibrated["governance"]["contract_only"] is True
+    assert calibrated["governance"]["does_not_enforce_runtime_claims"] is True
+    assert calibrated["next_smallest_truthful_gap"] == "stage13_runtime_claim_integration"
+
+    claim_rules = {item["claim_strength"]: item for item in calibrated["claim_logic_rules"]}
+    assert set(claim_rules) == {"confirmed", "likely", "uncertain", "blocked"}
+    assert claim_rules["confirmed"]["ui_state"] == "strong_signal_allowed_only_with_current_evidence"
+    assert claim_rules["confirmed"]["must_cite"] is True
+    assert "confirmed" in claim_rules["likely"]["forbidden_surface_language"]
+    assert claim_rules["likely"]["must_name_missing_verification"] is True
+    assert "safe_to_advance" in claim_rules["uncertain"]["forbidden_surface_language"]
+    assert claim_rules["blocked"]["ui_state"] == "blocked_signal_required"
+    assert claim_rules["blocked"]["must_cite"] is True
+
+    decision_table = {item["condition"]: item for item in calibrated["decision_table"]}
+    assert decision_table["current_readback_reports_blocked"]["claim_strength"] == "blocked"
+    assert decision_table["authority_or_required_receipt_missing"]["claim_strength"] == "blocked"
+    assert decision_table["current_receipt_or_readback_and_no_conflict"]["claim_strength"] == "confirmed"
+    assert decision_table["supporting_evidence_with_missing_verification"]["claim_strength"] == "likely"
+    assert decision_table["stale_or_conflicting_or_missing_evidence"]["claim_strength"] == "uncertain"
+
     status = client.get("/trust-calibration/status").json()
-    assert status["status"] == "stage13_anti_overclaim_policy_ready"
+    assert status["status"] == "stage13_calibrated_claim_logic_contract_ready"
     assert status["stage12_closed_by_receipt"] is True
     assert status["confidence_rules_contract_ready"] is True
     assert status["verification_gates_ready"] is True
     assert status["anti_overclaim_policy_ready"] is True
-    assert status["ready_count"] == 4
+    assert status["calibrated_claim_logic_ready"] is True
+    assert status["ready_count"] == 5
     assert status["required_count"] == 5
-    assert status["next_smallest_truthful_gap"] == "stage13_calibrated_claim_logic"
+    assert status["next_smallest_truthful_gap"] == "stage13_runtime_claim_integration"

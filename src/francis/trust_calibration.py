@@ -9,6 +9,7 @@ TRUST_CALIBRATION_STATUS_KIND = "francis.stage13.trust_calibration.status"
 TRUST_CALIBRATION_CONFIDENCE_RULES_CONTRACT_KIND = "francis.stage13.trust_calibration.confidence_rules_contract"
 TRUST_CALIBRATION_VERIFICATION_GATE_CONTRACT_KIND = "francis.stage13.trust_calibration.verification_gate_contract"
 TRUST_CALIBRATION_ANTI_OVERCLAIM_POLICY_KIND = "francis.stage13.trust_calibration.anti_overclaim_policy"
+TRUST_CALIBRATION_CALIBRATED_CLAIM_LOGIC_KIND = "francis.stage13.trust_calibration.calibrated_claim_logic"
 
 
 def trust_calibration_status_snapshot() -> dict[str, Any]:
@@ -20,6 +21,8 @@ def trust_calibration_status_snapshot() -> dict[str, Any]:
     verification_gates_ready = bool(verification_gates.get("verification_gate_contract_ready"))
     anti_overclaim_policy = trust_calibration_anti_overclaim_policy()
     anti_overclaim_policy_ready = bool(anti_overclaim_policy.get("anti_overclaim_policy_ready"))
+    calibrated_claim_logic = trust_calibration_calibrated_claim_logic()
+    calibrated_claim_logic_ready = bool(calibrated_claim_logic.get("calibrated_claim_logic_ready"))
     deliverables = [
         _deliverable(
             "stage12_ledger_closure_backstop",
@@ -52,8 +55,8 @@ def trust_calibration_status_snapshot() -> dict[str, Any]:
         _deliverable(
             "calibrated_claim_logic",
             "Runtime claim logic maps evidence strength to calibrated wording",
-            False,
-            "pending",
+            calibrated_claim_logic_ready,
+            "ready" if calibrated_claim_logic_ready else "pending",
             "stage13_calibrated_claim_logic",
         ),
     ]
@@ -63,7 +66,15 @@ def trust_calibration_status_snapshot() -> dict[str, Any]:
         "kind": TRUST_CALIBRATION_STATUS_KIND,
         "stage": STAGE13_TRUST_CALIBRATION_STAGE,
         "source_id": "trust_calibration",
-        "status": "stage13_anti_overclaim_policy_ready"
+        "status": "stage13_calibrated_claim_logic_contract_ready"
+        if (
+            stage12_closed
+            and confidence_rules_ready
+            and verification_gates_ready
+            and anti_overclaim_policy_ready
+            and calibrated_claim_logic_ready
+        )
+        else "stage13_anti_overclaim_policy_ready"
         if stage12_closed and confidence_rules_ready and verification_gates_ready and anti_overclaim_policy_ready
         else "stage13_verification_gate_contract_ready"
         if stage12_closed and confidence_rules_ready and verification_gates_ready
@@ -75,7 +86,7 @@ def trust_calibration_status_snapshot() -> dict[str, Any]:
         "confidence_rules_contract_ready": confidence_rules_ready,
         "verification_gates_ready": verification_gates_ready,
         "anti_overclaim_policy_ready": anti_overclaim_policy_ready,
-        "calibrated_claim_logic_ready": False,
+        "calibrated_claim_logic_ready": calibrated_claim_logic_ready,
         "deliverables": deliverables,
         "ready_count": ready_count,
         "required_count": len(deliverables),
@@ -84,10 +95,19 @@ def trust_calibration_status_snapshot() -> dict[str, Any]:
             "confidence_rules_contract": "/trust-calibration/confidence-rules-contract",
             "verification_gate_contract": "/trust-calibration/verification-gate-contract",
             "anti_overclaim_policy": "/trust-calibration/anti-overclaim-policy",
+            "calibrated_claim_logic": "/trust-calibration/calibrated-claim-logic",
             "stage12_closure_readback": "/knowledge-fabric/stage-closure-decisions",
         },
         "governance": _trust_calibration_governance(),
-        "next_smallest_truthful_gap": "stage13_calibrated_claim_logic"
+        "next_smallest_truthful_gap": "stage13_runtime_claim_integration"
+        if (
+            stage12_closed
+            and confidence_rules_ready
+            and verification_gates_ready
+            and anti_overclaim_policy_ready
+            and calibrated_claim_logic_ready
+        )
+        else "stage13_calibrated_claim_logic"
         if stage12_closed and confidence_rules_ready and verification_gates_ready and anti_overclaim_policy_ready
         else "stage13_anti_overclaim_policy"
         if stage12_closed and confidence_rules_ready and verification_gates_ready
@@ -459,6 +479,201 @@ def trust_calibration_anti_overclaim_policy() -> dict[str, Any]:
         if gates_ready
         else "stage13_verification_gate_contract"
         if confidence_rules_ready
+        else "stage12_ledger_closure",
+    }
+
+
+def trust_calibration_calibrated_claim_logic() -> dict[str, Any]:
+    anti_overclaim = trust_calibration_anti_overclaim_policy()
+    policy_ready = bool(anti_overclaim.get("anti_overclaim_policy_ready"))
+    gates_ready = bool(anti_overclaim.get("verification_gate_contract_ready"))
+    confidence_rules_ready = bool(anti_overclaim.get("confidence_rules_contract_ready"))
+    stage12_closed = bool(anti_overclaim.get("stage12_closed_by_receipt"))
+    claim_logic_rules = [
+        {
+            "claim_strength": "confirmed",
+            "allowed_when": [
+                "current_direct_readback_or_explicit_receipt_exists",
+                "claim_scope_matches_evidence_scope",
+                "recency_readback_is_current",
+                "no_conflicting_current_evidence_is_known",
+            ],
+            "required_inputs": [
+                "current_route_readback_or_explicit_receipt",
+                "source_route_or_receipt_id",
+                "recency_readback",
+                "conflict_check",
+            ],
+            "allowed_surface_language": [
+                "confirmed",
+                "current_readback_shows",
+                "receipt_records",
+            ],
+            "forbidden_surface_language": [
+                "probably_done",
+                "should_be_done",
+                "assumed_confirmed",
+            ],
+            "ui_state": "strong_signal_allowed_only_with_current_evidence",
+            "must_cite": True,
+            "must_name_missing_verification": False,
+        },
+        {
+            "claim_strength": "likely",
+            "allowed_when": [
+                "supporting_evidence_exists",
+                "one_or_more_verification_inputs_are_incomplete",
+                "no_conflicting_current_evidence_is_known",
+            ],
+            "required_inputs": [
+                "supporting_evidence",
+                "missing_verification_list",
+                "conflict_check",
+            ],
+            "allowed_surface_language": [
+                "likely",
+                "appears",
+                "based_on_available_evidence",
+            ],
+            "forbidden_surface_language": [
+                "confirmed",
+                "closed",
+                "guaranteed",
+            ],
+            "ui_state": "cautious_signal_only",
+            "must_cite": True,
+            "must_name_missing_verification": True,
+        },
+        {
+            "claim_strength": "uncertain",
+            "allowed_when": [
+                "evidence_is_missing",
+                "evidence_is_stale",
+                "evidence_is_conflicting",
+                "intent_or_scope_is_ambiguous",
+            ],
+            "required_inputs": [
+                "uncertainty_reason",
+                "next_bounded_verification",
+            ],
+            "allowed_surface_language": [
+                "uncertain",
+                "not_enough_current_evidence",
+                "needs_verification",
+            ],
+            "forbidden_surface_language": [
+                "done",
+                "confirmed",
+                "safe_to_advance",
+            ],
+            "ui_state": "neutral_or_attention_signal",
+            "must_cite": False,
+            "must_name_missing_verification": True,
+        },
+        {
+            "claim_strength": "blocked",
+            "allowed_when": [
+                "required_authority_is_absent",
+                "required_receipt_or_gate_is_missing",
+                "safe_execution_precondition_is_not_met",
+                "current_readback_reports_blocked",
+            ],
+            "required_inputs": [
+                "blocker_id_or_missing_scope",
+                "blocked_state_readback",
+                "next_smallest_truthful_gap",
+            ],
+            "allowed_surface_language": [
+                "blocked",
+                "cannot_claim_done",
+                "requires_receipt_or_authority",
+            ],
+            "forbidden_surface_language": [
+                "in_progress_as_if_unblocked",
+                "approved",
+                "ready_to_close",
+            ],
+            "ui_state": "blocked_signal_required",
+            "must_cite": True,
+            "must_name_missing_verification": True,
+        },
+    ]
+    return {
+        "ok": True,
+        "kind": TRUST_CALIBRATION_CALIBRATED_CLAIM_LOGIC_KIND,
+        "stage": STAGE13_TRUST_CALIBRATION_STAGE,
+        "source_id": "trust_calibration",
+        "status": "ready" if policy_ready else "blocked",
+        "calibrated_claim_logic_ready": policy_ready,
+        "anti_overclaim_policy_ready": policy_ready,
+        "verification_gate_contract_ready": gates_ready,
+        "confidence_rules_contract_ready": confidence_rules_ready,
+        "stage12_closed_by_receipt": stage12_closed,
+        "stage12_latest_closure_receipt_id": _safe_text(anti_overclaim.get("stage12_latest_closure_receipt_id")),
+        "claim_logic_rules": claim_logic_rules,
+        "claim_logic_rule_count": len(claim_logic_rules),
+        "decision_order": [
+            "blocked_state_preservation_before_progress",
+            "authority_and_receipt_gates_before_action_claims",
+            "recency_and_conflict_checks_before_confirmed_claims",
+            "evidence_scope_match_before_strong_language",
+            "missing_verification_named_before_likely_or_uncertain_language",
+        ],
+        "decision_table": [
+            {
+                "condition": "current_readback_reports_blocked",
+                "claim_strength": "blocked",
+                "surface_obligation": "preserve_blocked_state_and_name_next_gap",
+            },
+            {
+                "condition": "authority_or_required_receipt_missing",
+                "claim_strength": "blocked",
+                "surface_obligation": "state_missing_authority_or_receipt",
+            },
+            {
+                "condition": "current_receipt_or_readback_and_no_conflict",
+                "claim_strength": "confirmed",
+                "surface_obligation": "cite_current_evidence",
+            },
+            {
+                "condition": "supporting_evidence_with_missing_verification",
+                "claim_strength": "likely",
+                "surface_obligation": "name_missing_verification",
+            },
+            {
+                "condition": "stale_or_conflicting_or_missing_evidence",
+                "claim_strength": "uncertain",
+                "surface_obligation": "state_uncertainty_and_next_check",
+            },
+        ],
+        "surface_targets": [
+            "missions",
+            "handbacks",
+            "away_reports",
+            "lens_cues",
+            "retrieval_backed_claims",
+            "capability_promotion",
+            "incident_handling",
+            "orb",
+            "hud",
+            "chat_ui",
+        ],
+        "runtime_integration_status": "contract_only_not_enforced",
+        "writes_memory": False,
+        "writes_receipts": False,
+        "scores_model_output": False,
+        "changes_ui_confidence": False,
+        "enforces_runtime_claims": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": _trust_calibration_governance(),
+        "next_smallest_truthful_gap": "stage13_runtime_claim_integration"
+        if policy_ready
+        else "stage13_calibrated_claim_logic"
+        if gates_ready
         else "stage12_ledger_closure",
     }
 
