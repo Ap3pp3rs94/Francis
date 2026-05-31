@@ -12,6 +12,7 @@ STAGE12_KNOWLEDGE_FABRIC_STAGE = "Stage 12 / Knowledge Fabric"
 KNOWLEDGE_FABRIC_STATUS_KIND = "francis.stage12.knowledge_fabric.status"
 KNOWLEDGE_FABRIC_ARTIFACT_INDEX_CONTRACT_KIND = "francis.stage12.knowledge_fabric.artifact_index_contract"
 KNOWLEDGE_FABRIC_ARTIFACT_INDEX_PROJECTION_KIND = "francis.stage12.knowledge_fabric.artifact_index_projection"
+KNOWLEDGE_FABRIC_RETRIEVAL_PREVIEW_KIND = "francis.stage12.knowledge_fabric.retrieval_preview"
 
 
 def knowledge_fabric_status_snapshot() -> dict[str, Any]:
@@ -21,6 +22,8 @@ def knowledge_fabric_status_snapshot() -> dict[str, Any]:
     artifact_contract_ready = bool(artifact_contract.get("artifact_index_contract_ready"))
     artifact_projection = knowledge_fabric_artifact_index_projection(limit=1, memory_limit=5, ledger_limit=5)
     artifact_projection_ready = bool(artifact_projection.get("artifact_index_projection_ready"))
+    retrieval_preview = knowledge_fabric_retrieval_preview(query="", limit=1, memory_limit=5, ledger_limit=5)
+    retrieval_layer_ready = bool(retrieval_preview.get("retrieval_layer_ready"))
     deliverables = [
         _deliverable(
             "stage11_ledger_closure_backstop",
@@ -46,8 +49,8 @@ def knowledge_fabric_status_snapshot() -> dict[str, Any]:
         _deliverable(
             "retrieval_layer",
             "Retrieval can return bounded local evidence references",
-            False,
-            "pending",
+            retrieval_layer_ready,
+            "ready" if retrieval_layer_ready else "pending",
             "stage12_retrieval_layer",
         ),
         _deliverable(
@@ -71,7 +74,9 @@ def knowledge_fabric_status_snapshot() -> dict[str, Any]:
         "kind": KNOWLEDGE_FABRIC_STATUS_KIND,
         "stage": STAGE12_KNOWLEDGE_FABRIC_STAGE,
         "source_id": "knowledge_fabric",
-        "status": "stage12_artifact_index_projection_ready"
+        "status": "stage12_retrieval_layer_ready"
+        if stage11_closed and artifact_contract_ready and artifact_projection_ready and retrieval_layer_ready
+        else "stage12_artifact_index_projection_ready"
         if stage11_closed and artifact_contract_ready and artifact_projection_ready
         else "stage12_artifact_index_contract_ready"
         if stage11_closed and artifact_contract_ready
@@ -82,7 +87,7 @@ def knowledge_fabric_status_snapshot() -> dict[str, Any]:
         "artifact_index_projection_ready": artifact_projection_ready,
         "artifact_index_projection_count": _safe_int(artifact_projection.get("total")),
         "artifact_indexing_active": False,
-        "retrieval_layer_ready": False,
+        "retrieval_layer_ready": retrieval_layer_ready,
         "local_evidence_citations_ready": False,
         "retention_model_ready": False,
         "deliverables": deliverables,
@@ -92,6 +97,7 @@ def knowledge_fabric_status_snapshot() -> dict[str, Any]:
             "status": "/knowledge-fabric/status",
             "artifact_index_contract": "/knowledge-fabric/artifact-index-contract",
             "artifact_index_projection": "/knowledge-fabric/artifact-index-projection",
+            "retrieval_preview": "/knowledge-fabric/retrieval-preview",
             "memory_timeline": "/memory/timeline/list",
             "artifact_inspection": "/artifacts/inspect",
             "continuity_ledger": "/continuity/ledger",
@@ -104,11 +110,96 @@ def knowledge_fabric_status_snapshot() -> dict[str, Any]:
             "does_not_replicate_data": True,
             "does_not_grant_authority": True,
         },
-        "next_smallest_truthful_gap": "stage12_retrieval_layer"
+        "next_smallest_truthful_gap": "stage12_local_evidence_citation_surface"
+        if stage11_closed and artifact_contract_ready and artifact_projection_ready and retrieval_layer_ready
+        else "stage12_retrieval_layer"
         if stage11_closed and artifact_contract_ready and artifact_projection_ready
         else "stage12_artifact_index_projection"
         if stage11_closed and artifact_contract_ready
         else "stage11_ledger_closure",
+    }
+
+
+def knowledge_fabric_retrieval_preview(
+    *,
+    query: Any = "",
+    limit: int = 10,
+    memory_limit: int = 100,
+    ledger_limit: int = 100,
+) -> dict[str, Any]:
+    safe_query = _redact_text(query)[:500]
+    safe_limit = _safe_limit(limit, default=10)
+    projection = knowledge_fabric_artifact_index_projection(
+        limit=max(safe_limit, 50),
+        memory_limit=memory_limit,
+        ledger_limit=ledger_limit,
+    )
+    if not bool(projection.get("artifact_index_projection_ready")):
+        return {
+            "ok": True,
+            "kind": KNOWLEDGE_FABRIC_RETRIEVAL_PREVIEW_KIND,
+            "stage": STAGE12_KNOWLEDGE_FABRIC_STAGE,
+            "source_id": "knowledge_fabric",
+            "status": "blocked",
+            "query": safe_query,
+            "retrieval_layer_ready": False,
+            "stage11_closed_by_receipt": bool(projection.get("stage11_closed_by_receipt")),
+            "items": [],
+            "citations": [],
+            "total": 0,
+            "limit": safe_limit,
+            "truncated": False,
+            "retrieval_mode": "bounded_lexical_local_citation_preview",
+            "uses_embeddings": False,
+            "uses_model": False,
+            "writes_memory": False,
+            "writes_index": False,
+            "scans_files": False,
+            "replicates_data": False,
+            "grants_authority": False,
+            "governance": _retrieval_preview_governance(),
+            "next_smallest_truthful_gap": _safe_text(projection.get("next_smallest_truthful_gap"))
+            or "stage12_artifact_index_projection",
+        }
+
+    terms = _query_terms(safe_query)
+    candidates = [_scored_retrieval_item(item, terms=terms) for item in _as_list(projection.get("citations"))]
+    candidates = [item for item in candidates if item and (not terms or int(item.get("match_score") or 0) > 0)]
+    candidates.sort(
+        key=lambda item: (
+            _safe_int(item.get("match_score")),
+            _safe_int(item.get("observed_ts")),
+            _safe_text(item.get("reference_id")),
+        ),
+        reverse=True,
+    )
+    page = candidates[:safe_limit]
+    return {
+        "ok": True,
+        "kind": KNOWLEDGE_FABRIC_RETRIEVAL_PREVIEW_KIND,
+        "stage": STAGE12_KNOWLEDGE_FABRIC_STAGE,
+        "source_id": "knowledge_fabric",
+        "status": "ready" if page else "empty",
+        "query": safe_query,
+        "terms": terms,
+        "retrieval_layer_ready": True,
+        "stage11_closed_by_receipt": bool(projection.get("stage11_closed_by_receipt")),
+        "items": page,
+        "citations": page,
+        "total": len(candidates),
+        "limit": safe_limit,
+        "truncated": len(candidates) > len(page),
+        "retrieval_mode": "bounded_lexical_local_citation_preview",
+        "projection_total": _safe_int(projection.get("total")),
+        "uses_embeddings": False,
+        "uses_model": False,
+        "writes_memory": False,
+        "writes_index": False,
+        "scans_files": False,
+        "replicates_data": False,
+        "grants_authority": False,
+        "governance": _retrieval_preview_governance(),
+        "next_smallest_truthful_gap": "stage12_local_evidence_citation_surface",
     }
 
 
@@ -535,6 +626,54 @@ def _artifact_projection_governance() -> dict[str, Any]:
         "does_not_replicate_data": True,
         "grants_authority": False,
     }
+
+
+def _retrieval_preview_governance() -> dict[str, Any]:
+    return {
+        "read_only": True,
+        "requires_artifact_index_projection": True,
+        "local_evidence_only": True,
+        "bounded_lexical_retrieval_only": True,
+        "does_not_use_embeddings": True,
+        "does_not_call_model": True,
+        "does_not_write_index": True,
+        "does_not_write_memory": True,
+        "does_not_scan_files": True,
+        "does_not_replicate_data": True,
+        "grants_authority": False,
+    }
+
+
+def _query_terms(query: str) -> list[str]:
+    terms: list[str] = []
+    current: list[str] = []
+    for char in query.lower():
+        if char.isalnum() or char in {"_", "-"}:
+            current.append(char)
+            continue
+        if current:
+            term = "".join(current).strip("-_")
+            if len(term) >= 2 and term not in terms:
+                terms.append(term)
+            current = []
+    if current:
+        term = "".join(current).strip("-_")
+        if len(term) >= 2 and term not in terms:
+            terms.append(term)
+    return terms[:12]
+
+
+def _scored_retrieval_item(item: Any, *, terms: list[str]) -> dict[str, Any]:
+    if not isinstance(item, dict):
+        return {}
+    haystack = json.dumps(item, ensure_ascii=False, sort_keys=True, default=str).lower()
+    matched_terms = [term for term in terms if term in haystack]
+    score = len(matched_terms)
+    out = dict(item)
+    out["match_score"] = score
+    out["matched_terms"] = matched_terms
+    out["retrieval_mode"] = "bounded_lexical_local_citation_preview"
+    return out
 
 
 def _count_by(items: list[dict[str, Any]], key: str) -> dict[str, int]:

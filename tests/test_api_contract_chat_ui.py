@@ -291,5 +291,6 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("GET", "/knowledge-fabric/status"),
         ("GET", "/knowledge-fabric/artifact-index-contract"),
         ("GET", "/knowledge-fabric/artifact-index-projection"),
+        ("GET", "/knowledge-fabric/retrieval-preview"),
     ]
     _assert_has_endpoints(routes, endpoints)

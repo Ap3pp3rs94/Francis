@@ -48720,6 +48720,57 @@ Latest validation for Stage 12 artifact index projection:
   status_status=stage12_artifact_index_projection_ready;
   status_projection_ready=true; status_next=stage12_retrieval_layer`.
 
+### 2026-05-31 - Stage 12 retrieval preview returns bounded local citations
+
+Roadmap area: Stage 12 / Knowledge Fabric, retrieval layer over local evidence
+citations.
+
+Material change:
+
+- Added read-only GET `/knowledge-fabric/retrieval-preview`.
+- Retrieval preview is blocked until the artifact-index projection is ready.
+- Retrieval uses bounded lexical matching over projected local citations from
+  the memory timeline and continuity ledger.
+- Results preserve citation fields, trace lineage, retention metadata,
+  provenance, match score, and matched query terms.
+- `/knowledge-fabric/status` now reports `stage12_retrieval_layer_ready` and
+  advances the next smallest truthful gap to
+  `stage12_local_evidence_citation_surface`.
+- The preview does not use embeddings, call a model, write memory, write an
+  index, scan files, replicate data, or grant authority.
+
+Latest validation for Stage 12 retrieval preview:
+
+- `python -m pytest tests/test_api_knowledge_fabric.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 5 passed`
+- `python -m mypy src/francis/knowledge_fabric.py
+  src/francis/api/routes/knowledge_fabric.py src/francis/api/app.py`
+  Result: `passed`
+- `python -m ruff check src/francis/knowledge_fabric.py
+  src/francis/api/routes/knowledge_fabric.py src/francis/api/app.py
+  tests/test_api_knowledge_fabric.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/knowledge_fabric.py
+  src/francis/api/routes/knowledge_fabric.py src/francis/api/app.py
+  tests/test_api_knowledge_fabric.py tests/test_api_contract_chat_ui.py`
+  Result: `passed; 5 files already formatted`
+- Live local TestClient route/readback against an isolated data root:
+  write a Stage 11 closure receipt fixture, write one memory timeline trace
+  event, append one continuity ledger trace event, GET
+  `/knowledge-fabric/retrieval-preview?query=ledger`, and GET
+  `/knowledge-fabric/status`.
+  Result: `retrieval_status=ready; retrieval_ready=true;
+  retrieval_total=1; terms=["ledger"];
+  first_source_route=/continuity/ledger;
+  first_reference_id=trace-ledger-retrieval; uses_embeddings=false;
+  uses_model=false; writes_memory=false; writes_index=false;
+  scans_files=false; replicates_data=false; grants_authority=false;
+  status_status=stage12_retrieval_layer_ready;
+  status_retrieval_ready=true;
+  status_next=stage12_local_evidence_citation_surface`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
