@@ -46539,6 +46539,54 @@ Latest validation for Stage 7 top-level closure projection:
   the closure decision readback also reported
   `stage7_closed_by_receipt=true` and `latest_decision=close_stage7`.
 
+### 2026-05-30 - Stage 8 executor substrate starts read-only
+
+Roadmap area: Stage 8 / Executor Substrate, first safe-hands posture contract.
+
+Material change:
+
+- Added read-only Stage 8 executor substrate status at
+  `/executor/substrate/status`.
+- The status route requires the Stage 7 ledger-closure receipt before reporting
+  `status=substrate_contract_ready`; otherwise it reports
+  `status=awaiting_stage7_ledger_closure`.
+- The route inventories the current executor substrate against the canonical
+  Stage 8 deliverables: execution toolbelt inventory, allowlist/policy filters,
+  branch-first workflows, leases/idempotency, and verification hooks.
+- The route reports current readiness truthfully: Stage 7 closure, toolbelt
+  inventory, and allowlist/policy filters are ready; branch-first workflows,
+  leases/idempotency, and verification hooks remain incomplete.
+- The route is strictly read-only. It does not write tasks, write receipts,
+  write memory, run tools, run shell commands, run git, start processes, grant
+  execution authority, or grant mutation authority.
+- Live local readback after the Stage 7 closure receipt reports
+  `status=substrate_contract_ready`, `stage7_closed_by_receipt=true`,
+  `ready_count=3`, `required_count=6`, `stage8_done_ready=false`, and
+  `next_smallest_truthful_gap=stage8_executor_toolbelt_allowlist_review`.
+
+Latest validation for Stage 8 executor substrate start:
+
+- `python -m pytest tests/test_api_executor_substrate.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 3 passed`
+- `python -m mypy src/francis/executor_substrate.py
+  src/francis/api/routes/executor_substrate.py src/francis/api/app.py`
+  Result: `passed`
+- `python -m ruff check src/francis/executor_substrate.py
+  src/francis/api/routes/executor_substrate.py src/francis/api/app.py
+  tests/test_api_executor_substrate.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/executor_substrate.py
+  src/francis/api/routes/executor_substrate.py src/francis/api/app.py
+  tests/test_api_executor_substrate.py tests/test_api_contract_chat_ui.py`
+  Result: `passed; 5 files already formatted`
+- Live local readback:
+  `/executor/substrate/status`.
+  Result: `status=substrate_contract_ready; stage7_closed_by_receipt=true;
+  ready_count=3; required_count=6; stage8_done_ready=false;
+  next_smallest_truthful_gap=stage8_executor_toolbelt_allowlist_review`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
