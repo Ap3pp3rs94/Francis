@@ -80,6 +80,17 @@ _RULES: tuple[AuthorityRule, ...] = (
     ),
     AuthorityRule(
         family="takeover",
+        prefixes=("/takeover/stage-closure-decision",),
+        required_actor="payload.actor",
+        required_scope="takeover.stage9.closure.write",
+        approval_requirement="this is the Stage 9 operator closure decision route after completion review readiness",
+        receipt_behavior="stage9 takeover operator stage closure decision receipt",
+        denial_behavior="api_permission_denied via permission_gate before stage closure receipt write",
+        governance_maturity="permission_gated",
+        notes="Closure receipt does not mutate runtime stage state or grant execution authority.",
+    ),
+    AuthorityRule(
+        family="takeover",
         prefixes=("/takeover/handback-summary",),
         required_actor="payload.actor",
         required_scope="takeover.handback.write",

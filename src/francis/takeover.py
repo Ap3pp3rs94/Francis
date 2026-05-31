@@ -23,11 +23,13 @@ TAKEOVER_PANIC_STOP_RECEIPT_KIND = "francis.stage9.takeover.panic_stop_receipt"
 TAKEOVER_HANDBACK_SUMMARY_RECEIPT_KIND = "francis.stage9.takeover.handback_summary_receipt"
 TAKEOVER_LIVE_ACTION_RECEIPT_KIND = "francis.stage9.takeover.live_action_receipt"
 TAKEOVER_COMPLETION_REVIEW_KIND = "francis.stage9.takeover.completion_review"
+TAKEOVER_STAGE_CLOSURE_DECISION_KIND = "francis.stage9.takeover.stage9_operator_stage_closure_decision_receipt"
 
 TAKEOVER_CONTROL_TRANSFER_SCOPE = "takeover.control.write"
 TAKEOVER_PANIC_STOP_SCOPE = "takeover.panic.write"
 TAKEOVER_HANDBACK_SUMMARY_SCOPE = "takeover.handback.write"
 TAKEOVER_LIVE_ACTION_SCOPE = "takeover.action.write"
+TAKEOVER_STAGE_CLOSURE_SCOPE = "takeover.stage9.closure.write"
 
 _ALLOWED_ENV_PROFILES = {"dev", "workstation", "local", "test"}
 _ALLOWED_TAKEOVER_LIVE_ACTIONS = {"plan.create"}
@@ -43,11 +45,14 @@ def takeover_status_snapshot(*, limit: int = 10) -> dict[str, Any]:
     panic_receipts = read_takeover_panic_stop_receipts(limit=10)
     handback_receipts = read_takeover_handback_summary_receipts(limit=10)
     live_action_receipts = read_takeover_live_action_receipts(limit=10)
+    stage_closure_decisions = read_takeover_stage9_operator_stage_closure_decisions(limit=10)
     active_transfer = _active_control_transfer(
         transfers=transfers,
         panic_receipts=panic_receipts,
         handback_receipts=handback_receipts,
     )
+    latest_stage_closure = stage_closure_decisions[-1] if stage_closure_decisions else {}
+    stage9_closed_by_receipt = bool(latest_stage_closure.get("stage9_closed_by_receipt"))
     stage8_closed = bool(stage8.get("stage8_closed_by_receipt"))
     pilot_visible = _safe_text(control_mode.get("id")) == "pilot"
     control_transfer_ready = stage8_closed and not bool(active_transfer)
@@ -71,6 +76,8 @@ def takeover_status_snapshot(*, limit: int = 10) -> dict[str, Any]:
         "latest_panic_stop_receipt": panic_receipts[-1] if panic_receipts else {},
         "latest_handback_summary_receipt": handback_receipts[-1] if handback_receipts else {},
         "latest_live_action_receipt": live_action_receipts[-1] if live_action_receipts else {},
+        "latest_stage_closure_decision_receipt": latest_stage_closure,
+        "stage9_closed_by_receipt": stage9_closed_by_receipt,
         "panic_stop_ready": bool(active_transfer),
         "handback_required": bool(active_transfer),
         "handback_summary_ready": handback_ready,
@@ -107,11 +114,14 @@ def takeover_status_snapshot(*, limit: int = 10) -> dict[str, Any]:
         "operator_surface_contract_ready": False,
         "stage9_completion_review_route": "/takeover/completion-review",
         "stage9_completion_review_ready": False,
+        "stage9_closure_decision_route": "/takeover/stage-closure-decision",
+        "stage9_closure_decision_readback_route": "/takeover/stage-closure-decisions",
         "next_smallest_truthful_gap": _takeover_next_gap(
             active_transfer=bool(active_transfer),
             has_transfer=bool(transfers),
             handback_ready=handback_ready,
             stage8_closed=stage8_closed,
+            stage9_closed_by_receipt=stage9_closed_by_receipt,
             operator_surface_ready=False,
             panic_operation_cancellation_ready=panic_operation_cancellation_ready,
             live_action_ready=live_action_ready,
@@ -130,6 +140,7 @@ def takeover_status_snapshot(*, limit: int = 10) -> dict[str, Any]:
         has_transfer=bool(transfers),
         handback_ready=handback_ready,
         stage8_closed=stage8_closed,
+        stage9_closed_by_receipt=stage9_closed_by_receipt,
         operator_surface_ready=surface_ready,
         panic_operation_cancellation_ready=panic_operation_cancellation_ready,
         live_action_ready=live_action_ready,
@@ -154,6 +165,8 @@ def takeover_operator_surface_contract(*, limit: int = 10) -> dict[str, Any]:
             "status": "/takeover/status",
             "action_feed": "/takeover/action-feed",
             "completion_review": "/takeover/completion-review",
+            "stage_closure_decisions": "/takeover/stage-closure-decisions",
+            "stage_closure_decision": "/takeover/stage-closure-decision",
             "delegated_action_receipts": "/takeover/delegated-action-receipts",
             "control_transfer_receipts": "/takeover/control-transfer-receipts",
             "panic_stop_receipts": "/takeover/panic-stop-receipts",
@@ -215,6 +228,7 @@ def takeover_stage9_completion_review(*, limit: int = 10) -> dict[str, Any]:
     latest_panic = _as_dict(snapshot.get("latest_panic_stop_receipt"))
     latest_handback = _as_dict(snapshot.get("latest_handback_summary_receipt"))
     latest_live_action = _as_dict(snapshot.get("latest_live_action_receipt"))
+    stage9_closed = bool(snapshot.get("stage9_closed_by_receipt"))
     return {
         "ok": True,
         "kind": TAKEOVER_COMPLETION_REVIEW_KIND,
@@ -241,11 +255,12 @@ def takeover_stage9_completion_review(*, limit: int = 10) -> dict[str, Any]:
         "cancels_operations": False,
         "grants_execution_authority": False,
         "grants_mutation_authority": False,
-        "stage_closure_decision_required": True,
+        "stage9_closed_by_receipt": stage9_closed,
+        "stage_closure_decision_required": not stage9_closed,
         "governance": {
             "read_only": True,
             "completion_review_only": True,
-            "stage_closure_decision_required": True,
+            "stage_closure_decision_required": not stage9_closed,
             "does_not_close_stage": True,
             "execution_still_uses_executor_governance": True,
             "does_not_run_tools": True,
@@ -253,7 +268,11 @@ def takeover_stage9_completion_review(*, limit: int = 10) -> dict[str, Any]:
             "grants_execution_authority": False,
             "grants_mutation_authority": False,
         },
-        "next_smallest_truthful_gap": "stage9_operator_closure_decision" if ready else "stage9_completion_review",
+        "next_smallest_truthful_gap": "stage9_ledger_closure"
+        if stage9_closed
+        else "stage9_operator_closure_decision"
+        if ready
+        else "stage9_completion_review",
     }
 
 
@@ -768,6 +787,70 @@ def record_takeover_live_action(
     return receipt
 
 
+def record_takeover_stage9_operator_stage_closure_decision(
+    *,
+    actor: Any,
+    reason: Any,
+    decision: Any,
+    review: dict[str, Any],
+    notes: Any = "",
+) -> dict[str, Any]:
+    safe_decision = _safe_stage9_closure_decision(decision)
+    closure_ready = bool(review.get("stage9_completion_review_ready"))
+    stage9_closed_by_receipt = safe_decision == "close_stage9" and closure_ready
+    receipt_id = f"takeover_stage9_closure_{uuid.uuid4().hex[:12]}"
+    payload = {
+        "ok": True,
+        "kind": TAKEOVER_STAGE_CLOSURE_DECISION_KIND,
+        "receipt_id": receipt_id,
+        "stage": STAGE9_TAKEOVER_STAGE,
+        "source_id": "takeover",
+        "capture_mode": "explicit_operator_stage_closure_decision",
+        "target": "stage9_takeover",
+        "actor": _redacted_text(actor)[:240],
+        "reason": _redacted_text(reason)[:500],
+        "decision": safe_decision,
+        "notes": _redacted_text(notes)[:500],
+        "review_status": _safe_text(review.get("status")),
+        "completion_review_ready": closure_ready,
+        "latest_control_transfer_receipt_id": _safe_text(review.get("latest_control_transfer_receipt_id")),
+        "latest_panic_stop_receipt_id": _safe_text(review.get("latest_panic_stop_receipt_id")),
+        "latest_handback_summary_receipt_id": _safe_text(review.get("latest_handback_summary_receipt_id")),
+        "latest_live_action_receipt_id": _safe_text(review.get("latest_live_action_receipt_id")),
+        "latest_live_action_operation_id": _safe_text(review.get("latest_live_action_operation_id")),
+        "latest_live_action_trace_id": _safe_text(review.get("latest_live_action_trace_id")),
+        "latest_live_action_run_id": _safe_text(review.get("latest_live_action_run_id")),
+        "stage9_closed_by_receipt": stage9_closed_by_receipt,
+        "marks_runtime_stage_state": False,
+        "recorded_ts": _now_s(),
+        "governance": {
+            "permission_scope": TAKEOVER_STAGE_CLOSURE_SCOPE,
+            "explicit_operator_decision": True,
+            "stage_closure_decision": True,
+            "requires_completion_review_ready": True,
+            "does_not_mutate_runtime_stage_state": True,
+            "does_not_write_tasks": True,
+            "does_not_write_memory": True,
+            "does_not_run_tools": True,
+            "does_not_run_shell": True,
+            "does_not_run_git": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+    }
+    _append_jsonl(_stage9_operator_stage_closure_decision_path(), payload)
+    audit_record(
+        "takeover.stage9_closure_decision_recorded",
+        actor=payload["actor"],
+        reason=payload["reason"],
+        receipt_id=receipt_id,
+        decision=safe_decision,
+        target=payload["target"],
+        stage9_closed_by_receipt=stage9_closed_by_receipt,
+    )
+    return payload
+
+
 def read_takeover_control_transfer_receipts(*, limit: int = 20) -> list[dict[str, Any]]:
     return _read_jsonl_tail(_control_transfer_path(), limit=_safe_limit(limit, default=20))
 
@@ -782,6 +865,76 @@ def read_takeover_handback_summary_receipts(*, limit: int = 20) -> list[dict[str
 
 def read_takeover_live_action_receipts(*, limit: int = 20) -> list[dict[str, Any]]:
     return _read_jsonl_tail(_live_action_path(), limit=_safe_limit(limit, default=20))
+
+
+def read_takeover_stage9_operator_stage_closure_decisions(*, limit: int = 20) -> list[dict[str, Any]]:
+    return _read_jsonl_tail(_stage9_operator_stage_closure_decision_path(), limit=_safe_limit(limit, default=20))
+
+
+def takeover_stage9_operator_stage_closure_decision_count() -> int:
+    path = _stage9_operator_stage_closure_decision_path()
+    if not path.exists() or not path.is_file():
+        return 0
+    return sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
+
+
+def takeover_stage9_operator_stage_closure_decision_readback(*, limit: int = 20) -> dict[str, Any]:
+    safe_limit = _safe_limit(limit, default=20)
+    items = read_takeover_stage9_operator_stage_closure_decisions(limit=safe_limit)
+    latest_receipt = items[-1] if items else {}
+    decision_counts = {"close_stage9": 0, "do_not_close_stage9": 0, "needs_more_evidence": 0}
+    for item in items:
+        decision = _safe_text(item.get("decision"))
+        if decision in decision_counts:
+            decision_counts[decision] += 1
+    stage9_closed_by_receipt = bool(latest_receipt.get("stage9_closed_by_receipt"))
+    return {
+        "ok": True,
+        "kind": "francis.stage9.takeover.stage9_operator_stage_closure_decision_receipts",
+        "stage": STAGE9_TAKEOVER_STAGE,
+        "source_id": "takeover",
+        "status": "stage_closure_decision_readback_ready" if items else "empty",
+        "target": "stage9_takeover",
+        "items": items,
+        "count": len(items),
+        "total": takeover_stage9_operator_stage_closure_decision_count(),
+        "limit": safe_limit,
+        "latest_receipt": latest_receipt,
+        "latest_receipt_id": latest_receipt.get("receipt_id", ""),
+        "latest_decision": latest_receipt.get("decision", ""),
+        "latest_recorded_ts": latest_receipt.get("recorded_ts", 0),
+        "decision_counts": decision_counts,
+        "receipt_readback_ready": bool(latest_receipt),
+        "stage9_closed_by_receipt": stage9_closed_by_receipt,
+        "marks_runtime_stage_state": False,
+        "reads_receipts": True,
+        "writes_receipts": False,
+        "writes_tasks": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "stage_closure_decision_receipt_readback": True,
+            "receipt_readback_ready": bool(latest_receipt),
+            "does_not_mutate_runtime_stage_state": True,
+            "does_not_write_receipts": True,
+            "does_not_write_tasks": True,
+            "does_not_write_memory": True,
+            "does_not_run_tools": True,
+            "does_not_run_shell": True,
+            "does_not_run_git": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": "stage9_ledger_closure"
+        if stage9_closed_by_receipt
+        else "stage9_operator_closure_decision",
+    }
 
 
 def _active_control_transfer(
@@ -887,11 +1040,14 @@ def _takeover_next_gap(
     has_transfer: bool,
     handback_ready: bool,
     stage8_closed: bool,
+    stage9_closed_by_receipt: bool,
     operator_surface_ready: bool,
     panic_operation_cancellation_ready: bool,
     live_action_ready: bool,
     completion_review_ready: bool,
 ) -> str:
+    if stage9_closed_by_receipt:
+        return "stage9_ledger_closure"
     if active_transfer or (has_transfer and not handback_ready):
         return "stage9_handback_summary_receipts"
     if handback_ready:
@@ -1118,6 +1274,13 @@ def _blocked_no_receipt(
     }
 
 
+def _safe_stage9_closure_decision(value: Any) -> str:
+    text = _safe_text(value).strip()
+    if text in {"close_stage9", "do_not_close_stage9", "needs_more_evidence"}:
+        return text
+    return "needs_more_evidence"
+
+
 def _control_transfer_path() -> Path:
     return data_dir() / "logs" / "takeover" / "control_transfer_receipts.jsonl"
 
@@ -1132,6 +1295,10 @@ def _handback_summary_path() -> Path:
 
 def _live_action_path() -> Path:
     return data_dir() / "logs" / "takeover" / "live_action_receipts.jsonl"
+
+
+def _stage9_operator_stage_closure_decision_path() -> Path:
+    return data_dir() / "logs" / "takeover" / "stage9_operator_stage_closure_decisions.jsonl"
 
 
 def _latest_receipt_for_session(

@@ -11,10 +11,12 @@ from francis.takeover import (
     TAKEOVER_HANDBACK_SUMMARY_SCOPE,
     TAKEOVER_LIVE_ACTION_SCOPE,
     TAKEOVER_PANIC_STOP_SCOPE,
+    TAKEOVER_STAGE_CLOSURE_SCOPE,
     read_takeover_control_transfer_receipts,
     read_takeover_handback_summary_receipts,
     read_takeover_live_action_receipts,
     read_takeover_panic_stop_receipts,
+    record_takeover_stage9_operator_stage_closure_decision,
     record_takeover_control_transfer,
     record_takeover_handback_summary,
     record_takeover_live_action,
@@ -22,6 +24,7 @@ from francis.takeover import (
     takeover_action_feed,
     takeover_operator_surface_contract,
     takeover_stage9_completion_review,
+    takeover_stage9_operator_stage_closure_decision_readback,
     takeover_status_snapshot,
 )
 
@@ -58,6 +61,13 @@ class TakeoverDelegatedActionIn(BaseModel):
     goal: str = Field(default="", max_length=800)
     mission_id: str = Field(default="", max_length=160)
     operation_limit: int = 10
+
+
+class TakeoverStage9OperatorStageClosureDecisionIn(BaseModel):
+    actor: str = Field(default="", max_length=240)
+    reason: str = Field(default="", max_length=500)
+    decision: str = Field(default="needs_more_evidence", max_length=80)
+    notes: str = Field(default="", max_length=500)
 
 
 def _write_permission(actor: Any, *, required_scope: str, route: str, method: str) -> ApiPermissionDecision:
@@ -119,6 +129,11 @@ def operator_surface_contract(limit: int = 10) -> dict[str, Any]:
 @router.get("/completion-review")
 def completion_review(limit: int = 10) -> dict[str, Any]:
     return takeover_stage9_completion_review(limit=limit)
+
+
+@router.get("/stage-closure-decisions")
+def stage_closure_decisions(limit: int = 20) -> dict[str, Any]:
+    return takeover_stage9_operator_stage_closure_decision_readback(limit=limit)
 
 
 @router.get("/control-transfer-receipts")
@@ -355,6 +370,105 @@ def delegated_action(request: Request, payload: TakeoverDelegatedActionIn) -> di
             "grants_mutation_authority": False,
         },
         "next_smallest_truthful_gap": receipt.get("next_smallest_truthful_gap", "stage9_live_delegated_action_runtime"),
+    }
+
+
+@router.post("/stage-closure-decision")
+def stage_closure_decision(
+    request: Request,
+    payload: TakeoverStage9OperatorStageClosureDecisionIn,
+) -> dict[str, Any]:
+    route = "/takeover/stage-closure-decision"
+    permission = _write_permission(
+        payload.actor,
+        required_scope=TAKEOVER_STAGE_CLOSURE_SCOPE,
+        route=route,
+        method="POST",
+    )
+    if not permission.allowed:
+        return _permission_denied(
+            permission,
+            required_scope=TAKEOVER_STAGE_CLOSURE_SCOPE,
+            next_step="configure_takeover_stage9_closure_write_scope_before_operator_stage_closure_decision",
+        )
+
+    review = takeover_stage9_completion_review(limit=10)
+    if not review.get("stage9_completion_review_ready"):
+        return {
+            "ok": True,
+            "kind": "francis.stage9.takeover.stage9_operator_stage_closure_decision.record",
+            "status": "awaiting_stage9_closure_readiness",
+            "source_id": "takeover",
+            "target": "stage9_takeover",
+            "review": review,
+            "receipt": None,
+            "receipt_id": "",
+            "writes_receipt": False,
+            "writes_tasks": False,
+            "writes_memory": False,
+            "runs_tools": False,
+            "runs_shell": False,
+            "runs_git": False,
+            "starts_processes": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+            "marks_runtime_stage_state": False,
+            "governance": {
+                "required_scope": TAKEOVER_STAGE_CLOSURE_SCOPE,
+                "route": str(request.url.path),
+                "explicit_operator_decision": True,
+                "does_not_record_when_review_not_ready": True,
+                "does_not_mutate_runtime_stage_state": True,
+                "grants_execution_authority": False,
+                "grants_mutation_authority": False,
+            },
+            "next_smallest_truthful_gap": "stage9_completion_review",
+        }
+
+    receipt = record_takeover_stage9_operator_stage_closure_decision(
+        actor=payload.actor,
+        reason=payload.reason,
+        decision=payload.decision,
+        notes=payload.notes,
+        review=review,
+    )
+    return {
+        "ok": True,
+        "kind": "francis.stage9.takeover.stage9_operator_stage_closure_decision.record",
+        "status": "recorded",
+        "source_id": "takeover",
+        "target": "stage9_takeover",
+        "review": review,
+        "receipt": receipt,
+        "receipt_id": receipt.get("receipt_id", ""),
+        "decision": receipt.get("decision", ""),
+        "stage9_closed_by_receipt": bool(receipt.get("stage9_closed_by_receipt")),
+        "writes_receipt": True,
+        "writes_tasks": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "marks_runtime_stage_state": False,
+        "governance": {
+            "required_scope": TAKEOVER_STAGE_CLOSURE_SCOPE,
+            "route": str(request.url.path),
+            "explicit_operator_decision": True,
+            "does_not_mutate_runtime_stage_state": True,
+            "does_not_write_tasks": True,
+            "does_not_write_memory": True,
+            "does_not_run_tools": True,
+            "does_not_run_shell": True,
+            "does_not_run_git": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": "stage9_ledger_closure"
+        if receipt.get("stage9_closed_by_receipt")
+        else "stage9_operator_closure_decision",
     }
 
 

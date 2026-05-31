@@ -99,6 +99,35 @@ def test_takeover_control_transfer_denies_without_scope(monkeypatch, tmp_path: P
     assert not _receipt_path(data_root, "control_transfer_receipts.jsonl").exists()
 
 
+def test_takeover_stage9_closure_decision_denies_without_scope(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    response = TestClient(create_app()).post(
+        "/takeover/stage-closure-decision",
+        json={
+            "actor": "test.takeover.closure",
+            "reason": "operator closes stage9",
+            "decision": "close_stage9",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["status"] == "denied"
+    assert body["error"] == "api_permission_denied"
+    assert body["writes_receipt"] is False
+    assert body["writes_tasks"] is False
+    assert body["writes_memory"] is False
+    assert body["runs_shell"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["governance"]["required_scope"] == "takeover.stage9.closure.write"
+    assert body["governance"]["reason"] == "missing_scopes"
+    assert not _receipt_path(data_root, "stage9_operator_stage_closure_decisions.jsonl").exists()
+
+
 def test_takeover_control_transfer_receipt_and_panic_stop_are_auditable(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
@@ -113,6 +142,7 @@ def test_takeover_control_transfer_receipt_and_panic_stop_are_auditable(monkeypa
                     "takeover.action.write",
                     "takeover.panic.write",
                     "takeover.handback.write",
+                    "takeover.stage9.closure.write",
                 ],
             }
         ),
@@ -425,6 +455,85 @@ def test_takeover_control_transfer_receipt_and_panic_stop_are_auditable(monkeypa
     assert completion_checks["live_delegated_action_receipted"]["passed"] is True
     assert completion_checks["operator_surface_contract_ready"]["passed"] is True
     assert completion_checks["no_authority_escalation"]["passed"] is True
+
+    stage_closure = client.post(
+        "/takeover/stage-closure-decision",
+        json={
+            "actor": "codex.builder",
+            "reason": "operator closes stage9 token=stage9closuresecret123",
+            "decision": "close_stage9",
+            "notes": "stage 9 ready token=stage9closurenotesecret123",
+        },
+    )
+
+    assert stage_closure.status_code == 200
+    stage_closure_body = stage_closure.json()
+    assert stage_closure_body["ok"] is True
+    assert stage_closure_body["status"] == "recorded"
+    assert stage_closure_body["writes_receipt"] is True
+    assert stage_closure_body["writes_tasks"] is False
+    assert stage_closure_body["writes_memory"] is False
+    assert stage_closure_body["runs_tools"] is False
+    assert stage_closure_body["runs_shell"] is False
+    assert stage_closure_body["runs_git"] is False
+    assert stage_closure_body["grants_execution_authority"] is False
+    assert stage_closure_body["grants_mutation_authority"] is False
+    assert stage_closure_body["marks_runtime_stage_state"] is False
+    assert stage_closure_body["decision"] == "close_stage9"
+    assert stage_closure_body["stage9_closed_by_receipt"] is True
+    assert stage_closure_body["next_smallest_truthful_gap"] == "stage9_ledger_closure"
+    assert stage_closure_body["review"]["stage9_completion_review_ready"] is True
+
+    stage_closure_receipt = stage_closure_body["receipt"]
+    assert stage_closure_receipt["kind"] == "francis.stage9.takeover.stage9_operator_stage_closure_decision_receipt"
+    assert stage_closure_receipt["receipt_id"] == stage_closure_body["receipt_id"]
+    assert stage_closure_receipt["actor"] == "codex.builder"
+    assert stage_closure_receipt["decision"] == "close_stage9"
+    assert stage_closure_receipt["completion_review_ready"] is True
+    assert stage_closure_receipt["latest_control_transfer_receipt_id"] == transfer_body["receipt_id"]
+    assert stage_closure_receipt["latest_panic_stop_receipt_id"] == panic_body["receipt_id"]
+    assert stage_closure_receipt["latest_handback_summary_receipt_id"] == handback_body["receipt_id"]
+    assert stage_closure_receipt["latest_live_action_receipt_id"] == live_action_body["receipt_id"]
+    assert stage_closure_receipt["stage9_closed_by_receipt"] is True
+    assert stage_closure_receipt["marks_runtime_stage_state"] is False
+    assert stage_closure_receipt["governance"]["permission_scope"] == "takeover.stage9.closure.write"
+    assert stage_closure_receipt["governance"]["explicit_operator_decision"] is True
+    assert stage_closure_receipt["governance"]["stage_closure_decision"] is True
+    assert stage_closure_receipt["governance"]["does_not_mutate_runtime_stage_state"] is True
+    assert stage_closure_receipt["governance"]["grants_execution_authority"] is False
+    assert stage_closure_receipt["governance"]["grants_mutation_authority"] is False
+    stage_closure_receipt_text = json.dumps(stage_closure_receipt, sort_keys=True)
+    assert "stage9closuresecret123" not in stage_closure_receipt_text
+    assert "stage9closurenotesecret123" not in stage_closure_receipt_text
+
+    stage_closure_readback = client.get("/takeover/stage-closure-decisions?limit=10").json()
+    assert stage_closure_readback["status"] == "stage_closure_decision_readback_ready"
+    assert stage_closure_readback["count"] == 1
+    assert stage_closure_readback["latest_receipt_id"] == stage_closure_body["receipt_id"]
+    assert stage_closure_readback["latest_decision"] == "close_stage9"
+    assert stage_closure_readback["decision_counts"] == {
+        "close_stage9": 1,
+        "do_not_close_stage9": 0,
+        "needs_more_evidence": 0,
+    }
+    assert stage_closure_readback["receipt_readback_ready"] is True
+    assert stage_closure_readback["stage9_closed_by_receipt"] is True
+    assert stage_closure_readback["marks_runtime_stage_state"] is False
+    assert stage_closure_readback["writes_receipts"] is False
+    assert stage_closure_readback["writes_tasks"] is False
+    assert stage_closure_readback["writes_memory"] is False
+    assert stage_closure_readback["runs_tools"] is False
+    assert stage_closure_readback["runs_shell"] is False
+    assert stage_closure_readback["runs_git"] is False
+    assert stage_closure_readback["grants_execution_authority"] is False
+    assert stage_closure_readback["governance"]["stage_closure_decision_receipt_readback"] is True
+    assert stage_closure_readback["governance"]["does_not_mutate_runtime_stage_state"] is True
+    assert stage_closure_readback["next_smallest_truthful_gap"] == "stage9_ledger_closure"
+
+    closed_status = client.get("/takeover/status").json()
+    assert closed_status["stage9_closed_by_receipt"] is True
+    assert closed_status["latest_stage_closure_decision_receipt"]["receipt_id"] == stage_closure_body["receipt_id"]
+    assert closed_status["next_smallest_truthful_gap"] == "stage9_ledger_closure"
 
     transfer_receipts = client.get("/takeover/control-transfer-receipts").json()
     panic_receipts = client.get("/takeover/panic-stop-receipts").json()

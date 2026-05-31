@@ -47524,6 +47524,62 @@ Latest validation for Stage 9 Takeover completion review:
   status_next=stage9_operator_closure_decision;
   review_next=stage9_operator_closure_decision`.
 
+### 2026-05-31 - Stage 9 takeover operator closure decision is receipt-backed
+
+Roadmap area: Stage 9 / Takeover (Pilot Mode), explicit operator closure
+decision after completion review readiness.
+
+Material change:
+
+- Added governed POST `/takeover/stage-closure-decision`.
+- Added read-only GET `/takeover/stage-closure-decisions`.
+- Added the dedicated `takeover.stage9.closure.write` scope and mutating-route
+  authority matrix entry.
+- The closure route records a
+  `francis.stage9.takeover.stage9_operator_stage_closure_decision_receipt` only
+  after `/takeover/completion-review` reports ready.
+- `/takeover/status` now consumes the latest closure receipt and reports
+  `stage9_closed_by_receipt` plus `next_smallest_truthful_gap=stage9_ledger_closure`
+  after a `close_stage9` decision.
+- The closure receipt records the linked control-transfer, panic-stop,
+  handback, live-action, operation, trace, and run handles.
+- This closure receipt does not mutate runtime stage state, write tasks, write
+  memory, run tools, run shell, run git, start processes, or grant execution or
+  mutation authority.
+
+Latest validation for Stage 9 Takeover operator closure decision:
+
+- `python -m pytest tests/test_api_takeover.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  tests/test_api_mutating_route_authority_matrix.py -q --tb=short --maxfail=1`
+  Result: `passed; 7 tests passed`
+- `python -m mypy src/francis/takeover.py
+  src/francis/api/routes/takeover.py
+  src/francis/api/mutation_authority_matrix.py`
+  Result: `passed`
+- `python -m ruff check src/francis/takeover.py
+  src/francis/api/routes/takeover.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_takeover.py
+  tests/test_api_contract_chat_ui.py
+  tests/test_api_mutating_route_authority_matrix.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/takeover.py
+  src/francis/api/routes/takeover.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_takeover.py
+  tests/test_api_contract_chat_ui.py
+  tests/test_api_mutating_route_authority_matrix.py`
+  Result: `passed; 6 files already formatted`
+- Live local route/readback:
+  POST `/takeover/stage-closure-decision`, GET
+  `/takeover/stage-closure-decisions?limit=5`, and GET `/takeover/status`.
+  Result: `receipt_id=takeover_stage9_closure_2291ffbd5472;
+  decision=close_stage9; stage9_closed_by_receipt=true;
+  post_next=stage9_ledger_closure;
+  readback_status=stage_closure_decision_readback_ready;
+  readback_latest=takeover_stage9_closure_2291ffbd5472;
+  readback_closed=true; status_closed=true;
+  status_next=stage9_ledger_closure`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

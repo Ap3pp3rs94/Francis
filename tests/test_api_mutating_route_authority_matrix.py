@@ -138,6 +138,15 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
     assert "live-action receipt" in takeover_action["receipt_behavior"]
     assert "allowlisted executor operations" in takeover_action["notes"]
 
+    takeover_closure = entries["/takeover/stage-closure-decision"]
+    assert takeover_closure["family"] == "takeover"
+    assert takeover_closure["required_actor"] == "payload.actor"
+    assert takeover_closure["required_scope"] == "takeover.stage9.closure.write"
+    assert takeover_closure["governance_maturity"] == "permission_gated"
+    assert "completion review readiness" in takeover_closure["approval_requirement"]
+    assert "stage closure decision receipt" in takeover_closure["receipt_behavior"]
+    assert "does not mutate runtime stage state" in takeover_closure["notes"]
+
     takeover_handback = entries["/takeover/handback-summary"]
     assert takeover_handback["family"] == "takeover"
     assert takeover_handback["required_actor"] == "payload.actor"
