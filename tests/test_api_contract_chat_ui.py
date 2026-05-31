@@ -240,5 +240,6 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("GET", "/telemetry/terminal/events"),
         ("POST", "/telemetry/terminal/events"),
         ("GET", "/executor/substrate/status"),
+        ("GET", "/executor/substrate/toolbelt-allowlist-review"),
     ]
     _assert_has_endpoints(routes, endpoints)

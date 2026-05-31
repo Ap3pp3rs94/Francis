@@ -46587,6 +46587,50 @@ Latest validation for Stage 8 executor substrate start:
   ready_count=3; required_count=6; stage8_done_ready=false;
   next_smallest_truthful_gap=stage8_executor_toolbelt_allowlist_review`.
 
+### 2026-05-30 - Stage 8 toolbelt and allowlist review is read-only
+
+Roadmap area: Stage 8 / Executor Substrate, toolbelt and allowlist/policy
+filter review.
+
+Material change:
+
+- Added read-only Stage 8 toolbelt/allowlist review at
+  `/executor/substrate/toolbelt-allowlist-review`.
+- The review consumes `/executor/substrate/status` and verifies four criteria:
+  substrate contract ready, toolbelt inventory readback, allowlist/policy filter
+  readback, and non-authorizing review guard.
+- The review surfaces the known bounded capability inventory:
+  `chat.summarize`, `plan.create`, `plan.revise`, `plugin.run`,
+  `plugin.tool.run`, `codex.supervised_exec`, and `git.push`.
+- The review does not write tasks, write receipts, write memory, run tools, run
+  shell commands, run git, start processes, grant execution authority, or grant
+  mutation authority.
+- Live local readback reports `status=toolbelt_allowlist_review_ready`,
+  `ready_count=4`, `required_count=4`, and
+  `next_smallest_truthful_gap=stage8_branch_first_workflow_review`.
+
+Latest validation for Stage 8 toolbelt/allowlist review:
+
+- `python -m pytest tests/test_api_executor_substrate.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 4 passed`
+- `python -m mypy src/francis/executor_substrate.py
+  src/francis/api/routes/executor_substrate.py`
+  Result: `passed`
+- `python -m ruff check src/francis/executor_substrate.py
+  src/francis/api/routes/executor_substrate.py tests/test_api_executor_substrate.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/executor_substrate.py
+  src/francis/api/routes/executor_substrate.py tests/test_api_executor_substrate.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed; 4 files already formatted`
+- Live local readback:
+  `/executor/substrate/toolbelt-allowlist-review`.
+  Result: `status=toolbelt_allowlist_review_ready; ready_count=4;
+  required_count=4; next_smallest_truthful_gap=stage8_branch_first_workflow_review`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

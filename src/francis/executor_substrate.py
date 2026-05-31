@@ -9,6 +9,7 @@ EXECUTOR_SUBSTRATE_STATUS_KIND = "francis.stage8.executor_substrate.status"
 
 _STAGE7_LEDGER_CLOSURE_GAP = "stage7_ledger_closure"
 _STAGE8_TOOLBELT_ALLOWLIST_GAP = "stage8_executor_toolbelt_allowlist_review"
+_STAGE8_BRANCH_FIRST_WORKFLOW_GAP = "stage8_branch_first_workflow_review"
 
 
 def executor_substrate_status_snapshot() -> dict[str, Any]:
@@ -54,6 +55,102 @@ def executor_substrate_status_snapshot() -> dict[str, Any]:
             "grants_mutation_authority": False,
         },
         "next_smallest_truthful_gap": (_STAGE8_TOOLBELT_ALLOWLIST_GAP if stage7_closed else _STAGE7_LEDGER_CLOSURE_GAP),
+    }
+
+
+def executor_toolbelt_allowlist_review_snapshot() -> dict[str, Any]:
+    status = executor_substrate_status_snapshot()
+    deliverables_value = status.get("deliverables")
+    deliverables = deliverables_value if isinstance(deliverables_value, list) else []
+    deliverable_map = {str(item.get("id")): item for item in deliverables if isinstance(item, dict)}
+    toolbelt = deliverable_map.get("execution_toolbelt_inventory", {})
+    allowlist = deliverable_map.get("allowlist_policy_filters", {})
+    criteria = [
+        {
+            "id": "substrate_contract_ready",
+            "ready": status.get("status") == "substrate_contract_ready",
+            "evidence": {
+                "status": status.get("status", "unknown"),
+                "stage7_closed_by_receipt": bool(status.get("stage7_closed_by_receipt")),
+            },
+        },
+        {
+            "id": "toolbelt_inventory_readback",
+            "ready": bool(toolbelt.get("ready")),
+            "evidence": toolbelt.get("evidence", {}),
+        },
+        {
+            "id": "allowlist_policy_filter_readback",
+            "ready": bool(allowlist.get("ready")),
+            "evidence": allowlist.get("evidence", {}),
+        },
+        {
+            "id": "non_authorizing_review_guard",
+            "ready": (
+                status.get("read_only") is True
+                and status.get("runs_tools") is False
+                and status.get("runs_shell") is False
+                and status.get("runs_git") is False
+                and status.get("grants_execution_authority") is False
+                and status.get("grants_mutation_authority") is False
+            ),
+            "evidence": {
+                "read_only": bool(status.get("read_only")),
+                "runs_tools": bool(status.get("runs_tools")),
+                "runs_shell": bool(status.get("runs_shell")),
+                "runs_git": bool(status.get("runs_git")),
+                "grants_execution_authority": bool(status.get("grants_execution_authority")),
+                "grants_mutation_authority": bool(status.get("grants_mutation_authority")),
+            },
+        },
+    ]
+    ready_count = sum(1 for criterion in criteria if criterion["ready"])
+    review_ready = ready_count == len(criteria)
+    toolbelt_evidence_value = toolbelt.get("evidence")
+    toolbelt_evidence: dict[str, Any] = toolbelt_evidence_value if isinstance(toolbelt_evidence_value, dict) else {}
+    known_capabilities = toolbelt_evidence.get("known_capabilities", [])
+    return {
+        "ok": True,
+        "kind": "francis.stage8.executor_substrate.toolbelt_allowlist_review",
+        "stage": STAGE8_EXECUTOR_SUBSTRATE_STAGE,
+        "status": "toolbelt_allowlist_review_ready" if review_ready else "toolbelt_allowlist_review_partial",
+        "source_id": "executor_substrate",
+        "target": "safe_bounded_execution",
+        "toolbelt_allowlist_review_ready": review_ready,
+        "ready_count": ready_count,
+        "required_count": len(criteria),
+        "criteria": criteria,
+        "known_capabilities": known_capabilities if isinstance(known_capabilities, list) else [],
+        "substrate_status": {
+            "route": "/executor/substrate/status",
+            "status": status.get("status", "unknown"),
+            "next_smallest_truthful_gap": status.get("next_smallest_truthful_gap", ""),
+        },
+        "read_only": True,
+        "writes_tasks": False,
+        "writes_receipts": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "toolbelt_allowlist_review": True,
+            "uses_executor_substrate_status": True,
+            "does_not_execute": True,
+            "does_not_write_tasks": True,
+            "does_not_write_receipts": True,
+            "does_not_write_memory": True,
+            "does_not_grant_authority": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": (
+            _STAGE8_BRANCH_FIRST_WORKFLOW_GAP if review_ready else _STAGE8_TOOLBELT_ALLOWLIST_GAP
+        ),
     }
 
 

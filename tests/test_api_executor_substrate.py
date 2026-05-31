@@ -98,3 +98,59 @@ def test_executor_substrate_status_starts_readonly_after_stage7_closure_receipt(
     assert body["grants_execution_authority"] is False
     assert body["governance"]["stage8_posture_contract"] is True
     assert body["governance"]["uses_stage7_telemetry_receipt_readback"] is True
+
+
+def test_executor_toolbelt_allowlist_review_advances_after_stage8_status_ready(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    receipt_path = data_root / "logs" / "telemetry" / "stage7_operator_stage_closure_decisions.jsonl"
+    receipt_path.parent.mkdir(parents=True)
+    receipt_path.write_text(
+        json.dumps(
+            {
+                "kind": "francis.stage7.telemetry.stage7_operator_stage_closure_decision_receipt",
+                "receipt_id": "tel_stage7_closure_toolbelt_allowlist",
+                "decision": "close_stage7",
+                "stage7_closed_by_receipt": True,
+                "marks_runtime_stage_state": False,
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    body = TestClient(create_app()).get("/executor/substrate/toolbelt-allowlist-review").json()
+
+    assert body["ok"] is True
+    assert body["kind"] == "francis.stage8.executor_substrate.toolbelt_allowlist_review"
+    assert body["stage"] == "Stage 8 / Executor Substrate"
+    assert body["status"] == "toolbelt_allowlist_review_ready"
+    assert body["toolbelt_allowlist_review_ready"] is True
+    assert body["ready_count"] == body["required_count"] == 4
+    assert [item["id"] for item in body["criteria"]] == [
+        "substrate_contract_ready",
+        "toolbelt_inventory_readback",
+        "allowlist_policy_filter_readback",
+        "non_authorizing_review_guard",
+    ]
+    assert all(item["ready"] is True for item in body["criteria"])
+    assert "codex.supervised_exec" in body["known_capabilities"]
+    assert "git.push" in body["known_capabilities"]
+    assert body["substrate_status"]["status"] == "substrate_contract_ready"
+    assert body["read_only"] is True
+    assert body["writes_tasks"] is False
+    assert body["writes_receipts"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["starts_processes"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["governance"]["toolbelt_allowlist_review"] is True
+    assert body["governance"]["does_not_execute"] is True
+    assert body["governance"]["does_not_grant_authority"] is True
+    assert body["next_smallest_truthful_gap"] == "stage8_branch_first_workflow_review"
