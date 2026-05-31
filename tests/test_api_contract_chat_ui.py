@@ -244,5 +244,6 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("GET", "/executor/substrate/branch-first-workflow-review"),
         ("GET", "/executor/substrate/leases-idempotency-review"),
         ("GET", "/executor/substrate/verification-hooks-review"),
+        ("GET", "/executor/substrate/scope-enforcement-review"),
     ]
     _assert_has_endpoints(routes, endpoints)

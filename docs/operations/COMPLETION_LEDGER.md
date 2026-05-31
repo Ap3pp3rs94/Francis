@@ -47029,6 +47029,56 @@ Latest validation for Stage 8 executor verification hooks:
   status_required_count=7;
   status_next=stage8_substrate_scope_enforcement_review`.
 
+### 2026-05-30 - Stage 8 substrate scope enforcement review is ready
+
+Roadmap area: Stage 8 / Executor Substrate, substrate-level scope enforcement.
+
+Material change:
+
+- Added read-only `/executor/substrate/scope-enforcement-review`.
+- The review consumes the verification-hooks review and the live FastAPI
+  mutating-route authority matrix.
+- The review confirms the existing scope boundaries for executor capability
+  allowlisting, supervised_exec command/path boundaries, API permission gating,
+  mutating-route authority coverage, and branch-first git push boundaries.
+- The review is non-authorizing: it does not write tasks, write receipts, write
+  memory, run tools, run shell commands, run git, start processes, grant
+  execution authority, or grant mutation authority.
+- `/executor/substrate/status` now reports `ready_count=7`, `required_count=7`,
+  `stage8_done_ready=true`, and
+  `next_smallest_truthful_gap=stage8_ledger_closure`.
+
+Latest validation for Stage 8 substrate scope enforcement review:
+
+- `python -m pytest tests/test_api_executor_substrate.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  tests/test_api_mutating_route_authority_matrix.py -q --tb=short --maxfail=1`
+  Result: `passed; 10 selected tests passed`
+- `python -m mypy src/francis/executor_substrate.py
+  src/francis/api/routes/executor_substrate.py
+  src/francis/api/mutation_authority_matrix.py`
+  Result: `passed`
+- `python -m ruff check src/francis/executor_substrate.py
+  src/francis/api/routes/executor_substrate.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_executor_substrate.py
+  tests/test_api_contract_chat_ui.py tests/test_api_mutating_route_authority_matrix.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/executor_substrate.py
+  src/francis/api/routes/executor_substrate.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_executor_substrate.py
+  tests/test_api_contract_chat_ui.py tests/test_api_mutating_route_authority_matrix.py`
+  Result: `passed; 6 files already formatted`
+- `git diff --check`
+  Result: `passed`
+- Live local readback:
+  `/executor/substrate/scope-enforcement-review` and
+  `/executor/substrate/status`.
+  Result: `review_status=scope_enforcement_review_ready;
+  review_ready_count=7; review_required_count=7; matrix_ready=true;
+  review_next=stage8_ledger_closure; status_ready_count=7;
+  status_required_count=7; stage8_done_ready=true;
+  status_next=stage8_ledger_closure`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

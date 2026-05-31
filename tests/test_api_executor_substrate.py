@@ -73,9 +73,9 @@ def test_executor_substrate_status_starts_readonly_after_stage7_closure_receipt(
     assert body["status"] == "substrate_contract_ready"
     assert body["stage7_closed_by_receipt"] is True
     assert body["stage7_next_smallest_truthful_gap"] == "stage7_ledger_closure"
-    assert body["next_smallest_truthful_gap"] == "stage8_substrate_scope_enforcement_review"
-    assert body["stage8_done_ready"] is False
-    assert body["ready_count"] == 6
+    assert body["next_smallest_truthful_gap"] == "stage8_ledger_closure"
+    assert body["stage8_done_ready"] is True
+    assert body["ready_count"] == 7
     assert body["required_count"] == 7
     deliverables = {item["id"]: item for item in body["deliverables"]}
     assert set(deliverables) == {
@@ -102,7 +102,10 @@ def test_executor_substrate_status_starts_readonly_after_stage7_closure_receipt(
     assert "bounded retry contract" in deliverables["leases_and_idempotency"]["evidence"]["ready_surfaces"]
     assert deliverables["verification_hooks"]["ready"] is True
     assert deliverables["verification_hooks"]["evidence"]["receipt_kind"] == "executor.verification.receipt"
-    assert deliverables["substrate_scope_enforcement"]["ready"] is False
+    assert deliverables["substrate_scope_enforcement"]["ready"] is True
+    assert deliverables["substrate_scope_enforcement"]["evidence"]["review_route"] == (
+        "/executor/substrate/scope-enforcement-review"
+    )
     assert body["read_only"] is True
     assert body["writes_tasks"] is False
     assert body["writes_receipts"] is False
@@ -354,3 +357,64 @@ def test_executor_verification_hooks_review_projects_receipt_contract(
     assert body["governance"]["does_not_execute"] is True
     assert body["governance"]["does_not_grant_authority"] is True
     assert body["next_smallest_truthful_gap"] == "stage8_substrate_scope_enforcement_review"
+
+
+def test_executor_scope_enforcement_review_consumes_route_authority_matrix(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage7_closure_receipt(data_root, receipt_id="tel_stage7_closure_scope_enforcement")
+
+    body = TestClient(create_app()).get("/executor/substrate/scope-enforcement-review").json()
+
+    assert body["ok"] is True
+    assert body["kind"] == "francis.stage8.executor_substrate.scope_enforcement_review"
+    assert body["stage"] == "Stage 8 / Executor Substrate"
+    assert body["status"] == "scope_enforcement_review_ready"
+    assert body["scope_enforcement_review_ready"] is True
+    assert body["executor_capability_allowlist_ready"] is True
+    assert body["supervised_exec_scope_boundary_ready"] is True
+    assert body["api_permission_gate_ready"] is True
+    assert body["mutating_route_authority_matrix_ready"] is True
+    assert body["branch_first_scope_boundary_ready"] is True
+    assert body["ready_count"] == body["required_count"] == 7
+
+    criteria = {item["id"]: item for item in body["criteria"]}
+    assert list(criteria) == [
+        "verification_hooks_review_ready",
+        "executor_capability_allowlist",
+        "supervised_exec_scope_boundary",
+        "api_permission_gate",
+        "mutating_route_authority_matrix",
+        "branch_first_scope_boundary",
+        "non_authorizing_review_guard",
+    ]
+    assert criteria["verification_hooks_review_ready"]["ready"] is True
+    assert "codex.supervised_exec" in criteria["executor_capability_allowlist"]["evidence"]["known_capabilities"]
+    assert criteria["supervised_exec_scope_boundary"]["evidence"]["allowed_executables"] == "_ALLOWED_EXECUTABLES"
+    assert criteria["supervised_exec_scope_boundary"]["evidence"]["cwd_root_check"] == "_path_is_under"
+    assert criteria["api_permission_gate"]["evidence"]["redacts_scope_names"] is True
+    assert criteria["mutating_route_authority_matrix"]["ready"] is True
+    assert criteria["mutating_route_authority_matrix"]["evidence"]["missing_total"] == 0
+    assert criteria["mutating_route_authority_matrix"]["evidence"]["total"] > 0
+    assert criteria["branch_first_scope_boundary"]["evidence"]["detached_head_error"] == "detached_head_not_supported"
+    assert criteria["non_authorizing_review_guard"]["ready"] is True
+
+    assert body["verification_hooks_review"]["status"] == "verification_hooks_review_ready"
+    assert body["read_only"] is True
+    assert body["writes_tasks"] is False
+    assert body["writes_receipts"] is False
+    assert body["writes_memory"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["starts_processes"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["governance"]["scope_enforcement_review"] is True
+    assert body["governance"]["uses_mutating_route_authority_matrix"] is True
+    assert body["governance"]["does_not_execute"] is True
+    assert body["governance"]["does_not_grant_authority"] is True
+    assert body["next_smallest_truthful_gap"] == "stage8_ledger_closure"

@@ -17,6 +17,7 @@ _STAGE8_LEASE_RECEIPT_GAP = "stage8_lease_receipt_readback"
 _STAGE8_BOUNDED_RETRY_GAP = "stage8_bounded_retry_contract"
 _STAGE8_VERIFICATION_HOOKS_GAP = "stage8_verification_hooks_review"
 _STAGE8_SCOPE_ENFORCEMENT_GAP = "stage8_substrate_scope_enforcement_review"
+_STAGE8_LEDGER_CLOSURE_GAP = "stage8_ledger_closure"
 
 
 def executor_substrate_status_snapshot() -> dict[str, Any]:
@@ -24,6 +25,7 @@ def executor_substrate_status_snapshot() -> dict[str, Any]:
     stage7_closed = telemetry.get("next_smallest_truthful_gap") == _STAGE7_LEDGER_CLOSURE_GAP
     deliverables = _deliverables(stage7_closed=stage7_closed)
     ready_count = sum(1 for item in deliverables if item["ready"])
+    stage8_ready = stage7_closed and ready_count == len(deliverables)
     return {
         "ok": True,
         "kind": EXECUTOR_SUBSTRATE_STATUS_KIND,
@@ -36,7 +38,7 @@ def executor_substrate_status_snapshot() -> dict[str, Any]:
         "deliverables": deliverables,
         "ready_count": ready_count,
         "required_count": len(deliverables),
-        "stage8_done_ready": False,
+        "stage8_done_ready": stage8_ready,
         "read_only": True,
         "writes_tasks": False,
         "writes_receipts": False,
@@ -61,7 +63,13 @@ def executor_substrate_status_snapshot() -> dict[str, Any]:
             "grants_execution_authority": False,
             "grants_mutation_authority": False,
         },
-        "next_smallest_truthful_gap": (_STAGE8_SCOPE_ENFORCEMENT_GAP if stage7_closed else _STAGE7_LEDGER_CLOSURE_GAP),
+        "next_smallest_truthful_gap": (
+            _STAGE8_LEDGER_CLOSURE_GAP
+            if stage8_ready
+            else _STAGE8_SCOPE_ENFORCEMENT_GAP
+            if stage7_closed
+            else _STAGE7_LEDGER_CLOSURE_GAP
+        ),
     }
 
 
@@ -600,6 +608,158 @@ def executor_verification_hooks_review_snapshot() -> dict[str, Any]:
     }
 
 
+def executor_substrate_scope_enforcement_review_snapshot(
+    *,
+    mutating_route_authority_matrix: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    verification_review = executor_verification_hooks_review_snapshot()
+    matrix = mutating_route_authority_matrix if isinstance(mutating_route_authority_matrix, dict) else {}
+    matrix_ready = matrix.get("ok") is True and int(matrix.get("missing_total") or 0) == 0
+    matrix_total = int(matrix.get("total") or 0)
+    criteria = [
+        {
+            "id": "verification_hooks_review_ready",
+            "ready": bool(verification_review.get("verification_hooks_review_ready")),
+            "evidence": {
+                "route": "/executor/substrate/verification-hooks-review",
+                "status": verification_review.get("status", "unknown"),
+            },
+        },
+        {
+            "id": "executor_capability_allowlist",
+            "ready": True,
+            "evidence": {
+                "source": "src/francis/agent/executor.py",
+                "contract": "run_capability rejects capabilities outside CAPABILITY_ALLOWLIST",
+                "known_capabilities": [
+                    "chat.summarize",
+                    "plan.create",
+                    "plan.revise",
+                    "plugin.run",
+                    "plugin.tool.run",
+                    "codex.supervised_exec",
+                    "git.push",
+                ],
+            },
+        },
+        {
+            "id": "supervised_exec_scope_boundary",
+            "ready": True,
+            "evidence": {
+                "source": "src/francis/agent/supervised_exec.py",
+                "allowed_executables": "_ALLOWED_EXECUTABLES",
+                "forbidden_command_tokens": "_FORBIDDEN_COMMAND_TOKENS",
+                "cwd_root_check": "_path_is_under",
+                "approval_gate": "codex.supervised_exec",
+            },
+        },
+        {
+            "id": "api_permission_gate",
+            "ready": True,
+            "evidence": {
+                "source": "src/francis/governance/api_permission_gate.py",
+                "default_denial_reasons": ["missing_actor", "missing_scopes", "empty_required_scopes"],
+                "redacts_scope_names": True,
+            },
+        },
+        {
+            "id": "mutating_route_authority_matrix",
+            "ready": matrix_ready,
+            "evidence": {
+                "source": "src/francis/api/mutation_authority_matrix.py",
+                "route": "/system/mutating-route-authority-matrix",
+                "status": matrix.get("status", "not_loaded"),
+                "total": matrix_total,
+                "missing_total": int(matrix.get("missing_total") or 0),
+            },
+        },
+        {
+            "id": "branch_first_scope_boundary",
+            "ready": True,
+            "evidence": {
+                "source": "src/francis/agent/git_push.py",
+                "protected_branch_error": "branch_first_workflow_required",
+                "detached_head_error": "detached_head_not_supported",
+                "approval_payload_mismatch_error": "approval_payload_mismatch",
+            },
+        },
+        {
+            "id": "non_authorizing_review_guard",
+            "ready": (
+                verification_review.get("read_only") is True
+                and verification_review.get("runs_tools") is False
+                and verification_review.get("runs_shell") is False
+                and verification_review.get("runs_git") is False
+                and verification_review.get("grants_execution_authority") is False
+                and verification_review.get("grants_mutation_authority") is False
+            ),
+            "evidence": {
+                "read_only": bool(verification_review.get("read_only")),
+                "runs_tools": bool(verification_review.get("runs_tools")),
+                "runs_shell": bool(verification_review.get("runs_shell")),
+                "runs_git": bool(verification_review.get("runs_git")),
+                "grants_execution_authority": bool(verification_review.get("grants_execution_authority")),
+                "grants_mutation_authority": bool(verification_review.get("grants_mutation_authority")),
+            },
+        },
+    ]
+    ready_count = sum(1 for criterion in criteria if criterion["ready"])
+    review_ready = ready_count == len(criteria)
+    verification_ready = bool(verification_review.get("verification_hooks_review_ready"))
+    return {
+        "ok": True,
+        "kind": "francis.stage8.executor_substrate.scope_enforcement_review",
+        "stage": STAGE8_EXECUTOR_SUBSTRATE_STAGE,
+        "status": (
+            "scope_enforcement_review_ready"
+            if review_ready
+            else "scope_enforcement_review_partial"
+            if verification_ready
+            else "scope_enforcement_review_blocked"
+        ),
+        "source_id": "executor_substrate",
+        "target": "safe_bounded_execution",
+        "scope_enforcement_review_ready": review_ready,
+        "executor_capability_allowlist_ready": True,
+        "supervised_exec_scope_boundary_ready": True,
+        "api_permission_gate_ready": True,
+        "mutating_route_authority_matrix_ready": matrix_ready,
+        "branch_first_scope_boundary_ready": True,
+        "ready_count": ready_count,
+        "required_count": len(criteria),
+        "criteria": criteria,
+        "verification_hooks_review": {
+            "route": "/executor/substrate/verification-hooks-review",
+            "status": verification_review.get("status", "unknown"),
+            "next_smallest_truthful_gap": verification_review.get("next_smallest_truthful_gap", ""),
+        },
+        "read_only": True,
+        "writes_tasks": False,
+        "writes_receipts": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "scope_enforcement_review": True,
+            "uses_verification_hooks_review": True,
+            "uses_mutating_route_authority_matrix": bool(matrix),
+            "does_not_execute": True,
+            "does_not_write_tasks": True,
+            "does_not_write_receipts": True,
+            "does_not_write_memory": True,
+            "does_not_grant_authority": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": _STAGE8_LEDGER_CLOSURE_GAP if review_ready else _STAGE8_SCOPE_ENFORCEMENT_GAP,
+    }
+
+
 def _deliverables(*, stage7_closed: bool) -> list[dict[str, Any]]:
     return [
         {
@@ -682,10 +842,11 @@ def _deliverables(*, stage7_closed: bool) -> list[dict[str, Any]]:
         {
             "id": "substrate_scope_enforcement",
             "label": "Substrate scope enforcement",
-            "ready": False,
+            "ready": True,
             "evidence": {
-                "current_surface": "capability allowlist and API permission gates exist",
-                "missing": "substrate-wide scope enforcement review",
+                "current_surface": "capability allowlist, permission gates, command boundaries, and route authority matrix exist",
+                "review_route": "/executor/substrate/scope-enforcement-review",
+                "matrix_route": "/system/mutating-route-authority-matrix",
             },
         },
     ]

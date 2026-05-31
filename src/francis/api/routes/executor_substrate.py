@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
+from francis.api.mutation_authority_matrix import build_mutating_route_authority_matrix
 from francis.executor_substrate import (
     executor_branch_first_workflow_review_snapshot,
     executor_leases_idempotency_review_snapshot,
+    executor_substrate_scope_enforcement_review_snapshot,
     executor_substrate_status_snapshot,
     executor_toolbelt_allowlist_review_snapshot,
     executor_verification_hooks_review_snapshot,
@@ -38,3 +40,10 @@ def leases_idempotency_review() -> dict[str, Any]:
 @router.get("/substrate/verification-hooks-review")
 def verification_hooks_review() -> dict[str, Any]:
     return executor_verification_hooks_review_snapshot()
+
+
+@router.get("/substrate/scope-enforcement-review")
+def scope_enforcement_review(request: Request) -> dict[str, Any]:
+    return executor_substrate_scope_enforcement_review_snapshot(
+        mutating_route_authority_matrix=build_mutating_route_authority_matrix(request.app.routes)
+    )
