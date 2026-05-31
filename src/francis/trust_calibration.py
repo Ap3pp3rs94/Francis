@@ -886,6 +886,17 @@ def trust_calibration_ui_state_coherence_review() -> dict[str, Any]:
             ],
         ),
         _source_contract(
+            "completion_closure_readback",
+            "apps/chat_ui/src/App.tsx",
+            app_text,
+            [
+                "trustCalibrationCompletionReview.stage13_completion_review_ready",
+                "trustCalibrationCompletionReview?.stage_closure_decision_required",
+                "trustCalibrationStageClosureReadback.stage13_closed_by_receipt",
+                "trustCalibrationCompletionBlockers",
+            ],
+        ),
+        _source_contract(
             "presentation_model",
             "apps/chat_ui/src/trust_dashboard/index.ts",
             dashboard_text,
@@ -917,7 +928,8 @@ def trust_calibration_ui_state_coherence_review() -> dict[str, Any]:
         "operator_shell_card_observed": bool(source_contracts[0]["observed"]),
         "bounded_shell_claim_request_observed": bool(source_contracts[1]["observed"]),
         "claim_guard_readback_observed": bool(source_contracts[2]["observed"]),
-        "presentation_model_observed": bool(source_contracts[3]["observed"]),
+        "completion_closure_readback_observed": bool(source_contracts[3]["observed"]),
+        "presentation_model_observed": bool(source_contracts[4]["observed"]),
         "browser_visual_readback_required": True,
         "operator_browser_visual_readback_observed": browser_visual_observed,
         "latest_operator_browser_visual_readback_receipt_id": _safe_text(

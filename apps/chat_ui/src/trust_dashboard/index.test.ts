@@ -184,6 +184,92 @@ test("TrustClient.evaluateClaim rejects malformed calibration responses", async 
   }
 });
 
+test("TrustClient reads Stage 13 completion review and closure receipts without mutations", async () => {
+  const capturedUrls: string[] = [];
+  const restoreFetch = installFetch(async (url) => {
+    capturedUrls.push(url);
+    if (url.endsWith("/trust-calibration/completion-review")) {
+      return jsonResponse({
+        ok: true,
+        status: "blocked",
+        stage13_completion_review_ready: false,
+        stage_closure_decision_required: false,
+        stage13_closed_by_receipt: false,
+        operator_browser_visual_readback_observed: false,
+        latest_operator_browser_visual_readback_receipt_id: "",
+        ready_count: 6,
+        required_count: 7,
+        blockers: ["operator_browser_visual_readback_observed", "all_deliverables_ready"],
+        next_smallest_truthful_gap: "stage13_operator_browser_visual_readback",
+        reads_receipts: true,
+        writes_receipts: false,
+        writes_memory: false,
+        runs_tools: false,
+        runs_shell: false,
+        runs_git: false,
+        launches_browser: false,
+        captures_screen: false,
+        marks_stage_closed: false,
+        grants_execution_authority: false,
+        grants_mutation_authority: false,
+      });
+    }
+    return jsonResponse({
+      ok: true,
+      status: "empty",
+      count: 0,
+      latest_receipt_id: "",
+      latest_decision: "",
+      stage13_closed_by_receipt: false,
+      reads_receipts: true,
+      writes_receipts: false,
+      writes_memory: false,
+      runs_tools: false,
+      runs_shell: false,
+      runs_git: false,
+      launches_browser: false,
+      captures_screen: false,
+      marks_runtime_stage_state: false,
+      grants_execution_authority: false,
+      grants_mutation_authority: false,
+      next_smallest_truthful_gap: "stage13_completion_review",
+    });
+  });
+
+  try {
+    const client = new TrustClient("http://127.0.0.1:8000", { retry: { retries: 0 } });
+    const review = await client.getTrustCalibrationCompletionReview();
+    const closure = await client.getTrustCalibrationStageClosureDecisions({ limit: 10 });
+
+    assert.deepEqual(capturedUrls, [
+      "http://127.0.0.1:8000/trust-calibration/completion-review",
+      "http://127.0.0.1:8000/trust-calibration/stage-closure-decisions?limit=10",
+    ]);
+    assert.equal(review.status, "blocked");
+    assert.equal(review.stage13_completion_review_ready, false);
+    assert.equal(review.stage_closure_decision_required, false);
+    assert.equal(review.ready_count, 6);
+    assert.equal(review.required_count, 7);
+    assert.deepEqual(review.blockers, ["operator_browser_visual_readback_observed", "all_deliverables_ready"]);
+    assert.equal(review.writes_receipts, false);
+    assert.equal(review.writes_memory, false);
+    assert.equal(review.runs_shell, false);
+    assert.equal(review.launches_browser, false);
+    assert.equal(review.captures_screen, false);
+    assert.equal(review.marks_stage_closed, false);
+
+    assert.equal(closure.status, "empty");
+    assert.equal(closure.stage13_closed_by_receipt, false);
+    assert.equal(closure.latest_receipt_id, "");
+    assert.equal(closure.writes_receipts, false);
+    assert.equal(closure.writes_memory, false);
+    assert.equal(closure.runs_git, false);
+    assert.equal(closure.next_smallest_truthful_gap, "stage13_completion_review");
+  } finally {
+    restoreFetch();
+  }
+});
+
 test("presentTrustCalibrationClaimEvaluation preserves blocked and missing-verification obligations", () => {
   const presentation = presentTrustCalibrationClaimEvaluation({
     ok: true,

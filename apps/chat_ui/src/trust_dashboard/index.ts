@@ -285,6 +285,54 @@ export type TrustCalibrationClaimEvaluation = {
   governance?: Record<string, unknown>;
 };
 
+export type TrustCalibrationCompletionReview = {
+  ok: boolean;
+  status: string;
+  stage13_completion_review_ready: boolean;
+  stage_closure_decision_required: boolean;
+  stage13_closed_by_receipt: boolean;
+  operator_browser_visual_readback_observed: boolean;
+  latest_operator_browser_visual_readback_receipt_id: string;
+  ready_count: number;
+  required_count: number;
+  blockers: string[];
+  next_smallest_truthful_gap: string;
+  reads_receipts: boolean;
+  writes_receipts: boolean;
+  writes_memory: boolean;
+  runs_tools: boolean;
+  runs_shell: boolean;
+  runs_git: boolean;
+  launches_browser: boolean;
+  captures_screen: boolean;
+  marks_stage_closed: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+  governance?: Record<string, unknown>;
+};
+
+export type TrustCalibrationStageClosureDecisionReadback = {
+  ok: boolean;
+  status: string;
+  count: number;
+  latest_receipt_id: string;
+  latest_decision: string;
+  stage13_closed_by_receipt: boolean;
+  reads_receipts: boolean;
+  writes_receipts: boolean;
+  writes_memory: boolean;
+  runs_tools: boolean;
+  runs_shell: boolean;
+  runs_git: boolean;
+  launches_browser: boolean;
+  captures_screen: boolean;
+  marks_runtime_stage_state: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+  next_smallest_truthful_gap: string;
+  governance?: Record<string, unknown>;
+};
+
 const DEFAULT_TRUST_MUTATION_ACTOR = "chat_ui.trust";
 
 export class TrustApiError extends Error {
@@ -747,6 +795,73 @@ function parseTrustCalibrationClaimEvaluation(raw: unknown): TrustCalibrationCla
   };
 }
 
+function parseTrustCalibrationCompletionReview(raw: unknown): TrustCalibrationCompletionReview | null {
+  if (!isRecord(raw)) return null;
+
+  const status = safeString(raw.status, "").trim();
+  if (!status) return null;
+
+  return {
+    ok: safeBool(raw.ok, true),
+    status,
+    stage13_completion_review_ready: safeBool(raw.stage13_completion_review_ready, false),
+    stage_closure_decision_required: safeBool(raw.stage_closure_decision_required, false),
+    stage13_closed_by_receipt: safeBool(raw.stage13_closed_by_receipt, false),
+    operator_browser_visual_readback_observed: safeBool(raw.operator_browser_visual_readback_observed, false),
+    latest_operator_browser_visual_readback_receipt_id: safeString(
+      raw.latest_operator_browser_visual_readback_receipt_id,
+      "",
+    ),
+    ready_count: safeNumber(raw.ready_count, 0),
+    required_count: safeNumber(raw.required_count, 0),
+    blockers: safeStringArray(raw.blockers) ?? [],
+    next_smallest_truthful_gap: safeString(raw.next_smallest_truthful_gap, ""),
+    reads_receipts: safeBool(raw.reads_receipts, false),
+    writes_receipts: safeBool(raw.writes_receipts, false),
+    writes_memory: safeBool(raw.writes_memory, false),
+    runs_tools: safeBool(raw.runs_tools, false),
+    runs_shell: safeBool(raw.runs_shell, false),
+    runs_git: safeBool(raw.runs_git, false),
+    launches_browser: safeBool(raw.launches_browser, false),
+    captures_screen: safeBool(raw.captures_screen, false),
+    marks_stage_closed: safeBool(raw.marks_stage_closed, false),
+    grants_execution_authority: safeBool(raw.grants_execution_authority, false),
+    grants_mutation_authority: safeBool(raw.grants_mutation_authority, false),
+    governance: isRecord(raw.governance) ? (raw.governance as Record<string, unknown>) : undefined,
+  };
+}
+
+function parseTrustCalibrationStageClosureDecisionReadback(
+  raw: unknown,
+): TrustCalibrationStageClosureDecisionReadback | null {
+  if (!isRecord(raw)) return null;
+
+  const status = safeString(raw.status, "").trim();
+  if (!status) return null;
+
+  return {
+    ok: safeBool(raw.ok, true),
+    status,
+    count: safeNumber(raw.count, 0),
+    latest_receipt_id: safeString(raw.latest_receipt_id, ""),
+    latest_decision: safeString(raw.latest_decision, ""),
+    stage13_closed_by_receipt: safeBool(raw.stage13_closed_by_receipt, false),
+    reads_receipts: safeBool(raw.reads_receipts, false),
+    writes_receipts: safeBool(raw.writes_receipts, false),
+    writes_memory: safeBool(raw.writes_memory, false),
+    runs_tools: safeBool(raw.runs_tools, false),
+    runs_shell: safeBool(raw.runs_shell, false),
+    runs_git: safeBool(raw.runs_git, false),
+    launches_browser: safeBool(raw.launches_browser, false),
+    captures_screen: safeBool(raw.captures_screen, false),
+    marks_runtime_stage_state: safeBool(raw.marks_runtime_stage_state, false),
+    grants_execution_authority: safeBool(raw.grants_execution_authority, false),
+    grants_mutation_authority: safeBool(raw.grants_mutation_authority, false),
+    next_smallest_truthful_gap: safeString(raw.next_smallest_truthful_gap, ""),
+    governance: isRecord(raw.governance) ? (raw.governance as Record<string, unknown>) : undefined,
+  };
+}
+
 /* -------------------------------------------------------------------------------------------------
  * endpoints (overrideable)
  * ------------------------------------------------------------------------------------------------- */
@@ -762,6 +877,8 @@ export type TrustEndpoints = {
    * The backend returns calibrated language/UI obligations without mutating state.
    */
   claimEvaluation: () => string[];
+  completionReview: () => string[];
+  stageClosureDecisions: (q?: { limit?: number }) => string[];
 
   /**
    * Mutations (approval/policy gated server-side).
@@ -810,6 +927,11 @@ export function defaultTrustEndpoints(): TrustEndpoints {
     policy: () => ["/trust/policy", "/trust/config", "/trust/settings", "/system/trust/policy", "/system/trust/config"],
 
     claimEvaluation: () => ["/trust-calibration/evaluate-claim"],
+    completionReview: () => ["/trust-calibration/completion-review"],
+    stageClosureDecisions: (q) => {
+      const qs = encodeQuery({ limit: q?.limit });
+      return [`/trust-calibration/stage-closure-decisions${qs}`];
+    },
 
     adjust: () => ["/trust/adjust", "/trust/mutate", "/trust/set", "/system/trust/adjust", "/system/trust/mutate"],
   };
@@ -1103,6 +1225,44 @@ export class TrustClient {
     }
     if (!parsed.ok) {
       throw new TrustApiError(parsed.reason || parsed.status || "Trust calibration claim evaluation failed.", {
+        status: res.status,
+      });
+    }
+    return parsed;
+  }
+
+  async getTrustCalibrationCompletionReview(
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<TrustCalibrationCompletionReview> {
+    const { json, res } = await this.fetchFirstOk(this.endpoints.completionReview(), this.init(opts));
+    const parsed = parseTrustCalibrationCompletionReview(json);
+    if (!parsed) {
+      throw new TrustApiError("Invalid trust calibration completion review response.", {
+        status: res.status,
+      });
+    }
+    if (!parsed.ok) {
+      throw new TrustApiError(parsed.status || "Trust calibration completion review failed.", {
+        status: res.status,
+      });
+    }
+    return parsed;
+  }
+
+  async getTrustCalibrationStageClosureDecisions(
+    params?: { limit?: number },
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<TrustCalibrationStageClosureDecisionReadback> {
+    const limit = typeof params?.limit === "number" ? clamp(Math.floor(params.limit), 1, 100) : 20;
+    const { json, res } = await this.fetchFirstOk(this.endpoints.stageClosureDecisions({ limit }), this.init(opts));
+    const parsed = parseTrustCalibrationStageClosureDecisionReadback(json);
+    if (!parsed) {
+      throw new TrustApiError("Invalid trust calibration stage closure decision response.", {
+        status: res.status,
+      });
+    }
+    if (!parsed.ok) {
+      throw new TrustApiError(parsed.status || "Trust calibration stage closure decision readback failed.", {
         status: res.status,
       });
     }

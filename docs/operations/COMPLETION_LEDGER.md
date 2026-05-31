@@ -49635,6 +49635,56 @@ Latest validation for Stage 13 closure decision path:
   "all_deliverables_ready"];
   review_next=stage13_operator_browser_visual_readback`.
 
+### 2026-05-31 - Stage 13 completion and closure readbacks reach the ORB shell
+
+Roadmap area: Stage 13 / Trust Calibration, UI and state coherence around
+confidence and stage-completion claims.
+
+Material change:
+
+- The chat UI trust dashboard client now reads
+  `/trust-calibration/completion-review` and
+  `/trust-calibration/stage-closure-decisions`.
+- The ORB/System surface now shows Stage 13 completion-review status, closure
+  receipt status, completion blockers, and the current next truthful gap next
+  to the existing trust-calibration claim evaluator.
+- The UI surface remains read-only. It does not write closure receipts, memory,
+  UI confidence, runtime stage state, launch browsers, capture screens, run
+  tools, run shell, run git, or grant execution or mutation authority.
+- The backend static UI state-coherence review now verifies the shell references
+  completion-review state, stage-closure decision requirement state, closure
+  receipt state, and completion blockers.
+- Current source-contract readback is
+  `source_contract_ready_count=5; source_contract_count=5`, while browser visual
+  readback remains missing.
+
+Latest validation for Stage 13 completion/closure UI readbacks:
+
+- `python -m pytest tests/test_api_trust_calibration.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed`
+- `python -m mypy src/francis/trust_calibration.py
+  src/francis/api/routes/trust_calibration.py`
+  Result: `passed`
+- `python -m ruff check src/francis/trust_calibration.py
+  tests/test_api_trust_calibration.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/trust_calibration.py
+  tests/test_api_trust_calibration.py`
+  Result: `passed`
+- `node --test --experimental-strip-types src/trust_dashboard/index.test.ts`
+  from `apps/chat_ui/`
+  Result: `passed; 7 passed`
+- `npm run build` from `apps/chat_ui/`
+  Result: `passed`
+- Direct local `TestClient` readback of GET
+  `/trust-calibration/ui-state-coherence`.
+  Result: `status=ready; source_contract_ready_count=5;
+  source_contract_count=5; completion_closure_readback_observed=true;
+  operator_browser_visual_readback_observed=false;
+  next_smallest_truthful_gap=stage13_operator_browser_visual_readback`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -67,6 +67,10 @@ def _write_stage13_ui_coherence_sources(repo_root: Path) -> None:
         trustCalibrationPresentation.must_name_missing_verification;
         trustCalibrationPresentation.runtime_claim_integration_ready;
         trustCalibrationPresentation.side_effects_denied;
+        trustCalibrationCompletionReview.stage13_completion_review_ready;
+        trustCalibrationCompletionReview?.stage_closure_decision_required;
+        trustCalibrationStageClosureReadback.stage13_closed_by_receipt;
+        trustCalibrationCompletionBlockers;
         """,
         encoding="utf-8",
     )
@@ -418,11 +422,12 @@ def test_trust_calibration_confidence_rules_contract_ready_after_stage12_closure
     assert ui_review["runtime_claim_integration_ready"] is True
     assert ui_review["stage12_closed_by_receipt"] is True
     assert ui_review["stage12_latest_closure_receipt_id"] == "knowledge_fabric_stage12_closure_tc_test"
-    assert ui_review["source_contract_count"] == 4
-    assert ui_review["source_contract_ready_count"] == 4
+    assert ui_review["source_contract_count"] == 5
+    assert ui_review["source_contract_ready_count"] == 5
     assert ui_review["operator_shell_card_observed"] is True
     assert ui_review["bounded_shell_claim_request_observed"] is True
     assert ui_review["claim_guard_readback_observed"] is True
+    assert ui_review["completion_closure_readback_observed"] is True
     assert ui_review["presentation_model_observed"] is True
     assert ui_review["browser_visual_readback_required"] is True
     assert ui_review["operator_browser_visual_readback_observed"] is False

@@ -137,6 +137,8 @@ import {
   TrustClient,
   presentTrustCalibrationClaimEvaluation,
   type TrustCalibrationClaimEvaluation,
+  type TrustCalibrationCompletionReview,
+  type TrustCalibrationStageClosureDecisionReadback,
 } from "./trust_dashboard";
 
 const DEFAULT_API = "http://127.0.0.1:8000";
@@ -4168,6 +4170,22 @@ function SystemPanel(props: {
     useState<TrustCalibrationClaimEvaluation | null>(null);
   const [trustCalibrationEvaluationError, setTrustCalibrationEvaluationError] = useState<string | null>(null);
   const [trustCalibrationEvaluationLoadedAt, setTrustCalibrationEvaluationLoadedAt] = useState<number | null>(null);
+  const [trustCalibrationCompletionReview, setTrustCalibrationCompletionReview] =
+    useState<TrustCalibrationCompletionReview | null>(null);
+  const [trustCalibrationCompletionReviewError, setTrustCalibrationCompletionReviewError] = useState<string | null>(
+    null,
+  );
+  const [trustCalibrationCompletionReviewLoadedAt, setTrustCalibrationCompletionReviewLoadedAt] = useState<
+    number | null
+  >(null);
+  const [trustCalibrationStageClosureReadback, setTrustCalibrationStageClosureReadback] =
+    useState<TrustCalibrationStageClosureDecisionReadback | null>(null);
+  const [trustCalibrationStageClosureReadbackError, setTrustCalibrationStageClosureReadbackError] = useState<
+    string | null
+  >(null);
+  const [trustCalibrationStageClosureReadbackLoadedAt, setTrustCalibrationStageClosureReadbackLoadedAt] = useState<
+    number | null
+  >(null);
   const [telemetryFeedbackReview, setTelemetryFeedbackReview] = useState<TelemetryContextFeedbackReview | null>(null);
   const [telemetryFeedbackReviewError, setTelemetryFeedbackReviewError] = useState<string | null>(null);
   const [telemetryFeedbackReviewLoadedAt, setTelemetryFeedbackReviewLoadedAt] = useState<number | null>(null);
@@ -4626,6 +4644,8 @@ function SystemPanel(props: {
         nextLensStatus,
         nextTelemetryStatus,
         nextTrustCalibrationEvaluation,
+        nextTrustCalibrationCompletionReview,
+        nextTrustCalibrationStageClosureReadback,
         nextTelemetryFeedbackReview,
         nextTelemetryFeedbackMemoryReadback,
         nextTelemetryFeedbackMemoryAssistancePolicy,
@@ -4684,6 +4704,8 @@ function SystemPanel(props: {
             next_smallest_truthful_gap: "stage13_ui_state_coherence",
           },
         }),
+        trustClient.getTrustCalibrationCompletionReview(),
+        trustClient.getTrustCalibrationStageClosureDecisions({ limit: 10 }),
         telemetryClient.getContextFeedbackReview({ limit: 25 }),
         telemetryClient.getContextFeedbackMemoryRetrievalReadback({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistancePolicy(),
@@ -4849,6 +4871,24 @@ function SystemPanel(props: {
       } else {
         setTrustCalibrationEvaluationError(trustError(nextTrustCalibrationEvaluation.reason));
         degradedFeeds.push("trust calibration");
+      }
+
+      if (nextTrustCalibrationCompletionReview.status === "fulfilled") {
+        setTrustCalibrationCompletionReview(nextTrustCalibrationCompletionReview.value);
+        setTrustCalibrationCompletionReviewError(null);
+        setTrustCalibrationCompletionReviewLoadedAt(refreshStartedAt);
+      } else {
+        setTrustCalibrationCompletionReviewError(trustError(nextTrustCalibrationCompletionReview.reason));
+        degradedFeeds.push("trust calibration completion review");
+      }
+
+      if (nextTrustCalibrationStageClosureReadback.status === "fulfilled") {
+        setTrustCalibrationStageClosureReadback(nextTrustCalibrationStageClosureReadback.value);
+        setTrustCalibrationStageClosureReadbackError(null);
+        setTrustCalibrationStageClosureReadbackLoadedAt(refreshStartedAt);
+      } else {
+        setTrustCalibrationStageClosureReadbackError(trustError(nextTrustCalibrationStageClosureReadback.reason));
+        degradedFeeds.push("trust calibration closure readback");
       }
 
       if (nextTelemetryFeedbackReview.status === "fulfilled") {
@@ -6968,6 +7008,37 @@ function SystemPanel(props: {
   const trustCalibrationMissingVerification = trustCalibrationPresentation.missing_verification.slice(0, 4);
   const trustCalibrationForbiddenLanguage = trustCalibrationPresentation.forbidden_surface_language.slice(0, 4);
   const trustCalibrationAllowedLanguage = trustCalibrationPresentation.allowed_surface_language.slice(0, 3);
+  const trustCalibrationCompletionStatus =
+    safeString(trustCalibrationCompletionReview?.status).trim() ||
+    (trustCalibrationCompletionReviewError ? "unavailable" : "unloaded");
+  const trustCalibrationCompletionTone = trustCalibrationCompletionReviewError
+    ? "blocked"
+    : trustCalibrationCompletionReview
+      ? trustCalibrationCompletionReview.stage13_completion_review_ready
+        ? "ready"
+        : "blocked"
+      : "standby";
+  const trustCalibrationClosureStatus =
+    safeString(trustCalibrationStageClosureReadback?.status).trim() ||
+    (trustCalibrationStageClosureReadbackError ? "unavailable" : "unloaded");
+  const trustCalibrationClosureTone = trustCalibrationStageClosureReadbackError
+    ? "blocked"
+    : trustCalibrationStageClosureReadback
+      ? trustCalibrationStageClosureReadback.stage13_closed_by_receipt
+        ? "ready"
+        : "dormant"
+      : "standby";
+  const trustCalibrationCompletionBlockers = trustCalibrationCompletionReview?.blockers.slice(0, 4) ?? [];
+  const trustCalibrationCompletionDetail = trustCalibrationCompletionReviewError
+    ? `Stage 13 completion review could not refresh: ${trustCalibrationCompletionReviewError}`
+    : trustCalibrationCompletionReview
+      ? `Completion review ${trustCalibrationCompletionStatus}; ${trustCalibrationCompletionReview.ready_count}/${trustCalibrationCompletionReview.required_count} gates ready; next ${trustCalibrationCompletionReview.next_smallest_truthful_gap || "stage13_operator_browser_visual_readback"}.`
+      : "Stage 13 completion review has not loaded yet.";
+  const trustCalibrationClosureDetail = trustCalibrationStageClosureReadbackError
+    ? `Stage 13 closure readback could not refresh: ${trustCalibrationStageClosureReadbackError}`
+    : trustCalibrationStageClosureReadback
+      ? `Closure receipt readback ${trustCalibrationClosureStatus}; latest ${trustCalibrationStageClosureReadback.latest_receipt_id || "none"}; next ${trustCalibrationStageClosureReadback.next_smallest_truthful_gap || "stage13_completion_review"}.`
+      : "Stage 13 closure receipt readback has not loaded yet.";
   const telemetryFeedbackStatus =
     safeString(telemetryFeedbackReview?.status).trim() || (telemetryFeedbackReviewError ? "unavailable" : "unloaded");
   const telemetryFeedbackTone = telemetryFeedbackReviewError
@@ -12449,6 +12520,12 @@ function SystemPanel(props: {
             <span style={badgeStyle(trustCalibrationPresentation.badge_status)}>
               Trust calibration {trustCalibrationStatus}
             </span>
+            <span style={badgeStyle(trustCalibrationCompletionTone)}>
+              Stage 13 review {trustCalibrationCompletionStatus}
+            </span>
+            <span style={badgeStyle(trustCalibrationClosureTone)}>
+              Stage 13 closure {trustCalibrationClosureStatus}
+            </span>
             <span style={badgeStyle(continuation.tone)}>{continuation.label}</span>
           </div>
         </div>
@@ -12486,13 +12563,36 @@ function SystemPanel(props: {
               <span style={badgeStyle(trustCalibrationPresentation.side_effects_denied ? "running" : "blocked")}>
                 side effects {trustCalibrationPresentation.side_effects_denied ? "denied" : "unclear"}
               </span>
+              <span style={badgeStyle(trustCalibrationCompletionTone)}>
+                review {trustCalibrationCompletionStatus}
+              </span>
+              <span style={badgeStyle(trustCalibrationClosureTone)}>
+                closure {trustCalibrationClosureStatus}
+              </span>
+              {trustCalibrationCompletionReview?.stage_closure_decision_required ? (
+                <span style={badgeStyle("running")}>closure decision required</span>
+              ) : null}
             </div>
             <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8, overflowWrap: "anywhere" }}>
-              next <code>{trustCalibrationPresentation.next_smallest_truthful_gap || "stage13_ui_state_coherence"}</code>
+              next{" "}
+              <code>
+                {trustCalibrationCompletionReview?.next_smallest_truthful_gap ||
+                  trustCalibrationPresentation.next_smallest_truthful_gap ||
+                  "stage13_ui_state_coherence"}
+              </code>
             </div>
-            {trustCalibrationEvaluationLoadedAt ? (
+            {trustCalibrationEvaluationLoadedAt ||
+            trustCalibrationCompletionReviewLoadedAt ||
+            trustCalibrationStageClosureReadbackLoadedAt ? (
               <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
-                Loaded {toLocaleTime(trustCalibrationEvaluationLoadedAt)}
+                Loaded{" "}
+                {toLocaleTime(
+                  Math.max(
+                    trustCalibrationEvaluationLoadedAt ?? 0,
+                    trustCalibrationCompletionReviewLoadedAt ?? 0,
+                    trustCalibrationStageClosureReadbackLoadedAt ?? 0,
+                  ),
+                )}
               </div>
             ) : null}
           </div>
@@ -12504,6 +12604,18 @@ function SystemPanel(props: {
         </div>
         <div style={{ fontSize: 12, color: trustCalibrationEvaluationError ? "#ffcf9d" : THEME.text, marginTop: 8 }}>
           {trustCalibrationDetail}
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            color:
+              trustCalibrationCompletionReviewError || trustCalibrationStageClosureReadbackError
+                ? "#ffcf9d"
+                : THEME.text,
+            marginTop: 8,
+          }}
+        >
+          {trustCalibrationCompletionDetail} {trustCalibrationClosureDetail}
         </div>
         <div
           style={{
@@ -12525,6 +12637,13 @@ function SystemPanel(props: {
               ) : (
                 <span style={badgeStyle("running")}>none</span>
               )}
+              {trustCalibrationCompletionBlockers.length > 0
+                ? trustCalibrationCompletionBlockers.map((item) => (
+                    <span key={`trust-calibration-completion-blocker-${item}`} style={badgeStyle("blocked")}>
+                      {item}
+                    </span>
+                  ))
+                : null}
             </div>
           </div>
           <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
