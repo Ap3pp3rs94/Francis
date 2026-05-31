@@ -47627,6 +47627,49 @@ Latest validation for Stage 10 Away groundwork:
   ready_count=4; required_count=8; away_ready=false;
   next=stage10_away_safe_task_classes`.
 
+### 2026-05-31 - Stage 10 away-safe task classes are explicit and gated
+
+Roadmap area: Stage 10 / Away Mode, away-safe task class contract.
+
+Material change:
+
+- Added read-only GET `/away/safe-task-classes`.
+- Away now declares four bounded task classes:
+  `continuity_monitoring`, `approval_queue_triage`, `shift_report_draft`, and
+  `safe_plan_preparation`.
+- The class contract allows only read-only or draft-only preparation. It does
+  not allow tool execution, shell, git, process starts, memory writes, file
+  writes, external sends, or approval decisions.
+- Each class requires future operator approval and an autonomy budget before
+  execution.
+- `/away/status` now marks `away_safe_task_classes` ready and advances the next
+  smallest truthful gap to `stage10_autonomy_budgets`.
+
+Latest validation for Stage 10 Away safe task classes:
+
+- `python -m pytest tests/test_api_away.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 4 tests passed`
+- `python -m mypy src/francis/away.py
+  src/francis/api/routes/away.py`
+  Result: `passed`
+- `python -m ruff check src/francis/away.py
+  src/francis/api/routes/away.py tests/test_api_away.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/away.py
+  src/francis/api/routes/away.py tests/test_api_away.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed; 4 files already formatted`
+- Live local read-only route/readback:
+  GET `/away/status` and GET `/away/safe-task-classes`.
+  Result: `status=stage10_groundwork_ready;
+  safe_ready=true; class_count=4;
+  ready_count=5; required_count=8;
+  status_next=stage10_autonomy_budgets;
+  review_next=stage10_autonomy_budgets`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
