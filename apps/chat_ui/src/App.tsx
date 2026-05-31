@@ -46,6 +46,7 @@ import {
 } from "./lens";
 import { OperationsApiError, OperationsClient } from "./operations";
 import type { OperationDetail, OperationGovernanceDecision, OperationMemoryReceipt, OperationRecord } from "./operations";
+import { TakeoverApiError, TakeoverClient, type TakeoverStatusSnapshot } from "./takeover";
 import {
   ReactorApiError,
   ReactorClient,
@@ -4093,6 +4094,7 @@ function SystemPanel(props: {
   const client = useMemo(() => new SettingsClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const missionsClient = useMemo(() => new MissionsClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const operationsClient = useMemo(() => new OperationsClient(resolvedBaseUrl), [resolvedBaseUrl]);
+  const takeoverClient = useMemo(() => new TakeoverClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const reactorClient = useMemo(() => new ReactorClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const lensClient = useMemo(() => new LensClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const telemetryClient = useMemo(() => new TelemetryClient(resolvedBaseUrl), [resolvedBaseUrl]);
@@ -4115,6 +4117,9 @@ function SystemPanel(props: {
   const [takeoverOperations, setTakeoverOperations] = useState<OperationRecord[]>([]);
   const [takeoverOperationsError, setTakeoverOperationsError] = useState<string | null>(null);
   const [takeoverOperationsLoadedAt, setTakeoverOperationsLoadedAt] = useState<number | null>(null);
+  const [takeoverStatus, setTakeoverStatus] = useState<TakeoverStatusSnapshot | null>(null);
+  const [takeoverStatusError, setTakeoverStatusError] = useState<string | null>(null);
+  const [takeoverStatusLoadedAt, setTakeoverStatusLoadedAt] = useState<number | null>(null);
   const [reactorReviewQueue, setReactorReviewQueue] = useState<ReactorReviewQueueSnapshot | null>(null);
   const [reactorReviewQueueError, setReactorReviewQueueError] = useState<string | null>(null);
   const [reactorReviewQueueLoadedAt, setReactorReviewQueueLoadedAt] = useState<number | null>(null);
@@ -4514,6 +4519,14 @@ function SystemPanel(props: {
     return "Operations request failed.";
   }, []);
 
+  const takeoverError = useCallback((err: unknown): string => {
+    if (err instanceof TakeoverApiError) {
+      return `${err.message}${err.status ? ` (HTTP ${err.status})` : ""}`;
+    }
+    if (err instanceof Error) return err.message;
+    return "Takeover request failed.";
+  }, []);
+
   const reactorError = useCallback((err: unknown): string => {
     if (err instanceof ReactorApiError) {
       return `${err.message}${err.status ? ` (HTTP ${err.status})` : ""}`;
@@ -4568,6 +4581,7 @@ function SystemPanel(props: {
         nextObserverEvents,
         nextOrbStatus,
         nextOperations,
+        nextTakeoverStatus,
         nextReactorOperatorVisibility,
         nextReactorReviewQueue,
         nextReactorProposalReviews,
@@ -4608,6 +4622,7 @@ function SystemPanel(props: {
         client.getObserverEvents({ limit: 8 }),
         client.getOrbStatus(),
         operationsClient.list({ limit: 16 }).then((response) => response.items ?? []),
+        takeoverClient.getStatus({ limit: 16 }),
         reactorClient.getOperatorVisibilitySummary({ limit: 6 }),
         reactorClient.getReviewQueue({ limit: 8, route: reactorReviewRouteFilter || undefined }),
         reactorClient.listEvents({
@@ -4712,6 +4727,15 @@ function SystemPanel(props: {
       } else {
         setTakeoverOperationsError(operationsError(nextOperations.reason));
         degradedFeeds.push("live operations");
+      }
+
+      if (nextTakeoverStatus.status === "fulfilled") {
+        setTakeoverStatus(nextTakeoverStatus.value);
+        setTakeoverStatusError(null);
+        setTakeoverStatusLoadedAt(refreshStartedAt);
+      } else {
+        setTakeoverStatusError(takeoverError(nextTakeoverStatus.reason));
+        degradedFeeds.push("takeover status");
       }
 
       if (nextReactorOperatorVisibility.status === "fulfilled") {
@@ -5067,6 +5091,8 @@ function SystemPanel(props: {
     reactorError,
     reactorReviewRouteFilter,
     settingsError,
+    takeoverClient,
+    takeoverError,
     telemetryClient,
     telemetryError,
   ]);
@@ -7495,7 +7521,36 @@ function SystemPanel(props: {
   const focusPlaneId = safeString(props.operatorMode?.focus?.plane_id).trim();
   const focusLabel = safeString(props.operatorMode?.focus?.label).trim() || focusPlaneId || "No active scope";
   const focusReason = safeString(props.operatorMode?.focus?.reason).trim() || "No active operator focus has been recorded.";
-  const pilotActive = controlModeId === "pilot";
+  const latestTakeoverTransfer = takeoverStatus?.latest_control_transfer_receipt;
+  const latestTakeoverPanic = takeoverStatus?.latest_panic_stop_receipt;
+  const latestTakeoverHandback = takeoverStatus?.latest_handback_summary_receipt;
+  const takeoverStatusLabel = safeString(takeoverStatus?.status).trim() || (controlModeId === "pilot" ? "pilot_active" : "standby");
+  const takeoverControlModeId = safeString(takeoverStatus?.control_mode?.id).trim();
+  const takeoverControlModeLabel = safeString(takeoverStatus?.control_mode?.label).trim() || takeoverControlModeId || controlModeId;
+  const takeoverNextGap = safeString(takeoverStatus?.next_smallest_truthful_gap).trim();
+  const takeoverStage8ReceiptId =
+    safeString(takeoverStatus?.stage8_latest_receipt_id).trim() ||
+    safeString(latestTakeoverTransfer?.stage8_closure_receipt_id).trim();
+  const takeoverSessionId =
+    safeString(takeoverStatus?.active_session_id).trim() ||
+    safeString(latestTakeoverHandback?.session_id).trim() ||
+    safeString(latestTakeoverPanic?.session_id).trim() ||
+    safeString(latestTakeoverTransfer?.session_id).trim();
+  const pilotActive = Boolean(takeoverStatus?.control_transfer_active) || controlModeId === "pilot";
+  const takeoverHandbackSummary = safeString(latestTakeoverHandback?.summary).trim();
+  const takeoverValidationOutcome = safeString(latestTakeoverHandback?.validation_outcome).trim();
+  const takeoverRemainingUncertainty = safeString(latestTakeoverHandback?.remaining_uncertainty).trim();
+  const takeoverNextRecommendation = safeString(latestTakeoverHandback?.next_recommendation).trim();
+  const takeoverProofReceipts = [
+    { label: "transfer", id: safeString(latestTakeoverTransfer?.receipt_id).trim() },
+    { label: "panic", id: safeString(latestTakeoverPanic?.receipt_id).trim() },
+    { label: "handback", id: safeString(latestTakeoverHandback?.receipt_id).trim() },
+  ].filter((item) => item.id);
+  const takeoverProofHandles = [
+    ...(latestTakeoverHandback?.trace_ids ?? []).map((id) => ({ label: "trace", id })),
+    ...(latestTakeoverHandback?.run_ids ?? []).map((id) => ({ label: "run", id })),
+    ...(latestTakeoverHandback?.changed_artifacts ?? []).map((id) => ({ label: "artifact", id })),
+  ].filter((item) => safeString(item.id).trim()).slice(0, 8);
   const activeTakeoverOperations = takeoverOperations.filter((operation) =>
     ["running", "queued", "blocked"].includes(operationStatus(operation)),
   );
@@ -8131,6 +8186,20 @@ function SystemPanel(props: {
       detail: takeoverOperationsError
         ? `Showing the last retained execution feed while refresh is failing: ${takeoverOperationsError}`
         : `${takeoverOperations.length} recent operation${takeoverOperations.length === 1 ? "" : "s"} are cached from the execution feed.`,
+    },
+    {
+      id: "takeover-status",
+      label: "Takeover",
+      observedAt: takeoverStatusLoadedAt,
+      error: takeoverStatusError,
+      staleAfterSeconds: 120,
+      actionLabel: "Inspect takeover",
+      onAction: () => scrollOrbSection("francis-takeover-feed"),
+      detail: takeoverStatusError
+        ? `Takeover status refresh failed: ${takeoverStatusError}`
+        : takeoverNextGap
+          ? `Pilot ${takeoverStatusLabel}; next ${takeoverNextGap}.`
+          : `Pilot ${takeoverStatusLabel} is visible.`,
     },
   ].map((item) => ({
     ...item,
@@ -14223,8 +14292,99 @@ function SystemPanel(props: {
             Live operations unavailable: {takeoverOperationsError}
           </div>
         ) : null}
+        {takeoverStatusError ? (
+          <div style={{ fontSize: 11, color: "#ffcf9d", marginTop: 8 }}>Takeover status unavailable: {takeoverStatusError}</div>
+        ) : null}
 
         <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+          <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 600 }}>Pilot State</div>
+              <span style={badgeStyle(takeoverStatusLabel)}>{takeoverStatusLabel}</span>
+            </div>
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6, overflowWrap: "anywhere" }}>
+              mode=<code>{takeoverControlModeLabel || "unknown"}</code>
+              {takeoverSessionId ? (
+                <>
+                  {" / "}session=<code>{takeoverSessionId}</code>
+                </>
+              ) : null}
+              {takeoverStage8ReceiptId ? (
+                <>
+                  {" / "}stage8=<code>{takeoverStage8ReceiptId}</code>
+                </>
+              ) : null}
+            </div>
+            {takeoverProofReceipts.length > 0 ? (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                {takeoverProofReceipts.map((receipt) => (
+                  <span key={`${receipt.label}:${receipt.id}`} style={{ ...badgeStyle(receipt.label), overflowWrap: "anywhere" }}>
+                    {receipt.label} {receipt.id}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            {takeoverNextGap ? (
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6, overflowWrap: "anywhere" }}>
+                next=<code>{takeoverNextGap}</code>
+              </div>
+            ) : null}
+          </div>
+
+          {latestTakeoverHandback ? (
+            <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                <div style={{ fontSize: 12, fontWeight: 600 }}>Handback Summary</div>
+                {latestTakeoverHandback.control_transferred_back ? <span style={badgeStyle("ready")}>returned</span> : null}
+              </div>
+              <div style={{ fontSize: 12, color: THEME.text, marginTop: 6 }}>
+                {takeoverHandbackSummary || "Handback receipt is available."}
+              </div>
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6, overflowWrap: "anywhere" }}>
+                receipt=<code>{latestTakeoverHandback.receipt_id || "unknown"}</code>
+                {latestTakeoverHandback.control_transfer_receipt_id ? (
+                  <>
+                    {" / "}transfer=<code>{latestTakeoverHandback.control_transfer_receipt_id}</code>
+                  </>
+                ) : null}
+                {latestTakeoverHandback.panic_stop_receipt_id ? (
+                  <>
+                    {" / "}panic=<code>{latestTakeoverHandback.panic_stop_receipt_id}</code>
+                  </>
+                ) : null}
+              </div>
+              {takeoverValidationOutcome || takeoverRemainingUncertainty || takeoverNextRecommendation ? (
+                <div style={{ fontSize: 11, color: THEME.muted, marginTop: 6, overflowWrap: "anywhere" }}>
+                  {takeoverValidationOutcome ? (
+                    <>
+                      validation=<code>{takeoverValidationOutcome}</code>
+                    </>
+                  ) : null}
+                  {takeoverRemainingUncertainty ? (
+                    <>
+                      {takeoverValidationOutcome ? " / " : ""}uncertainty=<code>{takeoverRemainingUncertainty}</code>
+                    </>
+                  ) : null}
+                  {takeoverNextRecommendation ? (
+                    <>
+                      {takeoverValidationOutcome || takeoverRemainingUncertainty ? " / " : ""}next=
+                      <code>{takeoverNextRecommendation}</code>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+              {takeoverProofHandles.length > 0 ? (
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                  {takeoverProofHandles.map((handle) => (
+                    <span key={`${handle.label}:${handle.id}`} style={{ ...badgeStyle(handle.label), overflowWrap: "anywhere" }}>
+                      {handle.label} {handle.id}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
           <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
               <div style={{ fontSize: 12, fontWeight: 600 }}>Active Scope</div>

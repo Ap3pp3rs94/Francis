@@ -47264,6 +47264,42 @@ Latest validation for Stage 9 Takeover handback summaries:
   after_mode=assist; after_active=false; after_handback_ready=true;
   after_next=stage9_operator_surface_contract`.
 
+### 2026-05-31 - Stage 9 takeover status reaches the ORB operator surface
+
+Roadmap area: Stage 9 / Takeover (Pilot Mode), operator surface contract.
+
+Material change:
+
+- Added a typed chat UI Takeover client for the read-only `/takeover/status`
+  route.
+- The ORB Takeover Feed now consumes `/takeover/status` during refresh and
+  exposes a separate Takeover freshness item.
+- The Takeover Feed now shows Pilot state, control mode, active/latest session
+  id, Stage 8 closure receipt id, latest control-transfer receipt, latest
+  panic-stop receipt, latest handback-summary receipt, and the current
+  Takeover next truthful gap.
+- When a handback summary exists, the surface shows the receipt id, linked
+  transfer/panic receipts, summary, validation outcome, remaining uncertainty,
+  next recommendation, trace ids, run ids, and changed artifact handles.
+- This change is read-only. It does not run tools, start processes, write
+  memory, grant authority, mutate runtime/config, cancel operations, or mark
+  Stage 9 complete.
+
+Latest validation for Stage 9 Takeover operator surface:
+
+- `node --test --experimental-strip-types src/takeover/index.test.ts`
+  Result: `passed; 2 tests passed`
+- `npm run test`
+  Result: `passed; 170 tests passed`
+- `npm run build`
+  Result: `passed`
+- `python -m pytest
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short`
+  Result: `passed; 1 test passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
