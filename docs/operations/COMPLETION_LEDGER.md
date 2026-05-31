@@ -48872,6 +48872,63 @@ Latest validation for Stage 12 retention model:
   writes_index=false; status_status=stage12_retention_model_ready;
   status_retention_ready=true; status_next=stage12_completion_review`.
 
+### 2026-05-31 - Stage 12 Knowledge Fabric completion review is read-only
+
+Roadmap area: Stage 12 / Knowledge Fabric, completion review.
+
+Material change:
+
+- Added read-only GET `/knowledge-fabric/completion-review`.
+- The review consumes the Stage 12 status, artifact projection, retrieval
+  preview, local evidence citation surface, and retention model.
+- The review distinguishes ready surfaces from completion readiness. It requires
+  actual projected local evidence, local evidence citations, declared retention
+  on reviewed citations, and cross-artifact continuity before reporting
+  `stage12_completion_review_ready=true`.
+- The review reports the roadmap done criteria for citing local evidence,
+  operational memory, grounded outputs, and cross-artifact continuity.
+- The review does not mark Stage 12 closed, write a closure receipt, write
+  memory, write an index, delete data, mutate retention, call a model, run
+  tools, run shell, run git, start processes, replicate data, or grant
+  authority.
+- A ready completion review advances only to
+  `stage12_operator_stage_closure_decision`; `/knowledge-fabric/status` remains
+  at `stage12_completion_review` until a separate operator closure path exists.
+
+Latest validation for Stage 12 Knowledge Fabric completion review:
+
+- `python -m pytest tests/test_api_knowledge_fabric.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 5 passed`
+- `python -m mypy src/francis/knowledge_fabric.py
+  src/francis/api/routes/knowledge_fabric.py src/francis/api/app.py`
+  Result: `passed`
+- `python -m ruff check src/francis/knowledge_fabric.py
+  src/francis/api/routes/knowledge_fabric.py src/francis/api/app.py
+  tests/test_api_knowledge_fabric.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/knowledge_fabric.py
+  src/francis/api/routes/knowledge_fabric.py src/francis/api/app.py
+  tests/test_api_knowledge_fabric.py tests/test_api_contract_chat_ui.py`
+  Result: `passed; 5 files already formatted`
+- Live local TestClient route/readback against an isolated data root:
+  write a Stage 11 closure receipt fixture, write one memory timeline trace
+  event, append one continuity ledger trace event, GET
+  `/knowledge-fabric/completion-review?limit=10`, and GET
+  `/knowledge-fabric/status`.
+  Result: `review_status=ready; review_ready=true;
+  stage_closure_decision_required=true; projection_count=2;
+  retrieval_total=2; citation_total=2; retention_declared_count=2;
+  retention_missing_count=0;
+  source_counts={"/continuity/ledger":1,"/memory/timeline/get":1};
+  retention_policy_counts={"mission_trace":2};
+  done_criteria all true; uses_model=false; writes_memory=false;
+  writes_index=false; writes_receipts=false; marks_stage_closed=false;
+  review_next=stage12_operator_stage_closure_decision;
+  status_status=stage12_retention_model_ready;
+  status_next=stage12_completion_review`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

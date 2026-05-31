@@ -69,6 +69,7 @@ def test_knowledge_fabric_status_blocks_until_stage11_closure(monkeypatch, tmp_p
     assert body["routes"]["artifact_index_projection"] == "/knowledge-fabric/artifact-index-projection"
     assert body["routes"]["local_evidence_citations"] == "/knowledge-fabric/local-evidence-citations"
     assert body["routes"]["retention_model"] == "/knowledge-fabric/retention-model"
+    assert body["routes"]["completion_review"] == "/knowledge-fabric/completion-review"
     assert body["routes"]["memory_timeline"] == "/memory/timeline/list"
     assert body["routes"]["artifact_inspection"] == "/artifacts/inspect"
     assert body["governance"]["read_only"] is True
@@ -155,6 +156,37 @@ def test_knowledge_fabric_artifact_index_contract_is_read_only_after_stage11_clo
     assert status["ready_count"] == 6
     assert status["required_count"] == 6
     assert status["next_smallest_truthful_gap"] == "stage12_completion_review"
+
+    review = client.get("/knowledge-fabric/completion-review").json()
+    assert review["ok"] is True
+    assert review["kind"] == "francis.stage12.knowledge_fabric.completion_review"
+    assert review["status"] == "blocked"
+    assert review["stage12_completion_review_ready"] is False
+    assert review["stage_closure_decision_required"] is False
+    assert review["stage11_closed_by_receipt"] is True
+    assert review["artifact_index_projection_count"] == 0
+    assert review["citation_total"] == 0
+    assert review["retention_model_ready"] is True
+    assert review["retention_declared_count"] == 0
+    assert review["retention_missing_count"] == 0
+    assert review["writes_memory"] is False
+    assert review["writes_index"] is False
+    assert review["writes_receipts"] is False
+    assert review["generates_answer"] is False
+    assert review["uses_model"] is False
+    assert review["deletes_data"] is False
+    assert review["mutates_retention"] is False
+    assert review["marks_stage_closed"] is False
+    assert review["governance"]["completion_review_only"] is True
+    assert review["governance"]["does_not_mark_stage_closed"] is True
+    assert review["next_smallest_truthful_gap"] == "stage12_local_evidence_required"
+
+    checks = {item["id"]: item for item in review["checks"]}
+    assert checks["stage11_ledger_closure_backstop"]["passed"] is True
+    assert checks["artifact_index_contract_ready"]["passed"] is True
+    assert checks["artifact_index_projection_ready"]["passed"] is True
+    assert checks["projected_local_evidence_present"]["passed"] is False
+    assert checks["completion_review_does_not_mark_stage_closed"]["passed"] is True
 
 
 def test_knowledge_fabric_artifact_index_projection_projects_local_citations(
@@ -369,6 +401,61 @@ def test_knowledge_fabric_artifact_index_projection_projects_local_citations(
     assert status["retention_model_ready"] is True
     assert status["next_smallest_truthful_gap"] == "stage12_completion_review"
 
+    completion_review = client.get("/knowledge-fabric/completion-review?limit=10").json()
+    assert completion_review["ok"] is True
+    assert completion_review["kind"] == "francis.stage12.knowledge_fabric.completion_review"
+    assert completion_review["status"] == "ready"
+    assert completion_review["stage12_completion_review_ready"] is True
+    assert completion_review["stage_closure_decision_required"] is True
+    assert completion_review["stage11_closed_by_receipt"] is True
+    assert completion_review["artifact_index_contract_ready"] is True
+    assert completion_review["artifact_index_projection_ready"] is True
+    assert completion_review["artifact_index_projection_count"] == 2
+    assert completion_review["retrieval_layer_ready"] is True
+    assert completion_review["retrieval_total"] == 2
+    assert completion_review["local_evidence_citations_ready"] is True
+    assert completion_review["citation_total"] == 2
+    assert completion_review["retention_model_ready"] is True
+    assert completion_review["retention_declared_count"] == 2
+    assert completion_review["retention_missing_count"] == 0
+    assert completion_review["artifact_class_counts"] == {"execution_traces": 2}
+    assert completion_review["source_counts"] == {"/continuity/ledger": 1, "/memory/timeline/get": 1}
+    assert completion_review["retention_policy_counts"] == {"mission_trace": 2}
+    assert completion_review["done_criteria"] == {
+        "francis_cites_local_evidence": True,
+        "memory_becomes_operational": True,
+        "recommendations_and_summaries_are_grounded": True,
+        "cross_artifact_continuity_becomes_real": True,
+    }
+    assert completion_review["reads_memory_timeline"] is True
+    assert completion_review["reads_continuity_ledger"] is True
+    assert completion_review["writes_memory"] is False
+    assert completion_review["writes_index"] is False
+    assert completion_review["writes_receipts"] is False
+    assert completion_review["generates_answer"] is False
+    assert completion_review["uses_model"] is False
+    assert completion_review["scans_files"] is False
+    assert completion_review["replicates_data"] is False
+    assert completion_review["deletes_data"] is False
+    assert completion_review["mutates_retention"] is False
+    assert completion_review["runs_tools"] is False
+    assert completion_review["runs_shell"] is False
+    assert completion_review["runs_git"] is False
+    assert completion_review["grants_execution_authority"] is False
+    assert completion_review["grants_mutation_authority"] is False
+    assert completion_review["marks_stage_closed"] is False
+    assert completion_review["governance"]["completion_review_only"] is True
+    assert completion_review["governance"]["requires_projected_local_evidence"] is True
+    assert completion_review["governance"]["requires_cross_artifact_continuity"] is True
+    assert completion_review["governance"]["requires_declared_retention_for_review"] is True
+    assert completion_review["governance"]["does_not_mark_stage_closed"] is True
+    assert completion_review["routes"]["completion_review"] == "/knowledge-fabric/completion-review"
+    assert completion_review["next_smallest_truthful_gap"] == "stage12_operator_stage_closure_decision"
+    assert "ledgerprojectionsecret123" not in json.dumps(completion_review, sort_keys=True)
+
+    review_checks = {item["id"]: item for item in completion_review["checks"]}
+    assert all(item["passed"] for item in review_checks.values())
+
 
 def test_knowledge_fabric_artifact_index_projection_blocks_without_stage11_closure(
     monkeypatch,
@@ -433,3 +520,28 @@ def test_knowledge_fabric_artifact_index_projection_blocks_without_stage11_closu
     assert retention["mutates_retention"] is False
     assert retention["governance"]["requires_local_evidence_citations"] is True
     assert retention["next_smallest_truthful_gap"] == "stage11_ledger_closure"
+
+    review = TestClient(create_app()).get("/knowledge-fabric/completion-review?query=anything").json()
+    assert review["status"] == "blocked"
+    assert review["stage12_completion_review_ready"] is False
+    assert review["stage_closure_decision_required"] is False
+    assert review["stage11_closed_by_receipt"] is False
+    assert review["artifact_index_contract_ready"] is False
+    assert review["artifact_index_projection_ready"] is False
+    assert review["artifact_index_projection_count"] == 0
+    assert review["citation_total"] == 0
+    assert review["retention_model_ready"] is False
+    assert review["writes_memory"] is False
+    assert review["writes_index"] is False
+    assert review["writes_receipts"] is False
+    assert review["uses_model"] is False
+    assert review["deletes_data"] is False
+    assert review["mutates_retention"] is False
+    assert review["marks_stage_closed"] is False
+    assert review["governance"]["read_only"] is True
+    assert review["governance"]["completion_review_only"] is True
+    assert review["next_smallest_truthful_gap"] == "stage11_ledger_closure"
+
+    checks = {item["id"]: item for item in review["checks"]}
+    assert checks["stage11_ledger_closure_backstop"]["passed"] is False
+    assert checks["completion_review_does_not_mark_stage_closed"]["passed"] is True

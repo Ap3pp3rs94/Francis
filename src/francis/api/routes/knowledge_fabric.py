@@ -7,6 +7,7 @@ from fastapi import APIRouter
 from francis.knowledge_fabric import (
     knowledge_fabric_artifact_index_contract,
     knowledge_fabric_artifact_index_projection,
+    knowledge_fabric_completion_review,
     knowledge_fabric_local_evidence_citations,
     knowledge_fabric_retention_model,
     knowledge_fabric_retrieval_preview,
@@ -73,6 +74,21 @@ def retention_model(
     ledger_limit: int = 100,
 ) -> dict[str, Any]:
     return knowledge_fabric_retention_model(
+        query=query,
+        limit=limit,
+        memory_limit=memory_limit,
+        ledger_limit=ledger_limit,
+    )
+
+
+@router.get("/completion-review")
+def completion_review(
+    query: str = "",
+    limit: int = 25,
+    memory_limit: int = 100,
+    ledger_limit: int = 100,
+) -> dict[str, Any]:
+    return knowledge_fabric_completion_review(
         query=query,
         limit=limit,
         memory_limit=memory_limit,

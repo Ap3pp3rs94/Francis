@@ -15,6 +15,7 @@ KNOWLEDGE_FABRIC_ARTIFACT_INDEX_PROJECTION_KIND = "francis.stage12.knowledge_fab
 KNOWLEDGE_FABRIC_RETRIEVAL_PREVIEW_KIND = "francis.stage12.knowledge_fabric.retrieval_preview"
 KNOWLEDGE_FABRIC_LOCAL_EVIDENCE_CITATIONS_KIND = "francis.stage12.knowledge_fabric.local_evidence_citations"
 KNOWLEDGE_FABRIC_RETENTION_MODEL_KIND = "francis.stage12.knowledge_fabric.retention_model"
+KNOWLEDGE_FABRIC_COMPLETION_REVIEW_KIND = "francis.stage12.knowledge_fabric.completion_review"
 
 
 def knowledge_fabric_status_snapshot() -> dict[str, Any]:
@@ -119,6 +120,7 @@ def knowledge_fabric_status_snapshot() -> dict[str, Any]:
             "retrieval_preview": "/knowledge-fabric/retrieval-preview",
             "local_evidence_citations": "/knowledge-fabric/local-evidence-citations",
             "retention_model": "/knowledge-fabric/retention-model",
+            "completion_review": "/knowledge-fabric/completion-review",
             "memory_timeline": "/memory/timeline/list",
             "artifact_inspection": "/artifacts/inspect",
             "continuity_ledger": "/continuity/ledger",
@@ -153,6 +155,110 @@ def knowledge_fabric_status_snapshot() -> dict[str, Any]:
         else "stage12_artifact_index_projection"
         if stage11_closed and artifact_contract_ready
         else "stage11_ledger_closure",
+    }
+
+
+def knowledge_fabric_completion_review(
+    *,
+    query: Any = "",
+    limit: int = 25,
+    memory_limit: int = 100,
+    ledger_limit: int = 100,
+) -> dict[str, Any]:
+    safe_query = _redact_text(query)[:500]
+    safe_limit = _safe_limit(limit, default=25)
+    status = knowledge_fabric_status_snapshot()
+    projection = knowledge_fabric_artifact_index_projection(
+        limit=safe_limit,
+        memory_limit=memory_limit,
+        ledger_limit=ledger_limit,
+    )
+    retrieval = knowledge_fabric_retrieval_preview(
+        query=safe_query,
+        limit=safe_limit,
+        memory_limit=memory_limit,
+        ledger_limit=ledger_limit,
+    )
+    citations = knowledge_fabric_local_evidence_citations(
+        query=safe_query,
+        limit=safe_limit,
+        memory_limit=memory_limit,
+        ledger_limit=ledger_limit,
+    )
+    retention = knowledge_fabric_retention_model(
+        query=safe_query,
+        limit=safe_limit,
+        memory_limit=memory_limit,
+        ledger_limit=ledger_limit,
+    )
+    citation_items = [item for item in _as_list(citations.get("citations")) if isinstance(item, dict)]
+    projection_items = [item for item in _as_list(projection.get("citations")) if isinstance(item, dict)]
+    checks = _completion_review_checks(
+        status=status,
+        projection=projection,
+        retrieval=retrieval,
+        citations=citations,
+        retention=retention,
+        citation_items=citation_items,
+        projection_items=projection_items,
+    )
+    review_ready = all(bool(check.get("passed")) for check in checks)
+    return {
+        "ok": True,
+        "kind": KNOWLEDGE_FABRIC_COMPLETION_REVIEW_KIND,
+        "stage": STAGE12_KNOWLEDGE_FABRIC_STAGE,
+        "source_id": "knowledge_fabric",
+        "status": "ready" if review_ready else "blocked",
+        "query": safe_query,
+        "stage12_completion_review_ready": review_ready,
+        "stage_closure_decision_required": review_ready,
+        "stage11_closed_by_receipt": bool(status.get("stage11_closed_by_receipt")),
+        "stage11_latest_closure_receipt_id": _safe_text(status.get("stage11_latest_closure_receipt_id")),
+        "artifact_index_contract_ready": bool(status.get("artifact_index_contract_ready")),
+        "artifact_index_projection_ready": bool(projection.get("artifact_index_projection_ready")),
+        "artifact_index_projection_count": _safe_int(projection.get("total")),
+        "retrieval_layer_ready": bool(retrieval.get("retrieval_layer_ready")),
+        "retrieval_total": _safe_int(retrieval.get("total")),
+        "local_evidence_citations_ready": bool(citations.get("local_evidence_citations_ready")),
+        "citation_total": len(citation_items),
+        "retention_model_ready": bool(retention.get("retention_model_ready")),
+        "retention_declared_count": _safe_int(retention.get("retention_declared_count")),
+        "retention_missing_count": _safe_int(retention.get("retention_missing_count")),
+        "artifact_class_counts": _count_by(projection_items, "artifact_class"),
+        "source_counts": _count_by(projection_items, "source_route"),
+        "retention_policy_counts": _as_dict(retention.get("retention_policy_counts")),
+        "done_criteria": {
+            "francis_cites_local_evidence": bool(citation_items),
+            "memory_becomes_operational": bool(projection_items),
+            "recommendations_and_summaries_are_grounded": bool(citation_items)
+            and bool(retrieval.get("retrieval_layer_ready")),
+            "cross_artifact_continuity_becomes_real": _cross_artifact_continuity_ready(projection_items),
+        },
+        "checks": checks,
+        "reads_memory_timeline": bool(projection.get("reads_memory_timeline")),
+        "reads_continuity_ledger": bool(projection.get("reads_continuity_ledger")),
+        "writes_memory": False,
+        "writes_index": False,
+        "writes_receipts": False,
+        "generates_answer": False,
+        "uses_model": False,
+        "scans_files": False,
+        "replicates_data": False,
+        "deletes_data": False,
+        "mutates_retention": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "grants_authority": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "marks_stage_closed": False,
+        "governance": _completion_review_governance(),
+        "routes": _as_dict(status.get("routes")),
+        "next_smallest_truthful_gap": "stage12_operator_stage_closure_decision"
+        if review_ready
+        else _completion_review_next_gap(checks=checks, status=status),
     }
 
 
@@ -862,6 +968,143 @@ def _retention_model_governance() -> dict[str, Any]:
         "does_not_replicate_data": True,
         "grants_authority": False,
     }
+
+
+def _completion_review_governance() -> dict[str, Any]:
+    return {
+        "read_only": True,
+        "completion_review_only": True,
+        "requires_stage11_ledger_closure": True,
+        "requires_artifact_index_contract": True,
+        "requires_artifact_index_projection": True,
+        "requires_retrieval_layer": True,
+        "requires_local_evidence_citations": True,
+        "requires_retention_model": True,
+        "requires_projected_local_evidence": True,
+        "requires_cross_artifact_continuity": True,
+        "requires_declared_retention_for_review": True,
+        "does_not_mark_stage_closed": True,
+        "does_not_write_receipts": True,
+        "does_not_write_memory": True,
+        "does_not_write_index": True,
+        "does_not_delete_data": True,
+        "does_not_mutate_retention": True,
+        "does_not_generate_answer": True,
+        "does_not_call_model": True,
+        "does_not_scan_files": True,
+        "does_not_replicate_data": True,
+        "does_not_run_tools": True,
+        "does_not_run_shell": True,
+        "does_not_run_git": True,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+    }
+
+
+def _completion_review_checks(
+    *,
+    status: dict[str, Any],
+    projection: dict[str, Any],
+    retrieval: dict[str, Any],
+    citations: dict[str, Any],
+    retention: dict[str, Any],
+    citation_items: list[dict[str, Any]],
+    projection_items: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    retention_missing_count = _safe_int(retention.get("retention_missing_count"))
+    retention_total = _safe_int(retention.get("total"))
+    return [
+        _review_check(
+            "stage11_ledger_closure_backstop",
+            bool(status.get("stage11_closed_by_receipt")),
+            "stage11_ledger_closure",
+            "Stage 11 closure receipt readback is present",
+        ),
+        _review_check(
+            "artifact_index_contract_ready",
+            bool(status.get("artifact_index_contract_ready")),
+            "stage12_artifact_index_contract",
+            "Artifact classes, citation fields, and retention contract are explicit",
+        ),
+        _review_check(
+            "artifact_index_projection_ready",
+            bool(projection.get("artifact_index_projection_ready")),
+            "stage12_artifact_index_projection",
+            "Known local evidence surfaces can be projected into citations",
+        ),
+        _review_check(
+            "projected_local_evidence_present",
+            len(projection_items) > 0,
+            "stage12_local_evidence_required",
+            "At least one local evidence artifact is projected before completion review can pass",
+        ),
+        _review_check(
+            "retrieval_layer_ready",
+            bool(retrieval.get("retrieval_layer_ready")),
+            "stage12_retrieval_layer",
+            "Retrieval can return bounded local evidence references",
+        ),
+        _review_check(
+            "local_evidence_citations_ready",
+            bool(citations.get("local_evidence_citations_ready")) and len(citation_items) > 0,
+            "stage12_local_evidence_citation_surface",
+            "The citation surface returns displayable local evidence citations",
+        ),
+        _review_check(
+            "retention_model_ready",
+            bool(retention.get("retention_model_ready")),
+            "stage12_retention_model",
+            "Citation retention metadata is inspectable",
+        ),
+        _review_check(
+            "retention_declared_for_reviewed_citations",
+            retention_total > 0 and retention_missing_count == 0,
+            "stage12_retention_metadata_required",
+            "Reviewed citations declare retention posture",
+        ),
+        _review_check(
+            "cross_artifact_continuity_ready",
+            _cross_artifact_continuity_ready(projection_items),
+            "stage12_cross_artifact_continuity_review",
+            "Projected evidence preserves enough source and trace lineage to connect artifacts",
+        ),
+        _review_check(
+            "completion_review_does_not_mark_stage_closed",
+            True,
+            "stage12_completion_review",
+            "Completion review is read-only and leaves operator closure as a separate decision",
+        ),
+    ]
+
+
+def _review_check(check_id: str, passed: bool, next_gap: str, evidence: str) -> dict[str, Any]:
+    return {
+        "id": check_id,
+        "passed": passed,
+        "status": "passed" if passed else "blocked",
+        "evidence": evidence,
+        "next_smallest_truthful_gap": next_gap,
+    }
+
+
+def _completion_review_next_gap(*, checks: list[dict[str, Any]], status: dict[str, Any]) -> str:
+    for check in checks:
+        if not bool(check.get("passed")):
+            return _safe_text(check.get("next_smallest_truthful_gap")) or "stage12_completion_review"
+    return _safe_text(status.get("next_smallest_truthful_gap")) or "stage12_completion_review"
+
+
+def _cross_artifact_continuity_ready(items: list[dict[str, Any]]) -> bool:
+    if len(items) < 2:
+        return False
+    source_routes = {_safe_text(item.get("source_route")) for item in items if _safe_text(item.get("source_route"))}
+    trace_keys = {"mission_id", "operation_id", "trace_id", "run_id", "artifact_dir"}
+    lineage_hits = 0
+    for item in items:
+        trace_lineage = _as_dict(item.get("trace_lineage"))
+        if sum(1 for key in trace_keys if _safe_text(trace_lineage.get(key))) >= 2:
+            lineage_hits += 1
+    return len(source_routes) >= 2 and lineage_hits >= 1
 
 
 def _retention_model_item(item: dict[str, Any]) -> dict[str, Any]:
