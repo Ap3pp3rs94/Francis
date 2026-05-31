@@ -1,8 +1,16 @@
 from __future__ import annotations
 
+import json
+import os
+import time
+import uuid
+from pathlib import Path
 from typing import Any
 
 from francis.takeover import takeover_stage9_operator_stage_closure_decision_readback
+from francis.governance.redaction import redact_secret_text
+from francis.kernel.paths import data_dir
+from francis.telemetry.audit import record as audit_record
 from francis.world_state.operator_mode import snapshot as operator_mode_snapshot
 
 STAGE10_AWAY_STAGE = "Stage 10 / Away Mode"
@@ -12,6 +20,13 @@ AWAY_AUTONOMY_BUDGETS_KIND = "francis.stage10.away.autonomy_budgets"
 AWAY_SHIFT_REPORT_KIND = "francis.stage10.away.shift_report"
 AWAY_RETURN_BRIEFING_KIND = "francis.stage10.away.return_briefing"
 AWAY_COMPLETION_REVIEW_KIND = "francis.stage10.away.completion_review"
+AWAY_LIVE_PROGRESS_SAMPLE_RECEIPT_KIND = "francis.stage10.away.live_progress_sample_receipt"
+AWAY_LIVE_PROGRESS_SAMPLE_RECEIPTS_KIND = "francis.stage10.away.live_progress_sample_receipts"
+
+AWAY_LIVE_PROGRESS_SCOPE = "away.progress.write"
+
+_ALLOWED_ENV_PROFILES = {"dev", "workstation", "local", "test"}
+_ALLOWED_LIVE_PROGRESS_SAMPLE_TYPES = {"shift_report_review", "return_briefing_review"}
 
 _AWAY_SAFE_TASK_CLASSES: tuple[dict[str, Any], ...] = (
     {
@@ -83,6 +98,8 @@ def away_status_snapshot() -> dict[str, Any]:
     autonomy_budgets = away_autonomy_budgets_review()
     shift_report = away_shift_report_snapshot()
     return_briefing = away_return_briefing_snapshot()
+    live_progress_receipts = read_away_live_progress_sample_receipts(limit=5)
+    latest_live_progress = live_progress_receipts[-1] if live_progress_receipts else {}
     control_mode = _as_dict(operator.get("control_mode"))
     backlog = _as_dict(operator.get("backlog"))
     continuity = _as_dict(operator.get("continuity"))
@@ -100,7 +117,7 @@ def away_status_snapshot() -> dict[str, Any]:
     ready_count = sum(1 for item in deliverables if bool(item.get("ready")))
     required_count = len(deliverables)
     away_groundwork_ready = stage9_closed and ready_count == required_count
-    live_away_progress_sample_ready = False
+    live_away_progress_sample_ready = bool(live_progress_receipts)
     stage10_completion_review_ready = away_groundwork_ready and live_away_progress_sample_ready
     return {
         "ok": True,
@@ -121,6 +138,7 @@ def away_status_snapshot() -> dict[str, Any]:
         "stage10_completion_review_route": "/away/completion-review",
         "stage10_completion_review_ready": stage10_completion_review_ready,
         "live_away_progress_sample_ready": live_away_progress_sample_ready,
+        "latest_live_progress_sample_receipt_id": _safe_text(latest_live_progress.get("receipt_id")),
         "reads_receipts": True,
         "writes_receipts": False,
         "writes_tasks": False,
@@ -157,9 +175,13 @@ def away_status_snapshot() -> dict[str, Any]:
             "shift_report": "/away/shift-report",
             "return_briefing": "/away/return-briefing",
             "completion_review": "/away/completion-review",
+            "live_progress_samples": "/away/live-progress-samples",
+            "live_progress_sample": "/away/live-progress-sample",
         },
-        "next_smallest_truthful_gap": "stage10_live_away_progress_sample"
-        if stage9_closed and bool(return_briefing.get("return_briefing_ready"))
+        "next_smallest_truthful_gap": "stage10_stage_closure_decision"
+        if stage10_completion_review_ready
+        else "stage10_live_away_progress_sample"
+        if away_groundwork_ready
         else "stage10_return_briefing_flow"
         if stage9_closed and bool(shift_report.get("shift_report_ready"))
         else "stage10_shift_reports"
@@ -170,6 +192,136 @@ def away_status_snapshot() -> dict[str, Any]:
         if stage9_closed
         else "stage9_ledger_closure",
     }
+
+
+def read_away_live_progress_sample_receipts(*, limit: int = 20) -> list[dict[str, Any]]:
+    return _read_jsonl_tail(_live_progress_sample_path(), limit=_safe_limit(limit, default=20))
+
+
+def away_live_progress_sample_receipts(*, limit: int = 20) -> dict[str, Any]:
+    items = read_away_live_progress_sample_receipts(limit=limit)
+    return {
+        "ok": True,
+        "kind": AWAY_LIVE_PROGRESS_SAMPLE_RECEIPTS_KIND,
+        "stage": STAGE10_AWAY_STAGE,
+        "source_id": "away",
+        "status": "ready" if items else "empty",
+        "items": items,
+        "count": len(items),
+        "latest_receipt_id": _safe_text(items[-1].get("receipt_id")) if items else "",
+        "reads_receipts": True,
+        "writes_receipts": False,
+        "writes_tasks": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "receipt_readback_only": True,
+            "does_not_activate_away_autonomy": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": "stage10_completion_review" if items else "stage10_live_away_progress_sample",
+    }
+
+
+def record_away_live_progress_sample(
+    *,
+    actor: Any,
+    reason: Any,
+    sample_type: Any = "shift_report_review",
+    summary: Any = "",
+    next_recommendation: Any = "",
+) -> dict[str, Any]:
+    env_profile = _env_profile()
+    if env_profile not in _ALLOWED_ENV_PROFILES:
+        return _blocked_no_receipt(
+            status="blocked_environment_profile",
+            reason="away_live_progress_dev_or_workstation_only",
+            required_scope=AWAY_LIVE_PROGRESS_SCOPE,
+            next_gap="stage10_live_away_progress_sample",
+        )
+
+    safe_sample_type = _safe_live_progress_sample_type(sample_type)
+    status = away_status_snapshot()
+    if not bool(status.get("away_groundwork_ready")):
+        return _blocked_no_receipt(
+            status="awaiting_stage10_groundwork",
+            reason="stage10_groundwork_required_before_live_progress_sample",
+            required_scope=AWAY_LIVE_PROGRESS_SCOPE,
+            next_gap=_safe_text(status.get("next_smallest_truthful_gap")) or "stage10_live_away_progress_sample",
+        )
+
+    shift_report = away_shift_report_snapshot()
+    return_briefing = away_return_briefing_snapshot()
+    receipt_id = f"away_live_progress_{uuid.uuid4().hex[:12]}"
+    safe_actor = _redacted_text(actor)[:240]
+    safe_reason = _redacted_text(reason)[:500]
+    safe_summary = _redacted_text(summary)[:800] or "Recorded a bounded Away progress sample from existing readbacks."
+    safe_next = _redacted_text(next_recommendation)[:500] or "Review the Away shift report and choose the next step."
+    receipt = {
+        "ok": True,
+        "kind": AWAY_LIVE_PROGRESS_SAMPLE_RECEIPT_KIND,
+        "receipt_id": receipt_id,
+        "stage": STAGE10_AWAY_STAGE,
+        "source_id": "away",
+        "target": "away_mode",
+        "actor": safe_actor,
+        "reason": safe_reason,
+        "sample_type": safe_sample_type,
+        "summary": safe_summary,
+        "next_recommendation": safe_next,
+        "env_profile": env_profile,
+        "stage9_closure_receipt_id": _safe_text(status.get("stage9_latest_closure_receipt_id")),
+        "groundwork_ready": True,
+        "ready_count": _safe_int(status.get("ready_count")),
+        "required_count": _safe_int(status.get("required_count")),
+        "shift_report_ready": bool(shift_report.get("shift_report_ready")),
+        "return_briefing_ready": bool(return_briefing.get("return_briefing_ready")),
+        "shift_report_route": "/away/shift-report",
+        "return_briefing_route": "/away/return-briefing",
+        "recorded_ts": _now_s(),
+        "live_away_progress_sample_ready": True,
+        "writes_receipt": True,
+        "writes_tasks": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "required_scope": AWAY_LIVE_PROGRESS_SCOPE,
+            "dev_or_workstation_only": True,
+            "sample_type_allowlisted": safe_sample_type in _ALLOWED_LIVE_PROGRESS_SAMPLE_TYPES,
+            "grounded_in_existing_readbacks": True,
+            "progress_sample_not_background_autonomy": True,
+            "does_not_activate_away_autonomy": True,
+            "does_not_run_tools": True,
+            "does_not_run_shell": True,
+            "does_not_run_git": True,
+            "does_not_write_tasks": True,
+            "does_not_write_memory": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": "stage10_completion_review",
+    }
+    _append_jsonl(_live_progress_sample_path(), receipt)
+    audit_record(
+        "away.live_progress_sample_recorded",
+        actor=safe_actor,
+        reason=safe_reason,
+        receipt_id=receipt_id,
+        sample_type=safe_sample_type,
+    )
+    return receipt
 
 
 def away_completion_review() -> dict[str, Any]:
@@ -188,6 +340,7 @@ def away_completion_review() -> dict[str, Any]:
         "away_groundwork_ready": bool(status.get("away_groundwork_ready")),
         "away_mode_ready": bool(status.get("away_mode_ready")),
         "live_away_progress_sample_ready": bool(status.get("live_away_progress_sample_ready")),
+        "latest_live_progress_sample_receipt_id": _safe_text(status.get("latest_live_progress_sample_receipt_id")),
         "ready_count": _safe_int(status.get("ready_count")),
         "required_count": _safe_int(status.get("required_count")),
         "checks": checks,
@@ -831,7 +984,7 @@ def _completion_review_checks(*, status: dict[str, Any]) -> list[dict[str, Any]]
         _check(
             "live_away_progress_sample_ready",
             passed=bool(status.get("live_away_progress_sample_ready")),
-            evidence="not_yet_recorded",
+            evidence=_safe_text(status.get("latest_live_progress_sample_receipt_id")) or "not_yet_recorded",
         ),
         _check(
             "risky_actions_remain_gated",
@@ -855,6 +1008,83 @@ def _backlog_summary(backlog: dict[str, Any]) -> str:
         f"{pending_approvals} pending approvals, {approval_tasks} approval-gated tasks, "
         f"{queued_tasks} queued tasks, {blocked_tasks} blocked tasks."
     )
+
+
+def _blocked_no_receipt(*, status: str, reason: str, required_scope: str, next_gap: str) -> dict[str, Any]:
+    return {
+        "ok": False,
+        "kind": "francis.stage10.away.live_progress_sample.record",
+        "stage": STAGE10_AWAY_STAGE,
+        "source_id": "away",
+        "status": status,
+        "reason": reason,
+        "receipt_id": "",
+        "writes_receipt": False,
+        "writes_tasks": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "required_scope": required_scope,
+            "does_not_record_when_not_ready": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": next_gap,
+    }
+
+
+def _safe_live_progress_sample_type(value: Any) -> str:
+    text = _safe_text(value)
+    if text in _ALLOWED_LIVE_PROGRESS_SAMPLE_TYPES:
+        return text
+    return "shift_report_review"
+
+
+def _live_progress_sample_path() -> Path:
+    return data_dir() / "logs" / "away" / "live_progress_sample_receipts.jsonl"
+
+
+def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str) + "\n")
+
+
+def _read_jsonl_tail(path: Path, *, limit: int) -> list[dict[str, Any]]:
+    if not path.exists() or not path.is_file():
+        return []
+    items: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict):
+            items.append(payload)
+    return items[-limit:]
+
+
+def _env_profile() -> str:
+    return _safe_text(os.getenv("FRANCIS_ENV_PROFILE")).strip().lower() or "dev"
+
+
+def _now_s() -> int:
+    return int(time.time())
+
+
+def _safe_limit(value: Any, *, default: int) -> int:
+    try:
+        parsed = int(value)
+    except Exception:
+        parsed = default
+    return max(1, min(parsed, 100))
 
 
 def _check(check_id: str, *, passed: bool, evidence: str) -> dict[str, Any]:
@@ -881,6 +1111,10 @@ def _safe_text(value: Any) -> str:
         return str(value).strip()
     except Exception:
         return ""
+
+
+def _redacted_text(value: Any) -> str:
+    return redact_secret_text(_safe_text(value))
 
 
 def _safe_int(value: Any) -> int:

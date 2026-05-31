@@ -101,6 +101,17 @@ _RULES: tuple[AuthorityRule, ...] = (
         notes="Handback summary transfers control back to Assist and reports proof handles without executing work.",
     ),
     AuthorityRule(
+        family="away",
+        prefixes=("/away/live-progress-sample",),
+        required_actor="payload.actor",
+        required_scope="away.progress.write",
+        approval_requirement="Stage 9 closure and Stage 10 groundwork must be ready before sample receipt write",
+        receipt_behavior="Stage 10 Away live-progress sample receipt",
+        denial_behavior="api_permission_denied via permission_gate before receipt write",
+        governance_maturity="permission_gated",
+        notes="The sample is grounded in existing Away readbacks and does not activate autonomy or run tools.",
+    ),
+    AuthorityRule(
         family="supervised_exec",
         prefixes=("/operations/supervised-exec",),
         required_actor="payload.actor",

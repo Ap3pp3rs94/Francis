@@ -100,6 +100,8 @@ def test_away_status_projects_stage10_groundwork_after_stage9_closure(monkeypatc
     assert body["routes"]["shift_report"] == "/away/shift-report"
     assert body["routes"]["return_briefing"] == "/away/return-briefing"
     assert body["routes"]["completion_review"] == "/away/completion-review"
+    assert body["routes"]["live_progress_samples"] == "/away/live-progress-samples"
+    assert body["routes"]["live_progress_sample"] == "/away/live-progress-sample"
     assert body["governance"]["does_not_claim_away_completion_from_groundwork"] is True
     assert body["governance"]["requires_live_progress_sample_before_completion"] is True
     assert body["next_smallest_truthful_gap"] == "stage10_live_away_progress_sample"
@@ -379,3 +381,127 @@ def test_away_completion_review_blocks_until_live_progress_sample(monkeypatch, t
     assert checks["live_away_progress_sample_ready"]["evidence"] == "not_yet_recorded"
     assert checks["risky_actions_remain_gated"]["passed"] is True
     assert checks["stage_not_marked_closed_by_review"]["passed"] is True
+
+
+def test_away_live_progress_sample_denies_without_actor_scope(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage9_closure_receipt(data_root, receipt_id="takeover_stage9_closure_progress_denied_test")
+
+    client = TestClient(create_app())
+    response = client.post(
+        "/away/live-progress-sample",
+        json={
+            "actor": "test.away.progress",
+            "reason": "missing progress scope",
+            "summary": "should not record",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["status"] == "denied"
+    assert body["error"] == "api_permission_denied"
+    assert body["writes_receipt"] is False
+    assert body["writes_tasks"] is False
+    assert body["writes_memory"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["starts_processes"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["governance"]["required_scope"] == "away.progress.write"
+    assert not (data_root / "logs" / "away" / "live_progress_sample_receipts.jsonl").exists()
+
+
+def test_away_live_progress_sample_records_receipt_and_unblocks_completion_review(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({"test.away.progress": ["away.progress.write"]}),
+    )
+    _write_stage9_closure_receipt(data_root, receipt_id="takeover_stage9_closure_progress_sample_test")
+
+    client = TestClient(create_app())
+    response = client.post(
+        "/away/live-progress-sample",
+        json={
+            "actor": "test.away.progress",
+            "reason": "record live away progress sample token=awayprogressreasonsecret123",
+            "sample_type": "return_briefing_review",
+            "summary": "Prepared return briefing from existing readbacks token=awayprogresssummarysecret123",
+            "next_recommendation": "Operator should review the shift report.",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "francis.stage10.away.live_progress_sample.record"
+    assert body["status"] == "recorded"
+    assert body["receipt_id"].startswith("away_live_progress_")
+    assert body["sample_type"] == "return_briefing_review"
+    assert body["writes_receipt"] is True
+    assert body["writes_tasks"] is False
+    assert body["writes_memory"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["starts_processes"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["governance"]["required_scope"] == "away.progress.write"
+    assert body["governance"]["grounded_in_existing_readbacks"] is True
+    assert body["governance"]["does_not_activate_away_autonomy"] is True
+    assert body["next_smallest_truthful_gap"] == "stage10_completion_review"
+
+    receipt = body["receipt"]
+    assert receipt["kind"] == "francis.stage10.away.live_progress_sample_receipt"
+    assert receipt["receipt_id"] == body["receipt_id"]
+    assert receipt["actor"] == "test.away.progress"
+    assert receipt["stage9_closure_receipt_id"] == "takeover_stage9_closure_progress_sample_test"
+    assert receipt["groundwork_ready"] is True
+    assert receipt["ready_count"] == receipt["required_count"] == 8
+    assert receipt["shift_report_ready"] is True
+    assert receipt["return_briefing_ready"] is True
+    assert receipt["live_away_progress_sample_ready"] is True
+    assert receipt["governance"]["required_scope"] == "away.progress.write"
+    assert receipt["governance"]["progress_sample_not_background_autonomy"] is True
+    assert receipt["governance"]["does_not_write_tasks"] is True
+    assert receipt["governance"]["does_not_write_memory"] is True
+
+    receipt_text = json.dumps(receipt, sort_keys=True)
+    assert "awayprogressreasonsecret123" not in receipt_text
+    assert "awayprogresssummarysecret123" not in receipt_text
+
+    readback = client.get("/away/live-progress-samples").json()
+    assert readback["ok"] is True
+    assert readback["kind"] == "francis.stage10.away.live_progress_sample_receipts"
+    assert readback["status"] == "ready"
+    assert readback["count"] == 1
+    assert readback["latest_receipt_id"] == body["receipt_id"]
+    assert readback["items"][0]["receipt_id"] == body["receipt_id"]
+
+    status = client.get("/away/status").json()
+    assert status["away_groundwork_ready"] is True
+    assert status["live_away_progress_sample_ready"] is True
+    assert status["latest_live_progress_sample_receipt_id"] == body["receipt_id"]
+    assert status["stage10_completion_review_ready"] is True
+    assert status["away_mode_ready"] is True
+    assert status["next_smallest_truthful_gap"] == "stage10_stage_closure_decision"
+
+    review = client.get("/away/completion-review").json()
+    assert review["status"] == "ready"
+    assert review["stage10_completion_review_ready"] is True
+    assert review["latest_live_progress_sample_receipt_id"] == body["receipt_id"]
+    assert review["next_smallest_truthful_gap"] == "stage10_stage_closure_decision"
+    checks = {item["id"]: item for item in review["checks"]}
+    assert checks["live_away_progress_sample_ready"]["passed"] is True
+    assert checks["live_away_progress_sample_ready"]["evidence"] == body["receipt_id"]
+    assert all(item["passed"] for item in review["checks"])

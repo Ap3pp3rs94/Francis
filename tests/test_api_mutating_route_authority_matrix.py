@@ -155,6 +155,15 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
     assert "control-transfer receipt" in takeover_handback["approval_requirement"]
     assert "without executing work" in takeover_handback["notes"]
 
+    away_progress = entries["/away/live-progress-sample"]
+    assert away_progress["family"] == "away"
+    assert away_progress["required_actor"] == "payload.actor"
+    assert away_progress["required_scope"] == "away.progress.write"
+    assert away_progress["governance_maturity"] == "permission_gated"
+    assert "Stage 10 groundwork" in away_progress["approval_requirement"]
+    assert "live-progress sample receipt" in away_progress["receipt_behavior"]
+    assert "does not activate autonomy" in away_progress["notes"]
+
     memory = entries["/memory/timeline/record"]
     assert memory["family"] == "memory_timeline"
     assert memory["required_actor"] == "payload.request_actor, payload.api_actor, or payload.actor"

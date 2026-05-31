@@ -47844,6 +47844,60 @@ Latest validation for Stage 10 Away completion review:
   status_next=stage10_live_away_progress_sample;
   review_next=stage10_live_away_progress_sample`.
 
+### 2026-05-31 - Stage 10 live Away progress sample is receipted
+
+Roadmap area: Stage 10 / Away Mode, bounded progress sample before closure.
+
+Material change:
+
+- Added permission-gated POST `/away/live-progress-sample` with required scope
+  `away.progress.write`.
+- Added read-only GET `/away/live-progress-samples`.
+- The live progress sample writes an auditable receipt grounded in existing
+  Away readbacks: Stage 9 closure, Stage 10 groundwork, shift report, and return
+  briefing.
+- The sample remains bounded: it does not activate Away autonomy, write tasks,
+  write memory, run tools, run shell, run git, start processes, grant execution
+  authority, or grant mutation authority.
+- The mutating-route authority matrix now covers `/away/live-progress-sample`.
+- A live local sample receipt was recorded:
+  `away_live_progress_d5bede554d60`.
+- `/away/status` and `/away/completion-review` now report the live sample as
+  ready and advance the next smallest truthful gap to
+  `stage10_stage_closure_decision`.
+
+Latest validation for Stage 10 Away live progress sample:
+
+- `python -m pytest tests/test_api_away.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  tests/test_api_mutating_route_authority_matrix.py -q --tb=short --maxfail=1`
+  Result: `passed; 12 tests passed`
+- `python -m mypy src/francis/away.py
+  src/francis/api/routes/away.py src/francis/api/mutation_authority_matrix.py`
+  Result: `passed`
+- `python -m ruff check src/francis/away.py
+  src/francis/api/routes/away.py src/francis/api/mutation_authority_matrix.py
+  tests/test_api_away.py tests/test_api_contract_chat_ui.py
+  tests/test_api_mutating_route_authority_matrix.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/away.py
+  src/francis/api/routes/away.py src/francis/api/mutation_authority_matrix.py
+  tests/test_api_away.py tests/test_api_contract_chat_ui.py
+  tests/test_api_mutating_route_authority_matrix.py`
+  Result: `passed; 6 files already formatted`
+- Live local governed route/readback:
+  POST `/away/live-progress-sample`, GET `/away/live-progress-samples`, GET
+  `/away/status`, and GET `/away/completion-review`.
+  Result: `record_status=recorded;
+  receipt_id=away_live_progress_d5bede554d60;
+  readback_count=1;
+  status_live_ready=true;
+  status_review_ready=true;
+  review_status=ready;
+  review_ready=true;
+  status_next=stage10_stage_closure_decision;
+  review_next=stage10_stage_closure_decision`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
