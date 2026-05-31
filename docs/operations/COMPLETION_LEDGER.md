@@ -49492,6 +49492,58 @@ Latest validation for Stage 13 UI state coherence review:
   source_contract_ready_count=4; source_contract_count=4;
   next_smallest_truthful_gap=stage13_operator_browser_visual_readback`.
 
+### 2026-05-31 - Stage 13 browser visual readback gains governed receipt path
+
+Roadmap area: Stage 13 / Trust Calibration, verification gates and UI confidence
+coherence.
+
+Material change:
+
+- Added readback route `/trust-calibration/operator-browser-visual-readbacks`.
+- Added scoped receipt route `/trust-calibration/operator-browser-visual-readback`
+  gated by `trust_calibration.browser_visual_readback.write`.
+- Browser visual readback receipts record explicit operator/browser observations
+  for claim guards, missing-verification visibility, forbidden-language
+  visibility, side-effect guard visibility, and next-gap visibility.
+- `/trust-calibration/status` now treats operator browser visual readback as a
+  seventh Stage 13 deliverable instead of collapsing static UI source coherence
+  into full visual proof.
+- Without a receipt, current status remains
+  `stage13_ui_state_coherence_ready`, `ready_count=6`, `required_count=7`, and
+  `next_smallest_truthful_gap=stage13_operator_browser_visual_readback`.
+- The receipt route records supplied operator/browser observations only. It does
+  not launch a browser, capture the screen, write memory, score model output,
+  change UI confidence, enforce runtime claims, run tools, run shell, run git,
+  mark Stage 13 closed, or grant execution or mutation authority.
+- Added `/output/` to `.gitignore` so local browser/debug artifacts do not
+  accidentally become source-control movement.
+
+Latest validation for Stage 13 browser visual readback receipt path:
+
+- `python -m pytest tests/test_api_trust_calibration.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed`
+- `python -m mypy src/francis/trust_calibration.py
+  src/francis/api/routes/trust_calibration.py`
+  Result: `passed`
+- `python -m ruff check src/francis/trust_calibration.py
+  src/francis/api/routes/trust_calibration.py tests/test_api_trust_calibration.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/trust_calibration.py
+  src/francis/api/routes/trust_calibration.py tests/test_api_trust_calibration.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- Live local API readback on current-code server at `127.0.0.1:8002`:
+  GET `/trust-calibration/status`, GET
+  `/trust-calibration/operator-browser-visual-readbacks`, and GET
+  `/trust-calibration/ui-state-coherence`.
+  Result: `status=stage13_ui_state_coherence_ready; ready_count=6;
+  required_count=7; operator_browser_visual_readback_observed=false;
+  browser_readback_status=empty;
+  next_smallest_truthful_gap=stage13_operator_browser_visual_readback`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

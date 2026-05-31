@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import json
+import os
+import time
+import uuid
+from pathlib import Path
 from typing import Any, Mapping
 
-from francis.kernel.paths import repo_root
+from francis.kernel.paths import data_dir, repo_root
 from francis.knowledge_fabric import knowledge_fabric_stage12_operator_stage_closure_decision_readback
 
 STAGE13_TRUST_CALIBRATION_STAGE = "Stage 13 / Trust Calibration"
@@ -13,6 +18,14 @@ TRUST_CALIBRATION_ANTI_OVERCLAIM_POLICY_KIND = "francis.stage13.trust_calibratio
 TRUST_CALIBRATION_CALIBRATED_CLAIM_LOGIC_KIND = "francis.stage13.trust_calibration.calibrated_claim_logic"
 TRUST_CALIBRATION_CLAIM_EVALUATION_KIND = "francis.stage13.trust_calibration.claim_evaluation"
 TRUST_CALIBRATION_UI_STATE_COHERENCE_KIND = "francis.stage13.trust_calibration.ui_state_coherence_review"
+TRUST_CALIBRATION_OPERATOR_BROWSER_VISUAL_READBACK_RECEIPT_KIND = (
+    "francis.stage13.trust_calibration.operator_browser_visual_readback_receipt"
+)
+TRUST_CALIBRATION_OPERATOR_BROWSER_VISUAL_READBACK_RECEIPTS_KIND = (
+    "francis.stage13.trust_calibration.operator_browser_visual_readback_receipts"
+)
+TRUST_CALIBRATION_BROWSER_VISUAL_READBACK_WRITE_SCOPE = "trust_calibration.browser_visual_readback.write"
+_ALLOWED_ENV_PROFILES = {"dev", "workstation"}
 
 
 def trust_calibration_status_snapshot() -> dict[str, Any]:
@@ -29,6 +42,8 @@ def trust_calibration_status_snapshot() -> dict[str, Any]:
     runtime_claim_integration_ready = calibrated_claim_logic_ready
     ui_state_coherence = trust_calibration_ui_state_coherence_review()
     ui_state_coherence_ready = bool(ui_state_coherence.get("ui_state_coherence_review_ready"))
+    browser_visual_readback = trust_calibration_operator_browser_visual_readback_receipts(limit=5)
+    browser_visual_readback_ready = bool(browser_visual_readback.get("operator_browser_visual_readback_observed"))
     deliverables = [
         _deliverable(
             "stage12_ledger_closure_backstop",
@@ -72,6 +87,13 @@ def trust_calibration_status_snapshot() -> dict[str, Any]:
             "ready" if ui_state_coherence_ready else "pending",
             "stage13_ui_state_coherence",
         ),
+        _deliverable(
+            "operator_browser_visual_readback",
+            "Operator browser visual readback proves the shell renders calibrated state",
+            browser_visual_readback_ready,
+            "ready" if browser_visual_readback_ready else "pending",
+            "stage13_operator_browser_visual_readback",
+        ),
     ]
     ready_count = sum(1 for item in deliverables if bool(item["ready"]))
     return {
@@ -79,7 +101,17 @@ def trust_calibration_status_snapshot() -> dict[str, Any]:
         "kind": TRUST_CALIBRATION_STATUS_KIND,
         "stage": STAGE13_TRUST_CALIBRATION_STAGE,
         "source_id": "trust_calibration",
-        "status": "stage13_ui_state_coherence_ready"
+        "status": "stage13_operator_browser_visual_readback_ready"
+        if (
+            stage12_closed
+            and confidence_rules_ready
+            and verification_gates_ready
+            and anti_overclaim_policy_ready
+            and calibrated_claim_logic_ready
+            and ui_state_coherence_ready
+            and browser_visual_readback_ready
+        )
+        else "stage13_ui_state_coherence_ready"
         if (
             stage12_closed
             and confidence_rules_ready
@@ -111,8 +143,9 @@ def trust_calibration_status_snapshot() -> dict[str, Any]:
         "calibrated_claim_logic_ready": calibrated_claim_logic_ready,
         "runtime_claim_integration_ready": runtime_claim_integration_ready,
         "ui_state_coherence_review_ready": ui_state_coherence_ready,
-        "operator_browser_visual_readback_observed": bool(
-            ui_state_coherence.get("operator_browser_visual_readback_observed")
+        "operator_browser_visual_readback_observed": browser_visual_readback_ready,
+        "latest_operator_browser_visual_readback_receipt_id": _safe_text(
+            browser_visual_readback.get("latest_receipt_id")
         ),
         "deliverables": deliverables,
         "ready_count": ready_count,
@@ -124,11 +157,23 @@ def trust_calibration_status_snapshot() -> dict[str, Any]:
             "anti_overclaim_policy": "/trust-calibration/anti-overclaim-policy",
             "calibrated_claim_logic": "/trust-calibration/calibrated-claim-logic",
             "ui_state_coherence": "/trust-calibration/ui-state-coherence",
+            "operator_browser_visual_readbacks": "/trust-calibration/operator-browser-visual-readbacks",
+            "operator_browser_visual_readback": "/trust-calibration/operator-browser-visual-readback",
             "claim_evaluation": "/trust-calibration/evaluate-claim",
             "stage12_closure_readback": "/knowledge-fabric/stage-closure-decisions",
         },
         "governance": _trust_calibration_governance(),
-        "next_smallest_truthful_gap": "stage13_operator_browser_visual_readback"
+        "next_smallest_truthful_gap": "stage13_completion_review"
+        if (
+            stage12_closed
+            and confidence_rules_ready
+            and verification_gates_ready
+            and anti_overclaim_policy_ready
+            and calibrated_claim_logic_ready
+            and ui_state_coherence_ready
+            and browser_visual_readback_ready
+        )
+        else "stage13_operator_browser_visual_readback"
         if (
             stage12_closed
             and confidence_rules_ready
@@ -784,6 +829,8 @@ def trust_calibration_claim_evaluation(payload: Mapping[str, Any] | None = None)
 def trust_calibration_ui_state_coherence_review() -> dict[str, Any]:
     claim_logic = trust_calibration_calibrated_claim_logic()
     runtime_ready = bool(claim_logic.get("calibrated_claim_logic_ready"))
+    browser_visual_readback = trust_calibration_operator_browser_visual_readback_receipts(limit=5)
+    browser_visual_observed = bool(browser_visual_readback.get("operator_browser_visual_readback_observed"))
     root = repo_root()
     app_path = root / "apps" / "chat_ui" / "src" / "App.tsx"
     dashboard_path = root / "apps" / "chat_ui" / "src" / "trust_dashboard" / "index.ts"
@@ -856,8 +903,12 @@ def trust_calibration_ui_state_coherence_review() -> dict[str, Any]:
         "claim_guard_readback_observed": bool(source_contracts[2]["observed"]),
         "presentation_model_observed": bool(source_contracts[3]["observed"]),
         "browser_visual_readback_required": True,
-        "operator_browser_visual_readback_observed": False,
-        "missing_verification": ["operator_browser_visual_readback"],
+        "operator_browser_visual_readback_observed": browser_visual_observed,
+        "latest_operator_browser_visual_readback_receipt_id": _safe_text(
+            browser_visual_readback.get("latest_receipt_id")
+        ),
+        "operator_browser_visual_readback_route": "/trust-calibration/operator-browser-visual-readbacks",
+        "missing_verification": [] if browser_visual_observed else ["operator_browser_visual_readback"],
         "writes_memory": False,
         "writes_receipts": False,
         "scores_model_output": False,
@@ -875,9 +926,159 @@ def trust_calibration_ui_state_coherence_review() -> dict[str, Any]:
             "does_not_launch_browser": True,
             "does_not_mark_stage_closed": True,
         },
-        "next_smallest_truthful_gap": "stage13_operator_browser_visual_readback"
+        "next_smallest_truthful_gap": "stage13_completion_review"
+        if review_ready and browser_visual_observed
+        else "stage13_operator_browser_visual_readback"
         if review_ready
         else "stage13_ui_state_coherence",
+    }
+
+
+def trust_calibration_operator_browser_visual_readback_receipts(*, limit: int = 20) -> dict[str, Any]:
+    safe_limit = _safe_limit(limit)
+    items = _read_jsonl_tail(_operator_browser_visual_readback_receipt_path(), limit=safe_limit)
+    latest = items[-1] if items else {}
+    latest_receipt_id = _safe_text(latest.get("receipt_id"))
+    return {
+        "ok": True,
+        "kind": TRUST_CALIBRATION_OPERATOR_BROWSER_VISUAL_READBACK_RECEIPTS_KIND,
+        "stage": STAGE13_TRUST_CALIBRATION_STAGE,
+        "source_id": "trust_calibration",
+        "status": "ready" if latest_receipt_id else "empty",
+        "operator_browser_visual_readback_observed": bool(latest_receipt_id),
+        "latest_receipt_id": latest_receipt_id,
+        "total": len(items),
+        "limit": safe_limit,
+        "items": items,
+        "reads_receipts": True,
+        "writes_receipts": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            **_trust_calibration_governance(),
+            "explicit_operator_browser_visual_readback_receipts_only": True,
+            "does_not_write_receipts": True,
+            "does_not_mark_stage_closed": True,
+        },
+        "next_smallest_truthful_gap": "stage13_completion_review"
+        if latest_receipt_id
+        else "stage13_operator_browser_visual_readback",
+    }
+
+
+def record_trust_calibration_operator_browser_visual_readback(
+    *,
+    actor: Any,
+    reason: Any,
+    claim_text: Any = "",
+    surface_id: Any = "",
+    browser_name: Any = "",
+    viewport: Any = "",
+    artifact_paths: Any = None,
+    claim_guard_visible: Any = False,
+    missing_verification_visible: Any = False,
+    forbidden_language_visible: Any = False,
+    side_effect_guard_visible: Any = False,
+    next_gap_visible: Any = False,
+) -> dict[str, Any]:
+    env_profile = _env_profile()
+    safe_actor = _redacted_text(actor)[:240]
+    safe_reason = _redacted_text(reason)[:500]
+    if env_profile not in _ALLOWED_ENV_PROFILES:
+        return _blocked_browser_visual_readback(
+            status="blocked_environment_profile",
+            reason="trust_calibration_browser_visual_readback_dev_or_workstation_only",
+        )
+
+    observed_flags = {
+        "claim_guard_visible": _safe_bool(claim_guard_visible),
+        "missing_verification_visible": _safe_bool(missing_verification_visible),
+        "forbidden_language_visible": _safe_bool(forbidden_language_visible),
+        "side_effect_guard_visible": _safe_bool(side_effect_guard_visible),
+        "next_gap_visible": _safe_bool(next_gap_visible),
+    }
+    readback_observed = all(observed_flags.values())
+    receipt_id = f"trust_calibration_browser_visual_{uuid.uuid4().hex[:12]}"
+    receipt = {
+        "ok": True,
+        "kind": TRUST_CALIBRATION_OPERATOR_BROWSER_VISUAL_READBACK_RECEIPT_KIND,
+        "receipt_id": receipt_id,
+        "stage": STAGE13_TRUST_CALIBRATION_STAGE,
+        "source_id": "trust_calibration",
+        "target": "stage13_operator_browser_visual_readback",
+        "actor": safe_actor,
+        "reason": safe_reason,
+        "claim_text": _redacted_text(claim_text)[:280],
+        "surface_id": _redacted_text(surface_id)[:160],
+        "browser_name": _redacted_text(browser_name)[:120],
+        "viewport": _redacted_text(viewport)[:80],
+        "artifact_paths": _safe_text_list(artifact_paths, limit=6),
+        "env_profile": env_profile,
+        "recorded_ts": _now_s(),
+        "capture_mode": "explicit_operator_browser_visual_readback_receipt",
+        "operator_browser_visual_readback_observed": readback_observed,
+        **observed_flags,
+        "writes_receipt": True,
+        "writes_memory": False,
+        "scores_model_output": False,
+        "changes_ui_confidence": False,
+        "enforces_runtime_claims": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            **_trust_calibration_governance(),
+            "required_scope": TRUST_CALIBRATION_BROWSER_VISUAL_READBACK_WRITE_SCOPE,
+            "dev_or_workstation_only": True,
+            "explicit_operator_browser_visual_readback": True,
+            "records_supplied_visual_readback_only": True,
+            "does_not_launch_browser": True,
+            "does_not_capture_screen": True,
+            "does_not_mark_stage_closed": True,
+        },
+        "next_smallest_truthful_gap": "stage13_completion_review"
+        if readback_observed
+        else "stage13_operator_browser_visual_readback",
+    }
+    _append_jsonl(_operator_browser_visual_readback_receipt_path(), receipt)
+    return receipt
+
+
+def _blocked_browser_visual_readback(*, status: str, reason: str) -> dict[str, Any]:
+    return {
+        "ok": False,
+        "kind": TRUST_CALIBRATION_OPERATOR_BROWSER_VISUAL_READBACK_RECEIPT_KIND,
+        "stage": STAGE13_TRUST_CALIBRATION_STAGE,
+        "source_id": "trust_calibration",
+        "status": status,
+        "reason": reason,
+        "required_scope": TRUST_CALIBRATION_BROWSER_VISUAL_READBACK_WRITE_SCOPE,
+        "operator_browser_visual_readback_observed": False,
+        "writes_receipt": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            **_trust_calibration_governance(),
+            "required_scope": TRUST_CALIBRATION_BROWSER_VISUAL_READBACK_WRITE_SCOPE,
+            "dev_or_workstation_only": True,
+            "does_not_write_receipts": True,
+            "does_not_mark_stage_closed": True,
+        },
+        "next_smallest_truthful_gap": "stage13_operator_browser_visual_readback",
     }
 
 
@@ -921,6 +1122,55 @@ def _read_source_text(path: Any, *, limit: int = 800_000) -> str:
     except OSError:
         return ""
     return text[:limit]
+
+
+def _operator_browser_visual_readback_receipt_path() -> Path:
+    return data_dir() / "logs" / "trust_calibration" / "operator_browser_visual_readbacks.jsonl"
+
+
+def _append_jsonl(path: Path, item: Mapping[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8", newline="\n") as handle:
+        handle.write(json.dumps(item, sort_keys=True, separators=(",", ":")))
+        handle.write("\n")
+
+
+def _read_jsonl_tail(path: Path, *, limit: int = 20) -> list[dict[str, Any]]:
+    if limit <= 0 or not path.is_file():
+        return []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    items: list[dict[str, Any]] = []
+    for line in lines[-limit:]:
+        try:
+            parsed = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            items.append(parsed)
+    return items
+
+
+def _safe_limit(value: Any, *, default: int = 20, maximum: int = 100) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return min(max(parsed, 1), maximum)
+
+
+def _env_profile() -> str:
+    return (os.getenv("FRANCIS_ENV_PROFILE") or "dev").strip().lower() or "dev"
+
+
+def _now_s() -> int:
+    return int(time.time())
+
+
+def _redacted_text(value: Any) -> str:
+    return " ".join(_safe_text(value).split())
 
 
 def _deliverable(

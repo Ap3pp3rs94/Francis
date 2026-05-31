@@ -104,13 +104,15 @@ def test_trust_calibration_status_blocks_until_stage12_closure(monkeypatch, tmp_
     assert body["ui_state_coherence_review_ready"] is False
     assert body["operator_browser_visual_readback_observed"] is False
     assert body["ready_count"] == 0
-    assert body["required_count"] == 6
+    assert body["required_count"] == 7
     assert body["routes"]["status"] == "/trust-calibration/status"
     assert body["routes"]["confidence_rules_contract"] == "/trust-calibration/confidence-rules-contract"
     assert body["routes"]["verification_gate_contract"] == "/trust-calibration/verification-gate-contract"
     assert body["routes"]["anti_overclaim_policy"] == "/trust-calibration/anti-overclaim-policy"
     assert body["routes"]["calibrated_claim_logic"] == "/trust-calibration/calibrated-claim-logic"
     assert body["routes"]["ui_state_coherence"] == "/trust-calibration/ui-state-coherence"
+    assert body["routes"]["operator_browser_visual_readbacks"] == "/trust-calibration/operator-browser-visual-readbacks"
+    assert body["routes"]["operator_browser_visual_readback"] == "/trust-calibration/operator-browser-visual-readback"
     assert body["routes"]["claim_evaluation"] == "/trust-calibration/evaluate-claim"
     assert body["routes"]["stage12_closure_readback"] == "/knowledge-fabric/stage-closure-decisions"
     assert body["governance"]["read_only"] is True
@@ -421,6 +423,8 @@ def test_trust_calibration_confidence_rules_contract_ready_after_stage12_closure
     assert ui_review["presentation_model_observed"] is True
     assert ui_review["browser_visual_readback_required"] is True
     assert ui_review["operator_browser_visual_readback_observed"] is False
+    assert ui_review["latest_operator_browser_visual_readback_receipt_id"] == ""
+    assert ui_review["operator_browser_visual_readback_route"] == "/trust-calibration/operator-browser-visual-readbacks"
     assert ui_review["missing_verification"] == ["operator_browser_visual_readback"]
     assert ui_review["writes_memory"] is False
     assert ui_review["writes_receipts"] is False
@@ -446,8 +450,9 @@ def test_trust_calibration_confidence_rules_contract_ready_after_stage12_closure
     assert status["runtime_claim_integration_ready"] is True
     assert status["ui_state_coherence_review_ready"] is True
     assert status["operator_browser_visual_readback_observed"] is False
+    assert status["latest_operator_browser_visual_readback_receipt_id"] == ""
     assert status["ready_count"] == 6
-    assert status["required_count"] == 6
+    assert status["required_count"] == 7
     assert status["next_smallest_truthful_gap"] == "stage13_operator_browser_visual_readback"
 
     blocked_eval = client.post(
@@ -531,3 +536,111 @@ def test_trust_calibration_confidence_rules_contract_ready_after_stage12_closure
     assert uncertain_eval["downgraded"] is True
     assert uncertain_eval["missing_verification"] == ["current_evidence_or_conflict_resolution"]
     assert uncertain_eval["surface_obligation"] == "state_uncertainty_and_next_check"
+
+
+def test_trust_calibration_operator_browser_visual_readback_receipt_advances_browser_gap(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    repo_root = tmp_path / "repo"
+    actor = "test.trust.browser"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({actor: ["trust_calibration.browser_visual_readback.write"]}),
+    )
+    _write_stage13_ui_coherence_sources(repo_root)
+    _write_stage12_closure_receipt(data_root, receipt_id="knowledge_fabric_stage12_closure_browser_test")
+
+    client = TestClient(create_app())
+    empty = client.get("/trust-calibration/operator-browser-visual-readbacks").json()
+    assert empty["ok"] is True
+    assert empty["kind"] == "francis.stage13.trust_calibration.operator_browser_visual_readback_receipts"
+    assert empty["status"] == "empty"
+    assert empty["operator_browser_visual_readback_observed"] is False
+    assert empty["latest_receipt_id"] == ""
+    assert empty["writes_receipts"] is False
+    assert empty["governance"]["explicit_operator_browser_visual_readback_receipts_only"] is True
+    assert empty["next_smallest_truthful_gap"] == "stage13_operator_browser_visual_readback"
+
+    denied = client.post(
+        "/trust-calibration/operator-browser-visual-readback",
+        json={
+            "actor": "missing.scope",
+            "reason": "attempt without scope",
+            "claim_guard_visible": True,
+            "missing_verification_visible": True,
+            "forbidden_language_visible": True,
+            "side_effect_guard_visible": True,
+            "next_gap_visible": True,
+        },
+    ).json()
+    assert denied["status"] == "denied"
+    assert denied["writes_receipt"] is False
+    assert denied["governance"]["required_scope"] == "trust_calibration.browser_visual_readback.write"
+
+    receipt = client.post(
+        "/trust-calibration/operator-browser-visual-readback",
+        json={
+            "actor": actor,
+            "reason": "operator_browser_visual_readback_observed_in_local_ui",
+            "claim_text": "Stage 13 trust calibration claim state is visible in the operator shell",
+            "surface_id": "francis-trust-calibration",
+            "browser_name": "Microsoft Edge",
+            "viewport": "1440x1200",
+            "artifact_paths": ["output/playwright/stage13-ui-state-coherence.png"],
+            "claim_guard_visible": True,
+            "missing_verification_visible": True,
+            "forbidden_language_visible": True,
+            "side_effect_guard_visible": True,
+            "next_gap_visible": True,
+        },
+    ).json()
+
+    assert receipt["ok"] is True
+    assert receipt["kind"] == "francis.stage13.trust_calibration.operator_browser_visual_readback_receipt"
+    assert receipt["receipt_id"].startswith("trust_calibration_browser_visual_")
+    assert receipt["actor"] == actor
+    assert receipt["writes_receipt"] is True
+    assert receipt["writes_memory"] is False
+    assert receipt["runs_tools"] is False
+    assert receipt["runs_shell"] is False
+    assert receipt["runs_git"] is False
+    assert receipt["launches_browser"] is False
+    assert receipt["captures_screen"] is False
+    assert receipt["operator_browser_visual_readback_observed"] is True
+    assert receipt["claim_guard_visible"] is True
+    assert receipt["missing_verification_visible"] is True
+    assert receipt["forbidden_language_visible"] is True
+    assert receipt["side_effect_guard_visible"] is True
+    assert receipt["next_gap_visible"] is True
+    assert receipt["governance"]["required_scope"] == "trust_calibration.browser_visual_readback.write"
+    assert receipt["governance"]["records_supplied_visual_readback_only"] is True
+    assert receipt["governance"]["does_not_launch_browser"] is True
+    assert receipt["governance"]["does_not_capture_screen"] is True
+    assert receipt["governance"]["does_not_mark_stage_closed"] is True
+    assert receipt["next_smallest_truthful_gap"] == "stage13_completion_review"
+
+    readback = client.get("/trust-calibration/operator-browser-visual-readbacks").json()
+    assert readback["status"] == "ready"
+    assert readback["operator_browser_visual_readback_observed"] is True
+    assert readback["latest_receipt_id"] == receipt["receipt_id"]
+    assert readback["items"][-1]["receipt_id"] == receipt["receipt_id"]
+    assert readback["next_smallest_truthful_gap"] == "stage13_completion_review"
+
+    ui_review = client.get("/trust-calibration/ui-state-coherence").json()
+    assert ui_review["operator_browser_visual_readback_observed"] is True
+    assert ui_review["latest_operator_browser_visual_readback_receipt_id"] == receipt["receipt_id"]
+    assert ui_review["missing_verification"] == []
+    assert ui_review["next_smallest_truthful_gap"] == "stage13_completion_review"
+
+    status = client.get("/trust-calibration/status").json()
+    assert status["status"] == "stage13_operator_browser_visual_readback_ready"
+    assert status["operator_browser_visual_readback_observed"] is True
+    assert status["latest_operator_browser_visual_readback_receipt_id"] == receipt["receipt_id"]
+    assert status["ready_count"] == 7
+    assert status["required_count"] == 7
+    assert status["next_smallest_truthful_gap"] == "stage13_completion_review"

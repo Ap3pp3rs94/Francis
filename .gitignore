@@ -198,6 +198,9 @@ $RECYCLE.BIN/
 .tmp/
 *.tmp
 *.bak
+
+# Local agent/browser verification artifacts
+/output/
 *.old
 *~
 
