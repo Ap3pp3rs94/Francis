@@ -49588,6 +49588,53 @@ Latest validation for Stage 13 completion review:
   "all_deliverables_ready"];
   next_smallest_truthful_gap=stage13_operator_browser_visual_readback`.
 
+### 2026-05-31 - Stage 13 closure decision path is receipt-backed
+
+Roadmap area: Stage 13 / Trust Calibration, explicit operator stage closure
+after truthful completion review.
+
+Material change:
+
+- Added read-only route `/trust-calibration/stage-closure-decisions`.
+- Added scoped route `/trust-calibration/stage-closure-decision` gated by
+  `trust_calibration.stage13.closure.write`.
+- Closure receipt writes are refused until
+  `/trust-calibration/completion-review` reports
+  `stage13_completion_review_ready=true`.
+- A valid `close_stage13` receipt records the completion-review evidence,
+  Stage 12 closure receipt, operator browser visual readback receipt, ready
+  counts, decision, actor, reason, and audit metadata.
+- The closure decision path does not mutate runtime stage state, write memory,
+  score model output, change UI confidence, launch browsers, capture screens,
+  run tools, run shell, run git, or grant execution or mutation authority.
+
+Latest validation for Stage 13 closure decision path:
+
+- `python -m pytest tests/test_api_trust_calibration.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed`
+- `python -m mypy src/francis/trust_calibration.py
+  src/francis/api/routes/trust_calibration.py`
+  Result: `passed`
+- `python -m ruff check src/francis/trust_calibration.py
+  src/francis/api/routes/trust_calibration.py tests/test_api_trust_calibration.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/trust_calibration.py
+  src/francis/api/routes/trust_calibration.py tests/test_api_trust_calibration.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- Direct local `TestClient` readback of GET
+  `/trust-calibration/stage-closure-decisions` and GET
+  `/trust-calibration/completion-review`.
+  Result: `closure_status=empty; stage13_closed_by_receipt=false;
+  closure_next=stage13_completion_review; review_status=blocked;
+  stage13_completion_review_ready=false;
+  review_blockers=["operator_browser_visual_readback_observed",
+  "all_deliverables_ready"];
+  review_next=stage13_operator_browser_visual_readback`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -9,6 +9,7 @@ from typing import Any, Mapping
 
 from francis.kernel.paths import data_dir, repo_root
 from francis.knowledge_fabric import knowledge_fabric_stage12_operator_stage_closure_decision_readback
+from francis.telemetry.audit import record as audit_record
 
 STAGE13_TRUST_CALIBRATION_STAGE = "Stage 13 / Trust Calibration"
 TRUST_CALIBRATION_STATUS_KIND = "francis.stage13.trust_calibration.status"
@@ -25,7 +26,10 @@ TRUST_CALIBRATION_OPERATOR_BROWSER_VISUAL_READBACK_RECEIPT_KIND = (
 TRUST_CALIBRATION_OPERATOR_BROWSER_VISUAL_READBACK_RECEIPTS_KIND = (
     "francis.stage13.trust_calibration.operator_browser_visual_readback_receipts"
 )
+TRUST_CALIBRATION_STAGE_CLOSURE_DECISION_KIND = "francis.stage13.trust_calibration.stage13_closure_decision_receipt"
+TRUST_CALIBRATION_STAGE_CLOSURE_DECISIONS_KIND = "francis.stage13.trust_calibration.stage13_closure_decision_receipts"
 TRUST_CALIBRATION_BROWSER_VISUAL_READBACK_WRITE_SCOPE = "trust_calibration.browser_visual_readback.write"
+TRUST_CALIBRATION_STAGE_CLOSURE_SCOPE = "trust_calibration.stage13.closure.write"
 _ALLOWED_ENV_PROFILES = {"dev", "workstation"}
 
 
@@ -45,6 +49,8 @@ def trust_calibration_status_snapshot() -> dict[str, Any]:
     ui_state_coherence_ready = bool(ui_state_coherence.get("ui_state_coherence_review_ready"))
     browser_visual_readback = trust_calibration_operator_browser_visual_readback_receipts(limit=5)
     browser_visual_readback_ready = bool(browser_visual_readback.get("operator_browser_visual_readback_observed"))
+    stage13_closure = trust_calibration_stage13_operator_stage_closure_decision_readback(limit=5)
+    stage13_closed = bool(stage13_closure.get("stage13_closed_by_receipt"))
     deliverables = [
         _deliverable(
             "stage12_ledger_closure_backstop",
@@ -102,7 +108,9 @@ def trust_calibration_status_snapshot() -> dict[str, Any]:
         "kind": TRUST_CALIBRATION_STATUS_KIND,
         "stage": STAGE13_TRUST_CALIBRATION_STAGE,
         "source_id": "trust_calibration",
-        "status": "stage13_operator_browser_visual_readback_ready"
+        "status": "stage13_closed_by_receipt"
+        if stage13_closed
+        else "stage13_operator_browser_visual_readback_ready"
         if (
             stage12_closed
             and confidence_rules_ready
@@ -148,6 +156,8 @@ def trust_calibration_status_snapshot() -> dict[str, Any]:
         "latest_operator_browser_visual_readback_receipt_id": _safe_text(
             browser_visual_readback.get("latest_receipt_id")
         ),
+        "stage13_closed_by_receipt": stage13_closed,
+        "stage13_latest_closure_receipt_id": _safe_text(stage13_closure.get("latest_receipt_id")),
         "deliverables": deliverables,
         "ready_count": ready_count,
         "required_count": len(deliverables),
@@ -161,11 +171,15 @@ def trust_calibration_status_snapshot() -> dict[str, Any]:
             "operator_browser_visual_readbacks": "/trust-calibration/operator-browser-visual-readbacks",
             "operator_browser_visual_readback": "/trust-calibration/operator-browser-visual-readback",
             "completion_review": "/trust-calibration/completion-review",
+            "stage_closure_decisions": "/trust-calibration/stage-closure-decisions",
+            "stage_closure_decision": "/trust-calibration/stage-closure-decision",
             "claim_evaluation": "/trust-calibration/evaluate-claim",
             "stage12_closure_readback": "/knowledge-fabric/stage-closure-decisions",
         },
         "governance": _trust_calibration_governance(),
-        "next_smallest_truthful_gap": "stage13_completion_review"
+        "next_smallest_truthful_gap": "stage13_ledger_closure"
+        if stage13_closed
+        else "stage13_completion_review"
         if (
             stage12_closed
             and confidence_rules_ready
@@ -938,6 +952,7 @@ def trust_calibration_ui_state_coherence_review() -> dict[str, Any]:
 
 def trust_calibration_completion_review() -> dict[str, Any]:
     status = trust_calibration_status_snapshot()
+    stage13_closed = bool(status.get("stage13_closed_by_receipt"))
     deliverables = [item for item in status.get("deliverables", []) if isinstance(item, Mapping)]
     ready_count = _safe_int(status.get("ready_count"))
     required_count = _safe_int(status.get("required_count"))
@@ -1002,7 +1017,9 @@ def trust_calibration_completion_review() -> dict[str, Any]:
         "source_id": "trust_calibration",
         "status": "ready" if review_ready else "blocked",
         "stage13_completion_review_ready": review_ready,
-        "stage_closure_decision_required": review_ready,
+        "stage13_closed_by_receipt": stage13_closed,
+        "stage13_latest_closure_receipt_id": _safe_text(status.get("stage13_latest_closure_receipt_id")),
+        "stage_closure_decision_required": review_ready and not stage13_closed,
         "stage12_closed_by_receipt": bool(status.get("stage12_closed_by_receipt")),
         "stage12_latest_closure_receipt_id": _safe_text(status.get("stage12_latest_closure_receipt_id")),
         "confidence_rules_contract_ready": bool(status.get("confidence_rules_contract_ready")),
@@ -1036,17 +1053,149 @@ def trust_calibration_completion_review() -> dict[str, Any]:
         "governance": {
             **_trust_calibration_governance(),
             "completion_review_only": True,
-            "stage_closure_decision_required": review_ready,
+            "stage_closure_decision_required": review_ready and not stage13_closed,
             "requires_operator_browser_visual_readback": True,
             "does_not_launch_browser": True,
             "does_not_capture_screen": True,
             "does_not_mark_stage_closed": True,
         },
         "routes": status.get("routes", {}),
-        "next_smallest_truthful_gap": "stage13_stage_closure_decision"
+        "next_smallest_truthful_gap": "stage13_ledger_closure"
+        if stage13_closed
+        else "stage13_stage_closure_decision"
         if review_ready
         else _safe_text(status.get("next_smallest_truthful_gap")) or "stage13_operator_browser_visual_readback",
     }
+
+
+def read_trust_calibration_stage13_operator_stage_closure_decisions(*, limit: int = 20) -> list[dict[str, Any]]:
+    return _read_jsonl_tail(_stage13_operator_stage_closure_decision_path(), limit=_safe_limit(limit))
+
+
+def trust_calibration_stage13_operator_stage_closure_decision_readback(*, limit: int = 20) -> dict[str, Any]:
+    safe_limit = _safe_limit(limit)
+    items = read_trust_calibration_stage13_operator_stage_closure_decisions(limit=safe_limit)
+    latest = items[-1] if items else {}
+    stage13_closed = bool(latest.get("stage13_closed_by_receipt"))
+    return {
+        "ok": True,
+        "kind": TRUST_CALIBRATION_STAGE_CLOSURE_DECISIONS_KIND,
+        "stage": STAGE13_TRUST_CALIBRATION_STAGE,
+        "source_id": "trust_calibration",
+        "status": "closed" if stage13_closed else "open" if items else "empty",
+        "items": items,
+        "count": len(items),
+        "limit": safe_limit,
+        "latest_receipt_id": _safe_text(latest.get("receipt_id")),
+        "latest_decision": _safe_text(latest.get("decision")),
+        "stage13_closed_by_receipt": stage13_closed,
+        "marks_runtime_stage_state": False,
+        "reads_receipts": True,
+        "writes_receipts": False,
+        "writes_memory": False,
+        "scores_model_output": False,
+        "changes_ui_confidence": False,
+        "enforces_runtime_claims": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            **_trust_calibration_governance(),
+            "stage_closure_decision_receipt_readback": True,
+            "does_not_mutate_runtime_stage_state": True,
+            "does_not_mark_stage_closed": True,
+        },
+        "next_smallest_truthful_gap": "stage13_ledger_closure"
+        if stage13_closed
+        else "stage13_stage_closure_decision"
+        if items
+        else "stage13_completion_review",
+    }
+
+
+def record_trust_calibration_stage13_operator_stage_closure_decision(
+    *,
+    actor: Any,
+    reason: Any,
+    decision: Any,
+    review: dict[str, Any],
+    notes: Any = "",
+) -> dict[str, Any]:
+    safe_decision = _safe_stage13_closure_decision(decision)
+    closure_ready = bool(review.get("stage13_completion_review_ready"))
+    stage13_closed_by_receipt = safe_decision == "close_stage13" and closure_ready
+    receipt_id = f"trust_calibration_stage13_closure_{uuid.uuid4().hex[:12]}"
+    payload = {
+        "ok": True,
+        "kind": TRUST_CALIBRATION_STAGE_CLOSURE_DECISION_KIND,
+        "receipt_id": receipt_id,
+        "stage": STAGE13_TRUST_CALIBRATION_STAGE,
+        "source_id": "trust_calibration",
+        "capture_mode": "explicit_operator_stage_closure_decision",
+        "target": "stage13_trust_calibration",
+        "actor": _redacted_text(actor)[:240],
+        "reason": _redacted_text(reason)[:500],
+        "decision": safe_decision,
+        "notes": _redacted_text(notes)[:500],
+        "review_status": _safe_text(review.get("status")),
+        "completion_review_ready": closure_ready,
+        "stage13_completion_review_ready": closure_ready,
+        "stage12_closure_receipt_id": _safe_text(review.get("stage12_latest_closure_receipt_id")),
+        "operator_browser_visual_readback_receipt_id": _safe_text(
+            review.get("latest_operator_browser_visual_readback_receipt_id")
+        ),
+        "ready_count": _safe_int(review.get("ready_count")),
+        "required_count": _safe_int(review.get("required_count")),
+        "blockers": _safe_text_list(review.get("blockers"), limit=20),
+        "stage13_closed_by_receipt": stage13_closed_by_receipt,
+        "marks_runtime_stage_state": False,
+        "recorded_ts": _now_s(),
+        "writes_receipt": True,
+        "writes_memory": False,
+        "scores_model_output": False,
+        "changes_ui_confidence": False,
+        "enforces_runtime_claims": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            **_trust_calibration_governance(),
+            "permission_scope": TRUST_CALIBRATION_STAGE_CLOSURE_SCOPE,
+            "explicit_operator_decision": True,
+            "stage_closure_decision": True,
+            "completion_review_ready": closure_ready,
+            "requires_stage12_ledger_closure": True,
+            "requires_confidence_rules_contract": True,
+            "requires_verification_gates": True,
+            "requires_anti_overclaim_policy": True,
+            "requires_calibrated_claim_logic": True,
+            "requires_ui_state_coherence": True,
+            "requires_operator_browser_visual_readback": True,
+            "does_not_mutate_runtime_stage_state": True,
+            "does_not_mark_stage_closed": True,
+        },
+        "next_smallest_truthful_gap": "stage13_ledger_closure"
+        if stage13_closed_by_receipt
+        else "stage13_stage_closure_decision",
+    }
+    _append_jsonl(_stage13_operator_stage_closure_decision_path(), payload)
+    audit_record(
+        "trust_calibration.stage13_closure_decision_recorded",
+        actor=payload["actor"],
+        reason=payload["reason"],
+        receipt_id=receipt_id,
+        decision=safe_decision,
+        stage13_closed_by_receipt=stage13_closed_by_receipt,
+    )
+    return payload
 
 
 def trust_calibration_operator_browser_visual_readback_receipts(*, limit: int = 20) -> dict[str, Any]:
@@ -1243,6 +1392,10 @@ def _operator_browser_visual_readback_receipt_path() -> Path:
     return data_dir() / "logs" / "trust_calibration" / "operator_browser_visual_readbacks.jsonl"
 
 
+def _stage13_operator_stage_closure_decision_path() -> Path:
+    return data_dir() / "logs" / "trust_calibration" / "stage13_operator_stage_closure_decisions.jsonl"
+
+
 def _append_jsonl(path: Path, item: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8", newline="\n") as handle:
@@ -1318,6 +1471,13 @@ def _safe_int(value: Any) -> int:
         return int(value)
     except (TypeError, ValueError):
         return 0
+
+
+def _safe_stage13_closure_decision(value: Any) -> str:
+    text = _safe_text(value)
+    if text in {"close_stage13", "do_not_close_stage13", "needs_more_evidence"}:
+        return text
+    return "needs_more_evidence"
 
 
 def _safe_text(value: Any) -> str:

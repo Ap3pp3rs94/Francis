@@ -114,6 +114,8 @@ def test_trust_calibration_status_blocks_until_stage12_closure(monkeypatch, tmp_
     assert body["routes"]["operator_browser_visual_readbacks"] == "/trust-calibration/operator-browser-visual-readbacks"
     assert body["routes"]["operator_browser_visual_readback"] == "/trust-calibration/operator-browser-visual-readback"
     assert body["routes"]["completion_review"] == "/trust-calibration/completion-review"
+    assert body["routes"]["stage_closure_decisions"] == "/trust-calibration/stage-closure-decisions"
+    assert body["routes"]["stage_closure_decision"] == "/trust-calibration/stage-closure-decision"
     assert body["routes"]["claim_evaluation"] == "/trust-calibration/evaluate-claim"
     assert body["routes"]["stage12_closure_readback"] == "/knowledge-fabric/stage-closure-decisions"
     assert body["governance"]["read_only"] is True
@@ -455,6 +457,8 @@ def test_trust_calibration_confidence_rules_contract_ready_after_stage12_closure
     assert status["ready_count"] == 6
     assert status["required_count"] == 7
     assert status["routes"]["completion_review"] == "/trust-calibration/completion-review"
+    assert status["routes"]["stage_closure_decisions"] == "/trust-calibration/stage-closure-decisions"
+    assert status["routes"]["stage_closure_decision"] == "/trust-calibration/stage-closure-decision"
     assert status["next_smallest_truthful_gap"] == "stage13_operator_browser_visual_readback"
 
     blocked_eval = client.post(
@@ -594,6 +598,8 @@ def test_trust_calibration_completion_review_blocks_until_browser_visual_readbac
     assert body["governance"]["does_not_capture_screen"] is True
     assert body["governance"]["does_not_mark_stage_closed"] is True
     assert body["routes"]["completion_review"] == "/trust-calibration/completion-review"
+    assert body["routes"]["stage_closure_decisions"] == "/trust-calibration/stage-closure-decisions"
+    assert body["routes"]["stage_closure_decision"] == "/trust-calibration/stage-closure-decision"
     assert body["next_smallest_truthful_gap"] == "stage13_operator_browser_visual_readback"
 
     checks = {item["id"]: item for item in body["checks"]}
@@ -616,7 +622,14 @@ def test_trust_calibration_operator_browser_visual_readback_receipt_advances_bro
     monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
     monkeypatch.setenv(
         "FRANCIS_API_ACTOR_SCOPES",
-        json.dumps({actor: ["trust_calibration.browser_visual_readback.write"]}),
+        json.dumps(
+            {
+                actor: [
+                    "trust_calibration.browser_visual_readback.write",
+                    "trust_calibration.stage13.closure.write",
+                ]
+            }
+        ),
     )
     _write_stage13_ui_coherence_sources(repo_root)
     _write_stage12_closure_receipt(data_root, receipt_id="knowledge_fabric_stage12_closure_browser_test")
@@ -631,6 +644,16 @@ def test_trust_calibration_operator_browser_visual_readback_receipt_advances_bro
     assert empty["writes_receipts"] is False
     assert empty["governance"]["explicit_operator_browser_visual_readback_receipts_only"] is True
     assert empty["next_smallest_truthful_gap"] == "stage13_operator_browser_visual_readback"
+
+    empty_closure = client.get("/trust-calibration/stage-closure-decisions").json()
+    assert empty_closure["ok"] is True
+    assert empty_closure["kind"] == "francis.stage13.trust_calibration.stage13_closure_decision_receipts"
+    assert empty_closure["status"] == "empty"
+    assert empty_closure["stage13_closed_by_receipt"] is False
+    assert empty_closure["latest_receipt_id"] == ""
+    assert empty_closure["writes_receipts"] is False
+    assert empty_closure["governance"]["stage_closure_decision_receipt_readback"] is True
+    assert empty_closure["next_smallest_truthful_gap"] == "stage13_completion_review"
 
     denied = client.post(
         "/trust-calibration/operator-browser-visual-readback",
@@ -647,6 +670,36 @@ def test_trust_calibration_operator_browser_visual_readback_receipt_advances_bro
     assert denied["status"] == "denied"
     assert denied["writes_receipt"] is False
     assert denied["governance"]["required_scope"] == "trust_calibration.browser_visual_readback.write"
+
+    denied_closure = client.post(
+        "/trust-calibration/stage-closure-decision",
+        json={
+            "actor": "missing.scope",
+            "reason": "attempt without scope",
+            "decision": "close_stage13",
+        },
+    ).json()
+    assert denied_closure["status"] == "denied"
+    assert denied_closure["writes_receipt"] is False
+    assert denied_closure["governance"]["required_scope"] == "trust_calibration.stage13.closure.write"
+    assert denied_closure["next_smallest_truthful_gap"] == "stage13_stage_closure_decision"
+
+    blocked_closure = client.post(
+        "/trust-calibration/stage-closure-decision",
+        json={
+            "actor": actor,
+            "reason": "attempt before browser visual readback",
+            "decision": "close_stage13",
+        },
+    ).json()
+    assert blocked_closure["ok"] is False
+    assert blocked_closure["status"] == "blocked_completion_review"
+    assert blocked_closure["receipt_id"] == ""
+    assert blocked_closure["completion_review_ready"] is False
+    assert blocked_closure["stage13_closed_by_receipt"] is False
+    assert blocked_closure["writes_receipt"] is False
+    assert blocked_closure["governance"]["does_not_record_when_not_ready"] is True
+    assert blocked_closure["next_smallest_truthful_gap"] == "stage13_operator_browser_visual_readback"
 
     receipt = client.post(
         "/trust-calibration/operator-browser-visual-readback",
@@ -735,3 +788,48 @@ def test_trust_calibration_operator_browser_visual_readback_receipt_advances_bro
     assert completion_review["governance"]["does_not_mark_stage_closed"] is True
     assert completion_review["next_smallest_truthful_gap"] == "stage13_stage_closure_decision"
     assert all(item["passed"] for item in completion_review["checks"])
+
+    closure = client.post(
+        "/trust-calibration/stage-closure-decision",
+        json={
+            "actor": actor,
+            "reason": "operator reviewed stage13 trust calibration completion",
+            "decision": "close_stage13",
+            "notes": "completion review ready after browser visual readback receipt",
+        },
+    ).json()
+    assert closure["ok"] is True
+    assert closure["kind"] == "francis.stage13.trust_calibration.stage13_closure_decision.record"
+    assert closure["status"] == "recorded"
+    assert closure["receipt_id"].startswith("trust_calibration_stage13_closure_")
+    assert closure["decision"] == "close_stage13"
+    assert closure["stage13_closed_by_receipt"] is True
+    assert closure["completion_review_ready"] is True
+    assert closure["writes_receipt"] is True
+    assert closure["writes_memory"] is False
+    assert closure["runs_tools"] is False
+    assert closure["runs_shell"] is False
+    assert closure["runs_git"] is False
+    assert closure["launches_browser"] is False
+    assert closure["captures_screen"] is False
+    assert closure["grants_execution_authority"] is False
+    assert closure["grants_mutation_authority"] is False
+    assert closure["governance"]["required_scope"] == "trust_calibration.stage13.closure.write"
+    assert closure["governance"]["stage_closure_decision"] is True
+    assert closure["governance"]["completion_review_ready"] is True
+    assert closure["governance"]["does_not_mutate_runtime_stage_state"] is True
+    assert closure["next_smallest_truthful_gap"] == "stage13_ledger_closure"
+
+    closure_readback = client.get("/trust-calibration/stage-closure-decisions").json()
+    assert closure_readback["status"] == "closed"
+    assert closure_readback["latest_receipt_id"] == closure["receipt_id"]
+    assert closure_readback["latest_decision"] == "close_stage13"
+    assert closure_readback["stage13_closed_by_receipt"] is True
+    assert closure_readback["items"][-1]["receipt_id"] == closure["receipt_id"]
+    assert closure_readback["next_smallest_truthful_gap"] == "stage13_ledger_closure"
+
+    closed_status = client.get("/trust-calibration/status").json()
+    assert closed_status["status"] == "stage13_closed_by_receipt"
+    assert closed_status["stage13_closed_by_receipt"] is True
+    assert closed_status["stage13_latest_closure_receipt_id"] == closure["receipt_id"]
+    assert closed_status["next_smallest_truthful_gap"] == "stage13_ledger_closure"
