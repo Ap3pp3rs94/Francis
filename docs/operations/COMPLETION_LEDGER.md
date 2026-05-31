@@ -46497,6 +46497,48 @@ Latest validation for Stage 7 feedback memory assistance closure receipt:
   latest_decision=close_stage7; stage7_closed_by_receipt=true;
   next_smallest_truthful_gap=stage7_ledger_closure`.
 
+### 2026-05-30 - Stage 7 closure gap projects through top-level telemetry
+
+Roadmap area: Stage 7 / Telemetry MVP, truthful top-level closure readback.
+
+Material change:
+
+- `/telemetry/status` now reads the latest Stage 7 closure decision receipt
+  read-only and reports `next_smallest_truthful_gap=stage7_ledger_closure`
+  when the latest receipt has `decision=close_stage7` and
+  `stage7_closed_by_receipt=true`.
+- `/telemetry/context` now reuses the telemetry status next-gap projection
+  instead of a stale static feedback-memory assistance gap.
+- This does not mutate runtime stage state, write receipts, start sensing,
+  grant execution authority, or grant mutation authority.
+- Live local readback now reports `stage7_ledger_closure` consistently from
+  `/telemetry/status`, `/telemetry/context`, and
+  `/telemetry/context/feedback/memory-assistance-feedback-loop-stage-closure-decisions`.
+
+Latest validation for Stage 7 top-level closure projection:
+
+- `python -m pytest
+  tests/test_api_telemetry.py::test_telemetry_status_projects_stage7_readonly_sources
+  tests/test_api_telemetry.py::test_telemetry_status_and_context_project_stage7_ledger_closure_after_receipt
+  tests/test_api_telemetry.py::test_telemetry_context_feedback_memory_assistance_live_sample_operator_decision_records_receipt
+  -q --tb=short --maxfail=1`
+  Result: `passed; 3 passed`
+- `python -m mypy src/francis/telemetry/status.py
+  src/francis/telemetry/context.py`
+  Result: `passed`
+- `python -m ruff check src/francis/telemetry/status.py
+  src/francis/telemetry/context.py tests/test_api_telemetry.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/telemetry/status.py
+  src/francis/telemetry/context.py tests/test_api_telemetry.py`
+  Result: `passed; 3 files already formatted`
+- Live local readback:
+  `/telemetry/status`, `/telemetry/context`, and
+  `/telemetry/context/feedback/memory-assistance-feedback-loop-stage-closure-decisions`.
+  Result: all reported `next_smallest_truthful_gap=stage7_ledger_closure`;
+  the closure decision readback also reported
+  `stage7_closed_by_receipt=true` and `latest_decision=close_stage7`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

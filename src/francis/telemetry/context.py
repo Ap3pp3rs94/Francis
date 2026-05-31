@@ -93,7 +93,9 @@ def telemetry_context_snapshot(*, surface: Any = "assist") -> dict[str, Any]:
             "grants_execution_authority": False,
             "grants_memory_write_authority": False,
         },
-        "next_smallest_truthful_gap": _NEXT_CONTEXT_FEEDBACK_GAP,
+        "next_smallest_truthful_gap": _redact_text(
+            status.get("next_smallest_truthful_gap") or _NEXT_CONTEXT_FEEDBACK_GAP
+        ),
     }
 
 

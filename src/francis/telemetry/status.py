@@ -1,12 +1,19 @@
 from __future__ import annotations
 
+import json
 import time
+from pathlib import Path
 from typing import Any
 
 from francis.governance.redaction import redact_governed_value
+from francis.kernel.paths import data_dir
 
 STAGE7_TELEMETRY_STAGE = "Stage 7 / Telemetry MVP"
 STAGE7_STATUS_KIND = "francis.stage7.telemetry.status"
+_STAGE7_FEEDBACK_MEMORY_ASSISTANCE_LIVE_SAMPLE_GAP = (
+    "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run"
+)
+_STAGE7_LEDGER_CLOSURE_GAP = "stage7_ledger_closure"
 
 _CONNECTOR_AUTHORITY = {
     "telemetry_collection": False,
@@ -103,12 +110,48 @@ def telemetry_status_snapshot() -> dict[str, Any]:
             "grants_execution_authority": False,
             "grants_memory_write_authority": False,
         },
-        "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run",
+        "next_smallest_truthful_gap": _stage7_feedback_memory_assistance_next_gap(),
     }
 
 
 def redact_telemetry_value(value: Any, *, key: str = "") -> Any:
     return redact_governed_value(value, key=key)
+
+
+def _stage7_feedback_memory_assistance_next_gap() -> str:
+    latest_receipt = _read_latest_stage7_closure_decision_receipt()
+    if latest_receipt.get("decision") == "close_stage7" and latest_receipt.get("stage7_closed_by_receipt") is True:
+        return _STAGE7_LEDGER_CLOSURE_GAP
+    return _STAGE7_FEEDBACK_MEMORY_ASSISTANCE_LIVE_SAMPLE_GAP
+
+
+def _read_latest_stage7_closure_decision_receipt() -> dict[str, Any]:
+    path = data_dir() / "logs" / "telemetry" / "stage7_operator_stage_closure_decisions.jsonl"
+    if not _safe_child_path(path, root=data_dir()) or not path.exists() or not path.is_file():
+        return {}
+    latest: dict[str, Any] = {}
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                item = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(item, dict):
+                latest = item
+    except OSError:
+        return {}
+    return latest
+
+
+def _safe_child_path(path: Path, *, root: Path) -> bool:
+    try:
+        resolved_path = path.resolve()
+        resolved_root = root.resolve()
+    except OSError:
+        return False
+    return resolved_path == resolved_root or resolved_root in resolved_path.parents
 
 
 def _inactive_source(definition: dict[str, Any]) -> dict[str, Any]:

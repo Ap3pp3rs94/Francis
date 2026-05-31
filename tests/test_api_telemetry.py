@@ -82,6 +82,43 @@ def test_telemetry_status_projects_stage7_readonly_sources(monkeypatch, tmp_path
     assert not data_root.exists()
 
 
+def test_telemetry_status_and_context_project_stage7_ledger_closure_after_receipt(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    receipt_path = data_root / "logs" / "telemetry" / "stage7_operator_stage_closure_decisions.jsonl"
+    receipt_path.parent.mkdir(parents=True)
+    receipt_path.write_text(
+        json.dumps(
+            {
+                "kind": "francis.stage7.telemetry.stage7_operator_stage_closure_decision_receipt",
+                "receipt_id": "tel_stage7_closure_status_projection",
+                "decision": "close_stage7",
+                "stage7_closed_by_receipt": True,
+                "marks_runtime_stage_state": False,
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    client = TestClient(create_app())
+    status = client.get("/telemetry/status").json()
+    context = client.get("/telemetry/context").json()
+
+    assert status["ok"] is True
+    assert status["next_smallest_truthful_gap"] == "stage7_ledger_closure"
+    assert status["governance"]["read_only_contract"] is True
+    assert status["governance"]["grants_execution_authority"] is False
+    assert context["ok"] is True
+    assert context["next_smallest_truthful_gap"] == "stage7_ledger_closure"
+    assert context["governance"]["read_only"] is True
+    assert context["governance"]["grants_execution_authority"] is False
+
+
 def test_telemetry_redaction_uses_governed_redaction() -> None:
     payload = {
         "cwd": "D:/Francis",
