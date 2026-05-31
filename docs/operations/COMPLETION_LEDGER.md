@@ -48153,6 +48153,61 @@ Latest validation for Stage 11 skillization artifact contract:
   status_next=stage11_forge_handoff_contract;
   contract_next=stage11_forge_handoff_contract`.
 
+### 2026-05-31 - Stage 11 Forge handoff contract is review-gated
+
+Roadmap area: Stage 11 / Apprenticeship, Forge handoff from demonstrations.
+
+Material change:
+
+- Added read-only GET `/apprenticeship/forge-handoff-contract`.
+- `/apprenticeship/status` now marks all five Stage 11 contract deliverables
+  ready and reports `stage11_contracts_ready`.
+- The Forge handoff contract declares the candidate payload boundary for a
+  Forge proposal: pattern summary, parameterization, usage scope, decision
+  logic, validation expectations, risk-tier candidate, documentation draft,
+  test candidate structure, operator review state, and promotion boundary.
+- The contract requires operator review, risk-tier review, documentation
+  review, test-candidate review, and explicit promotion decision before any
+  Forge write or promotion.
+- The contract denies direct Forge promotion, proposal writes without operator
+  review, automatic capability registration, and authority grants from teaching.
+- The contract does not write a Forge proposal, create a capability, promote to
+  Forge, register a capability, write receipts, write memory, run tools, run
+  shell, run git, start processes, or grant authority.
+- The next smallest truthful gap is now `stage11_live_teaching_session_ux`; the
+  contract surfaces are ready, but live teaching-session UX is not claimed done.
+
+Latest validation for Stage 11 Forge handoff contract:
+
+- `python -m pytest tests/test_api_apprenticeship.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 7 tests passed`
+- `python -m mypy src/francis/apprenticeship.py
+  src/francis/api/routes/apprenticeship.py`
+  Result: `passed`
+- `python -m ruff check src/francis/apprenticeship.py
+  src/francis/api/routes/apprenticeship.py tests/test_api_apprenticeship.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/apprenticeship.py
+  src/francis/api/routes/apprenticeship.py tests/test_api_apprenticeship.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed; 4 files already formatted`
+- Live local read-only route/readback:
+  GET `/apprenticeship/status` and GET
+  `/apprenticeship/forge-handoff-contract`.
+  Result: `status=stage11_contracts_ready;
+  forge_handoff_ready=true;
+  ready_count=5; required_count=5;
+  contract_status=ready; contract_ready=true;
+  handoff_target=forge_proposal_candidate;
+  handoff_payload_fields=10; required_reviews=5;
+  writes_forge_proposal=false; creates_capability=false;
+  promotes_to_forge=false;
+  status_next=stage11_live_teaching_session_ux;
+  contract_next=stage11_live_teaching_session_ux`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

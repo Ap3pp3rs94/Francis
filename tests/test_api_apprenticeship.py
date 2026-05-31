@@ -87,16 +87,16 @@ def test_apprenticeship_status_starts_stage11_groundwork_after_stage10_closure(
     body = response.json()
     assert body["ok"] is True
     assert body["kind"] == "francis.stage11.apprenticeship.status"
-    assert body["status"] == "stage11_groundwork_ready"
+    assert body["status"] == "stage11_contracts_ready"
     assert body["stage10_closed_by_receipt"] is True
     assert body["stage10_latest_closure_receipt_id"] == "away_stage10_closure_apprenticeship_test"
     assert body["stage10_next_smallest_truthful_gap"] == "stage10_ledger_closure"
-    assert body["ready_count"] == 4
+    assert body["ready_count"] == 5
     assert body["required_count"] == 5
     assert body["teaching_session_ready"] is True
     assert body["replay_generalization_ready"] is True
     assert body["skillization_ready"] is True
-    assert body["forge_handoff_ready"] is False
+    assert body["forge_handoff_ready"] is True
     assert body["reads_receipts"] is True
     assert body["writes_receipts"] is False
     assert body["writes_memory"] is False
@@ -125,14 +125,15 @@ def test_apprenticeship_status_starts_stage11_groundwork_after_stage10_closure(
     assert body["routes"]["teaching_session_contract"] == "/apprenticeship/teaching-session-contract"
     assert body["routes"]["replay_generalization_contract"] == "/apprenticeship/replay-generalization-contract"
     assert body["routes"]["skillization_artifact_contract"] == "/apprenticeship/skillization-artifact-contract"
-    assert body["next_smallest_truthful_gap"] == "stage11_forge_handoff_contract"
+    assert body["routes"]["forge_handoff_contract"] == "/apprenticeship/forge-handoff-contract"
+    assert body["next_smallest_truthful_gap"] == "stage11_live_teaching_session_ux"
 
     deliverables = {item["id"]: item for item in body["deliverables"]}
     assert deliverables["stage10_ledger_closure_backstop"]["ready"] is True
     assert deliverables["teaching_session_ux"]["ready"] is True
     assert deliverables["replay_generalization_flow"]["ready"] is True
     assert deliverables["skillization_artifacts"]["ready"] is True
-    assert deliverables["forge_ready_outputs"]["ready"] is False
+    assert deliverables["forge_ready_outputs"]["ready"] is True
 
 
 def test_apprenticeship_teaching_session_contract_is_explicit_and_non_capturing(
@@ -369,3 +370,90 @@ def test_apprenticeship_skillization_artifact_contract_is_forge_ready_without_pr
     assert checks["learning_classifications_declared"]["passed"] is True
     assert checks["automatic_promotion_denied"]["passed"] is True
     assert checks["artifact_write_requires_operator_review"]["passed"] is True
+
+
+def test_apprenticeship_forge_handoff_contract_is_review_gated_without_writes(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage10_closure_receipt(data_root, receipt_id="away_stage10_closure_forge_handoff_contract_test")
+
+    response = TestClient(create_app()).get("/apprenticeship/forge-handoff-contract")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "francis.stage11.apprenticeship.forge_handoff_contract"
+    assert body["status"] == "ready"
+    assert body["skillization_artifact_contract_ready"] is True
+    assert body["forge_handoff_contract_ready"] is True
+    assert body["handoff_target"] == "forge_proposal_candidate"
+    assert body["handoff_payload_field_count"] == 10
+    assert body["required_review_count"] == 5
+    assert set(body["denied_modes"]) == {
+        "automatic_capability_registration",
+        "authority_grant_from_teaching",
+        "direct_forge_promotion",
+        "proposal_write_without_operator_review",
+    }
+    assert body["reads_receipts"] is True
+    assert body["writes_receipts"] is False
+    assert body["writes_memory"] is False
+    assert body["writes_forge_proposal"] is False
+    assert body["creates_capability"] is False
+    assert body["promotes_to_forge"] is False
+    assert body["registers_capability"] is False
+    assert body["captures_screen"] is False
+    assert body["captures_audio"] is False
+    assert body["captures_keystrokes"] is False
+    assert body["passive_learning_enabled"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["starts_processes"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["governance"]["read_only"] is True
+    assert body["governance"]["contract_only"] is True
+    assert body["governance"]["requires_skillization_artifact_contract"] is True
+    assert body["governance"]["operator_review_required_before_forge_write"] is True
+    assert body["governance"]["explicit_promotion_decision_required"] is True
+    assert body["governance"]["direct_forge_promotion_denied"] is True
+    assert body["governance"]["automatic_capability_registration_denied"] is True
+    assert body["governance"]["authority_grant_from_teaching_denied"] is True
+    assert body["governance"]["does_not_write_forge_proposal"] is True
+    assert body["governance"]["does_not_create_capability"] is True
+    assert body["governance"]["does_not_promote_to_forge"] is True
+    assert body["next_smallest_truthful_gap"] == "stage11_live_teaching_session_ux"
+
+    handoff_schema = {item["id"]: item for item in body["handoff_payload_schema"]}
+    assert set(handoff_schema) == {
+        "decision_logic",
+        "documentation_draft",
+        "operator_review_state",
+        "parameterization",
+        "pattern_summary",
+        "promotion_boundary",
+        "risk_tier_candidate",
+        "test_candidate_structure",
+        "usage_scope",
+        "validation_expectations",
+    }
+    assert all(item["required"] for item in handoff_schema.values())
+
+    assert set(body["required_reviews"]) == {
+        "documentation_review",
+        "explicit_promotion_decision",
+        "operator_review",
+        "risk_tier_review",
+        "test_candidate_review",
+    }
+
+    checks = {item["id"]: item for item in body["checks"]}
+    assert checks["skillization_artifact_contract_ready"]["passed"] is True
+    assert checks["forge_handoff_payload_declared"]["passed"] is True
+    assert checks["promotion_reviews_required"]["passed"] is True
+    assert checks["direct_promotion_denied"]["passed"] is True
+    assert checks["authority_growth_denied"]["passed"] is True

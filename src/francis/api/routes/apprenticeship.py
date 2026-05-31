@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import APIRouter
 
 from francis.apprenticeship import (
+    apprenticeship_forge_handoff_contract,
     apprenticeship_replay_generalization_contract,
     apprenticeship_skillization_artifact_contract,
     apprenticeship_status_snapshot,
@@ -32,3 +33,8 @@ def replay_generalization_contract() -> dict[str, Any]:
 @router.get("/skillization-artifact-contract")
 def skillization_artifact_contract() -> dict[str, Any]:
     return apprenticeship_skillization_artifact_contract()
+
+
+@router.get("/forge-handoff-contract")
+def forge_handoff_contract() -> dict[str, Any]:
+    return apprenticeship_forge_handoff_contract()
