@@ -112,6 +112,20 @@ _RULES: tuple[AuthorityRule, ...] = (
         notes="The sample is grounded in existing Away readbacks and does not activate autonomy or run tools.",
     ),
     AuthorityRule(
+        family="apprenticeship",
+        prefixes=("/apprenticeship/teaching-session",),
+        required_actor="payload.actor",
+        required_scope="apprenticeship.teaching_session.write",
+        approval_requirement="not_required_scope_gate_only; explicit teaching-session receipt payload required",
+        receipt_behavior="Stage 11 Apprenticeship teaching-session receipt",
+        denial_behavior="api_permission_denied via permission_gate before teaching-session receipt write",
+        governance_maturity="permission_gated",
+        notes=(
+            "The receipt records explicit operator-supplied teaching context only; it does not write memory, "
+            "run tools, run shell, or create Forge artifacts."
+        ),
+    ),
+    AuthorityRule(
         family="away",
         prefixes=("/away/stage-closure-decision",),
         required_actor="payload.actor",

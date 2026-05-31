@@ -48268,6 +48268,67 @@ Latest validation for Stage 11 live teaching-session UX surface:
   status_next=stage11_teaching_session_receipt_write_path;
   ux_next=stage11_teaching_session_receipt_write_path`.
 
+### 2026-05-31 - Stage 11 teaching-session receipts are governed and auditable
+
+Roadmap area: Stage 11 / Apprenticeship, explicit teaching-session receipt
+write path.
+
+Material change:
+
+- Added permission-gated POST `/apprenticeship/teaching-session` requiring
+  `apprenticeship.teaching_session.write`.
+- Added read-only GET `/apprenticeship/teaching-session-receipts`.
+- `/apprenticeship/status` now reports the latest teaching-session receipt and
+  advances the next smallest truthful gap to `stage11_replay_receipt_write_path`
+  only after a receipt exists.
+- Teaching-session receipts record explicit operator-supplied context:
+  action, intent label, declared scope, success condition, demonstration
+  summary, notes, actor, reason, environment profile, timestamp, and receipt id.
+- Receipt fields are redacted before persistence and written as JSONL under the
+  governed Francis data root.
+- The mutating-route authority matrix now describes the Stage 11
+  teaching-session write route, required actor, required scope, receipt
+  behavior, and denial behavior.
+- The route writes only the teaching-session receipt. It does not write memory,
+  write skill artifacts, write Forge proposals, create capabilities, promote to
+  Forge, run tools, run shell, run git, start processes, capture screen/audio/
+  keystrokes, or grant execution/mutation authority.
+
+Latest validation for Stage 11 teaching-session receipt write path:
+
+- `python -m pytest tests/test_api_apprenticeship.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  tests/test_api_mutating_route_authority_matrix.py -q --tb=short --maxfail=1`
+  Result: `passed; 12 tests passed`
+- `python -m mypy src/francis/apprenticeship.py
+  src/francis/api/routes/apprenticeship.py
+  src/francis/api/mutation_authority_matrix.py`
+  Result: `passed`
+- `python -m ruff check src/francis/apprenticeship.py
+  src/francis/api/routes/apprenticeship.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_apprenticeship.py
+  tests/test_api_contract_chat_ui.py
+  tests/test_api_mutating_route_authority_matrix.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/apprenticeship.py
+  src/francis/api/routes/apprenticeship.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_apprenticeship.py
+  tests/test_api_contract_chat_ui.py
+  tests/test_api_mutating_route_authority_matrix.py`
+  Result: `passed; 6 files already formatted`
+- Live local permission-gated TestClient route/readback against an isolated data
+  root:
+  POST `/apprenticeship/teaching-session`, GET `/apprenticeship/status`, and
+  GET `/apprenticeship/teaching-session-receipts`.
+  Result: `record_ok=true; record_status=recorded;
+  receipt_id_prefix=apprenticeship_teaching_session_;
+  writes_receipt=true; writes_memory=false; runs_shell=false;
+  grants_execution_authority=false;
+  status=stage11_teaching_session_receipt_ready;
+  receipt_ready=true; status_next=stage11_replay_receipt_write_path;
+  readback_status=ready; readback_count=1;
+  readback_next=stage11_replay_receipt_write_path`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -164,6 +164,15 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
     assert "live-progress sample receipt" in away_progress["receipt_behavior"]
     assert "does not activate autonomy" in away_progress["notes"]
 
+    apprenticeship_teaching = entries["/apprenticeship/teaching-session"]
+    assert apprenticeship_teaching["family"] == "apprenticeship"
+    assert apprenticeship_teaching["required_actor"] == "payload.actor"
+    assert apprenticeship_teaching["required_scope"] == "apprenticeship.teaching_session.write"
+    assert apprenticeship_teaching["governance_maturity"] == "permission_gated"
+    assert "teaching-session receipt" in apprenticeship_teaching["receipt_behavior"]
+    assert "permission_gate" in apprenticeship_teaching["denial_behavior"]
+    assert "does not write memory" in apprenticeship_teaching["notes"]
+
     away_closure = entries["/away/stage-closure-decision"]
     assert away_closure["family"] == "away"
     assert away_closure["required_actor"] == "payload.actor"
