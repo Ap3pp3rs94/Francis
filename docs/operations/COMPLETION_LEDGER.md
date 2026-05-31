@@ -48929,6 +48929,63 @@ Latest validation for Stage 12 Knowledge Fabric completion review:
   status_status=stage12_retention_model_ready;
   status_next=stage12_completion_review`.
 
+### 2026-05-31 - Stage 12 operator closure decision writes governed receipt
+
+Roadmap area: Stage 12 / Knowledge Fabric, operator stage-closure decision.
+
+Material change:
+
+- Added read-only GET `/knowledge-fabric/stage-closure-decisions`.
+- Added scoped POST `/knowledge-fabric/stage-closure-decision` gated by
+  `knowledge_fabric.stage12.closure.write`.
+- The closure decision writes an explicit operator decision receipt only through
+  the governed API permission path.
+- `close_stage12` marks `stage12_closed_by_receipt=true` only when
+  `/knowledge-fabric/completion-review` is ready.
+- The receipt records the Stage 11 closure receipt id, artifact projection
+  count, retrieval total, citation total, retention declared/missing counts,
+  source counts, retention policy counts, and Stage 12 done-criteria readback.
+- The closure decision receipt does not mutate runtime stage state, write
+  memory, write an index, delete data, mutate retention, run tools, run shell,
+  run git, start processes, or grant authority.
+- `/knowledge-fabric/status` now reports `stage12_closed_by_receipt` after a
+  valid closure receipt and advances the next smallest truthful gap to
+  `stage12_ledger_closure`.
+
+Latest validation for Stage 12 operator closure decision:
+
+- `python -m pytest tests/test_api_knowledge_fabric.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 5 passed`
+- `python -m mypy src/francis/knowledge_fabric.py
+  src/francis/api/routes/knowledge_fabric.py src/francis/api/app.py`
+  Result: `passed`
+- `python -m ruff check src/francis/knowledge_fabric.py
+  src/francis/api/routes/knowledge_fabric.py src/francis/api/app.py
+  tests/test_api_knowledge_fabric.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/knowledge_fabric.py
+  src/francis/api/routes/knowledge_fabric.py src/francis/api/app.py
+  tests/test_api_knowledge_fabric.py tests/test_api_contract_chat_ui.py`
+  Result: `passed; 5 files already formatted`
+- Live local TestClient route/readback against an isolated data root:
+  configure `FRANCIS_API_ACTOR_SCOPES` with
+  `knowledge_fabric.stage12.closure.write`, write a Stage 11 closure receipt
+  fixture, write one memory timeline trace event, append one continuity ledger
+  trace event, GET `/knowledge-fabric/completion-review?limit=10`, POST
+  `/knowledge-fabric/stage-closure-decision`, GET
+  `/knowledge-fabric/stage-closure-decisions`, GET `/knowledge-fabric/status`,
+  and GET `/knowledge-fabric/completion-review?limit=10`.
+  Result: `review_before_ready=true; post_status=recorded;
+  receipt_id_prefix_ok=true; post_closed=true; post_completion_ready=true;
+  post_next=stage12_ledger_closure; readback_status=closed;
+  readback_closed=true; readback_latest_matches=true;
+  status_status=stage12_closed_by_receipt; status_closed=true;
+  status_next=stage12_ledger_closure; review_after_required=false;
+  review_after_next=stage12_ledger_closure; writes_memory=false;
+  writes_index=false; runs_tools=false; grants_execution_authority=false`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

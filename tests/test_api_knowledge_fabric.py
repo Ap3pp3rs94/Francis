@@ -42,6 +42,10 @@ def _write_stage11_closure_receipt(data_root: Path, *, receipt_id: str = "appren
     )
 
 
+def _stage12_scope_map() -> dict[str, list[str]]:
+    return {"test.knowledge_fabric.closure": ["knowledge_fabric.stage12.closure.write"]}
+
+
 def test_knowledge_fabric_status_blocks_until_stage11_closure(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
@@ -56,6 +60,8 @@ def test_knowledge_fabric_status_blocks_until_stage11_closure(monkeypatch, tmp_p
     assert body["status"] == "awaiting_stage11_ledger_closure"
     assert body["stage11_closed_by_receipt"] is False
     assert body["stage11_latest_closure_receipt_id"] == ""
+    assert body["stage12_closed_by_receipt"] is False
+    assert body["stage12_latest_closure_receipt_id"] == ""
     assert body["artifact_index_contract_ready"] is False
     assert body["artifact_index_projection_ready"] is False
     assert body["artifact_index_projection_count"] == 0
@@ -70,6 +76,8 @@ def test_knowledge_fabric_status_blocks_until_stage11_closure(monkeypatch, tmp_p
     assert body["routes"]["local_evidence_citations"] == "/knowledge-fabric/local-evidence-citations"
     assert body["routes"]["retention_model"] == "/knowledge-fabric/retention-model"
     assert body["routes"]["completion_review"] == "/knowledge-fabric/completion-review"
+    assert body["routes"]["stage_closure_decisions"] == "/knowledge-fabric/stage-closure-decisions"
+    assert body["routes"]["stage_closure_decision"] == "/knowledge-fabric/stage-closure-decision"
     assert body["routes"]["memory_timeline"] == "/memory/timeline/list"
     assert body["routes"]["artifact_inspection"] == "/artifacts/inspect"
     assert body["governance"]["read_only"] is True
@@ -195,6 +203,7 @@ def test_knowledge_fabric_artifact_index_projection_projects_local_citations(
 ) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps(_stage12_scope_map()))
     _write_stage11_closure_receipt(data_root, receipt_id="apprenticeship_stage11_closure_projection_test")
     memory_path = data_root / "memory" / "timeline" / "_events.json"
     memory_path.parent.mkdir(parents=True, exist_ok=True)
@@ -456,6 +465,99 @@ def test_knowledge_fabric_artifact_index_projection_projects_local_citations(
     review_checks = {item["id"]: item for item in completion_review["checks"]}
     assert all(item["passed"] for item in review_checks.values())
 
+    denied_root = data_root / "logs" / "knowledge_fabric" / "stage12_operator_stage_closure_decisions.jsonl"
+    response = client.post(
+        "/knowledge-fabric/stage-closure-decision",
+        json={
+            "actor": "test.knowledge_fabric.closure",
+            "reason": "close stage 12 token=stage12closereasonsecret123",
+            "decision": "close_stage12",
+            "notes": "Completion review is ready token=stage12closenotessecret123",
+        },
+    )
+
+    assert response.status_code == 200
+    closure_body = response.json()
+    assert closure_body["ok"] is True
+    assert closure_body["kind"] == "francis.stage12.knowledge_fabric.stage12_closure_decision.record"
+    assert closure_body["status"] == "recorded"
+    assert closure_body["receipt_id"].startswith("knowledge_fabric_stage12_closure_")
+    assert closure_body["decision"] == "close_stage12"
+    assert closure_body["stage12_closed_by_receipt"] is True
+    assert closure_body["completion_review_ready"] is True
+    assert closure_body["marks_runtime_stage_state"] is False
+    assert closure_body["writes_receipt"] is True
+    assert closure_body["writes_memory"] is False
+    assert closure_body["writes_index"] is False
+    assert closure_body["deletes_data"] is False
+    assert closure_body["mutates_retention"] is False
+    assert closure_body["runs_tools"] is False
+    assert closure_body["runs_shell"] is False
+    assert closure_body["runs_git"] is False
+    assert closure_body["starts_processes"] is False
+    assert closure_body["grants_execution_authority"] is False
+    assert closure_body["grants_mutation_authority"] is False
+    assert closure_body["governance"]["required_scope"] == "knowledge_fabric.stage12.closure.write"
+    assert closure_body["governance"]["does_not_mutate_runtime_stage_state"] is True
+    assert closure_body["next_smallest_truthful_gap"] == "stage12_ledger_closure"
+
+    receipt = closure_body["receipt"]
+    assert receipt["kind"] == "francis.stage12.knowledge_fabric.stage12_closure_decision_receipt"
+    assert receipt["receipt_id"] == closure_body["receipt_id"]
+    assert receipt["actor"] == "test.knowledge_fabric.closure"
+    assert receipt["stage11_closure_receipt_id"] == "apprenticeship_stage11_closure_projection_test"
+    assert receipt["artifact_index_projection_count"] == 2
+    assert receipt["retrieval_total"] == 2
+    assert receipt["citation_total"] == 2
+    assert receipt["retention_declared_count"] == 2
+    assert receipt["retention_missing_count"] == 0
+    assert receipt["source_counts"] == {"/continuity/ledger": 1, "/memory/timeline/get": 1}
+    assert receipt["retention_policy_counts"] == {"mission_trace": 2}
+    assert receipt["done_criteria"]["francis_cites_local_evidence"] is True
+    assert receipt["done_criteria"]["cross_artifact_continuity_becomes_real"] is True
+    assert receipt["stage12_closed_by_receipt"] is True
+    assert receipt["marks_runtime_stage_state"] is False
+    assert receipt["governance"]["permission_scope"] == "knowledge_fabric.stage12.closure.write"
+    assert receipt["governance"]["completion_review_ready"] is True
+    assert receipt["governance"]["requires_cross_artifact_continuity"] is True
+    assert receipt["governance"]["does_not_mutate_runtime_stage_state"] is True
+    assert denied_root.exists()
+    receipt_text = json.dumps(receipt, sort_keys=True)
+    assert "stage12closereasonsecret123" not in receipt_text
+    assert "stage12closenotessecret123" not in receipt_text
+    assert "ledgerprojectionsecret123" not in receipt_text
+
+    readback = client.get("/knowledge-fabric/stage-closure-decisions").json()
+    assert readback["ok"] is True
+    assert readback["kind"] == "francis.stage12.knowledge_fabric.stage12_closure_decision_receipts"
+    assert readback["status"] == "closed"
+    assert readback["latest_receipt_id"] == closure_body["receipt_id"]
+    assert readback["latest_decision"] == "close_stage12"
+    assert readback["stage12_closed_by_receipt"] is True
+    assert readback["marks_runtime_stage_state"] is False
+    assert readback["writes_receipts"] is False
+    assert readback["writes_memory"] is False
+    assert readback["writes_index"] is False
+    assert readback["deletes_data"] is False
+    assert readback["mutates_retention"] is False
+    assert readback["runs_tools"] is False
+    assert readback["runs_shell"] is False
+    assert readback["grants_execution_authority"] is False
+    assert readback["governance"]["stage_closure_decision_receipt_readback"] is True
+    assert readback["next_smallest_truthful_gap"] == "stage12_ledger_closure"
+
+    closed_status = client.get("/knowledge-fabric/status").json()
+    assert closed_status["status"] == "stage12_closed_by_receipt"
+    assert closed_status["stage12_closed_by_receipt"] is True
+    assert closed_status["stage12_latest_closure_receipt_id"] == closure_body["receipt_id"]
+    assert closed_status["next_smallest_truthful_gap"] == "stage12_ledger_closure"
+
+    closed_review = client.get("/knowledge-fabric/completion-review?limit=10").json()
+    assert closed_review["stage12_completion_review_ready"] is True
+    assert closed_review["stage12_closed_by_receipt"] is True
+    assert closed_review["stage_closure_decision_required"] is False
+    assert closed_review["next_smallest_truthful_gap"] == "stage12_ledger_closure"
+
 
 def test_knowledge_fabric_artifact_index_projection_blocks_without_stage11_closure(
     monkeypatch,
@@ -545,3 +647,29 @@ def test_knowledge_fabric_artifact_index_projection_blocks_without_stage11_closu
     checks = {item["id"]: item for item in review["checks"]}
     assert checks["stage11_ledger_closure_backstop"]["passed"] is False
     assert checks["completion_review_does_not_mark_stage_closed"]["passed"] is True
+
+    denied = TestClient(create_app()).post(
+        "/knowledge-fabric/stage-closure-decision",
+        json={
+            "actor": "test.knowledge_fabric.closure",
+            "reason": "missing closure scope",
+            "decision": "close_stage12",
+        },
+    )
+    assert denied.status_code == 200
+    denied_body = denied.json()
+    assert denied_body["ok"] is False
+    assert denied_body["status"] == "denied"
+    assert denied_body["error"] == "api_permission_denied"
+    assert denied_body["writes_receipt"] is False
+    assert denied_body["writes_memory"] is False
+    assert denied_body["writes_index"] is False
+    assert denied_body["deletes_data"] is False
+    assert denied_body["mutates_retention"] is False
+    assert denied_body["runs_tools"] is False
+    assert denied_body["runs_shell"] is False
+    assert denied_body["runs_git"] is False
+    assert denied_body["grants_execution_authority"] is False
+    assert denied_body["grants_mutation_authority"] is False
+    assert denied_body["governance"]["required_scope"] == "knowledge_fabric.stage12.closure.write"
+    assert not (data_root / "logs" / "knowledge_fabric" / "stage12_operator_stage_closure_decisions.jsonl").exists()

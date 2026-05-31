@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import json
+import time
+import uuid
+from pathlib import Path
 from typing import Any
 
 from francis.apprenticeship import apprenticeship_stage11_operator_stage_closure_decision_readback
 from francis.chat.continuity.ledger import tail as continuity_tail
 from francis.governance.redaction import redact_secret_text
 from francis.kernel.paths import data_dir
+from francis.telemetry.audit import record as audit_record
 
 STAGE12_KNOWLEDGE_FABRIC_STAGE = "Stage 12 / Knowledge Fabric"
 KNOWLEDGE_FABRIC_STATUS_KIND = "francis.stage12.knowledge_fabric.status"
@@ -16,11 +20,16 @@ KNOWLEDGE_FABRIC_RETRIEVAL_PREVIEW_KIND = "francis.stage12.knowledge_fabric.retr
 KNOWLEDGE_FABRIC_LOCAL_EVIDENCE_CITATIONS_KIND = "francis.stage12.knowledge_fabric.local_evidence_citations"
 KNOWLEDGE_FABRIC_RETENTION_MODEL_KIND = "francis.stage12.knowledge_fabric.retention_model"
 KNOWLEDGE_FABRIC_COMPLETION_REVIEW_KIND = "francis.stage12.knowledge_fabric.completion_review"
+KNOWLEDGE_FABRIC_STAGE_CLOSURE_DECISION_KIND = "francis.stage12.knowledge_fabric.stage12_closure_decision_receipt"
+KNOWLEDGE_FABRIC_STAGE_CLOSURE_DECISIONS_KIND = "francis.stage12.knowledge_fabric.stage12_closure_decision_receipts"
+KNOWLEDGE_FABRIC_STAGE_CLOSURE_SCOPE = "knowledge_fabric.stage12.closure.write"
 
 
 def knowledge_fabric_status_snapshot() -> dict[str, Any]:
     stage11 = apprenticeship_stage11_operator_stage_closure_decision_readback(limit=5)
     stage11_closed = bool(stage11.get("stage11_closed_by_receipt"))
+    stage12_closure = knowledge_fabric_stage12_operator_stage_closure_decision_readback(limit=5)
+    stage12_closed = bool(stage12_closure.get("stage12_closed_by_receipt"))
     artifact_contract = knowledge_fabric_artifact_index_contract()
     artifact_contract_ready = bool(artifact_contract.get("artifact_index_contract_ready"))
     artifact_projection = knowledge_fabric_artifact_index_projection(limit=1, memory_limit=5, ledger_limit=5)
@@ -81,7 +90,9 @@ def knowledge_fabric_status_snapshot() -> dict[str, Any]:
         "kind": KNOWLEDGE_FABRIC_STATUS_KIND,
         "stage": STAGE12_KNOWLEDGE_FABRIC_STAGE,
         "source_id": "knowledge_fabric",
-        "status": "stage12_retention_model_ready"
+        "status": "stage12_closed_by_receipt"
+        if stage12_closed
+        else "stage12_retention_model_ready"
         if stage11_closed
         and artifact_contract_ready
         and artifact_projection_ready
@@ -103,6 +114,8 @@ def knowledge_fabric_status_snapshot() -> dict[str, Any]:
         else "awaiting_stage11_ledger_closure",
         "stage11_closed_by_receipt": stage11_closed,
         "stage11_latest_closure_receipt_id": _safe_text(stage11.get("latest_receipt_id")),
+        "stage12_closed_by_receipt": stage12_closed,
+        "stage12_latest_closure_receipt_id": _safe_text(stage12_closure.get("latest_receipt_id")),
         "artifact_index_contract_ready": artifact_contract_ready,
         "artifact_index_projection_ready": artifact_projection_ready,
         "artifact_index_projection_count": _safe_int(artifact_projection.get("total")),
@@ -121,6 +134,8 @@ def knowledge_fabric_status_snapshot() -> dict[str, Any]:
             "local_evidence_citations": "/knowledge-fabric/local-evidence-citations",
             "retention_model": "/knowledge-fabric/retention-model",
             "completion_review": "/knowledge-fabric/completion-review",
+            "stage_closure_decisions": "/knowledge-fabric/stage-closure-decisions",
+            "stage_closure_decision": "/knowledge-fabric/stage-closure-decision",
             "memory_timeline": "/memory/timeline/list",
             "artifact_inspection": "/artifacts/inspect",
             "continuity_ledger": "/continuity/ledger",
@@ -135,7 +150,9 @@ def knowledge_fabric_status_snapshot() -> dict[str, Any]:
             "does_not_replicate_data": True,
             "does_not_grant_authority": True,
         },
-        "next_smallest_truthful_gap": "stage12_completion_review"
+        "next_smallest_truthful_gap": "stage12_ledger_closure"
+        if stage12_closed
+        else "stage12_completion_review"
         if stage11_closed
         and artifact_contract_ready
         and artifact_projection_ready
@@ -155,6 +172,60 @@ def knowledge_fabric_status_snapshot() -> dict[str, Any]:
         else "stage12_artifact_index_projection"
         if stage11_closed and artifact_contract_ready
         else "stage11_ledger_closure",
+    }
+
+
+def read_knowledge_fabric_stage12_operator_stage_closure_decisions(*, limit: int = 20) -> list[dict[str, Any]]:
+    return _read_jsonl_tail(_stage12_operator_stage_closure_decision_path(), limit=_safe_limit(limit, default=20))
+
+
+def knowledge_fabric_stage12_operator_stage_closure_decision_readback(*, limit: int = 20) -> dict[str, Any]:
+    items = read_knowledge_fabric_stage12_operator_stage_closure_decisions(limit=limit)
+    latest = items[-1] if items else {}
+    stage12_closed = bool(latest.get("stage12_closed_by_receipt"))
+    return {
+        "ok": True,
+        "kind": KNOWLEDGE_FABRIC_STAGE_CLOSURE_DECISIONS_KIND,
+        "stage": STAGE12_KNOWLEDGE_FABRIC_STAGE,
+        "source_id": "knowledge_fabric",
+        "status": "closed" if stage12_closed else "open" if items else "empty",
+        "items": items,
+        "count": len(items),
+        "latest_receipt_id": _safe_text(latest.get("receipt_id")),
+        "latest_decision": _safe_text(latest.get("decision")),
+        "stage12_closed_by_receipt": stage12_closed,
+        "marks_runtime_stage_state": False,
+        "reads_receipts": True,
+        "writes_receipts": False,
+        "writes_memory": False,
+        "writes_index": False,
+        "deletes_data": False,
+        "mutates_retention": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "stage_closure_decision_receipt_readback": True,
+            "does_not_mutate_runtime_stage_state": True,
+            "does_not_write_memory": True,
+            "does_not_write_index": True,
+            "does_not_delete_data": True,
+            "does_not_mutate_retention": True,
+            "does_not_run_tools": True,
+            "does_not_run_shell": True,
+            "does_not_run_git": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": "stage12_ledger_closure"
+        if stage12_closed
+        else "stage12_operator_stage_closure_decision"
+        if items
+        else "stage12_completion_review",
     }
 
 
@@ -203,6 +274,8 @@ def knowledge_fabric_completion_review(
         projection_items=projection_items,
     )
     review_ready = all(bool(check.get("passed")) for check in checks)
+    stage12_closure = knowledge_fabric_stage12_operator_stage_closure_decision_readback(limit=5)
+    stage12_closed = bool(stage12_closure.get("stage12_closed_by_receipt"))
     return {
         "ok": True,
         "kind": KNOWLEDGE_FABRIC_COMPLETION_REVIEW_KIND,
@@ -211,9 +284,11 @@ def knowledge_fabric_completion_review(
         "status": "ready" if review_ready else "blocked",
         "query": safe_query,
         "stage12_completion_review_ready": review_ready,
-        "stage_closure_decision_required": review_ready,
+        "stage_closure_decision_required": review_ready and not stage12_closed,
         "stage11_closed_by_receipt": bool(status.get("stage11_closed_by_receipt")),
         "stage11_latest_closure_receipt_id": _safe_text(status.get("stage11_latest_closure_receipt_id")),
+        "stage12_closed_by_receipt": stage12_closed,
+        "stage12_latest_closure_receipt_id": _safe_text(stage12_closure.get("latest_receipt_id")),
         "artifact_index_contract_ready": bool(status.get("artifact_index_contract_ready")),
         "artifact_index_projection_ready": bool(projection.get("artifact_index_projection_ready")),
         "artifact_index_projection_count": _safe_int(projection.get("total")),
@@ -256,10 +331,101 @@ def knowledge_fabric_completion_review(
         "marks_stage_closed": False,
         "governance": _completion_review_governance(),
         "routes": _as_dict(status.get("routes")),
-        "next_smallest_truthful_gap": "stage12_operator_stage_closure_decision"
+        "next_smallest_truthful_gap": "stage12_ledger_closure"
+        if stage12_closed
+        else "stage12_operator_stage_closure_decision"
         if review_ready
         else _completion_review_next_gap(checks=checks, status=status),
     }
+
+
+def record_knowledge_fabric_stage12_operator_stage_closure_decision(
+    *,
+    actor: Any,
+    reason: Any,
+    decision: Any,
+    review: dict[str, Any],
+    notes: Any = "",
+) -> dict[str, Any]:
+    safe_decision = _safe_stage12_closure_decision(decision)
+    closure_ready = bool(review.get("stage12_completion_review_ready"))
+    stage12_closed_by_receipt = safe_decision == "close_stage12" and closure_ready
+    receipt_id = f"knowledge_fabric_stage12_closure_{uuid.uuid4().hex[:12]}"
+    payload = {
+        "ok": True,
+        "kind": KNOWLEDGE_FABRIC_STAGE_CLOSURE_DECISION_KIND,
+        "receipt_id": receipt_id,
+        "stage": STAGE12_KNOWLEDGE_FABRIC_STAGE,
+        "source_id": "knowledge_fabric",
+        "capture_mode": "explicit_operator_stage_closure_decision",
+        "target": "stage12_knowledge_fabric",
+        "actor": _redact_text(actor)[:240],
+        "reason": _redact_text(reason)[:500],
+        "decision": safe_decision,
+        "notes": _redact_text(notes)[:500],
+        "review_status": _safe_text(review.get("status")),
+        "completion_review_ready": closure_ready,
+        "stage11_closure_receipt_id": _safe_text(review.get("stage11_latest_closure_receipt_id")),
+        "artifact_index_projection_count": _safe_int(review.get("artifact_index_projection_count")),
+        "retrieval_total": _safe_int(review.get("retrieval_total")),
+        "citation_total": _safe_int(review.get("citation_total")),
+        "retention_declared_count": _safe_int(review.get("retention_declared_count")),
+        "retention_missing_count": _safe_int(review.get("retention_missing_count")),
+        "source_counts": _as_dict(review.get("source_counts")),
+        "retention_policy_counts": _as_dict(review.get("retention_policy_counts")),
+        "done_criteria": _as_dict(review.get("done_criteria")),
+        "stage12_closed_by_receipt": stage12_closed_by_receipt,
+        "marks_runtime_stage_state": False,
+        "recorded_ts": _now_s(),
+        "writes_receipt": True,
+        "writes_memory": False,
+        "writes_index": False,
+        "deletes_data": False,
+        "mutates_retention": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "permission_scope": KNOWLEDGE_FABRIC_STAGE_CLOSURE_SCOPE,
+            "explicit_operator_decision": True,
+            "stage_closure_decision": True,
+            "completion_review_ready": closure_ready,
+            "requires_stage11_ledger_closure": True,
+            "requires_artifact_index_projection": True,
+            "requires_retrieval_layer": True,
+            "requires_local_evidence_citations": True,
+            "requires_retention_model": True,
+            "requires_projected_local_evidence": True,
+            "requires_cross_artifact_continuity": True,
+            "requires_declared_retention_for_review": True,
+            "does_not_mutate_runtime_stage_state": True,
+            "does_not_write_memory": True,
+            "does_not_write_index": True,
+            "does_not_delete_data": True,
+            "does_not_mutate_retention": True,
+            "does_not_run_tools": True,
+            "does_not_run_shell": True,
+            "does_not_run_git": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": "stage12_ledger_closure"
+        if stage12_closed_by_receipt
+        else "stage12_operator_stage_closure_decision",
+    }
+    _append_jsonl(_stage12_operator_stage_closure_decision_path(), payload)
+    audit_record(
+        "knowledge_fabric.stage12_closure_decision_recorded",
+        actor=payload["actor"],
+        reason=payload["reason"],
+        receipt_id=receipt_id,
+        decision=safe_decision,
+        stage12_closed_by_receipt=stage12_closed_by_receipt,
+    )
+    return payload
 
 
 def knowledge_fabric_retention_model(
@@ -1266,6 +1432,43 @@ def _safe_limit(value: Any, *, default: int) -> int:
     except Exception:
         parsed = default
     return max(1, min(parsed, 200))
+
+
+def _safe_stage12_closure_decision(value: Any) -> str:
+    text = _safe_text(value)
+    if text in {"close_stage12", "do_not_close_stage12", "needs_more_evidence"}:
+        return text
+    return "needs_more_evidence"
+
+
+def _stage12_operator_stage_closure_decision_path() -> Path:
+    return data_dir() / "logs" / "knowledge_fabric" / "stage12_operator_stage_closure_decisions.jsonl"
+
+
+def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str) + "\n")
+
+
+def _read_jsonl_tail(path: Path, *, limit: int) -> list[dict[str, Any]]:
+    if not path.exists() or not path.is_file():
+        return []
+    items: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict):
+            items.append(payload)
+    return items[-limit:]
+
+
+def _now_s() -> int:
+    return int(time.time())
 
 
 def _redact_text(value: Any) -> str:
