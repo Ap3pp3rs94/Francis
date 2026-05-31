@@ -48002,6 +48002,55 @@ Latest validation for Stage 11 Apprenticeship status:
   captures_screen=false; writes_memory=false;
   next=stage11_teaching_session_contract`.
 
+### 2026-05-31 - Stage 11 teaching-session contract is explicit and non-capturing
+
+Roadmap area: Stage 11 / Apprenticeship, teaching session UX contract.
+
+Material change:
+
+- Added read-only GET `/apprenticeship/teaching-session-contract`.
+- The contract declares the canonical Apprenticeship pipeline:
+  demonstrate, label intent, replay, generalize, skillize.
+- Teaching sessions now require explicit start/stop, declared scope, intent
+  label, success condition, and operator review before learning.
+- Capture boundaries are explicit: only operator-supplied step summaries are
+  allowed; screen capture, audio capture, keystroke capture, and passive
+  background learning are denied.
+- `/apprenticeship/status` now marks `teaching_session_ux` ready and advances
+  the next smallest truthful gap to `stage11_replay_generalization_contract`.
+- The contract does not write receipts, write memory, capture screen/audio/
+  keystrokes, enable passive learning, run tools, run shell, run git, start
+  processes, or grant authority.
+
+Latest validation for Stage 11 teaching-session contract:
+
+- `python -m pytest tests/test_api_apprenticeship.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 4 tests passed`
+- `python -m mypy src/francis/apprenticeship.py
+  src/francis/api/routes/apprenticeship.py`
+  Result: `passed`
+- `python -m ruff check src/francis/apprenticeship.py
+  src/francis/api/routes/apprenticeship.py tests/test_api_apprenticeship.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/apprenticeship.py
+  src/francis/api/routes/apprenticeship.py tests/test_api_apprenticeship.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed; 4 files already formatted`
+- Live local read-only route/readback:
+  GET `/apprenticeship/status` and GET
+  `/apprenticeship/teaching-session-contract`.
+  Result: `status=stage11_groundwork_ready;
+  teaching_ready=true;
+  ready_count=2; required_count=5;
+  contract_status=ready; contract_ready=true;
+  requirements=5; capture_boundaries=5;
+  passive_learning_enabled=false; captures_screen=false;
+  status_next=stage11_replay_generalization_contract;
+  contract_next=stage11_replay_generalization_contract`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
