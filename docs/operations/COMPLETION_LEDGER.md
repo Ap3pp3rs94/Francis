@@ -46320,6 +46320,51 @@ Latest validation for Stage 7 closure decision UI visibility:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-30 - GitHub CI operations require delegated operator authority
+
+Roadmap area: Phase 2 / P3 Governance, bounded external CI operations under
+operator delegation.
+
+Material change:
+
+- Added a governed GitHub CI operation wrapper in
+  `francis.governance.github_ci`.
+- The wrapper permits only bounded `gh` operations for run monitoring, run
+  view, failed-run rerun, and CI-only workflow dispatch.
+- Every operation requires an active `operator.delegation.receipt` for
+  `codex.builder` in `dev` or `workstation`; production and regulated profiles
+  remain blocked by the shared delegation gate.
+- Each successful operation writes an
+  `operator.delegated_github_ci.operation_receipt` with actor, delegation id,
+  command vector, shell=false, decision, timestamp, exit code, and hard-limit
+  governance fields.
+- The wrapper does not allow `.github/workflows/` edits, release/publish/deploy
+  workflow dispatch, run cancellation, force-push, branch protection mutation,
+  shell execution, or subdelegation.
+- Wrote live delegation receipt
+  `opdel_7153a2c1769d520b872b3cc8dc81ac5d` under
+  `data/approvals/operator_delegation_receipts/` for Austin delegating
+  `github.workflow_run_monitor`, `github.workflow_run_rerun`, and
+  `github.workflow_dispatch_ci` to `codex.builder` until explicit revocation.
+
+Latest validation for GitHub CI delegated operations:
+
+- `python -m pytest tests/test_governance_github_ci.py -q --tb=short
+  --maxfail=1`
+  Result: `passed; 2 passed`
+- `python -m pytest
+  tests/test_api_approvals.py::test_full_operator_delegation_receipt_is_inspectable_and_referenced_by_builder_approval
+  tests/test_governance_github_ci.py -q --tb=short --maxfail=1`
+  Result: `passed; 3 passed`
+- `python -m mypy src/francis/governance/github_ci.py`
+  Result: `passed`
+- `python -m ruff check src/francis/governance/github_ci.py
+  tests/test_governance_github_ci.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/governance/github_ci.py
+  tests/test_governance_github_ci.py`
+  Result: `passed; 2 files already formatted`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
