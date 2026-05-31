@@ -127,7 +127,7 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
     assert takeover_panic["required_scope"] == "takeover.panic.write"
     assert takeover_panic["governance_maturity"] == "permission_gated"
     assert "panic-stop receipt" in takeover_panic["receipt_behavior"]
-    assert "separate governed path" in takeover_panic["notes"]
+    assert "control-transfer action-feed receipt" in takeover_panic["notes"]
 
     takeover_handback = entries["/takeover/handback-summary"]
     assert takeover_handback["family"] == "takeover"

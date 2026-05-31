@@ -47,6 +47,7 @@ def takeover_status_snapshot(*, limit: int = 10) -> dict[str, Any]:
     pilot_visible = _safe_text(control_mode.get("id")) == "pilot"
     control_transfer_ready = stage8_closed and not bool(active_transfer)
     handback_ready = bool(handback_receipts)
+    panic_operation_cancellation_ready = _panic_operation_cancellation_ready(panic_receipts)
     snapshot = {
         "ok": True,
         "kind": TAKEOVER_STATUS_KIND,
@@ -101,6 +102,7 @@ def takeover_status_snapshot(*, limit: int = 10) -> dict[str, Any]:
             handback_ready=handback_ready,
             stage8_closed=stage8_closed,
             operator_surface_ready=False,
+            panic_operation_cancellation_ready=panic_operation_cancellation_ready,
         ),
     }
     surface_ready = _operator_surface_contract_ready(snapshot)
@@ -111,6 +113,7 @@ def takeover_status_snapshot(*, limit: int = 10) -> dict[str, Any]:
         handback_ready=handback_ready,
         stage8_closed=stage8_closed,
         operator_surface_ready=surface_ready,
+        panic_operation_cancellation_ready=panic_operation_cancellation_ready,
     )
     return snapshot
 
@@ -167,6 +170,8 @@ def takeover_operator_surface_contract(*, limit: int = 10) -> dict[str, Any]:
             "grants_mutation_authority": False,
         },
         "next_smallest_truthful_gap": "stage9_panic_operation_cancellation"
+        if ready and not _panic_operation_cancellation_ready(read_takeover_panic_stop_receipts(limit=10))
+        else "stage9_live_delegated_action_runtime"
         if ready
         else "stage9_operator_surface_contract",
     }
@@ -351,6 +356,11 @@ def record_takeover_panic_stop(
                 "revoked_takeover_session_id": session_id,
             },
         )
+    operation_cancel_results = _cancel_takeover_operations_for_panic(
+        active_transfer=active_transfer,
+        reason=f"takeover_panic_stop:{receipt_id}",
+    )
+    cancelled_count = sum(1 for item in operation_cancel_results if bool(item.get("cancelled")))
 
     receipt = {
         "ok": True,
@@ -369,20 +379,25 @@ def record_takeover_panic_stop(
         "recorded_ts": _now_s(),
         "writes_control_mode": env_profile in _ALLOWED_ENV_PROFILES,
         "writes_receipt": True,
-        "writes_tasks": False,
+        "writes_tasks": cancelled_count > 0,
+        "writes_operation_state": cancelled_count > 0,
         "writes_memory": False,
         "runs_tools": False,
         "runs_shell": False,
         "runs_git": False,
         "starts_processes": False,
-        "cancels_operations": False,
+        "cancels_operations": cancelled_count > 0,
+        "operation_cancellation_reviewed": True,
+        "operation_cancel_attempt_count": len(operation_cancel_results),
+        "operation_cancelled_count": cancelled_count,
+        "operation_cancel_results": operation_cancel_results,
         "grants_execution_authority": False,
         "grants_mutation_authority": False,
         "governance": {
             "required_scope": TAKEOVER_PANIC_STOP_SCOPE,
             "panic_stop": True,
             "revokes_pilot_control_mode": env_profile in _ALLOWED_ENV_PROFILES,
-            "does_not_cancel_operations_yet": True,
+            "cancels_only_control_transfer_action_feed_operations": True,
             "execution_still_uses_executor_governance": True,
             "grants_execution_authority": False,
             "grants_mutation_authority": False,
@@ -595,6 +610,45 @@ def _action_feed_item(operation: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _cancel_takeover_operations_for_panic(*, active_transfer: dict[str, Any], reason: str) -> list[dict[str, Any]]:
+    operation_ids = _bounded_unique_texts(
+        [_safe_text(item) for item in _as_list(active_transfer.get("action_feed_operation_ids"))],
+        limit=20,
+    )
+    results: list[dict[str, Any]] = []
+    for operation_id in operation_ids:
+        detail = get_operation_detail(operation_id, include_logs=False, log_limit=0)
+        operation = _as_dict(detail.get("operation")) if isinstance(detail, dict) else {}
+        previous_status = _safe_text(operation.get("status")) or "unknown"
+        if previous_status not in {"queued", "running", "blocked"}:
+            results.append(
+                {
+                    "operation_id": operation_id,
+                    "previous_status": previous_status,
+                    "cancelled": False,
+                    "reason": "terminal_or_not_active",
+                }
+            )
+            continue
+        ok, err = delegation_store.cancel_delegation(operation_id, reason=reason)
+        results.append(
+            {
+                "operation_id": operation_id,
+                "previous_status": previous_status,
+                "cancelled": bool(ok),
+                "reason": "" if ok else _redacted_text(err)[:240],
+            }
+        )
+    return results
+
+
+def _panic_operation_cancellation_ready(panic_receipts: list[dict[str, Any]]) -> bool:
+    if not panic_receipts:
+        return False
+    latest = panic_receipts[-1]
+    return bool(latest.get("operation_cancellation_reviewed"))
+
+
 def _takeover_next_gap(
     *,
     active_transfer: bool,
@@ -602,11 +656,18 @@ def _takeover_next_gap(
     handback_ready: bool,
     stage8_closed: bool,
     operator_surface_ready: bool,
+    panic_operation_cancellation_ready: bool,
 ) -> str:
     if active_transfer or (has_transfer and not handback_ready):
         return "stage9_handback_summary_receipts"
     if handback_ready:
-        return "stage9_panic_operation_cancellation" if operator_surface_ready else "stage9_operator_surface_contract"
+        if not operator_surface_ready:
+            return "stage9_operator_surface_contract"
+        return (
+            "stage9_live_delegated_action_runtime"
+            if panic_operation_cancellation_ready
+            else "stage9_panic_operation_cancellation"
+        )
     if stage8_closed:
         return "stage9_control_transfer_receipts"
     return "stage8_ledger_closure"

@@ -47342,6 +47342,64 @@ Latest validation for Stage 9 Takeover operator surface contract:
   surface_ready=true; status_next=stage9_panic_operation_cancellation;
   surface_next=stage9_panic_operation_cancellation`.
 
+### 2026-05-31 - Stage 9 panic-stop cancels captured takeover operations
+
+Roadmap area: Stage 9 / Takeover (Pilot Mode), panic stop and interruption.
+
+Material change:
+
+- Panic-stop now cancels only active operation ids that were captured in the
+  active control-transfer receipt's bounded action-feed list.
+- Panic-stop receipts now include `operation_cancellation_reviewed`,
+  cancellation attempt count, cancelled count, and per-operation cancellation
+  results.
+- The panic-stop route response exposes cancellation review and count fields.
+- The mutating-route authority matrix now documents that panic-stop cancellation
+  is bounded to the control-transfer action-feed receipt.
+- When the operator surface contract and panic operation cancellation review are
+  both satisfied, Takeover advances its next smallest truthful gap to
+  `stage9_live_delegated_action_runtime`.
+- Panic-stop still does not run tools, run shell, run git, start processes,
+  write memory, grant execution authority, grant mutation authority, or cancel
+  tasks outside the active control-transfer receipt.
+
+Latest validation for Stage 9 Takeover panic operation cancellation:
+
+- `python -m pytest tests/test_api_takeover.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  tests/test_api_mutating_route_authority_matrix.py -q --tb=short --maxfail=1`
+  Result: `passed; 6 tests passed`
+- `python -m mypy src/francis/takeover.py
+  src/francis/api/routes/takeover.py
+  src/francis/api/mutation_authority_matrix.py`
+  Result: `passed`
+- `python -m ruff check src/francis/takeover.py
+  src/francis/api/routes/takeover.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_takeover.py
+  tests/test_api_contract_chat_ui.py
+  tests/test_api_mutating_route_authority_matrix.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/takeover.py
+  src/francis/api/routes/takeover.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_takeover.py
+  tests/test_api_contract_chat_ui.py
+  tests/test_api_mutating_route_authority_matrix.py`
+  Result: `passed; 6 files already formatted`
+- Live local route/readback:
+  POST `/operations/create`, POST `/takeover/control-transfer`,
+  POST `/takeover/panic-stop`, POST `/takeover/handback-summary`, GET
+  `/operations/tsk_20260531_053912_a8a55077`, GET `/takeover/status`, and GET
+  `/takeover/operator-surface-contract`.
+  Result: `operation_id=tsk_20260531_053912_a8a55077;
+  transfer_receipt_id=takeover_transfer_71dd3f00fd31;
+  panic_receipt_id=takeover_panic_c5b9b75ac9cc;
+  panic_attempt_count=5; panic_cancelled_count=1;
+  handback_receipt_id=takeover_handback_00f8031b90f6;
+  operation_status_after=canceled;
+  status_next=stage9_live_delegated_action_runtime;
+  surface_status=ready;
+  surface_next=stage9_live_delegated_action_runtime`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -62,7 +62,10 @@ _RULES: tuple[AuthorityRule, ...] = (
         receipt_behavior="stage9 takeover panic-stop receipt",
         denial_behavior="api_permission_denied via permission_gate before panic-stop receipt write",
         governance_maturity="permission_gated",
-        notes="Panic stop revokes Pilot control mode; operation cancellation remains a separate governed path.",
+        notes=(
+            "Panic stop revokes Pilot control mode and cancels only active operations captured in the "
+            "control-transfer action-feed receipt."
+        ),
     ),
     AuthorityRule(
         family="takeover",
