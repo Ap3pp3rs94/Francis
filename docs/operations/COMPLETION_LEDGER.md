@@ -48543,6 +48543,78 @@ Latest validation for Stage 11 Forge handoff receipt write path:
   readback_status=ready; readback_count=1;
   readback_next=stage11_completion_review`.
 
+### 2026-05-31 - Stage 11 completion review and closure decision are receipt-gated
+
+Roadmap area: Stage 11 / Apprenticeship, completion review and operator stage
+closure decision.
+
+Material change:
+
+- Added read-only GET `/apprenticeship/completion-review`.
+- Added read-only GET `/apprenticeship/stage-closure-decisions`.
+- Added permission-gated POST `/apprenticeship/stage-closure-decision`
+  requiring `apprenticeship.stage11.closure.write`.
+- The completion review requires Stage 10 closure receipt readback plus the
+  Stage 11 teaching-session, replay/generalization, skillization artifact, and
+  Forge handoff receipts before reporting `stage11_completion_review_ready`.
+- The closure decision records an explicit Stage 11 operator decision receipt
+  and advances `/apprenticeship/status` to `stage11_closed_by_receipt` only when
+  the completion review was ready and the decision is `close_stage11`.
+- The closure receipt does not mutate runtime stage state, write memory, write a
+  skill artifact, write a Forge proposal, promote to Forge, run tools, run
+  shell, run git, start processes, or grant execution/mutation authority.
+- The mutating-route authority matrix now describes the Stage 11 closure route,
+  required actor, required scope, approval requirement, receipt behavior, and
+  permission-gate denial behavior.
+- The next smallest truthful gap is now `stage11_ledger_closure` after the
+  closure receipt is present.
+
+Latest validation for Stage 11 completion review and closure decision:
+
+- `python -m pytest tests/test_api_apprenticeship.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  tests/test_api_mutating_route_authority_matrix.py --tb=short --maxfail=1`
+  Result: `passed; 25 passed`
+- `python -m mypy src/francis/apprenticeship.py
+  src/francis/api/routes/apprenticeship.py
+  src/francis/api/mutation_authority_matrix.py`
+  Result: `passed`
+- `python -m ruff check src/francis/apprenticeship.py
+  src/francis/api/routes/apprenticeship.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_apprenticeship.py
+  tests/test_api_contract_chat_ui.py
+  tests/test_api_mutating_route_authority_matrix.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/apprenticeship.py
+  src/francis/api/routes/apprenticeship.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_apprenticeship.py
+  tests/test_api_contract_chat_ui.py
+  tests/test_api_mutating_route_authority_matrix.py`
+  Result: `passed; 6 files already formatted`
+- Live local permission-gated TestClient route/readback against an isolated data
+  root:
+  POST `/apprenticeship/teaching-session`, POST
+  `/apprenticeship/replay-receipt`, POST
+  `/apprenticeship/skillization-artifact-receipt`, POST
+  `/apprenticeship/forge-handoff-receipt`, GET
+  `/apprenticeship/completion-review`, POST
+  `/apprenticeship/stage-closure-decision`, GET `/apprenticeship/status`, GET
+  `/apprenticeship/stage-closure-decisions`, and GET
+  `/apprenticeship/completion-review`.
+  Result: `chain_ok=true; review_before_status=ready;
+  review_before_ready=true; review_before_next=stage11_stage_closure_decision;
+  closure_ok=true; closure_status=recorded;
+  closure_receipt_prefix_ok=true; closure_completion_review_ready=true;
+  closure_closed_by_receipt=true; closure_marks_runtime_stage_state=false;
+  closure_writes_memory=false; closure_writes_skill_artifact=false;
+  closure_writes_forge_proposal=false; closure_runs_tools=false;
+  closure_runs_shell=false; closure_grants_execution_authority=false;
+  status_status=stage11_closed_by_receipt;
+  status_closed_by_receipt=true; status_next=stage11_ledger_closure;
+  decisions_status=closed; decisions_count=1; review_after_status=ready;
+  review_after_ready=true; review_after_closed_by_receipt=true;
+  review_after_next=stage11_ledger_closure`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -45,6 +45,90 @@ def _write_stage10_closure_receipt(
     )
 
 
+def _record_full_apprenticeship_receipt_chain(client: TestClient) -> dict[str, dict[str, object]]:
+    teaching = client.post(
+        "/apprenticeship/teaching-session",
+        json={
+            "actor": "test.apprenticeship.teacher",
+            "reason": "start teaching",
+            "action": "start_teaching_session",
+            "intent_label": "summarize incident",
+            "declared_scope": "operator demonstrates incident summary",
+            "success_condition": "reviewable replay exists",
+            "demonstration_summary": "operator supplied summary",
+        },
+    ).json()
+    assert teaching["ok"] is True
+    replay = client.post(
+        "/apprenticeship/replay-receipt",
+        json={
+            "actor": "test.apprenticeship.reviewer",
+            "reason": "review replay",
+            "action": "approve_generalization",
+            "teaching_session_receipt_id": teaching["receipt_id"],
+            "intent_label": "summarize incident",
+            "replay_summary": "reviewed replay",
+            "generalization_summary": "stable summary steps",
+            "validation_result": "accepted",
+        },
+    ).json()
+    assert replay["ok"] is True
+    skillization = client.post(
+        "/apprenticeship/skillization-artifact-receipt",
+        json={
+            "actor": "test.apprenticeship.skillizer",
+            "reason": "prepare artifact",
+            "action": "approve_forge_candidate",
+            "replay_receipt_id": replay["receipt_id"],
+            "pattern_summary": "Incident summary pattern",
+            "parameterization": "incident id severity owner",
+            "usage_scope": "operator-reviewed summaries",
+            "decision_logic": "receipt-backed replay accepted",
+            "validation_expectations": "contract tests",
+            "risk_tier_candidate": "low",
+            "documentation_draft": "review-only draft",
+            "test_candidate_structure": "focused tests",
+            "classification": "candidate_reusable_skill",
+        },
+    ).json()
+    assert skillization["ok"] is True
+    forge_handoff = client.post(
+        "/apprenticeship/forge-handoff-receipt",
+        json={
+            "actor": "test.apprenticeship.forge",
+            "reason": "review handoff",
+            "action": "approve_forge_proposal_candidate",
+            "skillization_artifact_receipt_id": skillization["receipt_id"],
+            "handoff_summary": "Candidate can be staged for Forge review",
+            "operator_review_state": "reviewed",
+            "risk_tier_review": "low risk candidate only",
+            "documentation_review": "draft reviewed",
+            "test_candidate_review": "focused tests reviewed",
+            "promotion_boundary": "no promotion from apprenticeship receipt",
+            "explicit_promotion_decision": "do_not_promote_yet",
+        },
+    ).json()
+    assert forge_handoff["ok"] is True
+    return {
+        "teaching": teaching,
+        "replay": replay,
+        "skillization": skillization,
+        "forge_handoff": forge_handoff,
+    }
+
+
+def _stage11_scope_map(*, include_closure: bool = False) -> dict[str, list[str]]:
+    scopes = {
+        "test.apprenticeship.teacher": ["apprenticeship.teaching_session.write"],
+        "test.apprenticeship.reviewer": ["apprenticeship.replay_receipt.write"],
+        "test.apprenticeship.skillizer": ["apprenticeship.skillization_artifact.write"],
+        "test.apprenticeship.forge": ["apprenticeship.forge_handoff.write"],
+    }
+    if include_closure:
+        scopes["test.apprenticeship.closure"] = ["apprenticeship.stage11.closure.write"]
+    return scopes
+
+
 def test_apprenticeship_status_waits_for_stage10_closure(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
@@ -91,6 +175,8 @@ def test_apprenticeship_status_starts_stage11_groundwork_after_stage10_closure(
     assert body["stage10_closed_by_receipt"] is True
     assert body["stage10_latest_closure_receipt_id"] == "away_stage10_closure_apprenticeship_test"
     assert body["stage10_next_smallest_truthful_gap"] == "stage10_ledger_closure"
+    assert body["stage11_closed_by_receipt"] is False
+    assert body["stage11_latest_closure_receipt_id"] == ""
     assert body["ready_count"] == 5
     assert body["required_count"] == 5
     assert body["teaching_session_ready"] is True
@@ -148,6 +234,9 @@ def test_apprenticeship_status_starts_stage11_groundwork_after_stage10_closure(
     assert body["routes"]["skillization_artifact_record"] == "/apprenticeship/skillization-artifact-receipt"
     assert body["routes"]["forge_handoff_receipts"] == "/apprenticeship/forge-handoff-receipts"
     assert body["routes"]["forge_handoff_record"] == "/apprenticeship/forge-handoff-receipt"
+    assert body["routes"]["completion_review"] == "/apprenticeship/completion-review"
+    assert body["routes"]["stage_closure_decisions"] == "/apprenticeship/stage-closure-decisions"
+    assert body["routes"]["stage_closure_decision"] == "/apprenticeship/stage-closure-decision"
     assert body["next_smallest_truthful_gap"] == "stage11_teaching_session_receipt_write_path"
 
     deliverables = {item["id"]: item for item in body["deliverables"]}
@@ -1315,3 +1404,222 @@ def test_apprenticeship_forge_handoff_records_review_without_promotion(
     assert status["forge_handoff_receipt_ready"] is True
     assert status["latest_forge_handoff_receipt_id"] == body["receipt_id"]
     assert status["next_smallest_truthful_gap"] == "stage11_completion_review"
+
+
+def test_apprenticeship_completion_review_blocks_until_receipt_chain_exists(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage10_closure_receipt(data_root, receipt_id="away_stage10_closure_completion_blocked_test")
+
+    response = TestClient(create_app()).get("/apprenticeship/completion-review")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "francis.stage11.apprenticeship.completion_review"
+    assert body["status"] == "blocked"
+    assert body["stage11_completion_review_ready"] is False
+    assert body["stage11_closed_by_receipt"] is False
+    assert body["stage_closure_decision_required"] is False
+    assert body["stage10_closed_by_receipt"] is True
+    assert body["teaching_session_receipt_ready"] is False
+    assert body["replay_receipt_ready"] is False
+    assert body["skillization_artifact_receipt_ready"] is False
+    assert body["forge_handoff_receipt_ready"] is False
+    assert body["writes_receipts"] is False
+    assert body["writes_memory"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["marks_stage_closed"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["governance"]["read_only"] is True
+    assert body["governance"]["completion_review_only"] is True
+    assert body["governance"]["does_not_mark_stage_closed"] is True
+    assert body["next_smallest_truthful_gap"] == "stage11_teaching_session_receipt_write_path"
+
+    checks = {item["id"]: item for item in body["checks"]}
+    assert checks["stage10_ledger_closure_backstop"]["passed"] is True
+    assert checks["teaching_session_receipt_ready"]["passed"] is False
+    assert checks["replay_receipt_ready"]["passed"] is False
+    assert checks["skillization_artifact_receipt_ready"]["passed"] is False
+    assert checks["forge_handoff_receipt_ready"]["passed"] is False
+    assert checks["stage_not_marked_closed_by_review"]["passed"] is True
+
+
+def test_apprenticeship_completion_review_ready_after_receipt_chain(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", json.dumps(_stage11_scope_map()))
+    _write_stage10_closure_receipt(data_root, receipt_id="away_stage10_closure_completion_ready_test")
+
+    client = TestClient(create_app())
+    receipts = _record_full_apprenticeship_receipt_chain(client)
+    response = client.get("/apprenticeship/completion-review")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "francis.stage11.apprenticeship.completion_review"
+    assert body["status"] == "ready"
+    assert body["stage11_completion_review_ready"] is True
+    assert body["stage11_closed_by_receipt"] is False
+    assert body["stage_closure_decision_required"] is True
+    assert body["stage10_latest_closure_receipt_id"] == "away_stage10_closure_completion_ready_test"
+    assert body["latest_teaching_session_receipt_id"] == receipts["teaching"]["receipt_id"]
+    assert body["latest_replay_receipt_id"] == receipts["replay"]["receipt_id"]
+    assert body["latest_skillization_artifact_receipt_id"] == receipts["skillization"]["receipt_id"]
+    assert body["latest_forge_handoff_receipt_id"] == receipts["forge_handoff"]["receipt_id"]
+    assert body["ready_count"] == 5
+    assert body["required_count"] == 5
+    assert body["writes_receipts"] is False
+    assert body["writes_memory"] is False
+    assert body["writes_skill_artifact"] is False
+    assert body["writes_forge_proposal"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["marks_stage_closed"] is False
+    assert body["governance"]["stage_closure_decision_required"] is True
+    assert body["governance"]["requires_forge_handoff_receipt"] is True
+    assert body["next_smallest_truthful_gap"] == "stage11_stage_closure_decision"
+
+    checks = {item["id"]: item for item in body["checks"]}
+    assert all(item["passed"] for item in checks.values())
+
+
+def test_apprenticeship_stage11_closure_decision_denies_without_actor_scope(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage10_closure_receipt(data_root, receipt_id="away_stage10_closure_stage11_denied_test")
+
+    response = TestClient(create_app()).post(
+        "/apprenticeship/stage-closure-decision",
+        json={
+            "actor": "test.apprenticeship.closure",
+            "reason": "missing closure scope",
+            "decision": "close_stage11",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["status"] == "denied"
+    assert body["error"] == "api_permission_denied"
+    assert body["writes_receipt"] is False
+    assert body["writes_memory"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["starts_processes"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["governance"]["required_scope"] == "apprenticeship.stage11.closure.write"
+    assert not (data_root / "logs" / "apprenticeship" / "stage11_operator_stage_closure_decisions.jsonl").exists()
+
+
+def test_apprenticeship_stage11_closure_decision_records_receipt_after_completion_review(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps(_stage11_scope_map(include_closure=True)),
+    )
+    _write_stage10_closure_receipt(data_root, receipt_id="away_stage10_closure_stage11_close_test")
+
+    client = TestClient(create_app())
+    receipts = _record_full_apprenticeship_receipt_chain(client)
+    response = client.post(
+        "/apprenticeship/stage-closure-decision",
+        json={
+            "actor": "test.apprenticeship.closure",
+            "reason": "close stage 11 token=stage11closereasonsecret123",
+            "decision": "close_stage11",
+            "notes": "Completion review and all receipts are present token=stage11closenotessecret123",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "francis.stage11.apprenticeship.stage11_closure_decision.record"
+    assert body["status"] == "recorded"
+    assert body["receipt_id"].startswith("apprenticeship_stage11_closure_")
+    assert body["decision"] == "close_stage11"
+    assert body["stage11_closed_by_receipt"] is True
+    assert body["completion_review_ready"] is True
+    assert body["marks_runtime_stage_state"] is False
+    assert body["writes_receipt"] is True
+    assert body["writes_memory"] is False
+    assert body["writes_skill_artifact"] is False
+    assert body["writes_forge_proposal"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["starts_processes"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["governance"]["required_scope"] == "apprenticeship.stage11.closure.write"
+    assert body["governance"]["does_not_mutate_runtime_stage_state"] is True
+    assert body["next_smallest_truthful_gap"] == "stage11_ledger_closure"
+
+    receipt = body["receipt"]
+    assert receipt["kind"] == "francis.stage11.apprenticeship.stage11_closure_decision_receipt"
+    assert receipt["receipt_id"] == body["receipt_id"]
+    assert receipt["actor"] == "test.apprenticeship.closure"
+    assert receipt["stage10_closure_receipt_id"] == "away_stage10_closure_stage11_close_test"
+    assert receipt["teaching_session_receipt_id"] == receipts["teaching"]["receipt_id"]
+    assert receipt["replay_receipt_id"] == receipts["replay"]["receipt_id"]
+    assert receipt["skillization_artifact_receipt_id"] == receipts["skillization"]["receipt_id"]
+    assert receipt["forge_handoff_receipt_id"] == receipts["forge_handoff"]["receipt_id"]
+    assert receipt["stage11_closed_by_receipt"] is True
+    assert receipt["marks_runtime_stage_state"] is False
+    assert receipt["governance"]["permission_scope"] == "apprenticeship.stage11.closure.write"
+    assert receipt["governance"]["completion_review_ready"] is True
+    assert receipt["governance"]["requires_forge_handoff_receipt"] is True
+    assert receipt["governance"]["does_not_mutate_runtime_stage_state"] is True
+    receipt_text = json.dumps(receipt, sort_keys=True)
+    assert "stage11closereasonsecret123" not in receipt_text
+    assert "stage11closenotessecret123" not in receipt_text
+
+    readback = client.get("/apprenticeship/stage-closure-decisions").json()
+    assert readback["ok"] is True
+    assert readback["kind"] == "francis.stage11.apprenticeship.stage11_closure_decision_receipts"
+    assert readback["status"] == "closed"
+    assert readback["latest_receipt_id"] == body["receipt_id"]
+    assert readback["latest_decision"] == "close_stage11"
+    assert readback["stage11_closed_by_receipt"] is True
+    assert readback["marks_runtime_stage_state"] is False
+    assert readback["writes_receipts"] is False
+    assert readback["writes_memory"] is False
+    assert readback["runs_tools"] is False
+    assert readback["runs_shell"] is False
+    assert readback["grants_execution_authority"] is False
+    assert readback["governance"]["stage_closure_decision_receipt_readback"] is True
+    assert readback["next_smallest_truthful_gap"] == "stage11_ledger_closure"
+
+    status = client.get("/apprenticeship/status").json()
+    assert status["status"] == "stage11_closed_by_receipt"
+    assert status["stage11_closed_by_receipt"] is True
+    assert status["stage11_latest_closure_receipt_id"] == body["receipt_id"]
+    assert status["next_smallest_truthful_gap"] == "stage11_ledger_closure"
+
+    review = client.get("/apprenticeship/completion-review").json()
+    assert review["stage11_completion_review_ready"] is True
+    assert review["stage11_closed_by_receipt"] is True
+    assert review["stage_closure_decision_required"] is False
+    assert review["next_smallest_truthful_gap"] == "stage11_ledger_closure"

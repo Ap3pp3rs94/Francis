@@ -27,11 +27,15 @@ APPRENTICESHIP_SKILLIZATION_ARTIFACT_RECEIPT_KIND = "francis.stage11.apprentices
 APPRENTICESHIP_SKILLIZATION_ARTIFACT_RECEIPTS_KIND = "francis.stage11.apprenticeship.skillization_artifact_receipts"
 APPRENTICESHIP_FORGE_HANDOFF_RECEIPT_KIND = "francis.stage11.apprenticeship.forge_handoff_receipt"
 APPRENTICESHIP_FORGE_HANDOFF_RECEIPTS_KIND = "francis.stage11.apprenticeship.forge_handoff_receipts"
+APPRENTICESHIP_COMPLETION_REVIEW_KIND = "francis.stage11.apprenticeship.completion_review"
+APPRENTICESHIP_STAGE_CLOSURE_DECISION_KIND = "francis.stage11.apprenticeship.stage11_closure_decision_receipt"
+APPRENTICESHIP_STAGE_CLOSURE_DECISIONS_KIND = "francis.stage11.apprenticeship.stage11_closure_decision_receipts"
 
 APPRENTICESHIP_TEACHING_SESSION_WRITE_SCOPE = "apprenticeship.teaching_session.write"
 APPRENTICESHIP_REPLAY_RECEIPT_WRITE_SCOPE = "apprenticeship.replay_receipt.write"
 APPRENTICESHIP_SKILLIZATION_ARTIFACT_WRITE_SCOPE = "apprenticeship.skillization_artifact.write"
 APPRENTICESHIP_FORGE_HANDOFF_WRITE_SCOPE = "apprenticeship.forge_handoff.write"
+APPRENTICESHIP_STAGE_CLOSURE_SCOPE = "apprenticeship.stage11.closure.write"
 
 _ALLOWED_ENV_PROFILES = {"dev", "workstation", "local", "test"}
 _ALLOWED_TEACHING_SESSION_ACTIONS = {
@@ -67,6 +71,8 @@ _ALLOWED_FORGE_HANDOFF_ACTIONS = {
 def apprenticeship_status_snapshot() -> dict[str, Any]:
     stage10 = away_stage10_operator_stage_closure_decision_readback(limit=5)
     stage10_closed = bool(stage10.get("stage10_closed_by_receipt"))
+    stage11_closure = apprenticeship_stage11_operator_stage_closure_decision_readback(limit=5)
+    stage11_closed_by_receipt = bool(stage11_closure.get("stage11_closed_by_receipt"))
     teaching_session = apprenticeship_teaching_session_contract()
     teaching_session_ready = bool(teaching_session.get("teaching_session_contract_ready"))
     replay_generalization = apprenticeship_replay_generalization_contract()
@@ -109,7 +115,9 @@ def apprenticeship_status_snapshot() -> dict[str, Any]:
         "kind": APPRENTICESHIP_STATUS_KIND,
         "stage": STAGE11_APPRENTICESHIP_STAGE,
         "source_id": "apprenticeship",
-        "status": "stage11_forge_handoff_receipt_ready"
+        "status": "stage11_closed_by_receipt"
+        if stage11_closed_by_receipt
+        else "stage11_forge_handoff_receipt_ready"
         if stage10_closed
         and live_teaching_session_ux_ready
         and teaching_session_receipt_ready
@@ -136,6 +144,8 @@ def apprenticeship_status_snapshot() -> dict[str, Any]:
         "stage10_closed_by_receipt": stage10_closed,
         "stage10_latest_closure_receipt_id": _safe_text(stage10.get("latest_receipt_id")),
         "stage10_next_smallest_truthful_gap": _safe_text(stage10.get("next_smallest_truthful_gap")),
+        "stage11_closed_by_receipt": stage11_closed_by_receipt,
+        "stage11_latest_closure_receipt_id": _safe_text(stage11_closure.get("latest_receipt_id")),
         "deliverables": deliverables,
         "ready_count": ready_count,
         "required_count": required_count,
@@ -204,8 +214,12 @@ def apprenticeship_status_snapshot() -> dict[str, Any]:
             "skillization_artifact_record": "/apprenticeship/skillization-artifact-receipt",
             "forge_handoff_receipts": "/apprenticeship/forge-handoff-receipts",
             "forge_handoff_record": "/apprenticeship/forge-handoff-receipt",
+            "completion_review": "/apprenticeship/completion-review",
+            "stage_closure_decisions": "/apprenticeship/stage-closure-decisions",
+            "stage_closure_decision": "/apprenticeship/stage-closure-decision",
         },
         "next_smallest_truthful_gap": _apprenticeship_next_gap(
+            stage11_closed_by_receipt=stage11_closed_by_receipt,
             stage10_closed=stage10_closed,
             teaching_session_ready=teaching_session_ready,
             replay_generalization_ready=replay_generalization_ready,
@@ -1115,6 +1129,124 @@ def apprenticeship_forge_handoff_receipts(*, limit: int = 20) -> dict[str, Any]:
     }
 
 
+def read_apprenticeship_stage11_operator_stage_closure_decisions(*, limit: int = 20) -> list[dict[str, Any]]:
+    return _read_jsonl_tail(_stage11_operator_stage_closure_decision_path(), limit=_safe_limit(limit, default=20))
+
+
+def apprenticeship_stage11_operator_stage_closure_decision_readback(*, limit: int = 20) -> dict[str, Any]:
+    items = read_apprenticeship_stage11_operator_stage_closure_decisions(limit=limit)
+    latest = items[-1] if items else {}
+    stage11_closed = bool(latest.get("stage11_closed_by_receipt"))
+    return {
+        "ok": True,
+        "kind": APPRENTICESHIP_STAGE_CLOSURE_DECISIONS_KIND,
+        "stage": STAGE11_APPRENTICESHIP_STAGE,
+        "source_id": "apprenticeship",
+        "status": "closed" if stage11_closed else "open" if items else "empty",
+        "items": items,
+        "count": len(items),
+        "latest_receipt_id": _safe_text(latest.get("receipt_id")),
+        "latest_decision": _safe_text(latest.get("decision")),
+        "stage11_closed_by_receipt": stage11_closed,
+        "marks_runtime_stage_state": False,
+        "reads_receipts": True,
+        "writes_receipts": False,
+        "writes_memory": False,
+        "writes_skill_artifact": False,
+        "writes_forge_proposal": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "stage_closure_decision_receipt_readback": True,
+            "does_not_mutate_runtime_stage_state": True,
+            "does_not_write_memory": True,
+            "does_not_run_tools": True,
+            "does_not_run_shell": True,
+            "does_not_run_git": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": "stage11_ledger_closure"
+        if stage11_closed
+        else "stage11_stage_closure_decision"
+        if items
+        else "stage11_completion_review",
+    }
+
+
+def apprenticeship_completion_review() -> dict[str, Any]:
+    status = apprenticeship_status_snapshot()
+    checks = _completion_review_checks(status=status)
+    review_ready = all(bool(check.get("passed")) for check in checks)
+    stage11_closed = bool(status.get("stage11_closed_by_receipt"))
+    return {
+        "ok": True,
+        "kind": APPRENTICESHIP_COMPLETION_REVIEW_KIND,
+        "stage": STAGE11_APPRENTICESHIP_STAGE,
+        "source_id": "apprenticeship",
+        "status": "ready" if review_ready else "blocked",
+        "stage11_completion_review_ready": review_ready,
+        "stage11_closed_by_receipt": stage11_closed,
+        "stage_closure_decision_required": review_ready and not stage11_closed,
+        "stage10_closed_by_receipt": bool(status.get("stage10_closed_by_receipt")),
+        "stage10_latest_closure_receipt_id": _safe_text(status.get("stage10_latest_closure_receipt_id")),
+        "teaching_session_receipt_ready": bool(status.get("teaching_session_receipt_ready")),
+        "latest_teaching_session_receipt_id": _safe_text(status.get("latest_teaching_session_receipt_id")),
+        "replay_receipt_ready": bool(status.get("replay_receipt_ready")),
+        "latest_replay_receipt_id": _safe_text(status.get("latest_replay_receipt_id")),
+        "skillization_artifact_receipt_ready": bool(status.get("skillization_artifact_receipt_ready")),
+        "latest_skillization_artifact_receipt_id": _safe_text(status.get("latest_skillization_artifact_receipt_id")),
+        "forge_handoff_receipt_ready": bool(status.get("forge_handoff_receipt_ready")),
+        "latest_forge_handoff_receipt_id": _safe_text(status.get("latest_forge_handoff_receipt_id")),
+        "ready_count": _safe_int(status.get("ready_count")),
+        "required_count": _safe_int(status.get("required_count")),
+        "checks": checks,
+        "reads_receipts": True,
+        "writes_receipts": False,
+        "writes_memory": False,
+        "writes_skill_artifact": False,
+        "writes_forge_proposal": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "marks_stage_closed": False,
+        "governance": {
+            "read_only": True,
+            "completion_review_only": True,
+            "stage_closure_decision_required": review_ready and not stage11_closed,
+            "requires_stage10_ledger_closure": True,
+            "requires_teaching_session_receipt": True,
+            "requires_replay_receipt": True,
+            "requires_skillization_artifact_receipt": True,
+            "requires_forge_handoff_receipt": True,
+            "does_not_mark_stage_closed": True,
+            "does_not_write_receipts": True,
+            "does_not_write_memory": True,
+            "does_not_write_skill_artifact": True,
+            "does_not_write_forge_proposal": True,
+            "does_not_run_tools": True,
+            "does_not_run_shell": True,
+            "does_not_run_git": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "routes": _as_dict(status.get("routes")),
+        "next_smallest_truthful_gap": "stage11_ledger_closure"
+        if stage11_closed
+        else "stage11_stage_closure_decision"
+        if review_ready
+        else _safe_text(status.get("next_smallest_truthful_gap")) or "stage11_completion_review",
+    }
+
+
 def record_apprenticeship_teaching_session(
     *,
     actor: Any,
@@ -1567,6 +1699,87 @@ def record_apprenticeship_forge_handoff_receipt(
     return receipt
 
 
+def record_apprenticeship_stage11_operator_stage_closure_decision(
+    *,
+    actor: Any,
+    reason: Any,
+    decision: Any,
+    review: dict[str, Any],
+    notes: Any = "",
+) -> dict[str, Any]:
+    safe_decision = _safe_stage11_closure_decision(decision)
+    closure_ready = bool(review.get("stage11_completion_review_ready"))
+    stage11_closed_by_receipt = safe_decision == "close_stage11" and closure_ready
+    receipt_id = f"apprenticeship_stage11_closure_{uuid.uuid4().hex[:12]}"
+    payload = {
+        "ok": True,
+        "kind": APPRENTICESHIP_STAGE_CLOSURE_DECISION_KIND,
+        "receipt_id": receipt_id,
+        "stage": STAGE11_APPRENTICESHIP_STAGE,
+        "source_id": "apprenticeship",
+        "capture_mode": "explicit_operator_stage_closure_decision",
+        "target": "stage11_apprenticeship",
+        "actor": _redacted_text(actor)[:240],
+        "reason": _redacted_text(reason)[:500],
+        "decision": safe_decision,
+        "notes": _redacted_text(notes)[:500],
+        "review_status": _safe_text(review.get("status")),
+        "completion_review_ready": closure_ready,
+        "stage10_closure_receipt_id": _safe_text(review.get("stage10_latest_closure_receipt_id")),
+        "teaching_session_receipt_id": _safe_text(review.get("latest_teaching_session_receipt_id")),
+        "replay_receipt_id": _safe_text(review.get("latest_replay_receipt_id")),
+        "skillization_artifact_receipt_id": _safe_text(review.get("latest_skillization_artifact_receipt_id")),
+        "forge_handoff_receipt_id": _safe_text(review.get("latest_forge_handoff_receipt_id")),
+        "ready_count": _safe_int(review.get("ready_count")),
+        "required_count": _safe_int(review.get("required_count")),
+        "stage11_closed_by_receipt": stage11_closed_by_receipt,
+        "marks_runtime_stage_state": False,
+        "recorded_ts": _now_s(),
+        "writes_receipt": True,
+        "writes_memory": False,
+        "writes_skill_artifact": False,
+        "writes_forge_proposal": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "permission_scope": APPRENTICESHIP_STAGE_CLOSURE_SCOPE,
+            "explicit_operator_decision": True,
+            "stage_closure_decision": True,
+            "completion_review_ready": closure_ready,
+            "requires_teaching_session_receipt": True,
+            "requires_replay_receipt": True,
+            "requires_skillization_artifact_receipt": True,
+            "requires_forge_handoff_receipt": True,
+            "does_not_mutate_runtime_stage_state": True,
+            "does_not_write_memory": True,
+            "does_not_write_skill_artifact": True,
+            "does_not_write_forge_proposal": True,
+            "does_not_run_tools": True,
+            "does_not_run_shell": True,
+            "does_not_run_git": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": "stage11_ledger_closure"
+        if stage11_closed_by_receipt
+        else "stage11_stage_closure_decision",
+    }
+    _append_jsonl(_stage11_operator_stage_closure_decision_path(), payload)
+    audit_record(
+        "apprenticeship.stage11_closure_decision_recorded",
+        actor=payload["actor"],
+        reason=payload["reason"],
+        receipt_id=receipt_id,
+        decision=safe_decision,
+        stage11_closed_by_receipt=stage11_closed_by_receipt,
+    )
+    return payload
+
+
 def _apprenticeship_deliverables(
     *,
     stage10_closed: bool,
@@ -1611,6 +1824,7 @@ def _apprenticeship_deliverables(
 
 def _apprenticeship_next_gap(
     *,
+    stage11_closed_by_receipt: bool,
     stage10_closed: bool,
     teaching_session_ready: bool,
     replay_generalization_ready: bool,
@@ -1622,6 +1836,8 @@ def _apprenticeship_next_gap(
     skillization_artifact_receipt_ready: bool,
     forge_handoff_receipt_ready: bool,
 ) -> str:
+    if stage11_closed_by_receipt:
+        return "stage11_ledger_closure"
     if not stage10_closed:
         return "stage10_ledger_closure"
     if not teaching_session_ready:
@@ -1907,6 +2123,78 @@ def _teaching_session_contract_checks(
     ]
 
 
+def _completion_review_checks(*, status: dict[str, Any]) -> list[dict[str, Any]]:
+    deliverables = [item for item in _as_list(status.get("deliverables")) if isinstance(item, dict)]
+    route_map = _as_dict(status.get("routes"))
+    risky_flags_clear = all(
+        not bool(status.get(key))
+        for key in (
+            "writes_receipts",
+            "writes_memory",
+            "captures_screen",
+            "captures_audio",
+            "captures_keystrokes",
+            "passive_learning_enabled",
+            "runs_tools",
+            "runs_shell",
+            "runs_git",
+            "starts_processes",
+            "grants_execution_authority",
+            "grants_mutation_authority",
+        )
+    )
+    return [
+        _check(
+            "stage10_ledger_closure_backstop",
+            passed=bool(status.get("stage10_closed_by_receipt")),
+            evidence="/away/stage-closure-decisions",
+        ),
+        _check(
+            "contract_deliverables_ready",
+            passed=_safe_int(status.get("ready_count")) == _safe_int(status.get("required_count"))
+            and bool(deliverables)
+            and all(bool(item.get("ready")) for item in deliverables),
+            evidence="apprenticeship.status.deliverables",
+        ),
+        _check(
+            "operator_surface_ready",
+            passed=bool(status.get("live_teaching_session_ux_ready"))
+            and route_map.get("live_teaching_session_ux") == "/apprenticeship/live-teaching-session-ux",
+            evidence="/apprenticeship/live-teaching-session-ux",
+        ),
+        _check(
+            "teaching_session_receipt_ready",
+            passed=bool(status.get("teaching_session_receipt_ready")),
+            evidence=_safe_text(status.get("latest_teaching_session_receipt_id")) or "not_yet_recorded",
+        ),
+        _check(
+            "replay_receipt_ready",
+            passed=bool(status.get("replay_receipt_ready")),
+            evidence=_safe_text(status.get("latest_replay_receipt_id")) or "not_yet_recorded",
+        ),
+        _check(
+            "skillization_artifact_receipt_ready",
+            passed=bool(status.get("skillization_artifact_receipt_ready")),
+            evidence=_safe_text(status.get("latest_skillization_artifact_receipt_id")) or "not_yet_recorded",
+        ),
+        _check(
+            "forge_handoff_receipt_ready",
+            passed=bool(status.get("forge_handoff_receipt_ready")),
+            evidence=_safe_text(status.get("latest_forge_handoff_receipt_id")) or "not_yet_recorded",
+        ),
+        _check(
+            "risky_actions_remain_gated",
+            passed=risky_flags_clear,
+            evidence="status.governance",
+        ),
+        _check(
+            "stage_not_marked_closed_by_review",
+            passed=True,
+            evidence="completion_review_is_read_only",
+        ),
+    ]
+
+
 def _check(check_id: str, *, passed: bool, evidence: str) -> dict[str, Any]:
     return {
         "id": check_id,
@@ -1953,6 +2241,13 @@ def _safe_forge_handoff_action(value: Any) -> str:
     return "review_forge_handoff"
 
 
+def _safe_stage11_closure_decision(value: Any) -> str:
+    text = _safe_text(value)
+    if text in {"close_stage11", "do_not_close_stage11", "needs_more_evidence"}:
+        return text
+    return "needs_more_evidence"
+
+
 def _teaching_session_receipt_path() -> Path:
     return data_dir() / "logs" / "apprenticeship" / "teaching_session_receipts.jsonl"
 
@@ -1967,6 +2262,10 @@ def _skillization_artifact_receipt_path() -> Path:
 
 def _forge_handoff_receipt_path() -> Path:
     return data_dir() / "logs" / "apprenticeship" / "forge_handoff_receipts.jsonl"
+
+
+def _stage11_operator_stage_closure_decision_path() -> Path:
+    return data_dir() / "logs" / "apprenticeship" / "stage11_operator_stage_closure_decisions.jsonl"
 
 
 def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:
@@ -2005,6 +2304,22 @@ def _safe_limit(value: Any, *, default: int) -> int:
     except Exception:
         parsed = default
     return max(1, min(parsed, 100))
+
+
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _as_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _safe_int(value: Any) -> int:
+    try:
+        parsed = int(value)
+    except Exception:
+        return 0
+    return parsed
 
 
 def _redacted_text(value: Any) -> str:

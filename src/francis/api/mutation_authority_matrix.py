@@ -168,6 +168,17 @@ _RULES: tuple[AuthorityRule, ...] = (
         ),
     ),
     AuthorityRule(
+        family="apprenticeship",
+        prefixes=("/apprenticeship/stage-closure-decision",),
+        required_actor="payload.actor",
+        required_scope="apprenticeship.stage11.closure.write",
+        approval_requirement="this is the Stage 11 operator closure decision route after completion review readiness",
+        receipt_behavior="Stage 11 Apprenticeship operator stage closure decision receipt",
+        denial_behavior="api_permission_denied via permission_gate before stage closure receipt write",
+        governance_maturity="permission_gated",
+        notes="Closure receipt does not mutate runtime stage state, write memory, promote to Forge, or grant authority.",
+    ),
+    AuthorityRule(
         family="away",
         prefixes=("/away/stage-closure-decision",),
         required_actor="payload.actor",

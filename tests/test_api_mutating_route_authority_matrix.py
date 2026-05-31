@@ -203,6 +203,16 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
     assert "permission_gate" in apprenticeship_forge_handoff["denial_behavior"]
     assert "does not write a Forge proposal" in apprenticeship_forge_handoff["notes"]
 
+    apprenticeship_closure = entries["/apprenticeship/stage-closure-decision"]
+    assert apprenticeship_closure["family"] == "apprenticeship"
+    assert apprenticeship_closure["required_actor"] == "payload.actor"
+    assert apprenticeship_closure["required_scope"] == "apprenticeship.stage11.closure.write"
+    assert apprenticeship_closure["governance_maturity"] == "permission_gated"
+    assert "completion review readiness" in apprenticeship_closure["approval_requirement"]
+    assert "stage closure decision receipt" in apprenticeship_closure["receipt_behavior"]
+    assert "permission_gate" in apprenticeship_closure["denial_behavior"]
+    assert "does not mutate runtime stage state" in apprenticeship_closure["notes"]
+
     away_closure = entries["/away/stage-closure-decision"]
     assert away_closure["family"] == "away"
     assert away_closure["required_actor"] == "payload.actor"

@@ -8,18 +8,22 @@ from pydantic import BaseModel, Field
 from francis.apprenticeship import (
     APPRENTICESHIP_FORGE_HANDOFF_WRITE_SCOPE,
     APPRENTICESHIP_REPLAY_RECEIPT_WRITE_SCOPE,
+    APPRENTICESHIP_STAGE_CLOSURE_SCOPE,
     APPRENTICESHIP_SKILLIZATION_ARTIFACT_WRITE_SCOPE,
     APPRENTICESHIP_TEACHING_SESSION_WRITE_SCOPE,
     apprenticeship_forge_handoff_contract,
     apprenticeship_forge_handoff_receipts,
     apprenticeship_live_teaching_session_ux,
+    apprenticeship_completion_review,
     apprenticeship_replay_receipts,
     apprenticeship_replay_generalization_contract,
     apprenticeship_skillization_artifact_receipts,
     apprenticeship_skillization_artifact_contract,
     apprenticeship_status_snapshot,
+    apprenticeship_stage11_operator_stage_closure_decision_readback,
     apprenticeship_teaching_session_contract,
     apprenticeship_teaching_session_receipts,
+    record_apprenticeship_stage11_operator_stage_closure_decision,
     record_apprenticeship_replay_receipt,
     record_apprenticeship_forge_handoff_receipt,
     record_apprenticeship_skillization_artifact_receipt,
@@ -83,6 +87,13 @@ class ApprenticeshipForgeHandoffReceiptIn(BaseModel):
     test_candidate_review: str = Field(default="", max_length=500)
     promotion_boundary: str = Field(default="", max_length=500)
     explicit_promotion_decision: str = Field(default="", max_length=240)
+    notes: str = Field(default="", max_length=500)
+
+
+class ApprenticeshipStage11ClosureDecisionIn(BaseModel):
+    actor: str = Field(default="", max_length=240)
+    reason: str = Field(default="", max_length=500)
+    decision: str = Field(default="needs_more_evidence", max_length=80)
     notes: str = Field(default="", max_length=500)
 
 
@@ -177,6 +188,16 @@ def skillization_artifact_receipts(limit: int = 20) -> dict[str, Any]:
 @router.get("/forge-handoff-receipts")
 def forge_handoff_receipts(limit: int = 20) -> dict[str, Any]:
     return apprenticeship_forge_handoff_receipts(limit=limit)
+
+
+@router.get("/completion-review")
+def completion_review() -> dict[str, Any]:
+    return apprenticeship_completion_review()
+
+
+@router.get("/stage-closure-decisions")
+def stage_closure_decisions(limit: int = 20) -> dict[str, Any]:
+    return apprenticeship_stage11_operator_stage_closure_decision_readback(limit=limit)
 
 
 @router.post("/teaching-session")
@@ -456,5 +477,71 @@ def forge_handoff_receipt(request: Request, payload: ApprenticeshipForgeHandoffR
         "next_smallest_truthful_gap": receipt.get(
             "next_smallest_truthful_gap",
             "stage11_forge_handoff_receipt_write_path",
+        ),
+    }
+
+
+@router.post("/stage-closure-decision")
+def stage_closure_decision(request: Request, payload: ApprenticeshipStage11ClosureDecisionIn) -> dict[str, Any]:
+    route = "/apprenticeship/stage-closure-decision"
+    permission = _write_permission(
+        payload.actor,
+        required_scope=APPRENTICESHIP_STAGE_CLOSURE_SCOPE,
+        route=route,
+        method="POST",
+    )
+    if not permission.allowed:
+        return _permission_denied(
+            permission,
+            required_scope=APPRENTICESHIP_STAGE_CLOSURE_SCOPE,
+            next_step="configure_apprenticeship_stage11_closure_write_scope_before_decision",
+        )
+
+    review = apprenticeship_completion_review()
+    receipt = record_apprenticeship_stage11_operator_stage_closure_decision(
+        actor=payload.actor,
+        reason=payload.reason,
+        decision=payload.decision,
+        review=review,
+        notes=payload.notes,
+    )
+    return {
+        "ok": bool(receipt.get("ok")),
+        "kind": "francis.stage11.apprenticeship.stage11_closure_decision.record",
+        "status": "recorded",
+        "source_id": "apprenticeship",
+        "receipt": receipt,
+        "receipt_id": receipt.get("receipt_id", ""),
+        "decision": receipt.get("decision", ""),
+        "stage11_closed_by_receipt": bool(receipt.get("stage11_closed_by_receipt")),
+        "completion_review_ready": bool(receipt.get("completion_review_ready")),
+        "marks_runtime_stage_state": bool(receipt.get("marks_runtime_stage_state")),
+        "writes_receipt": bool(receipt.get("writes_receipt")),
+        "writes_memory": bool(receipt.get("writes_memory")),
+        "writes_skill_artifact": bool(receipt.get("writes_skill_artifact")),
+        "writes_forge_proposal": bool(receipt.get("writes_forge_proposal")),
+        "runs_tools": bool(receipt.get("runs_tools")),
+        "runs_shell": bool(receipt.get("runs_shell")),
+        "runs_git": bool(receipt.get("runs_git")),
+        "starts_processes": bool(receipt.get("starts_processes")),
+        "grants_execution_authority": bool(receipt.get("grants_execution_authority")),
+        "grants_mutation_authority": bool(receipt.get("grants_mutation_authority")),
+        "governance": {
+            "required_scope": APPRENTICESHIP_STAGE_CLOSURE_SCOPE,
+            "route": str(request.url.path),
+            "explicit_operator_decision": True,
+            "stage_closure_decision": True,
+            "completion_review_ready": bool(receipt.get("completion_review_ready")),
+            "does_not_mutate_runtime_stage_state": True,
+            "does_not_write_memory": True,
+            "does_not_run_tools": True,
+            "does_not_run_shell": True,
+            "does_not_run_git": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": receipt.get(
+            "next_smallest_truthful_gap",
+            "stage11_stage_closure_decision",
         ),
     }
