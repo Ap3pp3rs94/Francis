@@ -23,6 +23,9 @@ KNOWLEDGE_FABRIC_COMPLETION_REVIEW_KIND = "francis.stage12.knowledge_fabric.comp
 KNOWLEDGE_FABRIC_STAGE_CLOSURE_DECISION_KIND = "francis.stage12.knowledge_fabric.stage12_closure_decision_receipt"
 KNOWLEDGE_FABRIC_STAGE_CLOSURE_DECISIONS_KIND = "francis.stage12.knowledge_fabric.stage12_closure_decision_receipts"
 KNOWLEDGE_FABRIC_STAGE_CLOSURE_SCOPE = "knowledge_fabric.stage12.closure.write"
+CONTINUITY_LEDGER_DEFAULT_RETENTION_POLICY = "continuity_ledger_trace_evidence"
+CONTINUITY_LEDGER_DEFAULT_RETENTION_CLASS = "local_continuity_log"
+CONTINUITY_LEDGER_DEFAULT_RETENTION_SOURCE = "continuity_ledger_source_default"
 
 
 def knowledge_fabric_status_snapshot() -> dict[str, Any]:
@@ -950,7 +953,7 @@ def _project_continuity_entry(item: dict[str, Any]) -> dict[str, Any]:
         ),
         observed_ts=_safe_int(item.get("ts")),
         trace_lineage=references,
-        retention=_retention_from(meta, item),
+        retention=_continuity_ledger_retention_from(meta, item, references=references),
         provenance=_provenance_from(item, meta),
     )
 
@@ -1061,6 +1064,27 @@ def _retention_from(meta: dict[str, Any], item: dict[str, Any]) -> dict[str, Any
                 retention[out_key] = _safe_int(value) if out_key == "ttl_seconds" else _redact_text(value)
                 break
     return retention
+
+
+def _continuity_ledger_retention_from(
+    meta: dict[str, Any],
+    item: dict[str, Any],
+    *,
+    references: dict[str, str],
+) -> dict[str, Any]:
+    retention = _retention_from(meta, item)
+    if retention:
+        return retention
+    if any(
+        _safe_text(references.get(key)) for key in ("mission_id", "operation_id", "trace_id", "run_id", "artifact_dir")
+    ):
+        return {
+            "policy": CONTINUITY_LEDGER_DEFAULT_RETENTION_POLICY,
+            "class": CONTINUITY_LEDGER_DEFAULT_RETENTION_CLASS,
+            "source": CONTINUITY_LEDGER_DEFAULT_RETENTION_SOURCE,
+            "defaulted": True,
+        }
+    return {}
 
 
 def _provenance_from(item: dict[str, Any], meta: dict[str, Any]) -> dict[str, str]:
@@ -1281,6 +1305,8 @@ def _retention_model_item(item: dict[str, Any]) -> dict[str, Any]:
         _first_text(retention.get("until"), retention.get("retention_until"), retention.get("expires_at"))
     )
     ttl_seconds = _safe_int(retention.get("ttl_seconds"))
+    retention_source = _redact_text(_first_text(retention.get("source"), retention.get("retention_source")))
+    retention_defaulted = retention.get("defaulted") is True or _safe_text(retention.get("defaulted")).lower() == "true"
     retention_declared = bool(retention_policy or retention_class or retention_until or ttl_seconds > 0)
     return {
         "citation_id": _redact_text(item.get("citation_id")),
@@ -1292,6 +1318,8 @@ def _retention_model_item(item: dict[str, Any]) -> dict[str, Any]:
         "retention_class": retention_class,
         "retention_until": retention_until,
         "ttl_seconds": ttl_seconds,
+        "retention_source": retention_source,
+        "retention_defaulted": retention_defaulted,
         "retention_declared": retention_declared,
         "retention_status": "declared" if retention_declared else "missing",
         "retention": {
@@ -1299,6 +1327,8 @@ def _retention_model_item(item: dict[str, Any]) -> dict[str, Any]:
             "class": retention_class,
             "until": retention_until,
             "ttl_seconds": ttl_seconds,
+            "source": retention_source,
+            "defaulted": retention_defaulted,
         },
         "observed_ts": _safe_int(item.get("observed_ts")),
         "redacted": True,

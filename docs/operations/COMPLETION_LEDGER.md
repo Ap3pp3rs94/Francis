@@ -49387,6 +49387,58 @@ Latest validation for Stage 13 visible trust calibration surface:
 - `npm run test` from `apps/chat_ui/`
   Result: `passed; 179 passed`
 
+### 2026-05-31 - Stage 13 runtime evaluator unblocked by receipt-backed Stage 12 closure
+
+Roadmap area: Stage 12 / Knowledge Fabric into Stage 13 / Trust Calibration,
+local evidence retention and receipt-backed stage gating.
+
+Material change:
+
+- Continuity-ledger evidence projected by Knowledge Fabric now receives a
+  visible source-level retention default only when the ledger entry has
+  trace, operation, mission, run, or artifact lineage and lacks explicit
+  record-level retention fields.
+- The default is reported as
+  `policy=continuity_ledger_trace_evidence`,
+  `class=local_continuity_log`,
+  `source=continuity_ledger_source_default`, and `defaulted=true`.
+- Explicit retention metadata still wins; this does not mutate historical
+  ledger rows, write memory, write an index, delete data, mutate retention,
+  run tools, run shell, run git, or grant authority.
+- Live local governed receipts were written through existing API paths:
+  Stage 11 closure receipt `apprenticeship_stage11_closure_bd507355a2dd` and
+  Stage 12 closure receipt `knowledge_fabric_stage12_closure_dae9403bdc91`.
+- After those receipts, live `/trust-calibration/status` reports
+  `status=stage13_runtime_claim_evaluator_ready`, `ready_count=5`,
+  `required_count=5`, `runtime_claim_integration_ready=true`, and
+  `next_smallest_truthful_gap=stage13_ui_state_coherence`.
+
+Latest validation for Stage 13 runtime evaluator unblock:
+
+- `python -m pytest tests/test_api_knowledge_fabric.py
+  tests/test_api_trust_calibration.py -q --tb=short --maxfail=1`
+  Result: `passed`
+- `python -m mypy src/francis/knowledge_fabric.py
+  src/francis/api/routes/knowledge_fabric.py`
+  Result: `passed`
+- `python -m ruff check src/francis/knowledge_fabric.py
+  tests/test_api_knowledge_fabric.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/knowledge_fabric.py
+  tests/test_api_knowledge_fabric.py`
+  Result: `passed`
+- Live local API readback on `127.0.0.1:8001` after restart:
+  GET `/knowledge-fabric/stage-closure-decisions`,
+  GET `/knowledge-fabric/completion-review?limit=25`, GET
+  `/trust-calibration/status`, and POST `/trust-calibration/evaluate-claim`.
+  Result: `stage12_readback_status=closed;
+  stage12_latest_receipt=knowledge_fabric_stage12_closure_dae9403bdc91;
+  completion_review_ready=true; retention_declared_count=9;
+  retention_missing_count=0; trust_status=stage13_runtime_claim_evaluator_ready;
+  trust_ready_count=5; trust_required_count=5;
+  runtime_claim_integration_ready=true; evaluation_status=evaluated;
+  evaluation_strength=likely; evaluation_next=stage13_ui_state_coherence`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

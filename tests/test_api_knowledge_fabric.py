@@ -559,6 +559,61 @@ def test_knowledge_fabric_artifact_index_projection_projects_local_citations(
     assert closed_review["next_smallest_truthful_gap"] == "stage12_ledger_closure"
 
 
+def test_knowledge_fabric_retention_model_defaults_continuity_ledger_trace_retention(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage11_closure_receipt(data_root, receipt_id="apprenticeship_stage11_closure_retention_default_test")
+
+    from francis.chat.continuity.ledger import append
+
+    append(
+        "assistant",
+        "Continuity ledger default retention evidence token=ledgerdefaultsecret123",
+        {
+            "source": "unit_test",
+            "mission_id": "mission-ledger-default",
+            "operation_id": "op-ledger-default",
+            "trace_id": "trace-ledger-default",
+            "run_id": "run-ledger-default",
+            "artifact_dir": "data/artifacts/ledger-default",
+            "scope": "mission.loop",
+            "operation_status": "succeeded",
+        },
+    )
+
+    client = TestClient(create_app())
+    response = client.get("/knowledge-fabric/retention-model?query=default&limit=5")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["status"] == "ready"
+    assert body["retention_model_ready"] is True
+    assert body["total"] == 1
+    assert body["retention_declared_count"] == 1
+    assert body["retention_missing_count"] == 0
+    assert body["retention_policy_counts"] == {"continuity_ledger_trace_evidence": 1}
+    assert body["mutates_retention"] is False
+    assert body["writes_index"] is False
+    assert body["writes_memory"] is False
+
+    item = body["items"][0]
+    assert item["source_route"] == "/continuity/ledger"
+    assert item["reference_id"] == "trace-ledger-default"
+    assert item["retention_policy"] == "continuity_ledger_trace_evidence"
+    assert item["retention_class"] == "local_continuity_log"
+    assert item["retention_source"] == "continuity_ledger_source_default"
+    assert item["retention_defaulted"] is True
+    assert item["retention_declared"] is True
+    assert item["retention_status"] == "declared"
+    assert item["retention"]["source"] == "continuity_ledger_source_default"
+    assert item["retention"]["defaulted"] is True
+    assert "ledgerdefaultsecret123" not in json.dumps(body, sort_keys=True)
+
+
 def test_knowledge_fabric_artifact_index_projection_blocks_without_stage11_closure(
     monkeypatch,
     tmp_path: Path,
