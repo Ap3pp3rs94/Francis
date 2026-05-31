@@ -4,6 +4,38 @@ import json
 from pathlib import Path
 
 
+def test_executor_lock_writes_lease_acquire_deny_and_release_receipts(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from francis.agent import executor
+
+    assert executor._try_acquire_lock("tsk_lease_receipt", "worker-1", stale_seconds=3600) is True
+    assert executor._try_acquire_lock("tsk_lease_receipt", "worker-2", stale_seconds=3600) is False
+    executor._release_lock("tsk_lease_receipt")
+
+    receipt_dir = data_root / "artifacts" / "executor_lease_receipts"
+    receipts = [
+        json.loads(path.read_text(encoding="utf-8"))
+        for path in sorted(receipt_dir.glob("*.json"), key=lambda item: item.stat().st_mtime)
+    ]
+
+    assert [item["kind"] for item in receipts] == [
+        "executor.lease.receipt",
+        "executor.lease.receipt",
+        "executor.lease.receipt",
+    ]
+    assert [item["decision"] for item in receipts] == ["acquired", "denied", "released"]
+    assert [item["reason"] for item in receipts] == ["lock_acquired", "active_lock_exists", "lock_released"]
+    assert receipts[0]["worker_id"] == "worker-1"
+    assert receipts[1]["worker_id"] == "worker-2"
+    assert receipts[2]["worker_id"] == "worker-1"
+    assert all(item["task_id"] == "tsk_lease_receipt" for item in receipts)
+    assert all(item["governance"]["lease_receipt"] is True for item in receipts)
+    assert all(item["governance"]["execution_authority"] is False for item in receipts)
+    assert not executor.lock_path("tsk_lease_receipt").exists()
+
+
 def test_executor_status_audit_preserves_receipt_approval_reference(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

@@ -239,6 +239,10 @@ def lock_path(task_id: str) -> Path:
     return task_dir(task_id) / LOCK_FILENAME
 
 
+def _lease_receipts_dir() -> Path:
+    return data_dir() / "artifacts" / "executor_lease_receipts"
+
+
 def load_task(task_id: str) -> dict[str, Any]:
     path = record_path(task_id)
     if not path.exists():
@@ -260,8 +264,26 @@ def _try_acquire_lock(task_id: str, worker_id: str, *, stale_seconds: int = 3600
         try:
             age = time.time() - path.stat().st_mtime
             if age <= stale_seconds:
+                _write_lease_receipt(
+                    task_id=task_id,
+                    worker_id=worker_id,
+                    decision="denied",
+                    reason="active_lock_exists",
+                    path=path,
+                    stale_seconds=stale_seconds,
+                    stale_age_seconds=int(age),
+                )
                 return False
             path.unlink(missing_ok=True)  # type: ignore[arg-type]
+            _write_lease_receipt(
+                task_id=task_id,
+                worker_id=worker_id,
+                decision="reclaimed",
+                reason="stale_lock_reclaimed",
+                path=path,
+                stale_seconds=stale_seconds,
+                stale_age_seconds=int(age),
+            )
         except Exception:
             return False
 
@@ -272,16 +294,84 @@ def _try_acquire_lock(task_id: str, worker_id: str, *, stale_seconds: int = 3600
             os.write(fd, json.dumps(payload).encode("utf-8"))
         finally:
             os.close(fd)
+        _write_lease_receipt(
+            task_id=task_id,
+            worker_id=worker_id,
+            decision="acquired",
+            reason="lock_acquired",
+            path=path,
+            stale_seconds=stale_seconds,
+        )
         return True
     except Exception:
+        _write_lease_receipt(
+            task_id=task_id,
+            worker_id=worker_id,
+            decision="denied",
+            reason="lock_acquire_failed",
+            path=path,
+            stale_seconds=stale_seconds,
+        )
         return False
 
 
 def _release_lock(task_id: str) -> None:
     path = lock_path(task_id)
     try:
+        worker_id = ""
+        if path.exists():
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+                if isinstance(payload, dict):
+                    worker_id = _safe_str(payload.get("worker_id")).strip()
+            except Exception:
+                worker_id = ""
+            _write_lease_receipt(
+                task_id=task_id,
+                worker_id=worker_id,
+                decision="released",
+                reason="lock_released",
+                path=path,
+                stale_seconds=3600,
+            )
         if path.exists():
             path.unlink()  # type: ignore[arg-type]
+    except Exception:
+        pass
+
+
+def _write_lease_receipt(
+    *,
+    task_id: str,
+    worker_id: str,
+    decision: str,
+    reason: str,
+    path: Path,
+    stale_seconds: int,
+    stale_age_seconds: int | None = None,
+) -> None:
+    try:
+        receipt_id = f"exec_lease_{uuid.uuid4().hex[:16]}"
+        payload: dict[str, Any] = {
+            "kind": "executor.lease.receipt",
+            "receipt_id": receipt_id,
+            "ts": _utc_now_iso(),
+            "task_id": _safe_str(task_id).strip(),
+            "worker_id": _safe_str(worker_id).strip(),
+            "decision": _safe_str(decision).strip(),
+            "reason": _safe_str(reason).strip(),
+            "lock_path": str(path),
+            "stale_seconds": int(stale_seconds),
+            "governance": {
+                "lease_receipt": True,
+                "execution_authority": False,
+                "approval_authority": False,
+                "mutation_authority_granted": False,
+            },
+        }
+        if stale_age_seconds is not None:
+            payload["stale_age_seconds"] = int(stale_age_seconds)
+        _atomic_write_json(_lease_receipts_dir() / f"{receipt_id}.json", payload)
     except Exception:
         pass
 

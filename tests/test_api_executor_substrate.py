@@ -73,7 +73,7 @@ def test_executor_substrate_status_starts_readonly_after_stage7_closure_receipt(
     assert body["status"] == "substrate_contract_ready"
     assert body["stage7_closed_by_receipt"] is True
     assert body["stage7_next_smallest_truthful_gap"] == "stage7_ledger_closure"
-    assert body["next_smallest_truthful_gap"] == "stage8_lease_receipt_readback"
+    assert body["next_smallest_truthful_gap"] == "stage8_bounded_retry_contract"
     assert body["stage8_done_ready"] is False
     assert body["ready_count"] == 4
     assert body["required_count"] == 6
@@ -240,9 +240,9 @@ def test_executor_leases_idempotency_review_projects_partial_contract(
     assert body["ttl_expiration_contract_ready"] is True
     assert body["idempotency_key_propagation_ready"] is True
     assert body["idempotency_dedup_enforcement_ready"] is True
-    assert body["lease_receipt_readback_ready"] is False
+    assert body["lease_receipt_readback_ready"] is True
     assert body["bounded_retry_contract_ready"] is False
-    assert body["ready_count"] == 6
+    assert body["ready_count"] == 7
     assert body["required_count"] == 8
 
     criteria = {item["id"]: item for item in body["criteria"]}
@@ -265,7 +265,8 @@ def test_executor_leases_idempotency_review_projects_partial_contract(
         "duplicate operation creation returns existing operation"
     )
     assert criteria["idempotency_dedup_enforcement"]["evidence"]["audit_event"] == "idempotency_reused"
-    assert criteria["lease_receipt_readback"]["ready"] is False
+    assert criteria["lease_receipt_readback"]["ready"] is True
+    assert criteria["lease_receipt_readback"]["evidence"]["receipt_kind"] == "executor.lease.receipt"
     assert criteria["bounded_retry_contract"]["ready"] is False
     assert criteria["non_authorizing_review_guard"]["ready"] is True
 
@@ -283,4 +284,4 @@ def test_executor_leases_idempotency_review_projects_partial_contract(
     assert body["governance"]["leases_idempotency_review"] is True
     assert body["governance"]["does_not_execute"] is True
     assert body["governance"]["does_not_grant_authority"] is True
-    assert body["next_smallest_truthful_gap"] == "stage8_lease_receipt_readback"
+    assert body["next_smallest_truthful_gap"] == "stage8_bounded_retry_contract"
