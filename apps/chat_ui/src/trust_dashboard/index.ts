@@ -333,6 +333,46 @@ export type TrustCalibrationStageClosureDecisionReadback = {
   governance?: Record<string, unknown>;
 };
 
+export type TrustCalibrationOperatorBrowserVisualReadbackRequest = {
+  actor?: string;
+  reason: string;
+  claim_text?: string;
+  surface_id?: string;
+  browser_name?: string;
+  viewport?: string;
+  artifact_paths?: string[];
+  claim_guard_visible: boolean;
+  missing_verification_visible: boolean;
+  forbidden_language_visible: boolean;
+  side_effect_guard_visible: boolean;
+  next_gap_visible: boolean;
+};
+
+export type TrustCalibrationOperatorBrowserVisualReadbackReceipt = {
+  ok: boolean;
+  status: string;
+  receipt_id: string;
+  reason: string;
+  actor: string;
+  operator_browser_visual_readback_observed: boolean;
+  claim_guard_visible: boolean;
+  missing_verification_visible: boolean;
+  forbidden_language_visible: boolean;
+  side_effect_guard_visible: boolean;
+  next_gap_visible: boolean;
+  writes_receipt: boolean;
+  writes_memory: boolean;
+  runs_tools: boolean;
+  runs_shell: boolean;
+  runs_git: boolean;
+  launches_browser: boolean;
+  captures_screen: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+  next_smallest_truthful_gap: string;
+  governance?: Record<string, unknown>;
+};
+
 const DEFAULT_TRUST_MUTATION_ACTOR = "chat_ui.trust";
 
 export class TrustApiError extends Error {
@@ -862,6 +902,37 @@ function parseTrustCalibrationStageClosureDecisionReadback(
   };
 }
 
+function parseTrustCalibrationOperatorBrowserVisualReadbackReceipt(
+  raw: unknown,
+): TrustCalibrationOperatorBrowserVisualReadbackReceipt | null {
+  if (!isRecord(raw)) return null;
+
+  return {
+    ok: safeBool(raw.ok, false),
+    status: safeString(raw.status, ""),
+    receipt_id: safeString(raw.receipt_id, ""),
+    reason: safeString(raw.reason, ""),
+    actor: safeString(raw.actor, ""),
+    operator_browser_visual_readback_observed: safeBool(raw.operator_browser_visual_readback_observed, false),
+    claim_guard_visible: safeBool(raw.claim_guard_visible, false),
+    missing_verification_visible: safeBool(raw.missing_verification_visible, false),
+    forbidden_language_visible: safeBool(raw.forbidden_language_visible, false),
+    side_effect_guard_visible: safeBool(raw.side_effect_guard_visible, false),
+    next_gap_visible: safeBool(raw.next_gap_visible, false),
+    writes_receipt: safeBool(raw.writes_receipt, false),
+    writes_memory: safeBool(raw.writes_memory, false),
+    runs_tools: safeBool(raw.runs_tools, false),
+    runs_shell: safeBool(raw.runs_shell, false),
+    runs_git: safeBool(raw.runs_git, false),
+    launches_browser: safeBool(raw.launches_browser, false),
+    captures_screen: safeBool(raw.captures_screen, false),
+    grants_execution_authority: safeBool(raw.grants_execution_authority, false),
+    grants_mutation_authority: safeBool(raw.grants_mutation_authority, false),
+    next_smallest_truthful_gap: safeString(raw.next_smallest_truthful_gap, ""),
+    governance: isRecord(raw.governance) ? (raw.governance as Record<string, unknown>) : undefined,
+  };
+}
+
 /* -------------------------------------------------------------------------------------------------
  * endpoints (overrideable)
  * ------------------------------------------------------------------------------------------------- */
@@ -879,6 +950,7 @@ export type TrustEndpoints = {
   claimEvaluation: () => string[];
   completionReview: () => string[];
   stageClosureDecisions: (q?: { limit?: number }) => string[];
+  operatorBrowserVisualReadback: () => string[];
 
   /**
    * Mutations (approval/policy gated server-side).
@@ -932,6 +1004,7 @@ export function defaultTrustEndpoints(): TrustEndpoints {
       const qs = encodeQuery({ limit: q?.limit });
       return [`/trust-calibration/stage-closure-decisions${qs}`];
     },
+    operatorBrowserVisualReadback: () => ["/trust-calibration/operator-browser-visual-readback"],
 
     adjust: () => ["/trust/adjust", "/trust/mutate", "/trust/set", "/system/trust/adjust", "/system/trust/mutate"],
   };
@@ -1263,6 +1336,32 @@ export class TrustClient {
     }
     if (!parsed.ok) {
       throw new TrustApiError(parsed.status || "Trust calibration stage closure decision readback failed.", {
+        status: res.status,
+      });
+    }
+    return parsed;
+  }
+
+  async recordTrustCalibrationOperatorBrowserVisualReadback(
+    req: TrustCalibrationOperatorBrowserVisualReadbackRequest,
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<TrustCalibrationOperatorBrowserVisualReadbackReceipt> {
+    if (!this.mutationsEnabled) {
+      throw new Error("TrustClient.recordTrustCalibrationOperatorBrowserVisualReadback is disabled (mutationsEnabled=false).");
+    }
+
+    const body = {
+      ...req,
+      actor: req.actor?.trim() || DEFAULT_TRUST_MUTATION_ACTOR,
+    };
+    const { json, res } = await this.fetchFirstOk(this.endpoints.operatorBrowserVisualReadback(), {
+      ...this.init(opts),
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+    const parsed = parseTrustCalibrationOperatorBrowserVisualReadbackReceipt(json);
+    if (!parsed) {
+      throw new TrustApiError("Invalid trust calibration browser visual readback response.", {
         status: res.status,
       });
     }

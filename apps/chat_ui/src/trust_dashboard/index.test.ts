@@ -270,6 +270,97 @@ test("TrustClient reads Stage 13 completion review and closure receipts without 
   }
 });
 
+test("TrustClient records explicit browser visual readback through opt-in mutation path", async () => {
+  let capturedUrl = "";
+  let capturedMethod = "";
+  let capturedBody: Record<string, unknown> | null = null;
+  const restoreFetch = installFetch(async (url, init) => {
+    capturedUrl = url;
+    capturedMethod = String(init?.method ?? "GET");
+    capturedBody = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+    return jsonResponse({
+      ok: true,
+      status: "recorded",
+      receipt_id: "trust_calibration_browser_visual_ui_test",
+      actor: "chat_ui.trust_calibration",
+      reason: "operator_clicked_stage13_browser_visual_readback_in_orb_shell",
+      operator_browser_visual_readback_observed: true,
+      claim_guard_visible: true,
+      missing_verification_visible: true,
+      forbidden_language_visible: true,
+      side_effect_guard_visible: true,
+      next_gap_visible: true,
+      writes_receipt: true,
+      writes_memory: false,
+      runs_tools: false,
+      runs_shell: false,
+      runs_git: false,
+      launches_browser: false,
+      captures_screen: false,
+      grants_execution_authority: false,
+      grants_mutation_authority: false,
+      next_smallest_truthful_gap: "stage13_completion_review",
+      governance: {
+        required_scope: "trust_calibration.browser_visual_readback.write",
+        records_supplied_visual_readback_only: true,
+      },
+    });
+  });
+
+  try {
+    const readOnlyClient = new TrustClient("http://127.0.0.1:8000", { retry: { retries: 0 } });
+    await assert.rejects(
+      () =>
+        readOnlyClient.recordTrustCalibrationOperatorBrowserVisualReadback({
+          reason: "blocked",
+          claim_guard_visible: true,
+          missing_verification_visible: true,
+          forbidden_language_visible: true,
+          side_effect_guard_visible: true,
+          next_gap_visible: true,
+        }),
+      /mutationsEnabled=false/,
+    );
+
+    const client = new TrustClient("http://127.0.0.1:8000", { mutationsEnabled: true, retry: { retries: 0 } });
+    const receipt = await client.recordTrustCalibrationOperatorBrowserVisualReadback({
+      actor: "chat_ui.trust_calibration",
+      reason: "operator_clicked_stage13_browser_visual_readback_in_orb_shell",
+      claim_text: "Stage 13 trust calibration claim state is visible in the operator shell",
+      surface_id: "francis-trust-calibration",
+      browser_name: "test browser",
+      viewport: "1440x1200",
+      artifact_paths: [],
+      claim_guard_visible: true,
+      missing_verification_visible: true,
+      forbidden_language_visible: true,
+      side_effect_guard_visible: true,
+      next_gap_visible: true,
+    });
+
+    assert.equal(capturedUrl, "http://127.0.0.1:8000/trust-calibration/operator-browser-visual-readback");
+    assert.equal(capturedMethod, "POST");
+    assert.equal(capturedBody?.actor, "chat_ui.trust_calibration");
+    assert.equal(capturedBody?.surface_id, "francis-trust-calibration");
+    assert.equal(capturedBody?.claim_guard_visible, true);
+    assert.equal(capturedBody?.missing_verification_visible, true);
+    assert.equal(receipt.ok, true);
+    assert.equal(receipt.receipt_id, "trust_calibration_browser_visual_ui_test");
+    assert.equal(receipt.operator_browser_visual_readback_observed, true);
+    assert.equal(receipt.writes_receipt, true);
+    assert.equal(receipt.writes_memory, false);
+    assert.equal(receipt.runs_tools, false);
+    assert.equal(receipt.runs_shell, false);
+    assert.equal(receipt.launches_browser, false);
+    assert.equal(receipt.captures_screen, false);
+    assert.equal(receipt.grants_execution_authority, false);
+    assert.equal(receipt.grants_mutation_authority, false);
+    assert.equal(receipt.governance?.required_scope, "trust_calibration.browser_visual_readback.write");
+  } finally {
+    restoreFetch();
+  }
+});
+
 test("presentTrustCalibrationClaimEvaluation preserves blocked and missing-verification obligations", () => {
   const presentation = presentTrustCalibrationClaimEvaluation({
     ok: true,

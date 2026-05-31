@@ -894,6 +894,8 @@ def trust_calibration_ui_state_coherence_review() -> dict[str, Any]:
                 "trustCalibrationCompletionReview?.stage_closure_decision_required",
                 "trustCalibrationStageClosureReadback.stage13_closed_by_receipt",
                 "trustCalibrationCompletionBlockers",
+                "recordTrustCalibrationBrowserVisualReadback",
+                "Record visual readback",
             ],
         ),
         _source_contract(

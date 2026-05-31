@@ -71,6 +71,8 @@ def _write_stage13_ui_coherence_sources(repo_root: Path) -> None:
         trustCalibrationCompletionReview?.stage_closure_decision_required;
         trustCalibrationStageClosureReadback.stage13_closed_by_receipt;
         trustCalibrationCompletionBlockers;
+        recordTrustCalibrationBrowserVisualReadback;
+        Record visual readback;
         """,
         encoding="utf-8",
     )

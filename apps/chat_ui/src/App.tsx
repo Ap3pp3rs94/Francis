@@ -4125,6 +4125,10 @@ function SystemPanel(props: {
   const lensClient = useMemo(() => new LensClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const telemetryClient = useMemo(() => new TelemetryClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const trustClient = useMemo(() => new TrustClient(resolvedBaseUrl), [resolvedBaseUrl]);
+  const trustMutationClient = useMemo(
+    () => new TrustClient(resolvedBaseUrl, { mutationsEnabled: true }),
+    [resolvedBaseUrl],
+  );
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [infoError, setInfoError] = useState<string | null>(null);
   const [health, setHealth] = useState<SystemHealth | null>(null);
@@ -4186,6 +4190,11 @@ function SystemPanel(props: {
   const [trustCalibrationStageClosureReadbackLoadedAt, setTrustCalibrationStageClosureReadbackLoadedAt] = useState<
     number | null
   >(null);
+  const [trustCalibrationBrowserReadbackBusy, setTrustCalibrationBrowserReadbackBusy] = useState(false);
+  const [trustCalibrationBrowserReadbackNotice, setTrustCalibrationBrowserReadbackNotice] = useState<{
+    tone: "info" | "error";
+    text: string;
+  } | null>(null);
   const [telemetryFeedbackReview, setTelemetryFeedbackReview] = useState<TelemetryContextFeedbackReview | null>(null);
   const [telemetryFeedbackReviewError, setTelemetryFeedbackReviewError] = useState<string | null>(null);
   const [telemetryFeedbackReviewLoadedAt, setTelemetryFeedbackReviewLoadedAt] = useState<number | null>(null);
@@ -5196,6 +5205,66 @@ function SystemPanel(props: {
     telemetryError,
     trustClient,
     trustError,
+  ]);
+
+  const recordTrustCalibrationBrowserVisualReadback = useCallback(async () => {
+    setTrustCalibrationBrowserReadbackBusy(true);
+    setTrustCalibrationBrowserReadbackNotice(null);
+    try {
+      const nextGap =
+        trustCalibrationCompletionReview?.next_smallest_truthful_gap ||
+        trustCalibrationPresentation.next_smallest_truthful_gap ||
+        "stage13_operator_browser_visual_readback";
+      const receipt = await trustMutationClient.recordTrustCalibrationOperatorBrowserVisualReadback({
+        actor: "chat_ui.trust_calibration",
+        reason: "operator_clicked_stage13_browser_visual_readback_in_orb_shell",
+        claim_text: "Stage 13 trust calibration claim state is visible in the operator shell",
+        surface_id: "francis-trust-calibration",
+        browser_name: window.navigator.userAgent,
+        viewport: `${window.innerWidth}x${window.innerHeight}`,
+        artifact_paths: [],
+        claim_guard_visible: true,
+        missing_verification_visible:
+          trustCalibrationMissingVerification.length > 0 || trustCalibrationCompletionBlockers.length > 0,
+        forbidden_language_visible: trustCalibrationForbiddenLanguage.length > 0,
+        side_effect_guard_visible: trustCalibrationPresentation.side_effects_denied,
+        next_gap_visible: Boolean(nextGap),
+      });
+
+      if (!receipt.ok || !receipt.operator_browser_visual_readback_observed) {
+        const requiredScope = safeString(receipt.governance?.required_scope).trim();
+        const reason = safeString(receipt.reason).trim() || safeString(receipt.status).trim() || "receipt_not_recorded";
+        setTrustCalibrationBrowserReadbackNotice({
+          tone: "error",
+          text: requiredScope
+            ? `Browser visual readback was not recorded: ${reason}; required scope ${requiredScope}.`
+            : `Browser visual readback was not recorded: ${reason}.`,
+        });
+        return;
+      }
+
+      setTrustCalibrationBrowserReadbackNotice({
+        tone: "info",
+        text: receipt.receipt_id
+          ? `Browser visual readback recorded as ${receipt.receipt_id}.`
+          : "Browser visual readback recorded.",
+      });
+      await refresh();
+    } catch (err) {
+      setTrustCalibrationBrowserReadbackNotice({ tone: "error", text: trustError(err) });
+    } finally {
+      setTrustCalibrationBrowserReadbackBusy(false);
+    }
+  }, [
+    refresh,
+    trustCalibrationCompletionBlockers.length,
+    trustCalibrationCompletionReview?.next_smallest_truthful_gap,
+    trustCalibrationForbiddenLanguage.length,
+    trustCalibrationMissingVerification.length,
+    trustCalibrationPresentation.next_smallest_truthful_gap,
+    trustCalibrationPresentation.side_effects_denied,
+    trustError,
+    trustMutationClient,
   ]);
 
   const recordTelemetryFeedbackMemoryQuality = useCallback(async () => {
@@ -12573,6 +12642,29 @@ function SystemPanel(props: {
                 <span style={badgeStyle("running")}>closure decision required</span>
               ) : null}
             </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+              <button
+                style={buttonStyle}
+                disabled={
+                  trustCalibrationBrowserReadbackBusy ||
+                  Boolean(trustCalibrationCompletionReview?.operator_browser_visual_readback_observed)
+                }
+                onClick={() => void recordTrustCalibrationBrowserVisualReadback()}
+              >
+                {trustCalibrationBrowserReadbackBusy ? "Recording readback" : "Record visual readback"}
+              </button>
+            </div>
+            {trustCalibrationBrowserReadbackNotice ? (
+              <div
+                style={{
+                  fontSize: 11,
+                  color: trustCalibrationBrowserReadbackNotice.tone === "error" ? "#ffcf9d" : THEME.text,
+                  marginTop: 6,
+                }}
+              >
+                {trustCalibrationBrowserReadbackNotice.text}
+              </div>
+            ) : null}
             <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8, overflowWrap: "anywhere" }}>
               next{" "}
               <code>
