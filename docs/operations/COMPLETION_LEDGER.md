@@ -47580,6 +47580,53 @@ Latest validation for Stage 9 Takeover operator closure decision:
   readback_closed=true; status_closed=true;
   status_next=stage9_ledger_closure`.
 
+### 2026-05-31 - Stage 10 away mode starts with read-only groundwork
+
+Roadmap area: Stage 10 / Away Mode, first readiness surface after Stage 9
+ledger closure.
+
+Material change:
+
+- Added read-only GET `/away/status`.
+- Added the Stage 10 Away status projection and mounted the Away API router.
+- The status projection requires the Stage 9 closure readback before entering
+  `stage10_groundwork_ready`.
+- It surfaces current control mode, Away declaration status, the Stage 9 closure
+  receipt id, and eight Away deliverables: Stage 9 backstop, Away mode
+  visibility, approvals queue visibility, mission return briefing source,
+  away-safe task classes, autonomy budgets, shift reports, and return briefing
+  flow.
+- Away status is explicitly non-authorizing: it does not start background work,
+  write receipts, write tasks, write memory, run tools, run shell, run git,
+  start processes, or grant execution/mutation authority.
+- The next smallest truthful gap is now
+  `stage10_away_safe_task_classes`.
+
+Latest validation for Stage 10 Away groundwork:
+
+- `python -m pytest tests/test_api_away.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 3 tests passed`
+- `python -m mypy src/francis/away.py
+  src/francis/api/routes/away.py src/francis/api/app.py`
+  Result: `passed`
+- `python -m ruff check src/francis/away.py
+  src/francis/api/routes/away.py src/francis/api/app.py tests/test_api_away.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/away.py
+  src/francis/api/routes/away.py src/francis/api/app.py tests/test_api_away.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed; 5 files already formatted`
+- Live local read-only route/readback:
+  GET `/away/status`.
+  Result: `status=stage10_groundwork_ready;
+  stage9_closed=true;
+  latest_stage9=takeover_stage9_closure_2291ffbd5472;
+  ready_count=4; required_count=8; away_ready=false;
+  next=stage10_away_safe_task_classes`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

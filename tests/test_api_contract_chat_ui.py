@@ -261,5 +261,6 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("POST", "/takeover/stage-closure-decision"),
         ("POST", "/takeover/panic-stop"),
         ("POST", "/takeover/handback-summary"),
+        ("GET", "/away/status"),
     ]
     _assert_has_endpoints(routes, endpoints)
