@@ -132,6 +132,12 @@ import {
   type TelemetryContextFeedbackReview,
   type TelemetryStatusSnapshot,
 } from "./telemetry";
+import {
+  TrustApiError,
+  TrustClient,
+  presentTrustCalibrationClaimEvaluation,
+  type TrustCalibrationClaimEvaluation,
+} from "./trust_dashboard";
 
 const DEFAULT_API = "http://127.0.0.1:8000";
 
@@ -4116,6 +4122,7 @@ function SystemPanel(props: {
   const reactorClient = useMemo(() => new ReactorClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const lensClient = useMemo(() => new LensClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const telemetryClient = useMemo(() => new TelemetryClient(resolvedBaseUrl), [resolvedBaseUrl]);
+  const trustClient = useMemo(() => new TrustClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [infoError, setInfoError] = useState<string | null>(null);
   const [health, setHealth] = useState<SystemHealth | null>(null);
@@ -4157,6 +4164,10 @@ function SystemPanel(props: {
   const [telemetryStatus, setTelemetryStatus] = useState<TelemetryStatusSnapshot | null>(null);
   const [telemetryStatusError, setTelemetryStatusError] = useState<string | null>(null);
   const [telemetryStatusLoadedAt, setTelemetryStatusLoadedAt] = useState<number | null>(null);
+  const [trustCalibrationEvaluation, setTrustCalibrationEvaluation] =
+    useState<TrustCalibrationClaimEvaluation | null>(null);
+  const [trustCalibrationEvaluationError, setTrustCalibrationEvaluationError] = useState<string | null>(null);
+  const [trustCalibrationEvaluationLoadedAt, setTrustCalibrationEvaluationLoadedAt] = useState<number | null>(null);
   const [telemetryFeedbackReview, setTelemetryFeedbackReview] = useState<TelemetryContextFeedbackReview | null>(null);
   const [telemetryFeedbackReviewError, setTelemetryFeedbackReviewError] = useState<string | null>(null);
   const [telemetryFeedbackReviewLoadedAt, setTelemetryFeedbackReviewLoadedAt] = useState<number | null>(null);
@@ -4569,6 +4580,14 @@ function SystemPanel(props: {
     return "Telemetry status request failed.";
   }, []);
 
+  const trustError = useCallback((err: unknown): string => {
+    if (err instanceof TrustApiError) {
+      return `${err.message}${err.status ? ` (HTTP ${err.status})` : ""}`;
+    }
+    if (err instanceof Error) return err.message;
+    return "Trust calibration request failed.";
+  }, []);
+
   const scrollOrbSection = useCallback((sectionId: string) => {
     window.requestAnimationFrame(() => {
       document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -4606,6 +4625,7 @@ function SystemPanel(props: {
         nextReactorDeadletters,
         nextLensStatus,
         nextTelemetryStatus,
+        nextTrustCalibrationEvaluation,
         nextTelemetryFeedbackReview,
         nextTelemetryFeedbackMemoryReadback,
         nextTelemetryFeedbackMemoryAssistancePolicy,
@@ -4652,6 +4672,18 @@ function SystemPanel(props: {
         reactorClient.listDeadletters({ limit: 6 }),
         lensClient.getStatus({ limit: 6 }),
         telemetryClient.getStatus(),
+        trustClient.evaluateClaim({
+          claim_text: "Stage 13 trust calibration claim state is visible in the operator shell",
+          claim_scope: "stage13_ui_state_coherence",
+          requested_claim_strength: "likely",
+          evidence: {
+            supporting_evidence: true,
+            recency_readback: true,
+            claim_scope_matches_evidence_scope: true,
+            missing_verification: ["operator_browser_visual_readback"],
+            next_smallest_truthful_gap: "stage13_ui_state_coherence",
+          },
+        }),
         telemetryClient.getContextFeedbackReview({ limit: 25 }),
         telemetryClient.getContextFeedbackMemoryRetrievalReadback({ limit: 20 }),
         telemetryClient.getContextFeedbackMemoryAssistancePolicy(),
@@ -4808,6 +4840,15 @@ function SystemPanel(props: {
       } else {
         setTelemetryStatusError(telemetryError(nextTelemetryStatus.reason));
         degradedFeeds.push("telemetry status");
+      }
+
+      if (nextTrustCalibrationEvaluation.status === "fulfilled") {
+        setTrustCalibrationEvaluation(nextTrustCalibrationEvaluation.value);
+        setTrustCalibrationEvaluationError(null);
+        setTrustCalibrationEvaluationLoadedAt(refreshStartedAt);
+      } else {
+        setTrustCalibrationEvaluationError(trustError(nextTrustCalibrationEvaluation.reason));
+        degradedFeeds.push("trust calibration");
       }
 
       if (nextTelemetryFeedbackReview.status === "fulfilled") {
@@ -5113,6 +5154,8 @@ function SystemPanel(props: {
     takeoverError,
     telemetryClient,
     telemetryError,
+    trustClient,
+    trustError,
   ]);
 
   const recordTelemetryFeedbackMemoryQuality = useCallback(async () => {
@@ -6912,6 +6955,19 @@ function SystemPanel(props: {
     : telemetryStatus
       ? `${telemetryStatus.active_source_total} of ${telemetryStatus.source_total} telemetry source${telemetryStatus.source_total === 1 ? "" : "s"} active; connector collection is ${telemetryStatus.active ? "active" : "inactive"}.`
       : "Stage 7 telemetry readback has not loaded yet.";
+  const trustCalibrationPresentation = useMemo(
+    () => presentTrustCalibrationClaimEvaluation(trustCalibrationEvaluation),
+    [trustCalibrationEvaluation],
+  );
+  const trustCalibrationStatus =
+    safeString(trustCalibrationEvaluation?.status).trim() ||
+    (trustCalibrationEvaluationError ? "unavailable" : trustCalibrationPresentation.signal);
+  const trustCalibrationDetail = trustCalibrationEvaluationError
+    ? `Stage 13 trust calibration evaluator could not refresh: ${trustCalibrationEvaluationError}`
+    : `${trustCalibrationPresentation.headline}: ${trustCalibrationPresentation.detail}`;
+  const trustCalibrationMissingVerification = trustCalibrationPresentation.missing_verification.slice(0, 4);
+  const trustCalibrationForbiddenLanguage = trustCalibrationPresentation.forbidden_surface_language.slice(0, 4);
+  const trustCalibrationAllowedLanguage = trustCalibrationPresentation.allowed_surface_language.slice(0, 3);
   const telemetryFeedbackStatus =
     safeString(telemetryFeedbackReview?.status).trim() || (telemetryFeedbackReviewError ? "unavailable" : "unloaded");
   const telemetryFeedbackTone = telemetryFeedbackReviewError
@@ -8198,6 +8254,16 @@ function SystemPanel(props: {
       actionLabel: "Inspect telemetry",
       onAction: () => scrollOrbSection("francis-telemetry-status"),
       detail: telemetryReadbackDetail,
+    },
+    {
+      id: "trust-calibration",
+      label: "Trust Calibration",
+      observedAt: trustCalibrationEvaluationLoadedAt,
+      error: trustCalibrationEvaluationError,
+      staleAfterSeconds: 300,
+      actionLabel: "Inspect trust",
+      onAction: () => scrollOrbSection("francis-trust-calibration"),
+      detail: trustCalibrationDetail,
     },
     {
       id: "operations",
@@ -12380,6 +12446,9 @@ function SystemPanel(props: {
             <span style={badgeStyle(telemetryFeedbackMemoryAssistanceTrueExecutionTraceReviewTone)}>
               Execution trace {telemetryFeedbackMemoryAssistanceTrueExecutionTraceReviewStatus}
             </span>
+            <span style={badgeStyle(trustCalibrationPresentation.badge_status)}>
+              Trust calibration {trustCalibrationStatus}
+            </span>
             <span style={badgeStyle(continuation.tone)}>{continuation.label}</span>
           </div>
         </div>
@@ -12404,11 +12473,100 @@ function SystemPanel(props: {
             <div style={{ fontSize: 11, color: THEME.muted }}>Proactive mode</div>
             <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>{telemetry.proactiveLabel}</div>
           </div>
+          <div
+            id="francis-trust-calibration"
+            style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}
+          >
+            <div style={{ fontSize: 11, color: THEME.muted }}>Stage 13 calibration</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+              <span style={badgeStyle(trustCalibrationPresentation.badge_status)}>
+                {trustCalibrationPresentation.badge_label}
+              </span>
+              {trustCalibrationPresentation.downgraded ? <span style={badgeStyle("blocked")}>downgraded</span> : null}
+              <span style={badgeStyle(trustCalibrationPresentation.side_effects_denied ? "running" : "blocked")}>
+                side effects {trustCalibrationPresentation.side_effects_denied ? "denied" : "unclear"}
+              </span>
+            </div>
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8, overflowWrap: "anywhere" }}>
+              next <code>{trustCalibrationPresentation.next_smallest_truthful_gap || "stage13_ui_state_coherence"}</code>
+            </div>
+            {trustCalibrationEvaluationLoadedAt ? (
+              <div style={{ fontSize: 11, color: THEME.muted, marginTop: 4 }}>
+                Loaded {toLocaleTime(trustCalibrationEvaluationLoadedAt)}
+              </div>
+            ) : null}
+          </div>
         </div>
 
         <div style={{ fontSize: 12, color: THEME.text, marginTop: 10 }}>{telemetry.detail}</div>
         <div style={{ fontSize: 12, color: telemetryStatusError ? "#ffcf9d" : THEME.text, marginTop: 8 }}>
           {telemetryReadbackDetail}
+        </div>
+        <div style={{ fontSize: 12, color: trustCalibrationEvaluationError ? "#ffcf9d" : THEME.text, marginTop: 8 }}>
+          {trustCalibrationDetail}
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+            gap: 8,
+            marginTop: 10,
+          }}
+        >
+          <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+            <div style={{ fontSize: 11, color: THEME.muted }}>Missing verification</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+              {trustCalibrationMissingVerification.length > 0 ? (
+                trustCalibrationMissingVerification.map((item) => (
+                  <span key={`trust-calibration-missing-${item}`} style={badgeStyle("dormant")}>
+                    {item}
+                  </span>
+                ))
+              ) : (
+                <span style={badgeStyle("running")}>none</span>
+              )}
+            </div>
+          </div>
+          <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+            <div style={{ fontSize: 11, color: THEME.muted }}>Forbidden language</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+              {trustCalibrationForbiddenLanguage.length > 0 ? (
+                trustCalibrationForbiddenLanguage.map((item) => (
+                  <span key={`trust-calibration-forbidden-${item}`} style={badgeStyle("blocked")}>
+                    {item}
+                  </span>
+                ))
+              ) : (
+                <span style={badgeStyle("running")}>none</span>
+              )}
+            </div>
+          </div>
+          <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+            <div style={{ fontSize: 11, color: THEME.muted }}>Allowed language</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+              {trustCalibrationAllowedLanguage.length > 0 ? (
+                trustCalibrationAllowedLanguage.map((item) => (
+                  <span key={`trust-calibration-allowed-${item}`} style={badgeStyle("running")}>
+                    {item}
+                  </span>
+                ))
+              ) : (
+                <span style={badgeStyle("dormant")}>not evaluated</span>
+              )}
+            </div>
+          </div>
+          <div style={{ border: `1px solid ${THEME.panelBorder}`, borderRadius: 10, padding: 10, background: "#121212" }}>
+            <div style={{ fontSize: 11, color: THEME.muted }}>Claim guards</div>
+            <div style={{ fontSize: 12, color: THEME.text, marginTop: 6 }}>
+              strong <code>{trustCalibrationPresentation.strong_claim_allowed ? "allowed" : "denied"}</code>
+              {" / "}blocked <code>{trustCalibrationPresentation.blocked_claim_required ? "required" : "false"}</code>
+            </div>
+            <div style={{ fontSize: 12, color: THEME.text, marginTop: 4 }}>
+              name gaps <code>{trustCalibrationPresentation.must_name_missing_verification ? "true" : "false"}</code>
+              {" / "}runtime ready{" "}
+              <code>{trustCalibrationPresentation.runtime_claim_integration_ready ? "true" : "false"}</code>
+            </div>
+          </div>
         </div>
         <div style={{ fontSize: 12, color: telemetryFeedbackReviewError ? "#ffcf9d" : THEME.text, marginTop: 8 }}>
           {telemetryFeedbackDetail}

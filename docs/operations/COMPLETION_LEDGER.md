@@ -49354,6 +49354,39 @@ Latest validation for Stage 13 trust calibration presentation:
 - `npm run test` from `apps/chat_ui/`
   Result: `passed; 179 passed`
 
+### 2026-05-31 - Stage 13 trust calibration is visible in the ORB shell
+
+Roadmap area: Stage 13 / Trust Calibration, UI and state coherence around
+confidence.
+
+Material change:
+
+- The main chat UI System/ORB panel now refreshes the Stage 13 trust
+  calibration evaluator alongside the existing governed readback feeds.
+- The Telemetry & Continuation surface now includes a visible Stage 13
+  calibration card with calibrated signal, downgrade badge, side-effect guard,
+  latest loaded time, and next truthful gap.
+- The same surface renders missing verification, forbidden surface language,
+  allowed surface language, and claim guard readbacks from the evaluator
+  presentation model.
+- The UI request is explicitly bounded to the claim
+  `Stage 13 trust calibration claim state is visible in the operator shell`,
+  requested as `likely`, and includes the missing verification
+  `operator_browser_visual_readback` so the shell does not treat the new card as
+  a finished stage-closure proof.
+- The card stays read-only. It does not write memory, write receipts, change UI
+  confidence, enforce runtime claims, or grant execution or mutation authority.
+
+Latest validation for Stage 13 visible trust calibration surface:
+
+- `npm run build` from `apps/chat_ui/`
+  Result: `passed`
+- `node --test --experimental-strip-types src/trust_dashboard/index.test.ts`
+  from `apps/chat_ui/`
+  Result: `passed; 6 passed`
+- `npm run test` from `apps/chat_ui/`
+  Result: `passed; 179 passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
