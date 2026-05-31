@@ -47670,6 +47670,49 @@ Latest validation for Stage 10 Away safe task classes:
   status_next=stage10_autonomy_budgets;
   review_next=stage10_autonomy_budgets`.
 
+### 2026-05-31 - Stage 10 autonomy budgets are bounded and non-activating
+
+Roadmap area: Stage 10 / Away Mode, autonomy budget contract before any Away
+execution.
+
+Material change:
+
+- Added read-only GET `/away/autonomy-budgets`.
+- Away now declares bounded budgets for each away-safe task class:
+  read-only monitoring, approval triage, shift-report drafting, and safe plan
+  preparation.
+- Each budget has bounded item and duration caps, stays limited to read-only or
+  draft-only effects, and requires operator approval plus explicit budget
+  activation before execution.
+- The budget contract explicitly reports `activates_away_autonomy=false`.
+- `/away/status` now marks `autonomy_budgets` ready and advances the next
+  smallest truthful gap to `stage10_shift_reports`.
+
+Latest validation for Stage 10 Away autonomy budgets:
+
+- `python -m pytest tests/test_api_away.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 5 tests passed`
+- `python -m mypy src/francis/away.py
+  src/francis/api/routes/away.py`
+  Result: `passed`
+- `python -m ruff check src/francis/away.py
+  src/francis/api/routes/away.py tests/test_api_away.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/away.py
+  src/francis/api/routes/away.py tests/test_api_away.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed; 4 files already formatted`
+- Live local read-only route/readback:
+  GET `/away/status` and GET `/away/autonomy-budgets`.
+  Result: `status=stage10_groundwork_ready;
+  budget_ready=true; budget_count=4;
+  activates=false; ready_count=6; required_count=8;
+  status_next=stage10_shift_reports;
+  review_next=stage10_shift_reports`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

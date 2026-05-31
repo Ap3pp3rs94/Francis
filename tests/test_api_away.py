@@ -92,14 +92,15 @@ def test_away_status_projects_stage10_groundwork_after_stage9_closure(monkeypatc
     assert body["routes"]["stage9_closure_readback"] == "/takeover/stage-closure-decisions"
     assert body["routes"]["operator_mode"] == "/system/operator_mode"
     assert body["routes"]["safe_task_classes"] == "/away/safe-task-classes"
-    assert body["next_smallest_truthful_gap"] == "stage10_autonomy_budgets"
+    assert body["routes"]["autonomy_budgets"] == "/away/autonomy-budgets"
+    assert body["next_smallest_truthful_gap"] == "stage10_shift_reports"
 
     deliverables = {item["id"]: item for item in body["deliverables"]}
     assert deliverables["stage9_ledger_closure_backstop"]["ready"] is True
     assert deliverables["away_mode_visibility"]["ready"] is True
     assert deliverables["approvals_queue_visibility"]["ready"] is True
     assert deliverables["away_safe_task_classes"]["ready"] is True
-    assert deliverables["autonomy_budgets"]["ready"] is False
+    assert deliverables["autonomy_budgets"]["ready"] is True
     assert deliverables["shift_reports"]["ready"] is False
     assert deliverables["return_briefing_flow"]["ready"] is False
 
@@ -159,4 +160,66 @@ def test_away_safe_task_classes_are_readonly_and_gated(monkeypatch, tmp_path: Pa
     assert checks["classes_declared"]["passed"] is True
     assert checks["effects_limited_to_read_or_draft"]["passed"] is True
     assert checks["execution_requires_future_budget_and_approval"]["passed"] is True
+    assert checks["risky_actions_denied"]["passed"] is True
+
+
+def test_away_autonomy_budgets_are_bounded_and_non_executing(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage9_closure_receipt(data_root, receipt_id="takeover_stage9_closure_budgets_test")
+
+    response = TestClient(create_app()).get("/away/autonomy-budgets")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "francis.stage10.away.autonomy_budgets"
+    assert body["status"] == "ready"
+    assert body["safe_task_classes_ready"] is True
+    assert body["autonomy_budgets_ready"] is True
+    assert body["budget_count"] == 4
+    assert body["activates_away_autonomy"] is False
+    assert body["writes_receipts"] is False
+    assert body["writes_tasks"] is False
+    assert body["writes_memory"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["starts_processes"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["governance"]["read_only"] is True
+    assert body["governance"]["autonomy_budget_contract_only"] is True
+    assert body["governance"]["does_not_activate_away_autonomy"] is True
+    assert body["governance"]["approval_required_before_execution"] is True
+    assert body["next_smallest_truthful_gap"] == "stage10_shift_reports"
+
+    budgets = {item["class_id"]: item for item in body["budgets"]}
+    assert set(budgets) == {
+        "approval_queue_triage",
+        "continuity_monitoring",
+        "safe_plan_preparation",
+        "shift_report_draft",
+    }
+    for item in budgets.values():
+        assert 0 < item["max_items"] <= 50
+        assert 0 < item["max_duration_minutes"] <= 120
+        assert item["allowed_effect"] in {"read_only", "read_only_priority_projection", "draft_only"}
+        assert item["may_execute_tools"] is False
+        assert item["may_run_shell"] is False
+        assert item["may_run_git"] is False
+        assert item["may_start_processes"] is False
+        assert item["may_write_memory"] is False
+        assert item["may_write_files"] is False
+        assert item["may_send_external_messages"] is False
+        assert item["may_decide_approvals"] is False
+        assert item["requires_operator_approval_for_execution"] is True
+        assert item["budget_activation_required"] is True
+
+    checks = {item["id"]: item for item in body["checks"]}
+    assert checks["safe_task_classes_ready"]["passed"] is True
+    assert checks["budgets_declared_for_each_safe_class"]["passed"] is True
+    assert checks["budgets_are_bounded"]["passed"] is True
+    assert checks["budget_effects_match_safe_classes"]["passed"] is True
+    assert checks["budget_activation_gated"]["passed"] is True
     assert checks["risky_actions_denied"]["passed"] is True

@@ -8,6 +8,7 @@ from francis.world_state.operator_mode import snapshot as operator_mode_snapshot
 STAGE10_AWAY_STAGE = "Stage 10 / Away Mode"
 AWAY_STATUS_KIND = "francis.stage10.away.status"
 AWAY_SAFE_TASK_CLASSES_KIND = "francis.stage10.away.safe_task_classes"
+AWAY_AUTONOMY_BUDGETS_KIND = "francis.stage10.away.autonomy_budgets"
 
 _AWAY_SAFE_TASK_CLASSES: tuple[dict[str, Any], ...] = (
     {
@@ -40,11 +41,43 @@ _AWAY_SAFE_TASK_CLASSES: tuple[dict[str, Any], ...] = (
     },
 )
 
+_AWAY_AUTONOMY_BUDGETS: tuple[dict[str, Any], ...] = (
+    {
+        "id": "read_only_monitoring_budget",
+        "class_id": "continuity_monitoring",
+        "max_items": 50,
+        "max_duration_minutes": 120,
+        "allowed_effect": "read_only",
+    },
+    {
+        "id": "approval_triage_budget",
+        "class_id": "approval_queue_triage",
+        "max_items": 25,
+        "max_duration_minutes": 60,
+        "allowed_effect": "read_only_priority_projection",
+    },
+    {
+        "id": "shift_report_draft_budget",
+        "class_id": "shift_report_draft",
+        "max_items": 3,
+        "max_duration_minutes": 90,
+        "allowed_effect": "draft_only",
+    },
+    {
+        "id": "safe_plan_preparation_budget",
+        "class_id": "safe_plan_preparation",
+        "max_items": 3,
+        "max_duration_minutes": 90,
+        "allowed_effect": "draft_only",
+    },
+)
+
 
 def away_status_snapshot() -> dict[str, Any]:
     stage9 = takeover_stage9_operator_stage_closure_decision_readback(limit=5)
     operator = operator_mode_snapshot()
     safe_task_classes = away_safe_task_classes_review()
+    autonomy_budgets = away_autonomy_budgets_review()
     control_mode = _as_dict(operator.get("control_mode"))
     backlog = _as_dict(operator.get("backlog"))
     continuity = _as_dict(operator.get("continuity"))
@@ -52,6 +85,7 @@ def away_status_snapshot() -> dict[str, Any]:
     deliverables = _away_deliverables(
         stage9_closed=stage9_closed,
         safe_task_classes_ready=bool(safe_task_classes.get("away_safe_task_classes_ready")),
+        autonomy_budgets_ready=bool(autonomy_budgets.get("autonomy_budgets_ready")),
         operator=operator,
         backlog=backlog,
         continuity=continuity,
@@ -103,8 +137,11 @@ def away_status_snapshot() -> dict[str, Any]:
             "operator_mode": "/system/operator_mode",
             "stage9_closure_readback": "/takeover/stage-closure-decisions",
             "safe_task_classes": "/away/safe-task-classes",
+            "autonomy_budgets": "/away/autonomy-budgets",
         },
-        "next_smallest_truthful_gap": "stage10_autonomy_budgets"
+        "next_smallest_truthful_gap": "stage10_shift_reports"
+        if stage9_closed and bool(autonomy_budgets.get("autonomy_budgets_ready"))
+        else "stage10_autonomy_budgets"
         if stage9_closed and bool(safe_task_classes.get("away_safe_task_classes_ready"))
         else "stage10_away_safe_task_classes"
         if stage9_closed
@@ -165,10 +202,67 @@ def away_safe_task_classes_review() -> dict[str, Any]:
     }
 
 
+def away_autonomy_budgets_review() -> dict[str, Any]:
+    safe_classes = away_safe_task_classes_review()
+    safe_classes_ready = bool(safe_classes.get("away_safe_task_classes_ready"))
+    safe_class_ids = {
+        _safe_text(item.get("id")) for item in _as_list(safe_classes.get("classes")) if isinstance(item, dict)
+    }
+    budgets = [_autonomy_budget_item(item) for item in _AWAY_AUTONOMY_BUDGETS]
+    checks = _autonomy_budget_checks(
+        safe_classes_ready=safe_classes_ready,
+        safe_class_ids=safe_class_ids,
+        budgets=budgets,
+    )
+    ready = all(bool(check.get("passed")) for check in checks)
+    return {
+        "ok": True,
+        "kind": AWAY_AUTONOMY_BUDGETS_KIND,
+        "stage": STAGE10_AWAY_STAGE,
+        "source_id": "away",
+        "status": "ready" if ready else "blocked",
+        "safe_task_classes_ready": safe_classes_ready,
+        "autonomy_budgets_ready": ready,
+        "budgets": budgets,
+        "budget_count": len(budgets),
+        "checks": checks,
+        "reads_receipts": True,
+        "writes_receipts": False,
+        "writes_tasks": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "activates_away_autonomy": False,
+        "governance": {
+            "read_only": True,
+            "autonomy_budget_contract_only": True,
+            "does_not_activate_away_autonomy": True,
+            "requires_safe_task_classes": True,
+            "approval_required_before_execution": True,
+            "risky_actions_remain_gated": True,
+            "does_not_start_background_work": True,
+            "does_not_write_receipts": True,
+            "does_not_write_tasks": True,
+            "does_not_write_memory": True,
+            "does_not_run_tools": True,
+            "does_not_run_shell": True,
+            "does_not_run_git": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": "stage10_shift_reports" if ready else "stage10_autonomy_budgets",
+    }
+
+
 def _away_deliverables(
     *,
     stage9_closed: bool,
     safe_task_classes_ready: bool,
+    autonomy_budgets_ready: bool,
     operator: dict[str, Any],
     backlog: dict[str, Any],
     continuity: dict[str, Any],
@@ -212,8 +306,8 @@ def _away_deliverables(
         {
             "id": "autonomy_budgets",
             "label": "Autonomy budgets",
-            "ready": False,
-            "evidence": "not_implemented_yet",
+            "ready": autonomy_budgets_ready,
+            "evidence": "/away/autonomy-budgets",
         },
         {
             "id": "shift_reports",
@@ -300,6 +394,89 @@ def _safe_task_class_checks(*, stage9_closed: bool, classes: list[dict[str, Any]
     ]
 
 
+def _autonomy_budget_item(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": _safe_text(item.get("id")),
+        "class_id": _safe_text(item.get("class_id")),
+        "allowed_effect": _safe_text(item.get("allowed_effect")),
+        "max_items": _safe_int(item.get("max_items")),
+        "max_duration_minutes": _safe_int(item.get("max_duration_minutes")),
+        "may_execute_tools": False,
+        "may_run_shell": False,
+        "may_run_git": False,
+        "may_start_processes": False,
+        "may_write_memory": False,
+        "may_write_files": False,
+        "may_send_external_messages": False,
+        "may_decide_approvals": False,
+        "requires_operator_approval_for_execution": True,
+        "budget_activation_required": True,
+    }
+
+
+def _autonomy_budget_checks(
+    *,
+    safe_classes_ready: bool,
+    safe_class_ids: set[str],
+    budgets: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    return [
+        _check(
+            "safe_task_classes_ready",
+            passed=safe_classes_ready,
+            evidence="/away/safe-task-classes",
+        ),
+        _check(
+            "budgets_declared_for_each_safe_class",
+            passed=bool(safe_class_ids) and {_safe_text(item.get("class_id")) for item in budgets} == safe_class_ids,
+            evidence=str(len(budgets)),
+        ),
+        _check(
+            "budgets_are_bounded",
+            passed=all(
+                0 < _safe_int(item.get("max_items")) <= 50 and 0 < _safe_int(item.get("max_duration_minutes")) <= 120
+                for item in budgets
+            ),
+            evidence="bounded_items_and_duration",
+        ),
+        _check(
+            "budget_effects_match_safe_classes",
+            passed=all(
+                _safe_text(item.get("allowed_effect")) in {"read_only", "read_only_priority_projection", "draft_only"}
+                for item in budgets
+            ),
+            evidence="read_or_draft_only",
+        ),
+        _check(
+            "budget_activation_gated",
+            passed=all(
+                bool(item.get("requires_operator_approval_for_execution"))
+                and bool(item.get("budget_activation_required"))
+                for item in budgets
+            ),
+            evidence="approval_required_before_execution",
+        ),
+        _check(
+            "risky_actions_denied",
+            passed=all(
+                not bool(item.get(key))
+                for item in budgets
+                for key in (
+                    "may_execute_tools",
+                    "may_run_shell",
+                    "may_run_git",
+                    "may_start_processes",
+                    "may_write_memory",
+                    "may_write_files",
+                    "may_send_external_messages",
+                    "may_decide_approvals",
+                )
+            ),
+            evidence="no_risky_actions_allowed",
+        ),
+    ]
+
+
 def _check(check_id: str, *, passed: bool, evidence: str) -> dict[str, Any]:
     return {
         "id": check_id,
@@ -324,3 +501,11 @@ def _safe_text(value: Any) -> str:
         return str(value).strip()
     except Exception:
         return ""
+
+
+def _safe_int(value: Any) -> int:
+    try:
+        parsed = int(value)
+    except Exception:
+        return 0
+    return parsed
