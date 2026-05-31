@@ -73,10 +73,10 @@ def test_executor_substrate_status_starts_readonly_after_stage7_closure_receipt(
     assert body["status"] == "substrate_contract_ready"
     assert body["stage7_closed_by_receipt"] is True
     assert body["stage7_next_smallest_truthful_gap"] == "stage7_ledger_closure"
-    assert body["next_smallest_truthful_gap"] == "stage8_verification_hooks_review"
+    assert body["next_smallest_truthful_gap"] == "stage8_substrate_scope_enforcement_review"
     assert body["stage8_done_ready"] is False
-    assert body["ready_count"] == 5
-    assert body["required_count"] == 6
+    assert body["ready_count"] == 6
+    assert body["required_count"] == 7
     deliverables = {item["id"]: item for item in body["deliverables"]}
     assert set(deliverables) == {
         "stage7_ledger_closure_backstop",
@@ -85,6 +85,7 @@ def test_executor_substrate_status_starts_readonly_after_stage7_closure_receipt(
         "branch_first_workflows",
         "leases_and_idempotency",
         "verification_hooks",
+        "substrate_scope_enforcement",
     }
     assert deliverables["stage7_ledger_closure_backstop"]["ready"] is True
     assert deliverables["execution_toolbelt_inventory"]["ready"] is True
@@ -99,7 +100,9 @@ def test_executor_substrate_status_starts_readonly_after_stage7_closure_receipt(
         "/executor/substrate/leases-idempotency-review"
     )
     assert "bounded retry contract" in deliverables["leases_and_idempotency"]["evidence"]["ready_surfaces"]
-    assert deliverables["verification_hooks"]["ready"] is False
+    assert deliverables["verification_hooks"]["ready"] is True
+    assert deliverables["verification_hooks"]["evidence"]["receipt_kind"] == "executor.verification.receipt"
+    assert deliverables["substrate_scope_enforcement"]["ready"] is False
     assert body["read_only"] is True
     assert body["writes_tasks"] is False
     assert body["writes_receipts"] is False
@@ -290,3 +293,64 @@ def test_executor_leases_idempotency_review_projects_ready_contract(
     assert body["governance"]["does_not_execute"] is True
     assert body["governance"]["does_not_grant_authority"] is True
     assert body["next_smallest_truthful_gap"] == "stage8_verification_hooks_review"
+
+
+def test_executor_verification_hooks_review_projects_receipt_contract(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage7_closure_receipt(data_root, receipt_id="tel_stage7_closure_verification_hooks")
+
+    body = TestClient(create_app()).get("/executor/substrate/verification-hooks-review").json()
+
+    assert body["ok"] is True
+    assert body["kind"] == "francis.stage8.executor_substrate.verification_hooks_review"
+    assert body["stage"] == "Stage 8 / Executor Substrate"
+    assert body["status"] == "verification_hooks_review_ready"
+    assert body["verification_hooks_review_ready"] is True
+    assert body["execution_handle_contract_ready"] is True
+    assert body["operation_projection_contract_ready"] is True
+    assert body["verification_receipt_contract_ready"] is True
+    assert body["completion_claim_guard_ready"] is True
+    assert body["ready_count"] == body["required_count"] == 6
+
+    criteria = {item["id"]: item for item in body["criteria"]}
+    assert list(criteria) == [
+        "leases_idempotency_review_ready",
+        "execution_handle_contract",
+        "operation_projection_contract",
+        "verification_receipt_contract",
+        "completion_claim_guard",
+        "non_authorizing_review_guard",
+    ]
+    assert criteria["leases_idempotency_review_ready"]["ready"] is True
+    assert criteria["execution_handle_contract"]["evidence"]["trace_id_function"] == "_attach_execution_handles"
+    assert criteria["operation_projection_contract"]["evidence"]["projected_handles"] == [
+        "trace_id",
+        "run_id",
+        "artifact_dir",
+    ]
+    assert criteria["verification_receipt_contract"]["evidence"]["receipt_kind"] == "executor.verification.receipt"
+    assert criteria["completion_claim_guard"]["evidence"]["default_without_explicit_verification"] == "not_run"
+    assert criteria["completion_claim_guard"]["evidence"]["hidden_verification"] is False
+    assert criteria["non_authorizing_review_guard"]["ready"] is True
+
+    assert body["leases_idempotency_review"]["status"] == "leases_idempotency_review_ready"
+    assert body["read_only"] is True
+    assert body["writes_tasks"] is False
+    assert body["writes_receipts"] is False
+    assert body["writes_memory"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["starts_processes"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["governance"]["verification_hooks_review"] is True
+    assert body["governance"]["requires_explicit_verification_for_completion_claim"] is True
+    assert body["governance"]["hidden_verification"] is False
+    assert body["governance"]["does_not_execute"] is True
+    assert body["governance"]["does_not_grant_authority"] is True
+    assert body["next_smallest_truthful_gap"] == "stage8_substrate_scope_enforcement_review"

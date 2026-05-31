@@ -247,6 +247,10 @@ def _retry_receipts_dir() -> Path:
     return data_dir() / "artifacts" / "executor_retry_receipts"
 
 
+def _verification_receipts_dir() -> Path:
+    return data_dir() / "artifacts" / "executor_verification_receipts"
+
+
 def load_task(task_id: str) -> dict[str, Any]:
     path = record_path(task_id)
     if not path.exists():
@@ -400,6 +404,65 @@ def _task_max_attempts(task: dict[str, Any]) -> int:
     return max(1, min(parsed, 5))
 
 
+def _safe_text_items(value: Any, *, limit: int = 10) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    items: list[str] = []
+    for raw in value[:limit]:
+        text = _safe_str(raw).strip()
+        if text:
+            items.append(text[:240])
+    return items
+
+
+def _verification_status(raw: Any) -> str:
+    text = _safe_str(raw).strip().lower()
+    if text in {"passed", "failed", "blocked", "not_run", "unknown"}:
+        return text
+    return "unknown" if text else "not_run"
+
+
+def _payload_verification(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {}
+    raw = payload.get("verification")
+    verification = raw if isinstance(raw, dict) else {}
+    status = _verification_status(
+        verification.get("status")
+        or verification.get("verification_status")
+        or payload.get("verification_status")
+        or payload.get("verified_status")
+    )
+    outcome = (
+        _safe_str(
+            verification.get("outcome")
+            or verification.get("verification_outcome")
+            or payload.get("verification_outcome")
+        )
+        .strip()
+        .lower()
+    )
+    if not outcome:
+        outcome = (
+            "explicit_hook_passed" if status == "passed" else "explicit_hook_failed" if status == "failed" else status
+        )
+    hook_type = _safe_str(
+        verification.get("hook_type") or verification.get("type") or payload.get("verification_hook_type")
+    )
+    summary = _safe_str(
+        verification.get("summary") or verification.get("message") or payload.get("verification_summary")
+    )
+    checked = _safe_text_items(verification.get("checked") or payload.get("verification_checked"))
+    return {
+        "provided": bool(verification) or status not in {"not_run", "unknown"},
+        "status": status,
+        "outcome": outcome,
+        "hook_type": hook_type.strip()[:120] or "unspecified",
+        "summary": summary.strip()[:500],
+        "checked": checked,
+    }
+
+
 def _write_retry_budget_receipt(
     *,
     task_id: str,
@@ -436,6 +499,60 @@ def _write_retry_budget_receipt(
         path = _retry_receipts_dir() / f"{receipt_id}.json"
         _atomic_write_json(path, payload)
         return {"receipt_id": receipt_id, "receipt_path": str(path)}
+    except Exception:
+        return {}
+
+
+def _write_verification_receipt(
+    *,
+    task_id: str,
+    worker_id: str,
+    capability: str,
+    ok: bool,
+    payload: Any,
+) -> dict[str, str]:
+    try:
+        verification = _payload_verification(payload)
+        status = _safe_str(verification.get("status")).strip() or "not_run"
+        receipt_id = f"exec_verify_{uuid.uuid4().hex[:16]}"
+        references = _payload_audit_references(payload)
+        completion_claim_allowed = bool(ok) and status == "passed"
+        receipt = {
+            "kind": "executor.verification.receipt",
+            "receipt_id": receipt_id,
+            "ts": _utc_now_iso(),
+            "task_id": _safe_str(task_id).strip(),
+            "worker_id": _safe_str(worker_id).strip(),
+            "capability": _safe_str(capability).strip(),
+            "attempted_action_ok": bool(ok),
+            "verification_provided": bool(verification.get("provided")),
+            "verification_status": status,
+            "verification_outcome": _safe_str(verification.get("outcome")).strip() or status,
+            "hook_type": _safe_str(verification.get("hook_type")).strip() or "unspecified",
+            "summary": _safe_str(verification.get("summary")).strip(),
+            "checked": _safe_text_items(verification.get("checked")),
+            "completion_claim_allowed": completion_claim_allowed,
+            "references": references,
+            "governance": {
+                "verification_receipt": True,
+                "explicit_verification_required_for_completion_claim": True,
+                "hidden_verification": False,
+                "verification_execution_authority": False,
+                "completion_claim_authority": completion_claim_allowed,
+                "grants_execution_authority": False,
+                "grants_mutation_authority": False,
+                "memory_write": False,
+            },
+        }
+        path = _verification_receipts_dir() / f"{receipt_id}.json"
+        _atomic_write_json(path, receipt)
+        return {
+            "receipt_id": receipt_id,
+            "receipt_path": str(path),
+            "verification_status": status,
+            "verification_outcome": _safe_str(receipt.get("verification_outcome")),
+            "completion_claim_allowed": str(completion_claim_allowed).lower(),
+        }
     except Exception:
         return {}
 
@@ -1103,6 +1220,21 @@ def execute_task(task_id: str, worker_id: str) -> dict[str, Any]:
                 "receipt_id": retry_budget_receipt.get("receipt_id", ""),
                 "receipt_path": retry_budget_receipt.get("receipt_path", ""),
             }
+    verification_receipt = _write_verification_receipt(
+        task_id=task_id,
+        worker_id=worker_id,
+        capability=capability,
+        ok=ok,
+        payload=payload,
+    )
+    if isinstance(payload, dict):
+        payload["verification_receipt"] = {
+            "receipt_id": verification_receipt.get("receipt_id", ""),
+            "receipt_path": verification_receipt.get("receipt_path", ""),
+            "verification_status": verification_receipt.get("verification_status", "not_run"),
+            "verification_outcome": verification_receipt.get("verification_outcome", "not_run"),
+            "completion_claim_allowed": verification_receipt.get("completion_claim_allowed") == "true",
+        }
     task["result"] = {
         "kind": "task.result",
         "task_id": task_id,

@@ -16,6 +16,7 @@ _STAGE8_IDEMPOTENCY_DEDUP_GAP = "stage8_idempotency_dedup_enforcement"
 _STAGE8_LEASE_RECEIPT_GAP = "stage8_lease_receipt_readback"
 _STAGE8_BOUNDED_RETRY_GAP = "stage8_bounded_retry_contract"
 _STAGE8_VERIFICATION_HOOKS_GAP = "stage8_verification_hooks_review"
+_STAGE8_SCOPE_ENFORCEMENT_GAP = "stage8_substrate_scope_enforcement_review"
 
 
 def executor_substrate_status_snapshot() -> dict[str, Any]:
@@ -60,7 +61,7 @@ def executor_substrate_status_snapshot() -> dict[str, Any]:
             "grants_execution_authority": False,
             "grants_mutation_authority": False,
         },
-        "next_smallest_truthful_gap": (_STAGE8_VERIFICATION_HOOKS_GAP if stage7_closed else _STAGE7_LEDGER_CLOSURE_GAP),
+        "next_smallest_truthful_gap": (_STAGE8_SCOPE_ENFORCEMENT_GAP if stage7_closed else _STAGE7_LEDGER_CLOSURE_GAP),
     }
 
 
@@ -470,6 +471,135 @@ def executor_leases_idempotency_review_snapshot() -> dict[str, Any]:
     }
 
 
+def executor_verification_hooks_review_snapshot() -> dict[str, Any]:
+    leases_review = executor_leases_idempotency_review_snapshot()
+    criteria = [
+        {
+            "id": "leases_idempotency_review_ready",
+            "ready": bool(leases_review.get("leases_idempotency_review_ready")),
+            "evidence": {
+                "route": "/executor/substrate/leases-idempotency-review",
+                "status": leases_review.get("status", "unknown"),
+            },
+        },
+        {
+            "id": "execution_handle_contract",
+            "ready": True,
+            "evidence": {
+                "source": "src/francis/agent/executor.py",
+                "trace_id_function": "_attach_execution_handles",
+                "run_id_function": "_attach_execution_handles",
+                "audit_reference_function": "_payload_audit_references",
+            },
+        },
+        {
+            "id": "operation_projection_contract",
+            "ready": True,
+            "evidence": {
+                "source": "src/francis/operations/runtime.py",
+                "projected_handles": ["trace_id", "run_id", "artifact_dir"],
+                "supports_filters": ["trace_id", "run_id", "artifact_dir"],
+            },
+        },
+        {
+            "id": "verification_receipt_contract",
+            "ready": True,
+            "evidence": {
+                "source": "src/francis/agent/executor.py",
+                "receipt_kind": "executor.verification.receipt",
+                "receipt_dir": "data/artifacts/executor_verification_receipts",
+                "result_field": "verification_receipt",
+            },
+        },
+        {
+            "id": "completion_claim_guard",
+            "ready": True,
+            "evidence": {
+                "source": "src/francis/agent/executor.py",
+                "contract": "completion_claim_allowed requires an explicit passed verification status",
+                "default_without_explicit_verification": "not_run",
+                "hidden_verification": False,
+            },
+        },
+        {
+            "id": "non_authorizing_review_guard",
+            "ready": (
+                leases_review.get("read_only") is True
+                and leases_review.get("runs_tools") is False
+                and leases_review.get("runs_shell") is False
+                and leases_review.get("runs_git") is False
+                and leases_review.get("grants_execution_authority") is False
+                and leases_review.get("grants_mutation_authority") is False
+            ),
+            "evidence": {
+                "read_only": bool(leases_review.get("read_only")),
+                "runs_tools": bool(leases_review.get("runs_tools")),
+                "runs_shell": bool(leases_review.get("runs_shell")),
+                "runs_git": bool(leases_review.get("runs_git")),
+                "grants_execution_authority": bool(leases_review.get("grants_execution_authority")),
+                "grants_mutation_authority": bool(leases_review.get("grants_mutation_authority")),
+            },
+        },
+    ]
+    ready_count = sum(1 for criterion in criteria if criterion["ready"])
+    review_ready = ready_count == len(criteria)
+    leases_ready = bool(leases_review.get("leases_idempotency_review_ready"))
+    return {
+        "ok": True,
+        "kind": "francis.stage8.executor_substrate.verification_hooks_review",
+        "stage": STAGE8_EXECUTOR_SUBSTRATE_STAGE,
+        "status": (
+            "verification_hooks_review_ready"
+            if review_ready
+            else "verification_hooks_review_partial"
+            if leases_ready
+            else "verification_hooks_review_blocked"
+        ),
+        "source_id": "executor_substrate",
+        "target": "safe_bounded_execution",
+        "verification_hooks_review_ready": review_ready,
+        "execution_handle_contract_ready": True,
+        "operation_projection_contract_ready": True,
+        "verification_receipt_contract_ready": True,
+        "completion_claim_guard_ready": True,
+        "ready_count": ready_count,
+        "required_count": len(criteria),
+        "criteria": criteria,
+        "leases_idempotency_review": {
+            "route": "/executor/substrate/leases-idempotency-review",
+            "status": leases_review.get("status", "unknown"),
+            "next_smallest_truthful_gap": leases_review.get("next_smallest_truthful_gap", ""),
+        },
+        "read_only": True,
+        "writes_tasks": False,
+        "writes_receipts": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "verification_hooks_review": True,
+            "uses_leases_idempotency_review": True,
+            "does_not_execute": True,
+            "does_not_write_tasks": True,
+            "does_not_write_receipts": True,
+            "does_not_write_memory": True,
+            "does_not_grant_authority": True,
+            "requires_explicit_verification_for_completion_claim": True,
+            "hidden_verification": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": (
+            _STAGE8_SCOPE_ENFORCEMENT_GAP if review_ready else _STAGE8_VERIFICATION_HOOKS_GAP
+        ),
+    }
+
+
 def _deliverables(*, stage7_closed: bool) -> list[dict[str, Any]]:
     return [
         {
@@ -541,10 +671,21 @@ def _deliverables(*, stage7_closed: bool) -> list[dict[str, Any]]:
         {
             "id": "verification_hooks",
             "label": "Verification hooks",
+            "ready": True,
+            "evidence": {
+                "current_surface": "operation traces, artifacts, and executor verification receipts exist",
+                "review_route": "/executor/substrate/verification-hooks-review",
+                "receipt_kind": "executor.verification.receipt",
+                "completion_claim_guard": "explicit passed verification required",
+            },
+        },
+        {
+            "id": "substrate_scope_enforcement",
+            "label": "Substrate scope enforcement",
             "ready": False,
             "evidence": {
-                "current_surface": "operation traces and artifacts exist",
-                "missing": "executor-level verification hook contract",
+                "current_surface": "capability allowlist and API permission gates exist",
+                "missing": "substrate-wide scope enforcement review",
             },
         },
     ]

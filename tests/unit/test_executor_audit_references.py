@@ -84,6 +84,93 @@ def test_executor_failure_writes_retry_budget_exhaustion_receipt(monkeypatch, tm
     assert receipt["governance"]["bounded_retry_contract"] is True
     assert receipt["governance"]["hidden_retry"] is False
     assert receipt["governance"]["retry_authority"] is False
+    verification = executed["result"]["data"]["verification_receipt"]
+    assert verification["verification_status"] == "not_run"
+    assert verification["completion_claim_allowed"] is False
+    verification_receipt = json.loads(Path(str(verification["receipt_path"])).read_text(encoding="utf-8"))
+    assert verification_receipt["kind"] == "executor.verification.receipt"
+    assert verification_receipt["verification_status"] == "not_run"
+    assert verification_receipt["completion_claim_allowed"] is False
+    assert verification_receipt["governance"]["hidden_verification"] is False
+    assert verification_receipt["governance"]["verification_execution_authority"] is False
+
+
+def test_executor_writes_verification_receipt_for_explicit_hook_result(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from francis.agent import executor
+    from francis.agent.delegation import DelegationRequest, create_delegation, read_audit
+
+    def verified_capability(_inputs: dict[str, object], _objective: str) -> dict[str, object]:
+        return {
+            "kind": "test.verification.result",
+            "ok": True,
+            "status": "succeeded",
+            "verification": {
+                "status": "passed",
+                "outcome": "artifact_generated",
+                "hook_type": "artifact_confirmation",
+                "summary": "expected artifact confirmed",
+                "checked": ["artifact_exists", "content_matches"],
+            },
+        }
+
+    monkeypatch.setitem(executor.CAPABILITY_ALLOWLIST, "test.verification.hook", verified_capability)
+
+    record, err = create_delegation(
+        DelegationRequest(
+            requester_id="test.executor.verification",
+            capability="test.verification.hook",
+            objective="Write explicit verification receipt",
+            inputs={"artifact": "expected.txt"},
+            priority=5,
+            ttl_sec=900,
+        )
+    )
+    assert err is None
+    assert record is not None
+
+    executed = executor.execute_task(record.task_id, worker_id="test.executor.verification")
+
+    assert executed["status"] == "complete"
+    output = executed["result"]["data"]
+    assert str(output["trace_id"]).startswith("trace_")
+    assert str(output["run_id"]).startswith("run_")
+    verification = output["verification_receipt"]
+    assert verification["verification_status"] == "passed"
+    assert verification["verification_outcome"] == "artifact_generated"
+    assert verification["completion_claim_allowed"] is True
+
+    receipt_path = Path(str(verification["receipt_path"]))
+    assert receipt_path == (
+        data_root / "artifacts" / "executor_verification_receipts" / f"{verification['receipt_id']}.json"
+    )
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert receipt["kind"] == "executor.verification.receipt"
+    assert receipt["task_id"] == record.task_id
+    assert receipt["worker_id"] == "test.executor.verification"
+    assert receipt["verification_provided"] is True
+    assert receipt["verification_status"] == "passed"
+    assert receipt["verification_outcome"] == "artifact_generated"
+    assert receipt["hook_type"] == "artifact_confirmation"
+    assert receipt["checked"] == ["artifact_exists", "content_matches"]
+    assert receipt["completion_claim_allowed"] is True
+    assert receipt["references"]["trace_id"] == output["trace_id"]
+    assert receipt["references"]["run_id"] == output["run_id"]
+    assert receipt["governance"]["explicit_verification_required_for_completion_claim"] is True
+    assert receipt["governance"]["hidden_verification"] is False
+    assert receipt["governance"]["verification_execution_authority"] is False
+    assert receipt["governance"]["grants_execution_authority"] is False
+
+    audit = read_audit(record.task_id)
+    finished = [
+        item
+        for item in audit
+        if item.get("event") == "status_updated" and item.get("details", {}).get("to") == "complete"
+    ][-1]
+    assert finished["details"]["trace_id"] == output["trace_id"]
+    assert finished["details"]["run_id"] == output["run_id"]
 
 
 def test_executor_status_audit_preserves_receipt_approval_reference(monkeypatch, tmp_path: Path) -> None:

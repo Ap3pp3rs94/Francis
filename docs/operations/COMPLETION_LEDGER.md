@@ -46960,6 +46960,75 @@ Latest validation for Stage 8 bounded retry contract:
   leases_next=stage8_verification_hooks_review; status_ready_count=5;
   status_required_count=6; status_next=stage8_verification_hooks_review`.
 
+### 2026-05-30 - Stage 8 executor verification hooks write receipts
+
+Roadmap area: Stage 8 / Executor Substrate, verification hooks.
+
+Material change:
+
+- Executor task runs now write `executor.verification.receipt` records under
+  `data/artifacts/executor_verification_receipts`.
+- Verification receipts record task id, worker id, capability, attempted action
+  outcome, explicit verification status/outcome, checked items, audit
+  references, and governance flags.
+- Executor results now expose `verification_receipt` readbacks with receipt id,
+  receipt path, verification status/outcome, and `completion_claim_allowed`.
+- Completion claims are guarded: `completion_claim_allowed=true` requires a
+  successful action plus an explicit `verification.status=passed`; missing
+  verification is recorded as `not_run`.
+- Added read-only `/executor/substrate/verification-hooks-review`, which
+  consumes the leases/idempotency review and reports the execution handle,
+  operation projection, verification receipt, and completion-claim guard
+  contracts.
+- `/executor/substrate/status` now reports `ready_count=6`, `required_count=7`,
+  and `next_smallest_truthful_gap=stage8_substrate_scope_enforcement_review`.
+  The new remaining gap is substrate-wide scope enforcement review.
+
+Latest validation for Stage 8 executor verification hooks:
+
+- `python -m pytest
+  tests/unit/test_executor_audit_references.py::test_executor_failure_writes_retry_budget_exhaustion_receipt
+  tests/unit/test_executor_audit_references.py::test_executor_writes_verification_receipt_for_explicit_hook_result
+  tests/test_api_executor_substrate.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 9 selected tests passed`
+- `python -m pytest
+  tests/test_api_operations.py::test_operations_run_executes_plan_create
+  tests/unit/test_executor_audit_references.py -q --tb=short --maxfail=1`
+  Result: `passed; 8 selected tests passed`
+- `python -m pytest tests/test_api_executor_substrate.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 7 selected tests passed`
+- `python -m mypy src/francis/agent/executor.py
+  src/francis/executor_substrate.py
+  src/francis/api/routes/executor_substrate.py`
+  Result: `passed`
+- `python -m ruff check src/francis/agent/executor.py
+  src/francis/executor_substrate.py
+  src/francis/api/routes/executor_substrate.py
+  tests/unit/test_executor_audit_references.py tests/test_api_executor_substrate.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/agent/executor.py
+  src/francis/executor_substrate.py
+  src/francis/api/routes/executor_substrate.py
+  tests/unit/test_executor_audit_references.py tests/test_api_executor_substrate.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed; 6 files already formatted`
+- `git diff --check`
+  Result: `passed`
+- Live local readback:
+  `/executor/substrate/verification-hooks-review` and
+  `/executor/substrate/status`.
+  Result: `review_status=verification_hooks_review_ready;
+  review_ready_count=6; review_required_count=6;
+  verification_receipt_ready=true; completion_guard_ready=true;
+  review_next=stage8_substrate_scope_enforcement_review; status_ready_count=6;
+  status_required_count=7;
+  status_next=stage8_substrate_scope_enforcement_review`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
