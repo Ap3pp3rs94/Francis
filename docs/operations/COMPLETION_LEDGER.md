@@ -48615,6 +48615,59 @@ Latest validation for Stage 11 completion review and closure decision:
   review_after_ready=true; review_after_closed_by_receipt=true;
   review_after_next=stage11_ledger_closure`.
 
+### 2026-05-31 - Stage 12 Knowledge Fabric starts with artifact-index contract
+
+Roadmap area: Stage 12 / Knowledge Fabric, artifact indexing and local evidence
+citation groundwork.
+
+Material change:
+
+- Added read-only GET `/knowledge-fabric/status`.
+- Added read-only GET `/knowledge-fabric/artifact-index-contract`.
+- Stage 12 status is gated by the Stage 11 Apprenticeship closure receipt
+  readback and remains `awaiting_stage11_ledger_closure` until that receipt is
+  present.
+- The artifact-index contract defines the first seven artifact classes the
+  fabric can reason over: receipts, missions, incidents, staged capabilities,
+  observations, teaching outputs, and execution traces.
+- The contract defines required citation fields, local-evidence citation rules,
+  retention-contract fields, and the existing read surfaces it may later build
+  on: `/memory/timeline/list`, `/artifacts/inspect`, and `/continuity/ledger`.
+- This is contract-only groundwork. It does not write an index, write memory,
+  scan files, replicate data, or grant authority.
+- The next smallest truthful gap after the Stage 11 closure receipt and
+  artifact-index contract is `stage12_artifact_index_projection`.
+
+Latest validation for Stage 12 Knowledge Fabric artifact-index contract:
+
+- `python -m pytest tests/test_api_knowledge_fabric.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 3 passed`
+- `python -m mypy src/francis/knowledge_fabric.py
+  src/francis/api/routes/knowledge_fabric.py src/francis/api/app.py`
+  Result: `passed`
+- `python -m ruff check src/francis/knowledge_fabric.py
+  src/francis/api/routes/knowledge_fabric.py src/francis/api/app.py
+  tests/test_api_knowledge_fabric.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/knowledge_fabric.py
+  src/francis/api/routes/knowledge_fabric.py src/francis/api/app.py
+  tests/test_api_knowledge_fabric.py tests/test_api_contract_chat_ui.py`
+  Result: `passed; 5 files already formatted`
+- Live local TestClient route/readback against an isolated data root:
+  GET `/knowledge-fabric/status`, write a Stage 11 closure receipt fixture,
+  GET `/knowledge-fabric/artifact-index-contract`, and GET
+  `/knowledge-fabric/status`.
+  Result: `blocked_status=awaiting_stage11_ledger_closure;
+  blocked_stage11_closed=false; blocked_next=stage11_ledger_closure;
+  contract_status=ready; contract_ready=true; contract_class_count=7;
+  contract_writes_index=false; contract_writes_memory=false;
+  contract_scans_files=false; contract_replicates_data=false;
+  contract_grants_authority=false;
+  ready_status=stage12_artifact_index_contract_ready; ready_count=2;
+  required_count=5; ready_next=stage12_artifact_index_projection`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

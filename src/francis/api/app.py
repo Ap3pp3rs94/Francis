@@ -25,6 +25,7 @@ from francis.api.routes import (
     federation,
     forge,
     industrial,
+    knowledge_fabric,
     lens,
     memory_timeline,
     missions,
@@ -86,6 +87,7 @@ def create_app() -> FastAPI:
     app.include_router(takeover.router, prefix="/takeover", tags=["takeover"])
     app.include_router(away.router, prefix="/away", tags=["away"])
     app.include_router(apprenticeship.router, prefix="/apprenticeship", tags=["apprenticeship"])
+    app.include_router(knowledge_fabric.router, prefix="/knowledge-fabric", tags=["knowledge_fabric"])
     app.include_router(industrial.router, prefix="/industrial", tags=["industrial"])
     app.include_router(digital_twin.router, prefix="/digital_twin", tags=["digital_twin"])
 
