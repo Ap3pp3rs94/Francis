@@ -59,6 +59,8 @@ def test_takeover_status_blocks_without_stage8_closure(monkeypatch, tmp_path: Pa
     assert body["panic_stop_ready"] is False
     assert body["operator_surface_contract_ready"] is False
     assert body["operator_surface_contract_route"] == "/takeover/operator-surface-contract"
+    assert body["stage9_completion_review_ready"] is False
+    assert body["stage9_completion_review_route"] == "/takeover/completion-review"
     assert body["writes_receipts"] is False
     assert body["writes_tasks"] is False
     assert body["runs_shell"] is False
@@ -346,7 +348,10 @@ def test_takeover_control_transfer_receipt_and_panic_stop_are_auditable(monkeypa
     assert handback_status["latest_live_action_receipt"]["receipt_id"] == live_action_body["receipt_id"]
     assert handback_status["operator_surface_contract_ready"] is True
     assert handback_status["operator_surface_contract_route"] == "/takeover/operator-surface-contract"
-    assert handback_status["next_smallest_truthful_gap"] == "stage9_completion_review"
+    assert handback_status["stage9_completion_review_ready"] is True
+    assert handback_status["stage9_completion_review_route"] == "/takeover/completion-review"
+    assert handback_status["deliverables"]["completion_review"] is True
+    assert handback_status["next_smallest_truthful_gap"] == "stage9_operator_closure_decision"
 
     surface_contract = client.get("/takeover/operator-surface-contract").json()
     assert surface_contract["ok"] is True
@@ -358,6 +363,7 @@ def test_takeover_control_transfer_receipt_and_panic_stop_are_auditable(monkeypa
     assert surface_contract["latest_handback_summary_receipt_id"] == handback_body["receipt_id"]
     assert surface_contract["latest_live_action_receipt_id"] == live_action_body["receipt_id"]
     assert surface_contract["routes"]["status"] == "/takeover/status"
+    assert surface_contract["routes"]["completion_review"] == "/takeover/completion-review"
     assert surface_contract["routes"]["delegated_action"] == "/takeover/delegated-action"
     assert surface_contract["routes"]["delegated_action_receipts"] == "/takeover/delegated-action-receipts"
     assert surface_contract["routes"]["panic_stop"] == "/takeover/panic-stop"
@@ -372,7 +378,7 @@ def test_takeover_control_transfer_receipt_and_panic_stop_are_auditable(monkeypa
     assert surface_contract["grants_mutation_authority"] is False
     assert surface_contract["governance"]["read_only"] is True
     assert surface_contract["governance"]["surface_contract_only"] is True
-    assert surface_contract["next_smallest_truthful_gap"] == "stage9_completion_review"
+    assert surface_contract["next_smallest_truthful_gap"] == "stage9_operator_closure_decision"
     checks = {item["id"]: item for item in surface_contract["checks"]}
     assert checks["stage8_closure_receipt_visible"]["passed"] is True
     assert checks["control_transfer_receipt_visible"]["passed"] is True
@@ -382,6 +388,43 @@ def test_takeover_control_transfer_receipt_and_panic_stop_are_auditable(monkeypa
     assert checks["pilot_visibility_visible"]["passed"] is True
     assert checks["next_gap_visible"]["passed"] is True
     assert checks["no_authority_escalation"]["passed"] is True
+
+    completion_review = client.get("/takeover/completion-review").json()
+    assert completion_review["ok"] is True
+    assert completion_review["kind"] == "francis.stage9.takeover.completion_review"
+    assert completion_review["status"] == "ready"
+    assert completion_review["stage9_completion_review_ready"] is True
+    assert completion_review["latest_control_transfer_receipt_id"] == transfer_body["receipt_id"]
+    assert completion_review["latest_panic_stop_receipt_id"] == panic_body["receipt_id"]
+    assert completion_review["latest_handback_summary_receipt_id"] == handback_body["receipt_id"]
+    assert completion_review["latest_live_action_receipt_id"] == live_action_body["receipt_id"]
+    assert completion_review["latest_live_action_operation_id"] == live_action_body["operation_id"]
+    assert completion_review["latest_live_action_trace_id"] == live_action_body["trace_id"]
+    assert completion_review["latest_live_action_run_id"] == live_action_body["run_id"]
+    assert completion_review["reads_receipts"] is True
+    assert completion_review["writes_receipts"] is False
+    assert completion_review["writes_tasks"] is False
+    assert completion_review["writes_memory"] is False
+    assert completion_review["runs_tools"] is False
+    assert completion_review["runs_shell"] is False
+    assert completion_review["grants_execution_authority"] is False
+    assert completion_review["grants_mutation_authority"] is False
+    assert completion_review["stage_closure_decision_required"] is True
+    assert completion_review["governance"]["read_only"] is True
+    assert completion_review["governance"]["completion_review_only"] is True
+    assert completion_review["governance"]["does_not_close_stage"] is True
+    assert completion_review["next_smallest_truthful_gap"] == "stage9_operator_closure_decision"
+    completion_checks = {item["id"]: item for item in completion_review["checks"]}
+    assert completion_checks["takeover_never_implicit"]["passed"] is True
+    assert completion_checks["stage8_closure_receipt_visible"]["passed"] is True
+    assert completion_checks["control_transfer_flow_receipted"]["passed"] is True
+    assert completion_checks["live_action_feed_visible"]["passed"] is True
+    assert completion_checks["panic_stop_cancellation_reviewed"]["passed"] is True
+    assert completion_checks["handback_summary_receipted"]["passed"] is True
+    assert completion_checks["pilot_visibility_grounded"]["passed"] is True
+    assert completion_checks["live_delegated_action_receipted"]["passed"] is True
+    assert completion_checks["operator_surface_contract_ready"]["passed"] is True
+    assert completion_checks["no_authority_escalation"]["passed"] is True
 
     transfer_receipts = client.get("/takeover/control-transfer-receipts").json()
     panic_receipts = client.get("/takeover/panic-stop-receipts").json()

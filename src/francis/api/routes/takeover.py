@@ -21,6 +21,7 @@ from francis.takeover import (
     record_takeover_panic_stop,
     takeover_action_feed,
     takeover_operator_surface_contract,
+    takeover_stage9_completion_review,
     takeover_status_snapshot,
 )
 
@@ -113,6 +114,11 @@ def action_feed(limit: int = 10) -> dict[str, Any]:
 @router.get("/operator-surface-contract")
 def operator_surface_contract(limit: int = 10) -> dict[str, Any]:
     return takeover_operator_surface_contract(limit=limit)
+
+
+@router.get("/completion-review")
+def completion_review(limit: int = 10) -> dict[str, Any]:
+    return takeover_stage9_completion_review(limit=limit)
 
 
 @router.get("/control-transfer-receipts")

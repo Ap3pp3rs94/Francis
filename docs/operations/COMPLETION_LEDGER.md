@@ -47476,6 +47476,54 @@ Latest validation for Stage 9 Takeover live delegated action runtime:
   receipt_count=1; live_ready=true;
   status_next=stage9_completion_review`.
 
+### 2026-05-31 - Stage 9 takeover completion review is inspectable
+
+Roadmap area: Stage 9 / Takeover (Pilot Mode), completion review before any
+operator closure decision.
+
+Material change:
+
+- Added read-only GET `/takeover/completion-review`.
+- `/takeover/status` now exposes `stage9_completion_review_route`,
+  `stage9_completion_review_ready`, and `deliverables.completion_review`.
+- The completion review checks that Takeover was explicit, Stage 8 closure is
+  visible, control transfer is receipted, the live action feed is visible, panic
+  cancellation was reviewed, handback proof handles are present, Pilot
+  visibility is grounded, live delegated action has operation/trace/run handles,
+  the operator surface contract is ready, and the status projection does not
+  grant execution or mutation authority.
+- When the review passes, Takeover advances to
+  `stage9_operator_closure_decision`.
+- This route does not close Stage 9, write receipts, write tasks, write memory,
+  run shell/git/tools, start processes, cancel operations, or grant execution or
+  mutation authority.
+
+Latest validation for Stage 9 Takeover completion review:
+
+- `python -m pytest tests/test_api_takeover.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 4 tests passed`
+- `python -m mypy src/francis/takeover.py
+  src/francis/api/routes/takeover.py`
+  Result: `passed`
+- `python -m ruff check src/francis/takeover.py
+  src/francis/api/routes/takeover.py tests/test_api_takeover.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/takeover.py
+  src/francis/api/routes/takeover.py tests/test_api_takeover.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed; 4 files already formatted`
+- Live local read-only route/readback:
+  GET `/takeover/status` and GET `/takeover/completion-review`.
+  Result: `status=ready; surface_ready=true; completion_ready=true;
+  review_status=ready;
+  review_receipt=takeover_live_action_9c0138c55cd5;
+  review_operation=tsk_20260531_055055_3c5ee515;
+  status_next=stage9_operator_closure_decision;
+  review_next=stage9_operator_closure_decision`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

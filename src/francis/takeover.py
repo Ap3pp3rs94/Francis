@@ -22,6 +22,7 @@ TAKEOVER_CONTROL_TRANSFER_RECEIPT_KIND = "francis.stage9.takeover.control_transf
 TAKEOVER_PANIC_STOP_RECEIPT_KIND = "francis.stage9.takeover.panic_stop_receipt"
 TAKEOVER_HANDBACK_SUMMARY_RECEIPT_KIND = "francis.stage9.takeover.handback_summary_receipt"
 TAKEOVER_LIVE_ACTION_RECEIPT_KIND = "francis.stage9.takeover.live_action_receipt"
+TAKEOVER_COMPLETION_REVIEW_KIND = "francis.stage9.takeover.completion_review"
 
 TAKEOVER_CONTROL_TRANSFER_SCOPE = "takeover.control.write"
 TAKEOVER_PANIC_STOP_SCOPE = "takeover.panic.write"
@@ -104,6 +105,8 @@ def takeover_status_snapshot(*, limit: int = 10) -> dict[str, Any]:
         },
         "operator_surface_contract_route": "/takeover/operator-surface-contract",
         "operator_surface_contract_ready": False,
+        "stage9_completion_review_route": "/takeover/completion-review",
+        "stage9_completion_review_ready": False,
         "next_smallest_truthful_gap": _takeover_next_gap(
             active_transfer=bool(active_transfer),
             has_transfer=bool(transfers),
@@ -112,10 +115,16 @@ def takeover_status_snapshot(*, limit: int = 10) -> dict[str, Any]:
             operator_surface_ready=False,
             panic_operation_cancellation_ready=panic_operation_cancellation_ready,
             live_action_ready=live_action_ready,
+            completion_review_ready=False,
         ),
     }
     surface_ready = _operator_surface_contract_ready(snapshot)
     snapshot["operator_surface_contract_ready"] = surface_ready
+    completion_ready = _stage9_completion_review_ready(snapshot)
+    snapshot["stage9_completion_review_ready"] = completion_ready
+    deliverables = _as_dict(snapshot.get("deliverables"))
+    deliverables["completion_review"] = completion_ready
+    snapshot["deliverables"] = deliverables
     snapshot["next_smallest_truthful_gap"] = _takeover_next_gap(
         active_transfer=bool(active_transfer),
         has_transfer=bool(transfers),
@@ -124,6 +133,7 @@ def takeover_status_snapshot(*, limit: int = 10) -> dict[str, Any]:
         operator_surface_ready=surface_ready,
         panic_operation_cancellation_ready=panic_operation_cancellation_ready,
         live_action_ready=live_action_ready,
+        completion_review_ready=completion_ready,
     )
     return snapshot
 
@@ -143,6 +153,7 @@ def takeover_operator_surface_contract(*, limit: int = 10) -> dict[str, Any]:
         "routes": {
             "status": "/takeover/status",
             "action_feed": "/takeover/action-feed",
+            "completion_review": "/takeover/completion-review",
             "delegated_action_receipts": "/takeover/delegated-action-receipts",
             "control_transfer_receipts": "/takeover/control-transfer-receipts",
             "panic_stop_receipts": "/takeover/panic-stop-receipts",
@@ -188,9 +199,61 @@ def takeover_operator_surface_contract(*, limit: int = 10) -> dict[str, Any]:
         if ready and not _panic_operation_cancellation_ready(read_takeover_panic_stop_receipts(limit=10))
         else "stage9_live_delegated_action_runtime"
         if ready and not bool(read_takeover_live_action_receipts(limit=10))
+        else "stage9_operator_closure_decision"
+        if ready and _stage9_completion_review_ready(snapshot)
         else "stage9_completion_review"
         if ready
         else "stage9_operator_surface_contract",
+    }
+
+
+def takeover_stage9_completion_review(*, limit: int = 10) -> dict[str, Any]:
+    snapshot = takeover_status_snapshot(limit=limit)
+    checks = _stage9_completion_review_checks(snapshot)
+    ready = all(bool(check.get("passed")) for check in checks)
+    latest_transfer = _as_dict(snapshot.get("latest_control_transfer_receipt"))
+    latest_panic = _as_dict(snapshot.get("latest_panic_stop_receipt"))
+    latest_handback = _as_dict(snapshot.get("latest_handback_summary_receipt"))
+    latest_live_action = _as_dict(snapshot.get("latest_live_action_receipt"))
+    return {
+        "ok": True,
+        "kind": TAKEOVER_COMPLETION_REVIEW_KIND,
+        "stage": STAGE9_TAKEOVER_STAGE,
+        "source_id": "takeover",
+        "status": "ready" if ready else "blocked",
+        "stage9_completion_review_ready": ready,
+        "checks": checks,
+        "latest_control_transfer_receipt_id": _safe_text(latest_transfer.get("receipt_id")),
+        "latest_panic_stop_receipt_id": _safe_text(latest_panic.get("receipt_id")),
+        "latest_handback_summary_receipt_id": _safe_text(latest_handback.get("receipt_id")),
+        "latest_live_action_receipt_id": _safe_text(latest_live_action.get("receipt_id")),
+        "latest_live_action_operation_id": _safe_text(latest_live_action.get("operation_id")),
+        "latest_live_action_trace_id": _safe_text(latest_live_action.get("trace_id")),
+        "latest_live_action_run_id": _safe_text(latest_live_action.get("run_id")),
+        "reads_receipts": True,
+        "writes_receipts": False,
+        "writes_tasks": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "cancels_operations": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "stage_closure_decision_required": True,
+        "governance": {
+            "read_only": True,
+            "completion_review_only": True,
+            "stage_closure_decision_required": True,
+            "does_not_close_stage": True,
+            "execution_still_uses_executor_governance": True,
+            "does_not_run_tools": True,
+            "does_not_run_shell": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": "stage9_operator_closure_decision" if ready else "stage9_completion_review",
     }
 
 
@@ -827,12 +890,15 @@ def _takeover_next_gap(
     operator_surface_ready: bool,
     panic_operation_cancellation_ready: bool,
     live_action_ready: bool,
+    completion_review_ready: bool,
 ) -> str:
     if active_transfer or (has_transfer and not handback_ready):
         return "stage9_handback_summary_receipts"
     if handback_ready:
         if not operator_surface_ready:
             return "stage9_operator_surface_contract"
+        if live_action_ready and completion_review_ready:
+            return "stage9_operator_closure_decision"
         return (
             "stage9_completion_review"
             if live_action_ready
@@ -922,6 +988,99 @@ def _surface_check(check_id: str, *, passed: bool, evidence: str) -> dict[str, A
         "status": "ready" if passed else "blocked",
         "evidence": evidence,
     }
+
+
+def _stage9_completion_review_ready(snapshot: dict[str, Any]) -> bool:
+    return all(bool(check.get("passed")) for check in _stage9_completion_review_checks(snapshot))
+
+
+def _stage9_completion_review_checks(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
+    latest_transfer = _as_dict(snapshot.get("latest_control_transfer_receipt"))
+    latest_panic = _as_dict(snapshot.get("latest_panic_stop_receipt"))
+    latest_handback = _as_dict(snapshot.get("latest_handback_summary_receipt"))
+    latest_live_action = _as_dict(snapshot.get("latest_live_action_receipt"))
+    action_feed = _as_dict(snapshot.get("action_feed"))
+    deliverables = _as_dict(snapshot.get("deliverables"))
+    status_governance = _as_dict(snapshot.get("governance"))
+    transfer_governance = _as_dict(latest_transfer.get("governance"))
+    handback_governance = _as_dict(latest_handback.get("governance"))
+    live_action_governance = _as_dict(latest_live_action.get("governance"))
+    return [
+        _surface_check(
+            "takeover_never_implicit",
+            passed=bool(status_governance.get("takeover_never_implicit"))
+            and bool(transfer_governance.get("explicit_control_transfer")),
+            evidence=_safe_text(latest_transfer.get("receipt_id")),
+        ),
+        _surface_check(
+            "stage8_closure_receipt_visible",
+            passed=bool(snapshot.get("stage8_closed_by_receipt"))
+            and bool(_safe_text(snapshot.get("stage8_latest_receipt_id"))),
+            evidence=_safe_text(snapshot.get("stage8_latest_receipt_id")),
+        ),
+        _surface_check(
+            "control_transfer_flow_receipted",
+            passed=bool(deliverables.get("control_transfer_flow"))
+            and bool(_safe_text(latest_transfer.get("receipt_id"))),
+            evidence=_safe_text(latest_transfer.get("receipt_id")),
+        ),
+        _surface_check(
+            "live_action_feed_visible",
+            passed=bool(deliverables.get("live_action_feed"))
+            and bool(action_feed.get("ok"))
+            and isinstance(action_feed.get("items"), list),
+            evidence="/takeover/action-feed",
+        ),
+        _surface_check(
+            "panic_stop_cancellation_reviewed",
+            passed=bool(deliverables.get("panic_stop"))
+            and bool(_safe_text(latest_panic.get("receipt_id")))
+            and bool(latest_panic.get("operation_cancellation_reviewed")),
+            evidence=_safe_text(latest_panic.get("receipt_id")),
+        ),
+        _surface_check(
+            "handback_summary_receipted",
+            passed=bool(deliverables.get("handback_summary"))
+            and bool(_safe_text(latest_handback.get("receipt_id")))
+            and bool(latest_handback.get("control_transferred_back"))
+            and bool(handback_governance.get("proof_handles_included")),
+            evidence=_safe_text(latest_handback.get("receipt_id")),
+        ),
+        _surface_check(
+            "pilot_visibility_grounded",
+            passed=bool(deliverables.get("pilot_visibility"))
+            and bool(snapshot.get("pilot_indicator_visible") or latest_transfer),
+            evidence=_safe_text(_as_dict(snapshot.get("control_mode")).get("id")),
+        ),
+        _surface_check(
+            "live_delegated_action_receipted",
+            passed=bool(deliverables.get("live_delegated_action_runtime"))
+            and bool(_safe_text(latest_live_action.get("receipt_id")))
+            and bool(_safe_text(latest_live_action.get("operation_id")))
+            and bool(_safe_text(latest_live_action.get("trace_id")))
+            and bool(_safe_text(latest_live_action.get("run_id")))
+            and bool(latest_live_action.get("live_action_executed"))
+            and bool(live_action_governance.get("execution_still_uses_executor_governance")),
+            evidence=_safe_text(latest_live_action.get("receipt_id")),
+        ),
+        _surface_check(
+            "operator_surface_contract_ready",
+            passed=bool(snapshot.get("operator_surface_contract_ready")),
+            evidence="/takeover/operator-surface-contract",
+        ),
+        _surface_check(
+            "no_authority_escalation",
+            passed=not bool(snapshot.get("writes_receipts"))
+            and not bool(snapshot.get("writes_tasks"))
+            and not bool(snapshot.get("writes_memory"))
+            and not bool(snapshot.get("runs_tools"))
+            and not bool(snapshot.get("runs_shell"))
+            and not bool(snapshot.get("grants_execution_authority"))
+            and not bool(snapshot.get("grants_mutation_authority"))
+            and bool(status_governance.get("read_only")),
+            evidence="read_only_completion_review",
+        ),
+    ]
 
 
 def _blocked_no_receipt(
