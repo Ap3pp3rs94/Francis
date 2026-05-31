@@ -7,16 +7,19 @@ from pydantic import BaseModel, Field
 
 from francis.apprenticeship import (
     APPRENTICESHIP_REPLAY_RECEIPT_WRITE_SCOPE,
+    APPRENTICESHIP_SKILLIZATION_ARTIFACT_WRITE_SCOPE,
     APPRENTICESHIP_TEACHING_SESSION_WRITE_SCOPE,
     apprenticeship_forge_handoff_contract,
     apprenticeship_live_teaching_session_ux,
     apprenticeship_replay_receipts,
     apprenticeship_replay_generalization_contract,
+    apprenticeship_skillization_artifact_receipts,
     apprenticeship_skillization_artifact_contract,
     apprenticeship_status_snapshot,
     apprenticeship_teaching_session_contract,
     apprenticeship_teaching_session_receipts,
     record_apprenticeship_replay_receipt,
+    record_apprenticeship_skillization_artifact_receipt,
     record_apprenticeship_teaching_session,
 )
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
@@ -45,6 +48,23 @@ class ApprenticeshipReplayReceiptIn(BaseModel):
     generalization_summary: str = Field(default="", max_length=1000)
     assumptions: str = Field(default="", max_length=800)
     validation_result: str = Field(default="", max_length=500)
+    notes: str = Field(default="", max_length=500)
+
+
+class ApprenticeshipSkillizationArtifactReceiptIn(BaseModel):
+    actor: str = Field(default="", max_length=240)
+    reason: str = Field(default="", max_length=500)
+    action: str = Field(default="prepare_skillization_artifact", max_length=120)
+    replay_receipt_id: str = Field(default="", max_length=160)
+    pattern_summary: str = Field(default="", max_length=1000)
+    parameterization: str = Field(default="", max_length=1000)
+    usage_scope: str = Field(default="", max_length=800)
+    decision_logic: str = Field(default="", max_length=1000)
+    validation_expectations: str = Field(default="", max_length=800)
+    risk_tier_candidate: str = Field(default="", max_length=160)
+    documentation_draft: str = Field(default="", max_length=1200)
+    test_candidate_structure: str = Field(default="", max_length=1000)
+    classification: str = Field(default="", max_length=240)
     notes: str = Field(default="", max_length=500)
 
 
@@ -129,6 +149,11 @@ def teaching_session_receipts(limit: int = 20) -> dict[str, Any]:
 @router.get("/replay-receipts")
 def replay_receipts(limit: int = 20) -> dict[str, Any]:
     return apprenticeship_replay_receipts(limit=limit)
+
+
+@router.get("/skillization-artifact-receipts")
+def skillization_artifact_receipts(limit: int = 20) -> dict[str, Any]:
+    return apprenticeship_skillization_artifact_receipts(limit=limit)
 
 
 @router.post("/teaching-session")
@@ -260,5 +285,82 @@ def replay_receipt(request: Request, payload: ApprenticeshipReplayReceiptIn) -> 
         "next_smallest_truthful_gap": receipt.get(
             "next_smallest_truthful_gap",
             "stage11_replay_receipt_write_path",
+        ),
+    }
+
+
+@router.post("/skillization-artifact-receipt")
+def skillization_artifact_receipt(
+    request: Request,
+    payload: ApprenticeshipSkillizationArtifactReceiptIn,
+) -> dict[str, Any]:
+    route = "/apprenticeship/skillization-artifact-receipt"
+    permission = _write_permission(
+        payload.actor,
+        required_scope=APPRENTICESHIP_SKILLIZATION_ARTIFACT_WRITE_SCOPE,
+        route=route,
+        method="POST",
+    )
+    if not permission.allowed:
+        return _permission_denied(
+            permission,
+            required_scope=APPRENTICESHIP_SKILLIZATION_ARTIFACT_WRITE_SCOPE,
+            next_step="configure_apprenticeship_skillization_artifact_write_scope_before_recording",
+        )
+
+    receipt = record_apprenticeship_skillization_artifact_receipt(
+        actor=payload.actor,
+        reason=payload.reason,
+        action=payload.action,
+        replay_receipt_id=payload.replay_receipt_id,
+        pattern_summary=payload.pattern_summary,
+        parameterization=payload.parameterization,
+        usage_scope=payload.usage_scope,
+        decision_logic=payload.decision_logic,
+        validation_expectations=payload.validation_expectations,
+        risk_tier_candidate=payload.risk_tier_candidate,
+        documentation_draft=payload.documentation_draft,
+        test_candidate_structure=payload.test_candidate_structure,
+        classification=payload.classification,
+        notes=payload.notes,
+    )
+    return {
+        "ok": bool(receipt.get("ok")),
+        "kind": "francis.stage11.apprenticeship.skillization_artifact.record",
+        "status": "recorded" if receipt.get("receipt_id") else receipt.get("status", "blocked"),
+        "source_id": "apprenticeship",
+        "receipt": receipt if receipt.get("receipt_id") else None,
+        "receipt_id": receipt.get("receipt_id", ""),
+        "action": receipt.get("action", ""),
+        "writes_receipt": bool(receipt.get("writes_receipt")),
+        "writes_memory": bool(receipt.get("writes_memory")),
+        "writes_skill_artifact": bool(receipt.get("writes_skill_artifact")),
+        "writes_forge_proposal": bool(receipt.get("writes_forge_proposal")),
+        "creates_capability": bool(receipt.get("creates_capability")),
+        "promotes_to_forge": bool(receipt.get("promotes_to_forge")),
+        "registers_capability": bool(receipt.get("registers_capability")),
+        "runs_tools": bool(receipt.get("runs_tools")),
+        "runs_shell": bool(receipt.get("runs_shell")),
+        "runs_git": bool(receipt.get("runs_git")),
+        "starts_processes": bool(receipt.get("starts_processes")),
+        "grants_execution_authority": bool(receipt.get("grants_execution_authority")),
+        "grants_mutation_authority": bool(receipt.get("grants_mutation_authority")),
+        "governance": {
+            "required_scope": APPRENTICESHIP_SKILLIZATION_ARTIFACT_WRITE_SCOPE,
+            "route": str(request.url.path),
+            "requires_replay_receipt": True,
+            "explicit_operator_skillization_artifact_review": True,
+            "operator_review_required_before_artifact_write": True,
+            "does_not_write_memory": True,
+            "does_not_write_skill_artifact": True,
+            "does_not_run_tools": True,
+            "does_not_run_shell": True,
+            "does_not_run_git": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": receipt.get(
+            "next_smallest_truthful_gap",
+            "stage11_skillization_artifact_receipt_write_path",
         ),
     }

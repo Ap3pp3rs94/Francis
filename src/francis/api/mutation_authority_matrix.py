@@ -140,6 +140,20 @@ _RULES: tuple[AuthorityRule, ...] = (
         ),
     ),
     AuthorityRule(
+        family="apprenticeship",
+        prefixes=("/apprenticeship/skillization-artifact-receipt",),
+        required_actor="payload.actor",
+        required_scope="apprenticeship.skillization_artifact.write",
+        approval_requirement="not_required_scope_gate_only; prior replay receipt required",
+        receipt_behavior="Stage 11 Apprenticeship skillization artifact review receipt",
+        denial_behavior="api_permission_denied via permission_gate before skillization artifact receipt write",
+        governance_maturity="permission_gated",
+        notes=(
+            "The receipt records an operator-reviewed skillization artifact candidate only; it does not write memory, "
+            "write a skill artifact, promote to Forge, run tools, or grant authority."
+        ),
+    ),
+    AuthorityRule(
         family="away",
         prefixes=("/away/stage-closure-decision",),
         required_actor="payload.actor",

@@ -48398,6 +48398,81 @@ Latest validation for Stage 11 replay receipt write path:
   readback_status=ready; readback_count=1;
   readback_next=stage11_skillization_artifact_receipt_write_path`.
 
+### 2026-05-31 - Stage 11 skillization artifact receipts are governed and review-only
+
+Roadmap area: Stage 11 / Apprenticeship, skillization artifact candidate
+receipt write path.
+
+Material change:
+
+- Added permission-gated POST
+  `/apprenticeship/skillization-artifact-receipt` requiring
+  `apprenticeship.skillization_artifact.write`.
+- Added read-only GET `/apprenticeship/skillization-artifact-receipts`.
+- `/apprenticeship/status` now reports the latest skillization artifact receipt
+  and advances the next smallest truthful gap to
+  `stage11_forge_handoff_receipt_write_path` only after teaching, replay, and
+  skillization artifact receipts exist.
+- Skillization artifact receipts require prior replay receipt readback and
+  record explicit operator-reviewed candidate structure: pattern summary,
+  parameterization, usage scope, decision logic, validation expectations,
+  risk-tier candidate, documentation draft, test candidate structure,
+  classification, notes, actor, reason, environment profile, timestamp, and
+  receipt id.
+- Receipt fields are redacted before persistence and written as JSONL under the
+  governed Francis data root.
+- The mutating-route authority matrix now describes the Stage 11 skillization
+  artifact write route, required actor, required scope, receipt behavior, and
+  denial behavior.
+- The route writes only the review receipt. It does not write memory, write a
+  skill artifact, write Forge proposals, create capabilities, promote to Forge,
+  register capabilities, run tools, run shell, run git, start processes, or
+  grant execution/mutation authority.
+
+Latest validation for Stage 11 skillization artifact receipt write path:
+
+- `python -m pytest tests/test_api_apprenticeship.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  tests/test_api_mutating_route_authority_matrix.py -q --tb=short --maxfail=1`
+  Result: `passed; 18 tests passed`
+- `python -m mypy src/francis/apprenticeship.py
+  src/francis/api/routes/apprenticeship.py
+  src/francis/api/mutation_authority_matrix.py`
+  Result: `passed`
+- `python -m ruff check src/francis/apprenticeship.py
+  src/francis/api/routes/apprenticeship.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_apprenticeship.py
+  tests/test_api_contract_chat_ui.py
+  tests/test_api_mutating_route_authority_matrix.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/apprenticeship.py
+  src/francis/api/routes/apprenticeship.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_apprenticeship.py
+  tests/test_api_contract_chat_ui.py
+  tests/test_api_mutating_route_authority_matrix.py`
+  Result: `passed; 6 files already formatted`
+- Live local permission-gated TestClient route/readback against an isolated data
+  root:
+  POST `/apprenticeship/teaching-session`, POST
+  `/apprenticeship/replay-receipt`, POST
+  `/apprenticeship/skillization-artifact-receipt`, GET
+  `/apprenticeship/status`, and GET
+  `/apprenticeship/skillization-artifact-receipts`.
+  Result: `teaching_ok=true; replay_ok=true;
+  skillization_ok=true; skillization_status=recorded;
+  skillization_receipt_prefix=apprenticeship_skillization_;
+  skillization_writes_receipt=true; skillization_writes_memory=false;
+  skillization_writes_skill_artifact=false;
+  skillization_writes_forge_proposal=false;
+  skillization_runs_shell=false;
+  skillization_grants_execution_authority=false;
+  status=stage11_skillization_artifact_receipt_ready;
+  replay_receipt_ready=true;
+  skillization_artifact_receipt_ready=true;
+  status_next=stage11_forge_handoff_receipt_write_path;
+  readback_status=ready; readback_count=1;
+  readback_next=stage11_forge_handoff_receipt_write_path`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
