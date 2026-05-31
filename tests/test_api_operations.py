@@ -1790,6 +1790,76 @@ def test_operations_git_push_requires_approval_and_pushes_branch(monkeypatch, tm
     assert remote_branch.stdout.strip()
 
 
+def test_operations_git_push_branch_first_policy_blocks_protected_branch_before_approval(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo_root))
+
+    _git(repo_root, "init")
+    _git(repo_root, "config", "user.name", "Francis Tests")
+    _git(repo_root, "config", "user.email", "francis-tests@example.com")
+    _git(repo_root, "checkout", "-b", "main")
+    (repo_root / "README.md").write_text("initial\n", encoding="utf-8")
+    _git(repo_root, "add", "README.md")
+    _git(repo_root, "commit", "-m", "Initial commit")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    created = client.post(
+        "/operations/create",
+        json={
+            "action": "git.push",
+            "reason": "branch-first executor push",
+            "input": {"cwd": str(repo_root), "branch_first_required": True},
+        },
+    )
+    assert created.status_code == 200
+    operation_id = str(created.json()["operation_id"])
+
+    blocked = client.post(f"/operations/{operation_id}/run", json={"worker_id": "test.operations.git_push_branch"})
+
+    assert blocked.status_code == 200
+    blocked_body = blocked.json()
+    assert blocked_body["ok"] is True
+    assert blocked_body["status"] == "blocked"
+    operation = blocked_body["operation"]
+    output = operation["output"]
+    assert output["status"] == "blocked"
+    assert output["error"] == "branch_first_workflow_required"
+    assert output["branch"] == "main"
+    assert output["branch_first_policy"] == {
+        "required": True,
+        "workflow_policy": "branch_first",
+        "protected_branches": ["main", "master", "trunk", "production"],
+        "protected_branch": True,
+    }
+    assert output["governance"]["gate"] == "branch_first_workflow"
+    assert output["governance"]["approval_requested"] is False
+    receipt_id = str(output["branch_first_policy_receipt_id"])
+    assert receipt_id.startswith("gitpush_branch_policy_")
+    receipt_path = Path(str(output["branch_first_policy_receipt_path"]))
+    assert receipt_path == data_root / "artifacts" / "git_push_branch_policy_receipts" / f"{receipt_id}.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert receipt["kind"] == "git.push.branch_first_policy.receipt"
+    assert receipt["receipt_id"] == receipt_id
+    assert receipt["decision"] == "blocked"
+    assert receipt["reason"] == "branch_first_workflow_required"
+    assert receipt["branch"] == "main"
+    assert receipt["branch_first_policy"]["protected_branch"] is True
+    assert receipt["governance"]["branch_first_workflow_enforcement"] is True
+    assert receipt["governance"]["blocks_protected_branch_before_approval"] is True
+    assert not (data_root / "approvals" / "pending").exists()
+
+
 def test_operations_git_push_refreshes_approval_when_remote_changes(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     repo_root = tmp_path / "repo"

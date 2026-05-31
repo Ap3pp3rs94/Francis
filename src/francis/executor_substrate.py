@@ -11,6 +11,7 @@ _STAGE7_LEDGER_CLOSURE_GAP = "stage7_ledger_closure"
 _STAGE8_TOOLBELT_ALLOWLIST_GAP = "stage8_executor_toolbelt_allowlist_review"
 _STAGE8_BRANCH_FIRST_WORKFLOW_GAP = "stage8_branch_first_workflow_review"
 _STAGE8_BRANCH_FIRST_ENFORCEMENT_GAP = "stage8_branch_first_workflow_enforcement"
+_STAGE8_LEASES_IDEMPOTENCY_GAP = "stage8_leases_idempotency_review"
 
 
 def executor_substrate_status_snapshot() -> dict[str, Any]:
@@ -55,7 +56,7 @@ def executor_substrate_status_snapshot() -> dict[str, Any]:
             "grants_execution_authority": False,
             "grants_mutation_authority": False,
         },
-        "next_smallest_truthful_gap": (_STAGE8_TOOLBELT_ALLOWLIST_GAP if stage7_closed else _STAGE7_LEDGER_CLOSURE_GAP),
+        "next_smallest_truthful_gap": (_STAGE8_LEASES_IDEMPOTENCY_GAP if stage7_closed else _STAGE7_LEDGER_CLOSURE_GAP),
     }
 
 
@@ -205,11 +206,24 @@ def executor_branch_first_workflow_review_snapshot() -> dict[str, Any]:
         },
         {
             "id": "branch_first_enforcement_policy",
-            "ready": False,
+            "ready": True,
             "evidence": {
-                "source": "AGENTS.md",
+                "source": "src/francis/agent/git_push.py",
                 "current_maintainer_workflow": "direct_on_main",
-                "missing": "executor-specific branch-first enforcement policy and receipt readback",
+                "default_required": False,
+                "required_input": "branch_first_required",
+                "workflow_policy": "branch_first",
+                "protected_branch_error": "branch_first_workflow_required",
+                "preserves_current_maintainer_workflow": True,
+            },
+        },
+        {
+            "id": "branch_first_policy_receipt_readback",
+            "ready": True,
+            "evidence": {
+                "source": "src/francis/agent/git_push.py",
+                "receipt_kind": "git.push.branch_first_policy.receipt",
+                "receipt_dir": "data/artifacts/git_push_branch_policy_receipts",
             },
         },
         {
@@ -250,7 +264,7 @@ def executor_branch_first_workflow_review_snapshot() -> dict[str, Any]:
         "target": "safe_bounded_execution",
         "branch_first_workflow_review_ready": review_ready,
         "current_git_push_boundary_reviewed": allowlist_ready,
-        "branch_first_enforcement_ready": False,
+        "branch_first_enforcement_ready": review_ready,
         "ready_count": ready_count,
         "required_count": len(criteria),
         "criteria": criteria,
@@ -284,11 +298,16 @@ def executor_branch_first_workflow_review_snapshot() -> dict[str, Any]:
             "does_not_write_memory": True,
             "does_not_grant_authority": True,
             "preserves_current_maintainer_workflow": True,
+            "requires_branch_first_opt_in_for_git_push": True,
             "grants_execution_authority": False,
             "grants_mutation_authority": False,
         },
         "next_smallest_truthful_gap": (
-            _STAGE8_BRANCH_FIRST_ENFORCEMENT_GAP if allowlist_ready else _STAGE8_BRANCH_FIRST_WORKFLOW_GAP
+            _STAGE8_LEASES_IDEMPOTENCY_GAP
+            if review_ready
+            else _STAGE8_BRANCH_FIRST_ENFORCEMENT_GAP
+            if allowlist_ready
+            else _STAGE8_BRANCH_FIRST_WORKFLOW_GAP
         ),
     }
 
@@ -335,11 +354,13 @@ def _deliverables(*, stage7_closed: bool) -> list[dict[str, Any]]:
         {
             "id": "branch_first_workflows",
             "label": "Branch-first workflows",
-            "ready": False,
+            "ready": True,
             "evidence": {
                 "current_surface": "git.push approval-gated capability exists",
                 "review_route": "/executor/substrate/branch-first-workflow-review",
-                "missing": "executor-specific branch-first enforcement policy and receipt readback",
+                "enforcement": "opt-in branch_first_required blocks protected branches before approval",
+                "receipt_kind": "git.push.branch_first_policy.receipt",
+                "default_direct_on_main_preserved": True,
             },
         },
         {

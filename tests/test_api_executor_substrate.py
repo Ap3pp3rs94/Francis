@@ -73,9 +73,9 @@ def test_executor_substrate_status_starts_readonly_after_stage7_closure_receipt(
     assert body["status"] == "substrate_contract_ready"
     assert body["stage7_closed_by_receipt"] is True
     assert body["stage7_next_smallest_truthful_gap"] == "stage7_ledger_closure"
-    assert body["next_smallest_truthful_gap"] == "stage8_executor_toolbelt_allowlist_review"
+    assert body["next_smallest_truthful_gap"] == "stage8_leases_idempotency_review"
     assert body["stage8_done_ready"] is False
-    assert body["ready_count"] == 3
+    assert body["ready_count"] == 4
     assert body["required_count"] == 6
     deliverables = {item["id"]: item for item in body["deliverables"]}
     assert set(deliverables) == {
@@ -90,7 +90,10 @@ def test_executor_substrate_status_starts_readonly_after_stage7_closure_receipt(
     assert deliverables["execution_toolbelt_inventory"]["ready"] is True
     assert "codex.supervised_exec" in deliverables["execution_toolbelt_inventory"]["evidence"]["known_capabilities"]
     assert deliverables["allowlist_policy_filters"]["ready"] is True
-    assert deliverables["branch_first_workflows"]["ready"] is False
+    assert deliverables["branch_first_workflows"]["ready"] is True
+    assert deliverables["branch_first_workflows"]["evidence"]["receipt_kind"] == (
+        "git.push.branch_first_policy.receipt"
+    )
     assert deliverables["leases_and_idempotency"]["ready"] is False
     assert deliverables["verification_hooks"]["ready"] is False
     assert body["read_only"] is True
@@ -158,12 +161,12 @@ def test_executor_branch_first_workflow_review_projects_current_git_push_boundar
     assert body["ok"] is True
     assert body["kind"] == "francis.stage8.executor_substrate.branch_first_workflow_review"
     assert body["stage"] == "Stage 8 / Executor Substrate"
-    assert body["status"] == "branch_first_workflow_review_partial"
-    assert body["branch_first_workflow_review_ready"] is False
+    assert body["status"] == "branch_first_workflow_review_ready"
+    assert body["branch_first_workflow_review_ready"] is True
     assert body["current_git_push_boundary_reviewed"] is True
-    assert body["branch_first_enforcement_ready"] is False
-    assert body["ready_count"] == 6
-    assert body["required_count"] == 7
+    assert body["branch_first_enforcement_ready"] is True
+    assert body["ready_count"] == 8
+    assert body["required_count"] == 8
 
     criteria = {item["id"]: item for item in body["criteria"]}
     assert list(criteria) == [
@@ -173,6 +176,7 @@ def test_executor_branch_first_workflow_review_projects_current_git_push_boundar
         "approval_gated_execution",
         "stale_or_mismatched_approval_refresh",
         "branch_first_enforcement_policy",
+        "branch_first_policy_receipt_readback",
         "non_authorizing_review_guard",
     ]
     assert criteria["toolbelt_allowlist_review_ready"]["ready"] is True
@@ -184,8 +188,15 @@ def test_executor_branch_first_workflow_review_projects_current_git_push_boundar
     assert criteria["stale_or_mismatched_approval_refresh"]["evidence"]["mismatch_error"] == (
         "approval_payload_mismatch"
     )
-    assert criteria["branch_first_enforcement_policy"]["ready"] is False
+    assert criteria["branch_first_enforcement_policy"]["ready"] is True
     assert criteria["branch_first_enforcement_policy"]["evidence"]["current_maintainer_workflow"] == "direct_on_main"
+    assert criteria["branch_first_enforcement_policy"]["evidence"]["protected_branch_error"] == (
+        "branch_first_workflow_required"
+    )
+    assert criteria["branch_first_policy_receipt_readback"]["ready"] is True
+    assert criteria["branch_first_policy_receipt_readback"]["evidence"]["receipt_kind"] == (
+        "git.push.branch_first_policy.receipt"
+    )
     assert criteria["non_authorizing_review_guard"]["ready"] is True
 
     assert body["current_workflow_compatibility"]["direct_on_main_supported"] is True
@@ -203,4 +214,5 @@ def test_executor_branch_first_workflow_review_projects_current_git_push_boundar
     assert body["governance"]["branch_first_workflow_review"] is True
     assert body["governance"]["does_not_execute"] is True
     assert body["governance"]["preserves_current_maintainer_workflow"] is True
-    assert body["next_smallest_truthful_gap"] == "stage8_branch_first_workflow_enforcement"
+    assert body["governance"]["requires_branch_first_opt_in_for_git_push"] is True
+    assert body["next_smallest_truthful_gap"] == "stage8_leases_idempotency_review"

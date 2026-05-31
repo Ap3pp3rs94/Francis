@@ -46679,6 +46679,64 @@ Latest validation for Stage 8 branch-first workflow review:
   branch_first_enforcement_ready=false;
   next_smallest_truthful_gap=stage8_branch_first_workflow_enforcement`.
 
+### 2026-05-30 - Stage 8 branch-first enforcement is opt-in and receipted
+
+Roadmap area: Stage 8 / Executor Substrate, branch-first workflow enforcement.
+
+Material change:
+
+- `git.push` now supports opt-in branch-first enforcement through
+  `branch_first_required`, `branch_first_workflow`, or
+  `workflow_policy=branch_first`.
+- When branch-first enforcement is active, protected branches
+  `main`, `master`, `trunk`, and `production` are blocked before approval is
+  requested.
+- Each branch-first policy decision writes a
+  `git.push.branch_first_policy.receipt` under
+  `data/artifacts/git_push_branch_policy_receipts`.
+- The default direct-on-main maintainer workflow remains unchanged unless the
+  branch-first policy is explicitly requested.
+- `/executor/substrate/branch-first-workflow-review` now reports
+  `status=branch_first_workflow_review_ready`, `ready_count=8`,
+  `required_count=8`, `branch_first_enforcement_ready=true`, and
+  `next_smallest_truthful_gap=stage8_leases_idempotency_review`.
+- `/executor/substrate/status` now reports `ready_count=4`,
+  `required_count=6`, and
+  `next_smallest_truthful_gap=stage8_leases_idempotency_review`.
+
+Latest validation for Stage 8 branch-first enforcement:
+
+- `python -m pytest
+  tests/test_api_operations.py::test_operations_git_push_requires_approval_and_pushes_branch
+  tests/test_api_operations.py::test_operations_git_push_branch_first_policy_blocks_protected_branch_before_approval
+  tests/test_api_operations.py::test_operations_git_push_refreshes_approval_when_remote_changes
+  tests/test_api_executor_substrate.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 6 passed`
+- `python -m mypy src/francis/agent/git_push.py
+  src/francis/executor_substrate.py
+  src/francis/api/routes/executor_substrate.py`
+  Result: `passed`
+- `python -m ruff check src/francis/agent/git_push.py
+  src/francis/executor_substrate.py
+  src/francis/api/routes/executor_substrate.py tests/test_api_operations.py
+  tests/test_api_executor_substrate.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/agent/git_push.py
+  src/francis/executor_substrate.py
+  src/francis/api/routes/executor_substrate.py tests/test_api_operations.py
+  tests/test_api_executor_substrate.py tests/test_api_contract_chat_ui.py`
+  Result: `passed; 6 files already formatted`
+- Live local readback:
+  `/executor/substrate/branch-first-workflow-review` and
+  `/executor/substrate/status`.
+  Result: `branch_status=branch_first_workflow_review_ready;
+  branch_ready_count=8; branch_required_count=8;
+  branch_enforcement_ready=true; branch_next=stage8_leases_idempotency_review;
+  status_ready_count=4; status_required_count=6;
+  status_next=stage8_leases_idempotency_review`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
