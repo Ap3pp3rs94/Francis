@@ -164,6 +164,15 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
     assert "live-progress sample receipt" in away_progress["receipt_behavior"]
     assert "does not activate autonomy" in away_progress["notes"]
 
+    away_closure = entries["/away/stage-closure-decision"]
+    assert away_closure["family"] == "away"
+    assert away_closure["required_actor"] == "payload.actor"
+    assert away_closure["required_scope"] == "away.stage10.closure.write"
+    assert away_closure["governance_maturity"] == "permission_gated"
+    assert "completion review readiness" in away_closure["approval_requirement"]
+    assert "stage closure decision receipt" in away_closure["receipt_behavior"]
+    assert "does not mutate runtime stage state" in away_closure["notes"]
+
     memory = entries["/memory/timeline/record"]
     assert memory["family"] == "memory_timeline"
     assert memory["required_actor"] == "payload.request_actor, payload.api_actor, or payload.actor"

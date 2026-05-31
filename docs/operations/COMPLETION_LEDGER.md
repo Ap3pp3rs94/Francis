@@ -47898,6 +47898,64 @@ Latest validation for Stage 10 Away live progress sample:
   status_next=stage10_stage_closure_decision;
   review_next=stage10_stage_closure_decision`.
 
+### 2026-05-31 - Stage 10 Away closure decision is receipted
+
+Roadmap area: Stage 10 / Away Mode, explicit operator stage closure decision.
+
+Material change:
+
+- Added permission-gated POST `/away/stage-closure-decision` with required
+  scope `away.stage10.closure.write`.
+- Added read-only GET `/away/stage-closure-decisions`.
+- The closure route records an explicit Stage 10 operator decision only after
+  `/away/completion-review` is ready.
+- The closure receipt references the Stage 9 closure receipt and the live Away
+  progress sample receipt.
+- The closure receipt does not mutate runtime stage state, write tasks, write
+  memory, run tools, run shell, run git, start processes, grant execution
+  authority, or grant mutation authority.
+- The mutating-route authority matrix now covers
+  `/away/stage-closure-decision`.
+- A live local closure receipt was recorded:
+  `away_stage10_closure_53858b926ce2`.
+- `/away/status`, `/away/completion-review`, and
+  `/away/stage-closure-decisions` now report Stage 10 closed by receipt and
+  advance the next smallest truthful gap to `stage10_ledger_closure`.
+
+Latest validation for Stage 10 Away closure decision:
+
+- `python -m pytest tests/test_api_away.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  tests/test_api_mutating_route_authority_matrix.py -q --tb=short --maxfail=1`
+  Result: `passed; 14 tests passed`
+- `python -m mypy src/francis/away.py
+  src/francis/api/routes/away.py src/francis/api/mutation_authority_matrix.py`
+  Result: `passed`
+- `python -m ruff check src/francis/away.py
+  src/francis/api/routes/away.py src/francis/api/mutation_authority_matrix.py
+  tests/test_api_away.py tests/test_api_contract_chat_ui.py
+  tests/test_api_mutating_route_authority_matrix.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/away.py
+  src/francis/api/routes/away.py src/francis/api/mutation_authority_matrix.py
+  tests/test_api_away.py tests/test_api_contract_chat_ui.py
+  tests/test_api_mutating_route_authority_matrix.py`
+  Result: `passed; 6 files already formatted`
+- Live local governed route/readback:
+  POST `/away/stage-closure-decision`, GET `/away/stage-closure-decisions`,
+  GET `/away/status`, and GET `/away/completion-review`.
+  Result: `before_review_ready=true;
+  record_status=recorded;
+  receipt_id=away_stage10_closure_53858b926ce2;
+  decision=close_stage10;
+  closed_by_receipt=true;
+  readback_status=closed;
+  readback_closed=true;
+  status=stage10_closed_by_receipt;
+  status_closed=true;
+  status_next=stage10_ledger_closure;
+  review_next=stage10_ledger_closure`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -22,8 +22,10 @@ AWAY_RETURN_BRIEFING_KIND = "francis.stage10.away.return_briefing"
 AWAY_COMPLETION_REVIEW_KIND = "francis.stage10.away.completion_review"
 AWAY_LIVE_PROGRESS_SAMPLE_RECEIPT_KIND = "francis.stage10.away.live_progress_sample_receipt"
 AWAY_LIVE_PROGRESS_SAMPLE_RECEIPTS_KIND = "francis.stage10.away.live_progress_sample_receipts"
+AWAY_STAGE_CLOSURE_DECISION_KIND = "francis.stage10.away.stage10_operator_stage_closure_decision_receipt"
 
 AWAY_LIVE_PROGRESS_SCOPE = "away.progress.write"
+AWAY_STAGE_CLOSURE_SCOPE = "away.stage10.closure.write"
 
 _ALLOWED_ENV_PROFILES = {"dev", "workstation", "local", "test"}
 _ALLOWED_LIVE_PROGRESS_SAMPLE_TYPES = {"shift_report_review", "return_briefing_review"}
@@ -100,6 +102,9 @@ def away_status_snapshot() -> dict[str, Any]:
     return_briefing = away_return_briefing_snapshot()
     live_progress_receipts = read_away_live_progress_sample_receipts(limit=5)
     latest_live_progress = live_progress_receipts[-1] if live_progress_receipts else {}
+    stage_closure_decisions = read_away_stage10_operator_stage_closure_decisions(limit=5)
+    latest_stage_closure = stage_closure_decisions[-1] if stage_closure_decisions else {}
+    stage10_closed_by_receipt = bool(latest_stage_closure.get("stage10_closed_by_receipt"))
     control_mode = _as_dict(operator.get("control_mode"))
     backlog = _as_dict(operator.get("backlog"))
     continuity = _as_dict(operator.get("continuity"))
@@ -124,7 +129,13 @@ def away_status_snapshot() -> dict[str, Any]:
         "kind": AWAY_STATUS_KIND,
         "stage": STAGE10_AWAY_STAGE,
         "source_id": "away",
-        "status": "stage10_groundwork_ready" if stage9_closed else "awaiting_stage9_ledger_closure",
+        "status": "stage10_closed_by_receipt"
+        if stage10_closed_by_receipt
+        else "stage10_groundwork_ready"
+        if stage9_closed
+        else "awaiting_stage9_ledger_closure",
+        "stage10_closed_by_receipt": stage10_closed_by_receipt,
+        "stage10_latest_closure_receipt_id": _safe_text(latest_stage_closure.get("receipt_id")),
         "stage9_closed_by_receipt": stage9_closed,
         "stage9_latest_closure_receipt_id": _safe_text(stage9.get("latest_receipt_id")),
         "stage9_next_smallest_truthful_gap": _safe_text(stage9.get("next_smallest_truthful_gap")),
@@ -137,6 +148,8 @@ def away_status_snapshot() -> dict[str, Any]:
         "away_mode_ready": stage10_completion_review_ready,
         "stage10_completion_review_route": "/away/completion-review",
         "stage10_completion_review_ready": stage10_completion_review_ready,
+        "stage10_closure_decision_route": "/away/stage-closure-decision",
+        "stage10_closure_decision_readback_route": "/away/stage-closure-decisions",
         "live_away_progress_sample_ready": live_away_progress_sample_ready,
         "latest_live_progress_sample_receipt_id": _safe_text(latest_live_progress.get("receipt_id")),
         "reads_receipts": True,
@@ -177,8 +190,12 @@ def away_status_snapshot() -> dict[str, Any]:
             "completion_review": "/away/completion-review",
             "live_progress_samples": "/away/live-progress-samples",
             "live_progress_sample": "/away/live-progress-sample",
+            "stage_closure_decision": "/away/stage-closure-decision",
+            "stage_closure_decisions": "/away/stage-closure-decisions",
         },
-        "next_smallest_truthful_gap": "stage10_stage_closure_decision"
+        "next_smallest_truthful_gap": "stage10_ledger_closure"
+        if stage10_closed_by_receipt
+        else "stage10_stage_closure_decision"
         if stage10_completion_review_ready
         else "stage10_live_away_progress_sample"
         if away_groundwork_ready
@@ -191,6 +208,54 @@ def away_status_snapshot() -> dict[str, Any]:
         else "stage10_away_safe_task_classes"
         if stage9_closed
         else "stage9_ledger_closure",
+    }
+
+
+def read_away_stage10_operator_stage_closure_decisions(*, limit: int = 20) -> list[dict[str, Any]]:
+    return _read_jsonl_tail(_stage10_operator_stage_closure_decision_path(), limit=_safe_limit(limit, default=20))
+
+
+def away_stage10_operator_stage_closure_decision_readback(*, limit: int = 20) -> dict[str, Any]:
+    items = read_away_stage10_operator_stage_closure_decisions(limit=limit)
+    latest_receipt = items[-1] if items else {}
+    stage10_closed_by_receipt = bool(latest_receipt.get("stage10_closed_by_receipt"))
+    return {
+        "ok": True,
+        "kind": "francis.stage10.away.stage10_operator_stage_closure_decision_receipts",
+        "stage": STAGE10_AWAY_STAGE,
+        "source_id": "away",
+        "status": "closed" if stage10_closed_by_receipt else "ready" if latest_receipt else "empty",
+        "items": items,
+        "count": len(items),
+        "latest_receipt": latest_receipt,
+        "latest_receipt_id": _safe_text(latest_receipt.get("receipt_id")),
+        "latest_decision": _safe_text(latest_receipt.get("decision")),
+        "latest_recorded_ts": _safe_int(latest_receipt.get("recorded_ts")),
+        "receipt_readback_ready": bool(latest_receipt),
+        "stage10_closed_by_receipt": stage10_closed_by_receipt,
+        "marks_runtime_stage_state": False,
+        "reads_receipts": True,
+        "writes_receipts": False,
+        "writes_tasks": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "stage_closure_decision_receipt_readback": True,
+            "receipt_readback_ready": bool(latest_receipt),
+            "does_not_mutate_runtime_stage_state": True,
+            "does_not_write_receipts": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": "stage10_ledger_closure"
+        if stage10_closed_by_receipt
+        else "stage10_stage_closure_decision",
     }
 
 
@@ -324,10 +389,84 @@ def record_away_live_progress_sample(
     return receipt
 
 
+def record_away_stage10_operator_stage_closure_decision(
+    *,
+    actor: Any,
+    reason: Any,
+    decision: Any,
+    review: dict[str, Any],
+    notes: Any = "",
+) -> dict[str, Any]:
+    safe_decision = _safe_stage10_closure_decision(decision)
+    closure_ready = bool(review.get("stage10_completion_review_ready"))
+    stage10_closed_by_receipt = safe_decision == "close_stage10" and closure_ready
+    receipt_id = f"away_stage10_closure_{uuid.uuid4().hex[:12]}"
+    payload = {
+        "ok": True,
+        "kind": AWAY_STAGE_CLOSURE_DECISION_KIND,
+        "receipt_id": receipt_id,
+        "stage": STAGE10_AWAY_STAGE,
+        "source_id": "away",
+        "capture_mode": "explicit_operator_stage_closure_decision",
+        "target": "stage10_away",
+        "actor": _redacted_text(actor)[:240],
+        "reason": _redacted_text(reason)[:500],
+        "decision": safe_decision,
+        "notes": _redacted_text(notes)[:500],
+        "review_status": _safe_text(review.get("status")),
+        "completion_review_ready": closure_ready,
+        "stage9_closure_receipt_id": _safe_text(review.get("stage9_latest_closure_receipt_id")),
+        "live_progress_sample_receipt_id": _safe_text(review.get("latest_live_progress_sample_receipt_id")),
+        "ready_count": _safe_int(review.get("ready_count")),
+        "required_count": _safe_int(review.get("required_count")),
+        "stage10_closed_by_receipt": stage10_closed_by_receipt,
+        "marks_runtime_stage_state": False,
+        "recorded_ts": _now_s(),
+        "writes_receipt": True,
+        "writes_tasks": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "permission_scope": AWAY_STAGE_CLOSURE_SCOPE,
+            "explicit_operator_decision": True,
+            "stage_closure_decision": True,
+            "completion_review_ready": closure_ready,
+            "requires_live_progress_sample": True,
+            "does_not_mutate_runtime_stage_state": True,
+            "does_not_write_tasks": True,
+            "does_not_write_memory": True,
+            "does_not_run_tools": True,
+            "does_not_run_shell": True,
+            "does_not_run_git": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": "stage10_ledger_closure"
+        if stage10_closed_by_receipt
+        else "stage10_stage_closure_decision",
+    }
+    _append_jsonl(_stage10_operator_stage_closure_decision_path(), payload)
+    audit_record(
+        "away.stage10_closure_decision_recorded",
+        actor=payload["actor"],
+        reason=payload["reason"],
+        receipt_id=receipt_id,
+        decision=safe_decision,
+        stage10_closed_by_receipt=stage10_closed_by_receipt,
+    )
+    return payload
+
+
 def away_completion_review() -> dict[str, Any]:
     status = away_status_snapshot()
     checks = _completion_review_checks(status=status)
     review_ready = all(bool(check.get("passed")) for check in checks)
+    stage10_closed = bool(status.get("stage10_closed_by_receipt"))
     return {
         "ok": True,
         "kind": AWAY_COMPLETION_REVIEW_KIND,
@@ -335,6 +474,8 @@ def away_completion_review() -> dict[str, Any]:
         "source_id": "away",
         "status": "ready" if review_ready else "blocked",
         "stage10_completion_review_ready": review_ready,
+        "stage10_closed_by_receipt": stage10_closed,
+        "stage_closure_decision_required": not stage10_closed,
         "stage9_closed_by_receipt": bool(status.get("stage9_closed_by_receipt")),
         "stage9_latest_closure_receipt_id": _safe_text(status.get("stage9_latest_closure_receipt_id")),
         "away_groundwork_ready": bool(status.get("away_groundwork_ready")),
@@ -358,6 +499,7 @@ def away_completion_review() -> dict[str, Any]:
         "governance": {
             "read_only": True,
             "completion_review_only": True,
+            "stage_closure_decision_required": not stage10_closed,
             "requires_stage9_ledger_closure": True,
             "requires_live_progress_sample_before_completion": True,
             "does_not_claim_background_progress": True,
@@ -373,7 +515,9 @@ def away_completion_review() -> dict[str, Any]:
             "grants_mutation_authority": False,
         },
         "routes": _as_dict(status.get("routes")),
-        "next_smallest_truthful_gap": "stage10_stage_closure_decision"
+        "next_smallest_truthful_gap": "stage10_ledger_closure"
+        if stage10_closed
+        else "stage10_stage_closure_decision"
         if review_ready
         else "stage10_live_away_progress_sample",
     }
@@ -1013,7 +1157,7 @@ def _backlog_summary(backlog: dict[str, Any]) -> str:
 def _blocked_no_receipt(*, status: str, reason: str, required_scope: str, next_gap: str) -> dict[str, Any]:
     return {
         "ok": False,
-        "kind": "francis.stage10.away.live_progress_sample.record",
+        "kind": "francis.stage10.away.blocked_receipt",
         "stage": STAGE10_AWAY_STAGE,
         "source_id": "away",
         "status": status,
@@ -1045,8 +1189,19 @@ def _safe_live_progress_sample_type(value: Any) -> str:
     return "shift_report_review"
 
 
+def _safe_stage10_closure_decision(value: Any) -> str:
+    text = _safe_text(value)
+    if text in {"close_stage10", "do_not_close_stage10", "needs_more_evidence"}:
+        return text
+    return "needs_more_evidence"
+
+
 def _live_progress_sample_path() -> Path:
     return data_dir() / "logs" / "away" / "live_progress_sample_receipts.jsonl"
+
+
+def _stage10_operator_stage_closure_decision_path() -> Path:
+    return data_dir() / "logs" / "away" / "stage10_operator_stage_closure_decisions.jsonl"
 
 
 def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:

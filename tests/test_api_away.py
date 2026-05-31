@@ -74,6 +74,8 @@ def test_away_status_projects_stage10_groundwork_after_stage9_closure(monkeypatc
     body = response.json()
     assert body["ok"] is True
     assert body["status"] == "stage10_groundwork_ready"
+    assert body["stage10_closed_by_receipt"] is False
+    assert body["stage10_latest_closure_receipt_id"] == ""
     assert body["stage9_closed_by_receipt"] is True
     assert body["stage9_latest_closure_receipt_id"] == "takeover_stage9_closure_away_test"
     assert body["stage9_next_smallest_truthful_gap"] == "stage9_ledger_closure"
@@ -82,6 +84,8 @@ def test_away_status_projects_stage10_groundwork_after_stage9_closure(monkeypatc
     assert body["away_mode_ready"] is False
     assert body["stage10_completion_review_route"] == "/away/completion-review"
     assert body["stage10_completion_review_ready"] is False
+    assert body["stage10_closure_decision_route"] == "/away/stage-closure-decision"
+    assert body["stage10_closure_decision_readback_route"] == "/away/stage-closure-decisions"
     assert body["live_away_progress_sample_ready"] is False
     assert body["reads_receipts"] is True
     assert body["writes_receipts"] is False
@@ -102,6 +106,8 @@ def test_away_status_projects_stage10_groundwork_after_stage9_closure(monkeypatc
     assert body["routes"]["completion_review"] == "/away/completion-review"
     assert body["routes"]["live_progress_samples"] == "/away/live-progress-samples"
     assert body["routes"]["live_progress_sample"] == "/away/live-progress-sample"
+    assert body["routes"]["stage_closure_decision"] == "/away/stage-closure-decision"
+    assert body["routes"]["stage_closure_decisions"] == "/away/stage-closure-decisions"
     assert body["governance"]["does_not_claim_away_completion_from_groundwork"] is True
     assert body["governance"]["requires_live_progress_sample_before_completion"] is True
     assert body["next_smallest_truthful_gap"] == "stage10_live_away_progress_sample"
@@ -345,6 +351,8 @@ def test_away_completion_review_blocks_until_live_progress_sample(monkeypatch, t
     assert body["kind"] == "francis.stage10.away.completion_review"
     assert body["status"] == "blocked"
     assert body["stage10_completion_review_ready"] is False
+    assert body["stage10_closed_by_receipt"] is False
+    assert body["stage_closure_decision_required"] is True
     assert body["stage9_closed_by_receipt"] is True
     assert body["stage9_latest_closure_receipt_id"] == "takeover_stage9_closure_completion_review_test"
     assert body["away_groundwork_ready"] is True
@@ -363,6 +371,7 @@ def test_away_completion_review_blocks_until_live_progress_sample(monkeypatch, t
     assert body["marks_stage_closed"] is False
     assert body["governance"]["read_only"] is True
     assert body["governance"]["completion_review_only"] is True
+    assert body["governance"]["stage_closure_decision_required"] is True
     assert body["governance"]["requires_live_progress_sample_before_completion"] is True
     assert body["governance"]["does_not_claim_background_progress"] is True
     assert body["governance"]["does_not_activate_away_autonomy"] is True
@@ -505,3 +514,145 @@ def test_away_live_progress_sample_records_receipt_and_unblocks_completion_revie
     assert checks["live_away_progress_sample_ready"]["passed"] is True
     assert checks["live_away_progress_sample_ready"]["evidence"] == body["receipt_id"]
     assert all(item["passed"] for item in review["checks"])
+
+
+def test_away_stage10_closure_decision_denies_without_scope(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage9_closure_receipt(data_root, receipt_id="takeover_stage9_closure_stage10_denied_test")
+
+    response = TestClient(create_app()).post(
+        "/away/stage-closure-decision",
+        json={
+            "actor": "test.away.closure",
+            "reason": "missing closure scope",
+            "decision": "close_stage10",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["status"] == "denied"
+    assert body["error"] == "api_permission_denied"
+    assert body["writes_receipt"] is False
+    assert body["writes_tasks"] is False
+    assert body["writes_memory"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["starts_processes"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["governance"]["required_scope"] == "away.stage10.closure.write"
+    assert not (data_root / "logs" / "away" / "stage10_operator_stage_closure_decisions.jsonl").exists()
+
+
+def test_away_stage10_closure_decision_records_receipt_after_completion_review(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps(
+            {
+                "test.away.progress": ["away.progress.write"],
+                "test.away.closure": ["away.stage10.closure.write"],
+            }
+        ),
+    )
+    _write_stage9_closure_receipt(data_root, receipt_id="takeover_stage9_closure_stage10_close_test")
+
+    client = TestClient(create_app())
+    sample = client.post(
+        "/away/live-progress-sample",
+        json={
+            "actor": "test.away.progress",
+            "reason": "stage10 closure sample",
+            "sample_type": "return_briefing_review",
+            "summary": "Grounded sample before closure.",
+        },
+    ).json()
+    assert sample["ok"] is True
+    assert sample["receipt_id"]
+
+    response = client.post(
+        "/away/stage-closure-decision",
+        json={
+            "actor": "test.away.closure",
+            "reason": "close stage 10 token=awayclosereasonsecret123",
+            "decision": "close_stage10",
+            "notes": "Completion review and live sample are present token=awayclosenotessecret123",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "francis.stage10.away.stage10_operator_stage_closure_decision.record"
+    assert body["status"] == "recorded"
+    assert body["receipt_id"].startswith("away_stage10_closure_")
+    assert body["decision"] == "close_stage10"
+    assert body["stage10_closed_by_receipt"] is True
+    assert body["writes_receipt"] is True
+    assert body["writes_tasks"] is False
+    assert body["writes_memory"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["starts_processes"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["marks_runtime_stage_state"] is False
+    assert body["governance"]["required_scope"] == "away.stage10.closure.write"
+    assert body["governance"]["does_not_mutate_runtime_stage_state"] is True
+    assert body["next_smallest_truthful_gap"] == "stage10_ledger_closure"
+
+    receipt = body["receipt"]
+    assert receipt["kind"] == "francis.stage10.away.stage10_operator_stage_closure_decision_receipt"
+    assert receipt["receipt_id"] == body["receipt_id"]
+    assert receipt["actor"] == "test.away.closure"
+    assert receipt["completion_review_ready"] is True
+    assert receipt["stage10_closed_by_receipt"] is True
+    assert receipt["stage9_closure_receipt_id"] == "takeover_stage9_closure_stage10_close_test"
+    assert receipt["live_progress_sample_receipt_id"] == sample["receipt_id"]
+    assert receipt["marks_runtime_stage_state"] is False
+    assert receipt["governance"]["permission_scope"] == "away.stage10.closure.write"
+    assert receipt["governance"]["requires_live_progress_sample"] is True
+    assert receipt["governance"]["does_not_mutate_runtime_stage_state"] is True
+    receipt_text = json.dumps(receipt, sort_keys=True)
+    assert "awayclosereasonsecret123" not in receipt_text
+    assert "awayclosenotessecret123" not in receipt_text
+
+    readback = client.get("/away/stage-closure-decisions").json()
+    assert readback["ok"] is True
+    assert readback["kind"] == "francis.stage10.away.stage10_operator_stage_closure_decision_receipts"
+    assert readback["status"] == "closed"
+    assert readback["latest_receipt_id"] == body["receipt_id"]
+    assert readback["stage10_closed_by_receipt"] is True
+    assert readback["marks_runtime_stage_state"] is False
+    assert readback["writes_receipts"] is False
+    assert readback["writes_tasks"] is False
+    assert readback["writes_memory"] is False
+    assert readback["runs_tools"] is False
+    assert readback["runs_shell"] is False
+    assert readback["runs_git"] is False
+    assert readback["grants_execution_authority"] is False
+    assert readback["grants_mutation_authority"] is False
+    assert readback["governance"]["stage_closure_decision_receipt_readback"] is True
+    assert readback["governance"]["does_not_mutate_runtime_stage_state"] is True
+    assert readback["next_smallest_truthful_gap"] == "stage10_ledger_closure"
+
+    status = client.get("/away/status").json()
+    assert status["status"] == "stage10_closed_by_receipt"
+    assert status["stage10_closed_by_receipt"] is True
+    assert status["stage10_latest_closure_receipt_id"] == body["receipt_id"]
+    assert status["next_smallest_truthful_gap"] == "stage10_ledger_closure"
+
+    review = client.get("/away/completion-review").json()
+    assert review["stage10_completion_review_ready"] is True
+    assert review["stage10_closed_by_receipt"] is True
+    assert review["stage_closure_decision_required"] is False
+    assert review["next_smallest_truthful_gap"] == "stage10_ledger_closure"

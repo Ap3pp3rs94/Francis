@@ -7,13 +7,16 @@ from pydantic import BaseModel, Field
 
 from francis.away import (
     AWAY_LIVE_PROGRESS_SCOPE,
+    AWAY_STAGE_CLOSURE_SCOPE,
     away_autonomy_budgets_review,
     away_completion_review,
     away_live_progress_sample_receipts,
     away_return_briefing_snapshot,
     away_safe_task_classes_review,
+    away_stage10_operator_stage_closure_decision_readback,
     away_shift_report_snapshot,
     away_status_snapshot,
+    record_away_stage10_operator_stage_closure_decision,
     record_away_live_progress_sample,
 )
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
@@ -27,6 +30,13 @@ class AwayLiveProgressSampleIn(BaseModel):
     sample_type: str = Field(default="shift_report_review", max_length=120)
     summary: str = Field(default="", max_length=800)
     next_recommendation: str = Field(default="", max_length=500)
+
+
+class AwayStage10OperatorStageClosureDecisionIn(BaseModel):
+    actor: str = Field(default="", max_length=240)
+    reason: str = Field(default="", max_length=500)
+    decision: str = Field(default="needs_more_evidence", max_length=80)
+    notes: str = Field(default="", max_length=500)
 
 
 def _write_permission(actor: Any, *, required_scope: str, route: str, method: str) -> ApiPermissionDecision:
@@ -100,6 +110,11 @@ def completion_review() -> dict[str, Any]:
     return away_completion_review()
 
 
+@router.get("/stage-closure-decisions")
+def stage_closure_decisions(limit: int = 20) -> dict[str, Any]:
+    return away_stage10_operator_stage_closure_decision_readback(limit=limit)
+
+
 @router.get("/live-progress-samples")
 def live_progress_samples(limit: int = 20) -> dict[str, Any]:
     return away_live_progress_sample_receipts(limit=limit)
@@ -158,4 +173,103 @@ def live_progress_sample(request: Request, payload: AwayLiveProgressSampleIn) ->
             "next_smallest_truthful_gap",
             "stage10_live_away_progress_sample",
         ),
+    }
+
+
+@router.post("/stage-closure-decision")
+def stage_closure_decision(
+    request: Request,
+    payload: AwayStage10OperatorStageClosureDecisionIn,
+) -> dict[str, Any]:
+    route = "/away/stage-closure-decision"
+    permission = _write_permission(
+        payload.actor,
+        required_scope=AWAY_STAGE_CLOSURE_SCOPE,
+        route=route,
+        method="POST",
+    )
+    if not permission.allowed:
+        return _permission_denied(
+            permission,
+            required_scope=AWAY_STAGE_CLOSURE_SCOPE,
+            next_step="configure_away_stage10_closure_write_scope_before_operator_stage_closure_decision",
+        )
+
+    review = away_completion_review()
+    if not review.get("stage10_completion_review_ready"):
+        return {
+            "ok": True,
+            "kind": "francis.stage10.away.stage10_operator_stage_closure_decision.record",
+            "status": "awaiting_stage10_closure_readiness",
+            "source_id": "away",
+            "target": "stage10_away",
+            "review": review,
+            "receipt": None,
+            "receipt_id": "",
+            "writes_receipt": False,
+            "writes_tasks": False,
+            "writes_memory": False,
+            "runs_tools": False,
+            "runs_shell": False,
+            "runs_git": False,
+            "starts_processes": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+            "marks_runtime_stage_state": False,
+            "governance": {
+                "required_scope": AWAY_STAGE_CLOSURE_SCOPE,
+                "route": str(request.url.path),
+                "explicit_operator_decision": True,
+                "does_not_record_when_review_not_ready": True,
+                "does_not_mutate_runtime_stage_state": True,
+                "grants_execution_authority": False,
+                "grants_mutation_authority": False,
+            },
+            "next_smallest_truthful_gap": "stage10_completion_review",
+        }
+
+    receipt = record_away_stage10_operator_stage_closure_decision(
+        actor=payload.actor,
+        reason=payload.reason,
+        decision=payload.decision,
+        notes=payload.notes,
+        review=review,
+    )
+    return {
+        "ok": True,
+        "kind": "francis.stage10.away.stage10_operator_stage_closure_decision.record",
+        "status": "recorded",
+        "source_id": "away",
+        "target": "stage10_away",
+        "review": review,
+        "receipt": receipt,
+        "receipt_id": receipt.get("receipt_id", ""),
+        "decision": receipt.get("decision", ""),
+        "stage10_closed_by_receipt": bool(receipt.get("stage10_closed_by_receipt")),
+        "writes_receipt": True,
+        "writes_tasks": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "marks_runtime_stage_state": False,
+        "governance": {
+            "required_scope": AWAY_STAGE_CLOSURE_SCOPE,
+            "route": str(request.url.path),
+            "explicit_operator_decision": True,
+            "does_not_mutate_runtime_stage_state": True,
+            "does_not_write_tasks": True,
+            "does_not_write_memory": True,
+            "does_not_run_tools": True,
+            "does_not_run_shell": True,
+            "does_not_run_git": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": "stage10_ledger_closure"
+        if receipt.get("stage10_closed_by_receipt")
+        else "stage10_stage_closure_decision",
     }

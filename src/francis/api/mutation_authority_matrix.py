@@ -112,6 +112,17 @@ _RULES: tuple[AuthorityRule, ...] = (
         notes="The sample is grounded in existing Away readbacks and does not activate autonomy or run tools.",
     ),
     AuthorityRule(
+        family="away",
+        prefixes=("/away/stage-closure-decision",),
+        required_actor="payload.actor",
+        required_scope="away.stage10.closure.write",
+        approval_requirement="this is the Stage 10 operator closure decision route after completion review readiness",
+        receipt_behavior="Stage 10 Away operator stage closure decision receipt",
+        denial_behavior="api_permission_denied via permission_gate before stage closure receipt write",
+        governance_maturity="permission_gated",
+        notes="Closure receipt does not mutate runtime stage state or grant execution authority.",
+    ),
+    AuthorityRule(
         family="supervised_exec",
         prefixes=("/operations/supervised-exec",),
         required_actor="payload.actor",
