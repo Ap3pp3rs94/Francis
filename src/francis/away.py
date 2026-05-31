@@ -9,6 +9,7 @@ STAGE10_AWAY_STAGE = "Stage 10 / Away Mode"
 AWAY_STATUS_KIND = "francis.stage10.away.status"
 AWAY_SAFE_TASK_CLASSES_KIND = "francis.stage10.away.safe_task_classes"
 AWAY_AUTONOMY_BUDGETS_KIND = "francis.stage10.away.autonomy_budgets"
+AWAY_SHIFT_REPORT_KIND = "francis.stage10.away.shift_report"
 
 _AWAY_SAFE_TASK_CLASSES: tuple[dict[str, Any], ...] = (
     {
@@ -78,6 +79,7 @@ def away_status_snapshot() -> dict[str, Any]:
     operator = operator_mode_snapshot()
     safe_task_classes = away_safe_task_classes_review()
     autonomy_budgets = away_autonomy_budgets_review()
+    shift_report = away_shift_report_snapshot()
     control_mode = _as_dict(operator.get("control_mode"))
     backlog = _as_dict(operator.get("backlog"))
     continuity = _as_dict(operator.get("continuity"))
@@ -86,6 +88,7 @@ def away_status_snapshot() -> dict[str, Any]:
         stage9_closed=stage9_closed,
         safe_task_classes_ready=bool(safe_task_classes.get("away_safe_task_classes_ready")),
         autonomy_budgets_ready=bool(autonomy_budgets.get("autonomy_budgets_ready")),
+        shift_report_ready=bool(shift_report.get("shift_report_ready")),
         operator=operator,
         backlog=backlog,
         continuity=continuity,
@@ -138,8 +141,11 @@ def away_status_snapshot() -> dict[str, Any]:
             "stage9_closure_readback": "/takeover/stage-closure-decisions",
             "safe_task_classes": "/away/safe-task-classes",
             "autonomy_budgets": "/away/autonomy-budgets",
+            "shift_report": "/away/shift-report",
         },
-        "next_smallest_truthful_gap": "stage10_shift_reports"
+        "next_smallest_truthful_gap": "stage10_return_briefing_flow"
+        if stage9_closed and bool(shift_report.get("shift_report_ready"))
+        else "stage10_shift_reports"
         if stage9_closed and bool(autonomy_budgets.get("autonomy_budgets_ready"))
         else "stage10_autonomy_budgets"
         if stage9_closed and bool(safe_task_classes.get("away_safe_task_classes_ready"))
@@ -258,11 +264,94 @@ def away_autonomy_budgets_review() -> dict[str, Any]:
     }
 
 
+def away_shift_report_snapshot() -> dict[str, Any]:
+    stage9 = takeover_stage9_operator_stage_closure_decision_readback(limit=5)
+    operator = operator_mode_snapshot()
+    budgets = away_autonomy_budgets_review()
+    control_mode = _as_dict(operator.get("control_mode"))
+    backlog = _as_dict(operator.get("backlog"))
+    continuity = _as_dict(operator.get("continuity"))
+    sections = [
+        {
+            "id": "stage9_closure",
+            "label": "Takeover closure",
+            "summary": f"Latest Stage 9 closure receipt: {_safe_text(stage9.get('latest_receipt_id'))}.",
+            "evidence": "/takeover/stage-closure-decisions",
+        },
+        {
+            "id": "operator_mode",
+            "label": "Operator mode",
+            "summary": _safe_text(control_mode.get("summary")),
+            "evidence": "/system/operator_mode",
+        },
+        {
+            "id": "backlog",
+            "label": "Governed backlog",
+            "summary": _backlog_summary(backlog),
+            "evidence": "operator_mode.backlog",
+        },
+        {
+            "id": "continuity",
+            "label": "Continuity",
+            "summary": _safe_text(continuity.get("headline")),
+            "evidence": "operator_mode.continuity",
+        },
+        {
+            "id": "away_budget",
+            "label": "Away budget",
+            "summary": f"{_safe_int(budgets.get('budget_count'))} bounded budgets declared; autonomy activation remains off.",
+            "evidence": "/away/autonomy-budgets",
+        },
+    ]
+    checks = _shift_report_checks(budgets_ready=bool(budgets.get("autonomy_budgets_ready")), sections=sections)
+    ready = all(bool(check.get("passed")) for check in checks)
+    return {
+        "ok": True,
+        "kind": AWAY_SHIFT_REPORT_KIND,
+        "stage": STAGE10_AWAY_STAGE,
+        "source_id": "away",
+        "status": "ready" if ready else "blocked",
+        "shift_report_ready": ready,
+        "stage9_closed_by_receipt": bool(stage9.get("stage9_closed_by_receipt")),
+        "stage9_latest_closure_receipt_id": _safe_text(stage9.get("latest_receipt_id")),
+        "autonomy_budgets_ready": bool(budgets.get("autonomy_budgets_ready")),
+        "sections": sections,
+        "section_count": len(sections),
+        "checks": checks,
+        "reads_receipts": True,
+        "writes_receipts": False,
+        "writes_tasks": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "shift_report_projection_only": True,
+            "does_not_claim_background_progress": True,
+            "does_not_activate_away_autonomy": True,
+            "does_not_write_receipts": True,
+            "does_not_write_tasks": True,
+            "does_not_write_memory": True,
+            "does_not_run_tools": True,
+            "does_not_run_shell": True,
+            "does_not_run_git": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": "stage10_return_briefing_flow" if ready else "stage10_shift_reports",
+    }
+
+
 def _away_deliverables(
     *,
     stage9_closed: bool,
     safe_task_classes_ready: bool,
     autonomy_budgets_ready: bool,
+    shift_report_ready: bool,
     operator: dict[str, Any],
     backlog: dict[str, Any],
     continuity: dict[str, Any],
@@ -312,8 +401,8 @@ def _away_deliverables(
         {
             "id": "shift_reports",
             "label": "Shift reports",
-            "ready": False,
-            "evidence": "not_implemented_yet",
+            "ready": shift_report_ready,
+            "evidence": "/away/shift-report",
         },
         {
             "id": "return_briefing_flow",
@@ -475,6 +564,43 @@ def _autonomy_budget_checks(
             evidence="no_risky_actions_allowed",
         ),
     ]
+
+
+def _shift_report_checks(*, budgets_ready: bool, sections: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    section_ids = {_safe_text(item.get("id")) for item in sections}
+    return [
+        _check(
+            "autonomy_budgets_ready",
+            passed=budgets_ready,
+            evidence="/away/autonomy-budgets",
+        ),
+        _check(
+            "required_sections_present",
+            passed={"stage9_closure", "operator_mode", "backlog", "continuity", "away_budget"}.issubset(section_ids),
+            evidence=str(len(sections)),
+        ),
+        _check(
+            "sections_have_summaries",
+            passed=all(bool(_safe_text(item.get("summary"))) for item in sections),
+            evidence="non_empty_summaries",
+        ),
+        _check(
+            "read_only_report",
+            passed=True,
+            evidence="projection_only",
+        ),
+    ]
+
+
+def _backlog_summary(backlog: dict[str, Any]) -> str:
+    pending_approvals = _safe_int(backlog.get("pending_approvals"))
+    approval_tasks = _safe_int(backlog.get("approval_pending_tasks"))
+    queued_tasks = _safe_int(backlog.get("queued_tasks"))
+    blocked_tasks = _safe_int(backlog.get("blocked_tasks"))
+    return (
+        f"{pending_approvals} pending approvals, {approval_tasks} approval-gated tasks, "
+        f"{queued_tasks} queued tasks, {blocked_tasks} blocked tasks."
+    )
 
 
 def _check(check_id: str, *, passed: bool, evidence: str) -> dict[str, Any]:

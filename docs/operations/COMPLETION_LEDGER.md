@@ -47713,6 +47713,46 @@ Latest validation for Stage 10 Away autonomy budgets:
   status_next=stage10_shift_reports;
   review_next=stage10_shift_reports`.
 
+### 2026-05-31 - Stage 10 shift report is a read-only projection
+
+Roadmap area: Stage 10 / Away Mode, shift report surface.
+
+Material change:
+
+- Added read-only GET `/away/shift-report`.
+- The report summarizes the Stage 9 closure receipt, current operator mode,
+  governed backlog, continuity headline, and Away budget posture.
+- The report is projection-only: it does not claim background progress, activate
+  Away autonomy, write receipts, write tasks, write memory, run tools, run
+  shell, run git, start processes, or grant execution/mutation authority.
+- `/away/status` now marks `shift_reports` ready and advances the next smallest
+  truthful gap to `stage10_return_briefing_flow`.
+
+Latest validation for Stage 10 Away shift report:
+
+- `python -m pytest tests/test_api_away.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 6 tests passed`
+- `python -m mypy src/francis/away.py
+  src/francis/api/routes/away.py`
+  Result: `passed`
+- `python -m ruff check src/francis/away.py
+  src/francis/api/routes/away.py tests/test_api_away.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/away.py
+  src/francis/api/routes/away.py tests/test_api_away.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed; 4 files already formatted`
+- Live local read-only route/readback:
+  GET `/away/status` and GET `/away/shift-report`.
+  Result: `status=stage10_groundwork_ready;
+  shift_ready=true; section_count=5;
+  ready_count=7; required_count=8;
+  status_next=stage10_return_briefing_flow;
+  report_next=stage10_return_briefing_flow`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
