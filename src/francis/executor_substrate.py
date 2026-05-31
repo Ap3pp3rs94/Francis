@@ -13,6 +13,7 @@ _STAGE8_BRANCH_FIRST_WORKFLOW_GAP = "stage8_branch_first_workflow_review"
 _STAGE8_BRANCH_FIRST_ENFORCEMENT_GAP = "stage8_branch_first_workflow_enforcement"
 _STAGE8_LEASES_IDEMPOTENCY_GAP = "stage8_leases_idempotency_review"
 _STAGE8_IDEMPOTENCY_DEDUP_GAP = "stage8_idempotency_dedup_enforcement"
+_STAGE8_LEASE_RECEIPT_GAP = "stage8_lease_receipt_readback"
 
 
 def executor_substrate_status_snapshot() -> dict[str, Any]:
@@ -57,7 +58,7 @@ def executor_substrate_status_snapshot() -> dict[str, Any]:
             "grants_execution_authority": False,
             "grants_mutation_authority": False,
         },
-        "next_smallest_truthful_gap": (_STAGE8_IDEMPOTENCY_DEDUP_GAP if stage7_closed else _STAGE7_LEDGER_CLOSURE_GAP),
+        "next_smallest_truthful_gap": (_STAGE8_LEASE_RECEIPT_GAP if stage7_closed else _STAGE7_LEDGER_CLOSURE_GAP),
     }
 
 
@@ -356,11 +357,13 @@ def executor_leases_idempotency_review_snapshot() -> dict[str, Any]:
         },
         {
             "id": "idempotency_dedup_enforcement",
-            "ready": False,
+            "ready": True,
             "evidence": {
                 "source": "src/francis/operations/runtime.py",
-                "current_surface": "idempotency_key is propagated into task inputs",
-                "missing": "reuse or reject duplicate operation creation by actor/action/idempotency_key",
+                "current_surface": "duplicate operation creation returns existing operation",
+                "match_scope": "requester_id + capability + idempotency_key",
+                "audit_event": "idempotency_reused",
+                "duplicate_create_blocked": True,
             },
         },
         {
@@ -421,7 +424,7 @@ def executor_leases_idempotency_review_snapshot() -> dict[str, Any]:
         "lock_file_contract_ready": True,
         "ttl_expiration_contract_ready": True,
         "idempotency_key_propagation_ready": True,
-        "idempotency_dedup_enforcement_ready": False,
+        "idempotency_dedup_enforcement_ready": True,
         "lease_receipt_readback_ready": False,
         "bounded_retry_contract_ready": False,
         "ready_count": ready_count,
@@ -454,9 +457,7 @@ def executor_leases_idempotency_review_snapshot() -> dict[str, Any]:
             "grants_execution_authority": False,
             "grants_mutation_authority": False,
         },
-        "next_smallest_truthful_gap": (
-            _STAGE8_IDEMPOTENCY_DEDUP_GAP if branch_ready else _STAGE8_LEASES_IDEMPOTENCY_GAP
-        ),
+        "next_smallest_truthful_gap": (_STAGE8_LEASE_RECEIPT_GAP if branch_ready else _STAGE8_LEASES_IDEMPOTENCY_GAP),
     }
 
 
@@ -522,8 +523,9 @@ def _deliverables(*, stage7_closed: bool) -> list[dict[str, Any]]:
                     "task lock file contract",
                     "ttl expiration contract",
                     "idempotency key propagation",
+                    "idempotency dedup enforcement",
                 ],
-                "missing": "idempotency dedup enforcement, lease receipt readback, and bounded retry contract",
+                "missing": "lease receipt readback and bounded retry contract",
             },
         },
         {

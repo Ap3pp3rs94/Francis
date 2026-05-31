@@ -88,6 +88,65 @@ def test_operations_create_list_get_cancel(monkeypatch, tmp_path: Path) -> None:
     assert cancelled_body["status"] in {"queued", "running", "failed", "canceled", "succeeded", "unknown"}
 
 
+def test_operations_create_reuses_existing_operation_for_matching_idempotency_key(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    first = client.post(
+        "/operations/create",
+        json={
+            "action": "plan.create",
+            "reason": "idempotent operation create",
+            "actor": "test.operations.write",
+            "idempotency_key": "idem-stage8-lease-review",
+            "input": {"goal": "dedupe this operation"},
+        },
+    )
+    assert first.status_code == 200
+    first_body = first.json()
+    assert first_body["ok"] is True
+    operation_id = str(first_body["operation_id"])
+    assert operation_id
+
+    second = client.post(
+        "/operations/create",
+        json={
+            "action": "plan.create",
+            "reason": "idempotent operation create duplicate",
+            "actor": "test.operations.write",
+            "idempotency_key": "idem-stage8-lease-review",
+            "input": {"goal": "dedupe this operation"},
+        },
+    )
+
+    assert second.status_code == 200
+    second_body = second.json()
+    assert second_body["ok"] is True
+    assert second_body["operation_id"] == operation_id
+    assert second_body["idempotent_reuse"] is True
+    assert second_body["duplicate_create_blocked"] is True
+    assert second_body["message"] == "idempotent_reuse"
+    assert second_body["operation"]["id"] == operation_id
+    assert second_body["operation"]["input"]["idempotency_key"] == "idem-stage8-lease-review"
+    assert len([path for path in (data_root / "tasks").iterdir() if path.is_dir()]) == 1
+
+    audit_log = data_root / "tasks" / operation_id / "audit.log"
+    audit_lines = [json.loads(line) for line in audit_log.read_text(encoding="utf-8").splitlines()]
+    reuse_events = [line for line in audit_lines if line["event"] == "idempotency_reused"]
+    assert len(reuse_events) == 1
+    assert reuse_events[0]["details"]["idempotency_key"] == "idem-stage8-lease-review"
+    assert reuse_events[0]["details"]["duplicate_create_blocked"] is True
+
+
 def test_operations_operator_surfaces_redact_secret_text(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

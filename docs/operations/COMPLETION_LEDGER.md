@@ -46790,6 +46790,62 @@ Latest validation for Stage 8 leases/idempotency review:
   status_ready_count=4; status_required_count=6;
   status_next=stage8_idempotency_dedup_enforcement`.
 
+### 2026-05-30 - Stage 8 idempotency dedup blocks duplicate operation create
+
+Roadmap area: Stage 8 / Executor Substrate, idempotency enforcement.
+
+Material change:
+
+- `/operations/create` now reuses an existing operation when the same requester,
+  capability, and `idempotency_key` are submitted again.
+- Duplicate operation creation writes an `idempotency_reused` audit event on the
+  existing task and returns `idempotent_reuse=true` with
+  `duplicate_create_blocked=true`.
+- The dedup scope is deliberately narrow:
+  `requester_id + capability + idempotency_key`.
+- `/executor/substrate/leases-idempotency-review` now reports
+  `idempotency_dedup_enforcement_ready=true`, while still leaving durable lease
+  receipt readback and bounded retry contracts incomplete.
+- Live local readback reports `status=leases_idempotency_review_partial`,
+  `ready_count=6`, `required_count=8`,
+  `idempotency_dedup_enforcement_ready=true`,
+  `lease_receipt_readback_ready=false`, `bounded_retry_contract_ready=false`,
+  and `next_smallest_truthful_gap=stage8_lease_receipt_readback`.
+- `/executor/substrate/status` now reports
+  `next_smallest_truthful_gap=stage8_lease_receipt_readback`.
+
+Latest validation for Stage 8 idempotency dedup enforcement:
+
+- `python -m pytest
+  tests/test_api_operations.py::test_operations_create_reuses_existing_operation_for_matching_idempotency_key
+  tests/test_api_executor_substrate.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 7 passed`
+- `python -m mypy src/francis/operations/runtime.py
+  src/francis/executor_substrate.py
+  src/francis/api/routes/executor_substrate.py`
+  Result: `passed`
+- `python -m ruff check src/francis/operations/runtime.py
+  src/francis/executor_substrate.py
+  src/francis/api/routes/executor_substrate.py tests/test_api_operations.py
+  tests/test_api_executor_substrate.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/operations/runtime.py
+  src/francis/executor_substrate.py
+  src/francis/api/routes/executor_substrate.py tests/test_api_operations.py
+  tests/test_api_executor_substrate.py tests/test_api_contract_chat_ui.py`
+  Result: `passed; 6 files already formatted`
+- Live local readback:
+  `/executor/substrate/leases-idempotency-review` and
+  `/executor/substrate/status`.
+  Result: `leases_status=leases_idempotency_review_partial;
+  leases_ready_count=6; leases_required_count=8;
+  idempotency_dedup_ready=true; lease_receipt_ready=false;
+  bounded_retry_ready=false; leases_next=stage8_lease_receipt_readback;
+  status_ready_count=4; status_required_count=6;
+  status_next=stage8_lease_receipt_readback`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

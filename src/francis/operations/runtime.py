@@ -196,6 +196,15 @@ def _operation_approval_id(task: dict[str, Any]) -> str:
     return _result_approval_id(task) or _input_approval_id(task)
 
 
+def _task_idempotency_key(task: dict[str, Any]) -> str:
+    inputs = task.get("inputs") if isinstance(task.get("inputs"), dict) else {}
+    key = _safe_str(inputs.get("idempotency_key")).strip()
+    if key:
+        return key
+    meta = inputs.get("meta") if isinstance(inputs.get("meta"), dict) else {}
+    return _safe_str(meta.get("idempotency_key")).strip()
+
+
 def _result_previous_approval_id(task: dict[str, Any]) -> str:
     payload = _result_payload(task)
     return _safe_str(payload.get("previous_approval_id")).strip()
@@ -806,6 +815,45 @@ def _resolve_capability(action: str, explicit: str | None) -> str:
     return ""
 
 
+def _find_idempotent_operation(
+    *,
+    requester_id: str,
+    capability: str,
+    idempotency_key: str,
+) -> dict[str, Any] | None:
+    key = _safe_str(idempotency_key).strip()
+    if not key:
+        return None
+    root = _task_root_dir()
+    if not root.exists():
+        return None
+
+    matches: list[dict[str, Any]] = []
+    try:
+        children = list(root.iterdir())
+    except Exception:
+        return None
+
+    for child in children:
+        if not child.is_dir():
+            continue
+        task = _load_task(child.name)
+        if not isinstance(task, dict):
+            continue
+        if _safe_str(task.get("requester_id")).strip() != requester_id:
+            continue
+        if _safe_str(task.get("capability")).strip() != capability:
+            continue
+        if _task_idempotency_key(task) != key:
+            continue
+        matches.append(task)
+
+    if not matches:
+        return None
+    matches.sort(key=lambda item: (_safe_str(item.get("created_at")), _safe_str(item.get("task_id"))), reverse=True)
+    return matches[0]
+
+
 def create_operation(
     *,
     action: str,
@@ -855,6 +903,42 @@ def create_operation(
         inputs["meta"] = merged_meta
     else:
         inputs.pop("meta", None)
+
+    idempotency_ref = _safe_str(inputs.get("idempotency_key")).strip()
+    if idempotency_ref:
+        existing = _find_idempotent_operation(
+            requester_id=requester_id,
+            capability=capability_name,
+            idempotency_key=idempotency_ref,
+        )
+        if isinstance(existing, dict):
+            existing_task_id = _safe_str(existing.get("task_id")).strip()
+            append = getattr(delegation_store, "_append_audit", None)
+            if callable(append) and existing_task_id:
+                append(
+                    existing_task_id,
+                    "idempotency_reused",
+                    {
+                        "requester_id": requester_id,
+                        "capability": capability_name,
+                        "idempotency_key": idempotency_ref,
+                        "duplicate_create_blocked": True,
+                    },
+                )
+            operation = _task_to_operation(existing)
+            return {
+                "ok": True,
+                "operation_id": existing_task_id,
+                "status": operation.get("status", "queued"),
+                "operation": operation,
+                "message": "idempotent_reuse",
+                "idempotent_reuse": True,
+                "duplicate_create_blocked": True,
+                "idempotency_key": idempotency_ref,
+                "mission_id": _task_mission_id(existing) or None,
+                "mission_linked": bool(_task_mission_id(existing)),
+                "mission_link_error": None,
+            }
 
     record, err = delegation_store.create_delegation(
         DelegationRequest(
