@@ -113,6 +113,22 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
     assert "closure receipt" in executor_closure["denial_behavior"]
     assert "does not mutate runtime stage state" in executor_closure["notes"]
 
+    takeover_control = entries["/takeover/control-transfer"]
+    assert takeover_control["family"] == "takeover"
+    assert takeover_control["required_actor"] == "payload.actor"
+    assert takeover_control["required_scope"] == "takeover.control.write"
+    assert takeover_control["governance_maturity"] == "permission_gated"
+    assert "Stage 8 closure receipt" in takeover_control["approval_requirement"]
+    assert "does not run tools" in takeover_control["notes"]
+
+    takeover_panic = entries["/takeover/panic-stop"]
+    assert takeover_panic["family"] == "takeover"
+    assert takeover_panic["required_actor"] == "payload.actor"
+    assert takeover_panic["required_scope"] == "takeover.panic.write"
+    assert takeover_panic["governance_maturity"] == "permission_gated"
+    assert "panic-stop receipt" in takeover_panic["receipt_behavior"]
+    assert "separate governed path" in takeover_panic["notes"]
+
     memory = entries["/memory/timeline/record"]
     assert memory["family"] == "memory_timeline"
     assert memory["required_actor"] == "payload.request_actor, payload.api_actor, or payload.actor"

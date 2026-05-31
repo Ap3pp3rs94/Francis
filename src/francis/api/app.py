@@ -33,6 +33,7 @@ from francis.api.routes import (
     simulation,
     supervised_exec,
     system,
+    takeover,
     telemetry,
     trust,
     web_learning,
@@ -80,6 +81,7 @@ def create_app() -> FastAPI:
     app.include_router(lens.router, prefix="/lens", tags=["lens"])
     app.include_router(telemetry.router, prefix="/telemetry", tags=["telemetry"])
     app.include_router(executor_substrate.router, prefix="/executor", tags=["executor"])
+    app.include_router(takeover.router, prefix="/takeover", tags=["takeover"])
     app.include_router(industrial.router, prefix="/industrial", tags=["industrial"])
     app.include_router(digital_twin.router, prefix="/digital_twin", tags=["digital_twin"])
 

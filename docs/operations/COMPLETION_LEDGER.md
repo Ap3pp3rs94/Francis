@@ -47135,6 +47135,68 @@ Latest validation for Stage 8 executor substrate closure decision:
   latest_decision=close_stage8; readback_stage8_closed=true;
   stage8_done_ready=true; status_next=stage8_ledger_closure`.
 
+### 2026-05-30 - Stage 9 takeover control transfer and panic stop are receipt-backed
+
+Roadmap area: Stage 9 / Takeover (Pilot Mode), explicit control transfer and
+panic revocation.
+
+Material change:
+
+- Added Stage 9 Takeover API routes:
+  `/takeover/status`, `/takeover/action-feed`,
+  `/takeover/control-transfer-receipts`,
+  `/takeover/panic-stop-receipts`, `/takeover/control-transfer`, and
+  `/takeover/panic-stop`.
+- Control transfer requires `takeover.control.write`, a ready Stage 8 closure
+  receipt, and a dev/workstation/local/test environment profile before it writes
+  a `francis.stage9.takeover.control_transfer_receipt`.
+- Control transfer lights the existing Pilot operator-mode indicator and records
+  the scope, actor, Stage 8 closure receipt, session id, action-feed summary,
+  panic-stop route, and handback requirement.
+- Panic stop requires `takeover.panic.write`, writes a
+  `francis.stage9.takeover.panic_stop_receipt`, and revokes Pilot back to
+  Assist mode.
+- The Takeover routes do not run tools, run shell, run git, start processes,
+  write tasks, write memory, cancel operations, grant execution authority, or
+  grant mutation authority. Existing executor and operation governance still
+  own execution.
+- The mutating-route authority matrix now covers both Takeover write routes.
+- Live local proof recorded control-transfer receipt
+  `takeover_transfer_900e4a632620`, session `pilot_2a1beed87172`, then
+  panic-stop receipt `takeover_panic_044a1b0c07b1`; final Takeover status was
+  `ready`, `control_transfer_active=false`, and `control_mode=assist`.
+
+Latest validation for Stage 9 Takeover control-transfer and panic-stop receipts:
+
+- `python -m pytest tests/test_api_takeover.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  tests/test_api_mutating_route_authority_matrix.py -q --tb=short --maxfail=1`
+  Result: `passed; 6 selected tests passed`
+- `python -m mypy src/francis/takeover.py
+  src/francis/api/routes/takeover.py`
+  Result: `passed`
+- `python -m ruff check src/francis/takeover.py
+  src/francis/api/routes/takeover.py src/francis/api/app.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_takeover.py
+  tests/test_api_contract_chat_ui.py tests/test_api_mutating_route_authority_matrix.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/takeover.py
+  src/francis/api/routes/takeover.py src/francis/api/app.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_takeover.py
+  tests/test_api_contract_chat_ui.py tests/test_api_mutating_route_authority_matrix.py`
+  Result: `passed; 7 files already formatted`
+- Live local route/readback:
+  GET `/takeover/status`, POST `/takeover/control-transfer`,
+  GET `/takeover/status`, POST `/takeover/panic-stop`, and final
+  GET `/takeover/status`.
+  Result: `before_stage8_closed=true; transfer_status=recorded;
+  transfer_receipt_id=takeover_transfer_900e4a632620;
+  transfer_session_id=pilot_2a1beed87172; active_status=pilot_active;
+  active_mode=pilot; panic_status=recorded;
+  panic_receipt_id=takeover_panic_044a1b0c07b1; panic_revoked=true;
+  after_status=ready; after_mode=assist; after_active=false;
+  after_next=stage9_control_transfer_receipts`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
