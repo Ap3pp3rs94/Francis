@@ -48771,6 +48771,58 @@ Latest validation for Stage 12 retrieval preview:
   status_retrieval_ready=true;
   status_next=stage12_local_evidence_citation_surface`.
 
+### 2026-05-31 - Stage 12 local evidence citation surface is read-only
+
+Roadmap area: Stage 12 / Knowledge Fabric, local evidence citation support.
+
+Material change:
+
+- Added read-only GET `/knowledge-fabric/local-evidence-citations`.
+- The citation surface is blocked until the retrieval layer is ready.
+- The surface turns retrieval preview items into displayable local evidence
+  citations with citation id, artifact class, source route, reference id, local
+  handle, evidence summary, display label, display text, observed timestamp,
+  trace lineage, retention metadata, provenance, match score, and matched terms.
+- The citation surface deliberately does not generate answer claims. It exposes
+  the citation evidence for another governed answer surface to consume.
+- `/knowledge-fabric/status` now reports
+  `stage12_local_evidence_citation_surface_ready` and advances the next smallest
+  truthful gap to `stage12_retention_model`.
+- The surface does not call a model, write memory, write an index, scan files,
+  replicate data, or grant authority.
+
+Latest validation for Stage 12 local evidence citation surface:
+
+- `python -m pytest tests/test_api_knowledge_fabric.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 5 passed`
+- `python -m mypy src/francis/knowledge_fabric.py
+  src/francis/api/routes/knowledge_fabric.py src/francis/api/app.py`
+  Result: `passed`
+- `python -m ruff check src/francis/knowledge_fabric.py
+  src/francis/api/routes/knowledge_fabric.py src/francis/api/app.py
+  tests/test_api_knowledge_fabric.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/knowledge_fabric.py
+  src/francis/api/routes/knowledge_fabric.py src/francis/api/app.py
+  tests/test_api_knowledge_fabric.py tests/test_api_contract_chat_ui.py`
+  Result: `passed; 5 files already formatted`
+- Live local TestClient route/readback against an isolated data root:
+  write a Stage 11 closure receipt fixture, write one memory timeline trace
+  event, append one continuity ledger trace event, GET
+  `/knowledge-fabric/local-evidence-citations?query=ledger`, and GET
+  `/knowledge-fabric/status`.
+  Result: `citations_status=ready; citations_ready=true;
+  citations_total=1;
+  first_citation_id=kfcite_execution_traces_trace_ledger_citation_continuity_ledger;
+  first_display_label=execution_traces:trace-ledger-citation;
+  generates_answer=false; uses_model=false; writes_memory=false;
+  writes_index=false; scans_files=false; replicates_data=false;
+  grants_authority=false;
+  status_status=stage12_local_evidence_citation_surface_ready;
+  status_local_citations_ready=true; status_next=stage12_retention_model`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

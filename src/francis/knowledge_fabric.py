@@ -13,6 +13,7 @@ KNOWLEDGE_FABRIC_STATUS_KIND = "francis.stage12.knowledge_fabric.status"
 KNOWLEDGE_FABRIC_ARTIFACT_INDEX_CONTRACT_KIND = "francis.stage12.knowledge_fabric.artifact_index_contract"
 KNOWLEDGE_FABRIC_ARTIFACT_INDEX_PROJECTION_KIND = "francis.stage12.knowledge_fabric.artifact_index_projection"
 KNOWLEDGE_FABRIC_RETRIEVAL_PREVIEW_KIND = "francis.stage12.knowledge_fabric.retrieval_preview"
+KNOWLEDGE_FABRIC_LOCAL_EVIDENCE_CITATIONS_KIND = "francis.stage12.knowledge_fabric.local_evidence_citations"
 
 
 def knowledge_fabric_status_snapshot() -> dict[str, Any]:
@@ -24,6 +25,8 @@ def knowledge_fabric_status_snapshot() -> dict[str, Any]:
     artifact_projection_ready = bool(artifact_projection.get("artifact_index_projection_ready"))
     retrieval_preview = knowledge_fabric_retrieval_preview(query="", limit=1, memory_limit=5, ledger_limit=5)
     retrieval_layer_ready = bool(retrieval_preview.get("retrieval_layer_ready"))
+    local_citations = knowledge_fabric_local_evidence_citations(query="", limit=1, memory_limit=5, ledger_limit=5)
+    local_evidence_citations_ready = bool(local_citations.get("local_evidence_citations_ready"))
     deliverables = [
         _deliverable(
             "stage11_ledger_closure_backstop",
@@ -56,8 +59,8 @@ def knowledge_fabric_status_snapshot() -> dict[str, Any]:
         _deliverable(
             "local_evidence_citations",
             "Answers can cite local evidence without exposing raw secrets",
-            False,
-            "pending",
+            local_evidence_citations_ready,
+            "ready" if local_evidence_citations_ready else "pending",
             "stage12_local_evidence_citations",
         ),
         _deliverable(
@@ -74,7 +77,13 @@ def knowledge_fabric_status_snapshot() -> dict[str, Any]:
         "kind": KNOWLEDGE_FABRIC_STATUS_KIND,
         "stage": STAGE12_KNOWLEDGE_FABRIC_STAGE,
         "source_id": "knowledge_fabric",
-        "status": "stage12_retrieval_layer_ready"
+        "status": "stage12_local_evidence_citation_surface_ready"
+        if stage11_closed
+        and artifact_contract_ready
+        and artifact_projection_ready
+        and retrieval_layer_ready
+        and local_evidence_citations_ready
+        else "stage12_retrieval_layer_ready"
         if stage11_closed and artifact_contract_ready and artifact_projection_ready and retrieval_layer_ready
         else "stage12_artifact_index_projection_ready"
         if stage11_closed and artifact_contract_ready and artifact_projection_ready
@@ -88,7 +97,7 @@ def knowledge_fabric_status_snapshot() -> dict[str, Any]:
         "artifact_index_projection_count": _safe_int(artifact_projection.get("total")),
         "artifact_indexing_active": False,
         "retrieval_layer_ready": retrieval_layer_ready,
-        "local_evidence_citations_ready": False,
+        "local_evidence_citations_ready": local_evidence_citations_ready,
         "retention_model_ready": False,
         "deliverables": deliverables,
         "ready_count": ready_count,
@@ -98,6 +107,7 @@ def knowledge_fabric_status_snapshot() -> dict[str, Any]:
             "artifact_index_contract": "/knowledge-fabric/artifact-index-contract",
             "artifact_index_projection": "/knowledge-fabric/artifact-index-projection",
             "retrieval_preview": "/knowledge-fabric/retrieval-preview",
+            "local_evidence_citations": "/knowledge-fabric/local-evidence-citations",
             "memory_timeline": "/memory/timeline/list",
             "artifact_inspection": "/artifacts/inspect",
             "continuity_ledger": "/continuity/ledger",
@@ -110,13 +120,88 @@ def knowledge_fabric_status_snapshot() -> dict[str, Any]:
             "does_not_replicate_data": True,
             "does_not_grant_authority": True,
         },
-        "next_smallest_truthful_gap": "stage12_local_evidence_citation_surface"
+        "next_smallest_truthful_gap": "stage12_retention_model"
+        if stage11_closed
+        and artifact_contract_ready
+        and artifact_projection_ready
+        and retrieval_layer_ready
+        and local_evidence_citations_ready
+        else "stage12_local_evidence_citation_surface"
         if stage11_closed and artifact_contract_ready and artifact_projection_ready and retrieval_layer_ready
         else "stage12_retrieval_layer"
         if stage11_closed and artifact_contract_ready and artifact_projection_ready
         else "stage12_artifact_index_projection"
         if stage11_closed and artifact_contract_ready
         else "stage11_ledger_closure",
+    }
+
+
+def knowledge_fabric_local_evidence_citations(
+    *,
+    query: Any = "",
+    limit: int = 10,
+    memory_limit: int = 100,
+    ledger_limit: int = 100,
+) -> dict[str, Any]:
+    retrieval = knowledge_fabric_retrieval_preview(
+        query=query,
+        limit=limit,
+        memory_limit=memory_limit,
+        ledger_limit=ledger_limit,
+    )
+    safe_query = _redact_text(query)[:500]
+    if not bool(retrieval.get("retrieval_layer_ready")):
+        return {
+            "ok": True,
+            "kind": KNOWLEDGE_FABRIC_LOCAL_EVIDENCE_CITATIONS_KIND,
+            "stage": STAGE12_KNOWLEDGE_FABRIC_STAGE,
+            "source_id": "knowledge_fabric",
+            "status": "blocked",
+            "query": safe_query,
+            "local_evidence_citations_ready": False,
+            "stage11_closed_by_receipt": bool(retrieval.get("stage11_closed_by_receipt")),
+            "items": [],
+            "citations": [],
+            "total": 0,
+            "limit": _safe_limit(limit, default=10),
+            "truncated": False,
+            "writes_memory": False,
+            "writes_index": False,
+            "generates_answer": False,
+            "uses_model": False,
+            "scans_files": False,
+            "replicates_data": False,
+            "grants_authority": False,
+            "governance": _local_evidence_citation_governance(),
+            "next_smallest_truthful_gap": _safe_text(retrieval.get("next_smallest_truthful_gap"))
+            or "stage12_retrieval_layer",
+        }
+
+    citations = [_citation_surface_item(item) for item in _as_list(retrieval.get("items")) if isinstance(item, dict)]
+    return {
+        "ok": True,
+        "kind": KNOWLEDGE_FABRIC_LOCAL_EVIDENCE_CITATIONS_KIND,
+        "stage": STAGE12_KNOWLEDGE_FABRIC_STAGE,
+        "source_id": "knowledge_fabric",
+        "status": "ready" if citations else "empty",
+        "query": safe_query,
+        "local_evidence_citations_ready": True,
+        "stage11_closed_by_receipt": bool(retrieval.get("stage11_closed_by_receipt")),
+        "items": citations,
+        "citations": citations,
+        "total": len(citations),
+        "limit": _safe_limit(limit, default=10),
+        "truncated": bool(retrieval.get("truncated")),
+        "retrieval_total": _safe_int(retrieval.get("total")),
+        "writes_memory": False,
+        "writes_index": False,
+        "generates_answer": False,
+        "uses_model": False,
+        "scans_files": False,
+        "replicates_data": False,
+        "grants_authority": False,
+        "governance": _local_evidence_citation_governance(),
+        "next_smallest_truthful_gap": "stage12_retention_model",
     }
 
 
@@ -642,6 +727,61 @@ def _retrieval_preview_governance() -> dict[str, Any]:
         "does_not_replicate_data": True,
         "grants_authority": False,
     }
+
+
+def _local_evidence_citation_governance() -> dict[str, Any]:
+    return {
+        "read_only": True,
+        "requires_retrieval_layer": True,
+        "citation_surface_only": True,
+        "local_evidence_only": True,
+        "does_not_generate_answer": True,
+        "does_not_call_model": True,
+        "does_not_write_index": True,
+        "does_not_write_memory": True,
+        "does_not_scan_files": True,
+        "does_not_replicate_data": True,
+        "grants_authority": False,
+    }
+
+
+def _citation_surface_item(item: dict[str, Any]) -> dict[str, Any]:
+    artifact_class = _redact_text(item.get("artifact_class"))
+    reference_id = _redact_text(item.get("reference_id"))
+    source_route = _redact_text(item.get("source_route"))
+    summary = _redact_text(item.get("evidence_summary"))[:280]
+    citation_id = _citation_id(artifact_class, reference_id, source_route)
+    return {
+        "citation_id": citation_id,
+        "artifact_class": artifact_class,
+        "source_route": source_route,
+        "reference_id": reference_id,
+        "local_handle": _redact_text(item.get("local_handle")),
+        "evidence_summary": summary,
+        "display_label": f"{artifact_class}:{reference_id}" if reference_id else artifact_class,
+        "display_text": f"{summary} [{artifact_class}; {reference_id}]".strip(),
+        "observed_ts": _safe_int(item.get("observed_ts")),
+        "redacted": True,
+        "trace_lineage": _as_dict(item.get("trace_lineage")),
+        "retention": _as_dict(item.get("retention")),
+        "provenance": _as_dict(item.get("provenance")),
+        "match_score": _safe_int(item.get("match_score")),
+        "matched_terms": [term for term in _as_list(item.get("matched_terms")) if isinstance(term, str)],
+        "answer_claim": "",
+        "citation_ready": True,
+    }
+
+
+def _citation_id(artifact_class: str, reference_id: str, source_route: str) -> str:
+    seed = f"{artifact_class}:{reference_id}:{source_route}".lower()
+    out: list[str] = []
+    for char in seed:
+        if char.isalnum():
+            out.append(char)
+        elif out and out[-1] != "_":
+            out.append("_")
+    suffix = "".join(out).strip("_")[:96] or "local_evidence"
+    return f"kfcite_{suffix}"
 
 
 def _query_terms(query: str) -> list[str]:

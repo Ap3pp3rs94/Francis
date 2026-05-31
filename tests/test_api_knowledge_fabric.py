@@ -67,6 +67,7 @@ def test_knowledge_fabric_status_blocks_until_stage11_closure(monkeypatch, tmp_p
     assert body["required_count"] == 6
     assert body["routes"]["artifact_index_contract"] == "/knowledge-fabric/artifact-index-contract"
     assert body["routes"]["artifact_index_projection"] == "/knowledge-fabric/artifact-index-projection"
+    assert body["routes"]["local_evidence_citations"] == "/knowledge-fabric/local-evidence-citations"
     assert body["routes"]["memory_timeline"] == "/memory/timeline/list"
     assert body["routes"]["artifact_inspection"] == "/artifacts/inspect"
     assert body["governance"]["read_only"] is True
@@ -141,14 +142,15 @@ def test_knowledge_fabric_artifact_index_contract_is_read_only_after_stage11_clo
     assert all(item["index_status"] == "contract_only" for item in classes.values())
 
     status = client.get("/knowledge-fabric/status").json()
-    assert status["status"] == "stage12_retrieval_layer_ready"
+    assert status["status"] == "stage12_local_evidence_citation_surface_ready"
     assert status["artifact_index_contract_ready"] is True
     assert status["artifact_index_projection_ready"] is True
     assert status["artifact_index_projection_count"] == 0
     assert status["retrieval_layer_ready"] is True
-    assert status["ready_count"] == 4
+    assert status["local_evidence_citations_ready"] is True
+    assert status["ready_count"] == 5
     assert status["required_count"] == 6
-    assert status["next_smallest_truthful_gap"] == "stage12_local_evidence_citation_surface"
+    assert status["next_smallest_truthful_gap"] == "stage12_retention_model"
 
 
 def test_knowledge_fabric_artifact_index_projection_projects_local_citations(
@@ -290,10 +292,37 @@ def test_knowledge_fabric_artifact_index_projection_projects_local_citations(
     assert "ledgerprojectionsecret123" not in json.dumps(retrieval, sort_keys=True)
     assert retrieval["next_smallest_truthful_gap"] == "stage12_local_evidence_citation_surface"
 
+    citation_surface = client.get("/knowledge-fabric/local-evidence-citations?query=ledger&limit=5").json()
+    assert citation_surface["ok"] is True
+    assert citation_surface["kind"] == "francis.stage12.knowledge_fabric.local_evidence_citations"
+    assert citation_surface["status"] == "ready"
+    assert citation_surface["query"] == "ledger"
+    assert citation_surface["local_evidence_citations_ready"] is True
+    assert citation_surface["writes_memory"] is False
+    assert citation_surface["writes_index"] is False
+    assert citation_surface["generates_answer"] is False
+    assert citation_surface["uses_model"] is False
+    assert citation_surface["scans_files"] is False
+    assert citation_surface["replicates_data"] is False
+    assert citation_surface["grants_authority"] is False
+    assert citation_surface["governance"]["citation_surface_only"] is True
+    assert citation_surface["total"] == 1
+    citation = citation_surface["citations"][0]
+    assert citation["citation_id"].startswith("kfcite_execution_traces_trace_ledger_kf")
+    assert citation["artifact_class"] == "execution_traces"
+    assert citation["source_route"] == "/continuity/ledger"
+    assert citation["reference_id"] == "trace-ledger-kf"
+    assert citation["display_label"] == "execution_traces:trace-ledger-kf"
+    assert citation["answer_claim"] == ""
+    assert citation["citation_ready"] is True
+    assert "ledgerprojectionsecret123" not in json.dumps(citation_surface, sort_keys=True)
+    assert citation_surface["next_smallest_truthful_gap"] == "stage12_retention_model"
+
     status = client.get("/knowledge-fabric/status").json()
-    assert status["status"] == "stage12_retrieval_layer_ready"
+    assert status["status"] == "stage12_local_evidence_citation_surface_ready"
     assert status["retrieval_layer_ready"] is True
-    assert status["next_smallest_truthful_gap"] == "stage12_local_evidence_citation_surface"
+    assert status["local_evidence_citations_ready"] is True
+    assert status["next_smallest_truthful_gap"] == "stage12_retention_model"
 
 
 def test_knowledge_fabric_artifact_index_projection_blocks_without_stage11_closure(
@@ -330,3 +359,14 @@ def test_knowledge_fabric_artifact_index_projection_blocks_without_stage11_closu
     assert retrieval["writes_index"] is False
     assert retrieval["scans_files"] is False
     assert retrieval["next_smallest_truthful_gap"] == "stage11_ledger_closure"
+
+    citations = TestClient(create_app()).get("/knowledge-fabric/local-evidence-citations?query=anything").json()
+    assert citations["status"] == "blocked"
+    assert citations["local_evidence_citations_ready"] is False
+    assert citations["items"] == []
+    assert citations["writes_memory"] is False
+    assert citations["writes_index"] is False
+    assert citations["generates_answer"] is False
+    assert citations["uses_model"] is False
+    assert citations["scans_files"] is False
+    assert citations["next_smallest_truthful_gap"] == "stage11_ledger_closure"
