@@ -6,6 +6,7 @@ from fastapi import APIRouter
 
 from francis.away import (
     away_autonomy_budgets_review,
+    away_completion_review,
     away_return_briefing_snapshot,
     away_safe_task_classes_review,
     away_shift_report_snapshot,
@@ -38,3 +39,8 @@ def shift_report() -> dict[str, Any]:
 @router.get("/return-briefing")
 def return_briefing() -> dict[str, Any]:
     return away_return_briefing_snapshot()
+
+
+@router.get("/completion-review")
+def completion_review() -> dict[str, Any]:
+    return away_completion_review()

@@ -47797,6 +47797,53 @@ Latest validation for Stage 10 Away return briefing:
   status_next=stage10_completion_review;
   briefing_next=stage10_completion_review`.
 
+### 2026-05-31 - Stage 10 completion review stays blocked on live progress proof
+
+Roadmap area: Stage 10 / Away Mode, completion review before any closure claim.
+
+Material change:
+
+- Added read-only GET `/away/completion-review`.
+- `/away/status` now distinguishes `away_groundwork_ready=true` from
+  `away_mode_ready=false`, so all read-only groundwork does not get reported as
+  complete Away Mode.
+- The completion review confirms the Stage 9 closure receipt, all eight
+  read-only Stage 10 groundwork deliverables, safe task classes, autonomy
+  budgets, shift report, return briefing, and gated risky-action posture.
+- The review intentionally remains blocked until a live Away progress sample is
+  recorded; it does not claim background progress, activate Away autonomy, write
+  receipts, write tasks, write memory, run tools, run shell, run git, start
+  processes, grant authority, or mark Stage 10 closed.
+- `/away/status` and `/away/completion-review` now report
+  `stage10_live_away_progress_sample` as the next smallest truthful gap.
+
+Latest validation for Stage 10 Away completion review:
+
+- `python -m pytest tests/test_api_away.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 8 tests passed`
+- `python -m mypy src/francis/away.py
+  src/francis/api/routes/away.py`
+  Result: `passed`
+- `python -m ruff check src/francis/away.py
+  src/francis/api/routes/away.py tests/test_api_away.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed; cache write warnings only`
+- `python -m ruff format --check src/francis/away.py
+  src/francis/api/routes/away.py tests/test_api_away.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed; 4 files already formatted`
+- Live local read-only route/readback:
+  GET `/away/status` and GET `/away/completion-review`.
+  Result: `status=stage10_groundwork_ready;
+  away_groundwork_ready=true; away_mode_ready=false;
+  ready_count=8; required_count=8;
+  review_status=blocked; review_ready=false;
+  live_away_progress_sample_ready=false;
+  status_next=stage10_live_away_progress_sample;
+  review_next=stage10_live_away_progress_sample`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -78,7 +78,11 @@ def test_away_status_projects_stage10_groundwork_after_stage9_closure(monkeypatc
     assert body["stage9_latest_closure_receipt_id"] == "takeover_stage9_closure_away_test"
     assert body["stage9_next_smallest_truthful_gap"] == "stage9_ledger_closure"
     assert body["away_declared"] is False
-    assert body["away_mode_ready"] is True
+    assert body["away_groundwork_ready"] is True
+    assert body["away_mode_ready"] is False
+    assert body["stage10_completion_review_route"] == "/away/completion-review"
+    assert body["stage10_completion_review_ready"] is False
+    assert body["live_away_progress_sample_ready"] is False
     assert body["reads_receipts"] is True
     assert body["writes_receipts"] is False
     assert body["writes_tasks"] is False
@@ -95,7 +99,10 @@ def test_away_status_projects_stage10_groundwork_after_stage9_closure(monkeypatc
     assert body["routes"]["autonomy_budgets"] == "/away/autonomy-budgets"
     assert body["routes"]["shift_report"] == "/away/shift-report"
     assert body["routes"]["return_briefing"] == "/away/return-briefing"
-    assert body["next_smallest_truthful_gap"] == "stage10_completion_review"
+    assert body["routes"]["completion_review"] == "/away/completion-review"
+    assert body["governance"]["does_not_claim_away_completion_from_groundwork"] is True
+    assert body["governance"]["requires_live_progress_sample_before_completion"] is True
+    assert body["next_smallest_truthful_gap"] == "stage10_live_away_progress_sample"
 
     deliverables = {item["id"]: item for item in body["deliverables"]}
     assert deliverables["stage9_ledger_closure_backstop"]["ready"] is True
@@ -321,3 +328,54 @@ def test_away_return_briefing_flow_is_readonly_and_operator_led(monkeypatch, tmp
     assert checks["continuity_headline_available"]["passed"] is True
     assert checks["required_reentry_steps_present"]["passed"] is True
     assert checks["operator_decision_required"]["passed"] is True
+
+
+def test_away_completion_review_blocks_until_live_progress_sample(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage9_closure_receipt(data_root, receipt_id="takeover_stage9_closure_completion_review_test")
+
+    response = TestClient(create_app()).get("/away/completion-review")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "francis.stage10.away.completion_review"
+    assert body["status"] == "blocked"
+    assert body["stage10_completion_review_ready"] is False
+    assert body["stage9_closed_by_receipt"] is True
+    assert body["stage9_latest_closure_receipt_id"] == "takeover_stage9_closure_completion_review_test"
+    assert body["away_groundwork_ready"] is True
+    assert body["away_mode_ready"] is False
+    assert body["live_away_progress_sample_ready"] is False
+    assert body["ready_count"] == body["required_count"] == 8
+    assert body["writes_receipts"] is False
+    assert body["writes_tasks"] is False
+    assert body["writes_memory"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["starts_processes"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["marks_stage_closed"] is False
+    assert body["governance"]["read_only"] is True
+    assert body["governance"]["completion_review_only"] is True
+    assert body["governance"]["requires_live_progress_sample_before_completion"] is True
+    assert body["governance"]["does_not_claim_background_progress"] is True
+    assert body["governance"]["does_not_activate_away_autonomy"] is True
+    assert body["governance"]["does_not_mark_stage_closed"] is True
+    assert body["routes"]["completion_review"] == "/away/completion-review"
+    assert body["next_smallest_truthful_gap"] == "stage10_live_away_progress_sample"
+
+    checks = {item["id"]: item for item in body["checks"]}
+    assert checks["stage9_ledger_closure_backstop"]["passed"] is True
+    assert checks["groundwork_deliverables_ready"]["passed"] is True
+    assert checks["safe_task_classes_surface_ready"]["passed"] is True
+    assert checks["autonomy_budgets_surface_ready"]["passed"] is True
+    assert checks["shift_report_surface_ready"]["passed"] is True
+    assert checks["return_briefing_surface_ready"]["passed"] is True
+    assert checks["live_away_progress_sample_ready"]["passed"] is False
+    assert checks["live_away_progress_sample_ready"]["evidence"] == "not_yet_recorded"
+    assert checks["risky_actions_remain_gated"]["passed"] is True
+    assert checks["stage_not_marked_closed_by_review"]["passed"] is True

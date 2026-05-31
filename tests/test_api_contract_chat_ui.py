@@ -266,5 +266,6 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("GET", "/away/autonomy-budgets"),
         ("GET", "/away/shift-report"),
         ("GET", "/away/return-briefing"),
+        ("GET", "/away/completion-review"),
     ]
     _assert_has_endpoints(routes, endpoints)

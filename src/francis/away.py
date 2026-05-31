@@ -11,6 +11,7 @@ AWAY_SAFE_TASK_CLASSES_KIND = "francis.stage10.away.safe_task_classes"
 AWAY_AUTONOMY_BUDGETS_KIND = "francis.stage10.away.autonomy_budgets"
 AWAY_SHIFT_REPORT_KIND = "francis.stage10.away.shift_report"
 AWAY_RETURN_BRIEFING_KIND = "francis.stage10.away.return_briefing"
+AWAY_COMPLETION_REVIEW_KIND = "francis.stage10.away.completion_review"
 
 _AWAY_SAFE_TASK_CLASSES: tuple[dict[str, Any], ...] = (
     {
@@ -98,6 +99,9 @@ def away_status_snapshot() -> dict[str, Any]:
     )
     ready_count = sum(1 for item in deliverables if bool(item.get("ready")))
     required_count = len(deliverables)
+    away_groundwork_ready = stage9_closed and ready_count == required_count
+    live_away_progress_sample_ready = False
+    stage10_completion_review_ready = away_groundwork_ready and live_away_progress_sample_ready
     return {
         "ok": True,
         "kind": AWAY_STATUS_KIND,
@@ -112,7 +116,11 @@ def away_status_snapshot() -> dict[str, Any]:
         "deliverables": deliverables,
         "ready_count": ready_count,
         "required_count": required_count,
-        "away_mode_ready": stage9_closed and ready_count == required_count,
+        "away_groundwork_ready": away_groundwork_ready,
+        "away_mode_ready": stage10_completion_review_ready,
+        "stage10_completion_review_route": "/away/completion-review",
+        "stage10_completion_review_ready": stage10_completion_review_ready,
+        "live_away_progress_sample_ready": live_away_progress_sample_ready,
         "reads_receipts": True,
         "writes_receipts": False,
         "writes_tasks": False,
@@ -128,6 +136,8 @@ def away_status_snapshot() -> dict[str, Any]:
             "requires_stage9_ledger_closure": True,
             "away_autonomy_not_enabled_by_status": True,
             "risky_actions_remain_gated": True,
+            "does_not_claim_away_completion_from_groundwork": True,
+            "requires_live_progress_sample_before_completion": True,
             "does_not_start_background_work": True,
             "does_not_write_receipts": True,
             "does_not_write_tasks": True,
@@ -146,8 +156,9 @@ def away_status_snapshot() -> dict[str, Any]:
             "autonomy_budgets": "/away/autonomy-budgets",
             "shift_report": "/away/shift-report",
             "return_briefing": "/away/return-briefing",
+            "completion_review": "/away/completion-review",
         },
-        "next_smallest_truthful_gap": "stage10_completion_review"
+        "next_smallest_truthful_gap": "stage10_live_away_progress_sample"
         if stage9_closed and bool(return_briefing.get("return_briefing_ready"))
         else "stage10_return_briefing_flow"
         if stage9_closed and bool(shift_report.get("shift_report_ready"))
@@ -158,6 +169,60 @@ def away_status_snapshot() -> dict[str, Any]:
         else "stage10_away_safe_task_classes"
         if stage9_closed
         else "stage9_ledger_closure",
+    }
+
+
+def away_completion_review() -> dict[str, Any]:
+    status = away_status_snapshot()
+    checks = _completion_review_checks(status=status)
+    review_ready = all(bool(check.get("passed")) for check in checks)
+    return {
+        "ok": True,
+        "kind": AWAY_COMPLETION_REVIEW_KIND,
+        "stage": STAGE10_AWAY_STAGE,
+        "source_id": "away",
+        "status": "ready" if review_ready else "blocked",
+        "stage10_completion_review_ready": review_ready,
+        "stage9_closed_by_receipt": bool(status.get("stage9_closed_by_receipt")),
+        "stage9_latest_closure_receipt_id": _safe_text(status.get("stage9_latest_closure_receipt_id")),
+        "away_groundwork_ready": bool(status.get("away_groundwork_ready")),
+        "away_mode_ready": bool(status.get("away_mode_ready")),
+        "live_away_progress_sample_ready": bool(status.get("live_away_progress_sample_ready")),
+        "ready_count": _safe_int(status.get("ready_count")),
+        "required_count": _safe_int(status.get("required_count")),
+        "checks": checks,
+        "reads_receipts": True,
+        "writes_receipts": False,
+        "writes_tasks": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "marks_stage_closed": False,
+        "governance": {
+            "read_only": True,
+            "completion_review_only": True,
+            "requires_stage9_ledger_closure": True,
+            "requires_live_progress_sample_before_completion": True,
+            "does_not_claim_background_progress": True,
+            "does_not_activate_away_autonomy": True,
+            "does_not_mark_stage_closed": True,
+            "does_not_write_receipts": True,
+            "does_not_write_tasks": True,
+            "does_not_write_memory": True,
+            "does_not_run_tools": True,
+            "does_not_run_shell": True,
+            "does_not_run_git": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "routes": _as_dict(status.get("routes")),
+        "next_smallest_truthful_gap": "stage10_stage_closure_decision"
+        if review_ready
+        else "stage10_live_away_progress_sample",
     }
 
 
@@ -708,6 +773,75 @@ def _return_briefing_checks(
             "operator_decision_required",
             passed=any(_safe_text(item.get("action")) == "operator_decision" for item in steps),
             evidence="/system/operator_mode",
+        ),
+    ]
+
+
+def _completion_review_checks(*, status: dict[str, Any]) -> list[dict[str, Any]]:
+    deliverables = [item for item in _as_list(status.get("deliverables")) if isinstance(item, dict)]
+    route_map = _as_dict(status.get("routes"))
+    risky_flags_clear = all(
+        not bool(status.get(key))
+        for key in (
+            "writes_receipts",
+            "writes_tasks",
+            "writes_memory",
+            "runs_tools",
+            "runs_shell",
+            "runs_git",
+            "starts_processes",
+            "grants_execution_authority",
+            "grants_mutation_authority",
+        )
+    )
+    return [
+        _check(
+            "stage9_ledger_closure_backstop",
+            passed=bool(status.get("stage9_closed_by_receipt")),
+            evidence="/takeover/stage-closure-decisions",
+        ),
+        _check(
+            "groundwork_deliverables_ready",
+            passed=bool(status.get("away_groundwork_ready"))
+            and _safe_int(status.get("ready_count")) == _safe_int(status.get("required_count"))
+            and bool(deliverables)
+            and all(bool(item.get("ready")) for item in deliverables),
+            evidence="away.status.deliverables",
+        ),
+        _check(
+            "safe_task_classes_surface_ready",
+            passed=route_map.get("safe_task_classes") == "/away/safe-task-classes",
+            evidence="/away/safe-task-classes",
+        ),
+        _check(
+            "autonomy_budgets_surface_ready",
+            passed=route_map.get("autonomy_budgets") == "/away/autonomy-budgets",
+            evidence="/away/autonomy-budgets",
+        ),
+        _check(
+            "shift_report_surface_ready",
+            passed=route_map.get("shift_report") == "/away/shift-report",
+            evidence="/away/shift-report",
+        ),
+        _check(
+            "return_briefing_surface_ready",
+            passed=route_map.get("return_briefing") == "/away/return-briefing",
+            evidence="/away/return-briefing",
+        ),
+        _check(
+            "live_away_progress_sample_ready",
+            passed=bool(status.get("live_away_progress_sample_ready")),
+            evidence="not_yet_recorded",
+        ),
+        _check(
+            "risky_actions_remain_gated",
+            passed=risky_flags_clear,
+            evidence="status.governance",
+        ),
+        _check(
+            "stage_not_marked_closed_by_review",
+            passed=True,
+            evidence="completion_review_is_read_only",
         ),
     ]
 
