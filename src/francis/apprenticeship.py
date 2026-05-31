@@ -10,6 +10,7 @@ APPRENTICESHIP_TEACHING_SESSION_CONTRACT_KIND = "francis.stage11.apprenticeship.
 APPRENTICESHIP_REPLAY_GENERALIZATION_CONTRACT_KIND = "francis.stage11.apprenticeship.replay_generalization_contract"
 APPRENTICESHIP_SKILLIZATION_ARTIFACT_CONTRACT_KIND = "francis.stage11.apprenticeship.skillization_artifact_contract"
 APPRENTICESHIP_FORGE_HANDOFF_CONTRACT_KIND = "francis.stage11.apprenticeship.forge_handoff_contract"
+APPRENTICESHIP_LIVE_TEACHING_SESSION_UX_KIND = "francis.stage11.apprenticeship.live_teaching_session_ux"
 
 
 def apprenticeship_status_snapshot() -> dict[str, Any]:
@@ -23,6 +24,8 @@ def apprenticeship_status_snapshot() -> dict[str, Any]:
     skillization_ready = bool(skillization_artifact.get("skillization_artifact_contract_ready"))
     forge_handoff = apprenticeship_forge_handoff_contract()
     forge_handoff_ready = bool(forge_handoff.get("forge_handoff_contract_ready"))
+    live_teaching_session_ux = apprenticeship_live_teaching_session_ux()
+    live_teaching_session_ux_ready = bool(live_teaching_session_ux.get("live_teaching_session_ux_ready"))
     deliverables = _apprenticeship_deliverables(
         stage10_closed=stage10_closed,
         teaching_session_ready=teaching_session_ready,
@@ -37,7 +40,9 @@ def apprenticeship_status_snapshot() -> dict[str, Any]:
         "kind": APPRENTICESHIP_STATUS_KIND,
         "stage": STAGE11_APPRENTICESHIP_STAGE,
         "source_id": "apprenticeship",
-        "status": "stage11_contracts_ready"
+        "status": "stage11_operator_surface_ready"
+        if stage10_closed and live_teaching_session_ux_ready
+        else "stage11_contracts_ready"
         if stage10_closed and forge_handoff_ready
         else "stage11_groundwork_ready"
         if stage10_closed
@@ -52,6 +57,7 @@ def apprenticeship_status_snapshot() -> dict[str, Any]:
         "replay_generalization_ready": replay_generalization_ready,
         "skillization_ready": skillization_ready,
         "forge_handoff_ready": forge_handoff_ready,
+        "live_teaching_session_ux_ready": live_teaching_session_ux_ready,
         "reads_receipts": True,
         "writes_receipts": False,
         "writes_memory": False,
@@ -91,6 +97,7 @@ def apprenticeship_status_snapshot() -> dict[str, Any]:
             "replay_generalization_contract": "/apprenticeship/replay-generalization-contract",
             "skillization_artifact_contract": "/apprenticeship/skillization-artifact-contract",
             "forge_handoff_contract": "/apprenticeship/forge-handoff-contract",
+            "live_teaching_session_ux": "/apprenticeship/live-teaching-session-ux",
         },
         "next_smallest_truthful_gap": _apprenticeship_next_gap(
             stage10_closed=stage10_closed,
@@ -98,6 +105,7 @@ def apprenticeship_status_snapshot() -> dict[str, Any]:
             replay_generalization_ready=replay_generalization_ready,
             skillization_ready=skillization_ready,
             forge_handoff_ready=forge_handoff_ready,
+            live_teaching_session_ux_ready=live_teaching_session_ux_ready,
         ),
     }
 
@@ -631,6 +639,166 @@ def apprenticeship_forge_handoff_contract() -> dict[str, Any]:
     }
 
 
+def apprenticeship_live_teaching_session_ux() -> dict[str, Any]:
+    forge_handoff = apprenticeship_forge_handoff_contract()
+    forge_handoff_ready = bool(forge_handoff.get("forge_handoff_contract_ready"))
+    visible_sections = [
+        {
+            "id": "stage_status",
+            "label": "Stage status",
+            "source_route": "/apprenticeship/status",
+            "visible": True,
+            "status": "declared",
+        },
+        {
+            "id": "teaching_contract",
+            "label": "Teaching contract",
+            "source_route": "/apprenticeship/teaching-session-contract",
+            "visible": True,
+            "status": "declared",
+        },
+        {
+            "id": "replay_generalization",
+            "label": "Replay and generalization",
+            "source_route": "/apprenticeship/replay-generalization-contract",
+            "visible": True,
+            "status": "declared",
+        },
+        {
+            "id": "skillization_artifact",
+            "label": "Skillization artifact",
+            "source_route": "/apprenticeship/skillization-artifact-contract",
+            "visible": True,
+            "status": "declared",
+        },
+        {
+            "id": "forge_handoff",
+            "label": "Forge handoff",
+            "source_route": "/apprenticeship/forge-handoff-contract",
+            "visible": True,
+            "status": "declared",
+        },
+        {
+            "id": "capture_boundaries",
+            "label": "Capture boundaries",
+            "source_route": "/apprenticeship/teaching-session-contract",
+            "visible": True,
+            "status": "declared",
+        },
+        {
+            "id": "next_gap",
+            "label": "Next gap",
+            "source_route": "/apprenticeship/status",
+            "visible": True,
+            "status": "declared",
+        },
+    ]
+    operator_actions = [
+        {
+            "id": "start_teaching_session",
+            "label": "Start teaching session",
+            "enabled": False,
+            "status": "requires_receipt_write_path",
+        },
+        {
+            "id": "label_intent",
+            "label": "Label intent",
+            "enabled": False,
+            "status": "requires_teaching_session_receipt",
+        },
+        {
+            "id": "review_replay",
+            "label": "Review replay",
+            "enabled": False,
+            "status": "requires_replay_receipt",
+        },
+        {
+            "id": "prepare_skillization_artifact",
+            "label": "Prepare skillization artifact",
+            "enabled": False,
+            "status": "requires_operator_reviewed_learning_record",
+        },
+        {
+            "id": "stage_forge_handoff",
+            "label": "Stage Forge handoff",
+            "enabled": False,
+            "status": "requires_explicit_promotion_decision",
+        },
+    ]
+    denied_modes = [
+        "ambient_capture_start",
+        "background_learning_toggle",
+        "teaching_session_without_receipt",
+        "forge_promotion_from_ui_surface",
+    ]
+    checks = _live_teaching_session_ux_checks(
+        forge_handoff_ready=forge_handoff_ready,
+        visible_sections=visible_sections,
+        operator_actions=operator_actions,
+        denied_modes=denied_modes,
+    )
+    ready = all(bool(check.get("passed")) for check in checks)
+    return {
+        "ok": True,
+        "kind": APPRENTICESHIP_LIVE_TEACHING_SESSION_UX_KIND,
+        "stage": STAGE11_APPRENTICESHIP_STAGE,
+        "source_id": "apprenticeship",
+        "status": "ready" if ready else "blocked",
+        "forge_handoff_contract_ready": forge_handoff_ready,
+        "live_teaching_session_ux_ready": ready,
+        "surface": "chat_ui.apprenticeship_panel",
+        "route": "/apprenticeship/live-teaching-session-ux",
+        "visible_sections": visible_sections,
+        "visible_section_count": len(visible_sections),
+        "operator_actions": operator_actions,
+        "operator_action_count": len(operator_actions),
+        "denied_modes": denied_modes,
+        "checks": checks,
+        "reads_receipts": True,
+        "writes_receipts": False,
+        "writes_memory": False,
+        "writes_skill_artifact": False,
+        "writes_forge_proposal": False,
+        "creates_capability": False,
+        "promotes_to_forge": False,
+        "starts_teaching_session": False,
+        "captures_screen": False,
+        "captures_audio": False,
+        "captures_keystrokes": False,
+        "passive_learning_enabled": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "operator_surface_only": True,
+            "requires_forge_handoff_contract": True,
+            "requires_receipt_write_path_before_actions_enable": True,
+            "ambient_capture_start_denied": True,
+            "background_learning_toggle_denied": True,
+            "forge_promotion_from_ui_surface_denied": True,
+            "does_not_start_teaching_session": True,
+            "does_not_write_receipts": True,
+            "does_not_write_memory": True,
+            "does_not_write_skill_artifact": True,
+            "does_not_write_forge_proposal": True,
+            "does_not_create_capability": True,
+            "does_not_promote_to_forge": True,
+            "does_not_run_tools": True,
+            "does_not_run_shell": True,
+            "does_not_run_git": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": "stage11_teaching_session_receipt_write_path"
+        if ready
+        else "stage11_live_teaching_session_ux",
+    }
+
+
 def _apprenticeship_deliverables(
     *,
     stage10_closed: bool,
@@ -680,6 +848,7 @@ def _apprenticeship_next_gap(
     replay_generalization_ready: bool,
     skillization_ready: bool,
     forge_handoff_ready: bool,
+    live_teaching_session_ux_ready: bool,
 ) -> str:
     if not stage10_closed:
         return "stage10_ledger_closure"
@@ -691,7 +860,64 @@ def _apprenticeship_next_gap(
         return "stage11_skillization_artifact_contract"
     if not forge_handoff_ready:
         return "stage11_forge_handoff_contract"
-    return "stage11_live_teaching_session_ux"
+    if not live_teaching_session_ux_ready:
+        return "stage11_live_teaching_session_ux"
+    return "stage11_teaching_session_receipt_write_path"
+
+
+def _live_teaching_session_ux_checks(
+    *,
+    forge_handoff_ready: bool,
+    visible_sections: list[dict[str, Any]],
+    operator_actions: list[dict[str, Any]],
+    denied_modes: list[str],
+) -> list[dict[str, Any]]:
+    section_ids = {_safe_text(item.get("id")) for item in visible_sections if bool(item.get("visible"))}
+    action_ids = {_safe_text(item.get("id")) for item in operator_actions}
+    actions_disabled = all(not bool(item.get("enabled")) for item in operator_actions)
+    denied = {_safe_text(item) for item in denied_modes}
+    return [
+        _check(
+            "forge_handoff_contract_ready",
+            passed=forge_handoff_ready,
+            evidence="/apprenticeship/forge-handoff-contract",
+        ),
+        _check(
+            "apprenticeship_sections_visible",
+            passed={
+                "stage_status",
+                "teaching_contract",
+                "replay_generalization",
+                "skillization_artifact",
+                "forge_handoff",
+                "capture_boundaries",
+                "next_gap",
+            }.issubset(section_ids),
+            evidence=str(len(visible_sections)),
+        ),
+        _check(
+            "operator_actions_declared_but_disabled",
+            passed={
+                "start_teaching_session",
+                "label_intent",
+                "review_replay",
+                "prepare_skillization_artifact",
+                "stage_forge_handoff",
+            }.issubset(action_ids)
+            and actions_disabled,
+            evidence=str(len(operator_actions)),
+        ),
+        _check(
+            "ambient_capture_controls_denied",
+            passed="ambient_capture_start" in denied and "background_learning_toggle" in denied,
+            evidence="ambient_capture_and_background_learning_controls_denied",
+        ),
+        _check(
+            "write_and_promotion_controls_denied",
+            passed="teaching_session_without_receipt" in denied and "forge_promotion_from_ui_surface" in denied,
+            evidence="receiptless_teaching_and_ui_promotion_denied",
+        ),
+    ]
 
 
 def _forge_handoff_contract_checks(

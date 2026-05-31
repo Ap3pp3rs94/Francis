@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ApprenticeshipPanel } from "./apprenticeship/ApprenticeshipPanel";
 import { ArtifactInspectionPanel } from "./artifacts/ArtifactInspectionPanel";
 import { parseChatSendResponse, type ChatMessage } from "./chat";
 
@@ -134,7 +135,7 @@ import {
 
 const DEFAULT_API = "http://127.0.0.1:8000";
 
-type TabKey = "approvals" | "plugins" | "system" | "operations" | "settings";
+type TabKey = "approvals" | "plugins" | "system" | "operations" | "apprenticeship" | "settings";
 type SensingMode = "text_only" | "input_only" | "camera_mic";
 type PaletteCommand = {
   id: string;
@@ -3019,6 +3020,10 @@ export default function App() {
     setPanel("operations");
   }, []);
 
+  const openApprenticeshipPanel = useCallback(() => {
+    setPanel("apprenticeship");
+  }, []);
+
   const openPluginsPanel = useCallback(() => {
     setPanel("plugins");
   }, []);
@@ -3278,6 +3283,14 @@ export default function App() {
         run: () => openOperationsPanel(),
       },
       {
+        id: "nav.apprenticeship",
+        label: "Open Apprenticeship",
+        description: "Inspect Stage 11 teaching surfaces, disabled actions, and learning guards.",
+        group: "Navigation",
+        keywords: "apprenticeship teaching replay generalization skill forge",
+        run: () => openApprenticeshipPanel(),
+      },
+      {
         id: "nav.orb",
         label: "Open ORB",
         description: "Inspect the canonical flow, incidents, and runtime posture.",
@@ -3361,6 +3374,7 @@ export default function App() {
   }, [
     createNewChat,
     openApprovalsPanel,
+    openApprenticeshipPanel,
     openContinuityLedger,
     openMissionFeed,
     openTakeoverFeed,
@@ -3550,6 +3564,7 @@ export default function App() {
                       ["plugins", "Plugins"],
                       ["system", "ORB"],
                       ["operations", "Operations"],
+                      ["apprenticeship", "Apprenticeship"],
                       ["settings", "Settings"],
                     ] as Array<[TabKey, string]>
                   ).map(([key, label]) => (
@@ -3598,6 +3613,7 @@ export default function App() {
                     onOpenContinuityLedger={openContinuityLedger}
                   />
                 ) : null}
+                {panel === "apprenticeship" ? <ApprenticeshipPanel baseUrl={baseUrl} /> : null}
                 {panel === "settings" ? <SettingsPanel settings={settings} onChange={setSettings} /> : null}
               </aside>
             )}
@@ -3612,6 +3628,7 @@ export default function App() {
                     ["plugins", "Plugins"],
                     ["system", "ORB"],
                     ["operations", "Operations"],
+                    ["apprenticeship", "Apprenticeship"],
                     ["settings", "Settings"],
                   ] as Array<[TabKey, string]>
                 ).map(([key, label]) => (
@@ -3660,6 +3677,7 @@ export default function App() {
                   onOpenContinuityLedger={openContinuityLedger}
                 />
               ) : null}
+              {panel === "apprenticeship" ? <ApprenticeshipPanel baseUrl={baseUrl} /> : null}
               {panel === "settings" ? <SettingsPanel settings={settings} onChange={setSettings} /> : null}
             </section>
           ) : null}

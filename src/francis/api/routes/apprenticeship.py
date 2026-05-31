@@ -6,6 +6,7 @@ from fastapi import APIRouter
 
 from francis.apprenticeship import (
     apprenticeship_forge_handoff_contract,
+    apprenticeship_live_teaching_session_ux,
     apprenticeship_replay_generalization_contract,
     apprenticeship_skillization_artifact_contract,
     apprenticeship_status_snapshot,
@@ -38,3 +39,8 @@ def skillization_artifact_contract() -> dict[str, Any]:
 @router.get("/forge-handoff-contract")
 def forge_handoff_contract() -> dict[str, Any]:
     return apprenticeship_forge_handoff_contract()
+
+
+@router.get("/live-teaching-session-ux")
+def live_teaching_session_ux() -> dict[str, Any]:
+    return apprenticeship_live_teaching_session_ux()

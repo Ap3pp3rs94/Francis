@@ -87,7 +87,7 @@ def test_apprenticeship_status_starts_stage11_groundwork_after_stage10_closure(
     body = response.json()
     assert body["ok"] is True
     assert body["kind"] == "francis.stage11.apprenticeship.status"
-    assert body["status"] == "stage11_contracts_ready"
+    assert body["status"] == "stage11_operator_surface_ready"
     assert body["stage10_closed_by_receipt"] is True
     assert body["stage10_latest_closure_receipt_id"] == "away_stage10_closure_apprenticeship_test"
     assert body["stage10_next_smallest_truthful_gap"] == "stage10_ledger_closure"
@@ -97,6 +97,7 @@ def test_apprenticeship_status_starts_stage11_groundwork_after_stage10_closure(
     assert body["replay_generalization_ready"] is True
     assert body["skillization_ready"] is True
     assert body["forge_handoff_ready"] is True
+    assert body["live_teaching_session_ux_ready"] is True
     assert body["reads_receipts"] is True
     assert body["writes_receipts"] is False
     assert body["writes_memory"] is False
@@ -126,7 +127,8 @@ def test_apprenticeship_status_starts_stage11_groundwork_after_stage10_closure(
     assert body["routes"]["replay_generalization_contract"] == "/apprenticeship/replay-generalization-contract"
     assert body["routes"]["skillization_artifact_contract"] == "/apprenticeship/skillization-artifact-contract"
     assert body["routes"]["forge_handoff_contract"] == "/apprenticeship/forge-handoff-contract"
-    assert body["next_smallest_truthful_gap"] == "stage11_live_teaching_session_ux"
+    assert body["routes"]["live_teaching_session_ux"] == "/apprenticeship/live-teaching-session-ux"
+    assert body["next_smallest_truthful_gap"] == "stage11_teaching_session_receipt_write_path"
 
     deliverables = {item["id"]: item for item in body["deliverables"]}
     assert deliverables["stage10_ledger_closure_backstop"]["ready"] is True
@@ -457,3 +459,90 @@ def test_apprenticeship_forge_handoff_contract_is_review_gated_without_writes(
     assert checks["promotion_reviews_required"]["passed"] is True
     assert checks["direct_promotion_denied"]["passed"] is True
     assert checks["authority_growth_denied"]["passed"] is True
+
+
+def test_apprenticeship_live_teaching_session_ux_is_visible_without_actions(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage10_closure_receipt(data_root, receipt_id="away_stage10_closure_live_teaching_ux_test")
+
+    response = TestClient(create_app()).get("/apprenticeship/live-teaching-session-ux")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "francis.stage11.apprenticeship.live_teaching_session_ux"
+    assert body["status"] == "ready"
+    assert body["forge_handoff_contract_ready"] is True
+    assert body["live_teaching_session_ux_ready"] is True
+    assert body["surface"] == "chat_ui.apprenticeship_panel"
+    assert body["route"] == "/apprenticeship/live-teaching-session-ux"
+    assert body["visible_section_count"] == 7
+    assert body["operator_action_count"] == 5
+    assert set(body["denied_modes"]) == {
+        "ambient_capture_start",
+        "background_learning_toggle",
+        "forge_promotion_from_ui_surface",
+        "teaching_session_without_receipt",
+    }
+    assert body["reads_receipts"] is True
+    assert body["writes_receipts"] is False
+    assert body["writes_memory"] is False
+    assert body["writes_skill_artifact"] is False
+    assert body["writes_forge_proposal"] is False
+    assert body["creates_capability"] is False
+    assert body["promotes_to_forge"] is False
+    assert body["starts_teaching_session"] is False
+    assert body["captures_screen"] is False
+    assert body["captures_audio"] is False
+    assert body["captures_keystrokes"] is False
+    assert body["passive_learning_enabled"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["starts_processes"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["governance"]["read_only"] is True
+    assert body["governance"]["operator_surface_only"] is True
+    assert body["governance"]["requires_forge_handoff_contract"] is True
+    assert body["governance"]["requires_receipt_write_path_before_actions_enable"] is True
+    assert body["governance"]["ambient_capture_start_denied"] is True
+    assert body["governance"]["background_learning_toggle_denied"] is True
+    assert body["governance"]["forge_promotion_from_ui_surface_denied"] is True
+    assert body["governance"]["does_not_start_teaching_session"] is True
+    assert body["governance"]["does_not_write_memory"] is True
+    assert body["governance"]["does_not_write_forge_proposal"] is True
+    assert body["next_smallest_truthful_gap"] == "stage11_teaching_session_receipt_write_path"
+
+    sections = {item["id"]: item for item in body["visible_sections"]}
+    assert set(sections) == {
+        "capture_boundaries",
+        "forge_handoff",
+        "next_gap",
+        "replay_generalization",
+        "skillization_artifact",
+        "stage_status",
+        "teaching_contract",
+    }
+    assert all(item["visible"] for item in sections.values())
+
+    actions = {item["id"]: item for item in body["operator_actions"]}
+    assert set(actions) == {
+        "label_intent",
+        "prepare_skillization_artifact",
+        "review_replay",
+        "stage_forge_handoff",
+        "start_teaching_session",
+    }
+    assert all(item["enabled"] is False for item in actions.values())
+
+    checks = {item["id"]: item for item in body["checks"]}
+    assert checks["forge_handoff_contract_ready"]["passed"] is True
+    assert checks["apprenticeship_sections_visible"]["passed"] is True
+    assert checks["operator_actions_declared_but_disabled"]["passed"] is True
+    assert checks["ambient_capture_controls_denied"]["passed"] is True
+    assert checks["write_and_promotion_controls_denied"]["passed"] is True

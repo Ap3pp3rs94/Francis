@@ -48208,6 +48208,66 @@ Latest validation for Stage 11 Forge handoff contract:
   status_next=stage11_live_teaching_session_ux;
   contract_next=stage11_live_teaching_session_ux`.
 
+### 2026-05-31 - Stage 11 live teaching-session UX surface is visible and read-only
+
+Roadmap area: Stage 11 / Apprenticeship, live teaching-session UX surface.
+
+Material change:
+
+- Added read-only GET `/apprenticeship/live-teaching-session-ux`.
+- Added a typed chat UI Apprenticeship client/parser and mounted an
+  `Apprenticeship` operator panel in the console.
+- `/apprenticeship/status` now reports `stage11_operator_surface_ready` when the
+  Stage 11 contracts and read-only operator surface are ready.
+- The surface exposes Stage status, teaching contract, replay/generalization,
+  skillization artifact, Forge handoff, capture boundaries, and next-gap
+  readback sections.
+- The surface declares but disables teaching actions until a governed receipt
+  write path exists: start teaching session, label intent, review replay,
+  prepare skillization artifact, and stage Forge handoff.
+- The surface denies ambient capture start, background learning toggles,
+  teaching sessions without receipts, and Forge promotion from the UI surface.
+- The surface does not start a teaching session, write receipts, write memory,
+  write skill artifacts, write Forge proposals, create capabilities, promote to
+  Forge, run tools, run shell, run git, start processes, or grant authority.
+- The next smallest truthful gap is now
+  `stage11_teaching_session_receipt_write_path`.
+
+Latest validation for Stage 11 live teaching-session UX surface:
+
+- `python -m pytest tests/test_api_apprenticeship.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 8 tests passed`
+- `python -m mypy src/francis/apprenticeship.py
+  src/francis/api/routes/apprenticeship.py`
+  Result: `passed`
+- `python -m ruff check src/francis/apprenticeship.py
+  src/francis/api/routes/apprenticeship.py tests/test_api_apprenticeship.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/apprenticeship.py
+  src/francis/api/routes/apprenticeship.py tests/test_api_apprenticeship.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed; 4 files already formatted`
+- `npm run test` from `apps/chat_ui`
+  Result: `passed; 175 tests passed`
+- `npm run build` from `apps/chat_ui`
+  Result: `passed`
+- Live local read-only route/readback:
+  GET `/apprenticeship/status` and GET
+  `/apprenticeship/live-teaching-session-ux`.
+  Result: `status=stage11_operator_surface_ready;
+  live_teaching_session_ux_ready=true;
+  ready_count=5; required_count=5;
+  ux_status=ready; ux_ready=true;
+  surface=chat_ui.apprenticeship_panel;
+  visible_sections=7; operator_actions=5;
+  starts_teaching_session=false; writes_receipts=false;
+  writes_memory=false; writes_forge_proposal=false;
+  status_next=stage11_teaching_session_receipt_write_path;
+  ux_next=stage11_teaching_session_receipt_write_path`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
