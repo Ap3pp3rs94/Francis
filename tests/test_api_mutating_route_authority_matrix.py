@@ -173,6 +173,16 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
     assert "permission_gate" in apprenticeship_teaching["denial_behavior"]
     assert "does not write memory" in apprenticeship_teaching["notes"]
 
+    apprenticeship_replay = entries["/apprenticeship/replay-receipt"]
+    assert apprenticeship_replay["family"] == "apprenticeship"
+    assert apprenticeship_replay["required_actor"] == "payload.actor"
+    assert apprenticeship_replay["required_scope"] == "apprenticeship.replay_receipt.write"
+    assert apprenticeship_replay["governance_maturity"] == "permission_gated"
+    assert "prior teaching-session receipt" in apprenticeship_replay["approval_requirement"]
+    assert "replay/generalization review receipt" in apprenticeship_replay["receipt_behavior"]
+    assert "permission_gate" in apprenticeship_replay["denial_behavior"]
+    assert "does not execute replay" in apprenticeship_replay["notes"]
+
     away_closure = entries["/away/stage-closure-decision"]
     assert away_closure["family"] == "away"
     assert away_closure["required_actor"] == "payload.actor"

@@ -21,8 +21,11 @@ APPRENTICESHIP_FORGE_HANDOFF_CONTRACT_KIND = "francis.stage11.apprenticeship.for
 APPRENTICESHIP_LIVE_TEACHING_SESSION_UX_KIND = "francis.stage11.apprenticeship.live_teaching_session_ux"
 APPRENTICESHIP_TEACHING_SESSION_RECEIPT_KIND = "francis.stage11.apprenticeship.teaching_session_receipt"
 APPRENTICESHIP_TEACHING_SESSION_RECEIPTS_KIND = "francis.stage11.apprenticeship.teaching_session_receipts"
+APPRENTICESHIP_REPLAY_RECEIPT_KIND = "francis.stage11.apprenticeship.replay_receipt"
+APPRENTICESHIP_REPLAY_RECEIPTS_KIND = "francis.stage11.apprenticeship.replay_receipts"
 
 APPRENTICESHIP_TEACHING_SESSION_WRITE_SCOPE = "apprenticeship.teaching_session.write"
+APPRENTICESHIP_REPLAY_RECEIPT_WRITE_SCOPE = "apprenticeship.replay_receipt.write"
 
 _ALLOWED_ENV_PROFILES = {"dev", "workstation", "local", "test"}
 _ALLOWED_TEACHING_SESSION_ACTIONS = {
@@ -33,6 +36,13 @@ _ALLOWED_TEACHING_SESSION_ACTIONS = {
     "review_replay",
     "review_generalization",
     "prepare_skillization_artifact",
+}
+_ALLOWED_REPLAY_RECEIPT_ACTIONS = {
+    "review_replay",
+    "approve_replay",
+    "request_replay_changes",
+    "review_generalization",
+    "approve_generalization",
 }
 
 
@@ -54,6 +64,9 @@ def apprenticeship_status_snapshot() -> dict[str, Any]:
         _safe_text(teaching_session_receipts[-1].get("receipt_id")) if teaching_session_receipts else ""
     )
     teaching_session_receipt_ready = bool(latest_teaching_session_receipt_id)
+    replay_receipts = read_apprenticeship_replay_receipts(limit=5)
+    latest_replay_receipt_id = _safe_text(replay_receipts[-1].get("receipt_id")) if replay_receipts else ""
+    replay_receipt_ready = bool(latest_replay_receipt_id)
     deliverables = _apprenticeship_deliverables(
         stage10_closed=stage10_closed,
         teaching_session_ready=teaching_session_ready,
@@ -68,7 +81,9 @@ def apprenticeship_status_snapshot() -> dict[str, Any]:
         "kind": APPRENTICESHIP_STATUS_KIND,
         "stage": STAGE11_APPRENTICESHIP_STAGE,
         "source_id": "apprenticeship",
-        "status": "stage11_teaching_session_receipt_ready"
+        "status": "stage11_replay_receipt_ready"
+        if stage10_closed and live_teaching_session_ux_ready and teaching_session_receipt_ready and replay_receipt_ready
+        else "stage11_teaching_session_receipt_ready"
         if stage10_closed and live_teaching_session_ux_ready and teaching_session_receipt_ready
         else "stage11_operator_surface_ready"
         if stage10_closed and live_teaching_session_ux_ready
@@ -90,6 +105,8 @@ def apprenticeship_status_snapshot() -> dict[str, Any]:
         "live_teaching_session_ux_ready": live_teaching_session_ux_ready,
         "teaching_session_receipt_ready": teaching_session_receipt_ready,
         "latest_teaching_session_receipt_id": latest_teaching_session_receipt_id,
+        "replay_receipt_ready": replay_receipt_ready,
+        "latest_replay_receipt_id": latest_replay_receipt_id,
         "reads_receipts": True,
         "writes_receipts": False,
         "writes_memory": False,
@@ -108,6 +125,7 @@ def apprenticeship_status_snapshot() -> dict[str, Any]:
             "requires_stage10_ledger_closure": True,
             "explicit_teaching_session_required": True,
             "teaching_session_receipt_required_before_learning": True,
+            "replay_receipt_required_before_skillization": True,
             "passive_capture_denied": True,
             "surveillance_like_learning_denied": True,
             "learned_skills_must_be_reviewable": True,
@@ -133,6 +151,8 @@ def apprenticeship_status_snapshot() -> dict[str, Any]:
             "live_teaching_session_ux": "/apprenticeship/live-teaching-session-ux",
             "teaching_session_receipts": "/apprenticeship/teaching-session-receipts",
             "teaching_session_record": "/apprenticeship/teaching-session",
+            "replay_receipts": "/apprenticeship/replay-receipts",
+            "replay_receipt_record": "/apprenticeship/replay-receipt",
         },
         "next_smallest_truthful_gap": _apprenticeship_next_gap(
             stage10_closed=stage10_closed,
@@ -142,6 +162,7 @@ def apprenticeship_status_snapshot() -> dict[str, Any]:
             forge_handoff_ready=forge_handoff_ready,
             live_teaching_session_ux_ready=live_teaching_session_ux_ready,
             teaching_session_receipt_ready=teaching_session_receipt_ready,
+            replay_receipt_ready=replay_receipt_ready,
         ),
     }
 
@@ -885,6 +906,59 @@ def apprenticeship_teaching_session_receipts(*, limit: int = 20) -> dict[str, An
     }
 
 
+def read_apprenticeship_replay_receipts(*, limit: int = 20) -> list[dict[str, Any]]:
+    return _read_jsonl_tail(_replay_receipt_path(), limit=_safe_limit(limit, default=20))
+
+
+def apprenticeship_replay_receipts(*, limit: int = 20) -> dict[str, Any]:
+    items = read_apprenticeship_replay_receipts(limit=limit)
+    latest_receipt_id = _safe_text(items[-1].get("receipt_id")) if items else ""
+    return {
+        "ok": True,
+        "kind": APPRENTICESHIP_REPLAY_RECEIPTS_KIND,
+        "stage": STAGE11_APPRENTICESHIP_STAGE,
+        "source_id": "apprenticeship",
+        "status": "ready" if latest_receipt_id else "empty",
+        "items": items,
+        "count": len(items),
+        "latest_receipt_id": latest_receipt_id,
+        "replay_receipt_ready": bool(latest_receipt_id),
+        "reads_receipts": True,
+        "writes_receipts": False,
+        "writes_memory": False,
+        "writes_skill_artifact": False,
+        "writes_forge_proposal": False,
+        "executes_replay": False,
+        "promotes_skill": False,
+        "starts_teaching_session": False,
+        "captures_screen": False,
+        "captures_audio": False,
+        "captures_keystrokes": False,
+        "passive_learning_enabled": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "receipt_readback_only": True,
+            "operator_reviewed_replay_receipts_only": True,
+            "does_not_execute_replay": True,
+            "does_not_write_memory": True,
+            "does_not_run_tools": True,
+            "does_not_run_shell": True,
+            "does_not_run_git": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": "stage11_skillization_artifact_receipt_write_path"
+        if latest_receipt_id
+        else "stage11_replay_receipt_write_path",
+    }
+
+
 def record_apprenticeship_teaching_session(
     *,
     actor: Any,
@@ -990,6 +1064,121 @@ def record_apprenticeship_teaching_session(
     return receipt
 
 
+def record_apprenticeship_replay_receipt(
+    *,
+    actor: Any,
+    reason: Any,
+    action: Any = "review_replay",
+    teaching_session_receipt_id: Any = "",
+    intent_label: Any = "",
+    replay_summary: Any = "",
+    generalization_summary: Any = "",
+    assumptions: Any = "",
+    validation_result: Any = "",
+    notes: Any = "",
+) -> dict[str, Any]:
+    env_profile = _env_profile()
+    if env_profile not in _ALLOWED_ENV_PROFILES:
+        return _blocked_no_receipt(
+            status="blocked_environment_profile",
+            reason="apprenticeship_replay_receipt_dev_or_workstation_only",
+            required_scope=APPRENTICESHIP_REPLAY_RECEIPT_WRITE_SCOPE,
+            next_gap="stage11_replay_receipt_write_path",
+        )
+
+    status = apprenticeship_status_snapshot()
+    if not bool(status.get("teaching_session_receipt_ready")):
+        return _blocked_no_receipt(
+            status="awaiting_teaching_session_receipt",
+            reason="teaching_session_receipt_required_before_replay_receipt",
+            required_scope=APPRENTICESHIP_REPLAY_RECEIPT_WRITE_SCOPE,
+            next_gap="stage11_teaching_session_receipt_write_path",
+        )
+
+    latest_teaching_session_receipt_id = _safe_text(status.get("latest_teaching_session_receipt_id"))
+    supplied_teaching_session_receipt_id = _safe_text(teaching_session_receipt_id)
+    linked_teaching_session_receipt_id = supplied_teaching_session_receipt_id or latest_teaching_session_receipt_id
+    safe_action = _safe_replay_receipt_action(action)
+    safe_actor = _redacted_text(actor)[:240]
+    safe_reason = _redacted_text(reason)[:500]
+    receipt_id = f"apprenticeship_replay_{uuid.uuid4().hex[:12]}"
+    receipt = {
+        "ok": True,
+        "kind": APPRENTICESHIP_REPLAY_RECEIPT_KIND,
+        "receipt_id": receipt_id,
+        "stage": STAGE11_APPRENTICESHIP_STAGE,
+        "source_id": "apprenticeship",
+        "target": "stage11_replay_generalization",
+        "actor": safe_actor,
+        "reason": safe_reason,
+        "action": safe_action,
+        "teaching_session_receipt_id": linked_teaching_session_receipt_id,
+        "latest_teaching_session_receipt_id": latest_teaching_session_receipt_id,
+        "intent_label": _redacted_text(intent_label)[:240],
+        "replay_summary": _redacted_text(replay_summary)[:1000],
+        "generalization_summary": _redacted_text(generalization_summary)[:1000],
+        "assumptions": _redacted_text(assumptions)[:800],
+        "validation_result": _redacted_text(validation_result)[:500],
+        "notes": _redacted_text(notes)[:500],
+        "env_profile": env_profile,
+        "recorded_ts": _now_s(),
+        "capture_mode": "explicit_operator_replay_review_receipt",
+        "replay_receipt_ready": True,
+        "writes_receipt": True,
+        "writes_memory": False,
+        "writes_skill_artifact": False,
+        "writes_forge_proposal": False,
+        "creates_capability": False,
+        "promotes_to_forge": False,
+        "starts_teaching_session": False,
+        "executes_replay": False,
+        "promotes_skill": False,
+        "captures_screen": False,
+        "captures_audio": False,
+        "captures_keystrokes": False,
+        "passive_learning_enabled": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "required_scope": APPRENTICESHIP_REPLAY_RECEIPT_WRITE_SCOPE,
+            "dev_or_workstation_only": True,
+            "action_allowlisted": safe_action in _ALLOWED_REPLAY_RECEIPT_ACTIONS,
+            "requires_teaching_session_receipt": True,
+            "explicit_operator_replay_review": True,
+            "bounded_replay_only": True,
+            "literal_macro_playback_denied": True,
+            "background_replay_execution_denied": True,
+            "unreviewed_generalization_denied": True,
+            "does_not_execute_replay": True,
+            "does_not_write_memory": True,
+            "does_not_write_skill_artifact": True,
+            "does_not_write_forge_proposal": True,
+            "does_not_create_capability": True,
+            "does_not_promote_to_forge": True,
+            "does_not_run_tools": True,
+            "does_not_run_shell": True,
+            "does_not_run_git": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": "stage11_skillization_artifact_receipt_write_path",
+    }
+    _append_jsonl(_replay_receipt_path(), receipt)
+    audit_record(
+        "apprenticeship.replay_receipt_recorded",
+        actor=safe_actor,
+        reason=safe_reason,
+        receipt_id=receipt_id,
+        action=safe_action,
+        teaching_session_receipt_id=linked_teaching_session_receipt_id,
+    )
+    return receipt
+
+
 def _apprenticeship_deliverables(
     *,
     stage10_closed: bool,
@@ -1041,6 +1230,7 @@ def _apprenticeship_next_gap(
     forge_handoff_ready: bool,
     live_teaching_session_ux_ready: bool,
     teaching_session_receipt_ready: bool,
+    replay_receipt_ready: bool,
 ) -> str:
     if not stage10_closed:
         return "stage10_ledger_closure"
@@ -1056,7 +1246,9 @@ def _apprenticeship_next_gap(
         return "stage11_live_teaching_session_ux"
     if not teaching_session_receipt_ready:
         return "stage11_teaching_session_receipt_write_path"
-    return "stage11_replay_receipt_write_path"
+    if not replay_receipt_ready:
+        return "stage11_replay_receipt_write_path"
+    return "stage11_skillization_artifact_receipt_write_path"
 
 
 def _live_teaching_session_ux_checks(
@@ -1346,8 +1538,19 @@ def _safe_teaching_session_action(value: Any) -> str:
     return "start_teaching_session"
 
 
+def _safe_replay_receipt_action(value: Any) -> str:
+    text = _safe_text(value)
+    if text in _ALLOWED_REPLAY_RECEIPT_ACTIONS:
+        return text
+    return "review_replay"
+
+
 def _teaching_session_receipt_path() -> Path:
     return data_dir() / "logs" / "apprenticeship" / "teaching_session_receipts.jsonl"
+
+
+def _replay_receipt_path() -> Path:
+    return data_dir() / "logs" / "apprenticeship" / "replay_receipts.jsonl"
 
 
 def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:

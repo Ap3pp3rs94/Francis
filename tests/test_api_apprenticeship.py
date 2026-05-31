@@ -100,6 +100,8 @@ def test_apprenticeship_status_starts_stage11_groundwork_after_stage10_closure(
     assert body["live_teaching_session_ux_ready"] is True
     assert body["teaching_session_receipt_ready"] is False
     assert body["latest_teaching_session_receipt_id"] == ""
+    assert body["replay_receipt_ready"] is False
+    assert body["latest_replay_receipt_id"] == ""
     assert body["reads_receipts"] is True
     assert body["writes_receipts"] is False
     assert body["writes_memory"] is False
@@ -116,6 +118,7 @@ def test_apprenticeship_status_starts_stage11_groundwork_after_stage10_closure(
     assert body["governance"]["read_only"] is True
     assert body["governance"]["explicit_teaching_session_required"] is True
     assert body["governance"]["teaching_session_receipt_required_before_learning"] is True
+    assert body["governance"]["replay_receipt_required_before_skillization"] is True
     assert body["governance"]["passive_capture_denied"] is True
     assert body["governance"]["surveillance_like_learning_denied"] is True
     assert body["governance"]["learned_skills_must_be_reviewable"] is True
@@ -133,6 +136,8 @@ def test_apprenticeship_status_starts_stage11_groundwork_after_stage10_closure(
     assert body["routes"]["live_teaching_session_ux"] == "/apprenticeship/live-teaching-session-ux"
     assert body["routes"]["teaching_session_receipts"] == "/apprenticeship/teaching-session-receipts"
     assert body["routes"]["teaching_session_record"] == "/apprenticeship/teaching-session"
+    assert body["routes"]["replay_receipts"] == "/apprenticeship/replay-receipts"
+    assert body["routes"]["replay_receipt_record"] == "/apprenticeship/replay-receipt"
     assert body["next_smallest_truthful_gap"] == "stage11_teaching_session_receipt_write_path"
 
     deliverables = {item["id"]: item for item in body["deliverables"]}
@@ -679,4 +684,195 @@ def test_apprenticeship_teaching_session_records_redacted_auditable_receipt(
     assert status["status"] == "stage11_teaching_session_receipt_ready"
     assert status["teaching_session_receipt_ready"] is True
     assert status["latest_teaching_session_receipt_id"] == body["receipt_id"]
+    assert status["replay_receipt_ready"] is False
+    assert status["latest_replay_receipt_id"] == ""
     assert status["next_smallest_truthful_gap"] == "stage11_replay_receipt_write_path"
+
+
+def test_apprenticeship_replay_receipt_denies_without_actor_scope(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage10_closure_receipt(data_root, receipt_id="away_stage10_closure_replay_denied_test")
+
+    response = TestClient(create_app()).post(
+        "/apprenticeship/replay-receipt",
+        json={
+            "actor": "test.apprenticeship.reviewer",
+            "reason": "missing replay receipt write scope",
+            "action": "review_replay",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["status"] == "denied"
+    assert body["error"] == "api_permission_denied"
+    assert body["writes_receipt"] is False
+    assert body["writes_memory"] is False
+    assert body["writes_skill_artifact"] is False
+    assert body["writes_forge_proposal"] is False
+    assert body["starts_teaching_session"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["starts_processes"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["governance"]["required_scope"] == "apprenticeship.replay_receipt.write"
+    assert not (data_root / "logs" / "apprenticeship" / "replay_receipts.jsonl").exists()
+
+
+def test_apprenticeship_replay_receipt_requires_teaching_session_receipt(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({"test.apprenticeship.reviewer": ["apprenticeship.replay_receipt.write"]}),
+    )
+    _write_stage10_closure_receipt(data_root, receipt_id="away_stage10_closure_replay_requires_teaching_test")
+
+    response = TestClient(create_app()).post(
+        "/apprenticeship/replay-receipt",
+        json={
+            "actor": "test.apprenticeship.reviewer",
+            "reason": "review before teaching receipt",
+            "action": "review_replay",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["status"] == "awaiting_teaching_session_receipt"
+    assert body["receipt"] is None
+    assert body["receipt_id"] == ""
+    assert body["writes_receipt"] is False
+    assert body["writes_memory"] is False
+    assert body["governance"]["required_scope"] == "apprenticeship.replay_receipt.write"
+    assert body["next_smallest_truthful_gap"] == "stage11_teaching_session_receipt_write_path"
+    assert not (data_root / "logs" / "apprenticeship" / "replay_receipts.jsonl").exists()
+
+
+def test_apprenticeship_replay_receipt_records_review_after_teaching_session(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps(
+            {
+                "test.apprenticeship.teacher": ["apprenticeship.teaching_session.write"],
+                "test.apprenticeship.reviewer": ["apprenticeship.replay_receipt.write"],
+            }
+        ),
+    )
+    _write_stage10_closure_receipt(data_root, receipt_id="away_stage10_closure_replay_receipt_test")
+
+    client = TestClient(create_app())
+    teaching = client.post(
+        "/apprenticeship/teaching-session",
+        json={
+            "actor": "test.apprenticeship.teacher",
+            "reason": "start teaching",
+            "action": "start_teaching_session",
+            "intent_label": "summarize incident",
+            "declared_scope": "operator demonstrates incident summary",
+            "success_condition": "reviewable replay exists",
+            "demonstration_summary": "operator supplied summary",
+        },
+    ).json()
+    assert teaching["ok"] is True
+    assert teaching["receipt_id"]
+
+    response = client.post(
+        "/apprenticeship/replay-receipt",
+        json={
+            "actor": "test.apprenticeship.reviewer",
+            "reason": "review replay token=replayreasonsecret123",
+            "action": "approve_generalization",
+            "teaching_session_receipt_id": teaching["receipt_id"],
+            "intent_label": "summarize incident",
+            "replay_summary": "Replay matched the operator steps token=replaysecret123",
+            "generalization_summary": "Generalized only stable summary steps",
+            "assumptions": "Input incidents remain operator-visible",
+            "validation_result": "Accepted for skillization candidate review",
+            "notes": "No background replay token=replaynotessecret123",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "francis.stage11.apprenticeship.replay_receipt.record"
+    assert body["status"] == "recorded"
+    assert body["receipt_id"].startswith("apprenticeship_replay_")
+    assert body["action"] == "approve_generalization"
+    assert body["writes_receipt"] is True
+    assert body["writes_memory"] is False
+    assert body["writes_skill_artifact"] is False
+    assert body["writes_forge_proposal"] is False
+    assert body["starts_teaching_session"] is False
+    assert body["executes_replay"] is False
+    assert body["promotes_skill"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["starts_processes"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["governance"]["required_scope"] == "apprenticeship.replay_receipt.write"
+    assert body["governance"]["requires_teaching_session_receipt"] is True
+    assert body["governance"]["explicit_operator_replay_review"] is True
+    assert body["governance"]["does_not_execute_replay"] is True
+    assert body["governance"]["does_not_write_memory"] is True
+    assert body["next_smallest_truthful_gap"] == "stage11_skillization_artifact_receipt_write_path"
+
+    receipt = body["receipt"]
+    assert receipt["kind"] == "francis.stage11.apprenticeship.replay_receipt"
+    assert receipt["receipt_id"] == body["receipt_id"]
+    assert receipt["actor"] == "test.apprenticeship.reviewer"
+    assert receipt["teaching_session_receipt_id"] == teaching["receipt_id"]
+    assert receipt["latest_teaching_session_receipt_id"] == teaching["receipt_id"]
+    assert receipt["capture_mode"] == "explicit_operator_replay_review_receipt"
+    assert receipt["replay_receipt_ready"] is True
+    assert receipt["governance"]["required_scope"] == "apprenticeship.replay_receipt.write"
+    assert receipt["governance"]["requires_teaching_session_receipt"] is True
+    assert receipt["governance"]["literal_macro_playback_denied"] is True
+    assert receipt["governance"]["background_replay_execution_denied"] is True
+    assert receipt["governance"]["does_not_write_skill_artifact"] is True
+    assert receipt["governance"]["does_not_run_shell"] is True
+    receipt_text = json.dumps(receipt, sort_keys=True)
+    assert "replayreasonsecret123" not in receipt_text
+    assert "replaysecret123" not in receipt_text
+    assert "replaynotessecret123" not in receipt_text
+
+    readback = client.get("/apprenticeship/replay-receipts").json()
+    assert readback["ok"] is True
+    assert readback["kind"] == "francis.stage11.apprenticeship.replay_receipts"
+    assert readback["status"] == "ready"
+    assert readback["latest_receipt_id"] == body["receipt_id"]
+    assert readback["replay_receipt_ready"] is True
+    assert readback["writes_receipts"] is False
+    assert readback["writes_memory"] is False
+    assert readback["executes_replay"] is False
+    assert readback["grants_execution_authority"] is False
+    assert readback["grants_mutation_authority"] is False
+    assert readback["governance"]["receipt_readback_only"] is True
+    assert readback["next_smallest_truthful_gap"] == "stage11_skillization_artifact_receipt_write_path"
+
+    status = client.get("/apprenticeship/status").json()
+    assert status["status"] == "stage11_replay_receipt_ready"
+    assert status["teaching_session_receipt_ready"] is True
+    assert status["latest_teaching_session_receipt_id"] == teaching["receipt_id"]
+    assert status["replay_receipt_ready"] is True
+    assert status["latest_replay_receipt_id"] == body["receipt_id"]
+    assert status["next_smallest_truthful_gap"] == "stage11_skillization_artifact_receipt_write_path"

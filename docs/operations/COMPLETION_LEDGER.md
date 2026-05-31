@@ -48329,6 +48329,75 @@ Latest validation for Stage 11 teaching-session receipt write path:
   readback_status=ready; readback_count=1;
   readback_next=stage11_replay_receipt_write_path`.
 
+### 2026-05-31 - Stage 11 replay receipts are governed and non-executing
+
+Roadmap area: Stage 11 / Apprenticeship, replay and generalization review
+receipt write path.
+
+Material change:
+
+- Added permission-gated POST `/apprenticeship/replay-receipt` requiring
+  `apprenticeship.replay_receipt.write`.
+- Added read-only GET `/apprenticeship/replay-receipts`.
+- `/apprenticeship/status` now reports the latest replay receipt and advances
+  the next smallest truthful gap to
+  `stage11_skillization_artifact_receipt_write_path` only after both a
+  teaching-session receipt and replay receipt exist.
+- Replay receipts require the prior teaching-session receipt readback and
+  record explicit operator review context: action, linked teaching receipt,
+  intent label, replay summary, generalization summary, assumptions, validation
+  result, notes, actor, reason, environment profile, timestamp, and receipt id.
+- Receipt fields are redacted before persistence and written as JSONL under the
+  governed Francis data root.
+- The mutating-route authority matrix now describes the Stage 11 replay receipt
+  write route, required actor, required scope, receipt behavior, and denial
+  behavior.
+- The route writes only the replay/generalization review receipt. It does not
+  execute replay, write memory, write skill artifacts, write Forge proposals,
+  create capabilities, promote to Forge, run tools, run shell, run git, start
+  processes, capture screen/audio/keystrokes, or grant execution/mutation
+  authority.
+
+Latest validation for Stage 11 replay receipt write path:
+
+- `python -m pytest tests/test_api_apprenticeship.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  tests/test_api_mutating_route_authority_matrix.py -q --tb=short --maxfail=1`
+  Result: `passed; 15 tests passed`
+- `python -m mypy src/francis/apprenticeship.py
+  src/francis/api/routes/apprenticeship.py
+  src/francis/api/mutation_authority_matrix.py`
+  Result: `passed`
+- `python -m ruff check src/francis/apprenticeship.py
+  src/francis/api/routes/apprenticeship.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_apprenticeship.py
+  tests/test_api_contract_chat_ui.py
+  tests/test_api_mutating_route_authority_matrix.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/apprenticeship.py
+  src/francis/api/routes/apprenticeship.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_apprenticeship.py
+  tests/test_api_contract_chat_ui.py
+  tests/test_api_mutating_route_authority_matrix.py`
+  Result: `passed; 6 files already formatted`
+- Live local permission-gated TestClient route/readback against an isolated data
+  root:
+  POST `/apprenticeship/teaching-session`, POST
+  `/apprenticeship/replay-receipt`, GET `/apprenticeship/status`, and GET
+  `/apprenticeship/replay-receipts`.
+  Result: `teaching_ok=true;
+  teaching_receipt_prefix=apprenticeship_teaching_session_;
+  replay_ok=true; replay_status=recorded;
+  replay_receipt_prefix=apprenticeship_replay_;
+  replay_writes_receipt=true; replay_writes_memory=false;
+  replay_executes_replay=false; replay_runs_shell=false;
+  replay_grants_execution_authority=false;
+  status=stage11_replay_receipt_ready;
+  teaching_receipt_ready=true; replay_receipt_ready=true;
+  status_next=stage11_skillization_artifact_receipt_write_path;
+  readback_status=ready; readback_count=1;
+  readback_next=stage11_skillization_artifact_receipt_write_path`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

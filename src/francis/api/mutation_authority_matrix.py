@@ -126,6 +126,20 @@ _RULES: tuple[AuthorityRule, ...] = (
         ),
     ),
     AuthorityRule(
+        family="apprenticeship",
+        prefixes=("/apprenticeship/replay-receipt",),
+        required_actor="payload.actor",
+        required_scope="apprenticeship.replay_receipt.write",
+        approval_requirement="not_required_scope_gate_only; prior teaching-session receipt required",
+        receipt_behavior="Stage 11 Apprenticeship replay/generalization review receipt",
+        denial_behavior="api_permission_denied via permission_gate before replay receipt write",
+        governance_maturity="permission_gated",
+        notes=(
+            "The receipt records explicit operator review of replay/generalization only; it does not execute replay, "
+            "write memory, run tools, run shell, or create Forge artifacts."
+        ),
+    ),
+    AuthorityRule(
         family="away",
         prefixes=("/away/stage-closure-decision",),
         required_actor="payload.actor",
