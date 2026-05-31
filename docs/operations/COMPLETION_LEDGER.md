@@ -47956,6 +47956,52 @@ Latest validation for Stage 10 Away closure decision:
   status_next=stage10_ledger_closure;
   review_next=stage10_ledger_closure`.
 
+### 2026-05-31 - Stage 11 Apprenticeship starts with read-only groundwork
+
+Roadmap area: Stage 11 / Apprenticeship, first readiness surface after Stage 10
+Away closure.
+
+Material change:
+
+- Added read-only GET `/apprenticeship/status`.
+- Mounted the Apprenticeship API router.
+- The status surface consumes the Stage 10 Away closure readback and starts
+  Stage 11 only when `stage10_closed_by_receipt=true`.
+- The initial Stage 11 deliverables are explicit: teaching session UX,
+  replay/generalization flow, skillization artifacts, and Forge-ready outputs
+  from demonstration.
+- The surface is intentionally non-capturing and non-learning: it does not
+  write receipts, write memory, capture screen/audio/keystrokes, enable passive
+  learning, run tools, run shell, run git, start processes, or grant authority.
+- The next smallest truthful gap is `stage11_teaching_session_contract`.
+
+Latest validation for Stage 11 Apprenticeship status:
+
+- `python -m pytest tests/test_api_apprenticeship.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 3 tests passed`
+- `python -m mypy src/francis/apprenticeship.py
+  src/francis/api/routes/apprenticeship.py src/francis/api/app.py`
+  Result: `passed`
+- `python -m ruff check src/francis/apprenticeship.py
+  src/francis/api/routes/apprenticeship.py src/francis/api/app.py
+  tests/test_api_apprenticeship.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/apprenticeship.py
+  src/francis/api/routes/apprenticeship.py src/francis/api/app.py
+  tests/test_api_apprenticeship.py tests/test_api_contract_chat_ui.py`
+  Result: `passed; 5 files already formatted`
+- Live local read-only route/readback:
+  GET `/apprenticeship/status`.
+  Result: `status=stage11_groundwork_ready;
+  stage10_closed=true;
+  stage10_latest=away_stage10_closure_53858b926ce2;
+  ready_count=1; required_count=5;
+  passive_learning_enabled=false;
+  captures_screen=false; writes_memory=false;
+  next=stage11_teaching_session_contract`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
