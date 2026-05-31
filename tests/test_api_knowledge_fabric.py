@@ -57,13 +57,16 @@ def test_knowledge_fabric_status_blocks_until_stage11_closure(monkeypatch, tmp_p
     assert body["stage11_closed_by_receipt"] is False
     assert body["stage11_latest_closure_receipt_id"] == ""
     assert body["artifact_index_contract_ready"] is False
+    assert body["artifact_index_projection_ready"] is False
+    assert body["artifact_index_projection_count"] == 0
     assert body["artifact_indexing_active"] is False
     assert body["retrieval_layer_ready"] is False
     assert body["local_evidence_citations_ready"] is False
     assert body["retention_model_ready"] is False
     assert body["ready_count"] == 0
-    assert body["required_count"] == 5
+    assert body["required_count"] == 6
     assert body["routes"]["artifact_index_contract"] == "/knowledge-fabric/artifact-index-contract"
+    assert body["routes"]["artifact_index_projection"] == "/knowledge-fabric/artifact-index-projection"
     assert body["routes"]["memory_timeline"] == "/memory/timeline/list"
     assert body["routes"]["artifact_inspection"] == "/artifacts/inspect"
     assert body["governance"]["read_only"] is True
@@ -138,8 +141,149 @@ def test_knowledge_fabric_artifact_index_contract_is_read_only_after_stage11_clo
     assert all(item["index_status"] == "contract_only" for item in classes.values())
 
     status = client.get("/knowledge-fabric/status").json()
-    assert status["status"] == "stage12_artifact_index_contract_ready"
+    assert status["status"] == "stage12_artifact_index_projection_ready"
     assert status["artifact_index_contract_ready"] is True
-    assert status["ready_count"] == 2
-    assert status["required_count"] == 5
-    assert status["next_smallest_truthful_gap"] == "stage12_artifact_index_projection"
+    assert status["artifact_index_projection_ready"] is True
+    assert status["artifact_index_projection_count"] == 0
+    assert status["ready_count"] == 3
+    assert status["required_count"] == 6
+    assert status["next_smallest_truthful_gap"] == "stage12_retrieval_layer"
+
+
+def test_knowledge_fabric_artifact_index_projection_projects_local_citations(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage11_closure_receipt(data_root, receipt_id="apprenticeship_stage11_closure_projection_test")
+    memory_path = data_root / "memory" / "timeline" / "_events.json"
+    memory_path.parent.mkdir(parents=True, exist_ok=True)
+    memory_path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "updated_at": 1_800_000_200,
+                "events": [
+                    {
+                        "id": "evt-kf-trace",
+                        "ts": 1_800_000_201,
+                        "kind": "memory_write",
+                        "title": "Operation evidence token=kfprojectionsecret123",
+                        "message": "Execution trace summary",
+                        "trace_id": "trace-kf",
+                        "mission_id": "mission-kf",
+                        "operation_id": "op-kf",
+                        "approval_id": "approval-kf",
+                        "run_id": "run-kf",
+                        "artifact_dir": "data/artifacts/kf-trace",
+                        "domain": "operations",
+                        "actor": "francis",
+                        "scope": "mission.loop",
+                        "meta": {
+                            "source": "unit_test",
+                            "retention_policy": "mission_trace",
+                            "ttl_seconds": 86400,
+                        },
+                    }
+                ],
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+
+    from francis.chat.continuity.ledger import append
+
+    append(
+        "assistant",
+        "Mission ledger evidence token=ledgerprojectionsecret123",
+        {
+            "source": "unit_test",
+            "mission_id": "mission-ledger-kf",
+            "operation_id": "op-ledger-kf",
+            "trace_id": "trace-ledger-kf",
+            "run_id": "run-ledger-kf",
+            "artifact_dir": "data/artifacts/ledger-kf",
+            "scope": "mission.loop",
+            "operation_status": "succeeded",
+            "retention_policy": "mission_trace",
+        },
+    )
+
+    response = TestClient(create_app()).get("/knowledge-fabric/artifact-index-projection?limit=10")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "francis.stage12.knowledge_fabric.artifact_index_projection"
+    assert body["status"] == "ready"
+    assert body["artifact_index_projection_ready"] is True
+    assert body["stage11_closed_by_receipt"] is True
+    assert body["memory_timeline_event_count"] == 1
+    assert body["continuity_ledger_entry_count"] == 1
+    assert body["total"] == 2
+    assert body["truncated"] is False
+    assert body["reads_memory_timeline"] is True
+    assert body["reads_continuity_ledger"] is True
+    assert body["writes_index"] is False
+    assert body["writes_memory"] is False
+    assert body["scans_files"] is False
+    assert body["replicates_data"] is False
+    assert body["grants_authority"] is False
+    assert body["governance"]["read_only"] is True
+    assert body["governance"]["bounded_local_readback"] is True
+    assert body["governance"]["does_not_scan_files"] is True
+    assert body["next_smallest_truthful_gap"] == "stage12_retrieval_layer"
+
+    citations = body["citations"]
+    assert len(citations) == 2
+    by_source = {item["source_route"]: item for item in citations}
+    memory = by_source["/memory/timeline/get"]
+    assert memory["artifact_class"] == "execution_traces"
+    assert memory["reference_id"] == "trace-kf"
+    assert memory["local_handle"] == "data/artifacts/kf-trace"
+    assert memory["redacted"] is True
+    assert memory["citation_ready"] is True
+    assert memory["trace_lineage"]["mission_id"] == "mission-kf"
+    assert memory["trace_lineage"]["operation_id"] == "op-kf"
+    assert memory["retention"]["policy"] == "mission_trace"
+    assert memory["retention"]["ttl_seconds"] == 86400
+    assert "kfprojectionsecret123" not in json.dumps(memory, sort_keys=True)
+
+    ledger = by_source["/continuity/ledger"]
+    assert ledger["artifact_class"] == "execution_traces"
+    assert ledger["reference_id"] == "trace-ledger-kf"
+    assert ledger["local_handle"] == "data/artifacts/ledger-kf"
+    assert ledger["redacted"] is True
+    assert ledger["trace_lineage"]["mission_id"] == "mission-ledger-kf"
+    assert ledger["provenance"]["source"] == "unit_test"
+    assert "ledgerprojectionsecret123" not in json.dumps(ledger, sort_keys=True)
+
+    assert body["artifact_class_counts"] == {"execution_traces": 2}
+    assert body["source_counts"] == {"/continuity/ledger": 1, "/memory/timeline/get": 1}
+
+
+def test_knowledge_fabric_artifact_index_projection_blocks_without_stage11_closure(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    response = TestClient(create_app()).get("/knowledge-fabric/artifact-index-projection")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["status"] == "blocked"
+    assert body["artifact_index_projection_ready"] is False
+    assert body["stage11_closed_by_receipt"] is False
+    assert body["items"] == []
+    assert body["total"] == 0
+    assert body["reads_memory_timeline"] is False
+    assert body["reads_continuity_ledger"] is False
+    assert body["writes_index"] is False
+    assert body["writes_memory"] is False
+    assert body["scans_files"] is False
+    assert body["next_smallest_truthful_gap"] == "stage11_ledger_closure"

@@ -48668,6 +48668,58 @@ Latest validation for Stage 12 Knowledge Fabric artifact-index contract:
   ready_status=stage12_artifact_index_contract_ready; ready_count=2;
   required_count=5; ready_next=stage12_artifact_index_projection`.
 
+### 2026-05-31 - Stage 12 artifact index projection reads local evidence
+
+Roadmap area: Stage 12 / Knowledge Fabric, artifact indexing projection before
+retrieval.
+
+Material change:
+
+- Added read-only GET `/knowledge-fabric/artifact-index-projection`.
+- The projection remains blocked until the Stage 11 closure receipt exists.
+- After Stage 11 closure, the projection reads bounded existing local evidence
+  from the memory timeline registry and continuity ledger tail.
+- The projection emits citation-ready records with artifact class, source route,
+  source record id, reference id, local handle, redacted evidence summary,
+  observed timestamp, trace lineage, retention metadata, and provenance.
+- The projection classifies trace/operation/artifact evidence as
+  `execution_traces`, even when the trace also carries approval references.
+- `/knowledge-fabric/status` now reports
+  `stage12_artifact_index_projection_ready` and advances the next smallest
+  truthful gap to `stage12_retrieval_layer` once the projection route is ready.
+- The projection is still read-only. It does not write an index, write memory,
+  scan files, replicate data, or grant authority.
+
+Latest validation for Stage 12 artifact index projection:
+
+- `python -m pytest tests/test_api_knowledge_fabric.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 5 passed`
+- `python -m mypy src/francis/knowledge_fabric.py
+  src/francis/api/routes/knowledge_fabric.py src/francis/api/app.py`
+  Result: `passed`
+- `python -m ruff check src/francis/knowledge_fabric.py
+  src/francis/api/routes/knowledge_fabric.py src/francis/api/app.py
+  tests/test_api_knowledge_fabric.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/knowledge_fabric.py
+  src/francis/api/routes/knowledge_fabric.py src/francis/api/app.py
+  tests/test_api_knowledge_fabric.py tests/test_api_contract_chat_ui.py`
+  Result: `passed; 5 files already formatted`
+- Live local TestClient route/readback against an isolated data root:
+  write a Stage 11 closure receipt fixture, write one memory timeline trace
+  event, append one continuity ledger trace event, GET
+  `/knowledge-fabric/artifact-index-projection`, and GET
+  `/knowledge-fabric/status`.
+  Result: `projection_status=ready; projection_ready=true;
+  projection_total=2; artifact_class_counts={"execution_traces":2};
+  source_counts={"/continuity/ledger":1,"/memory/timeline/get":1};
+  writes_index=false; writes_memory=false; scans_files=false;
+  replicates_data=false; grants_authority=false;
+  status_status=stage12_artifact_index_projection_ready;
+  status_projection_ready=true; status_next=stage12_retrieval_layer`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

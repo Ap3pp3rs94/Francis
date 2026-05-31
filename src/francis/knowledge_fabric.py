@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from francis.apprenticeship import apprenticeship_stage11_operator_stage_closure_decision_readback
+from francis.chat.continuity.ledger import tail as continuity_tail
+from francis.governance.redaction import redact_secret_text
+from francis.kernel.paths import data_dir
 
 STAGE12_KNOWLEDGE_FABRIC_STAGE = "Stage 12 / Knowledge Fabric"
 KNOWLEDGE_FABRIC_STATUS_KIND = "francis.stage12.knowledge_fabric.status"
 KNOWLEDGE_FABRIC_ARTIFACT_INDEX_CONTRACT_KIND = "francis.stage12.knowledge_fabric.artifact_index_contract"
+KNOWLEDGE_FABRIC_ARTIFACT_INDEX_PROJECTION_KIND = "francis.stage12.knowledge_fabric.artifact_index_projection"
 
 
 def knowledge_fabric_status_snapshot() -> dict[str, Any]:
@@ -14,6 +19,8 @@ def knowledge_fabric_status_snapshot() -> dict[str, Any]:
     stage11_closed = bool(stage11.get("stage11_closed_by_receipt"))
     artifact_contract = knowledge_fabric_artifact_index_contract()
     artifact_contract_ready = bool(artifact_contract.get("artifact_index_contract_ready"))
+    artifact_projection = knowledge_fabric_artifact_index_projection(limit=1, memory_limit=5, ledger_limit=5)
+    artifact_projection_ready = bool(artifact_projection.get("artifact_index_projection_ready"))
     deliverables = [
         _deliverable(
             "stage11_ledger_closure_backstop",
@@ -28,6 +35,13 @@ def knowledge_fabric_status_snapshot() -> dict[str, Any]:
             artifact_contract_ready,
             "ready" if artifact_contract_ready else "blocked",
             "stage12_artifact_index_contract",
+        ),
+        _deliverable(
+            "artifact_index_projection",
+            "Existing local evidence can be projected into bounded citations",
+            artifact_projection_ready,
+            "ready" if artifact_projection_ready else "pending",
+            "stage12_artifact_index_projection",
         ),
         _deliverable(
             "retrieval_layer",
@@ -57,12 +71,16 @@ def knowledge_fabric_status_snapshot() -> dict[str, Any]:
         "kind": KNOWLEDGE_FABRIC_STATUS_KIND,
         "stage": STAGE12_KNOWLEDGE_FABRIC_STAGE,
         "source_id": "knowledge_fabric",
-        "status": "stage12_artifact_index_contract_ready"
+        "status": "stage12_artifact_index_projection_ready"
+        if stage11_closed and artifact_contract_ready and artifact_projection_ready
+        else "stage12_artifact_index_contract_ready"
         if stage11_closed and artifact_contract_ready
         else "awaiting_stage11_ledger_closure",
         "stage11_closed_by_receipt": stage11_closed,
         "stage11_latest_closure_receipt_id": _safe_text(stage11.get("latest_receipt_id")),
         "artifact_index_contract_ready": artifact_contract_ready,
+        "artifact_index_projection_ready": artifact_projection_ready,
+        "artifact_index_projection_count": _safe_int(artifact_projection.get("total")),
         "artifact_indexing_active": False,
         "retrieval_layer_ready": False,
         "local_evidence_citations_ready": False,
@@ -73,6 +91,7 @@ def knowledge_fabric_status_snapshot() -> dict[str, Any]:
         "routes": {
             "status": "/knowledge-fabric/status",
             "artifact_index_contract": "/knowledge-fabric/artifact-index-contract",
+            "artifact_index_projection": "/knowledge-fabric/artifact-index-projection",
             "memory_timeline": "/memory/timeline/list",
             "artifact_inspection": "/artifacts/inspect",
             "continuity_ledger": "/continuity/ledger",
@@ -85,7 +104,9 @@ def knowledge_fabric_status_snapshot() -> dict[str, Any]:
             "does_not_replicate_data": True,
             "does_not_grant_authority": True,
         },
-        "next_smallest_truthful_gap": "stage12_artifact_index_projection"
+        "next_smallest_truthful_gap": "stage12_retrieval_layer"
+        if stage11_closed and artifact_contract_ready and artifact_projection_ready
+        else "stage12_artifact_index_projection"
         if stage11_closed and artifact_contract_ready
         else "stage11_ledger_closure",
     }
@@ -211,6 +232,92 @@ def knowledge_fabric_artifact_index_contract() -> dict[str, Any]:
     }
 
 
+def knowledge_fabric_artifact_index_projection(
+    *,
+    limit: int = 50,
+    memory_limit: int = 100,
+    ledger_limit: int = 100,
+) -> dict[str, Any]:
+    stage11 = apprenticeship_stage11_operator_stage_closure_decision_readback(limit=5)
+    stage11_closed = bool(stage11.get("stage11_closed_by_receipt"))
+    safe_limit = _safe_limit(limit, default=50)
+    safe_memory_limit = _safe_limit(memory_limit, default=100)
+    safe_ledger_limit = _safe_limit(ledger_limit, default=100)
+    if not stage11_closed:
+        return {
+            "ok": True,
+            "kind": KNOWLEDGE_FABRIC_ARTIFACT_INDEX_PROJECTION_KIND,
+            "stage": STAGE12_KNOWLEDGE_FABRIC_STAGE,
+            "source_id": "knowledge_fabric",
+            "status": "blocked",
+            "artifact_index_projection_ready": False,
+            "stage11_closed_by_receipt": False,
+            "stage11_latest_closure_receipt_id": _safe_text(stage11.get("latest_receipt_id")),
+            "items": [],
+            "citations": [],
+            "artifact_class_counts": {},
+            "source_counts": {},
+            "total": 0,
+            "limit": safe_limit,
+            "truncated": False,
+            "memory_timeline_event_count": 0,
+            "continuity_ledger_entry_count": 0,
+            "reads_memory_timeline": False,
+            "reads_continuity_ledger": False,
+            "writes_index": False,
+            "writes_memory": False,
+            "scans_files": False,
+            "replicates_data": False,
+            "grants_authority": False,
+            "governance": _artifact_projection_governance(),
+            "next_smallest_truthful_gap": "stage11_ledger_closure",
+        }
+
+    memory_events = _read_memory_timeline_events(limit=safe_memory_limit)
+    ledger_entries = _read_continuity_ledger_entries(limit=safe_ledger_limit)
+    projected: list[dict[str, Any]] = []
+    for item in memory_events:
+        citation = _project_memory_event(item)
+        if citation:
+            projected.append(citation)
+    for item in ledger_entries:
+        citation = _project_continuity_entry(item)
+        if citation:
+            projected.append(citation)
+    projected.sort(
+        key=lambda item: (_safe_int(item.get("observed_ts")), _safe_text(item.get("reference_id"))), reverse=True
+    )
+    page = projected[:safe_limit]
+    return {
+        "ok": True,
+        "kind": KNOWLEDGE_FABRIC_ARTIFACT_INDEX_PROJECTION_KIND,
+        "stage": STAGE12_KNOWLEDGE_FABRIC_STAGE,
+        "source_id": "knowledge_fabric",
+        "status": "ready" if page else "empty",
+        "artifact_index_projection_ready": True,
+        "stage11_closed_by_receipt": True,
+        "stage11_latest_closure_receipt_id": _safe_text(stage11.get("latest_receipt_id")),
+        "items": page,
+        "citations": page,
+        "artifact_class_counts": _count_by(page, "artifact_class"),
+        "source_counts": _count_by(page, "source_route"),
+        "total": len(projected),
+        "limit": safe_limit,
+        "truncated": len(projected) > len(page),
+        "memory_timeline_event_count": len(memory_events),
+        "continuity_ledger_entry_count": len(ledger_entries),
+        "reads_memory_timeline": True,
+        "reads_continuity_ledger": True,
+        "writes_index": False,
+        "writes_memory": False,
+        "scans_files": False,
+        "replicates_data": False,
+        "grants_authority": False,
+        "governance": _artifact_projection_governance(),
+        "next_smallest_truthful_gap": "stage12_retrieval_layer",
+    }
+
+
 def _artifact_class(
     artifact_id: str,
     description: str,
@@ -231,6 +338,214 @@ def _artifact_class(
     }
 
 
+def _read_memory_timeline_events(*, limit: int) -> list[dict[str, Any]]:
+    path = data_dir() / "memory" / "timeline" / "_events.json"
+    if not path.exists():
+        return []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    events = payload.get("events") if isinstance(payload, dict) else []
+    if not isinstance(events, list):
+        return []
+    return [item for item in events[-limit:] if isinstance(item, dict)]
+
+
+def _read_continuity_ledger_entries(*, limit: int) -> list[dict[str, Any]]:
+    try:
+        return [item for item in continuity_tail(limit=limit) if isinstance(item, dict)]
+    except Exception:
+        return []
+
+
+def _project_memory_event(item: dict[str, Any]) -> dict[str, Any]:
+    references = _references_from(item, _as_dict(item.get("references")), _as_dict(item.get("meta")))
+    artifact_class = _artifact_class_for(item, references=references)
+    reference_id = _reference_id_for(artifact_class, item, references)
+    if not reference_id:
+        return {}
+    return _citation(
+        artifact_class=artifact_class,
+        source_route="/memory/timeline/get",
+        source_record_id=_safe_text(item.get("id")),
+        source_kind=_safe_text(item.get("kind")),
+        reference_id=reference_id,
+        local_handle=_first_text(references.get("artifact_dir"), item.get("artifact_dir"), item.get("id")),
+        evidence_summary=_first_text(item.get("title"), item.get("message"), item.get("kind"), item.get("id")),
+        observed_ts=_safe_int(item.get("ts")),
+        trace_lineage=references,
+        retention=_retention_from(_as_dict(item.get("meta")), item),
+        provenance=_provenance_from(item, _as_dict(item.get("meta"))),
+    )
+
+
+def _project_continuity_entry(item: dict[str, Any]) -> dict[str, Any]:
+    meta = _as_dict(item.get("meta"))
+    references = _references_from(meta)
+    artifact_class = _artifact_class_for({"kind": "ledger_append", **meta}, references=references)
+    reference_id = _reference_id_for(artifact_class, item, references)
+    if not reference_id:
+        return {}
+    return _citation(
+        artifact_class=artifact_class,
+        source_route="/continuity/ledger",
+        source_record_id=_first_text(
+            meta.get("operation_id"), meta.get("trace_id"), meta.get("mission_id"), item.get("ts")
+        ),
+        source_kind="ledger_append",
+        reference_id=reference_id,
+        local_handle=_first_text(references.get("artifact_dir"), references.get("run_id"), reference_id),
+        evidence_summary=_first_text(
+            item.get("content"), meta.get("result_message"), meta.get("operation_error"), "ledger_append"
+        ),
+        observed_ts=_safe_int(item.get("ts")),
+        trace_lineage=references,
+        retention=_retention_from(meta, item),
+        provenance=_provenance_from(item, meta),
+    )
+
+
+def _citation(
+    *,
+    artifact_class: str,
+    source_route: str,
+    source_record_id: str,
+    source_kind: str,
+    reference_id: str,
+    local_handle: str,
+    evidence_summary: str,
+    observed_ts: int,
+    trace_lineage: dict[str, str],
+    retention: dict[str, Any],
+    provenance: dict[str, str],
+) -> dict[str, Any]:
+    return {
+        "artifact_class": artifact_class,
+        "source_route": source_route,
+        "source_record_id": _redact_text(source_record_id),
+        "source_kind": _redact_text(source_kind),
+        "reference_id": _redact_text(reference_id),
+        "local_handle": _redact_text(local_handle),
+        "evidence_summary": _redact_text(evidence_summary)[:500],
+        "observed_ts": observed_ts,
+        "redacted": True,
+        "trace_lineage": {key: _redact_text(value) for key, value in trace_lineage.items() if value},
+        "retention": retention,
+        "provenance": provenance,
+        "citation_ready": True,
+    }
+
+
+def _artifact_class_for(item: dict[str, Any], *, references: dict[str, str]) -> str:
+    kind = _safe_text(item.get("kind")).lower()
+    domain = _safe_text(item.get("domain")).lower()
+    scope = _safe_text(item.get("scope")).lower()
+    haystack = " ".join((kind, domain, scope, " ".join(_safe_text(tag).lower() for tag in _as_list(item.get("tags")))))
+    if any(
+        key in item for key in ("teaching_session_receipt_id", "replay_receipt_id", "skillization_artifact_receipt_id")
+    ):
+        return "teaching_outputs"
+    if "apprenticeship" in haystack:
+        return "teaching_outputs"
+    if "receipt" in haystack:
+        return "receipts"
+    if references.get("trace_id") or references.get("operation_id") or references.get("artifact_dir"):
+        return "execution_traces"
+    if references.get("approval_id"):
+        return "receipts"
+    if references.get("mission_id") or "mission" in haystack:
+        return "missions"
+    if "incident" in haystack:
+        return "incidents"
+    if "telemetry" in haystack or "observer" in haystack or item.get("source_id"):
+        return "observations"
+    return "observations"
+
+
+def _reference_id_for(artifact_class: str, item: dict[str, Any], references: dict[str, str]) -> str:
+    if artifact_class == "execution_traces":
+        return _first_text(references.get("trace_id"), references.get("operation_id"), references.get("artifact_dir"))
+    if artifact_class == "missions":
+        return _first_text(references.get("mission_id"), references.get("operation_id"))
+    if artifact_class in {"receipts", "teaching_outputs", "staged_capabilities"}:
+        return _first_text(item.get("receipt_id"), references.get("approval_id"), item.get("id"))
+    if artifact_class == "incidents":
+        return _first_text(item.get("incident_id"), item.get("id"), references.get("trace_id"))
+    return _first_text(item.get("source_id"), item.get("id"), references.get("trace_id"))
+
+
+def _references_from(*items: dict[str, Any]) -> dict[str, str]:
+    out: dict[str, str] = {}
+    keys = ("mission_id", "operation_id", "trace_id", "approval_id", "run_id", "artifact_dir")
+    fallback_keys = {
+        "operation_id": ("operation_id", "task_id", "current_task_operation_id", "handoff_operation_id"),
+        "trace_id": ("trace_id", "current_task_trace_id", "handoff_trace_id"),
+        "approval_id": ("approval_id", "current_task_approval_id", "handoff_approval_id"),
+        "run_id": ("run_id", "current_task_run_id", "handoff_run_id"),
+        "artifact_dir": ("artifact_dir", "artifact_path", "current_task_artifact_dir", "handoff_artifact_dir"),
+        "mission_id": ("mission_id", "current_task_mission_id", "handoff_mission_id"),
+    }
+    for key in keys:
+        for item in items:
+            for candidate in fallback_keys[key]:
+                value = _safe_text(item.get(candidate)).strip()
+                if value:
+                    out[key] = value
+                    break
+            if key in out:
+                break
+    return out
+
+
+def _retention_from(meta: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
+    retention: dict[str, Any] = {}
+    for out_key, keys in {
+        "policy": ("retention_policy", "policy"),
+        "class": ("retention_class", "class"),
+        "until": ("retention_until", "until", "expires_at"),
+        "ttl_seconds": ("ttl_seconds",),
+    }.items():
+        for key in keys:
+            value = meta.get(key) if key in meta else item.get(key)
+            if _safe_text(value).strip():
+                retention[out_key] = _safe_int(value) if out_key == "ttl_seconds" else _redact_text(value)
+                break
+    return retention
+
+
+def _provenance_from(item: dict[str, Any], meta: dict[str, Any]) -> dict[str, str]:
+    provenance: dict[str, str] = {}
+    for key in ("source", "domain", "actor", "scope", "correlation_id"):
+        value = _first_text(meta.get(key), item.get(key))
+        if value:
+            provenance[key] = _redact_text(value)
+    return provenance
+
+
+def _artifact_projection_governance() -> dict[str, Any]:
+    return {
+        "read_only": True,
+        "requires_stage11_ledger_closure": True,
+        "bounded_local_readback": True,
+        "reads_known_receipt_surfaces_only": True,
+        "does_not_write_index": True,
+        "does_not_write_memory": True,
+        "does_not_scan_files": True,
+        "does_not_replicate_data": True,
+        "grants_authority": False,
+    }
+
+
+def _count_by(items: list[dict[str, Any]], key: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for item in items:
+        value = _safe_text(item.get(key)).strip()
+        if value:
+            counts[value] = counts.get(value, 0) + 1
+    return dict(sorted(counts.items(), key=lambda item: (-item[1], item[0])))
+
+
 def _deliverable(
     deliverable_id: str,
     label: str,
@@ -245,6 +560,41 @@ def _deliverable(
         "status": status,
         "next_smallest_truthful_gap": next_gap,
     }
+
+
+def _first_text(*values: Any) -> str:
+    for value in values:
+        text = _safe_text(value).strip()
+        if text:
+            return text
+    return ""
+
+
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _as_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _safe_int(value: Any) -> int:
+    try:
+        return int(float(_safe_text(value).strip()))
+    except Exception:
+        return 0
+
+
+def _safe_limit(value: Any, *, default: int) -> int:
+    try:
+        parsed = int(value)
+    except Exception:
+        parsed = default
+    return max(1, min(parsed, 200))
+
+
+def _redact_text(value: Any) -> str:
+    return redact_secret_text(_safe_text(value).strip())
 
 
 def _safe_text(value: Any) -> str:
