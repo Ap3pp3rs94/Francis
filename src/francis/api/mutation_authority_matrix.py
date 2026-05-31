@@ -32,6 +32,17 @@ _RULES: tuple[AuthorityRule, ...] = (
         notes="POST is used to carry a bounded id list; the route does not mutate operations.",
     ),
     AuthorityRule(
+        family="executor_substrate",
+        prefixes=("/executor/substrate/stage-closure-decision",),
+        required_actor="payload.actor",
+        required_scope="executor.stage8.closure.write",
+        approval_requirement="this is the Stage 8 operator closure decision route",
+        receipt_behavior="stage8 operator stage closure decision receipt",
+        denial_behavior="api_permission_denied via permission_gate before closure receipt write",
+        governance_maturity="permission_gated",
+        notes="Closure receipt does not mutate runtime stage state or grant execution authority.",
+    ),
+    AuthorityRule(
         family="supervised_exec",
         prefixes=("/operations/supervised-exec",),
         required_actor="payload.actor",

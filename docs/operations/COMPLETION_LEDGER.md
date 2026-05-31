@@ -47079,6 +47079,62 @@ Latest validation for Stage 8 substrate scope enforcement review:
   status_required_count=7; stage8_done_ready=true;
   status_next=stage8_ledger_closure`.
 
+### 2026-05-30 - Stage 8 executor substrate closure decision is receipt-backed
+
+Roadmap area: Stage 8 / Executor Substrate, ledger-backed closure decision.
+
+Material change:
+
+- Added governed write route
+  `/executor/substrate/stage-closure-decision`.
+- Added read-only receipt route
+  `/executor/substrate/stage-closure-decisions`.
+- The write route requires `executor.stage8.closure.write` and records a
+  `francis.stage8.executor_substrate.stage8_operator_stage_closure_decision_receipt`
+  only after the Stage 8 scope-enforcement review is ready.
+- The receipt records the explicit operator-stage closure decision, actor,
+  reason, stage readiness counts, and decision result.
+- The route does not mutate runtime stage state, write tasks, write memory, run
+  tools, run shell, run git, start processes, grant execution authority, or
+  grant mutation authority.
+- The mutating-route authority matrix now covers the Stage 8 closure decision
+  route with its required actor, scope, receipt behavior, and denial behavior.
+- Live local closure decision recorded receipt
+  `exec_stage8_closure_7c5bcc182cce` with
+  `decision=close_stage8`, `stage8_closed_by_receipt=true`, and
+  `next_smallest_truthful_gap=stage8_ledger_closure`.
+
+Latest validation for Stage 8 executor substrate closure decision:
+
+- `python -m pytest tests/test_api_executor_substrate.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  tests/test_api_mutating_route_authority_matrix.py -q --tb=short --maxfail=1`
+  Result: `passed; 12 selected tests passed`
+- `python -m mypy src/francis/executor_substrate.py
+  src/francis/api/routes/executor_substrate.py
+  src/francis/api/mutation_authority_matrix.py`
+  Result: `passed`
+- `python -m ruff check src/francis/executor_substrate.py
+  src/francis/api/routes/executor_substrate.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_executor_substrate.py
+  tests/test_api_contract_chat_ui.py tests/test_api_mutating_route_authority_matrix.py`
+  Result: `passed`
+- `python -m ruff format src/francis/executor_substrate.py
+  src/francis/api/routes/executor_substrate.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_executor_substrate.py
+  tests/test_api_contract_chat_ui.py tests/test_api_mutating_route_authority_matrix.py`
+  Result: `passed; 6 files left unchanged`
+- Live local route/readback:
+  POST `/executor/substrate/stage-closure-decision`,
+  GET `/executor/substrate/stage-closure-decisions?limit=5`, and
+  GET `/executor/substrate/status`.
+  Result: `receipt_id=exec_stage8_closure_7c5bcc182cce;
+  post_status=recorded; decision=close_stage8;
+  stage8_closed_by_receipt=true;
+  readback_status=stage_closure_decision_readback_ready;
+  latest_decision=close_stage8; readback_stage8_closed=true;
+  stage8_done_ready=true; status_next=stage8_ledger_closure`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -1,11 +1,22 @@
 from __future__ import annotations
 
+import json
+import time
+import uuid
+from pathlib import Path
 from typing import Any
 
+from francis.governance.redaction import redact_secret_text
+from francis.kernel.paths import data_dir
+from francis.telemetry.audit import record as audit_record
 from francis.telemetry.status import telemetry_status_snapshot
 
 STAGE8_EXECUTOR_SUBSTRATE_STAGE = "Stage 8 / Executor Substrate"
 EXECUTOR_SUBSTRATE_STATUS_KIND = "francis.stage8.executor_substrate.status"
+STAGE8_OPERATOR_STAGE_CLOSURE_DECISION_KIND = (
+    "francis.stage8.executor_substrate.stage8_operator_stage_closure_decision_receipt"
+)
+STAGE8_OPERATOR_STAGE_CLOSURE_WRITE_SCOPE = "executor.stage8.closure.write"
 
 _STAGE7_LEDGER_CLOSURE_GAP = "stage7_ledger_closure"
 _STAGE8_TOOLBELT_ALLOWLIST_GAP = "stage8_executor_toolbelt_allowlist_review"
@@ -758,6 +769,190 @@ def executor_substrate_scope_enforcement_review_snapshot(
         },
         "next_smallest_truthful_gap": _STAGE8_LEDGER_CLOSURE_GAP if review_ready else _STAGE8_SCOPE_ENFORCEMENT_GAP,
     }
+
+
+def record_stage8_operator_stage_closure_decision(
+    *,
+    actor: Any,
+    reason: Any,
+    decision: Any,
+    review: dict[str, Any],
+    notes: Any = "",
+) -> dict[str, Any]:
+    safe_decision = _safe_stage8_closure_decision(decision)
+    closure_ready = bool(review.get("scope_enforcement_review_ready"))
+    stage8_closed_by_receipt = safe_decision == "close_stage8" and closure_ready
+    receipt_id = f"exec_stage8_closure_{uuid.uuid4().hex[:12]}"
+    payload = {
+        "ok": True,
+        "kind": STAGE8_OPERATOR_STAGE_CLOSURE_DECISION_KIND,
+        "receipt_id": receipt_id,
+        "stage": STAGE8_EXECUTOR_SUBSTRATE_STAGE,
+        "source_id": "executor_substrate",
+        "capture_mode": "explicit_operator_stage_closure_decision",
+        "target": "stage8_executor_substrate",
+        "actor": _redacted_text(actor)[:240],
+        "reason": _redacted_text(reason)[:500],
+        "decision": safe_decision,
+        "notes": _redacted_text(notes)[:500],
+        "review_status": _safe_text(review.get("status")),
+        "scope_enforcement_review_ready": closure_ready,
+        "ready_count": _safe_int(review.get("ready_count"), 0),
+        "required_count": _safe_int(review.get("required_count"), 0),
+        "stage8_closed_by_receipt": stage8_closed_by_receipt,
+        "marks_runtime_stage_state": False,
+        "recorded_ts": _now_s(),
+        "governance": {
+            "permission_scope": STAGE8_OPERATOR_STAGE_CLOSURE_WRITE_SCOPE,
+            "explicit_operator_decision": True,
+            "stage_closure_decision": True,
+            "does_not_mutate_runtime_stage_state": True,
+            "does_not_write_tasks": True,
+            "does_not_write_memory": True,
+            "does_not_run_tools": True,
+            "does_not_run_shell": True,
+            "does_not_run_git": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+    }
+    _append_jsonl(_stage8_operator_stage_closure_decision_path(), payload)
+    audit_record(
+        "executor_substrate.stage8_closure_decision_recorded",
+        actor=payload["actor"],
+        reason=payload["reason"],
+        receipt_id=receipt_id,
+        decision=safe_decision,
+        target=payload["target"],
+        stage8_closed_by_receipt=stage8_closed_by_receipt,
+    )
+    return payload
+
+
+def read_stage8_operator_stage_closure_decisions(*, limit: int = 20) -> list[dict[str, Any]]:
+    return _read_jsonl_tail(_stage8_operator_stage_closure_decision_path(), limit=max(1, min(int(limit), 100)))
+
+
+def stage8_operator_stage_closure_decision_count() -> int:
+    path = _stage8_operator_stage_closure_decision_path()
+    if not path.exists() or not path.is_file():
+        return 0
+    return sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
+
+
+def stage8_operator_stage_closure_decision_readback(*, limit: int = 20) -> dict[str, Any]:
+    safe_limit = max(1, min(int(limit), 100))
+    items = read_stage8_operator_stage_closure_decisions(limit=safe_limit)
+    latest_receipt = items[-1] if items else {}
+    decision_counts = {"close_stage8": 0, "do_not_close_stage8": 0, "needs_more_evidence": 0}
+    for item in items:
+        decision = _safe_text(item.get("decision"))
+        if decision in decision_counts:
+            decision_counts[decision] += 1
+    stage8_closed_by_receipt = bool(latest_receipt.get("stage8_closed_by_receipt"))
+    return {
+        "ok": True,
+        "kind": "francis.stage8.executor_substrate.stage8_operator_stage_closure_decision_receipts",
+        "stage": STAGE8_EXECUTOR_SUBSTRATE_STAGE,
+        "source_id": "executor_substrate",
+        "status": "stage_closure_decision_readback_ready" if items else "empty",
+        "target": "stage8_executor_substrate",
+        "items": items,
+        "count": len(items),
+        "total": stage8_operator_stage_closure_decision_count(),
+        "limit": safe_limit,
+        "latest_receipt": latest_receipt,
+        "latest_receipt_id": latest_receipt.get("receipt_id", ""),
+        "latest_decision": latest_receipt.get("decision", ""),
+        "latest_recorded_ts": latest_receipt.get("recorded_ts", 0),
+        "decision_counts": decision_counts,
+        "receipt_readback_ready": bool(latest_receipt),
+        "stage8_closed_by_receipt": stage8_closed_by_receipt,
+        "marks_runtime_stage_state": False,
+        "reads_receipts": True,
+        "writes_receipts": False,
+        "writes_tasks": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "stage_closure_decision_receipt_readback": True,
+            "receipt_readback_ready": bool(latest_receipt),
+            "does_not_mutate_runtime_stage_state": True,
+            "does_not_write_receipts": True,
+            "does_not_write_tasks": True,
+            "does_not_write_memory": True,
+            "does_not_run_tools": True,
+            "does_not_run_shell": True,
+            "does_not_run_git": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": _STAGE8_LEDGER_CLOSURE_GAP,
+    }
+
+
+def _safe_stage8_closure_decision(value: Any) -> str:
+    text = _safe_text(value).strip()
+    if text in {"close_stage8", "do_not_close_stage8", "needs_more_evidence"}:
+        return text
+    return "needs_more_evidence"
+
+
+def _stage8_operator_stage_closure_decision_path() -> Path:
+    return data_dir() / "logs" / "executor_substrate" / "stage8_operator_stage_closure_decisions.jsonl"
+
+
+def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str) + "\n")
+
+
+def _read_jsonl_tail(path: Path, *, limit: int) -> list[dict[str, Any]]:
+    if not path.exists() or not path.is_file():
+        return []
+    items: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict):
+            items.append(payload)
+    return items[-limit:]
+
+
+def _now_s() -> int:
+    return int(time.time())
+
+
+def _safe_text(value: Any) -> str:
+    if value is None:
+        return ""
+    try:
+        return str(value).strip()
+    except Exception:
+        return ""
+
+
+def _redacted_text(value: Any) -> str:
+    return redact_secret_text(_safe_text(value))
+
+
+def _safe_int(value: Any, default: int) -> int:
+    try:
+        parsed = int(value)
+    except Exception:
+        return default
+    return parsed
 
 
 def _deliverables(*, stage7_closed: bool) -> list[dict[str, Any]]:

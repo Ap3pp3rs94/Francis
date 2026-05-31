@@ -105,6 +105,14 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
     assert "permission_gate" in approval_request["denial_behavior"]
     assert "lower authority than deciding" in approval_request["notes"]
 
+    executor_closure = entries["/executor/substrate/stage-closure-decision"]
+    assert executor_closure["family"] == "executor_substrate"
+    assert executor_closure["required_actor"] == "payload.actor"
+    assert executor_closure["required_scope"] == "executor.stage8.closure.write"
+    assert executor_closure["governance_maturity"] == "permission_gated"
+    assert "closure receipt" in executor_closure["denial_behavior"]
+    assert "does not mutate runtime stage state" in executor_closure["notes"]
+
     memory = entries["/memory/timeline/record"]
     assert memory["family"] == "memory_timeline"
     assert memory["required_actor"] == "payload.request_actor, payload.api_actor, or payload.actor"
