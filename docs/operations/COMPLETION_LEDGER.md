@@ -46631,6 +46631,54 @@ Latest validation for Stage 8 toolbelt/allowlist review:
   Result: `status=toolbelt_allowlist_review_ready; ready_count=4;
   required_count=4; next_smallest_truthful_gap=stage8_branch_first_workflow_review`.
 
+### 2026-05-30 - Stage 8 branch-first workflow review is read-only
+
+Roadmap area: Stage 8 / Executor Substrate, branch-first workflow review.
+
+Material change:
+
+- Added read-only Stage 8 branch-first workflow review at
+  `/executor/substrate/branch-first-workflow-review`.
+- The review consumes the Stage 8 toolbelt/allowlist review and reports the
+  current `git.push` boundaries: exact current-branch binding, detached-HEAD
+  rejection, approval-gated execution, and stale/mismatched approval refresh.
+- The review preserves the documented direct-on-main maintainer workflow and
+  does not falsely mark executor-specific branch-first enforcement complete.
+- The review does not write tasks, write receipts, write memory, run tools, run
+  shell commands, run git, start processes, grant execution authority, or grant
+  mutation authority.
+- Live local readback reports `status=branch_first_workflow_review_partial`,
+  `ready_count=6`, `required_count=7`,
+  `branch_first_workflow_review_ready=false`,
+  `branch_first_enforcement_ready=false`, and
+  `next_smallest_truthful_gap=stage8_branch_first_workflow_enforcement`.
+
+Latest validation for Stage 8 branch-first workflow review:
+
+- `python -m pytest tests/test_api_executor_substrate.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 5 passed`
+- `python -m mypy src/francis/executor_substrate.py
+  src/francis/api/routes/executor_substrate.py`
+  Result: `passed`
+- `python -m ruff check src/francis/executor_substrate.py
+  src/francis/api/routes/executor_substrate.py tests/test_api_executor_substrate.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/executor_substrate.py
+  src/francis/api/routes/executor_substrate.py tests/test_api_executor_substrate.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed; 4 files already formatted`
+- `git diff --check`
+  Result: `passed`
+- Live local readback:
+  `/executor/substrate/branch-first-workflow-review`.
+  Result: `status=branch_first_workflow_review_partial; ready_count=6;
+  required_count=7; branch_first_workflow_review_ready=false;
+  branch_first_enforcement_ready=false;
+  next_smallest_truthful_gap=stage8_branch_first_workflow_enforcement`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

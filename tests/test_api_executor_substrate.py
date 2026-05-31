@@ -8,6 +8,25 @@ from fastapi.testclient import TestClient
 from francis.api.app import create_app
 
 
+def _write_stage7_closure_receipt(data_root: Path, *, receipt_id: str) -> None:
+    receipt_path = data_root / "logs" / "telemetry" / "stage7_operator_stage_closure_decisions.jsonl"
+    receipt_path.parent.mkdir(parents=True)
+    receipt_path.write_text(
+        json.dumps(
+            {
+                "kind": "francis.stage7.telemetry.stage7_operator_stage_closure_decision_receipt",
+                "receipt_id": receipt_id,
+                "decision": "close_stage7",
+                "stage7_closed_by_receipt": True,
+                "marks_runtime_stage_state": False,
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
 def test_executor_substrate_status_waits_for_stage7_closure_receipt(
     monkeypatch,
     tmp_path: Path,
@@ -46,22 +65,7 @@ def test_executor_substrate_status_starts_readonly_after_stage7_closure_receipt(
 ) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
-    receipt_path = data_root / "logs" / "telemetry" / "stage7_operator_stage_closure_decisions.jsonl"
-    receipt_path.parent.mkdir(parents=True)
-    receipt_path.write_text(
-        json.dumps(
-            {
-                "kind": "francis.stage7.telemetry.stage7_operator_stage_closure_decision_receipt",
-                "receipt_id": "tel_stage7_closure_executor_substrate",
-                "decision": "close_stage7",
-                "stage7_closed_by_receipt": True,
-                "marks_runtime_stage_state": False,
-            },
-            sort_keys=True,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
+    _write_stage7_closure_receipt(data_root, receipt_id="tel_stage7_closure_executor_substrate")
 
     body = TestClient(create_app()).get("/executor/substrate/status").json()
 
@@ -106,22 +110,7 @@ def test_executor_toolbelt_allowlist_review_advances_after_stage8_status_ready(
 ) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
-    receipt_path = data_root / "logs" / "telemetry" / "stage7_operator_stage_closure_decisions.jsonl"
-    receipt_path.parent.mkdir(parents=True)
-    receipt_path.write_text(
-        json.dumps(
-            {
-                "kind": "francis.stage7.telemetry.stage7_operator_stage_closure_decision_receipt",
-                "receipt_id": "tel_stage7_closure_toolbelt_allowlist",
-                "decision": "close_stage7",
-                "stage7_closed_by_receipt": True,
-                "marks_runtime_stage_state": False,
-            },
-            sort_keys=True,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
+    _write_stage7_closure_receipt(data_root, receipt_id="tel_stage7_closure_toolbelt_allowlist")
 
     body = TestClient(create_app()).get("/executor/substrate/toolbelt-allowlist-review").json()
 
@@ -154,3 +143,64 @@ def test_executor_toolbelt_allowlist_review_advances_after_stage8_status_ready(
     assert body["governance"]["does_not_execute"] is True
     assert body["governance"]["does_not_grant_authority"] is True
     assert body["next_smallest_truthful_gap"] == "stage8_branch_first_workflow_review"
+
+
+def test_executor_branch_first_workflow_review_projects_current_git_push_boundaries(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage7_closure_receipt(data_root, receipt_id="tel_stage7_closure_branch_first_review")
+
+    body = TestClient(create_app()).get("/executor/substrate/branch-first-workflow-review").json()
+
+    assert body["ok"] is True
+    assert body["kind"] == "francis.stage8.executor_substrate.branch_first_workflow_review"
+    assert body["stage"] == "Stage 8 / Executor Substrate"
+    assert body["status"] == "branch_first_workflow_review_partial"
+    assert body["branch_first_workflow_review_ready"] is False
+    assert body["current_git_push_boundary_reviewed"] is True
+    assert body["branch_first_enforcement_ready"] is False
+    assert body["ready_count"] == 6
+    assert body["required_count"] == 7
+
+    criteria = {item["id"]: item for item in body["criteria"]}
+    assert list(criteria) == [
+        "toolbelt_allowlist_review_ready",
+        "exact_current_branch_binding",
+        "detached_head_blocked",
+        "approval_gated_execution",
+        "stale_or_mismatched_approval_refresh",
+        "branch_first_enforcement_policy",
+        "non_authorizing_review_guard",
+    ]
+    assert criteria["toolbelt_allowlist_review_ready"]["ready"] is True
+    assert criteria["exact_current_branch_binding"]["ready"] is True
+    assert criteria["exact_current_branch_binding"]["evidence"]["denial_error"] == "branch_mismatch"
+    assert criteria["detached_head_blocked"]["ready"] is True
+    assert criteria["detached_head_blocked"]["evidence"]["denial_error"] == "detached_head_not_supported"
+    assert criteria["approval_gated_execution"]["evidence"]["gate"] == "approvals_gate"
+    assert criteria["stale_or_mismatched_approval_refresh"]["evidence"]["mismatch_error"] == (
+        "approval_payload_mismatch"
+    )
+    assert criteria["branch_first_enforcement_policy"]["ready"] is False
+    assert criteria["branch_first_enforcement_policy"]["evidence"]["current_maintainer_workflow"] == "direct_on_main"
+    assert criteria["non_authorizing_review_guard"]["ready"] is True
+
+    assert body["current_workflow_compatibility"]["direct_on_main_supported"] is True
+    assert body["toolbelt_allowlist_review"]["status"] == "toolbelt_allowlist_review_ready"
+    assert body["read_only"] is True
+    assert body["writes_tasks"] is False
+    assert body["writes_receipts"] is False
+    assert body["writes_memory"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["starts_processes"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["governance"]["branch_first_workflow_review"] is True
+    assert body["governance"]["does_not_execute"] is True
+    assert body["governance"]["preserves_current_maintainer_workflow"] is True
+    assert body["next_smallest_truthful_gap"] == "stage8_branch_first_workflow_enforcement"

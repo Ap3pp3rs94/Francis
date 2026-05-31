@@ -10,6 +10,7 @@ EXECUTOR_SUBSTRATE_STATUS_KIND = "francis.stage8.executor_substrate.status"
 _STAGE7_LEDGER_CLOSURE_GAP = "stage7_ledger_closure"
 _STAGE8_TOOLBELT_ALLOWLIST_GAP = "stage8_executor_toolbelt_allowlist_review"
 _STAGE8_BRANCH_FIRST_WORKFLOW_GAP = "stage8_branch_first_workflow_review"
+_STAGE8_BRANCH_FIRST_ENFORCEMENT_GAP = "stage8_branch_first_workflow_enforcement"
 
 
 def executor_substrate_status_snapshot() -> dict[str, Any]:
@@ -154,6 +155,144 @@ def executor_toolbelt_allowlist_review_snapshot() -> dict[str, Any]:
     }
 
 
+def executor_branch_first_workflow_review_snapshot() -> dict[str, Any]:
+    allowlist_review = executor_toolbelt_allowlist_review_snapshot()
+    criteria = [
+        {
+            "id": "toolbelt_allowlist_review_ready",
+            "ready": bool(allowlist_review.get("toolbelt_allowlist_review_ready")),
+            "evidence": {
+                "route": "/executor/substrate/toolbelt-allowlist-review",
+                "status": allowlist_review.get("status", "unknown"),
+            },
+        },
+        {
+            "id": "exact_current_branch_binding",
+            "ready": True,
+            "evidence": {
+                "source": "src/francis/agent/git_push.py",
+                "contract": "requested branch must match the detected current branch",
+                "denial_error": "branch_mismatch",
+            },
+        },
+        {
+            "id": "detached_head_blocked",
+            "ready": True,
+            "evidence": {
+                "source": "src/francis/agent/git_push.py",
+                "contract": "detached HEAD is rejected before approval or push",
+                "denial_error": "detached_head_not_supported",
+            },
+        },
+        {
+            "id": "approval_gated_execution",
+            "ready": True,
+            "evidence": {
+                "source": "src/francis/agent/git_push.py",
+                "gate": "approvals_gate",
+                "next_step": "approve_exact_action",
+            },
+        },
+        {
+            "id": "stale_or_mismatched_approval_refresh",
+            "ready": True,
+            "evidence": {
+                "source": "src/francis/agent/git_push.py",
+                "missing_or_corrupt_status": "needs_approval",
+                "mismatch_error": "approval_payload_mismatch",
+                "writes_mismatch_artifact": True,
+            },
+        },
+        {
+            "id": "branch_first_enforcement_policy",
+            "ready": False,
+            "evidence": {
+                "source": "AGENTS.md",
+                "current_maintainer_workflow": "direct_on_main",
+                "missing": "executor-specific branch-first enforcement policy and receipt readback",
+            },
+        },
+        {
+            "id": "non_authorizing_review_guard",
+            "ready": (
+                allowlist_review.get("read_only") is True
+                and allowlist_review.get("runs_tools") is False
+                and allowlist_review.get("runs_shell") is False
+                and allowlist_review.get("runs_git") is False
+                and allowlist_review.get("grants_execution_authority") is False
+                and allowlist_review.get("grants_mutation_authority") is False
+            ),
+            "evidence": {
+                "read_only": bool(allowlist_review.get("read_only")),
+                "runs_tools": bool(allowlist_review.get("runs_tools")),
+                "runs_shell": bool(allowlist_review.get("runs_shell")),
+                "runs_git": bool(allowlist_review.get("runs_git")),
+                "grants_execution_authority": bool(allowlist_review.get("grants_execution_authority")),
+                "grants_mutation_authority": bool(allowlist_review.get("grants_mutation_authority")),
+            },
+        },
+    ]
+    ready_count = sum(1 for criterion in criteria if criterion["ready"])
+    review_ready = ready_count == len(criteria)
+    allowlist_ready = bool(allowlist_review.get("toolbelt_allowlist_review_ready"))
+    return {
+        "ok": True,
+        "kind": "francis.stage8.executor_substrate.branch_first_workflow_review",
+        "stage": STAGE8_EXECUTOR_SUBSTRATE_STAGE,
+        "status": (
+            "branch_first_workflow_review_ready"
+            if review_ready
+            else "branch_first_workflow_review_partial"
+            if allowlist_ready
+            else "branch_first_workflow_review_blocked"
+        ),
+        "source_id": "executor_substrate",
+        "target": "safe_bounded_execution",
+        "branch_first_workflow_review_ready": review_ready,
+        "current_git_push_boundary_reviewed": allowlist_ready,
+        "branch_first_enforcement_ready": False,
+        "ready_count": ready_count,
+        "required_count": len(criteria),
+        "criteria": criteria,
+        "current_workflow_compatibility": {
+            "direct_on_main_supported": True,
+            "source": "AGENTS.md",
+            "reason": "current maintainer workflow is direct-on-main",
+        },
+        "toolbelt_allowlist_review": {
+            "route": "/executor/substrate/toolbelt-allowlist-review",
+            "status": allowlist_review.get("status", "unknown"),
+            "next_smallest_truthful_gap": allowlist_review.get("next_smallest_truthful_gap", ""),
+        },
+        "read_only": True,
+        "writes_tasks": False,
+        "writes_receipts": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "branch_first_workflow_review": True,
+            "uses_toolbelt_allowlist_review": True,
+            "does_not_execute": True,
+            "does_not_write_tasks": True,
+            "does_not_write_receipts": True,
+            "does_not_write_memory": True,
+            "does_not_grant_authority": True,
+            "preserves_current_maintainer_workflow": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": (
+            _STAGE8_BRANCH_FIRST_ENFORCEMENT_GAP if allowlist_ready else _STAGE8_BRANCH_FIRST_WORKFLOW_GAP
+        ),
+    }
+
+
 def _deliverables(*, stage7_closed: bool) -> list[dict[str, Any]]:
     return [
         {
@@ -199,7 +338,8 @@ def _deliverables(*, stage7_closed: bool) -> list[dict[str, Any]]:
             "ready": False,
             "evidence": {
                 "current_surface": "git.push approval-gated capability exists",
-                "missing": "branch-first workflow readback and enforcement review",
+                "review_route": "/executor/substrate/branch-first-workflow-review",
+                "missing": "executor-specific branch-first enforcement policy and receipt readback",
             },
         },
         {

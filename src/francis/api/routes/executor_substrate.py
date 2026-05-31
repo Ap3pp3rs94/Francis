@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import APIRouter
 
 from francis.executor_substrate import (
+    executor_branch_first_workflow_review_snapshot,
     executor_substrate_status_snapshot,
     executor_toolbelt_allowlist_review_snapshot,
 )
@@ -20,3 +21,8 @@ def substrate_status() -> dict[str, Any]:
 @router.get("/substrate/toolbelt-allowlist-review")
 def toolbelt_allowlist_review() -> dict[str, Any]:
     return executor_toolbelt_allowlist_review_snapshot()
+
+
+@router.get("/substrate/branch-first-workflow-review")
+def branch_first_workflow_review() -> dict[str, Any]:
+    return executor_branch_first_workflow_review_snapshot()
