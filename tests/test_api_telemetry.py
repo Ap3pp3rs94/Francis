@@ -1179,6 +1179,106 @@ def test_telemetry_context_feedback_memory_assistance_live_sample_readback_obser
     )
 
 
+def test_telemetry_context_feedback_memory_assistance_live_sample_run_executes_existing_governed_routes(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    actor = "test.telemetry.live.run"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps(
+            {
+                actor: [
+                    "chat.write",
+                    "telemetry.context.feedback.write",
+                    "memory.timeline.write",
+                ]
+            }
+        ),
+    )
+
+    client = TestClient(create_app())
+    from francis.chat import router as chat_router
+
+    def fake_generate(prompt: str) -> str:
+        assert "feedback_memory_assistance.summary:" in prompt
+        return "Feedback memory assistance live sample observed."
+
+    monkeypatch.setattr(chat_router, "generate", fake_generate)
+
+    response = client.post(
+        "/telemetry/context/feedback/memory-assistance-feedback-loop-live-sample-run",
+        json={
+            "actor": actor,
+            "reason": "operator runs live sample token=livesamplerunsecret123",
+            "message": "What context should guide this work?",
+            "use_llm": True,
+            "rating": "useful",
+            "seed_event_id": "evt-feedback-memory-assistance-live-run-seed",
+            "live_event_id": "evt-feedback-memory-assistance-live-run",
+            "limit": 10,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert (
+        body["kind"]
+        == "francis.stage7.telemetry.context_feedback_memory_assistance_operator_feedback_loop_live_sample_run"
+    )
+    assert body["status"] == "live_sample_observed"
+    assert body["live_sample_observed"] is True
+    assert body["ready_count"] == body["required_count"] == 4
+    assert body["seed_memory_event_id"] == "evt-feedback-memory-assistance-live-run-seed"
+    assert body["live_memory_event_id"] == "evt-feedback-memory-assistance-live-run"
+    assert body["writes_feedback"] is True
+    assert body["writes_memory"] is True
+    assert body["sends_chat"] is True
+    assert body["calls_model"] is True
+    assert body["selects_tools"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["governance"]["required_scopes"] == [
+        "chat.write",
+        "telemetry.context.feedback.write",
+        "memory.timeline.write",
+    ]
+    assert body["governance"]["uses_existing_chat_route"] is True
+    assert body["governance"]["uses_existing_feedback_route"] is True
+    assert body["governance"]["uses_existing_memory_quality_route"] is True
+    assert body["governance"]["does_not_select_tools"] is True
+    assert body["chat"]["execution_trace"]["model_call_response_observed"] is True
+    assert (
+        body["chat"]["telemetry_context"]["feedback_memory_assistance_prompt_integration"]["applies_to_chat_now"]
+        is True
+    )
+    assert body["live_feedback"]["reply_mode"] == "feedback_memory_assistance_prompt_context"
+    assert body["live_memory"]["writes_memory"] is True
+    assert body["readback"]["status"] == "live_sample_observed"
+    assert body["readback"]["live_sample_observed"] is True
+    assert body["readback"]["chat"]["model_call_response_observed"] is True
+    assert body["next_smallest_truthful_gap"] == (
+        "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_review"
+    )
+
+    readback = client.get(
+        "/telemetry/context/feedback/memory-assistance-feedback-loop-live-sample-readback?limit=10"
+    ).json()
+    assert readback["status"] == "live_sample_observed"
+    assert readback["live_sample_observed"] is True
+    assert readback["chat"]["model_call_response_observed"] is True
+    assert readback["memory"]["event_id"] in {
+        "evt-feedback-memory-assistance-live-run-seed",
+        "evt-feedback-memory-assistance-live-run",
+    }
+
+    raw_text = json.dumps(body, sort_keys=True)
+    assert "livesamplerunsecret123" not in raw_text
+
+
 def test_telemetry_context_feedback_memory_assistance_live_sample_operator_review_projects_operator_decision_gate(
     monkeypatch,
     tmp_path: Path,

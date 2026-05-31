@@ -46365,6 +46365,61 @@ Latest validation for GitHub CI delegated operations:
   tests/test_governance_github_ci.py`
   Result: `passed; 2 files already formatted`
 
+### 2026-05-30 - Stage 7 feedback memory assistance live sample can run through governed routes
+
+Roadmap area: Stage 7 / Telemetry MVP, primary-loop live sample execution for
+feedback-memory assistance.
+
+Material change:
+
+- Added a governed live-sample run route at
+  `/telemetry/context/feedback/memory-assistance-feedback-loop-live-sample-run`.
+- The route requires the same actor to hold `chat.write`,
+  `telemetry.context.feedback.write`, and `memory.timeline.write`.
+- The route executes the real bounded path instead of synthetic evidence:
+  seed operator feedback, write governed feedback-memory quality, send through
+  `/chat/send`, record live feedback from the returned feedback target, write
+  live feedback-memory quality, then return the read-only live-sample readback.
+- The route writes feedback and memory only through the existing governed
+  routes/functions; it does not select tools, grant execution authority, grant
+  mutation authority, train a model, or bypass permission checks.
+- A live local run as `codex.builder` reported
+  `status=live_sample_observed`, `live_sample_observed=true`, `ready_count=4`,
+  `required_count=4`, and advanced the live-sample readback next gap to
+  `stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_review`.
+- A follow-up operator-review readback reported `status=operator_review_ready`,
+  `operator_review_ready=true`, `ready_count=4`, `required_count=4`, and next
+  gap
+  `stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_decision`.
+
+Latest validation for Stage 7 feedback memory assistance live sample run:
+
+- `python -m pytest
+  tests/test_api_telemetry.py::test_telemetry_context_feedback_memory_assistance_live_sample_run_executes_existing_governed_routes
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 2 passed`
+- `python -m pytest
+  tests/test_api_telemetry.py::test_telemetry_context_feedback_memory_assistance_live_sample_readback_observes_existing_governed_routes
+  tests/test_api_telemetry.py::test_telemetry_context_feedback_memory_assistance_live_sample_run_executes_existing_governed_routes
+  tests/test_api_telemetry.py::test_telemetry_context_feedback_memory_assistance_live_sample_operator_review_projects_operator_decision_gate
+  tests/test_api_telemetry.py::test_telemetry_context_feedback_memory_assistance_live_sample_operator_decision_records_receipt
+  -q --tb=short --maxfail=1`
+  Result: `passed; 4 passed`
+- `python -m mypy src/francis/api/routes/telemetry.py`
+  Result: `passed`
+- `python -m ruff check src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/telemetry.py
+  tests/test_api_telemetry.py tests/test_api_contract_chat_ui.py`
+  Result: `passed; 3 files already formatted`
+- Live local route run:
+  `POST /telemetry/context/feedback/memory-assistance-feedback-loop-live-sample-run`
+  as `codex.builder` with `chat.write`, `telemetry.context.feedback.write`, and
+  `memory.timeline.write`.
+  Result: `live_sample_observed=true; ready_count=4; required_count=4`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

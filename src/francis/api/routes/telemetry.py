@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Any
+import uuid
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
@@ -114,6 +115,17 @@ class TelemetryContextFeedbackMemoryAssistanceLiveSampleOperatorDecisionIn(BaseM
     reason: str = ""
     decision: str = "needs_more_evidence"
     notes: str = ""
+    limit: int = 20
+
+
+class TelemetryContextFeedbackMemoryAssistanceLiveSampleRunIn(BaseModel):
+    actor: str | None = None
+    reason: str = "run feedback memory assistance live sample"
+    message: str = "What context should guide this work?"
+    use_llm: bool = False
+    rating: str = "useful"
+    seed_event_id: str | None = None
+    live_event_id: str | None = None
     limit: int = 20
 
 
@@ -812,6 +824,185 @@ def context_feedback_memory_assistance_operator_feedback_loop_e2e_acceptance_aud
             "grants_memory_write_authority": False,
         },
         "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run",
+    }
+
+
+@router.post("/context/feedback/memory-assistance-feedback-loop-live-sample-run")
+def context_feedback_memory_assistance_operator_feedback_loop_live_sample_run(
+    payload: TelemetryContextFeedbackMemoryAssistanceLiveSampleRunIn,
+) -> dict[str, Any]:
+    route = "/telemetry/context/feedback/memory-assistance-feedback-loop-live-sample-run"
+    required_scopes = [
+        "chat.write",
+        TELEMETRY_CONTEXT_FEEDBACK_WRITE_SCOPE,
+        MEMORY_TIMELINE_WRITE_SCOPE,
+    ]
+    permission = _write_permission_scopes(
+        payload.actor,
+        required_scopes=required_scopes,
+        route=route,
+        method="POST",
+    )
+    if not permission.allowed:
+        return _permission_denied(
+            permission,
+            source_id="telemetry_context",
+            required_scope=", ".join(required_scopes),
+            next_step="configure_chat_feedback_and_memory_scopes_before_running_live_sample",
+        )
+
+    safe_limit = max(1, min(int(payload.limit), 100))
+    actor = payload.actor or ""
+    sample_suffix = uuid.uuid4().hex[:12]
+    seed_memory_event_id = payload.seed_event_id or f"evt-feedback-memory-assistance-live-seed-{sample_suffix}"
+    live_memory_event_id = payload.live_event_id or f"evt-feedback-memory-assistance-live-sample-{sample_suffix}"
+
+    seed_feedback = record_telemetry_context_feedback(
+        actor=actor,
+        reason=f"{payload.reason}: seed assistance feedback",
+        context_id=f"tel_ctx_live_sample_seed_{sample_suffix}",
+        surface="chat",
+        rating=payload.rating,
+        message_id=f"tel_msg_live_sample_seed_{sample_suffix}",
+        reply_mode="feedback_memory_assistance_prompt_context",
+        source_ids=["feedback_memory_assistance", "telemetry_context"],
+        tags=["stage7", "feedback_memory_assistance", "chat_prompt_context"],
+        meta={
+            "feedback_target_kind": "feedback_memory_assistance_prompt_integration",
+            "line_count": 2,
+            "sample_id": sample_suffix,
+        },
+    )
+    seed_memory = context_feedback_memory_assistance_operator_feedback_memory_quality_record(
+        TelemetryContextFeedbackMemoryQualityIn(
+            actor=actor,
+            reason=f"{payload.reason}: seed assistance memory quality",
+            limit=safe_limit,
+            event_id=seed_memory_event_id,
+        )
+    )
+
+    from francis.api.routes.chat import ChatIn, send as chat_send
+
+    chat = chat_send(
+        ChatIn(
+            message=payload.message,
+            use_llm=payload.use_llm,
+            api_actor=actor,
+        )
+    )
+    telemetry_context_value = chat.get("telemetry_context") if isinstance(chat, dict) else {}
+    telemetry_context: dict[str, Any] = telemetry_context_value if isinstance(telemetry_context_value, dict) else {}
+    assistance_value = telemetry_context.get("feedback_memory_assistance_prompt_integration")
+    assistance: dict[str, Any] = assistance_value if isinstance(assistance_value, dict) else {}
+    feedback_target_value = assistance.get("feedback_target")
+    feedback_target: dict[str, Any] = feedback_target_value if isinstance(feedback_target_value, dict) else {}
+    if not feedback_target:
+        readback = context_feedback_memory_assistance_operator_feedback_loop_live_sample_readback(limit=safe_limit)
+        return {
+            "ok": True,
+            "kind": "francis.stage7.telemetry.context_feedback_memory_assistance_operator_feedback_loop_live_sample_run",
+            "status": "awaiting_feedback_target",
+            "source_id": "telemetry_context",
+            "target": "feedback_memory_assistance_prompt_integration",
+            "seed_feedback": seed_feedback,
+            "seed_memory": seed_memory,
+            "chat": chat,
+            "live_feedback": None,
+            "live_memory": None,
+            "readback": readback,
+            "writes_feedback": True,
+            "writes_memory": bool(seed_memory.get("writes_memory")),
+            "sends_chat": True,
+            "calls_model": bool(payload.use_llm),
+            "selects_tools": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+            "governance": {
+                "required_scopes": required_scopes,
+                "uses_existing_chat_route": True,
+                "uses_existing_feedback_route": True,
+                "uses_existing_memory_quality_route": True,
+                "does_not_select_tools": True,
+                "grants_execution_authority": False,
+                "grants_mutation_authority": False,
+            },
+            "next_smallest_truthful_gap": "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run",
+        }
+
+    live_feedback = record_telemetry_context_feedback(
+        actor=actor,
+        reason=f"{payload.reason}: record live sample feedback",
+        context_id=feedback_target.get("context_id", ""),
+        surface=feedback_target.get("surface", "chat"),
+        rating=payload.rating,
+        message_id=feedback_target.get("message_id", ""),
+        reply_mode=feedback_target.get("reply_mode", "feedback_memory_assistance_prompt_context"),
+        source_ids=feedback_target.get("source_ids", ["feedback_memory_assistance", "telemetry_context"]),
+        tags=feedback_target.get("tags", ["stage7", "feedback_memory_assistance"]),
+        meta={
+            "feedback_target_kind": "feedback_memory_assistance_prompt_integration",
+            "line_count": assistance.get("line_count", 0),
+            "sample_id": sample_suffix,
+        },
+    )
+    live_memory = context_feedback_memory_assistance_operator_feedback_memory_quality_record(
+        TelemetryContextFeedbackMemoryQualityIn(
+            actor=actor,
+            reason=f"{payload.reason}: record live sample assistance memory quality",
+            limit=safe_limit,
+            event_id=live_memory_event_id,
+        )
+    )
+    readback = context_feedback_memory_assistance_operator_feedback_loop_live_sample_readback(limit=safe_limit)
+    live_sample_observed = bool(readback.get("live_sample_observed"))
+
+    return {
+        "ok": True,
+        "kind": "francis.stage7.telemetry.context_feedback_memory_assistance_operator_feedback_loop_live_sample_run",
+        "status": "live_sample_observed" if live_sample_observed else "live_sample_recorded_incomplete",
+        "source_id": "telemetry_context",
+        "target": "feedback_memory_assistance_prompt_integration",
+        "sample_id": sample_suffix,
+        "seed_feedback_id": seed_feedback.get("feedback_id", ""),
+        "seed_memory_event_id": seed_memory.get("memory_event_id", ""),
+        "live_feedback_id": live_feedback.get("feedback_id", ""),
+        "live_memory_event_id": live_memory.get("memory_event_id", ""),
+        "seed_feedback": seed_feedback,
+        "seed_memory": seed_memory,
+        "chat": chat,
+        "live_feedback": live_feedback,
+        "live_memory": live_memory,
+        "readback": readback,
+        "live_sample_observed": live_sample_observed,
+        "ready_count": readback.get("ready_count", 0),
+        "required_count": readback.get("required_count", 0),
+        "writes_feedback": True,
+        "writes_memory": bool(seed_memory.get("writes_memory")) or bool(live_memory.get("writes_memory")),
+        "sends_chat": True,
+        "calls_model": bool(payload.use_llm),
+        "selects_tools": False,
+        "trains_model": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "required_scopes": required_scopes,
+            "operator_initiated_live_sample": True,
+            "uses_existing_chat_route": True,
+            "uses_existing_feedback_route": True,
+            "uses_existing_memory_quality_route": True,
+            "telemetry_is_untrusted_input": True,
+            "redacted_before_storage": True,
+            "does_not_select_tools": True,
+            "trains_model": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": (
+            "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_operator_review"
+            if live_sample_observed
+            else "stage7_context_feedback_memory_assistance_operator_feedback_loop_live_sample_run"
+        ),
     }
 
 
@@ -4195,6 +4386,21 @@ def _write_permission(actor: Any, *, required_scope: str, route: str, method: st
     return ApiPermissionGate.from_env().check(
         actor_id=actor,
         required_scopes=[required_scope],
+        route=route,
+        method=method,
+    )
+
+
+def _write_permission_scopes(
+    actor: Any,
+    *,
+    required_scopes: list[str],
+    route: str,
+    method: str,
+) -> ApiPermissionDecision:
+    return ApiPermissionGate.from_env().check(
+        actor_id=actor,
+        required_scopes=required_scopes,
         route=route,
         method=method,
     )
