@@ -46905,6 +46905,61 @@ Latest validation for Stage 8 executor lease receipts:
   status_ready_count=4; status_required_count=6;
   status_next=stage8_bounded_retry_contract`.
 
+### 2026-05-30 - Stage 8 executor failures write retry budget receipts
+
+Roadmap area: Stage 8 / Executor Substrate, bounded retry contract.
+
+Material change:
+
+- Failed executor task runs now write `executor.retry_budget.receipt` records
+  under `data/artifacts/executor_retry_receipts`.
+- Retry receipts record task id, worker id, capability, attempt count,
+  max-attempt budget, exhaustion state, status reason, and governance flags.
+- The executor exposes a `retry_budget` readback on failed task results with
+  `attempts`, `max_attempts`, `retry_exhausted`, `retry_started=false`, and the
+  receipt id/path.
+- The contract is bounded and intentionally non-authorizing: it does not start
+  hidden retries, grant retry authority, grant execution authority, or grant
+  approval authority.
+- `/executor/substrate/leases-idempotency-review` now reports
+  `bounded_retry_contract_ready=true`, `ready_count=8`, `required_count=8`,
+  and `next_smallest_truthful_gap=stage8_verification_hooks_review`.
+- `/executor/substrate/status` now reports `ready_count=5`, `required_count=6`,
+  and `next_smallest_truthful_gap=stage8_verification_hooks_review`.
+
+Latest validation for Stage 8 bounded retry contract:
+
+- `python -m pytest
+  tests/unit/test_executor_audit_references.py::test_executor_failure_writes_retry_budget_exhaustion_receipt
+  tests/test_api_executor_substrate.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 7 selected tests passed`
+- `python -m mypy src/francis/agent/executor.py
+  src/francis/executor_substrate.py
+  src/francis/api/routes/executor_substrate.py`
+  Result: `passed`
+- `python -m ruff check src/francis/agent/executor.py
+  src/francis/executor_substrate.py
+  src/francis/api/routes/executor_substrate.py
+  tests/unit/test_executor_audit_references.py tests/test_api_executor_substrate.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/agent/executor.py
+  src/francis/executor_substrate.py
+  src/francis/api/routes/executor_substrate.py
+  tests/unit/test_executor_audit_references.py tests/test_api_executor_substrate.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed; 6 files already formatted`
+- Live local readback:
+  `/executor/substrate/leases-idempotency-review` and
+  `/executor/substrate/status`.
+  Result: `leases_status=leases_idempotency_review_ready;
+  leases_ready_count=8; leases_required_count=8;
+  lease_receipt_ready=true; bounded_retry_ready=true;
+  leases_next=stage8_verification_hooks_review; status_ready_count=5;
+  status_required_count=6; status_next=stage8_verification_hooks_review`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

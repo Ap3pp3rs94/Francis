@@ -36,6 +36,56 @@ def test_executor_lock_writes_lease_acquire_deny_and_release_receipts(monkeypatc
     assert not executor.lock_path("tsk_lease_receipt").exists()
 
 
+def test_executor_failure_writes_retry_budget_exhaustion_receipt(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from francis.agent import executor
+    from francis.agent.delegation import DelegationRequest, create_delegation
+
+    def failing_capability(_inputs: dict[str, object], _objective: str) -> dict[str, object]:
+        return {"kind": "test.retry.failure", "ok": False, "status": "failed", "error": "planned_failure"}
+
+    monkeypatch.setitem(executor.CAPABILITY_ALLOWLIST, "test.retry.failure", failing_capability)
+
+    record, err = create_delegation(
+        DelegationRequest(
+            requester_id="test.executor.retry",
+            capability="test.retry.failure",
+            objective="Write retry budget exhaustion receipt",
+            inputs={"max_attempts": 1},
+            priority=5,
+            ttl_sec=900,
+        )
+    )
+    assert err is None
+    assert record is not None
+
+    executed = executor.execute_task(record.task_id, worker_id="test.executor.retry")
+
+    assert executed["status"] == "failed"
+    assert executed["attempts"] == 1
+    retry_budget = executed["result"]["data"]["retry_budget"]
+    assert retry_budget["attempts"] == 1
+    assert retry_budget["max_attempts"] == 1
+    assert retry_budget["retry_exhausted"] is True
+    assert retry_budget["retry_started"] is False
+    receipt_path = Path(str(retry_budget["receipt_path"]))
+    assert receipt_path == data_root / "artifacts" / "executor_retry_receipts" / f"{retry_budget['receipt_id']}.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert receipt["kind"] == "executor.retry_budget.receipt"
+    assert receipt["task_id"] == record.task_id
+    assert receipt["worker_id"] == "test.executor.retry"
+    assert receipt["attempts"] == 1
+    assert receipt["max_attempts"] == 1
+    assert receipt["retry_exhausted"] is True
+    assert receipt["retry_started"] is False
+    assert receipt["status"] == "exhausted"
+    assert receipt["governance"]["bounded_retry_contract"] is True
+    assert receipt["governance"]["hidden_retry"] is False
+    assert receipt["governance"]["retry_authority"] is False
+
+
 def test_executor_status_audit_preserves_receipt_approval_reference(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

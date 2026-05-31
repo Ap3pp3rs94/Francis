@@ -243,6 +243,10 @@ def _lease_receipts_dir() -> Path:
     return data_dir() / "artifacts" / "executor_lease_receipts"
 
 
+def _retry_receipts_dir() -> Path:
+    return data_dir() / "artifacts" / "executor_retry_receipts"
+
+
 def load_task(task_id: str) -> dict[str, Any]:
     path = record_path(task_id)
     if not path.exists():
@@ -383,6 +387,57 @@ def _append_task_audit(task_id: str, event: str, details: dict[str, Any]) -> Non
             append(task_id, event, details)
     except Exception:
         pass
+
+
+def _task_max_attempts(task: dict[str, Any]) -> int:
+    inputs = task.get("inputs") if isinstance(task.get("inputs"), dict) else {}
+    meta = inputs.get("meta") if isinstance(inputs.get("meta"), dict) else {}
+    raw = inputs.get("max_attempts", meta.get("max_attempts", 1))
+    try:
+        parsed = int(raw)
+    except Exception:
+        parsed = 1
+    return max(1, min(parsed, 5))
+
+
+def _write_retry_budget_receipt(
+    *,
+    task_id: str,
+    worker_id: str,
+    capability: str,
+    attempts: int,
+    max_attempts: int,
+    status_reason: str,
+) -> dict[str, str]:
+    try:
+        receipt_id = f"exec_retry_{uuid.uuid4().hex[:16]}"
+        retry_exhausted = int(attempts) >= int(max_attempts)
+        payload = {
+            "kind": "executor.retry_budget.receipt",
+            "receipt_id": receipt_id,
+            "ts": _utc_now_iso(),
+            "task_id": _safe_str(task_id).strip(),
+            "worker_id": _safe_str(worker_id).strip(),
+            "capability": _safe_str(capability).strip(),
+            "attempts": int(attempts),
+            "max_attempts": int(max_attempts),
+            "retry_exhausted": retry_exhausted,
+            "retry_started": False,
+            "status": "exhausted" if retry_exhausted else "remaining",
+            "reason": _safe_str(status_reason).strip() or "capability_failed",
+            "governance": {
+                "bounded_retry_contract": True,
+                "hidden_retry": False,
+                "retry_authority": False,
+                "execution_authority": False,
+                "approval_authority": False,
+            },
+        }
+        path = _retry_receipts_dir() / f"{receipt_id}.json"
+        _atomic_write_json(path, payload)
+        return {"receipt_id": receipt_id, "receipt_path": str(path)}
+    except Exception:
+        return {}
 
 
 def _task_mission_id(task: dict[str, Any]) -> str:
@@ -1018,7 +1073,17 @@ def execute_task(task_id: str, worker_id: str) -> dict[str, Any]:
     task["attempts"] = int(task.get("attempts", 0) or 0) + 1
     task["status"] = "complete" if ok else "failed"
     task["status_reason"] = status_reason if not ok else None
+    max_attempts = _task_max_attempts(task)
+    retry_budget_receipt: dict[str, str] = {}
     if not ok:
+        retry_budget_receipt = _write_retry_budget_receipt(
+            task_id=task_id,
+            worker_id=worker_id,
+            capability=capability,
+            attempts=int(task["attempts"]),
+            max_attempts=max_attempts,
+            status_reason=status_reason or "capability_failed",
+        )
         try:
             raw_plan = inputs.get("plan")
             if isinstance(raw_plan, dict):
@@ -1029,6 +1094,15 @@ def execute_task(task_id: str, worker_id: str) -> dict[str, Any]:
             _log_executor_exception(event="plan_revision", capability=capability, task_id=task_id)
             if isinstance(payload, dict):
                 payload["plan_revision_error"] = PLAN_REVISION_ERROR
+        if isinstance(payload, dict):
+            payload["retry_budget"] = {
+                "attempts": int(task["attempts"]),
+                "max_attempts": max_attempts,
+                "retry_exhausted": int(task["attempts"]) >= max_attempts,
+                "retry_started": False,
+                "receipt_id": retry_budget_receipt.get("receipt_id", ""),
+                "receipt_path": retry_budget_receipt.get("receipt_path", ""),
+            }
     task["result"] = {
         "kind": "task.result",
         "task_id": task_id,

@@ -73,9 +73,9 @@ def test_executor_substrate_status_starts_readonly_after_stage7_closure_receipt(
     assert body["status"] == "substrate_contract_ready"
     assert body["stage7_closed_by_receipt"] is True
     assert body["stage7_next_smallest_truthful_gap"] == "stage7_ledger_closure"
-    assert body["next_smallest_truthful_gap"] == "stage8_bounded_retry_contract"
+    assert body["next_smallest_truthful_gap"] == "stage8_verification_hooks_review"
     assert body["stage8_done_ready"] is False
-    assert body["ready_count"] == 4
+    assert body["ready_count"] == 5
     assert body["required_count"] == 6
     deliverables = {item["id"]: item for item in body["deliverables"]}
     assert set(deliverables) == {
@@ -94,10 +94,11 @@ def test_executor_substrate_status_starts_readonly_after_stage7_closure_receipt(
     assert deliverables["branch_first_workflows"]["evidence"]["receipt_kind"] == (
         "git.push.branch_first_policy.receipt"
     )
-    assert deliverables["leases_and_idempotency"]["ready"] is False
+    assert deliverables["leases_and_idempotency"]["ready"] is True
     assert deliverables["leases_and_idempotency"]["evidence"]["review_route"] == (
         "/executor/substrate/leases-idempotency-review"
     )
+    assert "bounded retry contract" in deliverables["leases_and_idempotency"]["evidence"]["ready_surfaces"]
     assert deliverables["verification_hooks"]["ready"] is False
     assert body["read_only"] is True
     assert body["writes_tasks"] is False
@@ -221,7 +222,7 @@ def test_executor_branch_first_workflow_review_projects_current_git_push_boundar
     assert body["next_smallest_truthful_gap"] == "stage8_leases_idempotency_review"
 
 
-def test_executor_leases_idempotency_review_projects_partial_contract(
+def test_executor_leases_idempotency_review_projects_ready_contract(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
@@ -234,15 +235,15 @@ def test_executor_leases_idempotency_review_projects_partial_contract(
     assert body["ok"] is True
     assert body["kind"] == "francis.stage8.executor_substrate.leases_idempotency_review"
     assert body["stage"] == "Stage 8 / Executor Substrate"
-    assert body["status"] == "leases_idempotency_review_partial"
-    assert body["leases_idempotency_review_ready"] is False
+    assert body["status"] == "leases_idempotency_review_ready"
+    assert body["leases_idempotency_review_ready"] is True
     assert body["lock_file_contract_ready"] is True
     assert body["ttl_expiration_contract_ready"] is True
     assert body["idempotency_key_propagation_ready"] is True
     assert body["idempotency_dedup_enforcement_ready"] is True
     assert body["lease_receipt_readback_ready"] is True
-    assert body["bounded_retry_contract_ready"] is False
-    assert body["ready_count"] == 7
+    assert body["bounded_retry_contract_ready"] is True
+    assert body["ready_count"] == 8
     assert body["required_count"] == 8
 
     criteria = {item["id"]: item for item in body["criteria"]}
@@ -267,7 +268,11 @@ def test_executor_leases_idempotency_review_projects_partial_contract(
     assert criteria["idempotency_dedup_enforcement"]["evidence"]["audit_event"] == "idempotency_reused"
     assert criteria["lease_receipt_readback"]["ready"] is True
     assert criteria["lease_receipt_readback"]["evidence"]["receipt_kind"] == "executor.lease.receipt"
-    assert criteria["bounded_retry_contract"]["ready"] is False
+    assert criteria["bounded_retry_contract"]["ready"] is True
+    assert criteria["bounded_retry_contract"]["evidence"]["receipt_kind"] == "executor.retry_budget.receipt"
+    assert criteria["bounded_retry_contract"]["evidence"]["hidden_retry"] is False
+    assert criteria["bounded_retry_contract"]["evidence"]["retry_started"] is False
+    assert criteria["bounded_retry_contract"]["evidence"]["retry_authority"] is False
     assert criteria["non_authorizing_review_guard"]["ready"] is True
 
     assert body["branch_first_workflow_review"]["status"] == "branch_first_workflow_review_ready"
@@ -284,4 +289,4 @@ def test_executor_leases_idempotency_review_projects_partial_contract(
     assert body["governance"]["leases_idempotency_review"] is True
     assert body["governance"]["does_not_execute"] is True
     assert body["governance"]["does_not_grant_authority"] is True
-    assert body["next_smallest_truthful_gap"] == "stage8_bounded_retry_contract"
+    assert body["next_smallest_truthful_gap"] == "stage8_verification_hooks_review"
