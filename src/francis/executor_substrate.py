@@ -12,6 +12,7 @@ _STAGE8_TOOLBELT_ALLOWLIST_GAP = "stage8_executor_toolbelt_allowlist_review"
 _STAGE8_BRANCH_FIRST_WORKFLOW_GAP = "stage8_branch_first_workflow_review"
 _STAGE8_BRANCH_FIRST_ENFORCEMENT_GAP = "stage8_branch_first_workflow_enforcement"
 _STAGE8_LEASES_IDEMPOTENCY_GAP = "stage8_leases_idempotency_review"
+_STAGE8_IDEMPOTENCY_DEDUP_GAP = "stage8_idempotency_dedup_enforcement"
 
 
 def executor_substrate_status_snapshot() -> dict[str, Any]:
@@ -56,7 +57,7 @@ def executor_substrate_status_snapshot() -> dict[str, Any]:
             "grants_execution_authority": False,
             "grants_mutation_authority": False,
         },
-        "next_smallest_truthful_gap": (_STAGE8_LEASES_IDEMPOTENCY_GAP if stage7_closed else _STAGE7_LEDGER_CLOSURE_GAP),
+        "next_smallest_truthful_gap": (_STAGE8_IDEMPOTENCY_DEDUP_GAP if stage7_closed else _STAGE7_LEDGER_CLOSURE_GAP),
     }
 
 
@@ -312,6 +313,153 @@ def executor_branch_first_workflow_review_snapshot() -> dict[str, Any]:
     }
 
 
+def executor_leases_idempotency_review_snapshot() -> dict[str, Any]:
+    branch_review = executor_branch_first_workflow_review_snapshot()
+    criteria = [
+        {
+            "id": "branch_first_workflow_review_ready",
+            "ready": bool(branch_review.get("branch_first_workflow_review_ready")),
+            "evidence": {
+                "route": "/executor/substrate/branch-first-workflow-review",
+                "status": branch_review.get("status", "unknown"),
+            },
+        },
+        {
+            "id": "task_lock_file_contract",
+            "ready": True,
+            "evidence": {
+                "source": "src/francis/agent/executor.py",
+                "lock_filename": ".lock",
+                "lock_function": "_try_acquire_lock",
+                "stale_seconds": 3600,
+            },
+        },
+        {
+            "id": "ttl_expiration_contract",
+            "ready": True,
+            "evidence": {
+                "source": "src/francis/agent/executor.py",
+                "status_reason": "expired_ttl",
+                "max_ttl_source": "src/francis/agent/delegation.py",
+                "max_ttl_seconds": 604800,
+            },
+        },
+        {
+            "id": "idempotency_key_propagation",
+            "ready": True,
+            "evidence": {
+                "source": "src/francis/operations/runtime.py",
+                "api_field": "OperationCreateIn.idempotency_key",
+                "stored_input_key": "idempotency_key",
+                "plugin_forwarding": "plugin.run and plugin.tool.run",
+            },
+        },
+        {
+            "id": "idempotency_dedup_enforcement",
+            "ready": False,
+            "evidence": {
+                "source": "src/francis/operations/runtime.py",
+                "current_surface": "idempotency_key is propagated into task inputs",
+                "missing": "reuse or reject duplicate operation creation by actor/action/idempotency_key",
+            },
+        },
+        {
+            "id": "lease_receipt_readback",
+            "ready": False,
+            "evidence": {
+                "source": "src/francis/agent/executor.py",
+                "current_surface": "ephemeral .lock file",
+                "missing": "durable lease acquisition/release receipts with stale-lock readback",
+            },
+        },
+        {
+            "id": "bounded_retry_contract",
+            "ready": False,
+            "evidence": {
+                "source": "src/francis/agent/executor.py",
+                "current_surface": "attempt counter is tracked on task execution",
+                "missing": "executor-level retry budget, backoff, and retry-exhausted receipt",
+            },
+        },
+        {
+            "id": "non_authorizing_review_guard",
+            "ready": (
+                branch_review.get("read_only") is True
+                and branch_review.get("runs_tools") is False
+                and branch_review.get("runs_shell") is False
+                and branch_review.get("runs_git") is False
+                and branch_review.get("grants_execution_authority") is False
+                and branch_review.get("grants_mutation_authority") is False
+            ),
+            "evidence": {
+                "read_only": bool(branch_review.get("read_only")),
+                "runs_tools": bool(branch_review.get("runs_tools")),
+                "runs_shell": bool(branch_review.get("runs_shell")),
+                "runs_git": bool(branch_review.get("runs_git")),
+                "grants_execution_authority": bool(branch_review.get("grants_execution_authority")),
+                "grants_mutation_authority": bool(branch_review.get("grants_mutation_authority")),
+            },
+        },
+    ]
+    ready_count = sum(1 for criterion in criteria if criterion["ready"])
+    review_ready = ready_count == len(criteria)
+    branch_ready = bool(branch_review.get("branch_first_workflow_review_ready"))
+    return {
+        "ok": True,
+        "kind": "francis.stage8.executor_substrate.leases_idempotency_review",
+        "stage": STAGE8_EXECUTOR_SUBSTRATE_STAGE,
+        "status": (
+            "leases_idempotency_review_ready"
+            if review_ready
+            else "leases_idempotency_review_partial"
+            if branch_ready
+            else "leases_idempotency_review_blocked"
+        ),
+        "source_id": "executor_substrate",
+        "target": "safe_bounded_execution",
+        "leases_idempotency_review_ready": review_ready,
+        "lock_file_contract_ready": True,
+        "ttl_expiration_contract_ready": True,
+        "idempotency_key_propagation_ready": True,
+        "idempotency_dedup_enforcement_ready": False,
+        "lease_receipt_readback_ready": False,
+        "bounded_retry_contract_ready": False,
+        "ready_count": ready_count,
+        "required_count": len(criteria),
+        "criteria": criteria,
+        "branch_first_workflow_review": {
+            "route": "/executor/substrate/branch-first-workflow-review",
+            "status": branch_review.get("status", "unknown"),
+            "next_smallest_truthful_gap": branch_review.get("next_smallest_truthful_gap", ""),
+        },
+        "read_only": True,
+        "writes_tasks": False,
+        "writes_receipts": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "leases_idempotency_review": True,
+            "uses_branch_first_workflow_review": True,
+            "does_not_execute": True,
+            "does_not_write_tasks": True,
+            "does_not_write_receipts": True,
+            "does_not_write_memory": True,
+            "does_not_grant_authority": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": (
+            _STAGE8_IDEMPOTENCY_DEDUP_GAP if branch_ready else _STAGE8_LEASES_IDEMPOTENCY_GAP
+        ),
+    }
+
+
 def _deliverables(*, stage7_closed: bool) -> list[dict[str, Any]]:
     return [
         {
@@ -369,7 +517,13 @@ def _deliverables(*, stage7_closed: bool) -> list[dict[str, Any]]:
             "ready": False,
             "evidence": {
                 "current_surface": "task lock files exist",
-                "missing": "lease/idempotency receipt readback and retry contract",
+                "review_route": "/executor/substrate/leases-idempotency-review",
+                "ready_surfaces": [
+                    "task lock file contract",
+                    "ttl expiration contract",
+                    "idempotency key propagation",
+                ],
+                "missing": "idempotency dedup enforcement, lease receipt readback, and bounded retry contract",
             },
         },
         {

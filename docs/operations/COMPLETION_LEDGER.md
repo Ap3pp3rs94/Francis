@@ -46737,6 +46737,59 @@ Latest validation for Stage 8 branch-first enforcement:
   status_ready_count=4; status_required_count=6;
   status_next=stage8_leases_idempotency_review`.
 
+### 2026-05-30 - Stage 8 leases and idempotency review is read-only
+
+Roadmap area: Stage 8 / Executor Substrate, leases and idempotency review.
+
+Material change:
+
+- Added read-only Stage 8 leases/idempotency review at
+  `/executor/substrate/leases-idempotency-review`.
+- The review consumes the branch-first workflow review and reports current
+  executor safety contracts: task lock files, TTL expiration, and idempotency
+  key propagation.
+- The review does not falsely mark leases/idempotency complete. It reports the
+  missing executor work explicitly: duplicate idempotency-key enforcement,
+  durable lease acquisition/release receipts, and bounded retry budget/readback.
+- The review does not write tasks, write receipts, write memory, run tools, run
+  shell commands, run git, start processes, grant execution authority, or grant
+  mutation authority.
+- Live local readback reports `status=leases_idempotency_review_partial`,
+  `ready_count=5`, `required_count=8`,
+  `idempotency_dedup_enforcement_ready=false`,
+  `lease_receipt_readback_ready=false`, `bounded_retry_contract_ready=false`,
+  and `next_smallest_truthful_gap=stage8_idempotency_dedup_enforcement`.
+- `/executor/substrate/status` now reports `ready_count=4`,
+  `required_count=6`, and
+  `next_smallest_truthful_gap=stage8_idempotency_dedup_enforcement`.
+
+Latest validation for Stage 8 leases/idempotency review:
+
+- `python -m pytest tests/test_api_executor_substrate.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 6 passed`
+- `python -m mypy src/francis/executor_substrate.py
+  src/francis/api/routes/executor_substrate.py`
+  Result: `passed`
+- `python -m ruff check src/francis/executor_substrate.py
+  src/francis/api/routes/executor_substrate.py tests/test_api_executor_substrate.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/executor_substrate.py
+  src/francis/api/routes/executor_substrate.py tests/test_api_executor_substrate.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed; 4 files already formatted`
+- Live local readback:
+  `/executor/substrate/leases-idempotency-review` and
+  `/executor/substrate/status`.
+  Result: `leases_status=leases_idempotency_review_partial;
+  leases_ready_count=5; leases_required_count=8;
+  idempotency_dedup_ready=false; lease_receipt_ready=false;
+  bounded_retry_ready=false; leases_next=stage8_idempotency_dedup_enforcement;
+  status_ready_count=4; status_required_count=6;
+  status_next=stage8_idempotency_dedup_enforcement`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

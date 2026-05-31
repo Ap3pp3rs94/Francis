@@ -73,7 +73,7 @@ def test_executor_substrate_status_starts_readonly_after_stage7_closure_receipt(
     assert body["status"] == "substrate_contract_ready"
     assert body["stage7_closed_by_receipt"] is True
     assert body["stage7_next_smallest_truthful_gap"] == "stage7_ledger_closure"
-    assert body["next_smallest_truthful_gap"] == "stage8_leases_idempotency_review"
+    assert body["next_smallest_truthful_gap"] == "stage8_idempotency_dedup_enforcement"
     assert body["stage8_done_ready"] is False
     assert body["ready_count"] == 4
     assert body["required_count"] == 6
@@ -95,6 +95,9 @@ def test_executor_substrate_status_starts_readonly_after_stage7_closure_receipt(
         "git.push.branch_first_policy.receipt"
     )
     assert deliverables["leases_and_idempotency"]["ready"] is False
+    assert deliverables["leases_and_idempotency"]["evidence"]["review_route"] == (
+        "/executor/substrate/leases-idempotency-review"
+    )
     assert deliverables["verification_hooks"]["ready"] is False
     assert body["read_only"] is True
     assert body["writes_tasks"] is False
@@ -216,3 +219,67 @@ def test_executor_branch_first_workflow_review_projects_current_git_push_boundar
     assert body["governance"]["preserves_current_maintainer_workflow"] is True
     assert body["governance"]["requires_branch_first_opt_in_for_git_push"] is True
     assert body["next_smallest_truthful_gap"] == "stage8_leases_idempotency_review"
+
+
+def test_executor_leases_idempotency_review_projects_partial_contract(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage7_closure_receipt(data_root, receipt_id="tel_stage7_closure_leases_idempotency")
+
+    body = TestClient(create_app()).get("/executor/substrate/leases-idempotency-review").json()
+
+    assert body["ok"] is True
+    assert body["kind"] == "francis.stage8.executor_substrate.leases_idempotency_review"
+    assert body["stage"] == "Stage 8 / Executor Substrate"
+    assert body["status"] == "leases_idempotency_review_partial"
+    assert body["leases_idempotency_review_ready"] is False
+    assert body["lock_file_contract_ready"] is True
+    assert body["ttl_expiration_contract_ready"] is True
+    assert body["idempotency_key_propagation_ready"] is True
+    assert body["idempotency_dedup_enforcement_ready"] is False
+    assert body["lease_receipt_readback_ready"] is False
+    assert body["bounded_retry_contract_ready"] is False
+    assert body["ready_count"] == 5
+    assert body["required_count"] == 8
+
+    criteria = {item["id"]: item for item in body["criteria"]}
+    assert list(criteria) == [
+        "branch_first_workflow_review_ready",
+        "task_lock_file_contract",
+        "ttl_expiration_contract",
+        "idempotency_key_propagation",
+        "idempotency_dedup_enforcement",
+        "lease_receipt_readback",
+        "bounded_retry_contract",
+        "non_authorizing_review_guard",
+    ]
+    assert criteria["branch_first_workflow_review_ready"]["ready"] is True
+    assert criteria["task_lock_file_contract"]["evidence"]["lock_filename"] == ".lock"
+    assert criteria["ttl_expiration_contract"]["evidence"]["status_reason"] == "expired_ttl"
+    assert criteria["idempotency_key_propagation"]["evidence"]["stored_input_key"] == "idempotency_key"
+    assert criteria["idempotency_dedup_enforcement"]["ready"] is False
+    assert criteria["idempotency_dedup_enforcement"]["evidence"]["current_surface"] == (
+        "idempotency_key is propagated into task inputs"
+    )
+    assert criteria["lease_receipt_readback"]["ready"] is False
+    assert criteria["bounded_retry_contract"]["ready"] is False
+    assert criteria["non_authorizing_review_guard"]["ready"] is True
+
+    assert body["branch_first_workflow_review"]["status"] == "branch_first_workflow_review_ready"
+    assert body["read_only"] is True
+    assert body["writes_tasks"] is False
+    assert body["writes_receipts"] is False
+    assert body["writes_memory"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["starts_processes"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["governance"]["leases_idempotency_review"] is True
+    assert body["governance"]["does_not_execute"] is True
+    assert body["governance"]["does_not_grant_authority"] is True
+    assert body["next_smallest_truthful_gap"] == "stage8_idempotency_dedup_enforcement"
