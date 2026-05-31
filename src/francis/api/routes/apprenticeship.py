@@ -6,10 +6,12 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
 from francis.apprenticeship import (
+    APPRENTICESHIP_FORGE_HANDOFF_WRITE_SCOPE,
     APPRENTICESHIP_REPLAY_RECEIPT_WRITE_SCOPE,
     APPRENTICESHIP_SKILLIZATION_ARTIFACT_WRITE_SCOPE,
     APPRENTICESHIP_TEACHING_SESSION_WRITE_SCOPE,
     apprenticeship_forge_handoff_contract,
+    apprenticeship_forge_handoff_receipts,
     apprenticeship_live_teaching_session_ux,
     apprenticeship_replay_receipts,
     apprenticeship_replay_generalization_contract,
@@ -19,6 +21,7 @@ from francis.apprenticeship import (
     apprenticeship_teaching_session_contract,
     apprenticeship_teaching_session_receipts,
     record_apprenticeship_replay_receipt,
+    record_apprenticeship_forge_handoff_receipt,
     record_apprenticeship_skillization_artifact_receipt,
     record_apprenticeship_teaching_session,
 )
@@ -65,6 +68,21 @@ class ApprenticeshipSkillizationArtifactReceiptIn(BaseModel):
     documentation_draft: str = Field(default="", max_length=1200)
     test_candidate_structure: str = Field(default="", max_length=1000)
     classification: str = Field(default="", max_length=240)
+    notes: str = Field(default="", max_length=500)
+
+
+class ApprenticeshipForgeHandoffReceiptIn(BaseModel):
+    actor: str = Field(default="", max_length=240)
+    reason: str = Field(default="", max_length=500)
+    action: str = Field(default="review_forge_handoff", max_length=120)
+    skillization_artifact_receipt_id: str = Field(default="", max_length=160)
+    handoff_summary: str = Field(default="", max_length=1000)
+    operator_review_state: str = Field(default="", max_length=500)
+    risk_tier_review: str = Field(default="", max_length=500)
+    documentation_review: str = Field(default="", max_length=500)
+    test_candidate_review: str = Field(default="", max_length=500)
+    promotion_boundary: str = Field(default="", max_length=500)
+    explicit_promotion_decision: str = Field(default="", max_length=240)
     notes: str = Field(default="", max_length=500)
 
 
@@ -154,6 +172,11 @@ def replay_receipts(limit: int = 20) -> dict[str, Any]:
 @router.get("/skillization-artifact-receipts")
 def skillization_artifact_receipts(limit: int = 20) -> dict[str, Any]:
     return apprenticeship_skillization_artifact_receipts(limit=limit)
+
+
+@router.get("/forge-handoff-receipts")
+def forge_handoff_receipts(limit: int = 20) -> dict[str, Any]:
+    return apprenticeship_forge_handoff_receipts(limit=limit)
 
 
 @router.post("/teaching-session")
@@ -362,5 +385,76 @@ def skillization_artifact_receipt(
         "next_smallest_truthful_gap": receipt.get(
             "next_smallest_truthful_gap",
             "stage11_skillization_artifact_receipt_write_path",
+        ),
+    }
+
+
+@router.post("/forge-handoff-receipt")
+def forge_handoff_receipt(request: Request, payload: ApprenticeshipForgeHandoffReceiptIn) -> dict[str, Any]:
+    route = "/apprenticeship/forge-handoff-receipt"
+    permission = _write_permission(
+        payload.actor,
+        required_scope=APPRENTICESHIP_FORGE_HANDOFF_WRITE_SCOPE,
+        route=route,
+        method="POST",
+    )
+    if not permission.allowed:
+        return _permission_denied(
+            permission,
+            required_scope=APPRENTICESHIP_FORGE_HANDOFF_WRITE_SCOPE,
+            next_step="configure_apprenticeship_forge_handoff_write_scope_before_recording",
+        )
+
+    receipt = record_apprenticeship_forge_handoff_receipt(
+        actor=payload.actor,
+        reason=payload.reason,
+        action=payload.action,
+        skillization_artifact_receipt_id=payload.skillization_artifact_receipt_id,
+        handoff_summary=payload.handoff_summary,
+        operator_review_state=payload.operator_review_state,
+        risk_tier_review=payload.risk_tier_review,
+        documentation_review=payload.documentation_review,
+        test_candidate_review=payload.test_candidate_review,
+        promotion_boundary=payload.promotion_boundary,
+        explicit_promotion_decision=payload.explicit_promotion_decision,
+        notes=payload.notes,
+    )
+    return {
+        "ok": bool(receipt.get("ok")),
+        "kind": "francis.stage11.apprenticeship.forge_handoff.record",
+        "status": "recorded" if receipt.get("receipt_id") else receipt.get("status", "blocked"),
+        "source_id": "apprenticeship",
+        "receipt": receipt if receipt.get("receipt_id") else None,
+        "receipt_id": receipt.get("receipt_id", ""),
+        "action": receipt.get("action", ""),
+        "writes_receipt": bool(receipt.get("writes_receipt")),
+        "writes_memory": bool(receipt.get("writes_memory")),
+        "writes_forge_proposal": bool(receipt.get("writes_forge_proposal")),
+        "creates_capability": bool(receipt.get("creates_capability")),
+        "promotes_to_forge": bool(receipt.get("promotes_to_forge")),
+        "registers_capability": bool(receipt.get("registers_capability")),
+        "runs_tools": bool(receipt.get("runs_tools")),
+        "runs_shell": bool(receipt.get("runs_shell")),
+        "runs_git": bool(receipt.get("runs_git")),
+        "starts_processes": bool(receipt.get("starts_processes")),
+        "grants_execution_authority": bool(receipt.get("grants_execution_authority")),
+        "grants_mutation_authority": bool(receipt.get("grants_mutation_authority")),
+        "governance": {
+            "required_scope": APPRENTICESHIP_FORGE_HANDOFF_WRITE_SCOPE,
+            "route": str(request.url.path),
+            "requires_skillization_artifact_receipt": True,
+            "explicit_operator_forge_handoff_review": True,
+            "operator_review_required_before_forge_write": True,
+            "does_not_write_memory": True,
+            "does_not_write_forge_proposal": True,
+            "does_not_run_tools": True,
+            "does_not_run_shell": True,
+            "does_not_run_git": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": receipt.get(
+            "next_smallest_truthful_gap",
+            "stage11_forge_handoff_receipt_write_path",
         ),
     }

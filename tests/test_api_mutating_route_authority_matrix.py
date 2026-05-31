@@ -193,6 +193,16 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
     assert "permission_gate" in apprenticeship_skillization["denial_behavior"]
     assert "does not write memory" in apprenticeship_skillization["notes"]
 
+    apprenticeship_forge_handoff = entries["/apprenticeship/forge-handoff-receipt"]
+    assert apprenticeship_forge_handoff["family"] == "apprenticeship"
+    assert apprenticeship_forge_handoff["required_actor"] == "payload.actor"
+    assert apprenticeship_forge_handoff["required_scope"] == "apprenticeship.forge_handoff.write"
+    assert apprenticeship_forge_handoff["governance_maturity"] == "permission_gated"
+    assert "prior skillization artifact receipt" in apprenticeship_forge_handoff["approval_requirement"]
+    assert "Forge handoff review receipt" in apprenticeship_forge_handoff["receipt_behavior"]
+    assert "permission_gate" in apprenticeship_forge_handoff["denial_behavior"]
+    assert "does not write a Forge proposal" in apprenticeship_forge_handoff["notes"]
+
     away_closure = entries["/away/stage-closure-decision"]
     assert away_closure["family"] == "away"
     assert away_closure["required_actor"] == "payload.actor"

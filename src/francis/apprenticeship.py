@@ -25,10 +25,13 @@ APPRENTICESHIP_REPLAY_RECEIPT_KIND = "francis.stage11.apprenticeship.replay_rece
 APPRENTICESHIP_REPLAY_RECEIPTS_KIND = "francis.stage11.apprenticeship.replay_receipts"
 APPRENTICESHIP_SKILLIZATION_ARTIFACT_RECEIPT_KIND = "francis.stage11.apprenticeship.skillization_artifact_receipt"
 APPRENTICESHIP_SKILLIZATION_ARTIFACT_RECEIPTS_KIND = "francis.stage11.apprenticeship.skillization_artifact_receipts"
+APPRENTICESHIP_FORGE_HANDOFF_RECEIPT_KIND = "francis.stage11.apprenticeship.forge_handoff_receipt"
+APPRENTICESHIP_FORGE_HANDOFF_RECEIPTS_KIND = "francis.stage11.apprenticeship.forge_handoff_receipts"
 
 APPRENTICESHIP_TEACHING_SESSION_WRITE_SCOPE = "apprenticeship.teaching_session.write"
 APPRENTICESHIP_REPLAY_RECEIPT_WRITE_SCOPE = "apprenticeship.replay_receipt.write"
 APPRENTICESHIP_SKILLIZATION_ARTIFACT_WRITE_SCOPE = "apprenticeship.skillization_artifact.write"
+APPRENTICESHIP_FORGE_HANDOFF_WRITE_SCOPE = "apprenticeship.forge_handoff.write"
 
 _ALLOWED_ENV_PROFILES = {"dev", "workstation", "local", "test"}
 _ALLOWED_TEACHING_SESSION_ACTIONS = {
@@ -52,6 +55,12 @@ _ALLOWED_SKILLIZATION_ARTIFACT_ACTIONS = {
     "review_skillization_artifact",
     "request_skillization_changes",
     "approve_forge_candidate",
+}
+_ALLOWED_FORGE_HANDOFF_ACTIONS = {
+    "review_forge_handoff",
+    "stage_forge_handoff",
+    "request_forge_handoff_changes",
+    "approve_forge_proposal_candidate",
 }
 
 
@@ -81,6 +90,11 @@ def apprenticeship_status_snapshot() -> dict[str, Any]:
         _safe_text(skillization_artifact_receipts[-1].get("receipt_id")) if skillization_artifact_receipts else ""
     )
     skillization_artifact_receipt_ready = bool(latest_skillization_artifact_receipt_id)
+    forge_handoff_receipts = read_apprenticeship_forge_handoff_receipts(limit=5)
+    latest_forge_handoff_receipt_id = (
+        _safe_text(forge_handoff_receipts[-1].get("receipt_id")) if forge_handoff_receipts else ""
+    )
+    forge_handoff_receipt_ready = bool(latest_forge_handoff_receipt_id)
     deliverables = _apprenticeship_deliverables(
         stage10_closed=stage10_closed,
         teaching_session_ready=teaching_session_ready,
@@ -95,7 +109,14 @@ def apprenticeship_status_snapshot() -> dict[str, Any]:
         "kind": APPRENTICESHIP_STATUS_KIND,
         "stage": STAGE11_APPRENTICESHIP_STAGE,
         "source_id": "apprenticeship",
-        "status": "stage11_skillization_artifact_receipt_ready"
+        "status": "stage11_forge_handoff_receipt_ready"
+        if stage10_closed
+        and live_teaching_session_ux_ready
+        and teaching_session_receipt_ready
+        and replay_receipt_ready
+        and skillization_artifact_receipt_ready
+        and forge_handoff_receipt_ready
+        else "stage11_skillization_artifact_receipt_ready"
         if stage10_closed
         and live_teaching_session_ux_ready
         and teaching_session_receipt_ready
@@ -129,6 +150,8 @@ def apprenticeship_status_snapshot() -> dict[str, Any]:
         "latest_replay_receipt_id": latest_replay_receipt_id,
         "skillization_artifact_receipt_ready": skillization_artifact_receipt_ready,
         "latest_skillization_artifact_receipt_id": latest_skillization_artifact_receipt_id,
+        "forge_handoff_receipt_ready": forge_handoff_receipt_ready,
+        "latest_forge_handoff_receipt_id": latest_forge_handoff_receipt_id,
         "reads_receipts": True,
         "writes_receipts": False,
         "writes_memory": False,
@@ -149,6 +172,7 @@ def apprenticeship_status_snapshot() -> dict[str, Any]:
             "teaching_session_receipt_required_before_learning": True,
             "replay_receipt_required_before_skillization": True,
             "skillization_artifact_receipt_required_before_forge_handoff": True,
+            "forge_handoff_receipt_required_before_completion_review": True,
             "passive_capture_denied": True,
             "surveillance_like_learning_denied": True,
             "learned_skills_must_be_reviewable": True,
@@ -178,6 +202,8 @@ def apprenticeship_status_snapshot() -> dict[str, Any]:
             "replay_receipt_record": "/apprenticeship/replay-receipt",
             "skillization_artifact_receipts": "/apprenticeship/skillization-artifact-receipts",
             "skillization_artifact_record": "/apprenticeship/skillization-artifact-receipt",
+            "forge_handoff_receipts": "/apprenticeship/forge-handoff-receipts",
+            "forge_handoff_record": "/apprenticeship/forge-handoff-receipt",
         },
         "next_smallest_truthful_gap": _apprenticeship_next_gap(
             stage10_closed=stage10_closed,
@@ -189,6 +215,7 @@ def apprenticeship_status_snapshot() -> dict[str, Any]:
             teaching_session_receipt_ready=teaching_session_receipt_ready,
             replay_receipt_ready=replay_receipt_ready,
             skillization_artifact_receipt_ready=skillization_artifact_receipt_ready,
+            forge_handoff_receipt_ready=forge_handoff_receipt_ready,
         ),
     }
 
@@ -1037,6 +1064,57 @@ def apprenticeship_skillization_artifact_receipts(*, limit: int = 20) -> dict[st
     }
 
 
+def read_apprenticeship_forge_handoff_receipts(*, limit: int = 20) -> list[dict[str, Any]]:
+    return _read_jsonl_tail(_forge_handoff_receipt_path(), limit=_safe_limit(limit, default=20))
+
+
+def apprenticeship_forge_handoff_receipts(*, limit: int = 20) -> dict[str, Any]:
+    items = read_apprenticeship_forge_handoff_receipts(limit=limit)
+    latest_receipt_id = _safe_text(items[-1].get("receipt_id")) if items else ""
+    return {
+        "ok": True,
+        "kind": APPRENTICESHIP_FORGE_HANDOFF_RECEIPTS_KIND,
+        "stage": STAGE11_APPRENTICESHIP_STAGE,
+        "source_id": "apprenticeship",
+        "status": "ready" if latest_receipt_id else "empty",
+        "items": items,
+        "count": len(items),
+        "latest_receipt_id": latest_receipt_id,
+        "forge_handoff_receipt_ready": bool(latest_receipt_id),
+        "reads_receipts": True,
+        "writes_receipts": False,
+        "writes_memory": False,
+        "writes_forge_proposal": False,
+        "creates_capability": False,
+        "promotes_to_forge": False,
+        "registers_capability": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "read_only": True,
+            "receipt_readback_only": True,
+            "operator_reviewed_forge_handoff_receipts_only": True,
+            "does_not_write_memory": True,
+            "does_not_write_forge_proposal": True,
+            "does_not_create_capability": True,
+            "does_not_promote_to_forge": True,
+            "does_not_register_capability": True,
+            "does_not_run_tools": True,
+            "does_not_run_shell": True,
+            "does_not_run_git": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": "stage11_completion_review"
+        if latest_receipt_id
+        else "stage11_forge_handoff_receipt_write_path",
+    }
+
+
 def record_apprenticeship_teaching_session(
     *,
     actor: Any,
@@ -1375,6 +1453,120 @@ def record_apprenticeship_skillization_artifact_receipt(
     return receipt
 
 
+def record_apprenticeship_forge_handoff_receipt(
+    *,
+    actor: Any,
+    reason: Any,
+    action: Any = "review_forge_handoff",
+    skillization_artifact_receipt_id: Any = "",
+    handoff_summary: Any = "",
+    operator_review_state: Any = "",
+    risk_tier_review: Any = "",
+    documentation_review: Any = "",
+    test_candidate_review: Any = "",
+    promotion_boundary: Any = "",
+    explicit_promotion_decision: Any = "",
+    notes: Any = "",
+) -> dict[str, Any]:
+    env_profile = _env_profile()
+    if env_profile not in _ALLOWED_ENV_PROFILES:
+        return _blocked_no_receipt(
+            status="blocked_environment_profile",
+            reason="apprenticeship_forge_handoff_dev_or_workstation_only",
+            required_scope=APPRENTICESHIP_FORGE_HANDOFF_WRITE_SCOPE,
+            next_gap="stage11_forge_handoff_receipt_write_path",
+        )
+
+    status = apprenticeship_status_snapshot()
+    if not bool(status.get("skillization_artifact_receipt_ready")):
+        return _blocked_no_receipt(
+            status="awaiting_skillization_artifact_receipt",
+            reason="skillization_artifact_receipt_required_before_forge_handoff_receipt",
+            required_scope=APPRENTICESHIP_FORGE_HANDOFF_WRITE_SCOPE,
+            next_gap="stage11_skillization_artifact_receipt_write_path",
+        )
+
+    latest_skillization_artifact_receipt_id = _safe_text(status.get("latest_skillization_artifact_receipt_id"))
+    supplied_skillization_artifact_receipt_id = _safe_text(skillization_artifact_receipt_id)
+    linked_skillization_artifact_receipt_id = (
+        supplied_skillization_artifact_receipt_id or latest_skillization_artifact_receipt_id
+    )
+    safe_action = _safe_forge_handoff_action(action)
+    safe_actor = _redacted_text(actor)[:240]
+    safe_reason = _redacted_text(reason)[:500]
+    receipt_id = f"apprenticeship_forge_handoff_{uuid.uuid4().hex[:12]}"
+    receipt = {
+        "ok": True,
+        "kind": APPRENTICESHIP_FORGE_HANDOFF_RECEIPT_KIND,
+        "receipt_id": receipt_id,
+        "stage": STAGE11_APPRENTICESHIP_STAGE,
+        "source_id": "apprenticeship",
+        "target": "stage11_forge_handoff",
+        "actor": safe_actor,
+        "reason": safe_reason,
+        "action": safe_action,
+        "skillization_artifact_receipt_id": linked_skillization_artifact_receipt_id,
+        "latest_skillization_artifact_receipt_id": latest_skillization_artifact_receipt_id,
+        "handoff_summary": _redacted_text(handoff_summary)[:1000],
+        "operator_review_state": _redacted_text(operator_review_state)[:500],
+        "risk_tier_review": _redacted_text(risk_tier_review)[:500],
+        "documentation_review": _redacted_text(documentation_review)[:500],
+        "test_candidate_review": _redacted_text(test_candidate_review)[:500],
+        "promotion_boundary": _redacted_text(promotion_boundary)[:500],
+        "explicit_promotion_decision": _redacted_text(explicit_promotion_decision)[:240],
+        "notes": _redacted_text(notes)[:500],
+        "env_profile": env_profile,
+        "recorded_ts": _now_s(),
+        "capture_mode": "explicit_operator_forge_handoff_receipt",
+        "forge_handoff_receipt_ready": True,
+        "writes_receipt": True,
+        "writes_memory": False,
+        "writes_forge_proposal": False,
+        "creates_capability": False,
+        "promotes_to_forge": False,
+        "registers_capability": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "starts_processes": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            "required_scope": APPRENTICESHIP_FORGE_HANDOFF_WRITE_SCOPE,
+            "dev_or_workstation_only": True,
+            "action_allowlisted": safe_action in _ALLOWED_FORGE_HANDOFF_ACTIONS,
+            "requires_skillization_artifact_receipt": True,
+            "explicit_operator_forge_handoff_review": True,
+            "operator_review_required_before_forge_write": True,
+            "explicit_promotion_decision_required": True,
+            "direct_forge_promotion_denied": True,
+            "automatic_capability_registration_denied": True,
+            "authority_grant_from_teaching_denied": True,
+            "does_not_write_memory": True,
+            "does_not_write_forge_proposal": True,
+            "does_not_create_capability": True,
+            "does_not_promote_to_forge": True,
+            "does_not_register_capability": True,
+            "does_not_run_tools": True,
+            "does_not_run_shell": True,
+            "does_not_run_git": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": "stage11_completion_review",
+    }
+    _append_jsonl(_forge_handoff_receipt_path(), receipt)
+    audit_record(
+        "apprenticeship.forge_handoff_receipt_recorded",
+        actor=safe_actor,
+        reason=safe_reason,
+        receipt_id=receipt_id,
+        action=safe_action,
+        skillization_artifact_receipt_id=linked_skillization_artifact_receipt_id,
+    )
+    return receipt
+
+
 def _apprenticeship_deliverables(
     *,
     stage10_closed: bool,
@@ -1428,6 +1620,7 @@ def _apprenticeship_next_gap(
     teaching_session_receipt_ready: bool,
     replay_receipt_ready: bool,
     skillization_artifact_receipt_ready: bool,
+    forge_handoff_receipt_ready: bool,
 ) -> str:
     if not stage10_closed:
         return "stage10_ledger_closure"
@@ -1447,7 +1640,9 @@ def _apprenticeship_next_gap(
         return "stage11_replay_receipt_write_path"
     if not skillization_artifact_receipt_ready:
         return "stage11_skillization_artifact_receipt_write_path"
-    return "stage11_forge_handoff_receipt_write_path"
+    if not forge_handoff_receipt_ready:
+        return "stage11_forge_handoff_receipt_write_path"
+    return "stage11_completion_review"
 
 
 def _live_teaching_session_ux_checks(
@@ -1751,6 +1946,13 @@ def _safe_skillization_artifact_action(value: Any) -> str:
     return "prepare_skillization_artifact"
 
 
+def _safe_forge_handoff_action(value: Any) -> str:
+    text = _safe_text(value)
+    if text in _ALLOWED_FORGE_HANDOFF_ACTIONS:
+        return text
+    return "review_forge_handoff"
+
+
 def _teaching_session_receipt_path() -> Path:
     return data_dir() / "logs" / "apprenticeship" / "teaching_session_receipts.jsonl"
 
@@ -1761,6 +1963,10 @@ def _replay_receipt_path() -> Path:
 
 def _skillization_artifact_receipt_path() -> Path:
     return data_dir() / "logs" / "apprenticeship" / "skillization_artifact_receipts.jsonl"
+
+
+def _forge_handoff_receipt_path() -> Path:
+    return data_dir() / "logs" / "apprenticeship" / "forge_handoff_receipts.jsonl"
 
 
 def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:

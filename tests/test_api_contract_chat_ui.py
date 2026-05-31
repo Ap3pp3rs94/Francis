@@ -283,5 +283,7 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("POST", "/apprenticeship/replay-receipt"),
         ("GET", "/apprenticeship/skillization-artifact-receipts"),
         ("POST", "/apprenticeship/skillization-artifact-receipt"),
+        ("GET", "/apprenticeship/forge-handoff-receipts"),
+        ("POST", "/apprenticeship/forge-handoff-receipt"),
     ]
     _assert_has_endpoints(routes, endpoints)

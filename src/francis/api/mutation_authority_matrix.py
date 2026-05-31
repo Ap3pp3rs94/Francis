@@ -154,6 +154,20 @@ _RULES: tuple[AuthorityRule, ...] = (
         ),
     ),
     AuthorityRule(
+        family="apprenticeship",
+        prefixes=("/apprenticeship/forge-handoff-receipt",),
+        required_actor="payload.actor",
+        required_scope="apprenticeship.forge_handoff.write",
+        approval_requirement="not_required_scope_gate_only; prior skillization artifact receipt required",
+        receipt_behavior="Stage 11 Apprenticeship Forge handoff review receipt",
+        denial_behavior="api_permission_denied via permission_gate before Forge handoff receipt write",
+        governance_maturity="permission_gated",
+        notes=(
+            "The receipt records operator review of a Forge proposal candidate boundary only; it does not write a "
+            "Forge proposal, promote to Forge, register a capability, run tools, or grant authority."
+        ),
+    ),
+    AuthorityRule(
         family="away",
         prefixes=("/away/stage-closure-decision",),
         required_actor="payload.actor",

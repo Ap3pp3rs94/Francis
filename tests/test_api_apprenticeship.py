@@ -104,6 +104,8 @@ def test_apprenticeship_status_starts_stage11_groundwork_after_stage10_closure(
     assert body["latest_replay_receipt_id"] == ""
     assert body["skillization_artifact_receipt_ready"] is False
     assert body["latest_skillization_artifact_receipt_id"] == ""
+    assert body["forge_handoff_receipt_ready"] is False
+    assert body["latest_forge_handoff_receipt_id"] == ""
     assert body["reads_receipts"] is True
     assert body["writes_receipts"] is False
     assert body["writes_memory"] is False
@@ -122,6 +124,7 @@ def test_apprenticeship_status_starts_stage11_groundwork_after_stage10_closure(
     assert body["governance"]["teaching_session_receipt_required_before_learning"] is True
     assert body["governance"]["replay_receipt_required_before_skillization"] is True
     assert body["governance"]["skillization_artifact_receipt_required_before_forge_handoff"] is True
+    assert body["governance"]["forge_handoff_receipt_required_before_completion_review"] is True
     assert body["governance"]["passive_capture_denied"] is True
     assert body["governance"]["surveillance_like_learning_denied"] is True
     assert body["governance"]["learned_skills_must_be_reviewable"] is True
@@ -143,6 +146,8 @@ def test_apprenticeship_status_starts_stage11_groundwork_after_stage10_closure(
     assert body["routes"]["replay_receipt_record"] == "/apprenticeship/replay-receipt"
     assert body["routes"]["skillization_artifact_receipts"] == "/apprenticeship/skillization-artifact-receipts"
     assert body["routes"]["skillization_artifact_record"] == "/apprenticeship/skillization-artifact-receipt"
+    assert body["routes"]["forge_handoff_receipts"] == "/apprenticeship/forge-handoff-receipts"
+    assert body["routes"]["forge_handoff_record"] == "/apprenticeship/forge-handoff-receipt"
     assert body["next_smallest_truthful_gap"] == "stage11_teaching_session_receipt_write_path"
 
     deliverables = {item["id"]: item for item in body["deliverables"]}
@@ -1087,4 +1092,226 @@ def test_apprenticeship_skillization_artifact_records_reviewed_candidate_after_r
     assert status["latest_replay_receipt_id"] == replay["receipt_id"]
     assert status["skillization_artifact_receipt_ready"] is True
     assert status["latest_skillization_artifact_receipt_id"] == body["receipt_id"]
+    assert status["forge_handoff_receipt_ready"] is False
+    assert status["latest_forge_handoff_receipt_id"] == ""
     assert status["next_smallest_truthful_gap"] == "stage11_forge_handoff_receipt_write_path"
+
+
+def test_apprenticeship_forge_handoff_denies_without_actor_scope(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage10_closure_receipt(data_root, receipt_id="away_stage10_closure_forge_handoff_denied_test")
+
+    response = TestClient(create_app()).post(
+        "/apprenticeship/forge-handoff-receipt",
+        json={
+            "actor": "test.apprenticeship.forge",
+            "reason": "missing forge handoff write scope",
+            "action": "review_forge_handoff",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["status"] == "denied"
+    assert body["error"] == "api_permission_denied"
+    assert body["writes_receipt"] is False
+    assert body["writes_memory"] is False
+    assert body["writes_forge_proposal"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["starts_processes"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["governance"]["required_scope"] == "apprenticeship.forge_handoff.write"
+    assert not (data_root / "logs" / "apprenticeship" / "forge_handoff_receipts.jsonl").exists()
+
+
+def test_apprenticeship_forge_handoff_requires_skillization_artifact_receipt(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({"test.apprenticeship.forge": ["apprenticeship.forge_handoff.write"]}),
+    )
+    _write_stage10_closure_receipt(data_root, receipt_id="away_stage10_closure_forge_requires_skill_test")
+
+    response = TestClient(create_app()).post(
+        "/apprenticeship/forge-handoff-receipt",
+        json={
+            "actor": "test.apprenticeship.forge",
+            "reason": "forge handoff before skillization artifact receipt",
+            "action": "review_forge_handoff",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["status"] == "awaiting_skillization_artifact_receipt"
+    assert body["receipt"] is None
+    assert body["receipt_id"] == ""
+    assert body["writes_receipt"] is False
+    assert body["writes_memory"] is False
+    assert body["governance"]["required_scope"] == "apprenticeship.forge_handoff.write"
+    assert body["next_smallest_truthful_gap"] == "stage11_skillization_artifact_receipt_write_path"
+    assert not (data_root / "logs" / "apprenticeship" / "forge_handoff_receipts.jsonl").exists()
+
+
+def test_apprenticeship_forge_handoff_records_review_without_promotion(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps(
+            {
+                "test.apprenticeship.teacher": ["apprenticeship.teaching_session.write"],
+                "test.apprenticeship.reviewer": ["apprenticeship.replay_receipt.write"],
+                "test.apprenticeship.skillizer": ["apprenticeship.skillization_artifact.write"],
+                "test.apprenticeship.forge": ["apprenticeship.forge_handoff.write"],
+            }
+        ),
+    )
+    _write_stage10_closure_receipt(data_root, receipt_id="away_stage10_closure_forge_handoff_receipt_test")
+
+    client = TestClient(create_app())
+    teaching = client.post(
+        "/apprenticeship/teaching-session",
+        json={
+            "actor": "test.apprenticeship.teacher",
+            "reason": "start teaching",
+            "action": "start_teaching_session",
+            "intent_label": "summarize incident",
+            "declared_scope": "operator demonstrates incident summary",
+            "success_condition": "reviewable replay exists",
+            "demonstration_summary": "operator supplied summary",
+        },
+    ).json()
+    assert teaching["ok"] is True
+    replay = client.post(
+        "/apprenticeship/replay-receipt",
+        json={
+            "actor": "test.apprenticeship.reviewer",
+            "reason": "review replay",
+            "action": "approve_generalization",
+            "teaching_session_receipt_id": teaching["receipt_id"],
+            "intent_label": "summarize incident",
+            "replay_summary": "reviewed replay",
+            "generalization_summary": "stable summary steps",
+            "validation_result": "accepted",
+        },
+    ).json()
+    assert replay["ok"] is True
+    skillization = client.post(
+        "/apprenticeship/skillization-artifact-receipt",
+        json={
+            "actor": "test.apprenticeship.skillizer",
+            "reason": "prepare artifact",
+            "action": "approve_forge_candidate",
+            "replay_receipt_id": replay["receipt_id"],
+            "pattern_summary": "Incident summary pattern",
+            "parameterization": "incident id severity owner",
+            "usage_scope": "operator-reviewed summaries",
+            "decision_logic": "receipt-backed replay accepted",
+            "validation_expectations": "contract tests",
+            "risk_tier_candidate": "low",
+            "documentation_draft": "review-only draft",
+            "test_candidate_structure": "focused tests",
+            "classification": "candidate_reusable_skill",
+        },
+    ).json()
+    assert skillization["ok"] is True
+
+    response = client.post(
+        "/apprenticeship/forge-handoff-receipt",
+        json={
+            "actor": "test.apprenticeship.forge",
+            "reason": "review handoff token=forgereasonsecret123",
+            "action": "approve_forge_proposal_candidate",
+            "skillization_artifact_receipt_id": skillization["receipt_id"],
+            "handoff_summary": "Candidate can be staged for Forge review token=forgehandoffsecret123",
+            "operator_review_state": "reviewed",
+            "risk_tier_review": "low risk candidate only",
+            "documentation_review": "draft reviewed",
+            "test_candidate_review": "focused tests reviewed",
+            "promotion_boundary": "no promotion from apprenticeship receipt",
+            "explicit_promotion_decision": "do_not_promote_yet",
+            "notes": "No Forge write token=forgenotessecret123",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "francis.stage11.apprenticeship.forge_handoff.record"
+    assert body["status"] == "recorded"
+    assert body["receipt_id"].startswith("apprenticeship_forge_handoff_")
+    assert body["action"] == "approve_forge_proposal_candidate"
+    assert body["writes_receipt"] is True
+    assert body["writes_memory"] is False
+    assert body["writes_forge_proposal"] is False
+    assert body["creates_capability"] is False
+    assert body["promotes_to_forge"] is False
+    assert body["registers_capability"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["starts_processes"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["governance"]["required_scope"] == "apprenticeship.forge_handoff.write"
+    assert body["governance"]["requires_skillization_artifact_receipt"] is True
+    assert body["governance"]["explicit_operator_forge_handoff_review"] is True
+    assert body["governance"]["does_not_write_forge_proposal"] is True
+    assert body["next_smallest_truthful_gap"] == "stage11_completion_review"
+
+    receipt = body["receipt"]
+    assert receipt["kind"] == "francis.stage11.apprenticeship.forge_handoff_receipt"
+    assert receipt["receipt_id"] == body["receipt_id"]
+    assert receipt["actor"] == "test.apprenticeship.forge"
+    assert receipt["skillization_artifact_receipt_id"] == skillization["receipt_id"]
+    assert receipt["latest_skillization_artifact_receipt_id"] == skillization["receipt_id"]
+    assert receipt["capture_mode"] == "explicit_operator_forge_handoff_receipt"
+    assert receipt["forge_handoff_receipt_ready"] is True
+    assert receipt["governance"]["required_scope"] == "apprenticeship.forge_handoff.write"
+    assert receipt["governance"]["requires_skillization_artifact_receipt"] is True
+    assert receipt["governance"]["direct_forge_promotion_denied"] is True
+    assert receipt["governance"]["does_not_write_forge_proposal"] is True
+    assert receipt["governance"]["does_not_run_shell"] is True
+    receipt_text = json.dumps(receipt, sort_keys=True)
+    assert "forgereasonsecret123" not in receipt_text
+    assert "forgehandoffsecret123" not in receipt_text
+    assert "forgenotessecret123" not in receipt_text
+
+    readback = client.get("/apprenticeship/forge-handoff-receipts").json()
+    assert readback["ok"] is True
+    assert readback["kind"] == "francis.stage11.apprenticeship.forge_handoff_receipts"
+    assert readback["status"] == "ready"
+    assert readback["latest_receipt_id"] == body["receipt_id"]
+    assert readback["forge_handoff_receipt_ready"] is True
+    assert readback["writes_receipts"] is False
+    assert readback["writes_memory"] is False
+    assert readback["writes_forge_proposal"] is False
+    assert readback["grants_execution_authority"] is False
+    assert readback["grants_mutation_authority"] is False
+    assert readback["governance"]["receipt_readback_only"] is True
+    assert readback["next_smallest_truthful_gap"] == "stage11_completion_review"
+
+    status = client.get("/apprenticeship/status").json()
+    assert status["status"] == "stage11_forge_handoff_receipt_ready"
+    assert status["skillization_artifact_receipt_ready"] is True
+    assert status["latest_skillization_artifact_receipt_id"] == skillization["receipt_id"]
+    assert status["forge_handoff_receipt_ready"] is True
+    assert status["latest_forge_handoff_receipt_id"] == body["receipt_id"]
+    assert status["next_smallest_truthful_gap"] == "stage11_completion_review"
