@@ -49776,6 +49776,82 @@ Latest validation for Stage 13 browser visual readback runner:
   Result: `failed as expected in this sandbox;
   status=browser_readback_runner_timeout; writes_receipt=false`
 
+### 2026-05-31 - Stage 13 browser readback reaches completion-review readiness
+
+Roadmap area: Stage 13 / Trust Calibration, operator/browser visual readback
+and truthful completion-review gating.
+
+Material change:
+
+- A real browser run against the ORB/System Stage 13 card wrote
+  `trust_calibration_browser_visual_bd3c38a7eaf9` through the governed
+  `/trust-calibration/operator-browser-visual-readback` path.
+- The browser runner now supports both pre-receipt and post-receipt UI states:
+  it can click the enabled `Record visual readback` action before a receipt
+  exists, and it can truthfully return `browser_readback_already_recorded`
+  after the completion review has advanced.
+- The latest readback reports
+  `operator_browser_visual_readback_observed=true`,
+  `ready_count=7`, `required_count=7`,
+  `stage13_completion_review_ready=true`, `blockers=[]`, and
+  `next_smallest_truthful_gap=stage13_stage_closure_decision`.
+- The ORB/System shell crash paths found during browser verification were
+  corrected: the Stage 13 readback action no longer evaluates a later
+  completion-review dependency while initializing, observer scans use a
+  mutation-enabled settings client, and mission detail rendering now guards
+  null queue-item readbacks.
+- The mutating browser-readback receipt governance now distinguishes the
+  receipt-write path from read-only review surfaces by setting
+  `writes_receipt=true`, `does_not_write_receipts=false`, and `read_only=false`
+  on future receipt records.
+- This does not close Stage 13. The truthful next gate is the separate
+  stage-closure decision receipt.
+
+Latest validation for Stage 13 browser readback completion-review readiness:
+
+- `node scripts/trust-calibration-browser-readback.mjs --ui-url
+  http://127.0.0.1:5180/ --debug-port 9464 --timeout-ms 30000`
+  Result: `passed; status=browser_readback_already_recorded;
+  latest_receipt_id=trust_calibration_browser_visual_bd3c38a7eaf9;
+  completion_review.status=ready; blockers=[]`
+- Browser artifacts:
+  `output/playwright/stage13-browser-readback-before-2026-05-31T23-37-30-828Z.png`
+  and
+  `output/playwright/stage13-browser-readback-after-2026-05-31T23-37-30-828Z.png`.
+- Direct local `TestClient` readback of GET `/trust-calibration/status`,
+  `/trust-calibration/completion-review`, and
+  `/trust-calibration/operator-browser-visual-readbacks?limit=1`.
+  Result: `status=stage13_operator_browser_visual_readback_ready;
+  ready_count=7; required_count=7;
+  operator_browser_visual_readback_observed=true;
+  completion_review.status=ready; blockers=[];
+  next_smallest_truthful_gap=stage13_stage_closure_decision`.
+- `python -m pytest tests/test_trust_calibration_browser_readback_script.py
+  tests/test_api_trust_calibration.py::test_trust_calibration_operator_browser_visual_readback_receipt_advances_browser_gap
+  tests/test_api_trust_calibration.py::test_trust_calibration_completion_review_blocks_until_browser_visual_readback
+  -q --tb=short`
+  Result: `passed; 4 passed`
+- `python -m mypy src/francis/trust_calibration.py
+  src/francis/api/routes/trust_calibration.py`
+  Result: `passed`
+- `python -m ruff check src/francis/trust_calibration.py
+  tests/test_api_trust_calibration.py
+  tests/test_trust_calibration_browser_readback_script.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/trust_calibration.py
+  tests/test_api_trust_calibration.py
+  tests/test_trust_calibration_browser_readback_script.py`
+  Result: `passed`
+- `node --check scripts/trust-calibration-browser-readback.mjs`
+  Result: `passed`
+- `node --test --experimental-strip-types src/trust_dashboard/index.test.ts`
+  from `apps/chat_ui/`
+  Result: `passed; 8 passed`
+- `npm run build` from `apps/chat_ui/`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

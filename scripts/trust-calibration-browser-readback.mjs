@@ -23,9 +23,9 @@ const CONTRACT = {
     "Missing verification",
     "Forbidden language",
     "Claim guards",
-    "stage13_operator_browser_visual_readback",
+    "stage13_operator_browser_visual_readback or stage13_stage_closure_decision",
     "side effects denied",
-    "Completion review blocked",
+    "Completion review blocked or ready",
   ],
   artifact_directory: "output/playwright",
   writes_receipt: "only_after_browser_visible_signals_are_observed_and_ui_action_succeeds",
@@ -186,8 +186,9 @@ async function waitForJson(url, timeoutMs) {
 }
 
 class CdpClient {
-  constructor(wsUrl) {
+  constructor(wsUrl, commandTimeoutMs = 10000) {
     this.wsUrl = wsUrl;
+    this.commandTimeoutMs = commandTimeoutMs;
     this.nextId = 1;
     this.pending = new Map();
     this.ws = new WebSocket(wsUrl);
@@ -236,7 +237,20 @@ class CdpClient {
     this.nextId += 1;
     const payload = JSON.stringify({ id, method, params });
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`CDP command timed out: ${method}`));
+      }, this.commandTimeoutMs);
+      this.pending.set(id, {
+        resolve: (value) => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        reject: (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      });
       this.ws.send(payload);
     });
   }
@@ -282,6 +296,7 @@ function chromeArgs(options, profileDir) {
     "--disable-gpu",
     "--disable-extensions",
     "--disable-sync",
+    "--no-sandbox",
     "--no-first-run",
     "--no-default-browser-check",
     "--remote-allow-origins=*",
@@ -301,7 +316,7 @@ function tail(text, maxLength = 2000) {
   return text.length > maxLength ? text.slice(text.length - maxLength) : text;
 }
 
-async function run(options) {
+async function run(options, progress = { phase: "starting" }) {
   const chromePath = findBrowser(options.chromePath);
   if (!chromePath) {
     return {
@@ -319,6 +334,7 @@ async function run(options) {
   const afterScreenshot = path.join(outDir, `stage13-browser-readback-after-${stamp}.png`);
   const stderrChunks = [];
 
+  progress.phase = "launching_browser";
   const chrome = spawn(chromePath, chromeArgs(options, profileDir), {
     stdio: ["ignore", "ignore", "pipe"],
   });
@@ -331,27 +347,37 @@ async function run(options) {
 
   let cdp = null;
   try {
+    progress.phase = "waiting_for_devtools";
     const version = await Promise.race([
       waitForJson(`http://127.0.0.1:${options.debugPort}/json/version`, options.timeoutMs),
       chromeExit.then((exit) => {
         throw new Error(`Browser exited before DevTools became ready: ${JSON.stringify(exit)}`);
       }),
     ]);
+    progress.phase = "opening_ui_target";
     const target = await fetchJson(
       `http://127.0.0.1:${options.debugPort}/json/new?${encodeURIComponent(options.uiUrl)}`,
       { method: "PUT" },
       options.timeoutMs,
     );
-    cdp = new CdpClient(target.webSocketDebuggerUrl);
+    progress.phase = "connecting_cdp";
+    cdp = new CdpClient(target.webSocketDebuggerUrl, options.timeoutMs);
     await cdp.open(options.timeoutMs);
+    progress.phase = "enabling_cdp_domains";
     await cdp.send("Page.enable");
     await cdp.send("Runtime.enable");
+    progress.phase = "waiting_for_app_shell";
     await waitForEval(cdp, "document.body && document.body.innerText.includes('Approvals')", options.timeoutMs);
 
+    progress.phase = "opening_system_panel";
     const tabResult = await cdp.send("Runtime.evaluate", {
       expression: `(() => {
         const buttons = [...document.querySelectorAll("button")];
-        const system = buttons.find((button) => (button.textContent || "").trim() === "System");
+        const matches = buttons.filter((button) => {
+          const label = (button.textContent || "").trim();
+          return label === "System" || label === "ORB";
+        });
+        const system = matches[matches.length - 1];
         if (!system) {
           return { clicked: false, buttons: buttons.slice(0, 40).map((button) => (button.textContent || "").trim()) };
         }
@@ -364,9 +390,81 @@ async function run(options) {
       throw new Error(`System tab not found: ${JSON.stringify(tabResult.result?.value)}`);
     }
 
+    progress.phase = "waiting_for_stage13_visible_signals";
     await waitForEval(cdp, browserVisibleExpression(), options.timeoutMs);
+    progress.phase = "capturing_before_screenshot";
     await captureScreenshot(cdp, beforeScreenshot);
 
+    progress.phase = "checking_readback_action_state";
+    const buttonState = await cdp.send("Runtime.evaluate", {
+      expression: `(() => {
+        const buttons = [...document.querySelectorAll("button")];
+        const button = buttons.find((item) => (item.textContent || "").trim() === "Record visual readback");
+        if (!button) {
+          return { present: false, disabled: false, body: document.body.innerText.slice(0, 2000) };
+        }
+        return { present: true, disabled: Boolean(button.disabled) };
+      })()`,
+      returnByValue: true,
+    });
+    if (!buttonState.result?.value?.present) {
+      throw new Error(`Readback button not found: ${JSON.stringify(buttonState.result?.value)}`);
+    }
+    if (buttonState.result?.value?.disabled) {
+      progress.phase = "reading_existing_readback_status";
+      const status = await fetchJson(`${options.apiUrl}/trust-calibration/status`, {}, options.timeoutMs);
+      const completionReview = await fetchJson(
+        `${options.apiUrl}/trust-calibration/completion-review`,
+        {},
+        options.timeoutMs,
+      );
+      const readbacks = await fetchJson(
+        `${options.apiUrl}/trust-calibration/operator-browser-visual-readbacks?limit=1`,
+        {},
+        options.timeoutMs,
+      );
+      if (!status.operator_browser_visual_readback_observed) {
+        throw new Error("Readback action is disabled before the browser visual readback is observed");
+      }
+      progress.phase = "capturing_after_screenshot";
+      await captureScreenshot(cdp, afterScreenshot);
+      return {
+        ok: true,
+        kind: "francis.stage13.trust_calibration.browser_readback_runner_result",
+        status: "browser_readback_already_recorded",
+        contract: CONTRACT,
+        chrome: {
+          executable: chromePath,
+          product: version.Browser || "",
+          protocol_version: version["Protocol-Version"] || "",
+        },
+        notice: `Browser visual readback already recorded as ${status.latest_operator_browser_visual_readback_receipt_id}.`,
+        writes_receipt: false,
+        artifacts: {
+          before_screenshot: beforeScreenshot,
+          after_screenshot: afterScreenshot,
+        },
+        status_readback: {
+          status: status.status,
+          ready_count: status.ready_count,
+          required_count: status.required_count,
+          operator_browser_visual_readback_observed: status.operator_browser_visual_readback_observed,
+          latest_operator_browser_visual_readback_receipt_id: status.latest_operator_browser_visual_readback_receipt_id,
+          next_smallest_truthful_gap: status.next_smallest_truthful_gap,
+        },
+        completion_review: {
+          status: completionReview.status,
+          stage13_completion_review_ready: completionReview.stage13_completion_review_ready,
+          ready_count: completionReview.ready_count,
+          required_count: completionReview.required_count,
+          blockers: completionReview.blockers,
+          next_smallest_truthful_gap: completionReview.next_smallest_truthful_gap,
+        },
+        latest_readback_receipt: readbacks.items?.[0] ?? null,
+      };
+    }
+
+    progress.phase = "clicking_readback_action";
     const clickResult = await cdp.send("Runtime.evaluate", {
       expression: `(() => {
         const buttons = [...document.querySelectorAll("button")];
@@ -383,6 +481,7 @@ async function run(options) {
       throw new Error(`Readback button not clicked: ${JSON.stringify(clickResult.result?.value)}`);
     }
 
+    progress.phase = "waiting_for_receipt_notice";
     const notice = await waitForEval(
       cdp,
       `(() => {
@@ -392,8 +491,10 @@ async function run(options) {
       })()`,
       options.timeoutMs,
     );
+    progress.phase = "capturing_after_screenshot";
     await captureScreenshot(cdp, afterScreenshot);
 
+    progress.phase = "reading_api_status";
     const status = await fetchJson(`${options.apiUrl}/trust-calibration/status`, {}, options.timeoutMs);
     const completionReview = await fetchJson(
       `${options.apiUrl}/trust-calibration/completion-review`,
@@ -443,6 +544,7 @@ async function run(options) {
       kind: "francis.stage13.trust_calibration.browser_readback_runner_result",
       status: "browser_readback_failed",
       error: error instanceof Error ? error.message : String(error),
+      phase: progress.phase,
       contract: CONTRACT,
       chrome: {
         executable: chromePath,
@@ -479,9 +581,10 @@ function browserVisibleExpression() {
       body.includes("Missing verification") &&
       body.includes("Forbidden language") &&
       body.includes("Claim guards") &&
-      body.includes("stage13_operator_browser_visual_readback") &&
+      (body.includes("stage13_operator_browser_visual_readback") ||
+        body.includes("stage13_stage_closure_decision")) &&
       body.includes("side effects denied") &&
-      body.includes("Completion review blocked")
+      (body.includes("Completion review blocked") || body.includes("Completion review ready"))
     );
   })()`;
 }
@@ -491,18 +594,20 @@ async function main() {
     // Keep Node alive while browser/network probes are pending or failing early.
   }, 1000);
   const options = parseArgs(process.argv.slice(2));
+  const progress = { phase: "starting" };
   try {
     if (options.printContract) {
       console.log(JSON.stringify(CONTRACT, null, 2));
       return 0;
     }
     const result = await Promise.race([
-      run(options),
+      run(options, progress),
       delay(options.timeoutMs + 5000).then(() => ({
         ok: false,
         kind: "francis.stage13.trust_calibration.browser_readback_runner_result",
         status: "browser_readback_runner_timeout",
         error: `Browser readback runner did not complete within ${options.timeoutMs + 5000}ms`,
+        phase: progress.phase,
         contract: CONTRACT,
         writes_receipt: false,
         next_smallest_truthful_gap: "stage13_operator_browser_visual_readback",

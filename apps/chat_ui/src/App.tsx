@@ -4118,6 +4118,10 @@ function SystemPanel(props: {
 }) {
   const resolvedBaseUrl = useMemo(() => normalizeBaseUrl(props.baseUrl), [props.baseUrl]);
   const client = useMemo(() => new SettingsClient(resolvedBaseUrl), [resolvedBaseUrl]);
+  const settingsMutationClient = useMemo(
+    () => new SettingsClient(resolvedBaseUrl, { mutationsEnabled: true }),
+    [resolvedBaseUrl],
+  );
   const missionsClient = useMemo(() => new MissionsClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const operationsClient = useMemo(() => new OperationsClient(resolvedBaseUrl), [resolvedBaseUrl]);
   const takeoverClient = useMemo(() => new TakeoverClient(resolvedBaseUrl), [resolvedBaseUrl]);
@@ -5207,7 +5211,7 @@ function SystemPanel(props: {
     trustError,
   ]);
 
-  const recordTrustCalibrationBrowserVisualReadback = useCallback(async () => {
+  const recordTrustCalibrationBrowserVisualReadback = async () => {
     setTrustCalibrationBrowserReadbackBusy(true);
     setTrustCalibrationBrowserReadbackNotice(null);
     try {
@@ -5255,17 +5259,7 @@ function SystemPanel(props: {
     } finally {
       setTrustCalibrationBrowserReadbackBusy(false);
     }
-  }, [
-    refresh,
-    trustCalibrationCompletionBlockers.length,
-    trustCalibrationCompletionReview?.next_smallest_truthful_gap,
-    trustCalibrationForbiddenLanguage.length,
-    trustCalibrationMissingVerification.length,
-    trustCalibrationPresentation.next_smallest_truthful_gap,
-    trustCalibrationPresentation.side_effects_denied,
-    trustError,
-    trustMutationClient,
-  ]);
+  };
 
   const recordTelemetryFeedbackMemoryQuality = useCallback(async () => {
     if (!telemetryFeedbackReview || telemetryFeedbackReview.reviewed_event_count <= 0) {
@@ -6137,7 +6131,7 @@ function SystemPanel(props: {
   );
 
   const recordObserverScan = useCallback(async () => {
-    if (!modeClient) {
+    if (!settingsMutationClient) {
       setObserverScanNotice({ tone: "error", text: "API base URL is required before observer scans can be recorded." });
       return;
     }
@@ -6145,7 +6139,7 @@ function SystemPanel(props: {
     setObserverScanBusy(true);
     setObserverScanNotice(null);
     try {
-      const response = await modeClient.recordObserverScan(
+      const response = await settingsMutationClient.recordObserverScan(
         {
           reason: "chat_ui.shift_briefing",
           actor: "chat_ui.shift_briefing",
@@ -6172,7 +6166,7 @@ function SystemPanel(props: {
     } finally {
       setObserverScanBusy(false);
     }
-  }, [modeClient, refresh, settingsError]);
+  }, [refresh, settingsError, settingsMutationClient]);
 
   useEffect(() => {
     void refresh();
@@ -7847,7 +7841,10 @@ function SystemPanel(props: {
   const missionHistory = missionDetail?.history ?? [];
   const missionLoopState: MissionLoopState | undefined = missionDetail?.loop_state;
   const missionLoopHandoff = missionLoopState?.handoff;
-  const selectedMissionQueueItem = missionDetail?.mission?.id === selectedMission?.id ? missionDetail.queue_item : undefined;
+  const selectedMissionQueueItem =
+    missionDetail && selectedMission && missionDetail.mission?.id === selectedMission.id
+      ? missionDetail.queue_item
+      : undefined;
   const selectedMissionCurrentTaskId = missionCurrentTaskId(
     selectedMission,
     selectedMissionQueueItem,
@@ -8154,32 +8151,35 @@ function SystemPanel(props: {
         errorCount: response.errors?.length ?? 0,
         counts: response.counts ?? {},
         request: response.request,
-        results: (response.results ?? []).slice(0, 4).map((item) => {
-          const recoveryFields = missionOperationRecoveryFields(item);
-          return {
-            missionId: item.mission_id,
-            operationId: item.operation_id,
-            approvalId: item.approval_id,
-            action: item.action,
-            activeStage: item.loop_state?.active_stage,
-            status: item.status,
-            gate: item.gate,
-            nextStep: item.next_step,
-            traceId: item.trace_id,
-            runId: item.run_id,
-            artifactDir: item.artifact_dir,
-            queueItem: item.queue_item,
-            currentTask: item.current_task,
-            receiptSummary: item.receipt_summary,
-            handoffAction: item.handoff?.action ?? item.loop_state?.handoff?.action,
-            handoffDetail: item.handoff?.detail ?? item.loop_state?.handoff?.detail,
-            historyCount: item.history_count,
-            linkedOperationCount: item.linked_operation_count,
-            runLedgerCount: item.run_ledger_count,
-            message: item.message,
-            ...recoveryFields,
-          };
-        }),
+        results: (response.results ?? [])
+          .filter((item) => item !== null && item !== undefined)
+          .slice(0, 4)
+          .map((item) => {
+            const recoveryFields = missionOperationRecoveryFields(item);
+            return {
+              missionId: item.mission_id,
+              operationId: item.operation_id,
+              approvalId: item.approval_id,
+              action: item.action,
+              activeStage: item.loop_state?.active_stage,
+              status: item.status,
+              gate: item.gate,
+              nextStep: item.next_step,
+              traceId: item.trace_id,
+              runId: item.run_id,
+              artifactDir: item.artifact_dir,
+              queueItem: item.queue_item,
+              currentTask: item.current_task,
+              receiptSummary: item.receipt_summary,
+              handoffAction: item.handoff?.action ?? item.loop_state?.handoff?.action,
+              handoffDetail: item.handoff?.detail ?? item.loop_state?.handoff?.detail,
+              historyCount: item.history_count,
+              linkedOperationCount: item.linked_operation_count,
+              runLedgerCount: item.run_ledger_count,
+              message: item.message,
+              ...recoveryFields,
+            };
+          }),
         errors: (response.errors ?? []).slice(0, 4).map((item) => {
           const governance = isRecord(item.governance) ? item.governance : {};
           const governanceDecision: MissionGovernanceDecision = {

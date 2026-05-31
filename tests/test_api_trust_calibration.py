@@ -744,6 +744,9 @@ def test_trust_calibration_operator_browser_visual_readback_receipt_advances_bro
     assert receipt["side_effect_guard_visible"] is True
     assert receipt["next_gap_visible"] is True
     assert receipt["governance"]["required_scope"] == "trust_calibration.browser_visual_readback.write"
+    assert receipt["governance"]["read_only"] is False
+    assert receipt["governance"]["writes_receipt"] is True
+    assert receipt["governance"]["does_not_write_receipts"] is False
     assert receipt["governance"]["records_supplied_visual_readback_only"] is True
     assert receipt["governance"]["does_not_launch_browser"] is True
     assert receipt["governance"]["does_not_capture_screen"] is True

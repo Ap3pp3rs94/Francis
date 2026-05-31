@@ -38,7 +38,11 @@ def test_trust_calibration_browser_readback_runner_contract_is_bounded() -> None
     assert contract["grants_mutation_authority"] is False
     assert "Stage 13 calibration" in contract["required_visible_signals"]
     assert "Record visual readback" in contract["required_visible_signals"]
-    assert "stage13_operator_browser_visual_readback" in contract["required_visible_signals"]
+    assert (
+        "stage13_operator_browser_visual_readback or stage13_stage_closure_decision"
+        in contract["required_visible_signals"]
+    )
+    assert "Completion review blocked or ready" in contract["required_visible_signals"]
 
 
 def test_trust_calibration_browser_readback_runner_parses_as_javascript() -> None:

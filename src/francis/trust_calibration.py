@@ -1314,6 +1314,9 @@ def record_trust_calibration_operator_browser_visual_readback(
         "grants_mutation_authority": False,
         "governance": {
             **_trust_calibration_governance(),
+            "read_only": False,
+            "does_not_write_receipts": False,
+            "writes_receipt": True,
             "required_scope": TRUST_CALIBRATION_BROWSER_VISUAL_READBACK_WRITE_SCOPE,
             "dev_or_workstation_only": True,
             "explicit_operator_browser_visual_readback": True,
