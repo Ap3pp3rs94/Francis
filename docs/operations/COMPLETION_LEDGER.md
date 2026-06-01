@@ -54988,6 +54988,33 @@ Latest validation for Stage 16 status receipt sequence readiness:
   confirmation_receipt_command_ready=true;
   confirmation_receipt_command_records_receipt=true`.
 
+### 2026-06-01 - Stage 16 Hub can record sleep/resume confirmation receipts
+
+Roadmap area: Stage 16 / Federation, sleep-continuity confirmation receipt
+operator surface.
+
+Material change:
+
+- Federation Hub now exposes the governed
+  `POST /federation/sleep-resume-confirmation` receipt path through its client
+  contract and operator panel.
+- The panel requires an explicit operator checkbox confirming that the
+  workstation slept or suspended after the current pre-sleep marker and resumed
+  before it enables the receipt-writing action.
+- The client parses and preserves receipt-write guard fields, including
+  `writes_receipt`, `writes_evidence`, `writes_runtime_readback`,
+  `marks_stage16_closed`, and authority-grant booleans.
+- This work did not execute the receipt-writing mutation, capture evidence,
+  write runtime readback, infer physical sleep/resume, grant authority, or close
+  Stage 16.
+
+Latest validation for Stage 16 Hub confirmation receipt recording:
+
+- `npm run test -- federation_hub`
+  Result: `passed; 195 passed`.
+- `npm run build`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

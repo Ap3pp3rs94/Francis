@@ -381,6 +381,24 @@ export type FederationSleepResumeConfirmationActorReadinessVisibleCommands = {
   scope_remediation_copyable_command?: string;
 };
 
+export type FederationSleepResumeConfirmationRecordResponse = {
+  ok: boolean;
+  kind?: string;
+  status?: string;
+  source_id?: string;
+  target?: string;
+  receipt_id?: string;
+  decision?: string;
+  writes_receipt: boolean;
+  writes_evidence: boolean;
+  writes_runtime_readback: boolean;
+  marks_stage16_closed: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+  receipt?: FederationSleepResumeConfirmationReceipt;
+  next_smallest_truthful_gap?: string;
+};
+
 export type FederationSleepResumeConfirmationActorReadiness = {
   ok: boolean;
   kind?: string;
@@ -866,6 +884,18 @@ function safeBoolean(v: unknown, fallback = false): boolean {
 function stringList(v: unknown): string[] {
   if (!Array.isArray(v)) return [];
   return v.map((x) => safeString(x)).filter((x) => x.length > 0);
+}
+
+function federationMutationErrorMessage(json: FederationSleepResumeConfirmationRecordResponse, fallback: string): string {
+  return json.status === "denied" || json.status === "blocked"
+    ? `${fallback} Status: ${json.status}.`
+    : fallback;
+}
+
+function assertFederationMutationAllowed(json: FederationSleepResumeConfirmationRecordResponse, fallback: string): void {
+  if (json.ok === false || json.status === "denied" || json.status === "blocked") {
+    throw new FederationApiError(federationMutationErrorMessage(json, fallback));
+  }
 }
 
 function stringRecord(v: unknown): Record<string, string> {
@@ -1640,6 +1670,30 @@ function parseFederationSleepResumeConfirmationReceipt(
   };
 }
 
+export function parseFederationSleepResumeConfirmationRecordResponse(
+  raw: unknown,
+): FederationSleepResumeConfirmationRecordResponse {
+  const body = isRecord(raw) ? raw : {};
+  const receipt = parseFederationSleepResumeConfirmationReceipt(body.receipt);
+  return {
+    ok: safeBoolean(body.ok),
+    kind: optionalString(body.kind),
+    status: optionalString(body.status),
+    source_id: optionalString(body.source_id),
+    target: optionalString(body.target),
+    receipt_id: optionalString(body.receipt_id),
+    decision: optionalString(body.decision),
+    writes_receipt: safeBoolean(body.writes_receipt),
+    writes_evidence: safeBoolean(body.writes_evidence),
+    writes_runtime_readback: safeBoolean(body.writes_runtime_readback),
+    marks_stage16_closed: safeBoolean(body.marks_stage16_closed),
+    grants_execution_authority: safeBoolean(body.grants_execution_authority),
+    grants_mutation_authority: safeBoolean(body.grants_mutation_authority),
+    receipt: receipt ?? undefined,
+    next_smallest_truthful_gap: optionalString(body.next_smallest_truthful_gap),
+  };
+}
+
 function parseFederationSleepResumeConfirmationOperatorStep(
   raw: unknown,
 ): FederationSleepResumeConfirmationOperatorStep | null {
@@ -2338,6 +2392,7 @@ export type FederationEndpoints = {
   sleepContinuityRunbook: () => string;
   sleepContinuityAction: (q?: { actor?: string }) => string;
   sleepResumeConfirmations: (q?: { limit?: number; actor?: string }) => string;
+  sleepResumeConfirmation: () => string;
   sleepResumeConfirmationActorReadiness: (q?: { actor?: string }) => string;
   stageClosureDecisions: (q?: { limit?: number }) => string;
   liveRuntimeReadbacks: (q?: { limit?: number }) => string;
@@ -2367,6 +2422,7 @@ export function defaultFederationEndpoints(): FederationEndpoints {
     sleepContinuityAction: (q) => `/federation/sleep-continuity-action${buildQuery({ actor: q?.actor })}`,
     sleepResumeConfirmations: (q) =>
       `/federation/sleep-resume-confirmations${buildQuery({ limit: q?.limit, actor: q?.actor })}`,
+    sleepResumeConfirmation: () => "/federation/sleep-resume-confirmation",
     sleepResumeConfirmationActorReadiness: (q) =>
       `/federation/sleep-resume-confirmation/actor-readiness${buildQuery({ actor: q?.actor })}`,
     stageClosureDecisions: (q) => `/federation/stage-closure-decisions${buildQuery({ limit: q?.limit })}`,
@@ -2519,6 +2575,30 @@ export class FederationClient {
       },
     );
     return parseFederationSleepResumeConfirmationActorReadiness(json);
+  }
+
+  async recordSleepResumeConfirmation(opts: {
+    actor: string;
+    reason: string;
+    preSleepEvidencePath?: string;
+    operatorConfirmedSleepResume: true;
+    signal?: AbortSignal;
+    timeoutMs?: number;
+  }): Promise<FederationSleepResumeConfirmationRecordResponse> {
+    const json = await fetchJson(this.url(this.endpoints.sleepResumeConfirmation()), {
+      method: "POST",
+      signal: opts.signal,
+      timeoutMs: opts.timeoutMs ?? this.defaultTimeoutMs,
+      body: JSON.stringify({
+        actor: opts.actor,
+        reason: opts.reason,
+        operator_confirmed_sleep_resume: opts.operatorConfirmedSleepResume,
+        pre_sleep_evidence_path: opts.preSleepEvidencePath,
+      }),
+    });
+    const parsed = parseFederationSleepResumeConfirmationRecordResponse(json);
+    assertFederationMutationAllowed(parsed, "Sleep/resume confirmation receipt was denied.");
+    return parsed;
   }
 
   async getStageClosureDecisions(opts?: {

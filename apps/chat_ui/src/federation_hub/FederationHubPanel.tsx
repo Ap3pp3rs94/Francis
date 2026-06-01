@@ -14,6 +14,7 @@ import {
   type FederationSleepContinuityPresentation,
   type FederationSleepContinuityRunbook,
   type FederationSleepResumeConfirmationActorReadiness,
+  type FederationSleepResumeConfirmationRecordResponse,
   type FederationSleepResumeConfirmations,
   type FederationStage16Status,
 } from "./index";
@@ -91,6 +92,10 @@ export function FederationHubPanel(props: { baseUrl: string }) {
   const [actorPreflightActor, setActorPreflightActor] = useState(DEFAULT_FEDERATION_SLEEP_RESUME_CONFIRMATION_ACTOR);
   const [actorReadinessAutoCheckedActor, setActorReadinessAutoCheckedActor] = useState("");
   const [actorReadinessLoading, setActorReadinessLoading] = useState(false);
+  const [sleepResumeAcknowledged, setSleepResumeAcknowledged] = useState(false);
+  const [receiptMutationLoading, setReceiptMutationLoading] = useState(false);
+  const [receiptMutationResult, setReceiptMutationResult] =
+    useState<FederationSleepResumeConfirmationRecordResponse | null>(null);
   const [presentation, setPresentation] = useState<FederationSleepContinuityPresentation | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -198,6 +203,36 @@ export function FederationHubPanel(props: { baseUrl: string }) {
   const visiblePostResumeSequenceCommand = visibleOperatorCommands.post_resume_sequence_copyable_command;
   const visiblePostResumeReceiptBackedSequenceCommand =
     visibleOperatorCommands.post_resume_receipt_backed_sequence_copyable_command;
+  const currentPreSleepEvidencePath =
+    confirmations?.current_pre_sleep_evidence_path ?? recordString(latestPreSleepEvidence, "evidence_path") ?? "";
+  const receiptRecordReady =
+    Boolean(status?.sleep_continuity_confirmation_receipt_command_ready) &&
+    Boolean(status?.sleep_continuity_confirmation_receipt_requested_actor_ready) &&
+    Boolean(currentPreSleepEvidencePath) &&
+    !Boolean(status?.sleep_continuity_receipt_backed_sequence_ready);
+  const receiptRecordDisabled = receiptMutationLoading || !sleepResumeAcknowledged || !receiptRecordReady;
+
+  const recordSleepResumeConfirmation = useCallback(async () => {
+    if (receiptRecordDisabled) return;
+    setReceiptMutationLoading(true);
+    setError(null);
+    try {
+      const result = await client.recordSleepResumeConfirmation({
+        actor: actorPreflightActor,
+        reason: "operator_confirmed_physical_sleep_resume_from_federation_hub",
+        preSleepEvidencePath: currentPreSleepEvidencePath,
+        operatorConfirmedSleepResume: true,
+        timeoutMs: 10_000,
+      });
+      setReceiptMutationResult(result);
+      setSleepResumeAcknowledged(false);
+      await refresh();
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setReceiptMutationLoading(false);
+    }
+  }, [actorPreflightActor, client, currentPreSleepEvidencePath, receiptRecordDisabled, refresh]);
 
   return (
     <section style={panelStyle}>
@@ -456,6 +491,35 @@ export function FederationHubPanel(props: { baseUrl: string }) {
               ) : null}
             </>
           ) : null}
+          <div style={{ marginTop: 8 }}>
+            <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 11, color: MUTED }}>
+              <input
+                type="checkbox"
+                checked={sleepResumeAcknowledged}
+                onChange={(event) => setSleepResumeAcknowledged(event.target.checked)}
+                disabled={!receiptRecordReady || receiptMutationLoading}
+              />
+              <span>
+                I confirm this workstation slept or suspended after the current pre-sleep marker and resumed before
+                continuing.
+              </span>
+            </label>
+            <button
+              style={{ ...buttonStyle, marginTop: 8 }}
+              onClick={() => void recordSleepResumeConfirmation()}
+              disabled={receiptRecordDisabled}
+            >
+              {receiptMutationLoading ? "Recording" : "Record Confirmation Receipt"}
+            </button>
+            {receiptMutationResult ? (
+              <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
+                recorded receipt <code>{codeValue(receiptMutationResult.receipt_id)}</code>
+                {" / "}status <code>{codeValue(receiptMutationResult.status)}</code>
+                {" / "}writes evidence <code>{yesNo(receiptMutationResult.writes_evidence)}</code>
+                {" / "}marks closed <code>{yesNo(receiptMutationResult.marks_stage16_closed)}</code>
+              </div>
+            ) : null}
+          </div>
           {confirmations.current_pre_sleep_evidence_path ? (
             <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
               current pre path <code>{confirmations.current_pre_sleep_evidence_path}</code>

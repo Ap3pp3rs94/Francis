@@ -14,6 +14,7 @@ import {
   parseFederationSleepContinuityAction,
   parseFederationSleepContinuityRunbook,
   parseFederationSleepResumeConfirmationActorReadiness,
+  parseFederationSleepResumeConfirmationRecordResponse,
   parseFederationSleepResumeConfirmations,
   parseFederationStage16Status,
   parseFederationStage16ClosureDecisions,
@@ -1205,6 +1206,131 @@ test("FederationClient reads sleep-resume confirmation actor readiness without m
   } finally {
     restoreFetch();
   }
+});
+
+test("FederationClient records sleep-resume confirmation receipt through governed POST", async () => {
+  const requests: Array<{
+    path: string;
+    method: string;
+    actor?: string;
+    operatorConfirmedSleepResume?: boolean;
+    preSleepEvidencePath?: string;
+  }> = [];
+  const restoreFetch = installFetch(async (url, init) => {
+    const parsed = new URL(url);
+    const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+    requests.push({
+      path: parsed.pathname,
+      method: (init?.method ?? "GET").toUpperCase(),
+      actor: typeof body.actor === "string" ? body.actor : undefined,
+      operatorConfirmedSleepResume:
+        typeof body.operator_confirmed_sleep_resume === "boolean"
+          ? body.operator_confirmed_sleep_resume
+          : undefined,
+      preSleepEvidencePath: typeof body.pre_sleep_evidence_path === "string" ? body.pre_sleep_evidence_path : undefined,
+    });
+    assert.equal(init?.method, "POST");
+    assert.equal(parsed.pathname, "/federation/sleep-resume-confirmation");
+    return jsonResponse({
+      ok: true,
+      kind: "francis.stage16.federation.sleep_resume_operator_confirmation.record",
+      status: "recorded",
+      source_id: "federation",
+      target: "stage16_sleep_continuity",
+      receipt_id: "fedsleepconfirm_ui_record",
+      decision: "operator_confirmed_sleep_resume",
+      writes_receipt: true,
+      writes_evidence: false,
+      writes_runtime_readback: false,
+      marks_stage16_closed: false,
+      grants_execution_authority: false,
+      grants_mutation_authority: false,
+      receipt: {
+        receipt_id: "fedsleepconfirm_ui_record",
+        actor: "test.federation.sleep",
+        decision: "operator_confirmed_sleep_resume",
+        operator_confirmed_sleep_resume: true,
+        pre_sleep_evidence_path:
+          "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json",
+        pre_sleep_recorded_ts: 1_800_030_000,
+        continuity_record_id: "stage16-sleep-continuity-test",
+        trace_id: "trace-stage16-sleep-continuity-test",
+        recorded_ts: 1_800_030_360,
+      },
+      next_smallest_truthful_gap: "stage16_sleep_continuity_runtime_readback",
+    });
+  });
+
+  try {
+    const client = new FederationClient("http://127.0.0.1:8000");
+    const response = await client.recordSleepResumeConfirmation({
+      actor: "test.federation.sleep",
+      reason: "operator confirmed physical sleep/resume in UI",
+      operatorConfirmedSleepResume: true,
+      preSleepEvidencePath:
+        "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json",
+      timeoutMs: 50,
+    });
+
+    assert.deepEqual(requests, [
+      {
+        path: "/federation/sleep-resume-confirmation",
+        method: "POST",
+        actor: "test.federation.sleep",
+        operatorConfirmedSleepResume: true,
+        preSleepEvidencePath:
+          "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json",
+      },
+    ]);
+    assert.equal(response.ok, true);
+    assert.equal(response.status, "recorded");
+    assert.equal(response.receipt_id, "fedsleepconfirm_ui_record");
+    assert.equal(response.decision, "operator_confirmed_sleep_resume");
+    assert.equal(response.writes_receipt, true);
+    assert.equal(response.writes_evidence, false);
+    assert.equal(response.writes_runtime_readback, false);
+    assert.equal(response.marks_stage16_closed, false);
+    assert.equal(response.grants_execution_authority, false);
+    assert.equal(response.grants_mutation_authority, false);
+    assert.equal(response.receipt?.actor, "test.federation.sleep");
+    assert.equal(response.receipt?.operator_confirmed_sleep_resume, true);
+    assert.equal(response.next_smallest_truthful_gap, "stage16_sleep_continuity_runtime_readback");
+  } finally {
+    restoreFetch();
+  }
+});
+
+test("parseFederationSleepResumeConfirmationRecordResponse preserves receipt guards", () => {
+  const response = parseFederationSleepResumeConfirmationRecordResponse({
+    ok: true,
+    status: "recorded",
+    receipt_id: "fedsleepconfirm_parse",
+    decision: "operator_confirmed_sleep_resume",
+    writes_receipt: true,
+    writes_evidence: false,
+    writes_runtime_readback: false,
+    marks_stage16_closed: false,
+    grants_execution_authority: false,
+    grants_mutation_authority: false,
+    receipt: {
+      receipt_id: "fedsleepconfirm_parse",
+      actor: "test.federation.sleep",
+      decision: "operator_confirmed_sleep_resume",
+      operator_confirmed_sleep_resume: true,
+      pre_sleep_recorded_ts: 1_800_030_000,
+      recorded_ts: 1_800_030_360,
+    },
+    next_smallest_truthful_gap: "stage16_sleep_continuity_runtime_readback",
+  });
+
+  assert.equal(response.status, "recorded");
+  assert.equal(response.receipt_id, "fedsleepconfirm_parse");
+  assert.equal(response.writes_receipt, true);
+  assert.equal(response.writes_evidence, false);
+  assert.equal(response.writes_runtime_readback, false);
+  assert.equal(response.marks_stage16_closed, false);
+  assert.equal(response.receipt?.receipt_id, "fedsleepconfirm_parse");
+  assert.equal(response.receipt?.recorded_ts, 1_800_030_360);
 });
 
 test("isFederationSleepResumeConfirmationActorReadinessCurrent rejects stale actor-bound command state", () => {
