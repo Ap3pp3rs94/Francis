@@ -311,6 +311,8 @@ export type FederationSleepResumeConfirmations = {
   confirmation_receipt_command_requires_scope?: string;
   confirmation_receipt_command_requires_actor_substitution: boolean;
   confirmation_receipt_command_actor_scope?: string;
+  confirmation_receipt_actor_readiness_route?: string;
+  confirmation_receipt_actor_readiness_query_param?: string;
   confirmation_receipt_command_next_readback_route?: string;
   confirmation_receipt_command_receipt_id_readback_field?: string;
   confirmation_receipt_command_next_operator_step?: string;
@@ -534,6 +536,8 @@ export type FederationSleepContinuityOperatorConfirmationHandoff = {
   confirmation_receipt_command_requires_scope?: string;
   confirmation_receipt_command_requires_actor_substitution: boolean;
   confirmation_receipt_command_actor_scope?: string;
+  confirmation_receipt_actor_readiness_route?: string;
+  confirmation_receipt_actor_readiness_query_param?: string;
   confirmation_receipt_command_next_readback_route?: string;
   confirmation_receipt_command_receipt_id_readback_field?: string;
   confirmation_receipt_command_next_operator_step?: string;
@@ -908,6 +912,10 @@ function parseFederationSleepContinuityOperatorConfirmationHandoff(
       raw.confirmation_receipt_command_requires_actor_substitution,
     ),
     confirmation_receipt_command_actor_scope: optionalString(raw.confirmation_receipt_command_actor_scope),
+    confirmation_receipt_actor_readiness_route: optionalString(raw.confirmation_receipt_actor_readiness_route),
+    confirmation_receipt_actor_readiness_query_param: optionalString(
+      raw.confirmation_receipt_actor_readiness_query_param,
+    ),
     confirmation_receipt_command_next_readback_route: optionalString(
       raw.confirmation_receipt_command_next_readback_route,
     ),
@@ -1472,6 +1480,10 @@ export function parseFederationSleepResumeConfirmations(raw: unknown): Federatio
       body.confirmation_receipt_command_requires_actor_substitution,
     ),
     confirmation_receipt_command_actor_scope: optionalString(body.confirmation_receipt_command_actor_scope),
+    confirmation_receipt_actor_readiness_route: optionalString(body.confirmation_receipt_actor_readiness_route),
+    confirmation_receipt_actor_readiness_query_param: optionalString(
+      body.confirmation_receipt_actor_readiness_query_param,
+    ),
     confirmation_receipt_command_next_readback_route: optionalString(
       body.confirmation_receipt_command_next_readback_route,
     ),

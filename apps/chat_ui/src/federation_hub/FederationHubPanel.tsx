@@ -261,6 +261,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
           <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
             actor substitution <code>{yesNo(confirmations.confirmation_receipt_command_requires_actor_substitution)}</code>
             {" / "}actor scope <code>{codeValue(confirmations.confirmation_receipt_command_actor_scope)}</code>
+            {" / "}actor preflight <code>{codeValue(confirmations.confirmation_receipt_actor_readiness_route)}</code>
             {" / "}next readback <code>{codeValue(confirmations.confirmation_receipt_command_next_readback_route)}</code>
             {" / "}receipt field{" "}
             <code>{codeValue(confirmations.confirmation_receipt_command_receipt_id_readback_field)}</code>

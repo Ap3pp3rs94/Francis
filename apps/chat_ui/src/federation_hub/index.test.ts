@@ -671,6 +671,8 @@ test("parseFederationSleepResumeConfirmations preserves missing-receipt remedy c
     confirmation_receipt_command_requires_scope: "federation.stage16.sleep_resume.confirmation.write",
     confirmation_receipt_command_requires_actor_substitution: true,
     confirmation_receipt_command_actor_scope: "federation.stage16.sleep_resume.confirmation.write",
+    confirmation_receipt_actor_readiness_route: "/federation/sleep-resume-confirmation/actor-readiness",
+    confirmation_receipt_actor_readiness_query_param: "actor",
     confirmation_receipt_command_next_readback_route: "/federation/sleep-resume-confirmations",
     confirmation_receipt_command_receipt_id_readback_field: "latest_receipt_id",
     confirmation_receipt_command_next_operator_step: "refresh_sleep_resume_confirmations_for_current_receipt_id",
@@ -752,6 +754,11 @@ test("parseFederationSleepResumeConfirmations preserves missing-receipt remedy c
     confirmations.confirmation_receipt_command_actor_scope,
     "federation.stage16.sleep_resume.confirmation.write",
   );
+  assert.equal(
+    confirmations.confirmation_receipt_actor_readiness_route,
+    "/federation/sleep-resume-confirmation/actor-readiness",
+  );
+  assert.equal(confirmations.confirmation_receipt_actor_readiness_query_param, "actor");
   assert.equal(
     confirmations.confirmation_receipt_command_next_readback_route,
     "/federation/sleep-resume-confirmations",

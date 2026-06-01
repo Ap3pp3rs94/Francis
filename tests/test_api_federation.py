@@ -1534,6 +1534,11 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
         == "federation.stage16.sleep_resume.confirmation.write"
     )
     assert (
+        confirmation_handoff["confirmation_receipt_actor_readiness_route"]
+        == "/federation/sleep-resume-confirmation/actor-readiness"
+    )
+    assert confirmation_handoff["confirmation_receipt_actor_readiness_query_param"] == "actor"
+    assert (
         confirmation_handoff["confirmation_receipt_command_next_readback_route"]
         == "/federation/sleep-resume-confirmations"
     )
@@ -1626,7 +1631,81 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert action["mutation_available_from_ui"] is False
     assert action["routes"]["sleep_resume_confirmation"] == "/federation/sleep-resume-confirmation"
     assert action["routes"]["sleep_resume_confirmations"] == "/federation/sleep-resume-confirmations"
+    assert action["routes"]["sleep_resume_confirmation_actor_readiness"] == (
+        "/federation/sleep-resume-confirmation/actor-readiness"
+    )
     assert action["next_smallest_truthful_gap"] == "stage16_sleep_continuity_runtime_readback"
+
+
+def test_federation_stage16_sleep_resume_confirmation_actor_readiness_is_read_only(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    placeholder_actor = "<actor_with_federation.stage16.sleep_resume.confirmation.write>"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps(
+            {
+                placeholder_actor: ["federation.stage16.sleep_resume.confirmation.write"],
+                "test.federation.sleep": ["federation.stage16.sleep_resume.confirmation.write"],
+                "test.federation.write": ["federation.write"],
+            }
+        ),
+    )
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    missing = client.get("/federation/sleep-resume-confirmation/actor-readiness").json()
+    assert missing["ok"] is True
+    assert missing["kind"] == "francis.stage16.federation.sleep_resume_operator_confirmation_actor_readiness"
+    assert missing["status"] == "actor_missing"
+    assert missing["confirmation_receipt_actor_ready"] is False
+    assert missing["safe_to_use_in_confirmation_command"] is False
+    assert missing["writes_receipt"] is False
+    assert missing["writes_evidence"] is False
+    assert missing["marks_stage16_closed"] is False
+
+    placeholder = client.get(
+        "/federation/sleep-resume-confirmation/actor-readiness",
+        params={"actor": placeholder_actor},
+    ).json()
+    assert placeholder["status"] == "placeholder_actor_rejected"
+    assert placeholder["actor_placeholder_rejected"] is True
+    assert placeholder["permission_allowed"] is True
+    assert placeholder["confirmation_receipt_actor_ready"] is False
+    assert placeholder["safe_to_use_in_confirmation_command"] is False
+    assert placeholder["next_step"] == "replace_actor_placeholder_with_scoped_operator_or_delegated_builder_actor"
+    assert placeholder["governance"]["rejects_placeholder_actor"] is True
+
+    unscoped = client.get(
+        "/federation/sleep-resume-confirmation/actor-readiness",
+        params={"actor": "test.federation.write"},
+    ).json()
+    assert unscoped["status"] == "actor_scope_missing"
+    assert unscoped["permission_allowed"] is False
+    assert unscoped["required_scope"] == "federation.stage16.sleep_resume.confirmation.write"
+    assert unscoped["confirmation_receipt_actor_ready"] is False
+
+    scoped = client.get(
+        "/federation/sleep-resume-confirmation/actor-readiness",
+        params={"actor": "test.federation.sleep"},
+    ).json()
+    assert scoped["status"] == "actor_ready_for_sleep_resume_confirmation"
+    assert scoped["permission_allowed"] is True
+    assert scoped["confirmation_receipt_actor_ready"] is True
+    assert scoped["safe_to_use_in_confirmation_command"] is True
+    assert scoped["target_route"] == "/federation/sleep-resume-confirmation"
+    assert scoped["readiness_route"] == "/federation/sleep-resume-confirmation/actor-readiness"
+    assert scoped["governance"]["actor_scope_preflight"] is True
+    assert scoped["governance"]["does_not_write_receipts"] is True
+    assert scoped["governance"]["does_not_mark_stage16_closed"] is True
+    assert not (data_root / "logs" / "federation" / "stage16_sleep_resume_operator_confirmations.jsonl").exists()
 
 
 def test_federation_stage16_sleep_resume_confirmation_denies_without_scope(monkeypatch, tmp_path: Path) -> None:
@@ -1771,6 +1850,10 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
         empty_readback["confirmation_receipt_command_actor_scope"]
         == "federation.stage16.sleep_resume.confirmation.write"
     )
+    assert empty_readback["confirmation_receipt_actor_readiness_route"] == (
+        "/federation/sleep-resume-confirmation/actor-readiness"
+    )
+    assert empty_readback["confirmation_receipt_actor_readiness_query_param"] == "actor"
     assert (
         empty_readback["confirmation_receipt_command_next_readback_route"] == "/federation/sleep-resume-confirmations"
     )

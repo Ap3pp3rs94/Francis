@@ -53723,6 +53723,65 @@ Latest validation for Stage 16 sleep confirmation placeholder rejection:
   placeholder_actor_rejected=true,
   requires_real_scoped_actor=true`.
 
+### 2026-06-01 - Stage 16 sleep confirmation actor readiness preflight is read-only
+
+Roadmap area: Stage 16 / Federation, workstation sleep-continuity operator
+confirmation receipt safety.
+
+Material change:
+
+- Added read-only `GET
+  /federation/sleep-resume-confirmation/actor-readiness` to preflight whether
+  a substituted operator or delegated builder actor can write a sleep/resume
+  confirmation receipt before the receipt command is run.
+- The preflight distinguishes missing actor, placeholder actor, actor missing
+  `federation.stage16.sleep_resume.confirmation.write`, and actor ready for
+  the confirmation command.
+- The existing sleep confirmation command projections now expose the actor
+  readiness route and `actor` query parameter.
+- Federation Hub preserves and displays the actor readiness route in the sleep
+  confirmation receipt panel.
+- The preflight is read-only: it checks the permission gate but does not write
+  receipts, evidence, runtime readbacks, registry state, memory, authority, or
+  Stage 16 closure state.
+
+Latest validation for Stage 16 sleep confirmation actor readiness preflight:
+
+- `python -m pytest tests/test_api_federation.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed`.
+- `npm run test -- federation_hub`
+  Result: `passed; 189 passed`.
+- `npm run build`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`.
+- `npx tsc --noEmit --pretty false 2>&1 | Select-String
+  "src/federation_hub/FederationHubPanel.tsx"`
+  Result: `passed; no_federation_panel_tsc_diagnostics`. Full repository
+  `tsc --noEmit` remains blocked by pre-existing unrelated strictness errors
+  outside this slice.
+- Live readback via `TestClient` for `GET
+  /federation/sleep-resume-confirmation/actor-readiness`
+  Result: `passed;
+  missing_actor_status=actor_missing,
+  placeholder_actor_status=placeholder_actor_rejected,
+  placeholder_permission_allowed=true,
+  unscoped_actor_status=actor_scope_missing,
+  scoped_actor_status=actor_ready_for_sleep_resume_confirmation,
+  scoped_actor_safe_to_use=true,
+  writes_receipt=false,
+  marks_stage16_closed=false`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
