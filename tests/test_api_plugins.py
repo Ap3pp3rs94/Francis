@@ -690,6 +690,61 @@ def test_plugins_capability_pack_migration_plan_projects_review_candidates(monke
     assert candidate["suggested_pack_governance"]["execution_authority"] is False
 
 
+def test_plugins_capability_pack_quality_standards_projects_pack_evidence(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    meta = {
+        **_forge_promotion_meta("capability_quality_standards"),
+        "pack_id": "ops.quality_standards",
+        "pack_version": "1.0.0",
+        "pack_name": "Ops Quality Standards Pack",
+        "known_limits": ["local_only"],
+    }
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Capability Quality Standards Plugin",
+            "description": "Stage 17 quality standards coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": meta,
+        },
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    plugin_id = str(built_body["plugin_id"])
+
+    response = client.get("/plugins/capabilities/packs/quality/standards")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "plugin.capability_pack.quality_standards"
+    assert body["stage"] == "Stage 17 / Capability Economy"
+    assert body["standards"]["tests_required"] is True
+    assert body["standards"]["docs_required"] is True
+    assert body["standards"]["validation_receipts_required_for_generated"] is True
+    assert body["governance"]["read_only"] is True
+    assert body["governance"]["does_not_promote_capabilities"] is True
+
+    pack = next(item for item in body["packs"] if item["pack_id"] == "ops.quality_standards")
+    assert pack["ready"] is True
+    assert pack["blockers"] == []
+    assert pack["tested_count"] == 1
+    assert pack["documented_count"] == 1
+    assert pack["validation_receipt_count"] == 1
+    assert pack["proposal_lineage_count"] == 1
+    assert pack["known_limits_count"] == 1
+    assert pack["failing_capabilities_sample"] == []
+    assert all(item["capability"] != plugin_id for item in pack["failing_capabilities_sample"])
+
+
 def test_plugins_capability_pack_metadata_receipt_expands_reviewed_migration_plan_candidate(
     monkeypatch,
     tmp_path: Path,

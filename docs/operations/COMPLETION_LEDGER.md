@@ -56114,6 +56114,59 @@ Validation risk:
 - Full local pytest was not rerun because focused pytest commands were already
   stalling in this workspace; GitHub CI remains the full-suite evidence gate.
 
+### 2026-06-01 - Stage 17 capability pack quality standards are readable
+
+Roadmap area: Stage 17 / Capability Economy, tested and documented capability
+packs with validation and lineage readback.
+
+Material change:
+
+- Added a read-only capability pack quality standards analyzer for Stage 17.
+- Added `GET /plugins/capabilities/packs/quality/standards`, which reports
+  pack-level tests, docs, validation receipts, proposal lineage, promotion
+  receipts, known limits, risk tiers, blockers, and a bounded failing
+  capability sample.
+- The projection does not write receipts, mutate registry state, promote
+  capabilities, execute capabilities, or grant approval authority.
+- The chat UI API contract endpoint list now includes the quality standards
+  route.
+
+Latest validation for Stage 17 capability pack quality standards:
+
+- Direct FastAPI `TestClient` validation of `/plugins/build` followed by
+  `GET /plugins/capabilities/packs/quality/standards`
+  Result: `passed`; staged pack `ops.quality_standards_direct` read back
+  `ready=True`, with one test, one doc, one validation receipt, and one
+  proposal-lineage reference. The global next gap remained
+  `stage17_capability_pack_quality_tests` because legacy packs are still
+  missing quality evidence.
+- Direct invocation of the new unit test functions in
+  `tests/unit/test_capability_pack_quality_standards.py`
+  Result: `passed`.
+- `python -m mypy
+  src/francis/economy/markets/capability_pack_quality_standards.py
+  src/francis/api/routes/plugins.py`
+  Result: `passed`.
+- `python -m ruff check
+  src/francis/economy/markets/capability_pack_quality_standards.py
+  src/francis/economy/markets/__init__.py src/francis/economy/__init__.py
+  src/francis/api/routes/plugins.py
+  tests/unit/test_capability_pack_quality_standards.py
+  tests/test_api_plugins.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`.
+- `python -m ruff format --check
+  src/francis/economy/markets/capability_pack_quality_standards.py
+  src/francis/economy/markets/__init__.py src/francis/economy/__init__.py
+  src/francis/api/routes/plugins.py
+  tests/unit/test_capability_pack_quality_standards.py
+  tests/test_api_plugins.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`.
+
+Validation risk:
+
+- Full local pytest was not rerun because focused pytest commands were already
+  stalling in this workspace; GitHub CI remains the full-suite evidence gate.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
