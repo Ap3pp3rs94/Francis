@@ -5,6 +5,7 @@ import {
   FederationClient,
   parseFederationCompletionReview,
   parseFederationLiveRuntimeReadbacks,
+  parseFederationSleepContinuityAction,
   parseFederationSleepContinuityRunbook,
   parseFederationStage16Status,
   parseFederationStage16ClosureDecisions,
@@ -254,6 +255,55 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
       });
     }
 
+    if (parsed.pathname === "/federation/sleep-continuity-action") {
+      return jsonResponse({
+        ok: true,
+        kind: "francis.stage16.federation.sleep_continuity_action",
+        stage: "Stage 16 / Federation",
+        status: "blocked_on_prior_live_readbacks",
+        action_projection_only: true,
+        selected_step_id: "",
+        selected_action: {},
+        primary_command: "",
+        primary_route: "",
+        method: "",
+        required_scope: "",
+        evidence_path: "",
+        blockers: ["live_pairing_flow_observed", "workstation_sleep_continuity_validated"],
+        prior_live_readback_blockers: ["live_pairing_flow_observed"],
+        pre_sleep_evidence_ready: false,
+        post_resume_evidence_ready: true,
+        sleep_continuity_ready: false,
+        ready_to_close: false,
+        stage16_closed_by_receipt: false,
+        operator_action_required: false,
+        operator_confirmation_required: false,
+        writes_evidence_when_run: false,
+        writes_receipts_when_run: false,
+        mutation_available_from_ui: false,
+        writes_evidence: false,
+        writes_receipts: false,
+        writes_registry: false,
+        writes_memory: false,
+        runs_tools: false,
+        runs_shell: false,
+        runs_git: false,
+        launches_browser: false,
+        captures_screen: false,
+        grants_execution_authority: false,
+        grants_mutation_authority: false,
+        marks_stage16_closed: false,
+        governance: {
+          read_only: true,
+          action_projection_only: true,
+          prior_live_readback_blockers_take_precedence: true,
+          does_not_run_selected_command: true,
+          does_not_post_selected_route: true,
+        },
+        next_smallest_truthful_gap: "stage16_live_federation_runtime_readback",
+      });
+    }
+
     if (parsed.pathname === "/federation/stage-closure-decisions") {
       return jsonResponse({
         ok: true,
@@ -290,6 +340,7 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
     const readbacks = await client.getLiveRuntimeReadbacks({ limit: 5, timeoutMs: 50 });
     const review = await client.getCompletionReview({ timeoutMs: 50 });
     const runbook = await client.getSleepContinuityRunbook({ timeoutMs: 50 });
+    const action = await client.getSleepContinuityAction({ timeoutMs: 50 });
     const closure = await client.getStageClosureDecisions({ limit: 5, timeoutMs: 50 });
     const presentation = await client.getSleepContinuityPresentation({ timeoutMs: 50 });
 
@@ -298,6 +349,7 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
       { path: "/federation/live-runtime-readbacks", method: "GET", limit: "5" },
       { path: "/federation/completion-review", method: "GET", limit: null },
       { path: "/federation/sleep-continuity-runbook", method: "GET", limit: null },
+      { path: "/federation/sleep-continuity-action", method: "GET", limit: null },
       { path: "/federation/stage-closure-decisions", method: "GET", limit: "5" },
       { path: "/federation/status", method: "GET", limit: null },
       { path: "/federation/sleep-continuity-runbook", method: "GET", limit: null },
@@ -380,6 +432,24 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
     assert.equal(runbook.marks_stage16_closed, false);
     assert.equal(runbook.next_smallest_truthful_gap, "stage16_sleep_continuity_runtime_readback");
 
+    assert.equal(action.kind, "francis.stage16.federation.sleep_continuity_action");
+    assert.equal(action.status, "blocked_on_prior_live_readbacks");
+    assert.equal(action.action_projection_only, true);
+    assert.equal(action.selected_step_id, undefined);
+    assert.equal(action.selected_action, undefined);
+    assert.deepEqual(action.blockers, ["live_pairing_flow_observed", "workstation_sleep_continuity_validated"]);
+    assert.deepEqual(action.prior_live_readback_blockers, ["live_pairing_flow_observed"]);
+    assert.equal(action.post_resume_evidence_ready, true);
+    assert.equal(action.operator_confirmation_required, false);
+    assert.equal(action.writes_evidence_when_run, false);
+    assert.equal(action.writes_receipts_when_run, false);
+    assert.equal(action.mutation_available_from_ui, false);
+    assert.equal(action.runs_shell, false);
+    assert.equal(action.grants_mutation_authority, false);
+    assert.equal(action.governance?.prior_live_readback_blockers_take_precedence, true);
+    assert.equal(action.governance?.does_not_run_selected_command, true);
+    assert.equal(action.next_smallest_truthful_gap, "stage16_live_federation_runtime_readback");
+
     assert.equal(closure.status, "empty");
     assert.equal(closure.count, 0);
     assert.equal(closure.total, 0);
@@ -408,6 +478,75 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
   } finally {
     restoreFetch();
   }
+});
+
+test("federation sleep-continuity action parser preserves selected read-only step", () => {
+  const action = parseFederationSleepContinuityAction({
+    ok: true,
+    kind: "francis.stage16.federation.sleep_continuity_action",
+    stage: "Stage 16 / Federation",
+    status: "capture_post_resume_evidence",
+    action_projection_only: true,
+    selected_step_id: "capture_post_resume_evidence",
+    selected_action: {
+      id: "capture_post_resume_evidence",
+      command:
+        'scripts/federation-stage16-sleep-continuity-evidence.ps1 -Mode PostResume -CommitEvidence -PreSleepEvidencePath "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json" -OperatorConfirmedSleepResume',
+      pre_sleep_evidence_required: true,
+      pre_sleep_evidence_available: true,
+      post_resume_evidence_required: false,
+      post_resume_evidence_available: false,
+      operator_action_required: true,
+      operator_confirmation_required: true,
+      writes_evidence_when_run: true,
+      writes_receipts_when_run: false,
+    },
+    primary_command:
+      'scripts/federation-stage16-sleep-continuity-evidence.ps1 -Mode PostResume -CommitEvidence -PreSleepEvidencePath "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json" -OperatorConfirmedSleepResume',
+    blockers: ["workstation_sleep_continuity_validated"],
+    prior_live_readback_blockers: [],
+    pre_sleep_evidence_ready: true,
+    post_resume_evidence_ready: false,
+    sleep_continuity_ready: false,
+    ready_to_close: false,
+    stage16_closed_by_receipt: false,
+    operator_action_required: true,
+    operator_confirmation_required: true,
+    writes_evidence_when_run: true,
+    writes_receipts_when_run: false,
+    mutation_available_from_ui: false,
+    writes_evidence: false,
+    writes_receipts: false,
+    writes_registry: false,
+    writes_memory: false,
+    runs_tools: false,
+    runs_shell: false,
+    runs_git: false,
+    launches_browser: false,
+    captures_screen: false,
+    grants_execution_authority: false,
+    grants_mutation_authority: false,
+    marks_stage16_closed: false,
+    governance: {
+      read_only: true,
+      action_projection_only: true,
+      does_not_run_selected_command: true,
+      does_not_post_selected_route: true,
+    },
+    next_smallest_truthful_gap: "stage16_sleep_continuity_runtime_readback",
+  });
+
+  assert.equal(action.status, "capture_post_resume_evidence");
+  assert.equal(action.selected_step_id, "capture_post_resume_evidence");
+  assert.equal(action.selected_action?.id, "capture_post_resume_evidence");
+  assert.equal(action.selected_action?.operator_confirmation_required, true);
+  assert.equal(action.primary_command?.includes("-OperatorConfirmedSleepResume"), true);
+  assert.deepEqual(action.prior_live_readback_blockers, []);
+  assert.equal(action.mutation_available_from_ui, false);
+  assert.equal(action.writes_evidence, false);
+  assert.equal(action.runs_shell, false);
+  assert.equal(action.grants_execution_authority, false);
+  assert.equal(action.governance?.does_not_post_selected_route, true);
 });
 
 test("federation Stage 16 parsers preserve ready receipt-backed posture", () => {

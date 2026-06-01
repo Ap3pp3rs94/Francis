@@ -51917,6 +51917,33 @@ Latest validation for Stage 16 sleep-continuity action readback:
   selected_step_id=capture_post_resume_evidence;
   mutation_available_from_ui=false`.
 
+### 2026-06-01 - Stage 16 sleep-continuity action is in the UI client contract
+
+Roadmap area: Stage 16 / Federation, workstation sleep continuity runtime
+readback.
+
+Material change:
+
+- `apps/chat_ui/src/federation_hub/index.ts` now includes a typed
+  `FederationSleepContinuityActionReadback` parser for
+  `/federation/sleep-continuity-action`.
+- `FederationClient` now exposes `getSleepContinuityAction(...)` as a direct
+  read-only client method for the backend action projection.
+- The UI contract test now exercises the backend action route and proves it
+  preserves prior-live-readback blockers, selected action metadata, governance
+  flags, and no-mutation/no-shell/no-authority guards.
+- This remains read-only. It does not run commands, write evidence, write
+  receipts, write registry state, write memory, grant execution authority,
+  grant mutation authority, infer workstation sleep/resume, or mark Stage 16
+  closed.
+
+Latest validation for Stage 16 sleep-continuity action UI client contract:
+
+- `cd apps/chat_ui; npm run test -- federation_hub`
+  Result: `passed; 187 passed`.
+- `cd apps/chat_ui; npm run build`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

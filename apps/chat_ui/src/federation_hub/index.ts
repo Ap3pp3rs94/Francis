@@ -325,6 +325,47 @@ export type FederationSleepContinuityPresentation = {
   next_smallest_truthful_gap?: string;
 };
 
+export type FederationSleepContinuityActionReadback = {
+  ok: boolean;
+  kind?: string;
+  stage?: string;
+  status?: FederationSleepContinuityActionState | string;
+  action_projection_only: boolean;
+  selected_step_id?: string;
+  selected_action?: FederationSleepContinuityRunbookStep;
+  primary_command?: string;
+  primary_route?: string;
+  method?: string;
+  required_scope?: string;
+  evidence_path?: string;
+  blockers: string[];
+  prior_live_readback_blockers: string[];
+  pre_sleep_evidence_ready: boolean;
+  post_resume_evidence_ready: boolean;
+  sleep_continuity_ready: boolean;
+  ready_to_close: boolean;
+  stage16_closed_by_receipt: boolean;
+  operator_action_required: boolean;
+  operator_confirmation_required: boolean;
+  writes_evidence_when_run: boolean;
+  writes_receipts_when_run: boolean;
+  mutation_available_from_ui: boolean;
+  writes_evidence: boolean;
+  writes_receipts: boolean;
+  writes_registry: boolean;
+  writes_memory: boolean;
+  runs_tools: boolean;
+  runs_shell: boolean;
+  runs_git: boolean;
+  launches_browser: boolean;
+  captures_screen: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+  marks_stage16_closed: boolean;
+  governance?: Record<string, unknown>;
+  next_smallest_truthful_gap?: string;
+};
+
 export type FederationListResponse<T> = { items: T[] };
 
 export class FederationApiError extends Error {
@@ -842,6 +883,51 @@ export function parseFederationSleepContinuityRunbook(raw: unknown): FederationS
   };
 }
 
+export function parseFederationSleepContinuityAction(raw: unknown): FederationSleepContinuityActionReadback {
+  const body = isRecord(raw) ? raw : {};
+  const selectedAction = parseFederationSleepContinuityRunbookStep(body.selected_action);
+  return {
+    ok: safeBoolean(body.ok),
+    kind: optionalString(body.kind),
+    stage: optionalString(body.stage),
+    status: optionalString(body.status),
+    action_projection_only: safeBoolean(body.action_projection_only),
+    selected_step_id: optionalString(body.selected_step_id),
+    selected_action: selectedAction ?? undefined,
+    primary_command: optionalString(body.primary_command),
+    primary_route: optionalString(body.primary_route),
+    method: optionalString(body.method),
+    required_scope: optionalString(body.required_scope),
+    evidence_path: optionalString(body.evidence_path),
+    blockers: stringList(body.blockers),
+    prior_live_readback_blockers: stringList(body.prior_live_readback_blockers),
+    pre_sleep_evidence_ready: safeBoolean(body.pre_sleep_evidence_ready),
+    post_resume_evidence_ready: safeBoolean(body.post_resume_evidence_ready),
+    sleep_continuity_ready: safeBoolean(body.sleep_continuity_ready),
+    ready_to_close: safeBoolean(body.ready_to_close),
+    stage16_closed_by_receipt: safeBoolean(body.stage16_closed_by_receipt),
+    operator_action_required: safeBoolean(body.operator_action_required),
+    operator_confirmation_required: safeBoolean(body.operator_confirmation_required),
+    writes_evidence_when_run: safeBoolean(body.writes_evidence_when_run),
+    writes_receipts_when_run: safeBoolean(body.writes_receipts_when_run),
+    mutation_available_from_ui: safeBoolean(body.mutation_available_from_ui),
+    writes_evidence: safeBoolean(body.writes_evidence),
+    writes_receipts: safeBoolean(body.writes_receipts),
+    writes_registry: safeBoolean(body.writes_registry),
+    writes_memory: safeBoolean(body.writes_memory),
+    runs_tools: safeBoolean(body.runs_tools),
+    runs_shell: safeBoolean(body.runs_shell),
+    runs_git: safeBoolean(body.runs_git),
+    launches_browser: safeBoolean(body.launches_browser),
+    captures_screen: safeBoolean(body.captures_screen),
+    grants_execution_authority: safeBoolean(body.grants_execution_authority),
+    grants_mutation_authority: safeBoolean(body.grants_mutation_authority),
+    marks_stage16_closed: safeBoolean(body.marks_stage16_closed),
+    governance: isRecord(body.governance) ? body.governance : undefined,
+    next_smallest_truthful_gap: optionalString(body.next_smallest_truthful_gap),
+  };
+}
+
 function findFederationSleepContinuityStep(
   runbook: FederationSleepContinuityRunbook | undefined,
   id: string,
@@ -962,6 +1048,7 @@ export type FederationEndpoints = {
   status: () => string;
   completionReview: () => string;
   sleepContinuityRunbook: () => string;
+  sleepContinuityAction: () => string;
   stageClosureDecisions: (q?: { limit?: number }) => string;
   liveRuntimeReadbacks: (q?: { limit?: number }) => string;
 
@@ -987,6 +1074,7 @@ export function defaultFederationEndpoints(): FederationEndpoints {
     status: () => "/federation/status",
     completionReview: () => "/federation/completion-review",
     sleepContinuityRunbook: () => "/federation/sleep-continuity-runbook",
+    sleepContinuityAction: () => "/federation/sleep-continuity-action",
     stageClosureDecisions: (q) => `/federation/stage-closure-decisions${buildQuery({ limit: q?.limit })}`,
     liveRuntimeReadbacks: (q) => `/federation/live-runtime-readbacks${buildQuery({ limit: q?.limit })}`,
 
@@ -1091,6 +1179,18 @@ export class FederationClient {
       timeoutMs: opts?.timeoutMs ?? this.defaultTimeoutMs,
     });
     return parseFederationSleepContinuityRunbook(json);
+  }
+
+  async getSleepContinuityAction(opts?: {
+    signal?: AbortSignal;
+    timeoutMs?: number;
+  }): Promise<FederationSleepContinuityActionReadback> {
+    const json = await fetchJson(this.url(this.endpoints.sleepContinuityAction()), {
+      method: "GET",
+      signal: opts?.signal,
+      timeoutMs: opts?.timeoutMs ?? this.defaultTimeoutMs,
+    });
+    return parseFederationSleepContinuityAction(json);
   }
 
   async getStageClosureDecisions(opts?: {
