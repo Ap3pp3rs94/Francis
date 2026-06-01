@@ -1106,6 +1106,14 @@ def stage16_sleep_continuity_runbook() -> dict[str, Any]:
     ready_to_close = bool(review.get("ready_to_close"))
     stage16_closed_by_receipt = bool(closure.get("stage16_closed_by_receipt"))
     missing_readbacks = _parse_list(live_readbacks.get("missing_readbacks"))
+    selected_action_summary = _stage16_sleep_continuity_status_action_summary(
+        completion_review_blockers=_parse_list(review.get("blockers")),
+        pre_sleep_evidence_ready=bool(latest_pre_sleep_evidence.get("present")),
+        post_resume_evidence_ready=bool(latest_post_resume_evidence.get("present")),
+        post_resume_evidence_conflict=post_resume_evidence_conflict,
+        sleep_continuity_ready=sleep_continuity_ready,
+        completion_ready=ready_to_close,
+    )
 
     if stage16_closed_by_receipt:
         status_text = "stage16_closed_by_receipt"
@@ -1154,6 +1162,7 @@ def stage16_sleep_continuity_runbook() -> dict[str, Any]:
         "ready_to_close": ready_to_close,
         "stage16_closed_by_receipt": stage16_closed_by_receipt,
         "missing_readbacks": missing_readbacks,
+        "selected_action_summary": selected_action_summary,
         "current_readback": {
             "status": _safe_str(live_readbacks.get("status")).strip(),
             "ready_count": int(live_readbacks.get("ready_count") or 0),
@@ -1189,6 +1198,7 @@ def stage16_sleep_continuity_runbook() -> dict[str, Any]:
             "does_not_infer_sleep_from_delay": True,
             "operator_confirmation_required": True,
             "requires_explicit_sleep_resume_confirmation": True,
+            "selected_action_summary_projected": True,
             "writes_evidence": False,
             "writes_receipts": False,
             "writes_registry": False,

@@ -116,6 +116,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
   const operatorTerminalInvocation = presentation?.operator_terminal_invocation;
   const operatorSleepResumeGate = presentation?.operator_sleep_resume_gate;
   const afterManualExecutionReadback = presentation?.after_manual_execution_readback;
+  const runbookSelectedActionSummary = runbook?.selected_action_summary;
 
   return (
     <section style={panelStyle}>
@@ -173,6 +174,13 @@ export function FederationHubPanel(props: { baseUrl: string }) {
           <div style={{ fontSize: 11, color: MUTED, marginTop: 8, overflowWrap: "anywhere" }}>
             next <code>{codeValue(status?.sleep_continuity_next_step)}</code>
           </div>
+          {runbookSelectedActionSummary ? (
+            <div style={{ fontSize: 11, color: MUTED, marginTop: 8, overflowWrap: "anywhere" }}>
+              runbook action <code>{codeValue(runbookSelectedActionSummary.selected_action_id)}</code>
+              {" / "}ready <code>{yesNo(runbookSelectedActionSummary.current_ready_to_run)}</code>
+              {" / "}confirmation pending <code>{yesNo(runbookSelectedActionSummary.operator_confirmation_pending)}</code>
+            </div>
+          ) : null}
         </div>
 
         <div style={{ border: `1px solid ${PANEL_BORDER}`, borderRadius: 10, padding: 10, background: "#121212" }}>

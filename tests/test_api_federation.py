@@ -1259,10 +1259,20 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert body["steps"][1]["pre_sleep_evidence_available"] is True
     assert body["steps"][2]["pre_sleep_evidence_available"] is True
     assert body["steps"][2]["post_resume_evidence_available"] is False
+    assert body["selected_action_summary"] == {
+        "selected_action_id": "capture_post_resume_evidence",
+        "current_ready_to_run": False,
+        "operator_confirmation_pending": True,
+        "post_confirmation_ready_to_capture": True,
+        "sleep_resume_confirmation_is_current_blocker": True,
+        "confirmation_blocker": "operator_confirmed_sleep_resume_missing",
+        "blocked_reason": "operator_confirmed_sleep_resume_missing",
+    }
     assert f'-PreSleepEvidencePath "{pre_sleep_path.resolve()}"' in body["steps"][1]["command"]
     assert f'-PreSleepEvidencePath "{pre_sleep_path.resolve()}"' in body["steps"][2]["command"]
     assert body["governance"]["read_only"] is True
     assert body["governance"]["reads_pre_sleep_evidence_metadata"] is True
+    assert body["governance"]["selected_action_summary_projected"] is True
     assert body["writes_receipts"] is False
     assert body["marks_stage16_closed"] is False
     assert not (data_root / "logs" / "federation" / "stage16_operator_stage_closure_decisions.jsonl").exists()
@@ -1458,6 +1468,15 @@ def test_federation_stage16_sleep_continuity_runbook_uses_linked_post_resume_mar
     assert body["post_resume_evidence"]["continuity_available_after_resume"] is True
     assert body["post_resume_evidence"]["writes_runtime_readback"] is False
     assert body["post_resume_evidence"]["marks_stage16_closed"] is False
+    assert body["selected_action_summary"] == {
+        "selected_action_id": "commit_sleep_continuity_readback",
+        "current_ready_to_run": True,
+        "operator_confirmation_pending": False,
+        "post_confirmation_ready_to_capture": False,
+        "sleep_resume_confirmation_is_current_blocker": False,
+        "confirmation_blocker": "",
+        "blocked_reason": "",
+    }
     assert f'-PostResumeEvidencePath "{post_resume_path.resolve()}"' in body["steps"][2]["command"]
     assert body["steps"][2]["post_resume_evidence_available"] is True
     assert body["governance"]["reads_post_resume_evidence_metadata"] is True

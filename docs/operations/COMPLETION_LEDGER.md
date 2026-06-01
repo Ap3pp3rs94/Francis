@@ -53136,6 +53136,51 @@ Latest validation for Stage 16 sleep status action summary:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 sleep runbook summarizes selected action readiness
+
+Roadmap area: Stage 16 / Federation, workstation sleep-continuity runbook
+truthfulness.
+
+Material change:
+
+- `/federation/sleep-continuity-runbook` now exposes
+  `selected_action_summary` so the read-only runbook states the selected action,
+  current runnable state, confirmation-pending state, post-confirmation capture
+  readiness, and any current confirmation blocker.
+- The summary is derived from the same current evidence and completion-review
+  blocker posture as `/federation/status`, but the runbook remains a read-only
+  planning surface.
+- Federation Hub preserves this runbook summary and displays it in the sleep
+  action panel alongside the status/action projections.
+- This does not run shell, write evidence, write receipts, infer sleep/resume,
+  grant authority, write memory, or mark Stage 16 closed.
+- Stage 16 remains open until operator-confirmed live workstation sleep/resume
+  evidence and receipt-backed completion/closure gates are satisfied.
+
+Latest validation for Stage 16 sleep runbook selected action summary:
+
+- `python -m pytest tests/test_api_federation.py -q --tb=short`
+  Result: `passed; 20 passed`.
+- `npm run test -- federation_hub`
+  Result: `passed; 188 passed`.
+- `npm run build`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- Live readback via `TestClient` for `/federation/sleep-continuity-runbook`
+  Result: `passed;
+  selected_action_id=capture_post_resume_evidence,
+  current_ready_to_run=false,
+  operator_confirmation_pending=true`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

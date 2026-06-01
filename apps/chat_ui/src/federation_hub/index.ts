@@ -273,6 +273,16 @@ export type FederationSleepContinuityRunbookStep = {
   payload_contract?: Record<string, unknown>;
 };
 
+export type FederationSleepContinuitySelectedActionSummary = {
+  selected_action_id?: string;
+  current_ready_to_run: boolean;
+  operator_confirmation_pending: boolean;
+  post_confirmation_ready_to_capture: boolean;
+  sleep_resume_confirmation_is_current_blocker: boolean;
+  confirmation_blocker?: string;
+  blocked_reason?: string;
+};
+
 export type FederationSleepContinuityRunbook = {
   ok: boolean;
   kind?: string;
@@ -294,6 +304,7 @@ export type FederationSleepContinuityRunbook = {
   current_readback?: Record<string, unknown>;
   completion_review?: Record<string, unknown>;
   stage_closure_decision?: Record<string, unknown>;
+  selected_action_summary?: FederationSleepContinuitySelectedActionSummary;
   steps: FederationSleepContinuityRunbookStep[];
   writes_evidence: boolean;
   writes_receipts: boolean;
@@ -1162,6 +1173,21 @@ function parseFederationSleepContinuityRunbookStep(raw: unknown): FederationSlee
   };
 }
 
+function parseFederationSleepContinuitySelectedActionSummary(
+  raw: unknown,
+): FederationSleepContinuitySelectedActionSummary | undefined {
+  if (!isRecord(raw)) return undefined;
+  return {
+    selected_action_id: optionalString(raw.selected_action_id),
+    current_ready_to_run: safeBoolean(raw.current_ready_to_run),
+    operator_confirmation_pending: safeBoolean(raw.operator_confirmation_pending),
+    post_confirmation_ready_to_capture: safeBoolean(raw.post_confirmation_ready_to_capture),
+    sleep_resume_confirmation_is_current_blocker: safeBoolean(raw.sleep_resume_confirmation_is_current_blocker),
+    confirmation_blocker: optionalString(raw.confirmation_blocker),
+    blocked_reason: optionalString(raw.blocked_reason),
+  };
+}
+
 export function parseFederationSleepContinuityRunbook(raw: unknown): FederationSleepContinuityRunbook {
   const body = isRecord(raw) ? raw : {};
   const steps = Array.isArray(body.steps)
@@ -1190,6 +1216,7 @@ export function parseFederationSleepContinuityRunbook(raw: unknown): FederationS
     current_readback: isRecord(body.current_readback) ? body.current_readback : undefined,
     completion_review: isRecord(body.completion_review) ? body.completion_review : undefined,
     stage_closure_decision: isRecord(body.stage_closure_decision) ? body.stage_closure_decision : undefined,
+    selected_action_summary: parseFederationSleepContinuitySelectedActionSummary(body.selected_action_summary),
     steps,
     writes_evidence: safeBoolean(body.writes_evidence),
     writes_receipts: safeBoolean(body.writes_receipts),

@@ -198,6 +198,15 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
           status: "empty",
           stage16_closed_by_receipt: false,
         },
+        selected_action_summary: {
+          selected_action_id: "commit_sleep_continuity_readback",
+          current_ready_to_run: true,
+          operator_confirmation_pending: false,
+          post_confirmation_ready_to_capture: false,
+          sleep_resume_confirmation_is_current_blocker: false,
+          confirmation_blocker: "",
+          blocked_reason: "",
+        },
         steps: [
           {
             id: "capture_pre_sleep_evidence",
@@ -429,6 +438,12 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
     assert.equal(runbook.ready_to_close, false);
     assert.equal(runbook.stage16_closed_by_receipt, false);
     assert.deepEqual(runbook.missing_readbacks, ["workstation_sleep_continuity_validated"]);
+    assert.equal(runbook.selected_action_summary?.selected_action_id, "commit_sleep_continuity_readback");
+    assert.equal(runbook.selected_action_summary?.current_ready_to_run, true);
+    assert.equal(runbook.selected_action_summary?.operator_confirmation_pending, false);
+    assert.equal(runbook.selected_action_summary?.post_confirmation_ready_to_capture, false);
+    assert.equal(runbook.selected_action_summary?.confirmation_blocker, undefined);
+    assert.equal(runbook.selected_action_summary?.blocked_reason, undefined);
     assert.deepEqual(
       runbook.steps.map((step) => step.id),
       [
