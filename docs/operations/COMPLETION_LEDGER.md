@@ -55015,6 +55015,34 @@ Latest validation for Stage 16 Hub confirmation receipt recording:
 - `npm run build`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 Hub explains confirmation receipt record readiness
+
+Roadmap area: Stage 16 / Federation, sleep-continuity confirmation receipt
+operator surface.
+
+Material change:
+
+- Federation Hub now computes a typed receipt-record readiness projection before
+  enabling the sleep/resume confirmation receipt action.
+- The projection exposes the bound actor, current pre-sleep evidence path,
+  receipt-write guard booleans, and explicit blockers such as missing operator
+  acknowledgement, missing actor readiness, missing pre-sleep path, unsafe
+  evidence writes, unsafe Stage 16 closure writes, or an already-ready
+  receipt-backed sequence.
+- The panel displays those readiness fields and blockers beside the governed
+  receipt button so the operator can see why the action is disabled before the
+  final physical sleep/resume step.
+- This remains UI/client truth hardening only: it did not execute the
+  receipt-writing mutation, capture evidence, write runtime readback, infer
+  physical sleep/resume, grant authority, or close Stage 16.
+
+Latest validation for Stage 16 Hub receipt record readiness:
+
+- `npm run test -- federation_hub`
+  Result: `passed; 197 passed`.
+- `npm run build`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

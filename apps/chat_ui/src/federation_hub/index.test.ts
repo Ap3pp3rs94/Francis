@@ -7,6 +7,7 @@ import {
   federationSleepContinuityVisibleOperatorCommands,
   federationSleepResumeConfirmationActorReadinessVisibleCommands,
   federationSleepResumeConfirmationVisibleCommands,
+  federationSleepResumeReceiptRecordReadiness,
   isFederationSleepContinuityOperatorCommandBlockedByPendingConfirmation,
   isFederationSleepResumeConfirmationActorReadinessCurrent,
   parseFederationCompletionReview,
@@ -1331,6 +1332,86 @@ test("parseFederationSleepResumeConfirmationRecordResponse preserves receipt gua
   assert.equal(response.marks_stage16_closed, false);
   assert.equal(response.receipt?.receipt_id, "fedsleepconfirm_parse");
   assert.equal(response.receipt?.recorded_ts, 1_800_030_360);
+});
+
+test("federationSleepResumeReceiptRecordReadiness gates UI receipt recording on acknowledgement", () => {
+  const status = parseFederationStage16Status({
+    ok: true,
+    latest_pre_sleep_evidence: {
+      evidence_path:
+        "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json",
+    },
+    sleep_continuity_confirmation_receipt_command_ready: true,
+    sleep_continuity_confirmation_receipt_requested_actor_ready: true,
+    sleep_continuity_confirmation_receipt_actor: "test.federation.sleep",
+    sleep_continuity_confirmation_receipt_command_records_receipt: true,
+    sleep_continuity_confirmation_receipt_command_writes_evidence: false,
+    sleep_continuity_confirmation_receipt_command_marks_stage16_closed: false,
+    sleep_continuity_receipt_backed_sequence_ready: false,
+  });
+  const confirmations = parseFederationSleepResumeConfirmations({
+    ok: true,
+    current_pre_sleep_evidence_path:
+      "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json",
+  });
+
+  const pending = federationSleepResumeReceiptRecordReadiness({
+    status,
+    confirmations,
+    operatorAcknowledged: false,
+  });
+  assert.equal(pending.ready, false);
+  assert.equal(pending.disabled, true);
+  assert.deepEqual(pending.blockers, ["operator_sleep_resume_acknowledgement_missing"]);
+  assert.equal(pending.command_ready, true);
+  assert.equal(pending.actor_ready, true);
+  assert.equal(pending.records_receipt, true);
+  assert.equal(pending.writes_evidence, false);
+  assert.equal(pending.marks_stage16_closed, false);
+  assert.equal(pending.current_pre_sleep_evidence_path, confirmations.current_pre_sleep_evidence_path);
+
+  const acknowledged = federationSleepResumeReceiptRecordReadiness({
+    status,
+    confirmations,
+    operatorAcknowledged: true,
+  });
+  assert.equal(acknowledged.ready, true);
+  assert.equal(acknowledged.disabled, false);
+  assert.deepEqual(acknowledged.blockers, []);
+  assert.equal(acknowledged.actor, "test.federation.sleep");
+  assert.equal(acknowledged.grants_execution_authority, false);
+  assert.equal(acknowledged.grants_mutation_authority, false);
+});
+
+test("federationSleepResumeReceiptRecordReadiness blocks unsafe or stale receipt posture", () => {
+  const status = parseFederationStage16Status({
+    ok: true,
+    sleep_continuity_confirmation_receipt_command_ready: true,
+    sleep_continuity_confirmation_receipt_requested_actor_ready: false,
+    sleep_continuity_confirmation_receipt_command_records_receipt: false,
+    sleep_continuity_confirmation_receipt_command_writes_evidence: true,
+    sleep_continuity_confirmation_receipt_command_marks_stage16_closed: true,
+    sleep_continuity_receipt_backed_sequence_ready: true,
+  });
+
+  const readiness = federationSleepResumeReceiptRecordReadiness({
+    status,
+    confirmations: null,
+    operatorAcknowledged: true,
+  });
+
+  assert.equal(readiness.ready, false);
+  assert.deepEqual(readiness.blockers, [
+    "confirmation_receipt_actor_not_ready",
+    "current_pre_sleep_evidence_path_missing",
+    "confirmation_receipt_command_does_not_record_receipt",
+    "confirmation_receipt_command_writes_evidence",
+    "confirmation_receipt_command_marks_stage16_closed",
+    "receipt_backed_sequence_already_ready",
+  ]);
+  assert.equal(readiness.writes_evidence, true);
+  assert.equal(readiness.marks_stage16_closed, true);
+  assert.equal(readiness.receipt_backed_sequence_ready, true);
 });
 
 test("isFederationSleepResumeConfirmationActorReadinessCurrent rejects stale actor-bound command state", () => {

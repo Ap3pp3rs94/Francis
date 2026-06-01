@@ -399,6 +399,24 @@ export type FederationSleepResumeConfirmationRecordResponse = {
   next_smallest_truthful_gap?: string;
 };
 
+export type FederationSleepResumeReceiptRecordReadiness = {
+  ready: boolean;
+  disabled: boolean;
+  blockers: string[];
+  current_pre_sleep_evidence_path?: string;
+  actor?: string;
+  operator_acknowledged: boolean;
+  receipt_backed_sequence_ready: boolean;
+  command_ready: boolean;
+  actor_ready: boolean;
+  records_receipt: boolean;
+  writes_evidence: boolean;
+  writes_runtime_readback: boolean;
+  marks_stage16_closed: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+};
+
 export type FederationSleepResumeConfirmationActorReadiness = {
   ok: boolean;
   kind?: string;
@@ -1894,6 +1912,69 @@ export function shouldAutoCheckFederationSleepResumeConfirmationActorReadiness(o
       !confirmations.grants_execution_authority &&
       !confirmations.grants_mutation_authority,
   );
+}
+
+export function federationSleepResumeReceiptRecordReadiness(opts: {
+  status: FederationStage16Status | null | undefined;
+  confirmations: FederationSleepResumeConfirmations | null | undefined;
+  operatorAcknowledged: boolean;
+}): FederationSleepResumeReceiptRecordReadiness {
+  const status = opts.status;
+  const confirmations = opts.confirmations;
+  const currentPreSleepEvidencePath =
+    confirmations?.current_pre_sleep_evidence_path ??
+    optionalString(status?.latest_pre_sleep_evidence?.evidence_path);
+  const commandReady = Boolean(
+    status?.sleep_continuity_confirmation_receipt_command_ready ||
+      confirmations?.confirmation_receipt_command_ready,
+  );
+  const actorReady = Boolean(
+    status?.sleep_continuity_confirmation_receipt_requested_actor_ready ||
+      confirmations?.confirmation_receipt_requested_actor_ready,
+  );
+  const recordsReceipt = Boolean(
+    status?.sleep_continuity_confirmation_receipt_command_records_receipt ||
+      confirmations?.confirmation_receipt_command_records_receipt,
+  );
+  const writesEvidence = Boolean(
+    status?.sleep_continuity_confirmation_receipt_command_writes_evidence ||
+      confirmations?.confirmation_receipt_command_writes_evidence,
+  );
+  const marksStage16Closed = Boolean(
+    status?.sleep_continuity_confirmation_receipt_command_marks_stage16_closed ||
+      confirmations?.confirmation_receipt_command_marks_stage16_closed,
+  );
+  const receiptBackedSequenceReady = Boolean(
+    status?.sleep_continuity_receipt_backed_sequence_ready || confirmations?.receipt_backed_sequence_ready,
+  );
+  const actor =
+    status?.sleep_continuity_confirmation_receipt_actor ?? confirmations?.confirmation_receipt_actor;
+  const blockers: string[] = [];
+  if (!commandReady) blockers.push("confirmation_receipt_command_not_ready");
+  if (!actorReady) blockers.push("confirmation_receipt_actor_not_ready");
+  if (!currentPreSleepEvidencePath) blockers.push("current_pre_sleep_evidence_path_missing");
+  if (!recordsReceipt) blockers.push("confirmation_receipt_command_does_not_record_receipt");
+  if (writesEvidence) blockers.push("confirmation_receipt_command_writes_evidence");
+  if (marksStage16Closed) blockers.push("confirmation_receipt_command_marks_stage16_closed");
+  if (receiptBackedSequenceReady) blockers.push("receipt_backed_sequence_already_ready");
+  if (!opts.operatorAcknowledged) blockers.push("operator_sleep_resume_acknowledgement_missing");
+  return {
+    ready: blockers.length === 0,
+    disabled: blockers.length > 0,
+    blockers,
+    current_pre_sleep_evidence_path: currentPreSleepEvidencePath,
+    actor,
+    operator_acknowledged: opts.operatorAcknowledged,
+    receipt_backed_sequence_ready: receiptBackedSequenceReady,
+    command_ready: commandReady,
+    actor_ready: actorReady,
+    records_receipt: recordsReceipt,
+    writes_evidence: writesEvidence,
+    writes_runtime_readback: false,
+    marks_stage16_closed: marksStage16Closed,
+    grants_execution_authority: false,
+    grants_mutation_authority: false,
+  };
 }
 
 export function parseFederationSleepResumeConfirmationActorReadiness(

@@ -7,6 +7,7 @@ import {
   federationSleepContinuityVisibleOperatorCommands,
   federationSleepResumeConfirmationActorReadinessVisibleCommands,
   federationSleepResumeConfirmationVisibleCommands,
+  federationSleepResumeReceiptRecordReadiness,
   isFederationSleepResumeConfirmationActorReadinessCurrent,
   presentFederationSleepContinuityAction,
   shouldAutoCheckFederationSleepResumeConfirmationActorReadiness,
@@ -203,14 +204,13 @@ export function FederationHubPanel(props: { baseUrl: string }) {
   const visiblePostResumeSequenceCommand = visibleOperatorCommands.post_resume_sequence_copyable_command;
   const visiblePostResumeReceiptBackedSequenceCommand =
     visibleOperatorCommands.post_resume_receipt_backed_sequence_copyable_command;
-  const currentPreSleepEvidencePath =
-    confirmations?.current_pre_sleep_evidence_path ?? recordString(latestPreSleepEvidence, "evidence_path") ?? "";
-  const receiptRecordReady =
-    Boolean(status?.sleep_continuity_confirmation_receipt_command_ready) &&
-    Boolean(status?.sleep_continuity_confirmation_receipt_requested_actor_ready) &&
-    Boolean(currentPreSleepEvidencePath) &&
-    !Boolean(status?.sleep_continuity_receipt_backed_sequence_ready);
-  const receiptRecordDisabled = receiptMutationLoading || !sleepResumeAcknowledged || !receiptRecordReady;
+  const receiptRecordReadiness = federationSleepResumeReceiptRecordReadiness({
+    status,
+    confirmations,
+    operatorAcknowledged: sleepResumeAcknowledged,
+  });
+  const currentPreSleepEvidencePath = receiptRecordReadiness.current_pre_sleep_evidence_path ?? "";
+  const receiptRecordDisabled = receiptMutationLoading || receiptRecordReadiness.disabled;
 
   const recordSleepResumeConfirmation = useCallback(async () => {
     if (receiptRecordDisabled) return;
@@ -492,12 +492,20 @@ export function FederationHubPanel(props: { baseUrl: string }) {
             </>
           ) : null}
           <div style={{ marginTop: 8 }}>
+            <div style={{ fontSize: 11, color: MUTED, marginBottom: 6, overflowWrap: "anywhere" }}>
+              record ready <code>{yesNo(receiptRecordReadiness.ready)}</code>
+              {" / "}actor <code>{codeValue(receiptRecordReadiness.actor)}</code>
+              {" / "}pre path <code>{codeValue(receiptRecordReadiness.current_pre_sleep_evidence_path)}</code>
+              {" / "}writes receipt <code>{yesNo(receiptRecordReadiness.records_receipt)}</code>
+              {" / "}writes evidence <code>{yesNo(receiptRecordReadiness.writes_evidence)}</code>
+              {" / "}marks closed <code>{yesNo(receiptRecordReadiness.marks_stage16_closed)}</code>
+            </div>
             <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 11, color: MUTED }}>
               <input
                 type="checkbox"
                 checked={sleepResumeAcknowledged}
                 onChange={(event) => setSleepResumeAcknowledged(event.target.checked)}
-                disabled={!receiptRecordReady || receiptMutationLoading}
+                disabled={receiptMutationLoading || !receiptRecordReadiness.command_ready}
               />
               <span>
                 I confirm this workstation slept or suspended after the current pre-sleep marker and resumed before
@@ -517,6 +525,15 @@ export function FederationHubPanel(props: { baseUrl: string }) {
                 {" / "}status <code>{codeValue(receiptMutationResult.status)}</code>
                 {" / "}writes evidence <code>{yesNo(receiptMutationResult.writes_evidence)}</code>
                 {" / "}marks closed <code>{yesNo(receiptMutationResult.marks_stage16_closed)}</code>
+              </div>
+            ) : null}
+            {receiptRecordReadiness.blockers.length ? (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                {receiptRecordReadiness.blockers.map((blocker) => (
+                  <span key={`federation-receipt-record-blocker-${blocker}`} style={badgeStyle("blocked")}>
+                    {blocker}
+                  </span>
+                ))}
               </div>
             ) : null}
           </div>
