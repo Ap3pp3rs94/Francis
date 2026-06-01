@@ -103,7 +103,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
       const [nextStatus, nextRunbook, nextAction, nextConfirmations] = await Promise.all([
         client.getStatus({ timeoutMs: 10_000 }),
         client.getSleepContinuityRunbook({ timeoutMs: 10_000 }),
-        client.getSleepContinuityAction({ timeoutMs: 10_000 }),
+        client.getSleepContinuityAction({ actor: actorPreflightActor, timeoutMs: 10_000 }),
         client.getSleepResumeConfirmations({
           limit: 5,
           actor: actorPreflightActor,

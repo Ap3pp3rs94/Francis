@@ -2084,6 +2084,7 @@ def _stage16_sleep_continuity_operator_confirmation_handoff(
     operator_terminal_invocation: dict[str, Any],
     operator_sleep_resume_gate: dict[str, Any],
     confirmation_requirements: list[str],
+    actor: str = "",
 ) -> dict[str, Any]:
     step_id = _safe_str(selected_step.get("id")).strip()
     confirmation_required = bool(operator_sleep_resume_gate.get("confirmation_required"))
@@ -2114,9 +2115,12 @@ def _stage16_sleep_continuity_operator_confirmation_handoff(
         f"Set-Location -LiteralPath {_powershell_single_quote(str(repo_root()))}; {receipt_backed_sequence_command}"
     )
     confirmation_reason = "operator confirms physical sleep/suspend and resume after the pre-sleep marker"
+    requested_actor = _safe_str(actor).strip()
+    requested_actor_ready = _stage16_sleep_resume_confirmation_actor_ready(requested_actor)
     confirmation_command = _stage16_sleep_resume_confirmation_command_projection(
         pre_sleep_evidence_path=pre_sleep_evidence_path,
         ready=ready_after_confirmation and step_id == "capture_post_resume_evidence",
+        actor=requested_actor if requested_actor_ready else "",
     )
     confirmation_receipt_command_visible = bool(confirmation_command.get("confirmation_receipt_command_ready"))
     post_resume_command_visible = (
@@ -2179,6 +2183,8 @@ def _stage16_sleep_continuity_operator_confirmation_handoff(
         "confirmation_receipt_route": routes["sleep_resume_confirmation"],
         "confirmation_receipt_readback_route": routes["sleep_resume_confirmations"],
         "confirmation_receipt_required_scope": _FEDERATION_SLEEP_RESUME_CONFIRMATION_SCOPE,
+        "confirmation_receipt_requested_actor": _redacted_text(requested_actor)[:240],
+        "confirmation_receipt_requested_actor_ready": requested_actor_ready,
         "confirmation_receipt_payload_contract": {
             "actor": "operator or delegated builder actor with federation.stage16.sleep_resume.confirmation.write",
             "operator_confirmed_sleep_resume": True,
@@ -2217,6 +2223,7 @@ def _stage16_sleep_continuity_operator_confirmation_handoff(
             "does_not_mark_stage16_closed": True,
             "does_not_grant_authority": True,
             "confirmation_receipt_command_projection_only": True,
+            "actor_bound_confirmation_command_projection": requested_actor_ready,
             "receipt_backed_sequence_requires_confirmation_receipt": confirmation_required
             and step_id == "capture_post_resume_evidence",
         },
@@ -2348,7 +2355,7 @@ def _stage16_sleep_continuity_status_action_summary(
     }
 
 
-def stage16_sleep_continuity_action() -> dict[str, Any]:
+def stage16_sleep_continuity_action(*, actor: str = "") -> dict[str, Any]:
     runbook = stage16_sleep_continuity_runbook()
     blockers = _parse_list(runbook.get("missing_readbacks"))
     prior_live_blockers = _stage16_prior_live_readback_blockers(blockers)
@@ -2411,6 +2418,7 @@ def stage16_sleep_continuity_action() -> dict[str, Any]:
         operator_terminal_invocation=operator_terminal_invocation,
         operator_sleep_resume_gate=operator_sleep_resume_gate,
         confirmation_requirements=confirmation_requirements,
+        actor=actor,
     )
     after_manual_execution_readback = _stage16_sleep_continuity_after_manual_execution_readback(
         selected_step=selected_step,
@@ -3598,8 +3606,8 @@ def get_sleep_continuity_runbook() -> dict[str, Any]:
 
 
 @router.get("/sleep-continuity-action")
-def get_sleep_continuity_action() -> dict[str, Any]:
-    return stage16_sleep_continuity_action()
+def get_sleep_continuity_action(actor: str = "") -> dict[str, Any]:
+    return stage16_sleep_continuity_action(actor=actor)
 
 
 @router.get("/sleep-resume-confirmations")

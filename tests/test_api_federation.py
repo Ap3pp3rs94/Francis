@@ -1270,6 +1270,15 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
 ) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps(
+            {
+                "test.federation.write": ["federation.write"],
+                "test.federation.sleep": ["federation.stage16.sleep_resume.confirmation.write"],
+            }
+        ),
+    )
     monkeypatch.setattr("francis.api.routes.federation._now_s", lambda: 1_800_030_300)
     _write_stage15_closure_receipt(data_root, receipt_id="swarm_stage15_closure_for_presleep_runbook")
     pre_sleep_path = _write_stage16_pre_sleep_evidence(data_root)
@@ -1631,6 +1640,33 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert confirmation_handoff["proof_boundary"]["does_not_grant_authority"] is True
     assert confirmation_handoff["proof_boundary"]["confirmation_receipt_command_projection_only"] is True
     assert confirmation_handoff["proof_boundary"]["receipt_backed_sequence_requires_confirmation_receipt"] is True
+
+    actor_bound_action = client.get("/federation/sleep-continuity-action?actor=test.federation.sleep").json()
+    actor_bound_handoff = actor_bound_action["operator_confirmation_handoff"]
+    assert actor_bound_handoff["confirmation_receipt_requested_actor"] == "test.federation.sleep"
+    assert actor_bound_handoff["confirmation_receipt_requested_actor_ready"] is True
+    assert actor_bound_handoff["confirmation_receipt_actor"] == "test.federation.sleep"
+    assert actor_bound_handoff["confirmation_receipt_actor_bound"] is True
+    assert actor_bound_handoff["confirmation_receipt_actor_placeholder"] == ""
+    assert actor_bound_handoff["confirmation_receipt_command_requires_actor_substitution"] is False
+    assert "actor = 'test.federation.sleep'" in actor_bound_handoff["confirmation_receipt_command"]
+    assert str(pre_sleep_path.resolve()) in actor_bound_handoff["confirmation_receipt_command"]
+    actor_bound_steps = actor_bound_handoff["confirmation_receipt_operator_steps"]
+    assert [step["status"] for step in actor_bound_steps] == [
+        "not_required",
+        "ready",
+        "ready",
+        "blocked_until_current_confirmation_receipt",
+    ]
+    assert [step["requires_actor_substitution"] for step in actor_bound_steps] == [False, False, False, False]
+    assert actor_bound_handoff["confirmation_receipt_command_records_receipt"] is True
+    assert actor_bound_handoff["confirmation_receipt_command_writes_evidence"] is False
+    assert actor_bound_handoff["confirmation_receipt_command_marks_stage16_closed"] is False
+    assert actor_bound_handoff["proof_boundary"]["actor_bound_confirmation_command_projection"] is True
+    assert actor_bound_action["writes_receipts"] is False
+    assert actor_bound_action["writes_evidence"] is False
+    assert actor_bound_action["marks_stage16_closed"] is False
+
     after_run = action["after_manual_execution_readback"]
     assert after_run["status"] == "manual_execution_waiting_for_operator_confirmation"
     assert after_run["selected_step_id"] == "capture_post_resume_evidence"

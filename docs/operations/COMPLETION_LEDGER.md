@@ -54811,6 +54811,57 @@ Latest validation for Stage 16 actor-bound operator steps:
   writes_receipts=false; writes_evidence=false; marks_stage16_closed=false;
   next_smallest_truthful_gap=stage16_sleep_resume_confirmation_receipt`.
 
+### 2026-06-01 - Stage 16 action handoff accepts scoped receipt actor
+
+Roadmap area: Stage 16 / Federation, sleep-continuity confirmation receipt
+operator surface.
+
+Material change:
+
+- `GET /federation/sleep-continuity-action` now accepts an optional `actor`
+  query parameter and binds the embedded sleep-resume confirmation handoff only
+  when that actor passes the existing
+  `federation.stage16.sleep_resume.confirmation.write` permission gate.
+- Federation Hub now requests the selected action handoff with its configured
+  receipt actor, aligning the selected-action handoff with the actor-bound
+  confirmations readback.
+- Default callers still receive the placeholder-based handoff, so unscoped
+  action readbacks continue to show actor replacement as required.
+- This is readback-only: it does not write the sleep/resume confirmation
+  receipt, capture evidence, run shell from the API or UI, grant authority, or
+  close Stage 16.
+
+Latest validation for Stage 16 action handoff actor binding:
+
+- `python -m pytest tests/test_api_federation.py -q --tb=short --maxfail=1`
+  Result: `passed; 26 passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `npm run test -- federation_hub`
+  Result: `passed; 193 passed`.
+- `npm run build`
+  Result: `passed`.
+- `git diff --check`
+  Result: `passed`.
+- Fresh local readback:
+  `GET /federation/sleep-continuity-action?actor=codex.builder`
+  Result: `status=capture_post_resume_evidence;
+  requested_actor=codex.builder; requested_actor_ready=true;
+  confirmation_receipt_actor=codex.builder;
+  confirmation_receipt_actor_bound=true;
+  confirmation_receipt_command_requires_actor_substitution=false;
+  operator_step_statuses=["not_required","ready","ready",
+  "blocked_until_current_confirmation_receipt"];
+  operator_step_requires_actor_substitution=[false,false,false,false];
+  writes_receipts=false; writes_evidence=false; marks_stage16_closed=false;
+  next_smallest_truthful_gap=stage16_sleep_resume_confirmation_receipt`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -626,6 +626,8 @@ export type FederationSleepContinuityOperatorConfirmationHandoff = {
   confirmation_receipt_route?: string;
   confirmation_receipt_readback_route?: string;
   confirmation_receipt_required_scope?: string;
+  confirmation_receipt_requested_actor?: string;
+  confirmation_receipt_requested_actor_ready: boolean;
   confirmation_receipt_payload_contract?: Record<string, unknown>;
   confirmation_receipt_command_ready: boolean;
   confirmation_receipt_actor?: string;
@@ -1022,6 +1024,8 @@ function parseFederationSleepContinuityOperatorConfirmationHandoff(
     confirmation_receipt_route: optionalString(raw.confirmation_receipt_route),
     confirmation_receipt_readback_route: optionalString(raw.confirmation_receipt_readback_route),
     confirmation_receipt_required_scope: optionalString(raw.confirmation_receipt_required_scope),
+    confirmation_receipt_requested_actor: optionalString(raw.confirmation_receipt_requested_actor),
+    confirmation_receipt_requested_actor_ready: safeBoolean(raw.confirmation_receipt_requested_actor_ready),
     confirmation_receipt_payload_contract: isRecord(raw.confirmation_receipt_payload_contract)
       ? raw.confirmation_receipt_payload_contract
       : undefined,
@@ -2268,7 +2272,7 @@ export type FederationEndpoints = {
   status: () => string;
   completionReview: () => string;
   sleepContinuityRunbook: () => string;
-  sleepContinuityAction: () => string;
+  sleepContinuityAction: (q?: { actor?: string }) => string;
   sleepResumeConfirmations: (q?: { limit?: number; actor?: string }) => string;
   sleepResumeConfirmationActorReadiness: (q?: { actor?: string }) => string;
   stageClosureDecisions: (q?: { limit?: number }) => string;
@@ -2296,7 +2300,7 @@ export function defaultFederationEndpoints(): FederationEndpoints {
     status: () => "/federation/status",
     completionReview: () => "/federation/completion-review",
     sleepContinuityRunbook: () => "/federation/sleep-continuity-runbook",
-    sleepContinuityAction: () => "/federation/sleep-continuity-action",
+    sleepContinuityAction: (q) => `/federation/sleep-continuity-action${buildQuery({ actor: q?.actor })}`,
     sleepResumeConfirmations: (q) =>
       `/federation/sleep-resume-confirmations${buildQuery({ limit: q?.limit, actor: q?.actor })}`,
     sleepResumeConfirmationActorReadiness: (q) =>
@@ -2408,10 +2412,11 @@ export class FederationClient {
   }
 
   async getSleepContinuityAction(opts?: {
+    actor?: string;
     signal?: AbortSignal;
     timeoutMs?: number;
   }): Promise<FederationSleepContinuityActionReadback> {
-    const json = await fetchJson(this.url(this.endpoints.sleepContinuityAction()), {
+    const json = await fetchJson(this.url(this.endpoints.sleepContinuityAction({ actor: opts?.actor })), {
       method: "GET",
       signal: opts?.signal,
       timeoutMs: opts?.timeoutMs ?? this.defaultTimeoutMs,
@@ -2466,6 +2471,7 @@ export class FederationClient {
   }
 
   async getSleepContinuityPresentation(opts?: {
+    actor?: string;
     signal?: AbortSignal;
     timeoutMs?: number;
   }): Promise<FederationSleepContinuityPresentation> {
