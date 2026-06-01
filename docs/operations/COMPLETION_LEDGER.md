@@ -51405,6 +51405,74 @@ Latest validation for Stage 16 sleep-continuity proof path:
   tests/test_federation_stage16_live_runtime_readback_proof_script.py`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 sleep-continuity evidence capture is operator-gated
+
+Roadmap area: Stage 16 / Federation, final sleep/resume runtime evidence
+collection.
+
+Material change:
+
+- Added `scripts/federation-stage16-sleep-continuity-evidence.ps1`.
+- The script exposes a bounded sequence: `Status`, `PreSleep`, operator
+  sleep/resume, `PostResume`, then the existing runtime proof with
+  `-CommitReceipts`.
+- `PreSleep` writes only a metadata marker: continuity record id, local source
+  node, paired node, trace id, authority snapshot id, timestamp, and governance
+  flags.
+- `PostResume` requires `-OperatorConfirmedSleepResume` plus the pre-sleep
+  evidence file, then writes metadata-only post-resume evidence consumable by
+  `scripts/federation-stage16-sleep-continuity-runtime-proof.ps1`.
+- The collector does not infer sleep from delay, write the final live-runtime
+  readback, write memory, run shell, run git, launch browsers, capture screens,
+  grant authority, or mark Stage 16 closed.
+- `-CommitEvidence` is blocked in production, prod, and regulated profiles.
+
+Current project-data readback:
+
+- No sleep-continuity readback receipt was committed by this collector. The
+  final readback still requires an actual operator sleep/resume cycle and the
+  existing runtime proof.
+- `GET /federation/live-runtime-readbacks`,
+  `GET /federation/completion-review`, and `GET /federation/status`
+  Result:
+  `ready_count=4; required_count=5;
+  missing_readbacks=[workstation_sleep_continuity_validated];
+  ready_to_close=false;
+  next_smallest_truthful_gap=stage16_sleep_continuity_runtime_readback`.
+
+Latest validation for Stage 16 sleep-continuity evidence capture:
+
+- PowerShell parser checks for
+  `scripts/federation-stage16-sleep-continuity-evidence.ps1` and
+  `scripts/federation-stage16-sleep-continuity-runtime-proof.ps1`
+  Result: `passed; parser_ok`.
+- `python -m pytest tests/test_api_federation.py
+  tests/test_federation_stage16_sleep_continuity_evidence_script.py
+  tests/test_federation_stage16_sleep_continuity_runtime_proof_script.py
+  tests/test_federation_stage16_revocation_runtime_proof_script.py
+  tests/test_federation_stage16_remote_approval_runtime_proof_script.py
+  tests/test_federation_stage16_local_loopback_runtime_proof_script.py
+  tests/test_federation_stage16_live_runtime_readback_proof_script.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  --tb=short --maxfail=1`
+  Result: `passed; 29 passed`.
+- `python -m ruff check tests/test_api_federation.py
+  tests/test_federation_stage16_sleep_continuity_evidence_script.py
+  tests/test_federation_stage16_sleep_continuity_runtime_proof_script.py
+  tests/test_federation_stage16_revocation_runtime_proof_script.py
+  tests/test_federation_stage16_remote_approval_runtime_proof_script.py
+  tests/test_federation_stage16_local_loopback_runtime_proof_script.py
+  tests/test_federation_stage16_live_runtime_readback_proof_script.py`
+  Result: `passed`.
+- `python -m ruff format --check tests/test_api_federation.py
+  tests/test_federation_stage16_sleep_continuity_evidence_script.py
+  tests/test_federation_stage16_sleep_continuity_runtime_proof_script.py
+  tests/test_federation_stage16_revocation_runtime_proof_script.py
+  tests/test_federation_stage16_remote_approval_runtime_proof_script.py
+  tests/test_federation_stage16_local_loopback_runtime_proof_script.py
+  tests/test_federation_stage16_live_runtime_readback_proof_script.py`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
