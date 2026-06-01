@@ -6,6 +6,7 @@ import {
   parseFederationCompletionReview,
   parseFederationLiveRuntimeReadbacks,
   parseFederationStage16Status,
+  parseFederationStage16ClosureDecisions,
 } from "./index.ts";
 
 type FetchHandler = (url: string, init?: RequestInit) => Response | Promise<Response>;
@@ -122,6 +123,33 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
       });
     }
 
+    if (parsed.pathname === "/federation/stage-closure-decisions") {
+      return jsonResponse({
+        ok: true,
+        kind: "francis.stage16.federation.stage16_operator_stage_closure_decision_receipts",
+        stage: "Stage 16 / Federation",
+        status: "empty",
+        count: 0,
+        total: 0,
+        receipt_readback_ready: false,
+        stage16_closed_by_receipt: false,
+        marks_runtime_stage_state: false,
+        reads_receipts: true,
+        writes_receipts: false,
+        writes_registry: false,
+        writes_memory: false,
+        runs_tools: false,
+        runs_shell: false,
+        runs_git: false,
+        launches_browser: false,
+        captures_screen: false,
+        grants_execution_authority: false,
+        grants_mutation_authority: false,
+        items: [],
+        next_smallest_truthful_gap: "stage16_operator_stage_closure_decision",
+      });
+    }
+
     return jsonResponse({ ok: false }, 404);
   });
 
@@ -130,11 +158,13 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
     const status = await client.getStatus({ timeoutMs: 50 });
     const readbacks = await client.getLiveRuntimeReadbacks({ limit: 5, timeoutMs: 50 });
     const review = await client.getCompletionReview({ timeoutMs: 50 });
+    const closure = await client.getStageClosureDecisions({ limit: 5, timeoutMs: 50 });
 
     assert.deepEqual(requests, [
       { path: "/federation/status", method: "GET", limit: null },
       { path: "/federation/live-runtime-readbacks", method: "GET", limit: "5" },
       { path: "/federation/completion-review", method: "GET", limit: null },
+      { path: "/federation/stage-closure-decisions", method: "GET", limit: "5" },
     ]);
     assert.equal(status.stage16_status, "stage16_contracts_ready_completion_blocked");
     assert.equal(status.stage16_completion_review_ready, false);
@@ -171,6 +201,24 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
     assert.equal(review.live_ready_count, 0);
     assert.equal(review.live_required_count, 5);
     assert.deepEqual(review.blockers, ["live_pairing_flow_observed", "workstation_sleep_continuity_validated"]);
+
+    assert.equal(closure.status, "empty");
+    assert.equal(closure.count, 0);
+    assert.equal(closure.total, 0);
+    assert.equal(closure.receipt_readback_ready, false);
+    assert.equal(closure.stage16_closed_by_receipt, false);
+    assert.equal(closure.marks_runtime_stage_state, false);
+    assert.equal(closure.reads_receipts, true);
+    assert.equal(closure.writes_receipts, false);
+    assert.equal(closure.writes_registry, false);
+    assert.equal(closure.writes_memory, false);
+    assert.equal(closure.runs_tools, false);
+    assert.equal(closure.runs_shell, false);
+    assert.equal(closure.runs_git, false);
+    assert.equal(closure.launches_browser, false);
+    assert.equal(closure.captures_screen, false);
+    assert.equal(closure.grants_execution_authority, false);
+    assert.equal(closure.grants_mutation_authority, false);
   } finally {
     restoreFetch();
   }
@@ -230,6 +278,51 @@ test("federation Stage 16 parsers preserve ready receipt-backed posture", () => 
     live_required_count: 5,
     next_smallest_truthful_gap: "stage16_operator_stage_closure_decision",
   });
+  const closure = parseFederationStage16ClosureDecisions({
+    ok: true,
+    status: "stage_closure_decision_readback_ready",
+    count: 1,
+    total: 1,
+    latest_receipt_id: "fedstage16close_test",
+    latest_decision: "close_stage16",
+    receipt_readback_ready: true,
+    stage16_closed_by_receipt: true,
+    marks_runtime_stage_state: false,
+    reads_receipts: true,
+    writes_receipts: false,
+    writes_registry: false,
+    writes_memory: false,
+    runs_tools: false,
+    runs_shell: false,
+    runs_git: false,
+    launches_browser: false,
+    captures_screen: false,
+    grants_execution_authority: false,
+    grants_mutation_authority: false,
+    latest_receipt: {
+      receipt_id: "fedstage16close_test",
+      actor: "codex.builder",
+      decision: "close_stage16",
+      completion_review_ready: true,
+      stage16_completion_review_ready: true,
+      live_runtime_readback_ready: true,
+      stage16_closed_by_receipt: true,
+      recorded_ts: 1_800_020_000,
+    },
+    items: [
+      {
+        receipt_id: "fedstage16close_test",
+        actor: "codex.builder",
+        decision: "close_stage16",
+        completion_review_ready: true,
+        stage16_completion_review_ready: true,
+        live_runtime_readback_ready: true,
+        stage16_closed_by_receipt: true,
+        recorded_ts: 1_800_020_000,
+      },
+    ],
+    next_smallest_truthful_gap: "stage16_ledger_closure",
+  });
 
   assert.equal(status.stage16_completion_review_ready, true);
   assert.equal(status.live_runtime_readback_ready, true);
@@ -250,4 +343,18 @@ test("federation Stage 16 parsers preserve ready receipt-backed posture", () => 
   assert.equal(review.stage_closure_decision_required, true);
   assert.equal(review.live_ready_count, 5);
   assert.equal(review.next_smallest_truthful_gap, "stage16_operator_stage_closure_decision");
+
+  assert.equal(closure.status, "stage_closure_decision_readback_ready");
+  assert.equal(closure.count, 1);
+  assert.equal(closure.latest_receipt_id, "fedstage16close_test");
+  assert.equal(closure.latest_decision, "close_stage16");
+  assert.equal(closure.receipt_readback_ready, true);
+  assert.equal(closure.stage16_closed_by_receipt, true);
+  assert.equal(closure.marks_runtime_stage_state, false);
+  assert.equal(closure.writes_memory, false);
+  assert.equal(closure.runs_shell, false);
+  assert.equal(closure.grants_execution_authority, false);
+  assert.equal(closure.latest_receipt?.decision, "close_stage16");
+  assert.equal(closure.items[0]?.recorded_ts, 1_800_020_000);
+  assert.equal(closure.next_smallest_truthful_gap, "stage16_ledger_closure");
 });

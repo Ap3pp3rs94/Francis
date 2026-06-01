@@ -192,6 +192,45 @@ export type FederationCompletionReview = {
   next_smallest_truthful_gap?: string;
 };
 
+export type FederationStage16ClosureReceipt = {
+  receipt_id: string;
+  actor?: string;
+  decision?: string;
+  completion_review_ready: boolean;
+  stage16_completion_review_ready: boolean;
+  live_runtime_readback_ready: boolean;
+  stage16_closed_by_receipt: boolean;
+  recorded_ts?: number;
+};
+
+export type FederationStage16ClosureDecisions = {
+  ok: boolean;
+  kind?: string;
+  stage?: string;
+  status?: string;
+  count: number;
+  total: number;
+  latest_receipt_id?: string;
+  latest_decision?: string;
+  receipt_readback_ready: boolean;
+  stage16_closed_by_receipt: boolean;
+  marks_runtime_stage_state: boolean;
+  reads_receipts: boolean;
+  writes_receipts: boolean;
+  writes_registry: boolean;
+  writes_memory: boolean;
+  runs_tools: boolean;
+  runs_shell: boolean;
+  runs_git: boolean;
+  launches_browser: boolean;
+  captures_screen: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+  latest_receipt?: FederationStage16ClosureReceipt;
+  items: FederationStage16ClosureReceipt[];
+  next_smallest_truthful_gap?: string;
+};
+
 export type FederationListResponse<T> = { items: T[] };
 
 export class FederationApiError extends Error {
@@ -575,9 +614,64 @@ export function parseFederationCompletionReview(raw: unknown): FederationComplet
   };
 }
 
+function parseFederationStage16ClosureReceipt(raw: unknown): FederationStage16ClosureReceipt | null {
+  if (!isRecord(raw)) return null;
+  const receiptId = safeString(raw.receipt_id);
+  if (!receiptId) return null;
+  const recordedTs = safeNumber(raw.recorded_ts, 0);
+  return {
+    receipt_id: receiptId,
+    actor: optionalString(raw.actor),
+    decision: optionalString(raw.decision),
+    completion_review_ready: safeBoolean(raw.completion_review_ready),
+    stage16_completion_review_ready: safeBoolean(raw.stage16_completion_review_ready),
+    live_runtime_readback_ready: safeBoolean(raw.live_runtime_readback_ready),
+    stage16_closed_by_receipt: safeBoolean(raw.stage16_closed_by_receipt),
+    recorded_ts: recordedTs > 0 ? normalizeTs(recordedTs) : undefined,
+  };
+}
+
+export function parseFederationStage16ClosureDecisions(raw: unknown): FederationStage16ClosureDecisions {
+  const body = isRecord(raw) ? raw : {};
+  const items = Array.isArray(body.items)
+    ? body.items
+        .map(parseFederationStage16ClosureReceipt)
+        .filter((x): x is FederationStage16ClosureReceipt => x !== null)
+    : [];
+  const latestReceipt = parseFederationStage16ClosureReceipt(body.latest_receipt);
+  return {
+    ok: safeBoolean(body.ok),
+    kind: optionalString(body.kind),
+    stage: optionalString(body.stage),
+    status: optionalString(body.status),
+    count: safeNumber(body.count, 0),
+    total: safeNumber(body.total, 0),
+    latest_receipt_id: optionalString(body.latest_receipt_id),
+    latest_decision: optionalString(body.latest_decision),
+    receipt_readback_ready: safeBoolean(body.receipt_readback_ready),
+    stage16_closed_by_receipt: safeBoolean(body.stage16_closed_by_receipt),
+    marks_runtime_stage_state: safeBoolean(body.marks_runtime_stage_state),
+    reads_receipts: safeBoolean(body.reads_receipts),
+    writes_receipts: safeBoolean(body.writes_receipts),
+    writes_registry: safeBoolean(body.writes_registry),
+    writes_memory: safeBoolean(body.writes_memory),
+    runs_tools: safeBoolean(body.runs_tools),
+    runs_shell: safeBoolean(body.runs_shell),
+    runs_git: safeBoolean(body.runs_git),
+    launches_browser: safeBoolean(body.launches_browser),
+    captures_screen: safeBoolean(body.captures_screen),
+    grants_execution_authority: safeBoolean(body.grants_execution_authority),
+    grants_mutation_authority: safeBoolean(body.grants_mutation_authority),
+    latest_receipt: latestReceipt ?? undefined,
+    items,
+    next_smallest_truthful_gap: optionalString(body.next_smallest_truthful_gap),
+  };
+}
+
 export type FederationEndpoints = {
   status: () => string;
   completionReview: () => string;
+  stageClosureDecisions: (q?: { limit?: number }) => string;
   liveRuntimeReadbacks: (q?: { limit?: number }) => string;
 
   instancesList: (q?: { status?: string; limit?: number; offset?: number; tags?: string[] }) => string;
@@ -601,6 +695,7 @@ export function defaultFederationEndpoints(): FederationEndpoints {
   return {
     status: () => "/federation/status",
     completionReview: () => "/federation/completion-review",
+    stageClosureDecisions: (q) => `/federation/stage-closure-decisions${buildQuery({ limit: q?.limit })}`,
     liveRuntimeReadbacks: (q) => `/federation/live-runtime-readbacks${buildQuery({ limit: q?.limit })}`,
 
     instancesList: (q) =>
@@ -692,6 +787,19 @@ export class FederationClient {
       timeoutMs: opts?.timeoutMs ?? this.defaultTimeoutMs,
     });
     return parseFederationCompletionReview(json);
+  }
+
+  async getStageClosureDecisions(opts?: {
+    limit?: number;
+    signal?: AbortSignal;
+    timeoutMs?: number;
+  }): Promise<FederationStage16ClosureDecisions> {
+    const json = await fetchJson(this.url(this.endpoints.stageClosureDecisions({ limit: opts?.limit })), {
+      method: "GET",
+      signal: opts?.signal,
+      timeoutMs: opts?.timeoutMs ?? this.defaultTimeoutMs,
+    });
+    return parseFederationStage16ClosureDecisions(json);
   }
 
   async listInstances(opts?: {

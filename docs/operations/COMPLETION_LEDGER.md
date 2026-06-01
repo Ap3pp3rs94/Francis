@@ -51535,6 +51535,44 @@ Latest validation for Stage 16 closure decision routing:
   tests/test_federation_stage16_sleep_continuity_runtime_proof_script.py`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 closure receipt readback reaches federation UI contract
+
+Roadmap area: Stage 16 / Federation, operator-visible closure posture.
+
+Material change:
+
+- `apps/chat_ui/src/federation_hub/index.ts` now exposes the read-only
+  `/federation/stage-closure-decisions` route through
+  `getStageClosureDecisions`.
+- Added typed parsing for Stage 16 closure receipt readbacks, including latest
+  receipt id, latest decision, receipt-readiness flags, stage-closed-by-receipt
+  flag, non-mutation guards, and next truthful gap.
+- The UI client only reads the closure posture. It does not add a browser-side
+  Stage 16 closure mutation path, write memory, run shell, run git, launch
+  browsers, capture screens, or grant authority.
+
+Current project-data readback:
+
+- Stage 16 project data remains unchanged by this UI client work:
+  `ready_count=4; required_count=5;
+  missing_readbacks=[workstation_sleep_continuity_validated];
+  ready_to_close=false; closure_status=empty;
+  stage16_closed_by_receipt=false;
+  next_smallest_truthful_gap=stage16_sleep_continuity_runtime_readback`.
+
+Latest validation for Stage 16 federation UI closure readback:
+
+- `cd apps/chat_ui; npm run test -- federation_hub`
+  Result: `passed; 183 passed`.
+- `cd apps/chat_ui; npm run build`
+  Result: `passed`.
+- `python -m pytest
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  tests/test_api_federation.py -q --tb=short --maxfail=1`
+  Result: `passed; 16 passed`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
