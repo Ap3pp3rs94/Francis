@@ -70,6 +70,7 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
       path: parsed.pathname,
       method: (init?.method ?? "GET").toUpperCase(),
       limit: parsed.searchParams.get("limit"),
+      actor: parsed.searchParams.get("actor"),
     });
 
     if (parsed.pathname === "/federation/status") {
@@ -382,6 +383,8 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
         current_pre_sleep_evidence_path:
           "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json",
         current_pre_sleep_recorded_ts: 1_800_030_000,
+        confirmation_receipt_requested_actor: parsed.searchParams.get("actor") ?? "",
+        confirmation_receipt_requested_actor_ready: parsed.searchParams.get("actor") === "test.federation.sleep",
         latest_receipt_is_operator_confirmed: true,
         latest_receipt_matches_current_pre_sleep: true,
         latest_receipt_usable_for_receipt_backed_sequence: true,
@@ -455,18 +458,22 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
     const runbook = await client.getSleepContinuityRunbook({ timeoutMs: 50 });
     const action = await client.getSleepContinuityAction({ timeoutMs: 50 });
     const closure = await client.getStageClosureDecisions({ limit: 5, timeoutMs: 50 });
-    const confirmations = await client.getSleepResumeConfirmations({ limit: 3, timeoutMs: 50 });
+    const confirmations = await client.getSleepResumeConfirmations({
+      limit: 3,
+      actor: "test.federation.sleep",
+      timeoutMs: 50,
+    });
     const presentation = await client.getSleepContinuityPresentation({ timeoutMs: 50 });
 
     assert.deepEqual(requests, [
-      { path: "/federation/status", method: "GET", limit: null },
-      { path: "/federation/live-runtime-readbacks", method: "GET", limit: "5" },
-      { path: "/federation/completion-review", method: "GET", limit: null },
-      { path: "/federation/sleep-continuity-runbook", method: "GET", limit: null },
-      { path: "/federation/sleep-continuity-action", method: "GET", limit: null },
-      { path: "/federation/stage-closure-decisions", method: "GET", limit: "5" },
-      { path: "/federation/sleep-resume-confirmations", method: "GET", limit: "3" },
-      { path: "/federation/sleep-continuity-action", method: "GET", limit: null },
+      { path: "/federation/status", method: "GET", limit: null, actor: null },
+      { path: "/federation/live-runtime-readbacks", method: "GET", limit: "5", actor: null },
+      { path: "/federation/completion-review", method: "GET", limit: null, actor: null },
+      { path: "/federation/sleep-continuity-runbook", method: "GET", limit: null, actor: null },
+      { path: "/federation/sleep-continuity-action", method: "GET", limit: null, actor: null },
+      { path: "/federation/stage-closure-decisions", method: "GET", limit: "5", actor: null },
+      { path: "/federation/sleep-resume-confirmations", method: "GET", limit: "3", actor: "test.federation.sleep" },
+      { path: "/federation/sleep-continuity-action", method: "GET", limit: null, actor: null },
     ]);
     assert.equal(status.stage16_status, "stage16_contracts_ready_completion_blocked");
     assert.equal(status.stage16_completion_review_ready, false);
@@ -606,6 +613,8 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
     assert.equal(confirmations.receipt_readback_ready, true);
     assert.equal(confirmations.current_pre_sleep_evidence_present, true);
     assert.equal(confirmations.current_pre_sleep_evidence_path, "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json");
+    assert.equal(confirmations.confirmation_receipt_requested_actor, "test.federation.sleep");
+    assert.equal(confirmations.confirmation_receipt_requested_actor_ready, true);
     assert.equal(confirmations.latest_receipt_is_operator_confirmed, true);
     assert.equal(confirmations.latest_receipt_matches_current_pre_sleep, true);
     assert.equal(confirmations.latest_receipt_usable_for_receipt_backed_sequence, true);
@@ -670,6 +679,8 @@ test("parseFederationSleepResumeConfirmations preserves missing-receipt remedy c
     current_pre_sleep_evidence_path:
       "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json",
     current_pre_sleep_recorded_ts: 1_800_030_000,
+    confirmation_receipt_requested_actor: "test.federation.sleep",
+    confirmation_receipt_requested_actor_ready: true,
     latest_receipt_is_operator_confirmed: false,
     latest_receipt_matches_current_pre_sleep: false,
     latest_receipt_usable_for_receipt_backed_sequence: false,
@@ -778,6 +789,8 @@ test("parseFederationSleepResumeConfirmations preserves missing-receipt remedy c
   assert.equal(confirmations.receipt_backed_sequence_ready, false);
   assert.equal(confirmations.receipt_backed_sequence_copyable_command?.includes("stale_or_missing"), true);
   assert.equal(confirmations.confirmation_receipt_command_ready, true);
+  assert.equal(confirmations.confirmation_receipt_requested_actor, "test.federation.sleep");
+  assert.equal(confirmations.confirmation_receipt_requested_actor_ready, true);
   assert.equal(confirmations.confirmation_receipt_actor, undefined);
   assert.equal(confirmations.confirmation_receipt_actor_bound, false);
   assert.equal(

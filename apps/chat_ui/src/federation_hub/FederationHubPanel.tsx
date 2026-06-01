@@ -104,7 +104,11 @@ export function FederationHubPanel(props: { baseUrl: string }) {
         client.getStatus({ timeoutMs: 10_000 }),
         client.getSleepContinuityRunbook({ timeoutMs: 10_000 }),
         client.getSleepContinuityAction({ timeoutMs: 10_000 }),
-        client.getSleepResumeConfirmations({ limit: 5, timeoutMs: 10_000 }),
+        client.getSleepResumeConfirmations({
+          limit: 5,
+          actor: actorPreflightActor,
+          timeoutMs: 10_000,
+        }),
       ]);
       setStatus(nextStatus);
       setRunbook(nextRunbook);
@@ -117,7 +121,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
     } finally {
       setLoading(false);
     }
-  }, [client]);
+  }, [actorPreflightActor, client]);
 
   useEffect(() => {
     void refresh();

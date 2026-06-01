@@ -1064,12 +1064,27 @@ def stage16_sleep_resume_confirmation_actor_readiness(actor: str) -> dict[str, A
     }
 
 
-def stage16_sleep_resume_confirmation_readback(*, limit: int = 20) -> dict[str, Any]:
+def _stage16_sleep_resume_confirmation_actor_ready(actor: str) -> bool:
+    safe_actor = _safe_str(actor).strip()
+    if not safe_actor or _stage16_sleep_resume_confirmation_actor_is_placeholder(safe_actor):
+        return False
+    permission = _federation_write_permission(
+        safe_actor,
+        route=_federation_routes()["sleep_resume_confirmation"],
+        method="POST",
+        required_scope=_FEDERATION_SLEEP_RESUME_CONFIRMATION_SCOPE,
+    )
+    return bool(permission.allowed)
+
+
+def stage16_sleep_resume_confirmation_readback(*, limit: int = 20, actor: str = "") -> dict[str, Any]:
     safe_limit = max(1, min(int(limit), 100))
     items = read_stage16_sleep_resume_confirmations(limit=safe_limit)
     latest_receipt = items[-1] if items else {}
     current_pre_sleep = _latest_stage16_pre_sleep_evidence()
     current_pre_sleep_path = _safe_str(current_pre_sleep.get("evidence_path")).strip()
+    requested_actor = _safe_str(actor).strip()
+    requested_actor_ready = _stage16_sleep_resume_confirmation_actor_ready(requested_actor)
     latest_pre_sleep_path = _safe_str(latest_receipt.get("pre_sleep_evidence_path")).strip()
     latest_decision = _safe_str(latest_receipt.get("decision")).strip()
     latest_operator_confirmed = bool(latest_receipt.get("operator_confirmed_sleep_resume"))
@@ -1097,6 +1112,7 @@ def stage16_sleep_resume_confirmation_readback(*, limit: int = 20) -> dict[str, 
     confirmation_command = _stage16_sleep_resume_confirmation_command_projection(
         pre_sleep_evidence_path=current_pre_sleep_path,
         ready=bool(current_pre_sleep.get("present")) and not receipt_backed_sequence_ready,
+        actor=requested_actor if requested_actor_ready else "",
     )
     confirmation_operator_steps = _stage16_sleep_resume_confirmation_operator_steps(
         confirmation_command_ready=bool(confirmation_command.get("confirmation_receipt_command_ready")),
@@ -1128,6 +1144,8 @@ def stage16_sleep_resume_confirmation_readback(*, limit: int = 20) -> dict[str, 
         "current_pre_sleep_evidence_present": bool(current_pre_sleep.get("present")),
         "current_pre_sleep_evidence_path": current_pre_sleep_path,
         "current_pre_sleep_recorded_ts": int(current_pre_sleep.get("recorded_ts") or 0),
+        "confirmation_receipt_requested_actor": _redacted_text(requested_actor)[:240],
+        "confirmation_receipt_requested_actor_ready": requested_actor_ready,
         "latest_receipt_is_operator_confirmed": latest_operator_confirmed
         and latest_decision == "operator_confirmed_sleep_resume",
         "latest_receipt_matches_current_pre_sleep": latest_matches_current_pre_sleep,
@@ -1168,6 +1186,7 @@ def stage16_sleep_resume_confirmation_readback(*, limit: int = 20) -> dict[str, 
             "checks_current_pre_sleep_evidence_path": True,
             "receipt_backed_sequence_requires_current_matching_confirmation": True,
             "receipt_backed_sequence_next_gap_projected": True,
+            "actor_bound_confirmation_command_projection": requested_actor_ready,
             "does_not_infer_sleep_from_delay": True,
             "does_not_write_receipts": True,
             "does_not_write_evidence": True,
@@ -3574,8 +3593,8 @@ def get_sleep_continuity_action() -> dict[str, Any]:
 
 
 @router.get("/sleep-resume-confirmations")
-def get_sleep_resume_confirmations(limit: int = 20) -> dict[str, Any]:
-    return stage16_sleep_resume_confirmation_readback(limit=limit)
+def get_sleep_resume_confirmations(limit: int = 20, actor: str = "") -> dict[str, Any]:
+    return stage16_sleep_resume_confirmation_readback(limit=limit, actor=actor)
 
 
 @router.get("/sleep-resume-confirmation/actor-readiness")

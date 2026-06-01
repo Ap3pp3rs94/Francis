@@ -2024,6 +2024,49 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     assert empty_readback["writes_runtime_readback"] is False
     assert empty_readback["marks_stage16_closed"] is False
 
+    actor_bound_readback = client.get(
+        "/federation/sleep-resume-confirmations?limit=5&actor=test.federation.sleep"
+    ).json()
+    assert actor_bound_readback["status"] == "empty"
+    assert actor_bound_readback["current_pre_sleep_evidence_present"] is True
+    assert actor_bound_readback["confirmation_receipt_requested_actor"] == "test.federation.sleep"
+    assert actor_bound_readback["confirmation_receipt_requested_actor_ready"] is True
+    assert actor_bound_readback["confirmation_receipt_command_ready"] is True
+    assert actor_bound_readback["confirmation_receipt_actor"] == "test.federation.sleep"
+    assert actor_bound_readback["confirmation_receipt_actor_bound"] is True
+    assert actor_bound_readback["confirmation_receipt_actor_placeholder"] == ""
+    assert actor_bound_readback["confirmation_receipt_command_requires_actor_substitution"] is False
+    assert "actor = 'test.federation.sleep'" in actor_bound_readback["confirmation_receipt_command"]
+    assert str(pre_sleep_path.resolve()) in actor_bound_readback["confirmation_receipt_command"]
+    assert (
+        actor_bound_readback["confirmation_receipt_command"]
+        in actor_bound_readback["confirmation_receipt_copyable_command"]
+    )
+    assert actor_bound_readback["confirmation_receipt_command_records_receipt"] is True
+    assert actor_bound_readback["confirmation_receipt_command_writes_evidence"] is False
+    assert actor_bound_readback["confirmation_receipt_command_marks_stage16_closed"] is False
+    assert actor_bound_readback["confirmation_receipt_command_projection_only"] is True
+    assert actor_bound_readback["writes_receipts"] is False
+    assert actor_bound_readback["writes_evidence"] is False
+    assert actor_bound_readback["writes_runtime_readback"] is False
+    assert actor_bound_readback["marks_stage16_closed"] is False
+    assert actor_bound_readback["governance"]["actor_bound_confirmation_command_projection"] is True
+    assert not (data_root / "logs" / "federation" / "stage16_sleep_resume_operator_confirmations.jsonl").exists()
+
+    unscoped_actor_readback = client.get(
+        "/federation/sleep-resume-confirmations?limit=5&actor=test.federation.write"
+    ).json()
+    assert unscoped_actor_readback["confirmation_receipt_requested_actor"] == "test.federation.write"
+    assert unscoped_actor_readback["confirmation_receipt_requested_actor_ready"] is False
+    assert unscoped_actor_readback["confirmation_receipt_actor"] == ""
+    assert unscoped_actor_readback["confirmation_receipt_actor_bound"] is False
+    assert unscoped_actor_readback["confirmation_receipt_command_requires_actor_substitution"] is True
+    assert (
+        unscoped_actor_readback["confirmation_receipt_actor_placeholder"]
+        == "<actor_with_federation.stage16.sleep_resume.confirmation.write>"
+    )
+    assert unscoped_actor_readback["governance"]["actor_bound_confirmation_command_projection"] is False
+
     mismatch = client.post(
         "/federation/sleep-resume-confirmation",
         json={
