@@ -1422,6 +1422,20 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
         confirmation_handoff["post_resume_sequence_command"]
         in confirmation_handoff["post_resume_sequence_copyable_command"]
     )
+    assert (
+        confirmation_handoff["post_resume_receipt_backed_sequence_command"]
+        == f"{confirmation_handoff['post_resume_sequence_command']} "
+        "-RequireConfirmationReceipt -ConfirmationReceiptId <confirmation_receipt_id>"
+    )
+    assert (
+        confirmation_handoff["post_resume_receipt_backed_sequence_command"]
+        in confirmation_handoff["post_resume_receipt_backed_sequence_copyable_command"]
+    )
+    assert confirmation_handoff["post_resume_receipt_backed_sequence_requires_confirmation_receipt"] is True
+    assert (
+        confirmation_handoff["post_resume_receipt_backed_sequence_confirmation_receipt_id_placeholder"]
+        == "<confirmation_receipt_id>"
+    )
     assert confirmation_handoff["post_resume_sequence_writes_evidence_when_run"] is True
     assert confirmation_handoff["post_resume_sequence_writes_receipts_when_run"] is True
     assert confirmation_handoff["confirmation_receipt_route"] == "/federation/sleep-resume-confirmation"
@@ -1458,6 +1472,7 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert confirmation_handoff["proof_boundary"]["does_not_write_receipts"] is True
     assert confirmation_handoff["proof_boundary"]["does_not_mark_stage16_closed"] is True
     assert confirmation_handoff["proof_boundary"]["does_not_grant_authority"] is True
+    assert confirmation_handoff["proof_boundary"]["receipt_backed_sequence_requires_confirmation_receipt"] is True
     after_run = action["after_manual_execution_readback"]
     assert after_run["status"] == "manual_execution_waiting_for_operator_confirmation"
     assert after_run["selected_step_id"] == "capture_post_resume_evidence"
@@ -1815,6 +1830,10 @@ def test_federation_stage16_sleep_continuity_runbook_uses_linked_post_resume_mar
     assert confirmation_handoff["post_resume_sequence_available_after_confirmation"] is False
     assert confirmation_handoff["post_resume_sequence_command"] == ""
     assert confirmation_handoff["post_resume_sequence_copyable_command"] == ""
+    assert confirmation_handoff["post_resume_receipt_backed_sequence_command"] == ""
+    assert confirmation_handoff["post_resume_receipt_backed_sequence_copyable_command"] == ""
+    assert confirmation_handoff["post_resume_receipt_backed_sequence_requires_confirmation_receipt"] is False
+    assert confirmation_handoff["post_resume_receipt_backed_sequence_confirmation_receipt_id_placeholder"] == ""
     assert confirmation_handoff["post_resume_sequence_writes_evidence_when_run"] is False
     assert confirmation_handoff["post_resume_sequence_writes_receipts_when_run"] is False
     assert confirmation_handoff["should_not_run_before_confirmation"] is False

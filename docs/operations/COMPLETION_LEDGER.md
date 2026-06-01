@@ -53298,6 +53298,70 @@ Latest validation for Stage 16 sleep post-resume operator sequence:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 post-resume sequence requires confirmation receipt
+
+Roadmap area: Stage 16 / Federation, workstation sleep-continuity operator
+handoff hardening.
+
+Material change:
+
+- `scripts/federation-stage16-sleep-continuity-post-resume-sequence.ps1`
+  now supports `-RequireConfirmationReceipt -ConfirmationReceiptId <id>`.
+- When enabled, the sequence reads the Stage 16 sleep/resume confirmation
+  receipt log under the configured Francis data root, requires the receipt to
+  be an explicit operator-confirmed sleep/resume decision, and requires its
+  pre-sleep evidence path to match the sequence input before it can capture
+  post-resume evidence or write runtime proof receipts.
+- `/federation/sleep-continuity-action` now projects a receipt-backed sequence
+  command and copyable terminal command through
+  `operator_confirmation_handoff`.
+- Federation Hub preserves and displays the receipt-backed sequence command,
+  receipt requirement, and placeholder receipt id without enabling UI mutation.
+- This does not infer workstation sleep/resume from elapsed time, grant
+  authority, write memory, execute the project committed post-resume sequence,
+  or mark Stage 16 closed.
+- Stage 16 remains open until operator-confirmed live workstation sleep/resume
+  evidence and receipt-backed completion/closure gates are satisfied.
+
+Latest validation for Stage 16 receipt-backed post-resume sequence:
+
+- PowerShell parser check for
+  `scripts/federation-stage16-sleep-continuity-post-resume-sequence.ps1`
+  Result: `passed`.
+- `python -m pytest
+  tests/test_federation_stage16_sleep_continuity_post_resume_sequence_script.py
+  tests/test_api_federation.py -q --tb=short --maxfail=1`
+  Result: `passed; 29 passed`.
+- `npm run test -- federation_hub`
+  Result: `passed; 188 passed`.
+- `npm run build`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py
+  tests/test_federation_stage16_sleep_continuity_post_resume_sequence_script.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py
+  tests/test_federation_stage16_sleep_continuity_post_resume_sequence_script.py`
+  Result: `passed`.
+- Live readback via `TestClient` for `/federation/sleep-continuity-action`
+  Result: `passed;
+  handoff_status=waiting_for_operator_sleep_resume_confirmation,
+  has_receipt_backed_command=true,
+  receipt_id_placeholder=<confirmation_receipt_id>,
+  receipt_backed_sequence_requires_confirmation_receipt=true,
+  marks_stage16_closed=false,
+  next_smallest_truthful_gap=stage16_sleep_continuity_runtime_readback`.
+- `.\scripts\federation-stage16-sleep-continuity-post-resume-sequence.ps1
+  -Mode Status`
+  Result: `passed; status=ready_for_operator_confirmed_post_resume_sequence,
+  receipt_backed_sequence_command projects -RequireConfirmationReceipt,
+  writes_evidence=false, writes_receipts=false, marks_stage16_closed=false`.
+- `git diff --check`
+  Result: `passed`.
+
 ### 2026-06-01 - Stage 16 sleep/resume confirmation is receipt-backed
 
 Roadmap area: Stage 16 / Federation, workstation sleep-continuity operator

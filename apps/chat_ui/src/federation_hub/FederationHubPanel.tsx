@@ -317,6 +317,18 @@ export function FederationHubPanel(props: { baseUrl: string }) {
               <code>{yesNo(operatorConfirmationHandoff.post_resume_sequence_writes_receipts_when_run)}</code>
             </div>
             <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
+              receipt-backed sequence{" "}
+              <code>{yesNo(Boolean(operatorConfirmationHandoff.post_resume_receipt_backed_sequence_command))}</code>
+              {" / "}requires receipt{" "}
+              <code>
+                {yesNo(operatorConfirmationHandoff.post_resume_receipt_backed_sequence_requires_confirmation_receipt)}
+              </code>
+              {" / "}receipt id{" "}
+              <code>
+                {codeValue(operatorConfirmationHandoff.post_resume_receipt_backed_sequence_confirmation_receipt_id_placeholder)}
+              </code>
+            </div>
+            <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
               receipt route <code>{codeValue(operatorConfirmationHandoff.confirmation_receipt_route)}</code>
               {" / "}readback <code>{codeValue(operatorConfirmationHandoff.confirmation_receipt_readback_route)}</code>
             </div>
@@ -369,6 +381,23 @@ export function FederationHubPanel(props: { baseUrl: string }) {
                 }}
               >
                 {operatorConfirmationHandoff.post_resume_sequence_copyable_command}
+              </pre>
+            ) : null}
+            {operatorConfirmationHandoff.post_resume_receipt_backed_sequence_copyable_command ? (
+              <pre
+                style={{
+                  margin: "8px 0 0",
+                  padding: 10,
+                  borderRadius: 10,
+                  border: `1px solid ${PANEL_BORDER}`,
+                  background: "#101010",
+                  color: TEXT,
+                  whiteSpace: "pre-wrap",
+                  overflowWrap: "anywhere",
+                  fontSize: 11,
+                }}
+              >
+                {operatorConfirmationHandoff.post_resume_receipt_backed_sequence_copyable_command}
               </pre>
             ) : null}
             {operatorConfirmationHandoff.required_confirmation_requirements.length ? (

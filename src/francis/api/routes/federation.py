@@ -1701,8 +1701,15 @@ def _stage16_sleep_continuity_operator_confirmation_handoff(
         "scripts/federation-stage16-sleep-continuity-post-resume-sequence.ps1 -Mode Run "
         f"-CommitEvidence -CommitReceipts -PreSleepEvidencePath {pre_sleep_arg} -OperatorConfirmedSleepResume"
     )
+    receipt_id_placeholder = "<confirmation_receipt_id>"
+    receipt_backed_sequence_command = (
+        f"{sequence_command} -RequireConfirmationReceipt -ConfirmationReceiptId {receipt_id_placeholder}"
+    )
     sequence_copyable_command = (
         f"Set-Location -LiteralPath {_powershell_single_quote(str(repo_root()))}; {sequence_command}"
+    )
+    receipt_backed_sequence_copyable_command = (
+        f"Set-Location -LiteralPath {_powershell_single_quote(str(repo_root()))}; {receipt_backed_sequence_command}"
     )
     return {
         "status": status,
@@ -1729,6 +1736,17 @@ def _stage16_sleep_continuity_operator_confirmation_handoff(
         "post_resume_sequence_available_after_confirmation": ready_after_confirmation,
         "post_resume_sequence_command": sequence_command if step_id == "capture_post_resume_evidence" else "",
         "post_resume_sequence_copyable_command": sequence_copyable_command
+        if step_id == "capture_post_resume_evidence"
+        else "",
+        "post_resume_receipt_backed_sequence_command": receipt_backed_sequence_command
+        if step_id == "capture_post_resume_evidence"
+        else "",
+        "post_resume_receipt_backed_sequence_copyable_command": receipt_backed_sequence_copyable_command
+        if step_id == "capture_post_resume_evidence"
+        else "",
+        "post_resume_receipt_backed_sequence_requires_confirmation_receipt": confirmation_required
+        and step_id == "capture_post_resume_evidence",
+        "post_resume_receipt_backed_sequence_confirmation_receipt_id_placeholder": receipt_id_placeholder
         if step_id == "capture_post_resume_evidence"
         else "",
         "post_resume_sequence_writes_evidence_when_run": step_id == "capture_post_resume_evidence",
@@ -1767,6 +1785,8 @@ def _stage16_sleep_continuity_operator_confirmation_handoff(
             "does_not_write_receipts": True,
             "does_not_mark_stage16_closed": True,
             "does_not_grant_authority": True,
+            "receipt_backed_sequence_requires_confirmation_receipt": confirmation_required
+            and step_id == "capture_post_resume_evidence",
         },
     }
 

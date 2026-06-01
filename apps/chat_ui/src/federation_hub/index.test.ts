@@ -770,6 +770,12 @@ test("federation sleep-continuity action parser preserves selected read-only ste
         'scripts/federation-stage16-sleep-continuity-post-resume-sequence.ps1 -Mode Run -CommitEvidence -CommitReceipts -PreSleepEvidencePath "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json" -OperatorConfirmedSleepResume',
       post_resume_sequence_copyable_command:
         'Set-Location -LiteralPath \'D:\\Francis\'; scripts/federation-stage16-sleep-continuity-post-resume-sequence.ps1 -Mode Run -CommitEvidence -CommitReceipts -PreSleepEvidencePath "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json" -OperatorConfirmedSleepResume',
+      post_resume_receipt_backed_sequence_command:
+        'scripts/federation-stage16-sleep-continuity-post-resume-sequence.ps1 -Mode Run -CommitEvidence -CommitReceipts -PreSleepEvidencePath "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json" -OperatorConfirmedSleepResume -RequireConfirmationReceipt -ConfirmationReceiptId <confirmation_receipt_id>',
+      post_resume_receipt_backed_sequence_copyable_command:
+        'Set-Location -LiteralPath \'D:\\Francis\'; scripts/federation-stage16-sleep-continuity-post-resume-sequence.ps1 -Mode Run -CommitEvidence -CommitReceipts -PreSleepEvidencePath "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json" -OperatorConfirmedSleepResume -RequireConfirmationReceipt -ConfirmationReceiptId <confirmation_receipt_id>',
+      post_resume_receipt_backed_sequence_requires_confirmation_receipt: true,
+      post_resume_receipt_backed_sequence_confirmation_receipt_id_placeholder: "<confirmation_receipt_id>",
       post_resume_sequence_writes_evidence_when_run: true,
       post_resume_sequence_writes_receipts_when_run: true,
       confirmation_receipt_route: "/federation/sleep-resume-confirmation",
@@ -982,6 +988,29 @@ test("federation sleep-continuity action parser preserves selected read-only ste
     true,
   );
   assert.equal(action.operator_confirmation_handoff?.post_resume_sequence_command?.includes("-CommitReceipts"), true);
+  assert.equal(
+    action.operator_confirmation_handoff?.post_resume_receipt_backed_sequence_command?.includes(
+      "-RequireConfirmationReceipt",
+    ),
+    true,
+  );
+  assert.equal(
+    action.operator_confirmation_handoff?.post_resume_receipt_backed_sequence_command?.includes(
+      "-ConfirmationReceiptId <confirmation_receipt_id>",
+    ),
+    true,
+  );
+  assert.equal(
+    action.operator_confirmation_handoff?.post_resume_receipt_backed_sequence_copyable_command?.includes(
+      action.operator_confirmation_handoff.post_resume_receipt_backed_sequence_command ?? "",
+    ),
+    true,
+  );
+  assert.equal(action.operator_confirmation_handoff?.post_resume_receipt_backed_sequence_requires_confirmation_receipt, true);
+  assert.equal(
+    action.operator_confirmation_handoff?.post_resume_receipt_backed_sequence_confirmation_receipt_id_placeholder,
+    "<confirmation_receipt_id>",
+  );
   assert.equal(action.operator_confirmation_handoff?.post_resume_sequence_writes_evidence_when_run, true);
   assert.equal(action.operator_confirmation_handoff?.post_resume_sequence_writes_receipts_when_run, true);
   assert.equal(action.operator_confirmation_handoff?.confirmation_receipt_route, "/federation/sleep-resume-confirmation");
@@ -1138,6 +1167,10 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   );
   assert.equal(presentation.operator_confirmation_handoff?.post_resume_sequence_available_after_confirmation, true);
   assert.equal(presentation.operator_confirmation_handoff?.post_resume_sequence_writes_receipts_when_run, true);
+  assert.equal(
+    presentation.operator_confirmation_handoff?.post_resume_receipt_backed_sequence_requires_confirmation_receipt,
+    true,
+  );
   assert.equal(presentation.operator_confirmation_handoff?.confirmation_receipt_route, "/federation/sleep-resume-confirmation");
   assert.equal(presentation.operator_confirmation_handoff?.confirmation_receipt_writes_receipts, true);
   assert.equal(presentation.operator_confirmation_handoff?.confirmation_receipt_marks_stage16_closed, false);

@@ -470,6 +470,10 @@ export type FederationSleepContinuityOperatorConfirmationHandoff = {
   post_resume_sequence_available_after_confirmation: boolean;
   post_resume_sequence_command?: string;
   post_resume_sequence_copyable_command?: string;
+  post_resume_receipt_backed_sequence_command?: string;
+  post_resume_receipt_backed_sequence_copyable_command?: string;
+  post_resume_receipt_backed_sequence_requires_confirmation_receipt: boolean;
+  post_resume_receipt_backed_sequence_confirmation_receipt_id_placeholder?: string;
   post_resume_sequence_writes_evidence_when_run: boolean;
   post_resume_sequence_writes_receipts_when_run: boolean;
   confirmation_receipt_route?: string;
@@ -815,6 +819,16 @@ function parseFederationSleepContinuityOperatorConfirmationHandoff(
     ),
     post_resume_sequence_command: optionalString(raw.post_resume_sequence_command),
     post_resume_sequence_copyable_command: optionalString(raw.post_resume_sequence_copyable_command),
+    post_resume_receipt_backed_sequence_command: optionalString(raw.post_resume_receipt_backed_sequence_command),
+    post_resume_receipt_backed_sequence_copyable_command: optionalString(
+      raw.post_resume_receipt_backed_sequence_copyable_command,
+    ),
+    post_resume_receipt_backed_sequence_requires_confirmation_receipt: safeBoolean(
+      raw.post_resume_receipt_backed_sequence_requires_confirmation_receipt,
+    ),
+    post_resume_receipt_backed_sequence_confirmation_receipt_id_placeholder: optionalString(
+      raw.post_resume_receipt_backed_sequence_confirmation_receipt_id_placeholder,
+    ),
     post_resume_sequence_writes_evidence_when_run: safeBoolean(raw.post_resume_sequence_writes_evidence_when_run),
     post_resume_sequence_writes_receipts_when_run: safeBoolean(raw.post_resume_sequence_writes_receipts_when_run),
     confirmation_receipt_route: optionalString(raw.confirmation_receipt_route),

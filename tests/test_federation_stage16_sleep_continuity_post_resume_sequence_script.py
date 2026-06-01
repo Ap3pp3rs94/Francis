@@ -62,6 +62,43 @@ def _run_sequence(*args: str, env: dict[str, str] | None = None) -> subprocess.C
     )
 
 
+def _write_confirmation_receipt(
+    data_dir: Path,
+    *,
+    receipt_id: str,
+    pre_sleep_path: str,
+    confirmed: bool = True,
+) -> None:
+    path = data_dir / "logs" / "federation" / "stage16_sleep_resume_operator_confirmations.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "ok": True,
+                "kind": "francis.stage16.federation.sleep_resume_operator_confirmation_receipt",
+                "receipt_id": receipt_id,
+                "stage": "Stage 16 / Federation",
+                "source_id": "federation",
+                "target": "stage16_sleep_continuity",
+                "actor": "test.operator",
+                "decision": "operator_confirmed_sleep_resume",
+                "operator_confirmed_sleep_resume": confirmed,
+                "pre_sleep_evidence_path": pre_sleep_path,
+                "pre_sleep_recorded_ts": 1_800_030_000,
+                "recorded_ts": 1_800_030_360,
+                "governance": {
+                    "explicit_operator_confirmation": True,
+                    "does_not_infer_sleep_from_delay": True,
+                    "does_not_mark_stage16_closed": True,
+                },
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
 def test_federation_stage16_sleep_post_resume_sequence_status_is_read_only(tmp_path: Path) -> None:
     pre_path = tmp_path / "evidence" / "pre_sleep.json"
 
@@ -73,17 +110,21 @@ def test_federation_stage16_sleep_post_resume_sequence_status_is_read_only(tmp_p
     assert payload["status"] == "ready_for_operator_confirmed_post_resume_sequence"
     assert payload["run_available_after_operator_confirmation"] is True
     assert payload["required_sequence"] == [
-        "operator-confirmed sleep/resume",
+        "operator-confirmed sleep/resume receipt",
         "PostResume evidence",
         "runtime proof receipt",
     ]
     assert "federation-stage16-sleep-continuity-post-resume-sequence.ps1" in payload["sequence_command"]
+    assert "federation-stage16-sleep-continuity-post-resume-sequence.ps1" in payload["receipt_backed_sequence_command"]
     assert "-OperatorConfirmedSleepResume" in payload["sequence_command"]
+    assert "-RequireConfirmationReceipt" in payload["receipt_backed_sequence_command"]
+    assert "-ConfirmationReceiptId <confirmation_receipt_id>" in payload["receipt_backed_sequence_command"]
     assert payload["governance"]["status_projection_only"] is True
     assert payload["governance"]["status_runs_shell"] is False
     assert payload["governance"]["status_writes_evidence"] is False
     assert payload["governance"]["status_writes_receipts"] is False
     assert payload["governance"]["run_requires_operator_confirmed_sleep_resume"] is True
+    assert payload["governance"]["confirmation_receipt_supported"] is True
     assert payload["governance"]["marks_stage16_closed"] is False
     assert payload["writes_evidence"] is False
     assert payload["writes_receipts"] is False
@@ -121,6 +162,88 @@ def test_federation_stage16_sleep_post_resume_sequence_requires_confirmation(tmp
     assert payload["writes_evidence"] is False
     assert payload["writes_receipts"] is False
     assert payload["marks_stage16_closed"] is False
+    assert list(output_dir.glob("post_resume_*.json")) == []
+
+
+def test_federation_stage16_sleep_post_resume_sequence_requires_receipt_id_when_enabled(tmp_path: Path) -> None:
+    output_dir = tmp_path / "evidence"
+    pre_proc = _run_evidence(
+        "-Mode",
+        "PreSleep",
+        "-OutputDir",
+        str(output_dir),
+        "-ContinuityRecordId",
+        "stage16-sleep-sequence-receipt-required-test",
+    )
+    assert pre_proc.returncode == 0, pre_proc.stderr or pre_proc.stdout
+    pre_payload = json.loads(pre_proc.stdout)
+
+    proc = _run_sequence(
+        "-Mode",
+        "Run",
+        "-OutputDir",
+        str(output_dir),
+        "-PreSleepEvidencePath",
+        pre_payload["evidence_path"],
+        "-OperatorConfirmedSleepResume",
+        "-RequireConfirmationReceipt",
+    )
+
+    assert proc.returncode == 1
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "blocked"
+    assert payload["error"] == "confirmation_receipt_id_required"
+    assert payload["require_confirmation_receipt"] is True
+    assert payload["writes_evidence"] is False
+    assert payload["writes_receipts"] is False
+    assert list(output_dir.glob("post_resume_*.json")) == []
+
+
+def test_federation_stage16_sleep_post_resume_sequence_rejects_mismatched_confirmation_receipt(
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "evidence"
+    data_dir = tmp_path / "proof_data"
+    pre_proc = _run_evidence(
+        "-Mode",
+        "PreSleep",
+        "-OutputDir",
+        str(output_dir),
+        "-ContinuityRecordId",
+        "stage16-sleep-sequence-receipt-mismatch-test",
+    )
+    assert pre_proc.returncode == 0, pre_proc.stderr or pre_proc.stdout
+    pre_payload = json.loads(pre_proc.stdout)
+    receipt_id = "fedsleepconfirm_sequence_mismatch"
+    _write_confirmation_receipt(
+        data_dir,
+        receipt_id=receipt_id,
+        pre_sleep_path=str((tmp_path / "other-pre-sleep.json").resolve()),
+    )
+
+    proc = _run_sequence(
+        "-Mode",
+        "Run",
+        "-OutputDir",
+        str(output_dir),
+        "-DataDir",
+        str(data_dir),
+        "-PreSleepEvidencePath",
+        pre_payload["evidence_path"],
+        "-OperatorConfirmedSleepResume",
+        "-RequireConfirmationReceipt",
+        "-ConfirmationReceiptId",
+        receipt_id,
+    )
+
+    assert proc.returncode == 1
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "blocked"
+    assert payload["error"] == "confirmation_receipt_pre_sleep_path_mismatch"
+    assert payload["confirmation_receipt_id"] == receipt_id
+    assert payload["confirmation_receipt"]["receipt_id"] == receipt_id
+    assert payload["writes_evidence"] is False
+    assert payload["writes_receipts"] is False
     assert list(output_dir.glob("post_resume_*.json")) == []
 
 
@@ -183,6 +306,57 @@ def test_federation_stage16_sleep_post_resume_sequence_runs_bounded_child_proofs
 
     receipt_path = data_dir / "logs" / "federation" / "stage16_live_runtime_readbacks.jsonl"
     assert receipt_path.exists()
+
+
+def test_federation_stage16_sleep_post_resume_sequence_runs_with_matching_confirmation_receipt(
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "evidence"
+    data_dir = tmp_path / "proof_data"
+    pre_proc = _run_evidence(
+        "-Mode",
+        "PreSleep",
+        "-OutputDir",
+        str(output_dir),
+        "-ContinuityRecordId",
+        "stage16-sleep-sequence-receipt-backed-test",
+        "-TraceId",
+        "trace-stage16-sleep-sequence-receipt-backed-test",
+        "-AuthoritySnapshotId",
+        "authsnap-stage16-sleep-sequence-receipt-backed-test",
+    )
+    assert pre_proc.returncode == 0, pre_proc.stderr or pre_proc.stdout
+    pre_payload = json.loads(pre_proc.stdout)
+    receipt_id = "fedsleepconfirm_sequence_match"
+    _write_confirmation_receipt(data_dir, receipt_id=receipt_id, pre_sleep_path=pre_payload["evidence_path"])
+
+    proc = _run_sequence(
+        "-Mode",
+        "Run",
+        "-OutputDir",
+        str(output_dir),
+        "-DataDir",
+        str(data_dir),
+        "-PreSleepEvidencePath",
+        pre_payload["evidence_path"],
+        "-OperatorConfirmedSleepResume",
+        "-RequireConfirmationReceipt",
+        "-ConfirmationReceiptId",
+        receipt_id,
+    )
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "sequence_passed"
+    assert payload["require_confirmation_receipt"] is True
+    assert payload["confirmation_receipt_id"] == receipt_id
+    assert payload["confirmation_receipt"]["receipt_id"] == receipt_id
+    assert payload["confirmation_receipt"]["operator_confirmed_sleep_resume"] is True
+    assert payload["post_resume_evidence_status"] == "post_resume_evidence_written"
+    assert payload["runtime_proof_status"] == "proof_passed"
+    assert payload["writes_evidence"] is True
+    assert payload["writes_receipts"] is False
+    assert payload["marks_stage16_closed"] is False
 
 
 def test_federation_stage16_sleep_post_resume_sequence_blocks_commit_in_production(tmp_path: Path) -> None:
