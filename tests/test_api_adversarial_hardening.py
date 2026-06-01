@@ -441,6 +441,77 @@ def test_adversarial_hardening_stage14_closure_decision_is_permissioned_and_audi
     assert closed_review["next_smallest_truthful_gap"] == "stage14_ledger_closure"
 
 
+def test_adversarial_hardening_stage14_closure_can_use_full_operator_delegation(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+    _write_stage13_closure_receipt(data_root)
+
+    from francis.governance import approvals
+
+    delegation = approvals.create_operator_delegation_receipt(
+        delegating_actor="Austin",
+        receiving_actor="codex.builder",
+        granted_scope=[approvals.FULL_OPERATOR_AUTHORITY_SCOPE],
+        reason="austin_grants_codex_full_operator_authority",
+        expiry_policy="active_until_explicit_revocation",
+        governance_overrides={
+            "operator_decision_record": True,
+            "delegated_operator_authority": True,
+            "subdelegation_allowed": False,
+            "production_allowed": False,
+            "regulated_profile_allowed": False,
+            "memory_write": True,
+            "workflow_edits_allowed": True,
+            "stage_closure_allowed": True,
+        },
+    )
+    delegation_id = str(delegation["delegation_id"])
+
+    client = TestClient(create_app())
+    closure = client.post(
+        "/adversarial-hardening/stage-closure-decision",
+        json={
+            "actor": "codex.builder",
+            "reason": "stage14_closure_under_austin_delegation",
+            "decision": "close_stage14",
+            "notes": "full operator delegation permits stage closure decision",
+        },
+    ).json()
+
+    assert closure["ok"] is True
+    assert closure["status"] == "recorded"
+    assert closure["decision"] == "close_stage14"
+    assert closure["authority"] == "delegated_operator"
+    assert closure["delegation_id"] == delegation_id
+    assert closure["delegated_operator_approval"] is True
+    assert closure["stage14_closed_by_receipt"] is True
+    assert closure["writes_receipt"] is True
+    assert closure["grants_execution_authority"] is False
+    assert closure["grants_mutation_authority"] is False
+    assert closure["governance"]["delegated_operator_authority"] is True
+    assert closure["governance"]["delegation_id"] == delegation_id
+    assert closure["next_smallest_truthful_gap"] == "stage14_ledger_closure"
+
+    receipt = closure["receipt"]
+    assert receipt["actor"] == "codex.builder"
+    assert receipt["authority"] == "delegated_operator"
+    assert receipt["delegation_id"] == delegation_id
+    assert receipt["delegated_operator_approval"] is True
+    assert receipt["governance"]["delegated_operator_authority"] is True
+    assert receipt["governance"]["delegation_id"] == delegation_id
+    assert receipt["governance"]["does_not_mutate_runtime_stage_state"] is True
+
+    readback = client.get("/adversarial-hardening/stage-closure-decisions").json()
+    assert readback["status"] == "closed"
+    assert readback["latest_receipt_id"] == closure["receipt_id"]
+    assert readback["items"][-1]["delegation_id"] == delegation_id
+
+
 def test_adversarial_hardening_policy_bypass_regression_suite_is_read_only_and_governed(
     monkeypatch,
     tmp_path: Path,

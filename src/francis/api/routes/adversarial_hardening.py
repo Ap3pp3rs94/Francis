@@ -5,6 +5,12 @@ from typing import Any
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
+from francis.governance.approvals import (
+    BUILDER_APPROVAL_ACTOR,
+    DELEGATED_OPERATOR_AUTHORITY,
+    FULL_OPERATOR_AUTHORITY_SCOPE,
+    active_operator_delegation_for,
+)
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.adversarial_hardening import (
     ADVERSARIAL_HARDENING_STAGE_CLOSURE_SCOPE,
@@ -40,6 +46,64 @@ def _write_permission(
         required_scopes=[required_scope],
         route=route,
         method=method,
+    )
+
+
+def _stage14_closure_permission(
+    actor: Any,
+    *,
+    route: str,
+    method: str,
+) -> tuple[ApiPermissionDecision, dict[str, Any]]:
+    decision = _write_permission(
+        actor,
+        required_scope=ADVERSARIAL_HARDENING_STAGE_CLOSURE_SCOPE,
+        route=route,
+        method=method,
+    )
+    if decision.allowed:
+        return decision, {}
+
+    actor_id = str(actor or "").strip()
+    if actor_id != BUILDER_APPROVAL_ACTOR:
+        return decision, {}
+
+    delegation = active_operator_delegation_for(
+        receiving_actor=BUILDER_APPROVAL_ACTOR,
+        required_scopes=[FULL_OPERATOR_AUTHORITY_SCOPE],
+    )
+    if delegation is None:
+        return decision, {}
+
+    raw_governance = delegation.get("governance")
+    governance: dict[str, Any] = raw_governance if isinstance(raw_governance, dict) else {}
+    if not bool(governance.get("stage_closure_allowed")):
+        return (
+            ApiPermissionDecision(
+                allowed=False,
+                reason="delegation_stage_closure_not_allowed",
+                evidence={
+                    **decision.evidence,
+                    "delegation_id": str(delegation.get("delegation_id", "")),
+                    "authority": DELEGATED_OPERATOR_AUTHORITY,
+                },
+            ),
+            {},
+        )
+
+    return (
+        ApiPermissionDecision(
+            allowed=True,
+            reason="delegated_operator_stage_closure_authority",
+            evidence={
+                **decision.evidence,
+                "delegation_id": str(delegation.get("delegation_id", "")),
+                "authority": DELEGATED_OPERATOR_AUTHORITY,
+                "full_operator_authority": bool(governance.get("full_operator_authority")),
+                "stage_closure_allowed": True,
+            },
+        ),
+        delegation,
     )
 
 
@@ -115,9 +179,8 @@ def stage_closure_decisions(limit: int = 20) -> dict[str, Any]:
 @router.post("/stage-closure-decision")
 def stage_closure_decision(request: Request, payload: Stage14ClosureDecisionIn) -> dict[str, Any]:
     route = "/adversarial-hardening/stage-closure-decision"
-    decision = _write_permission(
+    decision, delegation = _stage14_closure_permission(
         payload.actor,
-        required_scope=ADVERSARIAL_HARDENING_STAGE_CLOSURE_SCOPE,
         route=route,
         method="post",
     )
@@ -169,6 +232,9 @@ def stage_closure_decision(request: Request, payload: Stage14ClosureDecisionIn) 
         decision=payload.decision,
         review=review,
         notes=payload.notes,
+        authority=DELEGATED_OPERATOR_AUTHORITY if delegation else "operator",
+        delegation_id=delegation.get("delegation_id", "") if delegation else "",
+        delegated_operator=bool(delegation),
     )
     return {
         "ok": bool(receipt.get("ok")),
@@ -178,6 +244,9 @@ def stage_closure_decision(request: Request, payload: Stage14ClosureDecisionIn) 
         "receipt": receipt,
         "receipt_id": receipt.get("receipt_id", ""),
         "decision": receipt.get("decision", ""),
+        "authority": receipt.get("authority", ""),
+        "delegation_id": receipt.get("delegation_id", ""),
+        "delegated_operator_approval": bool(receipt.get("delegated_operator_approval")),
         "stage14_closed_by_receipt": bool(receipt.get("stage14_closed_by_receipt")),
         "completion_review_ready": bool(receipt.get("completion_review_ready")),
         "marks_runtime_stage_state": bool(receipt.get("marks_runtime_stage_state")),
@@ -196,6 +265,9 @@ def stage_closure_decision(request: Request, payload: Stage14ClosureDecisionIn) 
             "route": str(request.url.path),
             "explicit_operator_decision": True,
             "stage_closure_decision": True,
+            "authority": receipt.get("authority", ""),
+            "delegation_id": receipt.get("delegation_id", ""),
+            "delegated_operator_authority": bool(receipt.get("delegated_operator_approval")),
             "completion_review_ready": bool(receipt.get("completion_review_ready")),
             "does_not_mutate_runtime_stage_state": True,
             "does_not_write_memory": True,

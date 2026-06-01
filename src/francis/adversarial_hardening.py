@@ -667,11 +667,16 @@ def record_adversarial_hardening_stage14_operator_stage_closure_decision(
     decision: Any,
     review: dict[str, Any],
     notes: Any = "",
+    authority: Any = "operator",
+    delegation_id: Any = "",
+    delegated_operator: bool = False,
 ) -> dict[str, Any]:
     safe_decision = _safe_stage14_closure_decision(decision)
     closure_ready = bool(review.get("stage14_completion_review_ready"))
     stage14_closed_by_receipt = safe_decision == "close_stage14" and closure_ready
     receipt_id = f"adversarial_hardening_stage14_closure_{uuid.uuid4().hex[:12]}"
+    clean_authority = _safe_text(authority) or "operator"
+    clean_delegation_id = _safe_text(delegation_id)
     payload = {
         "ok": True,
         "kind": ADVERSARIAL_HARDENING_STAGE_CLOSURE_DECISION_KIND,
@@ -684,6 +689,9 @@ def record_adversarial_hardening_stage14_operator_stage_closure_decision(
         "reason": _redacted_text(reason)[:500],
         "decision": safe_decision,
         "notes": _redacted_text(notes)[:500],
+        "authority": clean_authority,
+        "delegation_id": clean_delegation_id,
+        "delegated_operator_approval": bool(delegated_operator),
         "review_status": _safe_text(review.get("status")),
         "completion_review_ready": closure_ready,
         "stage14_completion_review_ready": closure_ready,
@@ -713,6 +721,9 @@ def record_adversarial_hardening_stage14_operator_stage_closure_decision(
             "permission_scope": ADVERSARIAL_HARDENING_STAGE_CLOSURE_SCOPE,
             "explicit_operator_decision": True,
             "stage_closure_decision": True,
+            "authority": clean_authority,
+            "delegation_id": clean_delegation_id,
+            "delegated_operator_authority": bool(delegated_operator),
             "completion_review_ready": closure_ready,
             "requires_stage13_ledger_closure": True,
             "requires_injection_containment": True,
@@ -735,6 +746,8 @@ def record_adversarial_hardening_stage14_operator_stage_closure_decision(
         reason=payload["reason"],
         receipt_id=receipt_id,
         decision=safe_decision,
+        authority=clean_authority,
+        delegation_id=clean_delegation_id,
         stage14_closed_by_receipt=stage14_closed_by_receipt,
     )
     return payload
