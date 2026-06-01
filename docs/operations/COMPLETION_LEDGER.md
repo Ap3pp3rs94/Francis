@@ -51269,6 +51269,78 @@ Latest validation for Stage 16 remote approval runtime proof:
   tests/test_federation_stage16_local_loopback_runtime_proof_script.py`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 Federation revocation runtime readback is observed
+
+Roadmap area: Stage 16 / Federation, scoped revocation and traceable stop
+conditions.
+
+Material change:
+
+- Added `scripts/federation-stage16-revocation-runtime-proof.ps1`.
+- The proof records an active scoped local-loopback pairing, obtains a local
+  operator approval receipt for revocation, records the latest event for that
+  scope as `revoked`, writes stopped remote-approval and sync-lane flags, writes
+  a federation trace, and records `live_revocation_roundtrip_observed` as
+  `live_runtime_probe` evidence.
+- The proof uses existing governed routes:
+  `POST /federation/instances/upsert`,
+  `POST /federation/delegations/record`, `POST /approvals/request`,
+  `POST /approvals/decision`, `POST /federation/consensus_logs/append`, and
+  `POST /federation/live-runtime-readback`.
+- The revocation proof is local-loopback only. It does not silently reactivate
+  a scope, grant authority, write memory, execute remote approval authority,
+  mark Stage 16 closed, or claim workstation sleep/resume continuity.
+
+Current project-data readback after running commit mode:
+
+- `GET /federation/live-runtime-readbacks`,
+  `GET /federation/completion-review`, and `GET /federation/status`
+  Result:
+  `readbacks_status=partial; receipt_ready_count=4; ready_count=4;
+  completion_eligible_readback_count=4; required_count=5;
+  missing_readbacks=[workstation_sleep_continuity_validated];
+  live_runtime_readback_ready=false; completion_status=blocked;
+  completion_ready=false; ready_to_close=false;
+  readbacks_next_gap=stage16_sleep_continuity_runtime_readback;
+  completion_next_gap=stage16_sleep_continuity_runtime_readback;
+  status_next_gap=stage16_sleep_continuity_runtime_readback`.
+
+Latest validation for Stage 16 revocation runtime proof:
+
+- `scripts/federation-stage16-revocation-runtime-proof.ps1 -Mode Status
+  -CommitReceipts`
+  Result:
+  `proof_passed; commit_receipts=true; before_ready_count=3;
+  ready_count=4; completion_eligible_readback_count=4;
+  missing_readbacks=[workstation_sleep_continuity_validated];
+  live_runtime_readback_ready=false; completion_review_ready=false;
+  ready_to_close=false;
+  next_smallest_truthful_gap=stage16_sleep_continuity_runtime_readback`.
+- PowerShell parser check for
+  `scripts/federation-stage16-revocation-runtime-proof.ps1`
+  Result: `passed; parser_ok`.
+- `python -m pytest tests/test_api_federation.py
+  tests/test_federation_stage16_revocation_runtime_proof_script.py
+  tests/test_federation_stage16_remote_approval_runtime_proof_script.py
+  tests/test_federation_stage16_local_loopback_runtime_proof_script.py
+  tests/test_federation_stage16_live_runtime_readback_proof_script.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  --tb=short --maxfail=1`
+  with `FRANCIS_PYTEST_SESSION_RETENTION_ROOT=data/test_runs/pytest/s16revall`
+  Result: `passed; 21 passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py
+  tests/test_federation_stage16_revocation_runtime_proof_script.py
+  tests/test_federation_stage16_remote_approval_runtime_proof_script.py
+  tests/test_federation_stage16_local_loopback_runtime_proof_script.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py
+  tests/test_federation_stage16_revocation_runtime_proof_script.py
+  tests/test_federation_stage16_remote_approval_runtime_proof_script.py
+  tests/test_federation_stage16_local_loopback_runtime_proof_script.py`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
