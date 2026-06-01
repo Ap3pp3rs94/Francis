@@ -52542,6 +52542,61 @@ Latest validation for Stage 16 sleep action command validation:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 sleep action exposes terminal invocation handoff
+
+Roadmap area: Stage 16 / Federation, workstation sleep-continuity gate
+truthfulness.
+
+Material change:
+
+- `/federation/sleep-continuity-action` now exposes a read-only
+  `operator_terminal_invocation` projection for the selected sleep-continuity
+  action.
+- The projection carries the shell, working directory, selected command,
+  copyable PowerShell command, required operator-confirmation preconditions,
+  command validation checks, run blockers, and manual-execution effect flags.
+- The current post-resume capture posture can therefore show exactly how the
+  operator should run the command after a real sleep/resume cycle while still
+  reporting `ready_to_run=false` until explicit sleep/resume confirmation.
+- The federation UI parser, presenter, and panel preserve and render this
+  terminal invocation handoff.
+- This is read-only inspectability. It does not execute routes, run shell
+  commands, write evidence, write receipts, mutate registry state, write memory,
+  grant execution authority, grant mutation authority, infer workstation
+  sleep/resume, or mark Stage 16 closed.
+- Stage 16 remains open until live post-resume evidence and the receipt-backed
+  completion/closure gates are satisfied.
+
+Latest validation for Stage 16 sleep action terminal invocation handoff:
+
+- Live FastAPI readback of `/federation/sleep-continuity-action`
+  Result: `status=capture_post_resume_evidence`,
+  `operator_terminal_invocation.status=command_ready_for_operator_terminal`,
+  `shell=powershell`, `working_directory=D:\Francis`,
+  `selected_step_id=capture_post_resume_evidence`,
+  `operator_confirmation_required=true`,
+  `must_run_after_sleep_resume=true`, `operator_terminal_command_ready=true`,
+  `ready_to_run=false`, `projection_runs_shell=false`,
+  `projection_writes_evidence=false`, `projection_writes_receipts=false`,
+  `copyable_command` includes `Set-Location -LiteralPath`, and
+  `next_smallest_truthful_gap=stage16_sleep_continuity_runtime_readback`.
+- `python -m pytest tests/test_api_federation.py -q --tb=short`
+  Result: `passed; 19 passed`.
+- `cd apps/chat_ui; npm run test -- federation_hub`
+  Result: `passed; 187 passed`.
+- `cd apps/chat_ui; npm run build`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

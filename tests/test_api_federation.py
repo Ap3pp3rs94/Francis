@@ -1309,6 +1309,28 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert action["selected_action_readiness"]["next_operator_step"] == (
         "operator_confirm_sleep_resume_then_capture_post_resume_evidence"
     )
+    from francis.kernel.paths import repo_root
+
+    invocation = action["operator_terminal_invocation"]
+    assert invocation["status"] == "command_ready_for_operator_terminal"
+    assert invocation["shell"] == "powershell"
+    assert invocation["working_directory"] == str(repo_root())
+    assert invocation["command"] == action["primary_command"]
+    assert invocation["copyable_command"].startswith("Set-Location -LiteralPath ")
+    assert action["primary_command"] in invocation["copyable_command"]
+    assert invocation["selected_step_id"] == "capture_post_resume_evidence"
+    assert invocation["operator_confirmation_required"] is True
+    assert invocation["must_run_after_sleep_resume"] is True
+    assert invocation["preconditions"] == action["operator_confirmation_requirements"]
+    assert invocation["ready_to_run"] is False
+    assert invocation["operator_terminal_command_ready"] is True
+    assert invocation["manual_execution_writes_evidence"] is True
+    assert invocation["manual_execution_writes_receipts"] is False
+    assert invocation["projection_only"] is True
+    assert invocation["projection_runs_shell"] is False
+    assert invocation["projection_writes_evidence"] is False
+    assert invocation["projection_writes_receipts"] is False
+    assert invocation["projection_grants_authority"] is False
     assert "-OperatorConfirmedSleepResume" in action["primary_command"]
     assert action["pre_sleep_evidence_ready"] is True
     assert action["post_resume_evidence_ready"] is False
@@ -1395,6 +1417,18 @@ def test_federation_stage16_sleep_continuity_runbook_uses_linked_post_resume_mar
         "runtime_receipt_commit_command_bound",
     ]
     assert action["selected_action_readiness"]["command_validation_blockers"] == []
+    invocation = action["operator_terminal_invocation"]
+    assert invocation["status"] == "command_ready_for_operator_terminal"
+    assert invocation["selected_step_id"] == "commit_sleep_continuity_readback"
+    assert invocation["operator_confirmation_required"] is False
+    assert invocation["must_run_after_sleep_resume"] is False
+    assert invocation["preconditions"] == []
+    assert invocation["ready_to_run"] is True
+    assert invocation["operator_terminal_command_ready"] is True
+    assert invocation["manual_execution_writes_evidence"] is False
+    assert invocation["manual_execution_writes_receipts"] is True
+    assert invocation["projection_only"] is True
+    assert invocation["projection_runs_shell"] is False
     assert action["pre_sleep_evidence_ready"] is True
     assert action["post_resume_evidence_ready"] is True
     assert action["operator_confirmation_required"] is False

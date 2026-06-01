@@ -110,6 +110,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
   const latestPreSleepEvidence = status?.latest_pre_sleep_evidence;
   const latestPostResumeEvidence = status?.latest_post_resume_evidence;
   const selectedActionReadiness = presentation?.selected_action_readiness;
+  const operatorTerminalInvocation = presentation?.operator_terminal_invocation;
 
   return (
     <section style={panelStyle}>
@@ -221,6 +222,46 @@ export function FederationHubPanel(props: { baseUrl: string }) {
           >
             {presentation.primary_command}
           </pre>
+        ) : null}
+        {operatorTerminalInvocation ? (
+          <div style={{ marginTop: 8 }}>
+            <div style={{ fontSize: 11, color: MUTED }}>
+              terminal invocation <code>{codeValue(operatorTerminalInvocation.status)}</code>
+              {" / "}shell <code>{codeValue(operatorTerminalInvocation.shell)}</code>
+              {" / "}ready <code>{yesNo(operatorTerminalInvocation.operator_terminal_command_ready)}</code>
+            </div>
+            {operatorTerminalInvocation.working_directory ? (
+              <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
+                cwd <code>{operatorTerminalInvocation.working_directory}</code>
+              </div>
+            ) : null}
+            {operatorTerminalInvocation.copyable_command ? (
+              <pre
+                style={{
+                  margin: "8px 0 0",
+                  padding: 10,
+                  borderRadius: 10,
+                  border: `1px solid ${PANEL_BORDER}`,
+                  background: "#101010",
+                  color: TEXT,
+                  whiteSpace: "pre-wrap",
+                  overflowWrap: "anywhere",
+                  fontSize: 11,
+                }}
+              >
+                {operatorTerminalInvocation.copyable_command}
+              </pre>
+            ) : null}
+            {operatorTerminalInvocation.preconditions.length ? (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                {operatorTerminalInvocation.preconditions.map((precondition) => (
+                  <span key={`federation-terminal-precondition-${precondition}`} style={badgeStyle("blocked")}>
+                    {precondition}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
         ) : null}
         {presentation?.expected_output ? (
           <div style={{ fontSize: 11, color: MUTED, marginTop: 8 }}>

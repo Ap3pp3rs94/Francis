@@ -561,6 +561,41 @@ test("federation sleep-continuity action parser preserves selected read-only ste
       writes_evidence_when_run: true,
       writes_receipts_when_run: false,
     },
+    operator_terminal_invocation: {
+      status: "command_ready_for_operator_terminal",
+      shell: "powershell",
+      working_directory: "D:\\Francis",
+      command:
+        'scripts/federation-stage16-sleep-continuity-evidence.ps1 -Mode PostResume -CommitEvidence -PreSleepEvidencePath "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json" -OperatorConfirmedSleepResume',
+      copyable_command:
+        'Set-Location -LiteralPath \'D:\\Francis\'; scripts/federation-stage16-sleep-continuity-evidence.ps1 -Mode PostResume -CommitEvidence -PreSleepEvidencePath "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json" -OperatorConfirmedSleepResume',
+      selected_step_id: "capture_post_resume_evidence",
+      operator_confirmation_required: true,
+      must_run_after_sleep_resume: true,
+      preconditions: [
+        "operator_confirms_workstation_entered_sleep_or_suspend_after_pre_sleep_evidence",
+        "operator_confirms_workstation_resumed_before_post_resume_capture",
+        "pre_sleep_evidence_path_matches_latest_pre_sleep_artifact",
+        "post_resume_capture_uses_operator_confirmed_sleep_resume_flag",
+      ],
+      command_validation: [
+        "selected_command_projected",
+        "latest_pre_sleep_evidence_path_bound",
+        "operator_confirmed_sleep_resume_flag_bound",
+        "post_resume_evidence_capture_command_bound",
+      ],
+      command_validation_blockers: [],
+      run_blockers: ["operator_confirmed_sleep_resume_missing"],
+      ready_to_run: false,
+      operator_terminal_command_ready: true,
+      manual_execution_writes_evidence: true,
+      manual_execution_writes_receipts: false,
+      projection_only: true,
+      projection_runs_shell: false,
+      projection_writes_evidence: false,
+      projection_writes_receipts: false,
+      projection_grants_authority: false,
+    },
     writes_evidence_when_run: true,
     writes_receipts_when_run: false,
     mutation_available_from_ui: false,
@@ -628,6 +663,22 @@ test("federation sleep-continuity action parser preserves selected read-only ste
     "post_resume_evidence_capture_command_bound",
   ]);
   assert.deepEqual(action.selected_action_readiness?.command_validation_blockers, []);
+  assert.equal(action.operator_terminal_invocation?.status, "command_ready_for_operator_terminal");
+  assert.equal(action.operator_terminal_invocation?.shell, "powershell");
+  assert.equal(action.operator_terminal_invocation?.working_directory, "D:\\Francis");
+  assert.equal(action.operator_terminal_invocation?.command, action.primary_command);
+  assert.equal(action.operator_terminal_invocation?.copyable_command?.includes("Set-Location -LiteralPath"), true);
+  assert.equal(action.operator_terminal_invocation?.operator_confirmation_required, true);
+  assert.equal(action.operator_terminal_invocation?.must_run_after_sleep_resume, true);
+  assert.deepEqual(action.operator_terminal_invocation?.preconditions, action.operator_confirmation_requirements);
+  assert.deepEqual(action.operator_terminal_invocation?.run_blockers, ["operator_confirmed_sleep_resume_missing"]);
+  assert.equal(action.operator_terminal_invocation?.ready_to_run, false);
+  assert.equal(action.operator_terminal_invocation?.operator_terminal_command_ready, true);
+  assert.equal(action.operator_terminal_invocation?.manual_execution_writes_evidence, true);
+  assert.equal(action.operator_terminal_invocation?.manual_execution_writes_receipts, false);
+  assert.equal(action.operator_terminal_invocation?.projection_runs_shell, false);
+  assert.equal(action.operator_terminal_invocation?.projection_writes_evidence, false);
+  assert.equal(action.operator_terminal_invocation?.projection_grants_authority, false);
   assert.equal(
     action.selected_action_readiness?.next_operator_step,
     "operator_confirm_sleep_resume_then_capture_post_resume_evidence",
@@ -698,6 +749,10 @@ test("federation sleep-continuity action parser preserves selected read-only ste
     "operator_confirmed_sleep_resume_flag_bound",
     "post_resume_evidence_capture_command_bound",
   ]);
+  assert.equal(presentation.operator_terminal_invocation?.status, "command_ready_for_operator_terminal");
+  assert.equal(presentation.operator_terminal_invocation?.copyable_command?.includes(action.primary_command ?? ""), true);
+  assert.equal(presentation.operator_terminal_invocation?.must_run_after_sleep_resume, true);
+  assert.equal(presentation.operator_terminal_invocation?.projection_only, true);
   assert.equal(presentation.writes_evidence_when_run, true);
   assert.equal(presentation.writes_receipts_when_run, false);
   assert.equal(presentation.mutation_available_from_ui, false);

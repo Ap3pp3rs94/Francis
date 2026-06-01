@@ -328,6 +328,30 @@ export type FederationSleepContinuitySelectedActionReadiness = {
   writes_receipts_when_run: boolean;
 };
 
+export type FederationSleepContinuityOperatorTerminalInvocation = {
+  status?: string;
+  shell?: string;
+  working_directory?: string;
+  command?: string;
+  copyable_command?: string;
+  selected_step_id?: string;
+  operator_confirmation_required: boolean;
+  must_run_after_sleep_resume: boolean;
+  preconditions: string[];
+  command_validation: string[];
+  command_validation_blockers: string[];
+  run_blockers: string[];
+  ready_to_run: boolean;
+  operator_terminal_command_ready: boolean;
+  manual_execution_writes_evidence: boolean;
+  manual_execution_writes_receipts: boolean;
+  projection_only: boolean;
+  projection_runs_shell: boolean;
+  projection_writes_evidence: boolean;
+  projection_writes_receipts: boolean;
+  projection_grants_authority: boolean;
+};
+
 export type FederationSleepContinuityPresentation = {
   state: FederationSleepContinuityActionState;
   status_label: string;
@@ -354,6 +378,7 @@ export type FederationSleepContinuityPresentation = {
   operator_confirmation_required: boolean;
   operator_confirmation_requirements: string[];
   selected_action_readiness?: FederationSleepContinuitySelectedActionReadiness;
+  operator_terminal_invocation?: FederationSleepContinuityOperatorTerminalInvocation;
   writes_evidence_when_run: boolean;
   writes_receipts_when_run: boolean;
   expected_output?: string;
@@ -389,6 +414,7 @@ export type FederationSleepContinuityActionReadback = {
   operator_confirmation_required: boolean;
   operator_confirmation_requirements: string[];
   selected_action_readiness?: FederationSleepContinuitySelectedActionReadiness;
+  operator_terminal_invocation?: FederationSleepContinuityOperatorTerminalInvocation;
   writes_evidence_when_run: boolean;
   writes_receipts_when_run: boolean;
   mutation_available_from_ui: boolean;
@@ -495,6 +521,35 @@ function parseFederationSleepContinuitySelectedActionReadiness(
     operator_confirmation_required: safeBoolean(raw.operator_confirmation_required),
     writes_evidence_when_run: safeBoolean(raw.writes_evidence_when_run),
     writes_receipts_when_run: safeBoolean(raw.writes_receipts_when_run),
+  };
+}
+
+function parseFederationSleepContinuityOperatorTerminalInvocation(
+  raw: unknown,
+): FederationSleepContinuityOperatorTerminalInvocation | undefined {
+  if (!isRecord(raw)) return undefined;
+  return {
+    status: optionalString(raw.status),
+    shell: optionalString(raw.shell),
+    working_directory: optionalString(raw.working_directory),
+    command: optionalString(raw.command),
+    copyable_command: optionalString(raw.copyable_command),
+    selected_step_id: optionalString(raw.selected_step_id),
+    operator_confirmation_required: safeBoolean(raw.operator_confirmation_required),
+    must_run_after_sleep_resume: safeBoolean(raw.must_run_after_sleep_resume),
+    preconditions: stringList(raw.preconditions),
+    command_validation: stringList(raw.command_validation),
+    command_validation_blockers: stringList(raw.command_validation_blockers),
+    run_blockers: stringList(raw.run_blockers),
+    ready_to_run: safeBoolean(raw.ready_to_run),
+    operator_terminal_command_ready: safeBoolean(raw.operator_terminal_command_ready),
+    manual_execution_writes_evidence: safeBoolean(raw.manual_execution_writes_evidence),
+    manual_execution_writes_receipts: safeBoolean(raw.manual_execution_writes_receipts),
+    projection_only: safeBoolean(raw.projection_only),
+    projection_runs_shell: safeBoolean(raw.projection_runs_shell),
+    projection_writes_evidence: safeBoolean(raw.projection_writes_evidence),
+    projection_writes_receipts: safeBoolean(raw.projection_writes_receipts),
+    projection_grants_authority: safeBoolean(raw.projection_grants_authority),
   };
 }
 
@@ -998,6 +1053,9 @@ export function parseFederationSleepContinuityAction(raw: unknown): FederationSl
     operator_confirmation_required: safeBoolean(body.operator_confirmation_required),
     operator_confirmation_requirements: stringList(body.operator_confirmation_requirements),
     selected_action_readiness: parseFederationSleepContinuitySelectedActionReadiness(body.selected_action_readiness),
+    operator_terminal_invocation: parseFederationSleepContinuityOperatorTerminalInvocation(
+      body.operator_terminal_invocation,
+    ),
     writes_evidence_when_run: safeBoolean(body.writes_evidence_when_run),
     writes_receipts_when_run: safeBoolean(body.writes_receipts_when_run),
     mutation_available_from_ui: safeBoolean(body.mutation_available_from_ui),
@@ -1092,6 +1150,7 @@ function buildFederationSleepContinuityPresentation(
     operator_confirmation_required: selectedStep?.operator_confirmation_required ?? false,
     operator_confirmation_requirements: [],
     selected_action_readiness: undefined,
+    operator_terminal_invocation: undefined,
     writes_evidence_when_run: selectedStep?.writes_evidence_when_run ?? false,
     writes_receipts_when_run: selectedStep?.writes_receipts_when_run ?? false,
     expected_output: selectedStep?.expected_output,
@@ -1185,6 +1244,7 @@ export function presentFederationSleepContinuityAction(
       action.operator_confirmation_required || selectedStep?.operator_confirmation_required === true,
     operator_confirmation_requirements: action.operator_confirmation_requirements,
     selected_action_readiness: action.selected_action_readiness,
+    operator_terminal_invocation: action.operator_terminal_invocation,
     writes_evidence_when_run: action.writes_evidence_when_run || selectedStep?.writes_evidence_when_run === true,
     writes_receipts_when_run: action.writes_receipts_when_run || selectedStep?.writes_receipts_when_run === true,
     expected_output: action.expected_output ?? selectedStep?.expected_output,

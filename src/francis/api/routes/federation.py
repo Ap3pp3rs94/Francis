@@ -13,7 +13,7 @@ from fastapi import APIRouter, Request
 
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.redaction import redact_secret_text
-from francis.kernel.paths import data_dir
+from francis.kernel.paths import data_dir, repo_root
 from francis.swarm import swarm_stage15_operator_stage_closure_decision_readback
 
 router = APIRouter()
@@ -1223,6 +1223,10 @@ def _stage16_sleep_continuity_confirmation_requirements(step_id: str) -> list[st
     return []
 
 
+def _powershell_single_quote(value: Any) -> str:
+    return "'" + _safe_str(value).replace("'", "''") + "'"
+
+
 def _stage16_sleep_continuity_selected_action_readiness(
     *,
     state: str,
@@ -1343,6 +1347,43 @@ def _stage16_sleep_continuity_selected_action_readiness(
     }
 
 
+def _stage16_sleep_continuity_operator_terminal_invocation(
+    *,
+    selected_step: dict[str, Any],
+    selected_action_readiness: dict[str, Any],
+    confirmation_requirements: list[str],
+) -> dict[str, Any]:
+    command = _safe_str(selected_step.get("command")).strip()
+    step_id = _safe_str(selected_step.get("id")).strip()
+    working_directory = str(repo_root())
+    command_ready = bool(selected_action_readiness.get("operator_terminal_command_ready"))
+    return {
+        "status": "command_ready_for_operator_terminal" if command_ready else "command_not_ready_for_operator_terminal",
+        "shell": "powershell",
+        "working_directory": working_directory,
+        "command": command,
+        "copyable_command": f"Set-Location -LiteralPath {_powershell_single_quote(working_directory)}; {command}"
+        if command
+        else "",
+        "selected_step_id": step_id,
+        "operator_confirmation_required": bool(selected_step.get("operator_confirmation_required")),
+        "must_run_after_sleep_resume": step_id == "capture_post_resume_evidence",
+        "preconditions": confirmation_requirements,
+        "command_validation": _parse_list(selected_action_readiness.get("command_validation")),
+        "command_validation_blockers": _parse_list(selected_action_readiness.get("command_validation_blockers")),
+        "run_blockers": _parse_list(selected_action_readiness.get("run_blockers")),
+        "ready_to_run": bool(selected_action_readiness.get("ready_to_run")),
+        "operator_terminal_command_ready": command_ready,
+        "manual_execution_writes_evidence": bool(selected_step.get("writes_evidence_when_run")),
+        "manual_execution_writes_receipts": bool(selected_step.get("writes_receipts_when_run")),
+        "projection_only": True,
+        "projection_runs_shell": False,
+        "projection_writes_evidence": False,
+        "projection_writes_receipts": False,
+        "projection_grants_authority": False,
+    }
+
+
 def stage16_sleep_continuity_action() -> dict[str, Any]:
     runbook = stage16_sleep_continuity_runbook()
     blockers = _parse_list(runbook.get("missing_readbacks"))
@@ -1383,6 +1424,11 @@ def stage16_sleep_continuity_action() -> dict[str, Any]:
         pre_sleep_evidence_ready=pre_sleep_evidence_ready,
         post_resume_evidence_ready=post_resume_evidence_ready,
     )
+    operator_terminal_invocation = _stage16_sleep_continuity_operator_terminal_invocation(
+        selected_step=selected_step,
+        selected_action_readiness=selected_action_readiness,
+        confirmation_requirements=confirmation_requirements,
+    )
 
     return {
         "ok": True,
@@ -1413,6 +1459,7 @@ def stage16_sleep_continuity_action() -> dict[str, Any]:
         "operator_confirmation_required": bool(selected_step.get("operator_confirmation_required")),
         "operator_confirmation_requirements": confirmation_requirements,
         "selected_action_readiness": selected_action_readiness,
+        "operator_terminal_invocation": operator_terminal_invocation,
         "writes_evidence_when_run": bool(selected_step.get("writes_evidence_when_run")),
         "writes_receipts_when_run": bool(selected_step.get("writes_receipts_when_run")),
         "mutation_available_from_ui": False,
@@ -1426,6 +1473,7 @@ def stage16_sleep_continuity_action() -> dict[str, Any]:
             "does_not_infer_sleep_from_delay": True,
             "confirmation_requirements_projected": bool(confirmation_requirements),
             "selected_action_readiness_projected": True,
+            "operator_terminal_invocation_projected": True,
             "does_not_run_selected_command": True,
             "does_not_post_selected_route": True,
             "writes_evidence": False,
