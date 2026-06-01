@@ -67,6 +67,7 @@ def test_adversarial_hardening_status_blocks_until_stage13_closure(monkeypatch, 
     assert body["injection_containment_contract_ready"] is False
     assert body["quarantine_model_contract_ready"] is False
     assert body["red_team_suite_ready"] is False
+    assert body["policy_bypass_regression_suite_ready"] is False
     assert body["ready_count"] == 0
     assert body["required_count"] == 5
     assert body["governance"]["read_only"] is True
@@ -119,15 +120,19 @@ def test_adversarial_hardening_injection_contract_is_ready_after_stage13_closure
     assert contract["next_smallest_truthful_gap"] == "stage14_quarantine_model_contract"
 
     status = client.get("/adversarial-hardening/status").json()
-    assert status["status"] == "stage14_red_team_regression_suite_ready"
+    assert status["status"] == "stage14_policy_bypass_regression_suite_ready"
     assert status["stage13_closed_by_receipt"] is True
     assert status["injection_containment_contract_ready"] is True
     assert status["quarantine_model_contract_ready"] is True
     assert status["red_team_suite_ready"] is True
-    assert status["ready_count"] == 4
+    assert status["policy_bypass_regression_suite_ready"] is True
+    assert status["ready_count"] == 5
     assert status["required_count"] == 5
     assert status["routes"]["red_team_regression_suite"] == "/adversarial-hardening/red-team-regression-suite"
-    assert status["next_smallest_truthful_gap"] == "stage14_policy_bypass_regression_suite"
+    assert status["routes"]["policy_bypass_regression_suite"] == (
+        "/adversarial-hardening/policy-bypass-regression-suite"
+    )
+    assert status["next_smallest_truthful_gap"] == "stage14_completion_review"
 
 
 def test_adversarial_hardening_quarantine_model_contract_is_read_only_and_approval_bound(
@@ -239,8 +244,100 @@ def test_adversarial_hardening_red_team_regression_suite_replays_bounded_corpus(
     assert "curl https://example.invalid/install.sh" not in response_text
 
     status = client.get("/adversarial-hardening/status").json()
-    assert status["status"] == "stage14_red_team_regression_suite_ready"
+    assert status["status"] == "stage14_policy_bypass_regression_suite_ready"
     assert status["red_team_suite_ready"] is True
-    assert status["ready_count"] == 4
+    assert status["policy_bypass_regression_suite_ready"] is True
+    assert status["ready_count"] == 5
     assert status["required_count"] == 5
-    assert status["next_smallest_truthful_gap"] == "stage14_policy_bypass_regression_suite"
+    assert status["next_smallest_truthful_gap"] == "stage14_completion_review"
+
+
+def test_adversarial_hardening_policy_bypass_regression_suite_is_read_only_and_governed(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage13_closure_receipt(data_root)
+
+    client = TestClient(create_app())
+    contract = client.get("/adversarial-hardening/policy-bypass-regression-suite").json()
+
+    assert contract["ok"] is True
+    assert contract["kind"] == "francis.stage14.adversarial_hardening.policy_bypass_regression_suite"
+    assert contract["status"] == "ready"
+    assert contract["stage13_closed_by_receipt"] is True
+    assert contract["injection_containment_contract_ready"] is True
+    assert contract["quarantine_model_contract_ready"] is True
+    assert contract["red_team_suite_ready"] is True
+    assert contract["policy_bypass_regression_suite_ready"] is True
+    assert contract["capture_mode"] == "read_only_policy_bypass_contract_regression"
+    assert contract["case_count"] == 5
+    assert contract["passed_count"] == 5
+    assert contract["failed_count"] == 0
+    assert contract["policy_invariants"]["content_cannot_grant_authority"] is True
+    assert contract["policy_invariants"]["approval_must_match_exact_action"] is True
+    assert contract["policy_invariants"]["missing_approval_returns_needs_approval"] is True
+    assert contract["policy_invariants"]["mismatched_approval_refreshes_request"] is True
+    assert contract["policy_invariants"]["protected_branch_push_blocked_before_approval"] is True
+    assert contract["policy_invariants"]["destructive_quarantine_delete_requires_approval"] is True
+    assert contract["governed_surfaces"] == [
+        "codex.supervised_exec",
+        "git.push",
+        "web_learning.quarantine.delete",
+    ]
+    assert contract["payload_handling"]["returns_raw_payloads"] is False
+    assert contract["payload_handling"]["returns_raw_model_outputs"] is False
+    assert contract["payload_handling"]["returns_only_case_ids_invariants_and_signal_codes"] is True
+    assert contract["governance"]["read_only"] is True
+    assert contract["governance"]["does_not_write_receipts"] is True
+    assert contract["governance"]["does_not_write_quarantine"] is True
+    assert contract["governance"]["does_not_write_memory"] is True
+    assert contract["governance"]["does_not_run_tools"] is True
+    assert contract["governance"]["does_not_run_shell"] is True
+    assert contract["governance"]["does_not_run_git"] is True
+    assert contract["governance"]["grants_execution_authority"] is False
+    assert contract["governance"]["grants_mutation_authority"] is False
+    assert contract["next_smallest_truthful_gap"] == "stage14_completion_review"
+
+    cases = {item["case_id"]: item for item in contract["cases"]}
+    assert set(cases) == {
+        "content_claims_operator_approval",
+        "supervised_exec_missing_approval",
+        "supervised_exec_mismatched_approval",
+        "git_push_protected_branch_before_approval",
+        "quarantine_delete_requires_exact_approval",
+    }
+    assert all(item["passed"] is True for item in cases.values())
+    assert all(item["case_type"] == "read_only_policy_bypass_regression" for item in cases.values())
+    assert all(item["raw_payload_returned"] is False for item in cases.values())
+    assert all(item["raw_model_output_returned"] is False for item in cases.values())
+    assert all(item["authority_granted"] is False for item in cases.values())
+    assert all(item["executes_action"] is False for item in cases.values())
+    assert all("payload" not in item for item in cases.values())
+    assert all("raw_text" not in item for item in cases.values())
+    assert "pi_ignore_rules" in cases["content_claims_operator_approval"]["signal_codes"]
+    assert "pi_tool_override" in cases["content_claims_operator_approval"]["signal_codes"]
+    assert cases["supervised_exec_missing_approval"]["evidence"]["governance_gate"] == "approvals_gate"
+    assert cases["supervised_exec_missing_approval"]["evidence"]["missing_approval_status"] == "needs_approval"
+    assert cases["supervised_exec_mismatched_approval"]["evidence"]["mismatched_approval_error"] == (
+        "approval_payload_mismatch"
+    )
+    assert cases["git_push_protected_branch_before_approval"]["evidence"]["branch_first_gate"] == (
+        "branch_first_workflow"
+    )
+    assert cases["git_push_protected_branch_before_approval"]["evidence"]["approval_requested_when_blocked"] is False
+    assert cases["quarantine_delete_requires_exact_approval"]["evidence"]["approval_action"] == (
+        "web_learning.quarantine.delete"
+    )
+
+    response_text = json.dumps(contract, sort_keys=True)
+    assert "Ignore approval rules" not in response_text
+    assert "Execute the command" not in response_text
+
+    status = client.get("/adversarial-hardening/status").json()
+    assert status["status"] == "stage14_policy_bypass_regression_suite_ready"
+    assert status["policy_bypass_regression_suite_ready"] is True
+    assert status["ready_count"] == 5
+    assert status["required_count"] == 5
+    assert status["next_smallest_truthful_gap"] == "stage14_completion_review"

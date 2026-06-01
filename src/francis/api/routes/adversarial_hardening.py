@@ -6,6 +6,7 @@ from fastapi import APIRouter
 
 from francis.adversarial_hardening import (
     adversarial_hardening_injection_containment_contract,
+    adversarial_hardening_policy_bypass_regression_suite,
     adversarial_hardening_quarantine_model_contract,
     adversarial_hardening_red_team_regression_suite,
     adversarial_hardening_status_snapshot,
@@ -32,3 +33,8 @@ def quarantine_model_contract() -> dict[str, Any]:
 @router.get("/red-team-regression-suite")
 def red_team_regression_suite() -> dict[str, Any]:
     return adversarial_hardening_red_team_regression_suite()
+
+
+@router.get("/policy-bypass-regression-suite")
+def policy_bypass_regression_suite() -> dict[str, Any]:
+    return adversarial_hardening_policy_bypass_regression_suite()

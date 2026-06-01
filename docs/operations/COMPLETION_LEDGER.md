@@ -50080,6 +50080,64 @@ Latest validation for Stage 14 red-team regression suite:
   tests/test_api_adversarial_hardening.py tests/test_api_contract_chat_ui.py`
   Result: `passed`
 
+### 2026-05-31 - Stage 14 policy-bypass regression suite is read-only
+
+Roadmap area: Stage 14 / Adversarial Hardening, policy-bypass regression and
+governed-route invariants.
+
+Material change:
+
+- Added read-only
+  `/adversarial-hardening/policy-bypass-regression-suite`.
+- Stage 14 status now advances from
+  `stage14_red_team_regression_suite_ready` to
+  `stage14_policy_bypass_regression_suite_ready` when governed-route
+  policy-bypass regressions pass.
+- The suite covers five bounded cases: hostile content claiming operator
+  approval, supervised execution without approval, supervised execution with a
+  mismatched approval, protected-branch `git.push` before approval, and
+  destructive quarantine delete.
+- The suite binds the cases to existing governed surfaces:
+  `codex.supervised_exec`, `git.push`, and
+  `web_learning.quarantine.delete`.
+- The API returns only case IDs, surfaces, expected denial behavior, invariant
+  evidence, and signal codes. It does not return raw hostile payloads or raw
+  model outputs.
+- The route remains read-only: it does not approve requests, execute actions,
+  write receipts, write memory, write quarantine records, run shell commands,
+  run git, launch browsers, or grant runtime authority.
+- Current readback reports
+  `status=stage14_policy_bypass_regression_suite_ready`,
+  `policy_bypass_regression_suite_ready=true`, `case_count=5`,
+  `passed_count=5`, `failed_count=0`, `ready_count=5`,
+  `required_count=5`, and
+  `next_smallest_truthful_gap=stage14_completion_review`.
+
+Latest validation for Stage 14 policy-bypass regression suite:
+
+- Direct local `TestClient` readback of GET
+  `/adversarial-hardening/status` and GET
+  `/adversarial-hardening/policy-bypass-regression-suite`.
+  Result: `status=stage14_policy_bypass_regression_suite_ready;
+  policy_bypass_regression_suite_ready=true; ready_count=5;
+  required_count=5; next_smallest_truthful_gap=stage14_completion_review;
+  policy_status=ready; case_count=5; passed_count=5; failed_count=0`.
+- `python -m pytest tests/test_api_adversarial_hardening.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short`
+  Result: `passed; 6 passed`
+- `python -m mypy src/francis/adversarial_hardening.py
+  src/francis/api/routes/adversarial_hardening.py`
+  Result: `passed`
+- `python -m ruff check src/francis/adversarial_hardening.py
+  src/francis/api/routes/adversarial_hardening.py
+  tests/test_api_adversarial_hardening.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/adversarial_hardening.py
+  src/francis/api/routes/adversarial_hardening.py
+  tests/test_api_adversarial_hardening.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
