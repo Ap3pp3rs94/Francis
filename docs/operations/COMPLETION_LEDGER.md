@@ -55811,6 +55811,34 @@ Validation risk:
   test stalled in local subprocess execution and were stopped; no pytest pass
   is claimed for those tests in this closure entry.
 
+### 2026-06-01 - Windows 3.12 CI executor lease receipt ordering fixed
+
+Roadmap area: CI health / executor auditability.
+
+Material change:
+
+- GitHub CI run `26760603402` for commit `906f9b77` failed only on
+  `test (windows-2025-vs2026, 3.12)`.
+- The failing test wrote the expected executor lease receipts but sorted them
+  by filesystem modification time, which is not a stable event-order source on
+  Windows when receipts are written close together.
+- `tests/unit/test_executor_audit_references.py` now sorts loaded lease
+  receipts by their explicit receipt timestamp, then by the expected lease
+  decision precedence, then by receipt id.
+- The executor receipt contract is unchanged: acquire, deny, and release still
+  write auditable `executor.lease.receipt` records and do not grant execution
+  authority.
+
+Latest validation for executor lease receipt ordering:
+
+- Direct Python receipt-sequence validation against `francis.agent.executor`
+  Result: `passed`; decisions read back as `acquired`, `denied`, `released`
+  with three receipts and no remaining lock file.
+- `python -m ruff check tests/unit/test_executor_audit_references.py`
+  Result: `passed`.
+- `python -m ruff format --check tests/unit/test_executor_audit_references.py`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

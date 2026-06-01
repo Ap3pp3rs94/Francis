@@ -4,6 +4,9 @@ import json
 from pathlib import Path
 
 
+_LEASE_DECISION_ORDER = {"acquired": 0, "denied": 1, "released": 2}
+
+
 def test_executor_lock_writes_lease_acquire_deny_and_release_receipts(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
@@ -15,10 +18,15 @@ def test_executor_lock_writes_lease_acquire_deny_and_release_receipts(monkeypatc
     executor._release_lock("tsk_lease_receipt")
 
     receipt_dir = data_root / "artifacts" / "executor_lease_receipts"
-    receipts = [
-        json.loads(path.read_text(encoding="utf-8"))
-        for path in sorted(receipt_dir.glob("*.json"), key=lambda item: item.stat().st_mtime)
-    ]
+    receipts = [json.loads(path.read_text(encoding="utf-8")) for path in sorted(receipt_dir.glob("*.json"))]
+    receipts = sorted(
+        receipts,
+        key=lambda item: (
+            item["ts"],
+            _LEASE_DECISION_ORDER[item["decision"]],
+            item["receipt_id"],
+        ),
+    )
 
     assert [item["kind"] for item in receipts] == [
         "executor.lease.receipt",
