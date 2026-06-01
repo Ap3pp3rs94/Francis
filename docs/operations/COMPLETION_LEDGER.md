@@ -53230,6 +53230,74 @@ Latest validation for Stage 16 sleep action operator confirmation handoff:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 sleep post-resume sequence is operator-run
+
+Roadmap area: Stage 16 / Federation, workstation sleep-continuity operator
+execution handoff.
+
+Material change:
+
+- Added
+  `scripts/federation-stage16-sleep-continuity-post-resume-sequence.ps1`, a
+  governed operator-run sequence that can, after explicit workstation
+  sleep/resume confirmation, invoke the existing post-resume evidence capture
+  and feed its resulting evidence path into the runtime proof script.
+- `/federation/sleep-continuity-action` now projects the sequence command in
+  `operator_confirmation_handoff` as an after-confirmation convenience path.
+- Federation Hub preserves and displays the sequence availability and write
+  posture separately from the existing single-step post-resume capture command.
+- The wrapper status mode is read-only; it does not run shell child scripts,
+  write evidence, write receipts, infer sleep/resume, grant authority, write
+  memory, or mark Stage 16 closed.
+- The wrapper run mode remains explicitly gated by
+  `-OperatorConfirmedSleepResume` and blocks commit writes in production or
+  regulated profiles through its own guard and the child script guards.
+- This work did not execute the project committed post-resume sequence and did
+  not mark Stage 16 closed.
+- Stage 16 remains open until operator-confirmed live workstation sleep/resume
+  evidence and receipt-backed completion/closure gates are satisfied.
+
+Latest validation for Stage 16 sleep post-resume operator sequence:
+
+- `python -m pytest
+  tests/test_federation_stage16_sleep_continuity_evidence_script.py
+  tests/test_federation_stage16_sleep_continuity_runtime_proof_script.py
+  tests/test_federation_stage16_sleep_continuity_post_resume_sequence_script.py
+  -q --tb=short`
+  Result: `passed; 15 passed`.
+- `python -m pytest tests/test_api_federation.py -q --tb=short --maxfail=1`
+  Result: `passed; 20 passed`.
+- `npm run test -- federation_hub`
+  Result: `passed; 188 passed`.
+- `npm run build`
+  Result: `passed`.
+- PowerShell parser check for
+  `scripts/federation-stage16-sleep-continuity-post-resume-sequence.ps1`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py
+  tests/test_federation_stage16_sleep_continuity_post_resume_sequence_script.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py
+  tests/test_federation_stage16_sleep_continuity_post_resume_sequence_script.py`
+  Result: `passed`.
+- Live readback via `TestClient` for `/federation/sleep-continuity-action`
+  Result: `passed;
+  handoff_status=waiting_for_operator_sleep_resume_confirmation,
+  sequence_available=true,
+  sequence_has_wrapper=true,
+  sequence_writes_receipts=true,
+  marks_stage16_closed=false`.
+- `.\scripts\federation-stage16-sleep-continuity-post-resume-sequence.ps1
+  -Mode Status`
+  Result: `passed; status=ready_for_operator_confirmed_post_resume_sequence,
+  writes_evidence=false, writes_receipts=false, marks_stage16_closed=false`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -694,6 +694,13 @@ test("federation sleep-continuity action parser preserves selected read-only ste
         'scripts/federation-stage16-sleep-continuity-evidence.ps1 -Mode PostResume -CommitEvidence -PreSleepEvidencePath "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json" -OperatorConfirmedSleepResume',
       post_resume_capture_copyable_command:
         'Set-Location -LiteralPath \'D:\\Francis\'; scripts/federation-stage16-sleep-continuity-evidence.ps1 -Mode PostResume -CommitEvidence -PreSleepEvidencePath "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json" -OperatorConfirmedSleepResume',
+      post_resume_sequence_available_after_confirmation: true,
+      post_resume_sequence_command:
+        'scripts/federation-stage16-sleep-continuity-post-resume-sequence.ps1 -Mode Run -CommitEvidence -CommitReceipts -PreSleepEvidencePath "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json" -OperatorConfirmedSleepResume',
+      post_resume_sequence_copyable_command:
+        'Set-Location -LiteralPath \'D:\\Francis\'; scripts/federation-stage16-sleep-continuity-post-resume-sequence.ps1 -Mode Run -CommitEvidence -CommitReceipts -PreSleepEvidencePath "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json" -OperatorConfirmedSleepResume',
+      post_resume_sequence_writes_evidence_when_run: true,
+      post_resume_sequence_writes_receipts_when_run: true,
       should_not_run_before_confirmation: true,
       operator_terminal_command_ready: true,
       readback_routes: {
@@ -878,6 +885,16 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   assert.equal(action.operator_confirmation_handoff?.must_resume_before_post_resume_capture, true);
   assert.equal(action.operator_confirmation_handoff?.post_resume_capture_command_ready_after_confirmation, true);
   assert.equal(action.operator_confirmation_handoff?.post_resume_capture_command?.includes("-OperatorConfirmedSleepResume"), true);
+  assert.equal(action.operator_confirmation_handoff?.post_resume_sequence_available_after_confirmation, true);
+  assert.equal(
+    action.operator_confirmation_handoff?.post_resume_sequence_command?.includes(
+      "federation-stage16-sleep-continuity-post-resume-sequence.ps1",
+    ),
+    true,
+  );
+  assert.equal(action.operator_confirmation_handoff?.post_resume_sequence_command?.includes("-CommitReceipts"), true);
+  assert.equal(action.operator_confirmation_handoff?.post_resume_sequence_writes_evidence_when_run, true);
+  assert.equal(action.operator_confirmation_handoff?.post_resume_sequence_writes_receipts_when_run, true);
   assert.equal(action.operator_confirmation_handoff?.should_not_run_before_confirmation, true);
   assert.equal(action.operator_confirmation_handoff?.operator_terminal_command_ready, true);
   assert.equal(action.operator_confirmation_handoff?.readback_routes.status, "/federation/status");
@@ -1006,6 +1023,8 @@ test("federation sleep-continuity action parser preserves selected read-only ste
     presentation.operator_confirmation_handoff?.post_resume_capture_command_ready_after_confirmation,
     true,
   );
+  assert.equal(presentation.operator_confirmation_handoff?.post_resume_sequence_available_after_confirmation, true);
+  assert.equal(presentation.operator_confirmation_handoff?.post_resume_sequence_writes_receipts_when_run, true);
   assert.equal(presentation.operator_confirmation_handoff?.proof_boundary.does_not_run_shell, true);
   assert.equal(
     presentation.after_manual_execution_readback?.status,

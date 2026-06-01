@@ -309,6 +309,13 @@ export function FederationHubPanel(props: { baseUrl: string }) {
               {" / "}no shell{" "}
               <code>{yesNo(Boolean(operatorConfirmationHandoff.proof_boundary.does_not_run_shell))}</code>
             </div>
+            <div style={{ fontSize: 11, color: MUTED, marginTop: 6 }}>
+              sequence <code>{yesNo(operatorConfirmationHandoff.post_resume_sequence_available_after_confirmation)}</code>
+              {" / "}writes evidence{" "}
+              <code>{yesNo(operatorConfirmationHandoff.post_resume_sequence_writes_evidence_when_run)}</code>
+              {" / "}writes receipts{" "}
+              <code>{yesNo(operatorConfirmationHandoff.post_resume_sequence_writes_receipts_when_run)}</code>
+            </div>
             {operatorConfirmationHandoff.operator_confirmation_source_required ? (
               <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
                 source <code>{operatorConfirmationHandoff.operator_confirmation_source_required}</code>
@@ -334,6 +341,23 @@ export function FederationHubPanel(props: { baseUrl: string }) {
                 }}
               >
                 {operatorConfirmationHandoff.post_resume_capture_copyable_command}
+              </pre>
+            ) : null}
+            {operatorConfirmationHandoff.post_resume_sequence_copyable_command ? (
+              <pre
+                style={{
+                  margin: "8px 0 0",
+                  padding: 10,
+                  borderRadius: 10,
+                  border: `1px solid ${PANEL_BORDER}`,
+                  background: "#101010",
+                  color: TEXT,
+                  whiteSpace: "pre-wrap",
+                  overflowWrap: "anywhere",
+                  fontSize: 11,
+                }}
+              >
+                {operatorConfirmationHandoff.post_resume_sequence_copyable_command}
               </pre>
             ) : null}
             {operatorConfirmationHandoff.required_confirmation_requirements.length ? (

@@ -1409,6 +1409,21 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert confirmation_handoff["post_resume_capture_command_ready_after_confirmation"] is True
     assert confirmation_handoff["post_resume_capture_command"] == action["primary_command"]
     assert action["primary_command"] in confirmation_handoff["post_resume_capture_copyable_command"]
+    assert confirmation_handoff["post_resume_sequence_available_after_confirmation"] is True
+    assert (
+        "federation-stage16-sleep-continuity-post-resume-sequence.ps1"
+        in confirmation_handoff["post_resume_sequence_command"]
+    )
+    assert "-CommitEvidence -CommitReceipts" in confirmation_handoff["post_resume_sequence_command"]
+    assert "-OperatorConfirmedSleepResume" in confirmation_handoff["post_resume_sequence_command"]
+    assert str(pre_sleep_path.resolve()) in confirmation_handoff["post_resume_sequence_command"]
+    assert confirmation_handoff["post_resume_sequence_copyable_command"].startswith("Set-Location -LiteralPath ")
+    assert (
+        confirmation_handoff["post_resume_sequence_command"]
+        in confirmation_handoff["post_resume_sequence_copyable_command"]
+    )
+    assert confirmation_handoff["post_resume_sequence_writes_evidence_when_run"] is True
+    assert confirmation_handoff["post_resume_sequence_writes_receipts_when_run"] is True
     assert confirmation_handoff["should_not_run_before_confirmation"] is True
     assert confirmation_handoff["operator_terminal_command_ready"] is True
     assert confirmation_handoff["readback_routes"]["status"] == "/federation/status"
@@ -1606,6 +1621,11 @@ def test_federation_stage16_sleep_continuity_runbook_uses_linked_post_resume_mar
     assert confirmation_handoff["post_resume_capture_command_ready_after_confirmation"] is False
     assert confirmation_handoff["post_resume_capture_command"] == ""
     assert confirmation_handoff["post_resume_capture_copyable_command"] == ""
+    assert confirmation_handoff["post_resume_sequence_available_after_confirmation"] is False
+    assert confirmation_handoff["post_resume_sequence_command"] == ""
+    assert confirmation_handoff["post_resume_sequence_copyable_command"] == ""
+    assert confirmation_handoff["post_resume_sequence_writes_evidence_when_run"] is False
+    assert confirmation_handoff["post_resume_sequence_writes_receipts_when_run"] is False
     assert confirmation_handoff["should_not_run_before_confirmation"] is False
     assert confirmation_handoff["operator_terminal_command_ready"] is True
     assert confirmation_handoff["proof_boundary"]["projection_only"] is True

@@ -429,6 +429,11 @@ export type FederationSleepContinuityOperatorConfirmationHandoff = {
   post_resume_capture_command_ready_after_confirmation: boolean;
   post_resume_capture_command?: string;
   post_resume_capture_copyable_command?: string;
+  post_resume_sequence_available_after_confirmation: boolean;
+  post_resume_sequence_command?: string;
+  post_resume_sequence_copyable_command?: string;
+  post_resume_sequence_writes_evidence_when_run: boolean;
+  post_resume_sequence_writes_receipts_when_run: boolean;
   should_not_run_before_confirmation: boolean;
   operator_terminal_command_ready: boolean;
   readback_routes: Record<string, string>;
@@ -758,6 +763,13 @@ function parseFederationSleepContinuityOperatorConfirmationHandoff(
     ),
     post_resume_capture_command: optionalString(raw.post_resume_capture_command),
     post_resume_capture_copyable_command: optionalString(raw.post_resume_capture_copyable_command),
+    post_resume_sequence_available_after_confirmation: safeBoolean(
+      raw.post_resume_sequence_available_after_confirmation,
+    ),
+    post_resume_sequence_command: optionalString(raw.post_resume_sequence_command),
+    post_resume_sequence_copyable_command: optionalString(raw.post_resume_sequence_copyable_command),
+    post_resume_sequence_writes_evidence_when_run: safeBoolean(raw.post_resume_sequence_writes_evidence_when_run),
+    post_resume_sequence_writes_receipts_when_run: safeBoolean(raw.post_resume_sequence_writes_receipts_when_run),
     should_not_run_before_confirmation: safeBoolean(raw.should_not_run_before_confirmation),
     operator_terminal_command_ready: safeBoolean(raw.operator_terminal_command_ready),
     readback_routes: stringRecord(raw.readback_routes),

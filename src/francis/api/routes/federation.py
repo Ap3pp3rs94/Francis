@@ -1549,6 +1549,15 @@ def _stage16_sleep_continuity_operator_confirmation_handoff(
     else:
         status = "operator_confirmation_not_required_for_selected_step"
     copyable_command = _safe_str(operator_terminal_invocation.get("copyable_command")).strip()
+    pre_sleep_evidence_path = _safe_str(operator_sleep_resume_gate.get("pre_sleep_evidence_path")).strip()
+    pre_sleep_arg = f'"{pre_sleep_evidence_path}"' if pre_sleep_evidence_path else "<pre_sleep.json>"
+    sequence_command = (
+        "scripts/federation-stage16-sleep-continuity-post-resume-sequence.ps1 -Mode Run "
+        f"-CommitEvidence -CommitReceipts -PreSleepEvidencePath {pre_sleep_arg} -OperatorConfirmedSleepResume"
+    )
+    sequence_copyable_command = (
+        f"Set-Location -LiteralPath {_powershell_single_quote(str(repo_root()))}; {sequence_command}"
+    )
     return {
         "status": status,
         "selected_step_id": step_id,
@@ -1558,7 +1567,7 @@ def _stage16_sleep_continuity_operator_confirmation_handoff(
         else "",
         "operator_confirmation_pending": operator_confirmation_pending,
         "confirmation_blocker": _safe_str(operator_sleep_resume_gate.get("confirmation_blocker")).strip(),
-        "pre_sleep_evidence_path": _safe_str(operator_sleep_resume_gate.get("pre_sleep_evidence_path")).strip(),
+        "pre_sleep_evidence_path": pre_sleep_evidence_path,
         "pre_sleep_recorded_ts": int(operator_sleep_resume_gate.get("pre_sleep_recorded_ts") or 0),
         "must_sleep_after_pre_sleep_recorded_ts": bool(
             operator_sleep_resume_gate.get("must_sleep_after_pre_sleep_recorded_ts")
@@ -1571,6 +1580,13 @@ def _stage16_sleep_continuity_operator_confirmation_handoff(
         if step_id == "capture_post_resume_evidence"
         else "",
         "post_resume_capture_copyable_command": copyable_command if step_id == "capture_post_resume_evidence" else "",
+        "post_resume_sequence_available_after_confirmation": ready_after_confirmation,
+        "post_resume_sequence_command": sequence_command if step_id == "capture_post_resume_evidence" else "",
+        "post_resume_sequence_copyable_command": sequence_copyable_command
+        if step_id == "capture_post_resume_evidence"
+        else "",
+        "post_resume_sequence_writes_evidence_when_run": step_id == "capture_post_resume_evidence",
+        "post_resume_sequence_writes_receipts_when_run": step_id == "capture_post_resume_evidence",
         "should_not_run_before_confirmation": bool(
             operator_terminal_invocation.get("should_not_run_before_confirmation")
         ),
