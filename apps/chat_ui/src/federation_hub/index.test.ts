@@ -1579,6 +1579,29 @@ test("FederationClient reads receipt-backed sequence readiness as read-only proj
         operator_action_required: true,
         read_only_projection: true,
       },
+      receipt_backed_sequence_next_step: "run_receipt_backed_post_resume_sequence",
+      receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt: false,
+      receipt_backed_sequence_current_matching_confirmation_receipt_required: true,
+      receipt_backed_sequence_available_after_current_matching_confirmation_receipt: true,
+      receipt_backed_sequence_hidden_until_confirmation_receipt: false,
+      receipt_backed_sequence_runs_after_physical_sleep_resume_receipt_only: true,
+      post_receipt_handoff: {
+        status: "ready",
+        next_step: "run_receipt_backed_post_resume_sequence",
+        blocked_until_current_matching_confirmation_receipt: false,
+        current_matching_confirmation_receipt_required: true,
+        available_after_current_matching_confirmation_receipt: true,
+        command_visible: true,
+        command_field: "receipt_backed_sequence_copyable_command",
+        confirmation_receipt_id: "fedsleepconfirm_ui_ready",
+        blockers: [],
+        runs_after_physical_sleep_resume_receipt_only: true,
+        requires_operator_confirmed_sleep_resume: true,
+        writes_evidence_when_run: true,
+        writes_receipts_when_run: true,
+        marks_stage16_closed_when_run: false,
+        read_only_projection: true,
+      },
       operator_action_required: true,
       writes_evidence_when_run: true,
       writes_receipts_when_run: true,
@@ -1637,6 +1660,14 @@ test("FederationClient reads receipt-backed sequence readiness as read-only proj
     assert.deepEqual(readiness.receipt_backed_sequence_blockers, []);
     assert.equal(readiness.receipt_backed_sequence_command_visible, true);
     assert.equal(readiness.receipt_backed_sequence_operator_step?.id, "run_receipt_backed_post_resume_sequence");
+    assert.equal(readiness.receipt_backed_sequence_next_step, "run_receipt_backed_post_resume_sequence");
+    assert.equal(readiness.receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt, false);
+    assert.equal(readiness.receipt_backed_sequence_current_matching_confirmation_receipt_required, true);
+    assert.equal(readiness.receipt_backed_sequence_available_after_current_matching_confirmation_receipt, true);
+    assert.equal(readiness.receipt_backed_sequence_hidden_until_confirmation_receipt, false);
+    assert.equal(readiness.receipt_backed_sequence_runs_after_physical_sleep_resume_receipt_only, true);
+    assert.equal(readiness.post_receipt_handoff?.status, "ready");
+    assert.equal(readiness.post_receipt_handoff?.confirmation_receipt_id, "fedsleepconfirm_ui_ready");
     assert.equal(readiness.operator_action_required, true);
     assert.equal(readiness.writes_evidence_when_run, true);
     assert.equal(readiness.writes_receipts_when_run, true);
@@ -1662,6 +1693,20 @@ test("FederationClient reads receipt-backed sequence readiness as read-only proj
       receipt_backed_sequence_ready: false,
       receipt_backed_sequence_blockers: ["sleep_resume_confirmation_receipt_missing"],
       receipt_backed_sequence_command_visible: false,
+      receipt_backed_sequence_next_step: "record_current_matching_sleep_resume_confirmation_receipt",
+      receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt: true,
+      receipt_backed_sequence_current_matching_confirmation_receipt_required: true,
+      receipt_backed_sequence_available_after_current_matching_confirmation_receipt: false,
+      receipt_backed_sequence_hidden_until_confirmation_receipt: true,
+      receipt_backed_sequence_runs_after_physical_sleep_resume_receipt_only: true,
+      post_receipt_handoff: {
+        status: "blocked_until_current_confirmation_receipt",
+        next_step: "record_current_matching_sleep_resume_confirmation_receipt",
+        blocked_until_current_matching_confirmation_receipt: true,
+        current_matching_confirmation_receipt_required: true,
+        available_after_current_matching_confirmation_receipt: false,
+        command_visible: false,
+      },
       writes_evidence_when_run: false,
       writes_receipts_when_run: false,
       marks_stage16_closed: false,
@@ -1669,6 +1714,10 @@ test("FederationClient reads receipt-backed sequence readiness as read-only proj
     assert.equal(blocked.status, "blocked_until_current_confirmation_receipt");
     assert.deepEqual(blocked.receipt_backed_sequence_blockers, ["sleep_resume_confirmation_receipt_missing"]);
     assert.equal(blocked.receipt_backed_sequence_command_visible, false);
+    assert.equal(blocked.receipt_backed_sequence_next_step, "record_current_matching_sleep_resume_confirmation_receipt");
+    assert.equal(blocked.receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt, true);
+    assert.equal(blocked.receipt_backed_sequence_available_after_current_matching_confirmation_receipt, false);
+    assert.equal(blocked.post_receipt_handoff?.status, "blocked_until_current_confirmation_receipt");
     assert.equal(blocked.writes_evidence_when_run, false);
     assert.equal(
       federationSleepResumeReceiptBackedSequenceVisibleCommands(blocked).receipt_backed_sequence_copyable_command,

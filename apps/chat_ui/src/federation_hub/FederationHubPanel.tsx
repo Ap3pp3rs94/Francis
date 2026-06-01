@@ -420,6 +420,21 @@ export function FederationHubPanel(props: { baseUrl: string }) {
                 {" / "}marks closed <code>{yesNo(sequenceReadiness.marks_stage16_closed_when_run)}</code>
               </div>
               <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
+                next <code>{codeValue(sequenceReadiness.receipt_backed_sequence_next_step)}</code>
+                {" / "}blocked until receipt{" "}
+                <code>
+                  {yesNo(sequenceReadiness.receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt)}
+                </code>
+                {" / "}after receipt{" "}
+                <code>
+                  {yesNo(sequenceReadiness.receipt_backed_sequence_available_after_current_matching_confirmation_receipt)}
+                </code>
+                {" / "}receipt only{" "}
+                <code>
+                  {yesNo(sequenceReadiness.receipt_backed_sequence_runs_after_physical_sleep_resume_receipt_only)}
+                </code>
+              </div>
+              <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
                 sequence pre age <code>{sequenceReadiness.current_pre_sleep_age_seconds}s</code>
                 {" / "}freshness <code>{codeValue(sequenceReadiness.current_pre_sleep_freshness_state)}</code>
                 {" / "}guidance <code>{codeValue(sequenceReadiness.current_pre_sleep_age_guidance)}</code>

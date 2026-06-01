@@ -2238,6 +2238,37 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     assert empty_sequence_readiness["receipt_backed_sequence_command_visible"] is False
     assert empty_sequence_readiness["receipt_backed_sequence_command"] == ""
     assert empty_sequence_readiness["receipt_backed_sequence_copyable_command"] == ""
+    assert (
+        empty_sequence_readiness["receipt_backed_sequence_next_step"]
+        == "record_current_matching_sleep_resume_confirmation_receipt"
+    )
+    assert (
+        empty_sequence_readiness["receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt"] is True
+    )
+    assert empty_sequence_readiness["receipt_backed_sequence_current_matching_confirmation_receipt_required"] is True
+    assert (
+        empty_sequence_readiness["receipt_backed_sequence_available_after_current_matching_confirmation_receipt"]
+        is False
+    )
+    assert empty_sequence_readiness["receipt_backed_sequence_hidden_until_confirmation_receipt"] is True
+    assert empty_sequence_readiness["receipt_backed_sequence_runs_after_physical_sleep_resume_receipt_only"] is True
+    assert empty_sequence_readiness["post_receipt_handoff"] == {
+        "status": "blocked_until_current_confirmation_receipt",
+        "next_step": "record_current_matching_sleep_resume_confirmation_receipt",
+        "blocked_until_current_matching_confirmation_receipt": True,
+        "current_matching_confirmation_receipt_required": True,
+        "available_after_current_matching_confirmation_receipt": False,
+        "command_visible": False,
+        "command_field": "receipt_backed_sequence_copyable_command",
+        "confirmation_receipt_id": "",
+        "blockers": ["sleep_resume_confirmation_receipt_missing"],
+        "runs_after_physical_sleep_resume_receipt_only": True,
+        "requires_operator_confirmed_sleep_resume": True,
+        "writes_evidence_when_run": False,
+        "writes_receipts_when_run": False,
+        "marks_stage16_closed_when_run": False,
+        "read_only_projection": True,
+    }
     assert empty_sequence_readiness["operator_action_required"] is False
     assert empty_sequence_readiness["writes_evidence_when_run"] is False
     assert empty_sequence_readiness["writes_receipts_when_run"] is False
@@ -2247,6 +2278,7 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     assert empty_sequence_readiness["marks_stage16_closed"] is False
     assert empty_sequence_readiness["governance"]["read_only"] is True
     assert empty_sequence_readiness["governance"]["does_not_execute_sequence"] is True
+    assert empty_sequence_readiness["governance"]["post_receipt_handoff_projection"] is True
     assert empty_sequence_readiness["next_smallest_truthful_gap"] == "stage16_sleep_resume_confirmation_receipt"
 
     actor_bound_readback = client.get(
@@ -2513,6 +2545,20 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     assert (
         sequence_readiness["receipt_backed_sequence_operator_step"]["id"] == "run_receipt_backed_post_resume_sequence"
     )
+    assert sequence_readiness["receipt_backed_sequence_next_step"] == "run_receipt_backed_post_resume_sequence"
+    assert sequence_readiness["receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt"] is False
+    assert sequence_readiness["receipt_backed_sequence_current_matching_confirmation_receipt_required"] is True
+    assert sequence_readiness["receipt_backed_sequence_available_after_current_matching_confirmation_receipt"] is True
+    assert sequence_readiness["receipt_backed_sequence_hidden_until_confirmation_receipt"] is False
+    assert sequence_readiness["receipt_backed_sequence_runs_after_physical_sleep_resume_receipt_only"] is True
+    assert sequence_readiness["post_receipt_handoff"]["status"] == "ready"
+    assert sequence_readiness["post_receipt_handoff"]["next_step"] == "run_receipt_backed_post_resume_sequence"
+    assert sequence_readiness["post_receipt_handoff"]["confirmation_receipt_id"] == body["receipt_id"]
+    assert sequence_readiness["post_receipt_handoff"]["command_visible"] is True
+    assert sequence_readiness["post_receipt_handoff"]["blockers"] == []
+    assert sequence_readiness["post_receipt_handoff"]["writes_evidence_when_run"] is True
+    assert sequence_readiness["post_receipt_handoff"]["writes_receipts_when_run"] is True
+    assert sequence_readiness["post_receipt_handoff"]["marks_stage16_closed_when_run"] is False
     assert sequence_readiness["operator_action_required"] is True
     assert sequence_readiness["writes_evidence_when_run"] is True
     assert sequence_readiness["writes_receipts_when_run"] is True
@@ -2528,6 +2574,10 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     assert sequence_readiness["operator_checklist_route"] == "/federation/sleep-resume-confirmation/operator-checklist"
     assert sequence_readiness["governance"]["receipt_backed_sequence_readiness_projection"] is True
     assert sequence_readiness["governance"]["requires_current_matching_confirmation_receipt"] is True
+    assert sequence_readiness["governance"]["post_receipt_handoff_projection"] is True
+    assert (
+        sequence_readiness["governance"]["post_receipt_handoff_requires_current_matching_confirmation_receipt"] is True
+    )
     assert sequence_readiness["governance"]["does_not_write_evidence"] is True
     assert sequence_readiness["governance"]["does_not_mark_stage16_closed"] is True
     assert sequence_readiness["next_smallest_truthful_gap"] == "stage16_sleep_continuity_runtime_readback"

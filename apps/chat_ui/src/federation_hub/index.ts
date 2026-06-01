@@ -543,6 +543,13 @@ export type FederationSleepResumeReceiptBackedSequenceReadiness = {
   receipt_backed_sequence_requires_confirmation_receipt: boolean;
   receipt_backed_sequence_confirmation_receipt_id?: string;
   receipt_backed_sequence_operator_step?: FederationSleepResumeConfirmationOperatorStep;
+  receipt_backed_sequence_next_step?: string;
+  receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt: boolean;
+  receipt_backed_sequence_current_matching_confirmation_receipt_required: boolean;
+  receipt_backed_sequence_available_after_current_matching_confirmation_receipt: boolean;
+  receipt_backed_sequence_hidden_until_confirmation_receipt: boolean;
+  receipt_backed_sequence_runs_after_physical_sleep_resume_receipt_only: boolean;
+  post_receipt_handoff?: Record<string, unknown>;
   operator_action_required: boolean;
   writes_evidence_when_run: boolean;
   writes_receipts_when_run: boolean;
@@ -2104,6 +2111,23 @@ export function parseFederationSleepResumeReceiptBackedSequenceReadiness(
       body.receipt_backed_sequence_confirmation_receipt_id,
     ),
     receipt_backed_sequence_operator_step: sequenceOperatorStep ?? undefined,
+    receipt_backed_sequence_next_step: optionalString(body.receipt_backed_sequence_next_step),
+    receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt: safeBoolean(
+      body.receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt,
+    ),
+    receipt_backed_sequence_current_matching_confirmation_receipt_required: safeBoolean(
+      body.receipt_backed_sequence_current_matching_confirmation_receipt_required,
+    ),
+    receipt_backed_sequence_available_after_current_matching_confirmation_receipt: safeBoolean(
+      body.receipt_backed_sequence_available_after_current_matching_confirmation_receipt,
+    ),
+    receipt_backed_sequence_hidden_until_confirmation_receipt: safeBoolean(
+      body.receipt_backed_sequence_hidden_until_confirmation_receipt,
+    ),
+    receipt_backed_sequence_runs_after_physical_sleep_resume_receipt_only: safeBoolean(
+      body.receipt_backed_sequence_runs_after_physical_sleep_resume_receipt_only,
+    ),
+    post_receipt_handoff: isRecord(body.post_receipt_handoff) ? body.post_receipt_handoff : undefined,
     operator_action_required: safeBoolean(body.operator_action_required),
     writes_evidence_when_run: safeBoolean(body.writes_evidence_when_run),
     writes_receipts_when_run: safeBoolean(body.writes_receipts_when_run),
