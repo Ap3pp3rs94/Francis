@@ -1675,6 +1675,26 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     assert empty_readback["receipt_backed_sequence_blockers"] == ["sleep_resume_confirmation_receipt_missing"]
     assert empty_readback["receipt_backed_sequence_command"] == ""
     assert empty_readback["receipt_backed_sequence_copyable_command"] == ""
+    assert empty_readback["confirmation_receipt_command_ready"] is True
+    assert (
+        empty_readback["confirmation_receipt_actor_placeholder"]
+        == "<actor_with_federation.stage16.sleep_resume.confirmation.write>"
+    )
+    assert "Invoke-RestMethod -Method Post" in empty_readback["confirmation_receipt_command"]
+    assert (
+        "http://127.0.0.1:8000/federation/sleep-resume-confirmation" in empty_readback["confirmation_receipt_command"]
+    )
+    assert "operator_confirmed_sleep_resume = $true" in empty_readback["confirmation_receipt_command"]
+    assert str(pre_sleep_path.resolve()) in empty_readback["confirmation_receipt_command"]
+    assert empty_readback["confirmation_receipt_command"] in empty_readback["confirmation_receipt_copyable_command"]
+    assert (
+        empty_readback["confirmation_receipt_command_requires_scope"]
+        == "federation.stage16.sleep_resume.confirmation.write"
+    )
+    assert empty_readback["confirmation_receipt_command_records_receipt"] is True
+    assert empty_readback["confirmation_receipt_command_writes_evidence"] is False
+    assert empty_readback["confirmation_receipt_command_marks_stage16_closed"] is False
+    assert empty_readback["confirmation_receipt_command_projection_only"] is True
     assert empty_readback["writes_receipts"] is False
     assert empty_readback["writes_evidence"] is False
     assert empty_readback["writes_runtime_readback"] is False
@@ -1771,6 +1791,17 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     assert "-RequireConfirmationReceipt" in readback["receipt_backed_sequence_command"]
     assert str(pre_sleep_path.resolve()) in readback["receipt_backed_sequence_command"]
     assert readback["receipt_backed_sequence_command"] in readback["receipt_backed_sequence_copyable_command"]
+    assert readback["confirmation_receipt_command_ready"] is False
+    assert readback["confirmation_receipt_actor_placeholder"] == ""
+    assert readback["confirmation_receipt_command"] == ""
+    assert readback["confirmation_receipt_copyable_command"] == ""
+    assert (
+        readback["confirmation_receipt_command_requires_scope"] == "federation.stage16.sleep_resume.confirmation.write"
+    )
+    assert readback["confirmation_receipt_command_records_receipt"] is False
+    assert readback["confirmation_receipt_command_writes_evidence"] is False
+    assert readback["confirmation_receipt_command_marks_stage16_closed"] is False
+    assert readback["confirmation_receipt_command_projection_only"] is True
     assert readback["receipt_backed_sequence_requires_confirmation_receipt"] is True
     assert readback["receipt_backed_sequence_writes_evidence_when_run"] is True
     assert readback["receipt_backed_sequence_writes_receipts_when_run"] is True
@@ -1830,6 +1861,13 @@ def test_federation_stage16_sleep_resume_confirmation_readback_blocks_stale_rece
     assert readback["receipt_backed_sequence_blockers"] == ["latest_sleep_resume_confirmation_pre_sleep_path_mismatch"]
     assert readback["receipt_backed_sequence_command"] == ""
     assert readback["receipt_backed_sequence_copyable_command"] == ""
+    assert readback["confirmation_receipt_command_ready"] is True
+    assert str(current_pre_sleep_path.resolve()) in readback["confirmation_receipt_command"]
+    assert str(original_pre_sleep_path.resolve()) not in readback["confirmation_receipt_command"]
+    assert readback["confirmation_receipt_command_records_receipt"] is True
+    assert readback["confirmation_receipt_command_writes_evidence"] is False
+    assert readback["confirmation_receipt_command_marks_stage16_closed"] is False
+    assert readback["confirmation_receipt_command_projection_only"] is True
     assert readback["writes_evidence"] is False
     assert readback["writes_runtime_readback"] is False
     assert readback["marks_stage16_closed"] is False

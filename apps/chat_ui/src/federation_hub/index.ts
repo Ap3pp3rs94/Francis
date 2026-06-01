@@ -285,6 +285,15 @@ export type FederationSleepResumeConfirmations = {
   receipt_backed_sequence_blockers: string[];
   receipt_backed_sequence_command?: string;
   receipt_backed_sequence_copyable_command?: string;
+  confirmation_receipt_command_ready: boolean;
+  confirmation_receipt_actor_placeholder?: string;
+  confirmation_receipt_command?: string;
+  confirmation_receipt_copyable_command?: string;
+  confirmation_receipt_command_requires_scope?: string;
+  confirmation_receipt_command_records_receipt: boolean;
+  confirmation_receipt_command_writes_evidence: boolean;
+  confirmation_receipt_command_marks_stage16_closed: boolean;
+  confirmation_receipt_command_projection_only: boolean;
   receipt_backed_sequence_requires_confirmation_receipt: boolean;
   receipt_backed_sequence_writes_evidence_when_run: boolean;
   receipt_backed_sequence_writes_receipts_when_run: boolean;
@@ -1379,6 +1388,15 @@ export function parseFederationSleepResumeConfirmations(raw: unknown): Federatio
     receipt_backed_sequence_blockers: stringList(body.receipt_backed_sequence_blockers),
     receipt_backed_sequence_command: optionalString(body.receipt_backed_sequence_command),
     receipt_backed_sequence_copyable_command: optionalString(body.receipt_backed_sequence_copyable_command),
+    confirmation_receipt_command_ready: safeBoolean(body.confirmation_receipt_command_ready),
+    confirmation_receipt_actor_placeholder: optionalString(body.confirmation_receipt_actor_placeholder),
+    confirmation_receipt_command: optionalString(body.confirmation_receipt_command),
+    confirmation_receipt_copyable_command: optionalString(body.confirmation_receipt_copyable_command),
+    confirmation_receipt_command_requires_scope: optionalString(body.confirmation_receipt_command_requires_scope),
+    confirmation_receipt_command_records_receipt: safeBoolean(body.confirmation_receipt_command_records_receipt),
+    confirmation_receipt_command_writes_evidence: safeBoolean(body.confirmation_receipt_command_writes_evidence),
+    confirmation_receipt_command_marks_stage16_closed: safeBoolean(body.confirmation_receipt_command_marks_stage16_closed),
+    confirmation_receipt_command_projection_only: safeBoolean(body.confirmation_receipt_command_projection_only),
     receipt_backed_sequence_requires_confirmation_receipt: safeBoolean(
       body.receipt_backed_sequence_requires_confirmation_receipt,
     ),

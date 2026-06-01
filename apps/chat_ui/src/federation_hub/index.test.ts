@@ -7,6 +7,7 @@ import {
   parseFederationLiveRuntimeReadbacks,
   parseFederationSleepContinuityAction,
   parseFederationSleepContinuityRunbook,
+  parseFederationSleepResumeConfirmations,
   parseFederationStage16Status,
   parseFederationStage16ClosureDecisions,
   presentFederationSleepContinuity,
@@ -382,6 +383,15 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
           'scripts/federation-stage16-sleep-continuity-post-resume-sequence.ps1 -Mode Run -CommitEvidence -CommitReceipts -PreSleepEvidencePath "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json" -OperatorConfirmedSleepResume -RequireConfirmationReceipt -ConfirmationReceiptId fedsleepconfirm_ui_test',
         receipt_backed_sequence_copyable_command:
           'Set-Location -LiteralPath \'D:\\Francis\'; scripts/federation-stage16-sleep-continuity-post-resume-sequence.ps1 -Mode Run -CommitEvidence -CommitReceipts -PreSleepEvidencePath "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json" -OperatorConfirmedSleepResume -RequireConfirmationReceipt -ConfirmationReceiptId fedsleepconfirm_ui_test',
+        confirmation_receipt_command_ready: false,
+        confirmation_receipt_actor_placeholder: "",
+        confirmation_receipt_command: "",
+        confirmation_receipt_copyable_command: "",
+        confirmation_receipt_command_requires_scope: "federation.stage16.sleep_resume.confirmation.write",
+        confirmation_receipt_command_records_receipt: false,
+        confirmation_receipt_command_writes_evidence: false,
+        confirmation_receipt_command_marks_stage16_closed: false,
+        confirmation_receipt_command_projection_only: true,
         receipt_backed_sequence_requires_confirmation_receipt: true,
         receipt_backed_sequence_writes_evidence_when_run: true,
         receipt_backed_sequence_writes_receipts_when_run: true,
@@ -596,6 +606,18 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
     assert.equal(confirmations.receipt_backed_sequence_command?.includes("-RequireConfirmationReceipt"), true);
     assert.equal(confirmations.receipt_backed_sequence_command?.includes("fedsleepconfirm_ui_test"), true);
     assert.equal(confirmations.receipt_backed_sequence_copyable_command?.includes(confirmations.receipt_backed_sequence_command ?? ""), true);
+    assert.equal(confirmations.confirmation_receipt_command_ready, false);
+    assert.equal(confirmations.confirmation_receipt_actor_placeholder, undefined);
+    assert.equal(confirmations.confirmation_receipt_command, undefined);
+    assert.equal(confirmations.confirmation_receipt_copyable_command, undefined);
+    assert.equal(
+      confirmations.confirmation_receipt_command_requires_scope,
+      "federation.stage16.sleep_resume.confirmation.write",
+    );
+    assert.equal(confirmations.confirmation_receipt_command_records_receipt, false);
+    assert.equal(confirmations.confirmation_receipt_command_writes_evidence, false);
+    assert.equal(confirmations.confirmation_receipt_command_marks_stage16_closed, false);
+    assert.equal(confirmations.confirmation_receipt_command_projection_only, true);
     assert.equal(confirmations.receipt_backed_sequence_requires_confirmation_receipt, true);
     assert.equal(confirmations.receipt_backed_sequence_writes_evidence_when_run, true);
     assert.equal(confirmations.receipt_backed_sequence_writes_receipts_when_run, true);
@@ -617,6 +639,79 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
   } finally {
     restoreFetch();
   }
+});
+
+test("parseFederationSleepResumeConfirmations preserves missing-receipt remedy command", () => {
+  const confirmations = parseFederationSleepResumeConfirmations({
+    ok: true,
+    kind: "francis.stage16.federation.sleep_resume_operator_confirmation_receipts",
+    stage: "Stage 16 / Federation",
+    status: "empty",
+    count: 0,
+    total: 0,
+    receipt_readback_ready: false,
+    current_pre_sleep_evidence_present: true,
+    current_pre_sleep_evidence_path:
+      "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json",
+    current_pre_sleep_recorded_ts: 1_800_030_000,
+    latest_receipt_is_operator_confirmed: false,
+    latest_receipt_matches_current_pre_sleep: false,
+    latest_receipt_usable_for_receipt_backed_sequence: false,
+    receipt_backed_sequence_ready: false,
+    receipt_backed_sequence_blockers: ["sleep_resume_confirmation_receipt_missing"],
+    receipt_backed_sequence_requires_confirmation_receipt: true,
+    receipt_backed_sequence_writes_evidence_when_run: false,
+    receipt_backed_sequence_writes_receipts_when_run: false,
+    confirmation_receipt_command_ready: true,
+    confirmation_receipt_actor_placeholder: "<actor_with_federation.stage16.sleep_resume.confirmation.write>",
+    confirmation_receipt_command:
+      "$body = @{ actor = '<actor_with_federation.stage16.sleep_resume.confirmation.write>'; operator_confirmed_sleep_resume = $true; pre_sleep_evidence_path = 'D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json' } | ConvertTo-Json -Depth 6; Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/federation/sleep-resume-confirmation' -ContentType 'application/json' -Body $body",
+    confirmation_receipt_copyable_command:
+      "Set-Location -LiteralPath 'D:\\Francis'; $body = @{ actor = '<actor_with_federation.stage16.sleep_resume.confirmation.write>'; operator_confirmed_sleep_resume = $true; pre_sleep_evidence_path = 'D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json' } | ConvertTo-Json -Depth 6; Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/federation/sleep-resume-confirmation' -ContentType 'application/json' -Body $body",
+    confirmation_receipt_command_requires_scope: "federation.stage16.sleep_resume.confirmation.write",
+    confirmation_receipt_command_records_receipt: true,
+    confirmation_receipt_command_writes_evidence: false,
+    confirmation_receipt_command_marks_stage16_closed: false,
+    confirmation_receipt_command_projection_only: true,
+    reads_receipts: true,
+    writes_receipts: false,
+    writes_evidence: false,
+    writes_runtime_readback: false,
+    marks_stage16_closed: false,
+    grants_execution_authority: false,
+    grants_mutation_authority: false,
+    items: [],
+    routes: { sleep_resume_confirmation: "/federation/sleep-resume-confirmation" },
+    next_smallest_truthful_gap: "stage16_sleep_continuity_runtime_readback",
+  });
+
+  assert.equal(confirmations.status, "empty");
+  assert.deepEqual(confirmations.receipt_backed_sequence_blockers, ["sleep_resume_confirmation_receipt_missing"]);
+  assert.equal(confirmations.receipt_backed_sequence_ready, false);
+  assert.equal(confirmations.confirmation_receipt_command_ready, true);
+  assert.equal(
+    confirmations.confirmation_receipt_actor_placeholder,
+    "<actor_with_federation.stage16.sleep_resume.confirmation.write>",
+  );
+  assert.equal(confirmations.confirmation_receipt_command?.includes("Invoke-RestMethod -Method Post"), true);
+  assert.equal(
+    confirmations.confirmation_receipt_command?.includes("/federation/sleep-resume-confirmation"),
+    true,
+  );
+  assert.equal(
+    confirmations.confirmation_receipt_command?.includes("operator_confirmed_sleep_resume = $true"),
+    true,
+  );
+  assert.equal(
+    confirmations.confirmation_receipt_copyable_command?.includes(
+      confirmations.confirmation_receipt_command ?? "",
+    ),
+    true,
+  );
+  assert.equal(confirmations.confirmation_receipt_command_records_receipt, true);
+  assert.equal(confirmations.confirmation_receipt_command_writes_evidence, false);
+  assert.equal(confirmations.confirmation_receipt_command_marks_stage16_closed, false);
+  assert.equal(confirmations.confirmation_receipt_command_projection_only, true);
 });
 
 test("federation sleep-continuity action parser preserves selected read-only step", () => {

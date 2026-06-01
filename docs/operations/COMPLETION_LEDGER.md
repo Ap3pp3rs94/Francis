@@ -53529,6 +53529,57 @@ Latest validation for Stage 16 sleep/resume confirmation command projection:
   command_projection_only=true,
   next_smallest_truthful_gap=stage16_sleep_continuity_runtime_readback`.
 
+### 2026-06-01 - Stage 16 missing confirmation readback exposes remedy command
+
+Roadmap area: Stage 16 / Federation, workstation sleep-continuity operator
+confirmation readback.
+
+Material change:
+
+- `/federation/sleep-resume-confirmations` now projects the same copyable
+  confirmation receipt command when the current pre-sleep evidence exists but
+  the matching sleep/resume confirmation receipt is missing or stale.
+- The readback keeps the receipt-backed post-resume sequence blocked until a
+  current matching confirmation receipt exists.
+- The projected remedy command remains read-only until copied and run by the
+  operator. The readback does not run shell, write receipts, write evidence,
+  grant authority, or mark Stage 16 closed.
+- Federation Hub preserves the missing-receipt remedy command fields in the
+  sleep/resume confirmation parser.
+- Stage 16 remains open until a real workstation sleep/resume is confirmed by
+  a matching receipt and the later receipt-backed runtime/completion gates pass.
+
+Latest validation for Stage 16 missing-confirmation remedy readback:
+
+- `python -m pytest tests/test_api_federation.py -q --tb=short --maxfail=1`
+  Result: `passed`.
+- `npm run test -- federation_hub`
+  Result: `passed; 189 passed`.
+- `npm run build`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- Live readback via `TestClient` for `/federation/sleep-resume-confirmations`
+  Result: `passed;
+  status=empty,
+  current_pre_sleep_evidence_present=true,
+  receipt_backed_sequence_ready=false,
+  receipt_backed_sequence_blockers=[sleep_resume_confirmation_receipt_missing],
+  confirmation_receipt_command_ready=true,
+  has_confirmation_receipt_command=true,
+  has_confirmation_receipt_copyable_command=true,
+  command_records_receipt=true,
+  command_writes_evidence=false,
+  command_marks_stage16_closed=false,
+  command_projection_only=true,
+  next_smallest_truthful_gap=stage16_sleep_continuity_runtime_readback`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

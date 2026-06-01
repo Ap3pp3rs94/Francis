@@ -985,6 +985,10 @@ def stage16_sleep_resume_confirmation_readback(*, limit: int = 20) -> dict[str, 
         "-OperatorConfirmedSleepResume -RequireConfirmationReceipt "
         f"-ConfirmationReceiptId {receipt_id_arg}"
     )
+    confirmation_command = _stage16_sleep_resume_confirmation_command_projection(
+        pre_sleep_evidence_path=current_pre_sleep_path,
+        ready=bool(current_pre_sleep.get("present")) and not receipt_backed_sequence_ready,
+    )
     return {
         "ok": True,
         "kind": _FEDERATION_SLEEP_RESUME_CONFIRMATIONS_KIND,
@@ -1018,6 +1022,7 @@ def stage16_sleep_resume_confirmation_readback(*, limit: int = 20) -> dict[str, 
             if receipt_backed_sequence_ready
             else ""
         ),
+        **confirmation_command,
         "receipt_backed_sequence_requires_confirmation_receipt": True,
         "receipt_backed_sequence_writes_evidence_when_run": receipt_backed_sequence_ready,
         "receipt_backed_sequence_writes_receipts_when_run": receipt_backed_sequence_ready,
@@ -1452,6 +1457,42 @@ def _powershell_single_quote(value: Any) -> str:
     return "'" + _safe_str(value).replace("'", "''") + "'"
 
 
+def _stage16_sleep_resume_confirmation_command_projection(
+    *,
+    pre_sleep_evidence_path: str,
+    ready: bool,
+) -> dict[str, Any]:
+    actor_placeholder = f"<actor_with_{_FEDERATION_SLEEP_RESUME_CONFIRMATION_SCOPE}>"
+    reason = "operator confirms physical sleep/suspend and resume after the pre-sleep marker"
+    command = ""
+    copyable_command = ""
+    if ready:
+        routes = _federation_routes()
+        confirmation_uri = f"http://127.0.0.1:8000{routes['sleep_resume_confirmation']}"
+        command = (
+            "$body = @{ "
+            f"actor = {_powershell_single_quote(actor_placeholder)}; "
+            f"reason = {_powershell_single_quote(reason)}; "
+            "operator_confirmed_sleep_resume = $true; "
+            f"pre_sleep_evidence_path = {_powershell_single_quote(pre_sleep_evidence_path)} "
+            "} | ConvertTo-Json -Depth 6; "
+            f"Invoke-RestMethod -Method Post -Uri {_powershell_single_quote(confirmation_uri)} "
+            "-ContentType 'application/json' -Body $body"
+        )
+        copyable_command = f"Set-Location -LiteralPath {_powershell_single_quote(str(repo_root()))}; {command}"
+    return {
+        "confirmation_receipt_command_ready": ready,
+        "confirmation_receipt_actor_placeholder": actor_placeholder if ready else "",
+        "confirmation_receipt_command": command,
+        "confirmation_receipt_copyable_command": copyable_command,
+        "confirmation_receipt_command_requires_scope": _FEDERATION_SLEEP_RESUME_CONFIRMATION_SCOPE,
+        "confirmation_receipt_command_records_receipt": ready,
+        "confirmation_receipt_command_writes_evidence": False,
+        "confirmation_receipt_command_marks_stage16_closed": False,
+        "confirmation_receipt_command_projection_only": True,
+    }
+
+
 def _stage16_sleep_continuity_selected_action_readiness(
     *,
     state: str,
@@ -1757,26 +1798,11 @@ def _stage16_sleep_continuity_operator_confirmation_handoff(
     receipt_backed_sequence_copyable_command = (
         f"Set-Location -LiteralPath {_powershell_single_quote(str(repo_root()))}; {receipt_backed_sequence_command}"
     )
-    confirmation_receipt_command_ready = ready_after_confirmation and step_id == "capture_post_resume_evidence"
-    confirmation_actor_placeholder = f"<actor_with_{_FEDERATION_SLEEP_RESUME_CONFIRMATION_SCOPE}>"
     confirmation_reason = "operator confirms physical sleep/suspend and resume after the pre-sleep marker"
-    confirmation_receipt_command = ""
-    confirmation_receipt_copyable_command = ""
-    if confirmation_receipt_command_ready:
-        confirmation_uri = f"http://127.0.0.1:8000{routes['sleep_resume_confirmation']}"
-        confirmation_receipt_command = (
-            "$body = @{ "
-            f"actor = {_powershell_single_quote(confirmation_actor_placeholder)}; "
-            f"reason = {_powershell_single_quote(confirmation_reason)}; "
-            "operator_confirmed_sleep_resume = $true; "
-            f"pre_sleep_evidence_path = {_powershell_single_quote(pre_sleep_evidence_path)} "
-            "} | ConvertTo-Json -Depth 6; "
-            f"Invoke-RestMethod -Method Post -Uri {_powershell_single_quote(confirmation_uri)} "
-            "-ContentType 'application/json' -Body $body"
-        )
-        confirmation_receipt_copyable_command = (
-            f"Set-Location -LiteralPath {_powershell_single_quote(str(repo_root()))}; {confirmation_receipt_command}"
-        )
+    confirmation_command = _stage16_sleep_resume_confirmation_command_projection(
+        pre_sleep_evidence_path=pre_sleep_evidence_path,
+        ready=ready_after_confirmation and step_id == "capture_post_resume_evidence",
+    )
     return {
         "status": status,
         "selected_step_id": step_id,
@@ -1826,17 +1852,7 @@ def _stage16_sleep_continuity_operator_confirmation_handoff(
             "pre_sleep_evidence_path": pre_sleep_evidence_path,
             "reason": confirmation_reason,
         },
-        "confirmation_receipt_command_ready": confirmation_receipt_command_ready,
-        "confirmation_receipt_actor_placeholder": confirmation_actor_placeholder
-        if confirmation_receipt_command_ready
-        else "",
-        "confirmation_receipt_command": confirmation_receipt_command,
-        "confirmation_receipt_copyable_command": confirmation_receipt_copyable_command,
-        "confirmation_receipt_command_requires_scope": _FEDERATION_SLEEP_RESUME_CONFIRMATION_SCOPE,
-        "confirmation_receipt_command_records_receipt": confirmation_receipt_command_ready,
-        "confirmation_receipt_command_writes_evidence": False,
-        "confirmation_receipt_command_marks_stage16_closed": False,
-        "confirmation_receipt_command_projection_only": True,
+        **confirmation_command,
         "confirmation_receipt_available_before_sequence": ready_after_confirmation,
         "confirmation_receipt_required_for_receipt_backed_workflow": confirmation_required,
         "confirmation_receipt_writes_receipts": True,
