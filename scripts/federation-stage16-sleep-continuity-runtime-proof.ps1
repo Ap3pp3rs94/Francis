@@ -52,6 +52,19 @@ function Write-ProofFailure {
   } | ConvertTo-Json -Depth 6
 }
 
+function Test-PathInsideRoot {
+  param(
+    [string]$Path,
+    [string]$Root
+  )
+  $FullPath = [System.IO.Path]::GetFullPath($Path).TrimEnd('\', '/')
+  $FullRoot = [System.IO.Path]::GetFullPath($Root).TrimEnd('\', '/')
+  return (
+    $FullPath.Equals($FullRoot, [System.StringComparison]::OrdinalIgnoreCase) -or
+    $FullPath.StartsWith(($FullRoot + [System.IO.Path]::DirectorySeparatorChar), [System.StringComparison]::OrdinalIgnoreCase)
+  )
+}
+
 $PythonPath = Get-PythonPath
 if ([string]::IsNullOrWhiteSpace($PythonPath)) {
   Write-ProofFailure -ErrorCode 'python_unavailable' -DataRoot ''
@@ -59,6 +72,7 @@ if ([string]::IsNullOrWhiteSpace($PythonPath)) {
 }
 
 $ProjectDataRoot = [System.IO.Path]::GetFullPath((Join-Path $RepoRoot 'data'))
+$ProjectEvidenceRoot = [System.IO.Path]::GetFullPath((Join-Path $ProjectDataRoot 'test_runs\federation-stage16-sleep-continuity-evidence'))
 if ($CommitReceipts) {
   $Profile = ([string]$env:FRANCIS_ENV_PROFILE).Trim().ToLowerInvariant()
   if ([string]::IsNullOrWhiteSpace($Profile)) {
@@ -84,6 +98,13 @@ $PreEvidenceFullPath = [System.IO.Path]::GetFullPath($PreSleepEvidencePath)
 $PostEvidenceFullPath = [System.IO.Path]::GetFullPath($PostResumeEvidencePath)
 if (-not (Test-Path -LiteralPath $PreEvidenceFullPath -PathType Leaf) -or -not (Test-Path -LiteralPath $PostEvidenceFullPath -PathType Leaf)) {
   Write-ProofFailure -ErrorCode 'sleep_evidence_file_missing' -DataRoot $ProofDataRoot
+  exit 1
+}
+if ($CommitReceipts -and (
+    -not (Test-PathInsideRoot -Path $PreEvidenceFullPath -Root $ProjectEvidenceRoot) -or
+    -not (Test-PathInsideRoot -Path $PostEvidenceFullPath -Root $ProjectEvidenceRoot)
+  )) {
+  Write-ProofFailure -ErrorCode 'sleep_evidence_path_outside_commit_root' -DataRoot $ProofDataRoot
   exit 1
 }
 
@@ -414,6 +435,8 @@ def _run() -> tuple[int, dict[str, Any]]:
             "governance": {
                 "requires_explicit_pre_sleep_evidence": True,
                 "requires_explicit_post_resume_evidence": True,
+                "committed_evidence_paths_must_stay_under_project_evidence_root": True,
+                "committed_evidence_path_traversal_blocked": True,
                 "does_not_infer_sleep_from_delay": True,
                 "manual_operator_runtime_readback": True,
                 "redacted_continuity_summary_only": True,

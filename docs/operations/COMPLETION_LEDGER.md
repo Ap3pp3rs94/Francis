@@ -52767,6 +52767,50 @@ Latest validation for Stage 16 committed sleep evidence path guard:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 sleep runtime proof commit path rejects external evidence
+
+Roadmap area: Stage 16 / Federation, workstation sleep-continuity runtime
+proof receipt safety.
+
+Material change:
+
+- `scripts/federation-stage16-sleep-continuity-runtime-proof.ps1` now rejects
+  `-CommitReceipts` when either `-PreSleepEvidencePath` or
+  `-PostResumeEvidencePath` resolves outside the project Stage 16
+  sleep-continuity evidence root.
+- The runtime proof governance payload now declares that committed evidence
+  paths must stay under the project evidence root and that committed evidence
+  path traversal is blocked.
+- This prevents an operator-edited committed proof command from converting
+  external or stale sleep-continuity evidence files into a live runtime readback
+  receipt.
+- Non-committed test runs can still use isolated temp evidence and temp data
+  roots for validation.
+- This does not write memory, mark Stage 16 closed, infer workstation
+  sleep/resume, grant authority, or change the UI command surface.
+- Stage 16 remains open until live post-resume evidence and the receipt-backed
+  completion/closure gates are satisfied.
+
+Latest validation for Stage 16 committed sleep runtime proof path guard:
+
+- PowerShell parser check for
+  `scripts/federation-stage16-sleep-continuity-runtime-proof.ps1`
+  Result: `passed; parser_ok`.
+- `python -m pytest
+  tests/test_federation_stage16_sleep_continuity_runtime_proof_script.py
+  -q --tb=short`
+  Result: `passed; 4 passed`.
+- `python -m pytest tests/test_api_federation.py -q --tb=short`
+  Result: `passed; 19 passed`.
+- `python -m ruff check
+  tests/test_federation_stage16_sleep_continuity_runtime_proof_script.py`
+  Result: `passed`.
+- `python -m ruff format --check
+  tests/test_federation_stage16_sleep_continuity_runtime_proof_script.py`
+  Result: `passed`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

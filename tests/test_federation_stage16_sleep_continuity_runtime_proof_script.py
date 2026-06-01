@@ -177,6 +177,8 @@ def test_federation_stage16_sleep_continuity_runtime_proof_records_manual_readba
     governance = payload["governance"]
     assert governance["requires_explicit_pre_sleep_evidence"] is True
     assert governance["requires_explicit_post_resume_evidence"] is True
+    assert governance["committed_evidence_paths_must_stay_under_project_evidence_root"] is True
+    assert governance["committed_evidence_path_traversal_blocked"] is True
     assert governance["does_not_infer_sleep_from_delay"] is True
     assert governance["manual_operator_runtime_readback"] is True
     assert governance["redacted_continuity_summary_only"] is True
@@ -192,6 +194,34 @@ def test_federation_stage16_sleep_continuity_runtime_proof_records_manual_readba
     assert checks["sleep_continuity_trace_written"]["status"] == "observed"
     assert checks["sleep_continuity_runtime_receipt_written"]["status"] == "observed"
     assert all(item["passed"] for item in payload["checks"])
+
+
+def test_federation_stage16_sleep_continuity_runtime_proof_commit_rejects_external_evidence_paths(
+    tmp_path: Path,
+) -> None:
+    pre_path, post_path = _write_sleep_evidence(tmp_path / "external_evidence")
+
+    proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-CommitReceipts",
+        "-PreSleepEvidencePath",
+        str(pre_path),
+        "-PostResumeEvidencePath",
+        str(post_path),
+        env={"FRANCIS_ENV_PROFILE": "dev"},
+    )
+
+    assert proc.returncode == 1
+    payload = json.loads(proc.stdout)
+    assert payload["kind"] == "francis.stage16.federation.sleep_continuity_runtime_proof"
+    assert payload["status"] == "proof_failed"
+    assert payload["ok"] is False
+    assert payload["error"] == "sleep_evidence_path_outside_commit_root"
+    assert payload["commit_receipts"] is True
+    assert payload["writes_real_project_data"] is False
+    assert payload["ready_to_close"] is False
+    assert payload["next_smallest_truthful_gap"] == "stage16_sleep_continuity_runtime_readback"
 
 
 def test_federation_stage16_sleep_continuity_runtime_proof_blocks_commit_in_production() -> None:
