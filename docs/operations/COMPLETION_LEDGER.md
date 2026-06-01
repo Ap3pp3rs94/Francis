@@ -50349,6 +50349,56 @@ Latest validation for Stage 15 unit roles:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-31 - Stage 15 Swarm messaging model is read-only
+
+Roadmap area: Stage 15 / Swarm, messaging envelopes before delegation
+etiquette and failure semantics.
+
+Material change:
+
+- Added read-only `GET /swarm/messaging-model-contract`.
+- Stage 15 status now advances from `stage15_unit_roles_contract_ready` to
+  `stage15_messaging_model_contract_ready` when the messaging model contract is
+  ready.
+- The contract defines a bounded inter-unit message envelope with message id,
+  swarm trace id, parent message id, sender role, receiver role, objective,
+  evidence refs, requested action, authority claim, and handoff receipt
+  requirement.
+- The contract preserves the one-Francis identity and makes clear that an
+  envelope-level authority claim does not grant authority.
+- The route is contract-only: it does not send messages, start workers, write
+  receipts, write memory, run tools, run shell, run git, launch browsers,
+  capture the screen, or grant execution/mutation authority.
+- Current readback reports `status=stage15_messaging_model_contract_ready`,
+  `ready_count=3`, `required_count=6`,
+  `messaging_model_contract_ready=true`, `required_field_count=9`, and
+  `next_smallest_truthful_gap=stage15_delegation_etiquette_contract`.
+
+Latest validation for Stage 15 messaging model:
+
+- Direct local `TestClient` readback of GET `/swarm/status` and GET
+  `/swarm/messaging-model-contract`.
+  Result: `status=stage15_messaging_model_contract_ready; ready_count=3;
+  required_count=6; messaging_ready=true; required_fields=9;
+  status_next_gap=stage15_delegation_etiquette_contract`.
+- `python -m pytest tests/test_api_swarm.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 4 passed`
+- `python -m mypy src/francis/swarm.py src/francis/api/routes/swarm.py
+  src/francis/api/app.py`
+  Result: `passed`
+- `python -m ruff check src/francis/swarm.py src/francis/api/routes/swarm.py
+  src/francis/api/app.py tests/test_api_swarm.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed; non-fatal Ruff cache write warning observed`
+- `python -m ruff format --check src/francis/swarm.py
+  src/francis/api/routes/swarm.py src/francis/api/app.py
+  tests/test_api_swarm.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -132,14 +132,77 @@ def test_swarm_unit_roles_contract_is_ready_after_stage14_closure(monkeypatch, t
     assert source_contracts["emergent_behavior_signal_detector"]["observed"] is True
 
     status = client.get("/swarm/status").json()
-    assert status["status"] == "stage15_unit_roles_contract_ready"
+    assert status["status"] == "stage15_messaging_model_contract_ready"
     assert status["stage14_closed_by_receipt"] is True
     assert status["unit_roles_contract_ready"] is True
-    assert status["messaging_model_contract_ready"] is False
+    assert status["messaging_model_contract_ready"] is True
     assert status["delegation_etiquette_contract_ready"] is False
     assert status["trace_continuity_contract_ready"] is False
     assert status["failure_semantics_contract_ready"] is False
-    assert status["ready_count"] == 2
+    assert status["ready_count"] == 3
     assert status["required_count"] == 6
     assert status["routes"]["unit_roles_contract"] == "/swarm/unit-roles-contract"
-    assert status["next_smallest_truthful_gap"] == "stage15_messaging_model_contract"
+    assert status["routes"]["messaging_model_contract"] == "/swarm/messaging-model-contract"
+    assert status["next_smallest_truthful_gap"] == "stage15_delegation_etiquette_contract"
+
+
+def test_swarm_messaging_model_contract_preserves_trace_and_authority_boundaries(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage14_closure_receipt(data_root)
+
+    client = TestClient(create_app())
+    contract = client.get("/swarm/messaging-model-contract").json()
+
+    assert contract["ok"] is True
+    assert contract["kind"] == "francis.stage15.swarm.messaging_model_contract"
+    assert contract["stage"] == "Stage 15 / Swarm"
+    assert contract["status"] == "ready"
+    assert contract["unit_roles_contract_ready"] is True
+    assert contract["messaging_model_contract_ready"] is True
+    assert set(contract["allowed_roles"]) == {"coordinator", "specialist", "reviewer", "recorder"}
+    assert contract["required_field_count"] >= 8
+    assert contract["optional_field_count"] >= 1
+    assert contract["message_invariants"]["message_envelope_required"] is True
+    assert contract["message_invariants"]["sender_and_receiver_must_be_known_roles"] is True
+    assert contract["message_invariants"]["swarm_trace_id_required"] is True
+    assert contract["message_invariants"]["authority_claims_do_not_grant_authority"] is True
+    assert contract["message_invariants"]["raw_private_payloads_not_required"] is True
+    assert contract["message_invariants"]["operator_facing_identity_remains_francis"] is True
+    assert contract["delivery_semantics"]["contract_only"] is True
+    assert contract["delivery_semantics"]["sends_messages"] is False
+    assert contract["delivery_semantics"]["starts_workers"] is False
+    assert contract["delivery_semantics"]["runs_tools"] is False
+    assert contract["delivery_semantics"]["requires_deadletter_contract_before_retry"] is True
+    assert contract["payload_handling"]["references_evidence_instead_of_raw_private_payloads"] is True
+    assert contract["payload_handling"]["returns_raw_private_payloads"] is False
+    assert contract["payload_handling"]["returns_raw_model_outputs"] is False
+    assert contract["writes_receipts"] is False
+    assert contract["writes_memory"] is False
+    assert contract["runs_tools"] is False
+    assert contract["runs_shell"] is False
+    assert contract["runs_git"] is False
+    assert contract["launches_browser"] is False
+    assert contract["captures_screen"] is False
+    assert contract["grants_execution_authority"] is False
+    assert contract["grants_mutation_authority"] is False
+    assert contract["governance"]["does_not_create_agent_zoo"] is True
+    assert contract["governance"]["does_not_multiply_authority"] is True
+    assert contract["next_smallest_truthful_gap"] == "stage15_delegation_etiquette_contract"
+
+    fields = {item["field"]: item for item in contract["envelope_fields"]}
+    assert {
+        "message_id",
+        "swarm_trace_id",
+        "sender_role",
+        "receiver_role",
+        "objective",
+        "evidence_refs",
+        "requested_action",
+        "authority_claim",
+        "handoff_receipt_required",
+    }.issubset(set(fields))
+    assert fields["authority_claim"]["authority_bearing"] is False
