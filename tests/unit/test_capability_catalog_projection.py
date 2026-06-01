@@ -57,6 +57,9 @@ def test_plugin_registry_catalog_projects_to_capability_marketplace() -> None:
     assert listings[1].tests == ("tests/test_deploy.py",)
     assert listings[1].docs == ("docs/deploy.md",)
     assert listings[1].metadata["proposal_evidence"] == ["mission.deploy.repeat"]
+    assert listings[1].metadata["pack_id"] == "legacy.generated.generated_deploy"
+    assert listings[1].metadata["pack_version"] == "0.0.0-migration"
+    assert listings[1].metadata["pack_metadata_source"] == "legacy_generated_projection"
     assert listings[1].metadata["validation_receipt_id"] == "plugin_validation_generated_deploy"
     assert (
         listings[1].metadata["validation_receipt_path"]
@@ -75,3 +78,33 @@ def test_plugin_registry_catalog_projects_to_capability_marketplace() -> None:
         "tested_count": 1,
         "documented_count": 2,
     }
+
+
+def test_plugin_registry_catalog_projects_legacy_source_kind_to_migration_pack_metadata() -> None:
+    catalog = {
+        "plugins": [
+            {
+                "id": "1771955744_opsplugin",
+                "name": "Ops Plugin",
+                "source_kind": "generated",
+                "tags": ["generated"],
+                "generated_dir": "plugins/generated/1771955744_opsplugin",
+                "meta": {
+                    "promotion_status": "staged",
+                    "tests": ["tests/test_ops.py"],
+                    "docs": ["README.md"],
+                },
+            }
+        ]
+    }
+
+    listing = capability_listings_from_plugin_catalog(catalog)[0]
+
+    assert listing.source == "generated"
+    assert listing.metadata["pack_id"] == "legacy.generated.opsplugin"
+    assert listing.metadata["pack_version"] == "0.0.0-migration"
+    assert listing.metadata["pack_name"] == "Legacy Generated Opsplugin Pack"
+    assert listing.metadata["pack_metadata_source"] == "legacy_generated_projection"
+    assert (
+        listing.metadata["pack_migration_reason"] == "legacy_generated_artifact_missing_explicit_stage17_pack_metadata"
+    )

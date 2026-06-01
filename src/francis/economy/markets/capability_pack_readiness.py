@@ -63,6 +63,11 @@ def _pack_readiness(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "capabilities": capabilities,
                 "blockers": blockers,
                 "versioned_pack": bool(pack_id and pack_version),
+                "projected_metadata": any(_uses_projected_pack_metadata(entry) for entry in grouped_entries),
+                "metadata_receipts_ready": all(
+                    not _requires_pack_metadata_receipt(entry) or bool(entry["pack_metadata_receipt_id"])
+                    for entry in grouped_entries
+                ),
                 "promotion_rules_ready": all(bool(entry["promotion_rules"]) for entry in grouped_entries),
                 "quality_standards_ready": all(_quality_ready(entry) for entry in grouped_entries),
                 "governance_travels": all(bool(entry["pack_governance"]) for entry in grouped_entries),
@@ -76,6 +81,8 @@ def _pack_blockers(entries: list[dict[str, Any]]) -> list[str]:
     blockers: list[str] = []
     if any(not entry["pack_version"] for entry in entries):
         blockers.append("pack_version_missing")
+    if any(_requires_pack_metadata_receipt(entry) and not entry["pack_metadata_receipt_id"] for entry in entries):
+        blockers.append("pack_metadata_receipt_missing")
     if any(not entry["promotion_rules"] for entry in entries):
         blockers.append("promotion_rules_missing")
     if any(not entry["pack_governance"] for entry in entries):
@@ -108,6 +115,14 @@ def _requires_validation_receipt(entry: Mapping[str, Any]) -> bool:
     }
 
 
+def _requires_pack_metadata_receipt(entry: Mapping[str, Any]) -> bool:
+    return _uses_projected_pack_metadata(entry)
+
+
+def _uses_projected_pack_metadata(entry: Mapping[str, Any]) -> bool:
+    return str(entry.get("pack_metadata_source") or "") == "legacy_generated_projection"
+
+
 def _normalize_entry(entry: Mapping[str, Any]) -> dict[str, Any]:
     raw_quality = entry.get("quality")
     quality: Mapping[str, Any] = raw_quality if isinstance(raw_quality, Mapping) else {}
@@ -127,6 +142,8 @@ def _normalize_entry(entry: Mapping[str, Any]) -> dict[str, Any]:
         "pack_id": _text(metadata.get("pack_id") or metadata.get("capability_pack_id")),
         "pack_version": _text(metadata.get("pack_version") or metadata.get("capability_pack_version")),
         "pack_name": _text(metadata.get("pack_name") or metadata.get("capability_pack_name")),
+        "pack_metadata_source": _text(metadata.get("pack_metadata_source")),
+        "pack_metadata_receipt_id": _text(metadata.get("pack_metadata_receipt_id")),
         "promotion_rules": _str_list(metadata.get("promotion_rules") or metadata.get("promotion_rule_ids")),
         "pack_governance": _governance(metadata.get("pack_governance") or metadata.get("capability_pack_governance")),
     }
@@ -155,6 +172,7 @@ def _next_gap(*, packs: list[dict[str, Any]], unpacked: list[dict[str, Any]]) ->
         return "stage17_versioned_capability_pack_metadata"
     for blocker, gap in (
         ("pack_version_missing", "stage17_versioned_capability_pack_metadata"),
+        ("pack_metadata_receipt_missing", "stage17_capability_pack_metadata_receipts"),
         ("promotion_rules_missing", "stage17_capability_pack_promotion_rules"),
         ("pack_governance_missing", "stage17_capability_pack_governance"),
         ("tests_missing", "stage17_capability_pack_quality_standards"),

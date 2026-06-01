@@ -43,7 +43,7 @@ def _listing_from_plugin(plugin: Mapping[str, Any]) -> CapabilityListing | None:
         version=_text(plugin.get("version"), fallback="0.1.0"),
         status=_status_from_metadata(metadata),
         risk_tier=_risk_from_plugin(plugin, metadata),
-        source=_text(plugin.get("origin") or metadata.get("source"), fallback="unknown"),
+        source=_text(plugin.get("origin") or plugin.get("source_kind") or metadata.get("source"), fallback="unknown"),
         proposal_id=_text(metadata.get("proposal_id") or metadata.get("forge_proposal_id")),
         promotion_receipt_id=_text(metadata.get("promotion_receipt_id")),
         tests=quality["tests"],
@@ -73,10 +73,16 @@ def _catalog_metadata(plugin: Mapping[str, Any], metadata: Mapping[str, Any]) ->
         "promotion_rule_ids",
         "pack_governance",
         "capability_pack_governance",
+        "pack_metadata_source",
+        "pack_metadata_receipt_id",
+        "pack_migration_reason",
     ):
         value = metadata.get(key)
         if value:
             out[key] = value
+
+    if not (out.get("pack_id") or out.get("capability_pack_id")):
+        out.update(_legacy_generated_pack_metadata(plugin, metadata))
 
     name = _text(plugin.get("name"))
     if name:
@@ -100,6 +106,37 @@ def _risk_from_plugin(plugin: Mapping[str, Any], metadata: Mapping[str, Any]) ->
 
 def _status_from_metadata(metadata: Mapping[str, Any]) -> str:
     return _label(metadata.get("promotion_status") or metadata.get("status"))
+
+
+def _legacy_generated_pack_metadata(plugin: Mapping[str, Any], metadata: Mapping[str, Any]) -> dict[str, Any]:
+    source = _label(plugin.get("origin") or plugin.get("source_kind") or metadata.get("source"))
+    tags = _str_tuple(plugin.get("tags"))
+    generated_dir = _text(plugin.get("generated_dir"))
+    if source != "generated" and "generated" not in tags and not generated_dir:
+        return {}
+
+    plugin_id = _text(plugin.get("plugin_id") or plugin.get("id"))
+    family = _legacy_generated_family(plugin_id)
+    title = " ".join(part.capitalize() for part in family.split("_") if part) or "Unknown"
+    return {
+        "pack_id": f"legacy.generated.{family}",
+        "pack_version": "0.0.0-migration",
+        "pack_name": f"Legacy Generated {title} Pack",
+        "pack_metadata_source": "legacy_generated_projection",
+        "pack_migration_reason": "legacy_generated_artifact_missing_explicit_stage17_pack_metadata",
+    }
+
+
+def _legacy_generated_family(plugin_id: str) -> str:
+    text = plugin_id.strip().lower()
+    while text and text[0].isdigit():
+        text = text[1:]
+    text = text.lstrip("._-")
+
+    normalized = "".join(ch if ch.isalnum() else "_" for ch in text)
+    parts = [part for part in normalized.split("_") if part]
+    family = "_".join(parts)
+    return family[:80] or "unknown"
 
 
 def _mapping(value: Any) -> Mapping[str, Any]:

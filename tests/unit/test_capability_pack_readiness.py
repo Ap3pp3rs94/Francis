@@ -117,6 +117,50 @@ def test_capability_pack_readiness_blocks_unpackaged_and_ungoverned_capabilities
     assert pack["quality_standards_ready"] is False
 
 
+def test_capability_pack_readiness_blocks_projected_pack_metadata_without_receipt() -> None:
+    analysis = analyze_capability_pack_readiness(
+        [
+            {
+                "capability": "1771955744_opsplugin",
+                "version": "0.1.0",
+                "source": "generated",
+                "status": "staged",
+                "risk_tier": "normal",
+                "proposal_id": "proposal_legacy_ops",
+                "quality": {"tests": ["tests/test_ops.py"], "docs": ["README.md"]},
+                "metadata": {
+                    "validation_receipt_id": "validation_legacy_ops",
+                    "pack_id": "legacy.generated.opsplugin",
+                    "pack_version": "0.0.0-migration",
+                    "pack_name": "Legacy Generated Opsplugin Pack",
+                    "pack_metadata_source": "legacy_generated_projection",
+                    "promotion_rules": ["metadata_receipt_before_promotion"],
+                    "pack_governance": {
+                        "risk_tier": "normal",
+                        "scope": "build_dev",
+                        "migration_pack": True,
+                    },
+                },
+            }
+        ]
+    )
+
+    assert analysis["status"] == "blocked"
+    assert analysis["unpacked_entry_count"] == 0
+    assert analysis["blocked_pack_count"] == 1
+    assert analysis["next_smallest_truthful_gap"] == "stage17_capability_pack_metadata_receipts"
+
+    pack = analysis["packs"][0]
+    assert pack["pack_id"] == "legacy.generated.opsplugin"
+    assert pack["versioned_pack"] is True
+    assert pack["projected_metadata"] is True
+    assert pack["metadata_receipts_ready"] is False
+    assert pack["promotion_rules_ready"] is True
+    assert pack["quality_standards_ready"] is True
+    assert pack["governance_travels"] is True
+    assert pack["blockers"] == ["pack_metadata_receipt_missing"]
+
+
 def test_capability_pack_readiness_bounds_unpacked_capability_sample() -> None:
     analysis = analyze_capability_pack_readiness(
         {

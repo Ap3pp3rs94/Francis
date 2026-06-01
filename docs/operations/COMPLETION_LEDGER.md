@@ -55901,6 +55901,59 @@ Validation risk:
 - The local pytest runner again stalled before producing output and was
   stopped; no pytest pass is claimed for this entry.
 
+### 2026-06-01 - Stage 17 legacy generated capabilities gain migration pack metadata
+
+Roadmap area: Stage 17 / Capability Economy, versioned capability pack metadata
+for the legacy generated capability catalog.
+
+Material change:
+
+- Capability catalog projection now recognizes legacy generated plugin records
+  that expose `source_kind: generated`, not only modern `origin: generated`
+  records.
+- Generated catalog entries without explicit Stage 17 pack metadata now receive
+  read-only migration pack metadata with `pack_id`,
+  `pack_version=0.0.0-migration`, `pack_name`,
+  `pack_metadata_source=legacy_generated_projection`, and a migration reason.
+- Capability pack readiness treats projected migration metadata as blocked until
+  a metadata receipt exists. This prevents projected grouping from being
+  mistaken for operator-approved, promotion-ready packs.
+- The projection still does not promote, install, execute, price, write
+  receipts, or mutate generated plugin artifacts.
+
+Current live-style readback after this slice:
+
+- `/plugins/capabilities/catalog?limit=5000`
+  Result: `ok=True`, `status=blocked`, `total_entries=3315`,
+  `pack_total=15`, `ready_pack_count=0`, `blocked_pack_count=15`,
+  `unpacked_entry_count=0`, and
+  `next_smallest_truthful_gap=stage17_capability_pack_metadata_receipts`.
+
+Latest validation for Stage 17 legacy pack metadata projection:
+
+- Direct invocation of the targeted capability pack readiness and catalog
+  projection test functions
+  Result: `passed`.
+- `python -m mypy src/francis/economy/markets/capability_pack_readiness.py
+  src/francis/economy/markets/capability_catalog_projection.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/economy/markets/capability_pack_readiness.py
+  src/francis/economy/markets/capability_catalog_projection.py
+  tests/unit/test_capability_pack_readiness.py
+  tests/unit/test_capability_catalog_projection.py`
+  Result: `passed`.
+- `python -m ruff format --check
+  src/francis/economy/markets/capability_pack_readiness.py
+  src/francis/economy/markets/capability_catalog_projection.py
+  tests/unit/test_capability_pack_readiness.py
+  tests/unit/test_capability_catalog_projection.py`
+  Result: `passed`.
+
+Validation risk:
+
+- The focused local pytest command again stalled without output and was stopped;
+  no pytest pass is claimed for this entry.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
