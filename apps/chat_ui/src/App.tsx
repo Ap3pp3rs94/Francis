@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ApprenticeshipPanel } from "./apprenticeship/ApprenticeshipPanel";
 import { ArtifactInspectionPanel } from "./artifacts/ArtifactInspectionPanel";
 import { parseChatSendResponse, type ChatMessage } from "./chat";
+import { FederationHubPanel } from "./federation_hub/FederationHubPanel";
 
 import type { ApprovalItem } from "./index";
 import { ApprovalsApiError, ApprovalsClient } from "./index";
@@ -143,7 +144,7 @@ import {
 
 const DEFAULT_API = "http://127.0.0.1:8000";
 
-type TabKey = "approvals" | "plugins" | "system" | "operations" | "apprenticeship" | "settings";
+type TabKey = "approvals" | "plugins" | "system" | "operations" | "federation" | "apprenticeship" | "settings";
 type SensingMode = "text_only" | "input_only" | "camera_mic";
 type PaletteCommand = {
   id: string;
@@ -3032,6 +3033,10 @@ export default function App() {
     setPanel("apprenticeship");
   }, []);
 
+  const openFederationPanel = useCallback(() => {
+    setPanel("federation");
+  }, []);
+
   const openPluginsPanel = useCallback(() => {
     setPanel("plugins");
   }, []);
@@ -3291,6 +3296,14 @@ export default function App() {
         run: () => openOperationsPanel(),
       },
       {
+        id: "nav.federation",
+        label: "Open Federation",
+        description: "Inspect Stage 16 federation posture and sleep-continuity action readback.",
+        group: "Navigation",
+        keywords: "federation stage16 sleep continuity nodes action",
+        run: () => openFederationPanel(),
+      },
+      {
         id: "nav.apprenticeship",
         label: "Open Apprenticeship",
         description: "Inspect Stage 11 teaching surfaces, disabled actions, and learning guards.",
@@ -3384,6 +3397,7 @@ export default function App() {
     openApprovalsPanel,
     openApprenticeshipPanel,
     openContinuityLedger,
+    openFederationPanel,
     openMissionFeed,
     openTakeoverFeed,
     openTelemetryStatus,
@@ -3572,6 +3586,7 @@ export default function App() {
                       ["plugins", "Plugins"],
                       ["system", "ORB"],
                       ["operations", "Operations"],
+                      ["federation", "Federation"],
                       ["apprenticeship", "Apprenticeship"],
                       ["settings", "Settings"],
                     ] as Array<[TabKey, string]>
@@ -3621,6 +3636,7 @@ export default function App() {
                     onOpenContinuityLedger={openContinuityLedger}
                   />
                 ) : null}
+                {panel === "federation" ? <FederationHubPanel baseUrl={baseUrl} /> : null}
                 {panel === "apprenticeship" ? <ApprenticeshipPanel baseUrl={baseUrl} /> : null}
                 {panel === "settings" ? <SettingsPanel settings={settings} onChange={setSettings} /> : null}
               </aside>
@@ -3636,6 +3652,7 @@ export default function App() {
                     ["plugins", "Plugins"],
                     ["system", "ORB"],
                     ["operations", "Operations"],
+                    ["federation", "Federation"],
                     ["apprenticeship", "Apprenticeship"],
                     ["settings", "Settings"],
                   ] as Array<[TabKey, string]>
@@ -3685,6 +3702,7 @@ export default function App() {
                   onOpenContinuityLedger={openContinuityLedger}
                 />
               ) : null}
+              {panel === "federation" ? <FederationHubPanel baseUrl={baseUrl} /> : null}
               {panel === "apprenticeship" ? <ApprenticeshipPanel baseUrl={baseUrl} /> : null}
               {panel === "settings" ? <SettingsPanel settings={settings} onChange={setSettings} /> : null}
             </section>

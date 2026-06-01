@@ -51944,6 +51944,34 @@ Latest validation for Stage 16 sleep-continuity action UI client contract:
 - `cd apps/chat_ui; npm run build`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 federation action is visible in the operator app
+
+Roadmap area: Stage 16 / Federation, workstation sleep continuity runtime
+readback.
+
+Material change:
+
+- Added a read-only `FederationHubPanel` to the chat UI.
+- The operator app now has a `Federation` tab in both wide and narrow layouts,
+  plus an `Open Federation` command palette action.
+- The panel reads `/federation/status` and
+  `/federation/sleep-continuity-action`, then displays Stage 16 status,
+  selected sleep-continuity action, blocker chips, evidence readiness, and
+  no-mutation/no-shell/no-authority guards.
+- The panel renders the selected command as readback text only. It does not add
+  any execute, POST, receipt-write, evidence-write, authority, or stage-closure
+  control.
+- Current live readback remains `capture_post_resume_evidence` with
+  `post_resume_evidence_ready=false`; Stage 16 is not marked closed by this UI
+  slice.
+
+Latest validation for Stage 16 federation operator-app visibility:
+
+- `cd apps/chat_ui; npm run test -- federation_hub`
+  Result: `passed; 187 passed`.
+- `cd apps/chat_ui; npm run build`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
