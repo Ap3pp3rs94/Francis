@@ -141,7 +141,9 @@ export type FederationStage16Status = {
   sleep_continuity_status?: string;
   sleep_continuity_ready: boolean;
   pre_sleep_evidence_ready: boolean;
+  post_resume_evidence_ready: boolean;
   latest_pre_sleep_evidence?: Record<string, unknown>;
+  latest_post_resume_evidence?: Record<string, unknown>;
   sleep_continuity_next_step?: string;
   ready_count: number;
   required_count: number;
@@ -247,6 +249,8 @@ export type FederationSleepContinuityRunbookStep = {
   expected_output?: string;
   pre_sleep_evidence_required: boolean;
   pre_sleep_evidence_available: boolean;
+  post_resume_evidence_required: boolean;
+  post_resume_evidence_available: boolean;
   operator_action_required: boolean;
   operator_confirmation_required: boolean;
   writes_evidence_when_run: boolean;
@@ -266,6 +270,8 @@ export type FederationSleepContinuityRunbook = {
   sleep_continuity_ready: boolean;
   pre_sleep_evidence?: Record<string, unknown>;
   pre_sleep_evidence_ready: boolean;
+  post_resume_evidence?: Record<string, unknown>;
+  post_resume_evidence_ready: boolean;
   ready_to_close: boolean;
   stage16_closed_by_receipt: boolean;
   missing_readbacks: string[];
@@ -605,8 +611,12 @@ export function parseFederationStage16Status(raw: unknown): FederationStage16Sta
     sleep_continuity_status: optionalString(body.sleep_continuity_status),
     sleep_continuity_ready: safeBoolean(body.sleep_continuity_ready),
     pre_sleep_evidence_ready: safeBoolean(body.pre_sleep_evidence_ready),
+    post_resume_evidence_ready: safeBoolean(body.post_resume_evidence_ready),
     latest_pre_sleep_evidence: isRecord(body.latest_pre_sleep_evidence)
       ? body.latest_pre_sleep_evidence
+      : undefined,
+    latest_post_resume_evidence: isRecord(body.latest_post_resume_evidence)
+      ? body.latest_post_resume_evidence
       : undefined,
     sleep_continuity_next_step: optionalString(body.sleep_continuity_next_step),
     ready_count: safeNumber(body.ready_count, 0),
@@ -747,6 +757,8 @@ function parseFederationSleepContinuityRunbookStep(raw: unknown): FederationSlee
     expected_output: optionalString(raw.expected_output),
     pre_sleep_evidence_required: safeBoolean(raw.pre_sleep_evidence_required),
     pre_sleep_evidence_available: safeBoolean(raw.pre_sleep_evidence_available),
+    post_resume_evidence_required: safeBoolean(raw.post_resume_evidence_required),
+    post_resume_evidence_available: safeBoolean(raw.post_resume_evidence_available),
     operator_action_required: safeBoolean(raw.operator_action_required),
     operator_confirmation_required: safeBoolean(raw.operator_confirmation_required),
     writes_evidence_when_run: safeBoolean(raw.writes_evidence_when_run),
@@ -774,6 +786,8 @@ export function parseFederationSleepContinuityRunbook(raw: unknown): FederationS
     sleep_continuity_ready: safeBoolean(body.sleep_continuity_ready),
     pre_sleep_evidence: isRecord(body.pre_sleep_evidence) ? body.pre_sleep_evidence : undefined,
     pre_sleep_evidence_ready: safeBoolean(body.pre_sleep_evidence_ready),
+    post_resume_evidence: isRecord(body.post_resume_evidence) ? body.post_resume_evidence : undefined,
+    post_resume_evidence_ready: safeBoolean(body.post_resume_evidence_ready),
     ready_to_close: safeBoolean(body.ready_to_close),
     stage16_closed_by_receipt: safeBoolean(body.stage16_closed_by_receipt),
     missing_readbacks: stringList(body.missing_readbacks),

@@ -110,6 +110,51 @@ def _write_stage16_pre_sleep_evidence(
     return path
 
 
+def _write_stage16_post_resume_evidence(data_root: Path, pre_sleep_path: Path) -> Path:
+    continuity_record_id = "stage16-sleep-pre"
+    path = (
+        data_root
+        / "test_runs"
+        / "federation-stage16-sleep-continuity-evidence"
+        / f"post_resume_{continuity_record_id}.json"
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "evidence_kind": "stage16_sleep_continuity_post_resume",
+                "continuity_record_id": continuity_record_id,
+                "source_node_id": "stage16-local-workstation",
+                "paired_node_id": "stage16-local-loopback-node",
+                "trace_id": "trace-stage16-sleep-continuity-pre-test",
+                "authority_snapshot_id": "authsnap-stage16-sleep-pre-test",
+                "received_ts": 1_800_030_120,
+                "freshness_state": "fresh",
+                "redaction_summary": "metadata_only_no_private_payload",
+                "sleep_observed": True,
+                "resume_observed": True,
+                "continuity_available_after_resume": True,
+                "revoked_links_present_current_state": False,
+                "stale_state_implies_current_authority": False,
+                "capture_mode": "explicit_operator_post_resume_confirmation",
+                "pre_sleep_evidence_path": str(pre_sleep_path.resolve()),
+                "governance": {
+                    "operator_supplied_evidence": True,
+                    "explicit_operator_confirmation_required": True,
+                    "does_not_infer_sleep_from_delay": True,
+                    "metadata_only": True,
+                    "contains_raw_private_data": False,
+                    "writes_runtime_readback": False,
+                    "marks_stage16_closed": False,
+                },
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
 def test_federation_hub_contract_lifecycle(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
@@ -1024,6 +1069,8 @@ def test_federation_stage16_sleep_continuity_runbook_blocks_on_prior_live_readba
     assert body["sleep_continuity_ready"] is False
     assert body["pre_sleep_evidence_ready"] is False
     assert body["pre_sleep_evidence"]["present"] is False
+    assert body["post_resume_evidence_ready"] is False
+    assert body["post_resume_evidence"]["present"] is False
     assert body["ready_to_close"] is False
     assert body["stage16_closed_by_receipt"] is False
     assert body["current_readback"]["ready_count"] == 0
@@ -1040,6 +1087,7 @@ def test_federation_stage16_sleep_continuity_runbook_blocks_on_prior_live_readba
     assert body["steps"][1]["operator_confirmation_required"] is True
     assert body["steps"][1]["pre_sleep_evidence_available"] is False
     assert body["steps"][2]["id"] == "commit_sleep_continuity_readback"
+    assert body["steps"][2]["post_resume_evidence_available"] is False
     assert body["steps"][3]["id"] == "record_operator_stage_closure_decision"
     assert body["steps"][3]["route"] == "/federation/stage-closure-decision"
     assert body["routes"]["sleep_continuity_runbook"] == "/federation/sleep-continuity-runbook"
@@ -1096,6 +1144,8 @@ def test_federation_stage16_sleep_continuity_runbook_reports_ready_for_operator_
     assert body["sleep_continuity_ready"] is False
     assert body["pre_sleep_evidence_ready"] is False
     assert body["pre_sleep_evidence"]["present"] is False
+    assert body["post_resume_evidence_ready"] is False
+    assert body["post_resume_evidence"]["present"] is False
     assert body["sleep_continuity_check"]["id"] == "workstation_sleep_continuity_validated"
     assert body["sleep_continuity_check"]["passed"] is False
     assert body["missing_readbacks"] == ["workstation_sleep_continuity_validated"]
@@ -1118,6 +1168,7 @@ def test_federation_stage16_sleep_continuity_runbook_reports_ready_for_operator_
     assert "-OperatorConfirmedSleepResume" in body["steps"][1]["command"]
     assert "federation-stage16-sleep-continuity-runtime-proof.ps1" in body["steps"][2]["command"]
     assert body["steps"][2]["writes_receipts_when_run"] is True
+    assert body["steps"][2]["post_resume_evidence_available"] is False
     assert body["steps"][3]["required_scope"] == "federation.stage16.closure.write"
     assert body["governance"]["read_only"] is True
     assert body["governance"]["runbook_only"] is True
@@ -1159,6 +1210,8 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert body["status"] == "ready_for_operator_sleep_resume"
     assert body["pre_sleep_evidence_ready"] is True
     assert body["pre_sleep_evidence"]["present"] is True
+    assert body["post_resume_evidence_ready"] is False
+    assert body["post_resume_evidence"]["present"] is False
     assert body["pre_sleep_evidence"]["status"] == "pre_sleep_evidence_available"
     assert body["pre_sleep_evidence"]["evidence_path"] == str(pre_sleep_path.resolve())
     assert body["pre_sleep_evidence"]["continuity_record_id"] == "stage16-sleep-pre"
@@ -1170,6 +1223,7 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert body["steps"][0]["latest_evidence_path"] == str(pre_sleep_path.resolve())
     assert body["steps"][1]["pre_sleep_evidence_available"] is True
     assert body["steps"][2]["pre_sleep_evidence_available"] is True
+    assert body["steps"][2]["post_resume_evidence_available"] is False
     assert f'-PreSleepEvidencePath "{pre_sleep_path.resolve()}"' in body["steps"][1]["command"]
     assert f'-PreSleepEvidencePath "{pre_sleep_path.resolve()}"' in body["steps"][2]["command"]
     assert body["governance"]["read_only"] is True
@@ -1183,12 +1237,65 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert status["sleep_continuity_status"] == "pre_sleep_evidence_ready"
     assert status["sleep_continuity_ready"] is False
     assert status["pre_sleep_evidence_ready"] is True
+    assert status["post_resume_evidence_ready"] is False
     assert status["latest_pre_sleep_evidence"]["present"] is True
     assert status["latest_pre_sleep_evidence"]["evidence_path"] == str(pre_sleep_path.resolve())
     assert status["latest_pre_sleep_evidence"]["metadata_only"] is True
     assert status["latest_pre_sleep_evidence"]["writes_runtime_readback"] is False
     assert status["latest_pre_sleep_evidence"]["marks_stage16_closed"] is False
     assert status["sleep_continuity_next_step"] == "run_post_resume_evidence_with_operator_confirmation"
+    assert status["next_smallest_truthful_gap"] == "stage16_sleep_continuity_runtime_readback"
+
+
+def test_federation_stage16_sleep_continuity_runbook_uses_linked_post_resume_marker(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage15_closure_receipt(data_root, receipt_id="swarm_stage15_closure_for_postresume_runbook")
+    pre_sleep_path = _write_stage16_pre_sleep_evidence(data_root)
+    post_resume_path = _write_stage16_post_resume_evidence(data_root, pre_sleep_path)
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    for readback_id in [
+        "live_pairing_flow_observed",
+        "live_selective_sync_observed",
+        "live_remote_approval_roundtrip_observed",
+        "live_revocation_roundtrip_observed",
+    ]:
+        _record_stage16_live_readback(client, readback_id)
+
+    body = client.get("/federation/sleep-continuity-runbook").json()
+
+    assert body["status"] == "ready_for_operator_sleep_resume"
+    assert body["pre_sleep_evidence_ready"] is True
+    assert body["post_resume_evidence_ready"] is True
+    assert body["post_resume_evidence"]["present"] is True
+    assert body["post_resume_evidence"]["status"] == "post_resume_evidence_available"
+    assert body["post_resume_evidence"]["evidence_path"] == str(post_resume_path.resolve())
+    assert body["post_resume_evidence"]["pre_sleep_evidence_path"] == str(pre_sleep_path.resolve())
+    assert body["post_resume_evidence"]["linked_to_latest_pre_sleep"] is True
+    assert body["post_resume_evidence"]["operator_confirmed_sleep_resume"] is True
+    assert body["post_resume_evidence"]["continuity_available_after_resume"] is True
+    assert body["post_resume_evidence"]["writes_runtime_readback"] is False
+    assert body["post_resume_evidence"]["marks_stage16_closed"] is False
+    assert f'-PostResumeEvidencePath "{post_resume_path.resolve()}"' in body["steps"][2]["command"]
+    assert body["steps"][2]["post_resume_evidence_available"] is True
+    assert body["governance"]["reads_post_resume_evidence_metadata"] is True
+    assert body["writes_receipts"] is False
+    assert body["marks_stage16_closed"] is False
+
+    status = client.get("/federation/status").json()
+    assert status["sleep_continuity_status"] == "post_resume_evidence_ready"
+    assert status["pre_sleep_evidence_ready"] is True
+    assert status["post_resume_evidence_ready"] is True
+    assert status["latest_post_resume_evidence"]["evidence_path"] == str(post_resume_path.resolve())
+    assert status["sleep_continuity_next_step"] == "run_sleep_continuity_runtime_proof_with_committed_evidence"
     assert status["next_smallest_truthful_gap"] == "stage16_sleep_continuity_runtime_readback"
 
 
