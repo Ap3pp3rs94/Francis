@@ -1223,6 +1223,50 @@ def _stage16_sleep_resume_confirmation_next_gap(
     return _STAGE16_SLEEP_CONTINUITY_RUNTIME_READBACK_GAP
 
 
+def _stage16_sleep_resume_confirmation_record_readiness(
+    *,
+    command: dict[str, Any],
+    readback: dict[str, Any],
+    requested_actor_ready: bool,
+    pre_sleep_evidence_path: str,
+) -> dict[str, Any]:
+    command_ready = bool(command.get("confirmation_receipt_command_ready"))
+    records_receipt = bool(command.get("confirmation_receipt_command_records_receipt"))
+    writes_evidence = bool(command.get("confirmation_receipt_command_writes_evidence"))
+    marks_stage16_closed = bool(command.get("confirmation_receipt_command_marks_stage16_closed"))
+    receipt_backed_sequence_ready = bool(readback.get("receipt_backed_sequence_ready"))
+    blockers: list[str] = []
+    if not command_ready:
+        blockers.append("confirmation_receipt_command_not_ready")
+    if not requested_actor_ready:
+        blockers.append("confirmation_receipt_actor_not_ready")
+    if not pre_sleep_evidence_path:
+        blockers.append("current_pre_sleep_evidence_path_missing")
+    if not records_receipt:
+        blockers.append("confirmation_receipt_command_does_not_record_receipt")
+    if writes_evidence:
+        blockers.append("confirmation_receipt_command_writes_evidence")
+    if marks_stage16_closed:
+        blockers.append("confirmation_receipt_command_marks_stage16_closed")
+    if receipt_backed_sequence_ready:
+        blockers.append("receipt_backed_sequence_already_ready")
+    return {
+        "ready": not blockers,
+        "blockers": blockers,
+        "current_pre_sleep_evidence_path": pre_sleep_evidence_path,
+        "actor": _safe_str(command.get("confirmation_receipt_actor")).strip(),
+        "command_ready": command_ready,
+        "actor_ready": requested_actor_ready,
+        "records_receipt": records_receipt,
+        "writes_evidence": writes_evidence,
+        "writes_runtime_readback": False,
+        "marks_stage16_closed": marks_stage16_closed,
+        "receipt_backed_sequence_ready": receipt_backed_sequence_ready,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+    }
+
+
 def _stage16_sleep_continuity_next_gap_for_status(
     *,
     completion_review_blockers: list[str],
@@ -3407,6 +3451,12 @@ def status(actor: str = "") -> dict[str, Any]:
             ),
             actor=requested_actor if requested_actor_ready else "",
         )
+        sleep_continuity_confirmation_receipt_record_readiness = _stage16_sleep_resume_confirmation_record_readiness(
+            command=sleep_continuity_confirmation_receipt_command,
+            readback=sleep_continuity_confirmation_receipt_readback,
+            requested_actor_ready=requested_actor_ready,
+            pre_sleep_evidence_path=_safe_str(latest_pre_sleep_evidence.get("evidence_path")).strip(),
+        )
         sleep_continuity_next_gap = _stage16_sleep_continuity_next_gap_for_status(
             completion_review_blockers=completion_review_blockers,
             pre_sleep_evidence_ready=pre_sleep_evidence_ready,
@@ -3539,6 +3589,42 @@ def status(actor: str = "") -> dict[str, Any]:
             ),
             "sleep_continuity_confirmation_receipt_command_projection_only": bool(
                 sleep_continuity_confirmation_receipt_command.get("confirmation_receipt_command_projection_only")
+            ),
+            "sleep_continuity_confirmation_receipt_record_prerequisites_ready": bool(
+                sleep_continuity_confirmation_receipt_record_readiness.get("ready")
+            ),
+            "sleep_continuity_confirmation_receipt_record_blockers": _parse_list(
+                sleep_continuity_confirmation_receipt_record_readiness.get("blockers")
+            ),
+            "sleep_continuity_confirmation_receipt_record_current_pre_sleep_evidence_path": _safe_str(
+                sleep_continuity_confirmation_receipt_record_readiness.get("current_pre_sleep_evidence_path")
+            ).strip(),
+            "sleep_continuity_confirmation_receipt_record_actor": _safe_str(
+                sleep_continuity_confirmation_receipt_record_readiness.get("actor")
+            ).strip(),
+            "sleep_continuity_confirmation_receipt_record_command_ready": bool(
+                sleep_continuity_confirmation_receipt_record_readiness.get("command_ready")
+            ),
+            "sleep_continuity_confirmation_receipt_record_actor_ready": bool(
+                sleep_continuity_confirmation_receipt_record_readiness.get("actor_ready")
+            ),
+            "sleep_continuity_confirmation_receipt_record_records_receipt": bool(
+                sleep_continuity_confirmation_receipt_record_readiness.get("records_receipt")
+            ),
+            "sleep_continuity_confirmation_receipt_record_writes_evidence": bool(
+                sleep_continuity_confirmation_receipt_record_readiness.get("writes_evidence")
+            ),
+            "sleep_continuity_confirmation_receipt_record_writes_runtime_readback": bool(
+                sleep_continuity_confirmation_receipt_record_readiness.get("writes_runtime_readback")
+            ),
+            "sleep_continuity_confirmation_receipt_record_marks_stage16_closed": bool(
+                sleep_continuity_confirmation_receipt_record_readiness.get("marks_stage16_closed")
+            ),
+            "sleep_continuity_confirmation_receipt_record_grants_execution_authority": bool(
+                sleep_continuity_confirmation_receipt_record_readiness.get("grants_execution_authority")
+            ),
+            "sleep_continuity_confirmation_receipt_record_grants_mutation_authority": bool(
+                sleep_continuity_confirmation_receipt_record_readiness.get("grants_mutation_authority")
             ),
             "sleep_continuity_confirmation_receipt_readback_status": _safe_str(
                 sleep_continuity_confirmation_receipt_readback.get("status")

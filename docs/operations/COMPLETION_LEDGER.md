@@ -55043,6 +55043,49 @@ Latest validation for Stage 16 Hub receipt record readiness:
 - `npm run build`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 status exposes confirmation receipt record prerequisites
+
+Roadmap area: Stage 16 / Federation, sleep-continuity confirmation receipt
+operator surface.
+
+Material change:
+
+- `/federation/status` now exposes status-level confirmation receipt record
+  prerequisites: whether the receipt action is precondition-ready, the current
+  blockers, bound actor, current pre-sleep evidence path, and guard booleans
+  for receipt/evidence/runtime/closure/authority effects.
+- Federation Hub now prefers the backend readiness readback while still adding
+  the local operator acknowledgement blocker before enabling the governed
+  receipt button.
+- Fresh local status readback for `actor=codex.builder` now reports
+  `sleep_continuity_confirmation_receipt_record_prerequisites_ready=true`,
+  `sleep_continuity_confirmation_receipt_record_blockers=[]`,
+  `sleep_continuity_confirmation_receipt_record_actor=codex.builder`,
+  `sleep_continuity_confirmation_receipt_record_records_receipt=true`,
+  `sleep_continuity_confirmation_receipt_record_writes_evidence=false`,
+  `sleep_continuity_confirmation_receipt_record_writes_runtime_readback=false`,
+  and `sleep_continuity_confirmation_receipt_record_marks_stage16_closed=false`.
+- This remains readback/UI truth hardening only: it did not execute the
+  receipt-writing mutation, capture evidence, write runtime readback, infer
+  physical sleep/resume, grant authority, or close Stage 16.
+
+Latest validation for Stage 16 status receipt record prerequisites:
+
+- `python -m pytest tests/test_api_federation.py -q --tb=short --maxfail=1`
+  Result: `passed; 26 passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `npm run test -- federation_hub`
+  Result: `passed; 197 passed`.
+- `npm run build`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

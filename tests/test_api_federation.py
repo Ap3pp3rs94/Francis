@@ -1392,6 +1392,20 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert status["sleep_continuity_confirmation_receipt_command_writes_evidence"] is False
     assert status["sleep_continuity_confirmation_receipt_command_marks_stage16_closed"] is False
     assert status["sleep_continuity_confirmation_receipt_command_projection_only"] is True
+    assert status["sleep_continuity_confirmation_receipt_record_prerequisites_ready"] is False
+    assert status["sleep_continuity_confirmation_receipt_record_blockers"] == ["confirmation_receipt_actor_not_ready"]
+    assert status["sleep_continuity_confirmation_receipt_record_current_pre_sleep_evidence_path"] == str(
+        pre_sleep_path.resolve()
+    )
+    assert status["sleep_continuity_confirmation_receipt_record_actor"] == ""
+    assert status["sleep_continuity_confirmation_receipt_record_command_ready"] is True
+    assert status["sleep_continuity_confirmation_receipt_record_actor_ready"] is False
+    assert status["sleep_continuity_confirmation_receipt_record_records_receipt"] is True
+    assert status["sleep_continuity_confirmation_receipt_record_writes_evidence"] is False
+    assert status["sleep_continuity_confirmation_receipt_record_writes_runtime_readback"] is False
+    assert status["sleep_continuity_confirmation_receipt_record_marks_stage16_closed"] is False
+    assert status["sleep_continuity_confirmation_receipt_record_grants_execution_authority"] is False
+    assert status["sleep_continuity_confirmation_receipt_record_grants_mutation_authority"] is False
     assert status["next_smallest_truthful_gap"] == "stage16_sleep_resume_confirmation_receipt"
 
     actor_bound_status = client.get("/federation/status?actor=test.federation.sleep").json()
@@ -1407,6 +1421,14 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert actor_bound_status["sleep_continuity_confirmation_receipt_command_records_receipt"] is True
     assert actor_bound_status["sleep_continuity_confirmation_receipt_command_writes_evidence"] is False
     assert actor_bound_status["sleep_continuity_confirmation_receipt_command_marks_stage16_closed"] is False
+    assert actor_bound_status["sleep_continuity_confirmation_receipt_record_prerequisites_ready"] is True
+    assert actor_bound_status["sleep_continuity_confirmation_receipt_record_blockers"] == []
+    assert actor_bound_status["sleep_continuity_confirmation_receipt_record_actor"] == "test.federation.sleep"
+    assert actor_bound_status["sleep_continuity_confirmation_receipt_record_command_ready"] is True
+    assert actor_bound_status["sleep_continuity_confirmation_receipt_record_actor_ready"] is True
+    assert actor_bound_status["sleep_continuity_confirmation_receipt_record_records_receipt"] is True
+    assert actor_bound_status["sleep_continuity_confirmation_receipt_record_writes_evidence"] is False
+    assert actor_bound_status["sleep_continuity_confirmation_receipt_record_marks_stage16_closed"] is False
 
     action = client.get("/federation/sleep-continuity-action").json()
     assert action["status"] == "capture_post_resume_evidence"
@@ -2141,6 +2163,20 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     assert pending_status["sleep_continuity_confirmation_receipt_command_records_receipt"] is True
     assert pending_status["sleep_continuity_confirmation_receipt_command_writes_evidence"] is False
     assert pending_status["sleep_continuity_confirmation_receipt_command_marks_stage16_closed"] is False
+    assert pending_status["sleep_continuity_confirmation_receipt_record_prerequisites_ready"] is True
+    assert pending_status["sleep_continuity_confirmation_receipt_record_blockers"] == []
+    assert pending_status["sleep_continuity_confirmation_receipt_record_current_pre_sleep_evidence_path"] == str(
+        pre_sleep_path.resolve()
+    )
+    assert pending_status["sleep_continuity_confirmation_receipt_record_actor"] == "test.federation.sleep"
+    assert pending_status["sleep_continuity_confirmation_receipt_record_command_ready"] is True
+    assert pending_status["sleep_continuity_confirmation_receipt_record_actor_ready"] is True
+    assert pending_status["sleep_continuity_confirmation_receipt_record_records_receipt"] is True
+    assert pending_status["sleep_continuity_confirmation_receipt_record_writes_evidence"] is False
+    assert pending_status["sleep_continuity_confirmation_receipt_record_writes_runtime_readback"] is False
+    assert pending_status["sleep_continuity_confirmation_receipt_record_marks_stage16_closed"] is False
+    assert pending_status["sleep_continuity_confirmation_receipt_record_grants_execution_authority"] is False
+    assert pending_status["sleep_continuity_confirmation_receipt_record_grants_mutation_authority"] is False
     assert pending_status["sleep_continuity_next_step"] == "write_sleep_resume_confirmation_receipt"
     assert pending_status["next_smallest_truthful_gap"] == "stage16_sleep_resume_confirmation_receipt"
 
@@ -2316,6 +2352,21 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     assert receipt_ready_status["sleep_continuity_confirmation_receipt_command_records_receipt"] is False
     assert receipt_ready_status["sleep_continuity_confirmation_receipt_command_writes_evidence"] is False
     assert receipt_ready_status["sleep_continuity_confirmation_receipt_command_marks_stage16_closed"] is False
+    assert receipt_ready_status["sleep_continuity_confirmation_receipt_record_prerequisites_ready"] is False
+    assert receipt_ready_status["sleep_continuity_confirmation_receipt_record_blockers"] == [
+        "confirmation_receipt_command_not_ready",
+        "confirmation_receipt_command_does_not_record_receipt",
+        "receipt_backed_sequence_already_ready",
+    ]
+    assert receipt_ready_status["sleep_continuity_confirmation_receipt_record_actor"] == ""
+    assert receipt_ready_status["sleep_continuity_confirmation_receipt_record_command_ready"] is False
+    assert receipt_ready_status["sleep_continuity_confirmation_receipt_record_actor_ready"] is True
+    assert receipt_ready_status["sleep_continuity_confirmation_receipt_record_records_receipt"] is False
+    assert receipt_ready_status["sleep_continuity_confirmation_receipt_record_writes_evidence"] is False
+    assert receipt_ready_status["sleep_continuity_confirmation_receipt_record_writes_runtime_readback"] is False
+    assert receipt_ready_status["sleep_continuity_confirmation_receipt_record_marks_stage16_closed"] is False
+    assert receipt_ready_status["sleep_continuity_confirmation_receipt_record_grants_execution_authority"] is False
+    assert receipt_ready_status["sleep_continuity_confirmation_receipt_record_grants_mutation_authority"] is False
     assert receipt_ready_status["sleep_continuity_next_step"] == "run_receipt_backed_post_resume_sequence"
     assert receipt_ready_status["next_smallest_truthful_gap"] == "stage16_sleep_continuity_runtime_readback"
 
