@@ -52175,6 +52175,36 @@ Latest validation for Stage 16 selected evidence-path display:
   `post_resume_evidence_path=""`, and
   `next_smallest_truthful_gap=stage16_sleep_continuity_runtime_readback`.
 
+### 2026-06-01 - Stage 16 federation panel separates selected action effects
+
+Roadmap area: Stage 16 / Federation, operator-visible action authority and
+mutation truthfulness.
+
+Material change:
+
+- `FederationHubPanel` now separates readback safety from the selected action's
+  consequences in the guard row by showing operator action required, selected
+  evidence write, and selected receipt write independently.
+- The current `/federation/sleep-continuity-action` posture can therefore show
+  that the browser panel remains non-mutating while the selected post-resume
+  command, if the operator explicitly runs it after a real sleep/resume, would
+  write evidence.
+- This is read-only inspectability. It does not execute routes, run shell
+  commands, write evidence, write receipts, mutate registry state, write memory,
+  grant execution authority, grant mutation authority, infer workstation
+  sleep/resume, or mark Stage 16 closed.
+- Stage 16 remains open until live post-resume evidence and the receipt-backed
+  completion/closure gates are satisfied.
+
+Latest validation for Stage 16 selected action effect display:
+
+- `cd apps/chat_ui; npm run test -- federation_hub`
+  Result: `passed; 187 passed`.
+- `cd apps/chat_ui; npm run build`
+  Result: `passed`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

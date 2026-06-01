@@ -254,6 +254,15 @@ export function FederationHubPanel(props: { baseUrl: string }) {
             <span style={badgeStyle(presentation?.operator_confirmation_required ? "blocked" : "ready")}>
               confirmation {yesNo(Boolean(presentation?.operator_confirmation_required))}
             </span>
+            <span style={badgeStyle(presentation?.operator_action_required ? "blocked" : "ready")}>
+              operator action {yesNo(Boolean(presentation?.operator_action_required))}
+            </span>
+            <span style={badgeStyle(presentation?.writes_evidence_when_run ? "blocked" : "ready")}>
+              selected writes evidence {yesNo(Boolean(presentation?.writes_evidence_when_run))}
+            </span>
+            <span style={badgeStyle(presentation?.writes_receipts_when_run ? "blocked" : "ready")}>
+              selected writes receipts {yesNo(Boolean(presentation?.writes_receipts_when_run))}
+            </span>
           </div>
         </div>
       </div>
