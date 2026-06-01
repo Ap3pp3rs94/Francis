@@ -2187,6 +2187,26 @@ test("federation sleep-continuity action parser preserves selected read-only ste
         'Set-Location -LiteralPath \'D:\\Francis\'; scripts/federation-stage16-sleep-continuity-post-resume-sequence.ps1 -Mode Run -CommitEvidence -CommitReceipts -PreSleepEvidencePath "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json" -OperatorConfirmedSleepResume -RequireConfirmationReceipt -ConfirmationReceiptId <confirmation_receipt_id>',
       post_resume_receipt_backed_sequence_requires_confirmation_receipt: true,
       post_resume_receipt_backed_sequence_confirmation_receipt_id_placeholder: "<confirmation_receipt_id>",
+      post_resume_receipt_backed_sequence_next_step: "record_current_matching_sleep_resume_confirmation_receipt",
+      post_resume_receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt: true,
+      post_resume_receipt_backed_sequence_current_matching_confirmation_receipt_required: true,
+      post_resume_receipt_backed_sequence_available_after_current_matching_confirmation_receipt: false,
+      post_resume_receipt_backed_sequence_runs_after_physical_sleep_resume_receipt_only: true,
+      post_resume_receipt_backed_sequence_readiness_route:
+        "/federation/sleep-resume-confirmation/receipt-backed-sequence-readiness",
+      post_resume_receipt_backed_sequence_post_receipt_handoff: {
+        status: "blocked_until_current_confirmation_receipt",
+        next_step: "record_current_matching_sleep_resume_confirmation_receipt",
+        blockers: ["current_matching_sleep_resume_confirmation_receipt_missing"],
+        blocked_until_current_matching_confirmation_receipt: true,
+        current_matching_confirmation_receipt_required: true,
+        available_after_current_matching_confirmation_receipt: false,
+        runs_after_physical_sleep_resume_receipt_only: true,
+        writes_evidence_when_run: true,
+        writes_receipts_when_run: true,
+        marks_stage16_closed_when_run: false,
+        read_only_projection: true,
+      },
       post_resume_sequence_writes_evidence_when_run: true,
       post_resume_sequence_writes_receipts_when_run: true,
       confirmation_receipt_route: "/federation/sleep-resume-confirmation",
@@ -2224,6 +2244,8 @@ test("federation sleep-continuity action parser preserves selected read-only ste
         sleep_continuity_action: "/federation/sleep-continuity-action",
         sleep_continuity_runbook: "/federation/sleep-continuity-runbook",
         sleep_resume_confirmations: "/federation/sleep-resume-confirmations",
+        sleep_resume_confirmation_receipt_backed_sequence_readiness:
+          "/federation/sleep-resume-confirmation/receipt-backed-sequence-readiness",
         completion_review: "/federation/completion-review",
       },
       proof_boundary: {
@@ -2235,6 +2257,8 @@ test("federation sleep-continuity action parser preserves selected read-only ste
         does_not_write_receipts: true,
         does_not_mark_stage16_closed: true,
         does_not_grant_authority: true,
+        receipt_backed_sequence_handoff_projection: true,
+        receipt_backed_sequence_does_not_execute_before_current_confirmation_receipt: true,
       },
     },
     after_manual_execution_readback: {
@@ -2446,6 +2470,53 @@ test("federation sleep-continuity action parser preserves selected read-only ste
     action.operator_confirmation_handoff?.post_resume_receipt_backed_sequence_confirmation_receipt_id_placeholder,
     "<confirmation_receipt_id>",
   );
+  assert.equal(
+    action.operator_confirmation_handoff?.post_resume_receipt_backed_sequence_next_step,
+    "record_current_matching_sleep_resume_confirmation_receipt",
+  );
+  assert.equal(
+    action.operator_confirmation_handoff?.post_resume_receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt,
+    true,
+  );
+  assert.equal(
+    action.operator_confirmation_handoff?.post_resume_receipt_backed_sequence_current_matching_confirmation_receipt_required,
+    true,
+  );
+  assert.equal(
+    action.operator_confirmation_handoff?.post_resume_receipt_backed_sequence_available_after_current_matching_confirmation_receipt,
+    false,
+  );
+  assert.equal(
+    action.operator_confirmation_handoff?.post_resume_receipt_backed_sequence_runs_after_physical_sleep_resume_receipt_only,
+    true,
+  );
+  assert.equal(
+    action.operator_confirmation_handoff?.post_resume_receipt_backed_sequence_readiness_route,
+    "/federation/sleep-resume-confirmation/receipt-backed-sequence-readiness",
+  );
+  assert.equal(
+    action.operator_confirmation_handoff?.post_resume_receipt_backed_sequence_post_receipt_handoff?.status,
+    "blocked_until_current_confirmation_receipt",
+  );
+  assert.deepEqual(
+    action.operator_confirmation_handoff?.post_resume_receipt_backed_sequence_post_receipt_handoff?.blockers,
+    ["current_matching_sleep_resume_confirmation_receipt_missing"],
+  );
+  assert.equal(
+    action.operator_confirmation_handoff?.post_resume_receipt_backed_sequence_post_receipt_handoff
+      ?.writes_evidence_when_run,
+    true,
+  );
+  assert.equal(
+    action.operator_confirmation_handoff?.post_resume_receipt_backed_sequence_post_receipt_handoff
+      ?.writes_receipts_when_run,
+    true,
+  );
+  assert.equal(
+    action.operator_confirmation_handoff?.post_resume_receipt_backed_sequence_post_receipt_handoff
+      ?.marks_stage16_closed_when_run,
+    false,
+  );
   assert.equal(action.operator_confirmation_handoff?.post_resume_sequence_writes_evidence_when_run, true);
   assert.equal(action.operator_confirmation_handoff?.post_resume_sequence_writes_receipts_when_run, true);
   assert.equal(action.operator_confirmation_handoff?.confirmation_receipt_route, "/federation/sleep-resume-confirmation");
@@ -2510,9 +2581,19 @@ test("federation sleep-continuity action parser preserves selected read-only ste
     action.operator_confirmation_handoff?.readback_routes.sleep_resume_confirmations,
     "/federation/sleep-resume-confirmations",
   );
+  assert.equal(
+    action.operator_confirmation_handoff?.readback_routes.sleep_resume_confirmation_receipt_backed_sequence_readiness,
+    "/federation/sleep-resume-confirmation/receipt-backed-sequence-readiness",
+  );
   assert.equal(action.operator_confirmation_handoff?.proof_boundary.projection_only, true);
   assert.equal(action.operator_confirmation_handoff?.proof_boundary.does_not_run_shell, true);
   assert.equal(action.operator_confirmation_handoff?.proof_boundary.does_not_mark_stage16_closed, true);
+  assert.equal(action.operator_confirmation_handoff?.proof_boundary.receipt_backed_sequence_handoff_projection, true);
+  assert.equal(
+    action.operator_confirmation_handoff?.proof_boundary
+      .receipt_backed_sequence_does_not_execute_before_current_confirmation_receipt,
+    true,
+  );
   assert.equal(
     action.after_manual_execution_readback?.status,
     "manual_execution_waiting_for_operator_confirmation",
@@ -2716,6 +2797,20 @@ test("federation sleep-continuity action parser preserves selected read-only ste
     true,
   );
   assert.equal(presentation.operator_confirmation_handoff?.post_resume_receipt_backed_sequence_command_visible, false);
+  assert.equal(
+    presentation.operator_confirmation_handoff
+      ?.post_resume_receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt,
+    true,
+  );
+  assert.equal(
+    presentation.operator_confirmation_handoff
+      ?.post_resume_receipt_backed_sequence_runs_after_physical_sleep_resume_receipt_only,
+    true,
+  );
+  assert.equal(
+    presentation.operator_confirmation_handoff?.post_resume_receipt_backed_sequence_post_receipt_handoff?.status,
+    "blocked_until_current_confirmation_receipt",
+  );
   assert.equal(presentation.operator_confirmation_handoff?.confirmation_receipt_route, "/federation/sleep-resume-confirmation");
   assert.equal(presentation.operator_confirmation_handoff?.confirmation_receipt_command_ready, true);
   assert.equal(presentation.operator_confirmation_handoff?.confirmation_receipt_command_visible, true);

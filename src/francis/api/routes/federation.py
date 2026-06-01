@@ -2737,6 +2737,30 @@ def _stage16_sleep_continuity_operator_confirmation_handoff(
         and not operator_confirmation_pending
         and bool(operator_terminal_invocation.get("operator_terminal_command_visible"))
     )
+    receipt_backed_sequence_required = confirmation_required and step_id == "capture_post_resume_evidence"
+    receipt_backed_sequence_next_step = (
+        "record_current_matching_sleep_resume_confirmation_receipt" if receipt_backed_sequence_required else ""
+    )
+    receipt_backed_sequence_handoff = {
+        "status": "blocked_until_current_confirmation_receipt" if receipt_backed_sequence_required else "not_required",
+        "next_step": receipt_backed_sequence_next_step,
+        "blocked_until_current_matching_confirmation_receipt": receipt_backed_sequence_required,
+        "current_matching_confirmation_receipt_required": receipt_backed_sequence_required,
+        "available_after_current_matching_confirmation_receipt": False,
+        "readiness_route": routes["sleep_resume_confirmation_receipt_backed_sequence_readiness"]
+        if receipt_backed_sequence_required
+        else "",
+        "confirmation_receipt_id_placeholder": receipt_id_placeholder if receipt_backed_sequence_required else "",
+        "blockers": ["current_matching_sleep_resume_confirmation_receipt_missing"]
+        if receipt_backed_sequence_required
+        else [],
+        "runs_after_physical_sleep_resume_receipt_only": receipt_backed_sequence_required,
+        "requires_operator_confirmed_sleep_resume": receipt_backed_sequence_required,
+        "writes_evidence_when_run": receipt_backed_sequence_required,
+        "writes_receipts_when_run": receipt_backed_sequence_required,
+        "marks_stage16_closed_when_run": False,
+        "read_only_projection": True,
+    }
     confirmation_operator_steps = _stage16_sleep_resume_confirmation_operator_steps(
         confirmation_command_ready=bool(confirmation_command.get("confirmation_receipt_command_ready")),
         confirmation_command_requires_actor_substitution=bool(
@@ -2778,6 +2802,23 @@ def _stage16_sleep_continuity_operator_confirmation_handoff(
         if step_id == "capture_post_resume_evidence"
         else "",
         "post_resume_receipt_backed_sequence_command_visible": False,
+        "post_resume_receipt_backed_sequence_next_step": receipt_backed_sequence_next_step,
+        "post_resume_receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt": (
+            receipt_backed_sequence_required
+        ),
+        "post_resume_receipt_backed_sequence_current_matching_confirmation_receipt_required": (
+            receipt_backed_sequence_required
+        ),
+        "post_resume_receipt_backed_sequence_available_after_current_matching_confirmation_receipt": False,
+        "post_resume_receipt_backed_sequence_runs_after_physical_sleep_resume_receipt_only": (
+            receipt_backed_sequence_required
+        ),
+        "post_resume_receipt_backed_sequence_readiness_route": routes[
+            "sleep_resume_confirmation_receipt_backed_sequence_readiness"
+        ]
+        if receipt_backed_sequence_required
+        else "",
+        "post_resume_receipt_backed_sequence_post_receipt_handoff": receipt_backed_sequence_handoff,
         "post_resume_receipt_backed_sequence_copyable_command": receipt_backed_sequence_copyable_command
         if step_id == "capture_post_resume_evidence"
         else "",
@@ -2819,6 +2860,9 @@ def _stage16_sleep_continuity_operator_confirmation_handoff(
             "sleep_continuity_action": routes["sleep_continuity_action"],
             "sleep_continuity_runbook": routes["sleep_continuity_runbook"],
             "sleep_resume_confirmations": routes["sleep_resume_confirmations"],
+            "sleep_resume_confirmation_receipt_backed_sequence_readiness": routes[
+                "sleep_resume_confirmation_receipt_backed_sequence_readiness"
+            ],
             "completion_review": routes["completion_review"],
         },
         "proof_boundary": {
@@ -2834,6 +2878,8 @@ def _stage16_sleep_continuity_operator_confirmation_handoff(
             "actor_bound_confirmation_command_projection": requested_actor_ready,
             "receipt_backed_sequence_requires_confirmation_receipt": confirmation_required
             and step_id == "capture_post_resume_evidence",
+            "receipt_backed_sequence_handoff_projection": True,
+            "receipt_backed_sequence_does_not_execute_before_current_confirmation_receipt": True,
         },
     }
 

@@ -903,6 +903,31 @@ export function FederationHubPanel(props: { baseUrl: string }) {
               </code>
             </div>
             <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
+              receipt-backed next{" "}
+              <code>{codeValue(operatorConfirmationHandoff.post_resume_receipt_backed_sequence_next_step)}</code>
+              {" / "}blocked until receipt{" "}
+              <code>
+                {yesNo(
+                  operatorConfirmationHandoff
+                    .post_resume_receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt,
+                )}
+              </code>
+              {" / "}after receipt{" "}
+              <code>
+                {yesNo(
+                  operatorConfirmationHandoff
+                    .post_resume_receipt_backed_sequence_available_after_current_matching_confirmation_receipt,
+                )}
+              </code>
+              {" / "}receipt only{" "}
+              <code>
+                {yesNo(
+                  operatorConfirmationHandoff
+                    .post_resume_receipt_backed_sequence_runs_after_physical_sleep_resume_receipt_only,
+                )}
+              </code>
+            </div>
+            <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
               receipt route <code>{codeValue(operatorConfirmationHandoff.confirmation_receipt_route)}</code>
               {" / "}readback <code>{codeValue(operatorConfirmationHandoff.confirmation_receipt_readback_route)}</code>
             </div>

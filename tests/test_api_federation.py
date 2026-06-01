@@ -1702,6 +1702,44 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
         confirmation_handoff["post_resume_receipt_backed_sequence_confirmation_receipt_id_placeholder"]
         == "<confirmation_receipt_id>"
     )
+    assert (
+        confirmation_handoff["post_resume_receipt_backed_sequence_next_step"]
+        == "record_current_matching_sleep_resume_confirmation_receipt"
+    )
+    assert (
+        confirmation_handoff["post_resume_receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt"]
+        is True
+    )
+    assert (
+        confirmation_handoff["post_resume_receipt_backed_sequence_current_matching_confirmation_receipt_required"]
+        is True
+    )
+    assert (
+        confirmation_handoff[
+            "post_resume_receipt_backed_sequence_available_after_current_matching_confirmation_receipt"
+        ]
+        is False
+    )
+    assert (
+        confirmation_handoff["post_resume_receipt_backed_sequence_runs_after_physical_sleep_resume_receipt_only"]
+        is True
+    )
+    assert (
+        confirmation_handoff["post_resume_receipt_backed_sequence_readiness_route"]
+        == "/federation/sleep-resume-confirmation/receipt-backed-sequence-readiness"
+    )
+    post_receipt_handoff = confirmation_handoff["post_resume_receipt_backed_sequence_post_receipt_handoff"]
+    assert post_receipt_handoff["status"] == "blocked_until_current_confirmation_receipt"
+    assert post_receipt_handoff["next_step"] == "record_current_matching_sleep_resume_confirmation_receipt"
+    assert post_receipt_handoff["blockers"] == ["current_matching_sleep_resume_confirmation_receipt_missing"]
+    assert post_receipt_handoff["blocked_until_current_matching_confirmation_receipt"] is True
+    assert post_receipt_handoff["current_matching_confirmation_receipt_required"] is True
+    assert post_receipt_handoff["available_after_current_matching_confirmation_receipt"] is False
+    assert post_receipt_handoff["runs_after_physical_sleep_resume_receipt_only"] is True
+    assert post_receipt_handoff["writes_evidence_when_run"] is True
+    assert post_receipt_handoff["writes_receipts_when_run"] is True
+    assert post_receipt_handoff["marks_stage16_closed_when_run"] is False
+    assert post_receipt_handoff["read_only_projection"] is True
     assert confirmation_handoff["post_resume_sequence_writes_evidence_when_run"] is True
     assert confirmation_handoff["post_resume_sequence_writes_receipts_when_run"] is True
     assert confirmation_handoff["confirmation_receipt_route"] == "/federation/sleep-resume-confirmation"
@@ -1800,6 +1838,10 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
         confirmation_handoff["readback_routes"]["sleep_resume_confirmations"]
         == "/federation/sleep-resume-confirmations"
     )
+    assert (
+        confirmation_handoff["readback_routes"]["sleep_resume_confirmation_receipt_backed_sequence_readiness"]
+        == "/federation/sleep-resume-confirmation/receipt-backed-sequence-readiness"
+    )
     assert confirmation_handoff["readback_routes"]["completion_review"] == "/federation/completion-review"
     assert confirmation_handoff["proof_boundary"]["projection_only"] is True
     assert confirmation_handoff["proof_boundary"]["requires_manual_operator_confirmation"] is True
@@ -1811,6 +1853,13 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert confirmation_handoff["proof_boundary"]["does_not_grant_authority"] is True
     assert confirmation_handoff["proof_boundary"]["confirmation_receipt_command_projection_only"] is True
     assert confirmation_handoff["proof_boundary"]["receipt_backed_sequence_requires_confirmation_receipt"] is True
+    assert confirmation_handoff["proof_boundary"]["receipt_backed_sequence_handoff_projection"] is True
+    assert (
+        confirmation_handoff["proof_boundary"][
+            "receipt_backed_sequence_does_not_execute_before_current_confirmation_receipt"
+        ]
+        is True
+    )
 
     actor_bound_action = client.get("/federation/sleep-continuity-action?actor=test.federation.sleep").json()
     actor_bound_handoff = actor_bound_action["operator_confirmation_handoff"]
@@ -3076,6 +3125,38 @@ def test_federation_stage16_sleep_continuity_runbook_uses_linked_post_resume_mar
     assert confirmation_handoff["post_resume_receipt_backed_sequence_copyable_command"] == ""
     assert confirmation_handoff["post_resume_receipt_backed_sequence_requires_confirmation_receipt"] is False
     assert confirmation_handoff["post_resume_receipt_backed_sequence_confirmation_receipt_id_placeholder"] == ""
+    assert confirmation_handoff["post_resume_receipt_backed_sequence_next_step"] == ""
+    assert (
+        confirmation_handoff["post_resume_receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt"]
+        is False
+    )
+    assert (
+        confirmation_handoff["post_resume_receipt_backed_sequence_current_matching_confirmation_receipt_required"]
+        is False
+    )
+    assert (
+        confirmation_handoff[
+            "post_resume_receipt_backed_sequence_available_after_current_matching_confirmation_receipt"
+        ]
+        is False
+    )
+    assert (
+        confirmation_handoff["post_resume_receipt_backed_sequence_runs_after_physical_sleep_resume_receipt_only"]
+        is False
+    )
+    assert confirmation_handoff["post_resume_receipt_backed_sequence_readiness_route"] == ""
+    post_receipt_handoff = confirmation_handoff["post_resume_receipt_backed_sequence_post_receipt_handoff"]
+    assert post_receipt_handoff["status"] == "not_required"
+    assert post_receipt_handoff["next_step"] == ""
+    assert post_receipt_handoff["blockers"] == []
+    assert post_receipt_handoff["blocked_until_current_matching_confirmation_receipt"] is False
+    assert post_receipt_handoff["current_matching_confirmation_receipt_required"] is False
+    assert post_receipt_handoff["available_after_current_matching_confirmation_receipt"] is False
+    assert post_receipt_handoff["runs_after_physical_sleep_resume_receipt_only"] is False
+    assert post_receipt_handoff["writes_evidence_when_run"] is False
+    assert post_receipt_handoff["writes_receipts_when_run"] is False
+    assert post_receipt_handoff["marks_stage16_closed_when_run"] is False
+    assert post_receipt_handoff["read_only_projection"] is True
     assert confirmation_handoff["post_resume_sequence_writes_evidence_when_run"] is False
     assert confirmation_handoff["post_resume_sequence_writes_receipts_when_run"] is False
     assert confirmation_handoff["confirmation_receipt_command_ready"] is False
