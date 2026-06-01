@@ -53845,6 +53845,51 @@ Latest validation for Stage 16 actor-bound confirmation command preflight:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 actor readiness is reachable from Federation Hub
+
+Roadmap area: Stage 16 / Federation, workstation sleep-continuity operator
+confirmation UI visibility.
+
+Material change:
+
+- Federation Hub now exposes a read-only actor preflight control for the
+  Stage 16 sleep/resume confirmation actor readiness route.
+- The Hub can request `GET
+  /federation/sleep-resume-confirmation/actor-readiness?actor=...` through the
+  typed Federation client and parser.
+- The panel displays actor readiness, safe-command state, receipt/evidence/
+  closure write guards, next step, bound actor, and the actor-bound copyable
+  command when the backend returns one.
+- The UI remains read-only: it does not post the confirmation receipt route,
+  run shell, write receipts, write evidence, grant authority, or mark Stage 16
+  closed.
+
+Latest validation for Stage 16 actor readiness Federation Hub visibility:
+
+- `npm run test -- federation_hub`
+  Result: `passed; 191 passed`.
+- `npm run build`
+  Result: `passed`.
+- `python -m pytest tests/test_api_federation.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`.
+- `npx tsc --noEmit --pretty false 2>&1 | Select-String
+  "src/federation_hub/FederationHubPanel.tsx"`
+  Result: `passed; no_federation_panel_tsc_diagnostics`. Full repository
+  `tsc --noEmit` remains blocked by pre-existing unrelated strictness errors
+  outside this slice.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

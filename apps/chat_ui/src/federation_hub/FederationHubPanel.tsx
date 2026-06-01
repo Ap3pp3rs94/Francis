@@ -7,6 +7,7 @@ import {
   type FederationSleepContinuityActionReadback,
   type FederationSleepContinuityPresentation,
   type FederationSleepContinuityRunbook,
+  type FederationSleepResumeConfirmationActorReadiness,
   type FederationSleepResumeConfirmations,
   type FederationStage16Status,
 } from "./index";
@@ -80,6 +81,9 @@ export function FederationHubPanel(props: { baseUrl: string }) {
   const [runbook, setRunbook] = useState<FederationSleepContinuityRunbook | null>(null);
   const [action, setAction] = useState<FederationSleepContinuityActionReadback | null>(null);
   const [confirmations, setConfirmations] = useState<FederationSleepResumeConfirmations | null>(null);
+  const [actorReadiness, setActorReadiness] = useState<FederationSleepResumeConfirmationActorReadiness | null>(null);
+  const [actorPreflightActor, setActorPreflightActor] = useState("");
+  const [actorReadinessLoading, setActorReadinessLoading] = useState(false);
   const [presentation, setPresentation] = useState<FederationSleepContinuityPresentation | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -111,6 +115,22 @@ export function FederationHubPanel(props: { baseUrl: string }) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  const checkActorReadiness = useCallback(async () => {
+    setActorReadinessLoading(true);
+    setError(null);
+    try {
+      const nextReadiness = await client.getSleepResumeConfirmationActorReadiness({
+        actor: actorPreflightActor,
+        timeoutMs: 10_000,
+      });
+      setActorReadiness(nextReadiness);
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setActorReadinessLoading(false);
+    }
+  }, [actorPreflightActor, client]);
 
   const blockers = presentation?.blockers.length ? presentation.blockers : status?.completion_review_blockers ?? [];
   const priorLiveReadbackBlockers = presentation?.prior_live_readback_blockers ?? [];
@@ -279,6 +299,60 @@ export function FederationHubPanel(props: { baseUrl: string }) {
                 </span>
               ))}
             </div>
+          ) : null}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+            <input
+              value={actorPreflightActor}
+              onChange={(event) => setActorPreflightActor(event.target.value)}
+              placeholder="actor id"
+              style={{
+                minWidth: 220,
+                flex: "1 1 220px",
+                borderRadius: 10,
+                border: `1px solid ${PANEL_BORDER}`,
+                background: "#101010",
+                color: TEXT,
+                padding: "8px 10px",
+                fontSize: 12,
+              }}
+            />
+            <button style={buttonStyle} onClick={() => void checkActorReadiness()} disabled={actorReadinessLoading}>
+              {actorReadinessLoading ? "Checking" : "Check Actor"}
+            </button>
+          </div>
+          {actorReadiness ? (
+            <>
+              <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
+                actor status <code>{codeValue(actorReadiness.status)}</code>
+                {" / "}ready <code>{yesNo(actorReadiness.confirmation_receipt_actor_ready)}</code>
+                {" / "}safe command <code>{yesNo(actorReadiness.safe_to_use_in_confirmation_command)}</code>
+                {" / "}writes receipt <code>{yesNo(actorReadiness.writes_receipt)}</code>
+                {" / "}marks closed <code>{yesNo(actorReadiness.marks_stage16_closed)}</code>
+              </div>
+              <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
+                next <code>{codeValue(actorReadiness.next_step)}</code>
+                {" / "}bound actor <code>{codeValue(actorReadiness.confirmation_receipt_actor)}</code>
+                {" / "}substitution{" "}
+                <code>{yesNo(actorReadiness.confirmation_receipt_command_requires_actor_substitution)}</code>
+              </div>
+              {actorReadiness.confirmation_receipt_copyable_command ? (
+                <pre
+                  style={{
+                    margin: "8px 0 0",
+                    padding: 10,
+                    borderRadius: 10,
+                    border: `1px solid ${PANEL_BORDER}`,
+                    background: "#101010",
+                    color: TEXT,
+                    whiteSpace: "pre-wrap",
+                    overflowWrap: "anywhere",
+                    fontSize: 11,
+                  }}
+                >
+                  {actorReadiness.confirmation_receipt_copyable_command}
+                </pre>
+              ) : null}
+            </>
           ) : null}
           {confirmations.current_pre_sleep_evidence_path ? (
             <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>

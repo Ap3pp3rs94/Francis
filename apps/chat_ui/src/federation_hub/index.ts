@@ -339,6 +339,54 @@ export type FederationSleepResumeConfirmations = {
   next_smallest_truthful_gap?: string;
 };
 
+export type FederationSleepResumeConfirmationActorReadiness = {
+  ok: boolean;
+  kind?: string;
+  stage?: string;
+  status?: string;
+  target?: string;
+  actor?: string;
+  actor_present: boolean;
+  actor_placeholder_rejected: boolean;
+  required_scope?: string;
+  target_method?: string;
+  target_route?: string;
+  readiness_route?: string;
+  current_pre_sleep_evidence_present: boolean;
+  current_pre_sleep_evidence_path?: string;
+  permission_allowed: boolean;
+  permission_reason?: string;
+  confirmation_receipt_actor_ready: boolean;
+  safe_to_use_in_confirmation_command: boolean;
+  next_step?: string;
+  confirmation_receipt_command_ready: boolean;
+  confirmation_receipt_actor?: string;
+  confirmation_receipt_actor_bound: boolean;
+  confirmation_receipt_actor_placeholder?: string;
+  confirmation_receipt_command?: string;
+  confirmation_receipt_copyable_command?: string;
+  confirmation_receipt_command_requires_scope?: string;
+  confirmation_receipt_command_requires_actor_substitution: boolean;
+  confirmation_receipt_command_actor_scope?: string;
+  confirmation_receipt_actor_readiness_route?: string;
+  confirmation_receipt_actor_readiness_query_param?: string;
+  confirmation_receipt_command_next_readback_route?: string;
+  confirmation_receipt_command_receipt_id_readback_field?: string;
+  confirmation_receipt_command_next_operator_step?: string;
+  confirmation_receipt_command_records_receipt: boolean;
+  confirmation_receipt_command_writes_evidence: boolean;
+  confirmation_receipt_command_marks_stage16_closed: boolean;
+  confirmation_receipt_command_projection_only: boolean;
+  reads_permission_gate: boolean;
+  writes_receipt: boolean;
+  writes_evidence: boolean;
+  writes_runtime_readback: boolean;
+  marks_stage16_closed: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+  next_smallest_truthful_gap?: string;
+};
+
 export type FederationSleepContinuityRunbookStep = {
   id: string;
   title?: string;
@@ -1533,6 +1581,69 @@ export function parseFederationSleepResumeConfirmations(raw: unknown): Federatio
   };
 }
 
+export function parseFederationSleepResumeConfirmationActorReadiness(
+  raw: unknown,
+): FederationSleepResumeConfirmationActorReadiness {
+  const body = isRecord(raw) ? raw : {};
+  return {
+    ok: safeBoolean(body.ok),
+    kind: optionalString(body.kind),
+    stage: optionalString(body.stage),
+    status: optionalString(body.status),
+    target: optionalString(body.target),
+    actor: optionalString(body.actor),
+    actor_present: safeBoolean(body.actor_present),
+    actor_placeholder_rejected: safeBoolean(body.actor_placeholder_rejected),
+    required_scope: optionalString(body.required_scope),
+    target_method: optionalString(body.target_method),
+    target_route: optionalString(body.target_route),
+    readiness_route: optionalString(body.readiness_route),
+    current_pre_sleep_evidence_present: safeBoolean(body.current_pre_sleep_evidence_present),
+    current_pre_sleep_evidence_path: optionalString(body.current_pre_sleep_evidence_path),
+    permission_allowed: safeBoolean(body.permission_allowed),
+    permission_reason: optionalString(body.permission_reason),
+    confirmation_receipt_actor_ready: safeBoolean(body.confirmation_receipt_actor_ready),
+    safe_to_use_in_confirmation_command: safeBoolean(body.safe_to_use_in_confirmation_command),
+    next_step: optionalString(body.next_step),
+    confirmation_receipt_command_ready: safeBoolean(body.confirmation_receipt_command_ready),
+    confirmation_receipt_actor: optionalString(body.confirmation_receipt_actor),
+    confirmation_receipt_actor_bound: safeBoolean(body.confirmation_receipt_actor_bound),
+    confirmation_receipt_actor_placeholder: optionalString(body.confirmation_receipt_actor_placeholder),
+    confirmation_receipt_command: optionalString(body.confirmation_receipt_command),
+    confirmation_receipt_copyable_command: optionalString(body.confirmation_receipt_copyable_command),
+    confirmation_receipt_command_requires_scope: optionalString(body.confirmation_receipt_command_requires_scope),
+    confirmation_receipt_command_requires_actor_substitution: safeBoolean(
+      body.confirmation_receipt_command_requires_actor_substitution,
+    ),
+    confirmation_receipt_command_actor_scope: optionalString(body.confirmation_receipt_command_actor_scope),
+    confirmation_receipt_actor_readiness_route: optionalString(body.confirmation_receipt_actor_readiness_route),
+    confirmation_receipt_actor_readiness_query_param: optionalString(
+      body.confirmation_receipt_actor_readiness_query_param,
+    ),
+    confirmation_receipt_command_next_readback_route: optionalString(
+      body.confirmation_receipt_command_next_readback_route,
+    ),
+    confirmation_receipt_command_receipt_id_readback_field: optionalString(
+      body.confirmation_receipt_command_receipt_id_readback_field,
+    ),
+    confirmation_receipt_command_next_operator_step: optionalString(
+      body.confirmation_receipt_command_next_operator_step,
+    ),
+    confirmation_receipt_command_records_receipt: safeBoolean(body.confirmation_receipt_command_records_receipt),
+    confirmation_receipt_command_writes_evidence: safeBoolean(body.confirmation_receipt_command_writes_evidence),
+    confirmation_receipt_command_marks_stage16_closed: safeBoolean(body.confirmation_receipt_command_marks_stage16_closed),
+    confirmation_receipt_command_projection_only: safeBoolean(body.confirmation_receipt_command_projection_only),
+    reads_permission_gate: safeBoolean(body.reads_permission_gate),
+    writes_receipt: safeBoolean(body.writes_receipt),
+    writes_evidence: safeBoolean(body.writes_evidence),
+    writes_runtime_readback: safeBoolean(body.writes_runtime_readback),
+    marks_stage16_closed: safeBoolean(body.marks_stage16_closed),
+    grants_execution_authority: safeBoolean(body.grants_execution_authority),
+    grants_mutation_authority: safeBoolean(body.grants_mutation_authority),
+    next_smallest_truthful_gap: optionalString(body.next_smallest_truthful_gap),
+  };
+}
+
 function parseFederationSleepContinuityRunbookStep(raw: unknown): FederationSleepContinuityRunbookStep | null {
   if (!isRecord(raw)) return null;
   const id = safeString(raw.id);
@@ -1896,6 +2007,7 @@ export type FederationEndpoints = {
   sleepContinuityRunbook: () => string;
   sleepContinuityAction: () => string;
   sleepResumeConfirmations: (q?: { limit?: number }) => string;
+  sleepResumeConfirmationActorReadiness: (q?: { actor?: string }) => string;
   stageClosureDecisions: (q?: { limit?: number }) => string;
   liveRuntimeReadbacks: (q?: { limit?: number }) => string;
 
@@ -1923,6 +2035,8 @@ export function defaultFederationEndpoints(): FederationEndpoints {
     sleepContinuityRunbook: () => "/federation/sleep-continuity-runbook",
     sleepContinuityAction: () => "/federation/sleep-continuity-action",
     sleepResumeConfirmations: (q) => `/federation/sleep-resume-confirmations${buildQuery({ limit: q?.limit })}`,
+    sleepResumeConfirmationActorReadiness: (q) =>
+      `/federation/sleep-resume-confirmation/actor-readiness${buildQuery({ actor: q?.actor })}`,
     stageClosureDecisions: (q) => `/federation/stage-closure-decisions${buildQuery({ limit: q?.limit })}`,
     liveRuntimeReadbacks: (q) => `/federation/live-runtime-readbacks${buildQuery({ limit: q?.limit })}`,
 
@@ -2052,6 +2166,22 @@ export class FederationClient {
       timeoutMs: opts?.timeoutMs ?? this.defaultTimeoutMs,
     });
     return parseFederationSleepResumeConfirmations(json);
+  }
+
+  async getSleepResumeConfirmationActorReadiness(opts?: {
+    actor?: string;
+    signal?: AbortSignal;
+    timeoutMs?: number;
+  }): Promise<FederationSleepResumeConfirmationActorReadiness> {
+    const json = await fetchJson(
+      this.url(this.endpoints.sleepResumeConfirmationActorReadiness({ actor: opts?.actor })),
+      {
+        method: "GET",
+        signal: opts?.signal,
+        timeoutMs: opts?.timeoutMs ?? this.defaultTimeoutMs,
+      },
+    );
+    return parseFederationSleepResumeConfirmationActorReadiness(json);
   }
 
   async getStageClosureDecisions(opts?: {

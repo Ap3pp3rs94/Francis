@@ -7,6 +7,7 @@ import {
   parseFederationLiveRuntimeReadbacks,
   parseFederationSleepContinuityAction,
   parseFederationSleepContinuityRunbook,
+  parseFederationSleepResumeConfirmationActorReadiness,
   parseFederationSleepResumeConfirmations,
   parseFederationStage16Status,
   parseFederationStage16ClosureDecisions,
@@ -777,6 +778,139 @@ test("parseFederationSleepResumeConfirmations preserves missing-receipt remedy c
   assert.equal(confirmations.confirmation_receipt_operator_steps[1]?.requires_current_receipt, true);
   assert.equal(confirmations.confirmation_receipt_operator_steps[1]?.writes_evidence_when_run, false);
   assert.equal(confirmations.confirmation_receipt_operator_steps[1]?.marks_stage16_closed_when_run, false);
+});
+
+test("parseFederationSleepResumeConfirmationActorReadiness preserves actor-bound command guards", () => {
+  const readiness = parseFederationSleepResumeConfirmationActorReadiness({
+    ok: true,
+    kind: "francis.stage16.federation.sleep_resume_operator_confirmation_actor_readiness",
+    stage: "Stage 16 / Federation",
+    status: "actor_ready_for_sleep_resume_confirmation",
+    actor: "test.federation.sleep",
+    actor_present: true,
+    actor_placeholder_rejected: false,
+    required_scope: "federation.stage16.sleep_resume.confirmation.write",
+    target_method: "POST",
+    target_route: "/federation/sleep-resume-confirmation",
+    readiness_route: "/federation/sleep-resume-confirmation/actor-readiness",
+    current_pre_sleep_evidence_present: true,
+    current_pre_sleep_evidence_path:
+      "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json",
+    permission_allowed: true,
+    permission_reason: "actor_has_required_scopes",
+    confirmation_receipt_actor_ready: true,
+    safe_to_use_in_confirmation_command: true,
+    next_step: "use_actor_in_confirmation_receipt_command_after_real_sleep_resume",
+    confirmation_receipt_command_ready: true,
+    confirmation_receipt_actor: "test.federation.sleep",
+    confirmation_receipt_actor_bound: true,
+    confirmation_receipt_actor_placeholder: "",
+    confirmation_receipt_command:
+      "$body = @{ actor = 'test.federation.sleep'; operator_confirmed_sleep_resume = $true } | ConvertTo-Json -Depth 6",
+    confirmation_receipt_copyable_command:
+      "Set-Location -LiteralPath 'D:\\Francis'; $body = @{ actor = 'test.federation.sleep'; operator_confirmed_sleep_resume = $true } | ConvertTo-Json -Depth 6",
+    confirmation_receipt_command_requires_scope: "federation.stage16.sleep_resume.confirmation.write",
+    confirmation_receipt_command_requires_actor_substitution: false,
+    confirmation_receipt_command_actor_scope: "federation.stage16.sleep_resume.confirmation.write",
+    confirmation_receipt_actor_readiness_route: "/federation/sleep-resume-confirmation/actor-readiness",
+    confirmation_receipt_actor_readiness_query_param: "actor",
+    confirmation_receipt_command_next_readback_route: "/federation/sleep-resume-confirmations",
+    confirmation_receipt_command_receipt_id_readback_field: "latest_receipt_id",
+    confirmation_receipt_command_next_operator_step: "refresh_sleep_resume_confirmations_for_current_receipt_id",
+    confirmation_receipt_command_records_receipt: true,
+    confirmation_receipt_command_writes_evidence: false,
+    confirmation_receipt_command_marks_stage16_closed: false,
+    confirmation_receipt_command_projection_only: true,
+    reads_permission_gate: true,
+    writes_receipt: false,
+    writes_evidence: false,
+    writes_runtime_readback: false,
+    marks_stage16_closed: false,
+    grants_execution_authority: false,
+    grants_mutation_authority: false,
+    next_smallest_truthful_gap: "stage16_sleep_continuity_runtime_readback",
+  });
+
+  assert.equal(readiness.status, "actor_ready_for_sleep_resume_confirmation");
+  assert.equal(readiness.actor, "test.federation.sleep");
+  assert.equal(readiness.confirmation_receipt_actor_ready, true);
+  assert.equal(readiness.safe_to_use_in_confirmation_command, true);
+  assert.equal(readiness.confirmation_receipt_actor_bound, true);
+  assert.equal(readiness.confirmation_receipt_command_requires_actor_substitution, false);
+  assert.equal(readiness.confirmation_receipt_command?.includes("actor = 'test.federation.sleep'"), true);
+  assert.equal(readiness.writes_receipt, false);
+  assert.equal(readiness.writes_evidence, false);
+  assert.equal(readiness.marks_stage16_closed, false);
+});
+
+test("FederationClient reads sleep-resume confirmation actor readiness without mutation", async () => {
+  let request: { path: string; method: string; actor: string | null } | null = null;
+  const restoreFetch = installFetch(async (url, init) => {
+    const parsed = new URL(url);
+    request = {
+      path: parsed.pathname,
+      method: (init?.method ?? "GET").toUpperCase(),
+      actor: parsed.searchParams.get("actor"),
+    };
+
+    return jsonResponse({
+      ok: true,
+      kind: "francis.stage16.federation.sleep_resume_operator_confirmation_actor_readiness",
+      status: "actor_ready_for_sleep_resume_confirmation",
+      actor: "test.federation.sleep",
+      actor_present: true,
+      actor_placeholder_rejected: false,
+      required_scope: "federation.stage16.sleep_resume.confirmation.write",
+      target_method: "POST",
+      target_route: "/federation/sleep-resume-confirmation",
+      readiness_route: "/federation/sleep-resume-confirmation/actor-readiness",
+      current_pre_sleep_evidence_present: true,
+      permission_allowed: true,
+      confirmation_receipt_actor_ready: true,
+      safe_to_use_in_confirmation_command: true,
+      confirmation_receipt_command_ready: true,
+      confirmation_receipt_actor: "test.federation.sleep",
+      confirmation_receipt_actor_bound: true,
+      confirmation_receipt_command:
+        "$body = @{ actor = 'test.federation.sleep'; operator_confirmed_sleep_resume = $true }",
+      confirmation_receipt_copyable_command:
+        "Set-Location -LiteralPath 'D:\\Francis'; $body = @{ actor = 'test.federation.sleep'; operator_confirmed_sleep_resume = $true }",
+      confirmation_receipt_command_requires_actor_substitution: false,
+      confirmation_receipt_command_records_receipt: true,
+      confirmation_receipt_command_writes_evidence: false,
+      confirmation_receipt_command_marks_stage16_closed: false,
+      confirmation_receipt_command_projection_only: true,
+      reads_permission_gate: true,
+      writes_receipt: false,
+      writes_evidence: false,
+      writes_runtime_readback: false,
+      marks_stage16_closed: false,
+      grants_execution_authority: false,
+      grants_mutation_authority: false,
+    });
+  });
+
+  try {
+    const client = new FederationClient("http://127.0.0.1:8000");
+    const readiness = await client.getSleepResumeConfirmationActorReadiness({
+      actor: "test.federation.sleep",
+      timeoutMs: 50,
+    });
+
+    assert.deepEqual(request, {
+      path: "/federation/sleep-resume-confirmation/actor-readiness",
+      method: "GET",
+      actor: "test.federation.sleep",
+    });
+    assert.equal(readiness.confirmation_receipt_actor_ready, true);
+    assert.equal(readiness.confirmation_receipt_actor_bound, true);
+    assert.equal(readiness.confirmation_receipt_command_requires_actor_substitution, false);
+    assert.equal(readiness.confirmation_receipt_copyable_command?.includes("test.federation.sleep"), true);
+    assert.equal(readiness.writes_receipt, false);
+    assert.equal(readiness.marks_stage16_closed, false);
+  } finally {
+    restoreFetch();
+  }
 });
 
 test("federation sleep-continuity action parser preserves selected read-only step", () => {
