@@ -52205,6 +52205,35 @@ Latest validation for Stage 16 selected action effect display:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 federation panel expands readback guard matrix
+
+Roadmap area: Stage 16 / Federation, operator-visible governance and guard
+truthfulness.
+
+Material change:
+
+- `FederationHubPanel` now shows the remaining top-level
+  `/federation/sleep-continuity-action` readback guard flags for projection-only
+  status, tools, git, browser launch, screen capture, registry writes, memory
+  writes, and Stage 16 closure marking.
+- The UI contract now asserts those guard fields are preserved by the action
+  parser for the current post-resume evidence posture.
+- This is read-only inspectability. It does not execute routes, run shell
+  commands, write evidence, write receipts, mutate registry state, write memory,
+  grant execution authority, grant mutation authority, infer workstation
+  sleep/resume, or mark Stage 16 closed.
+- Stage 16 remains open until live post-resume evidence and the receipt-backed
+  completion/closure gates are satisfied.
+
+Latest validation for Stage 16 readback guard matrix display:
+
+- `cd apps/chat_ui; npm run test -- federation_hub`
+  Result: `passed; 187 passed`.
+- `cd apps/chat_ui; npm run build`
+  Result: `passed`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -242,14 +242,38 @@ export function FederationHubPanel(props: { baseUrl: string }) {
             <span style={badgeStyle(presentation?.mutation_available_from_ui ? "blocked" : "ready")}>
               ui mutation {yesNo(Boolean(presentation?.mutation_available_from_ui))}
             </span>
+            <span style={badgeStyle(action?.action_projection_only ? "ready" : "blocked")}>
+              projection only {yesNo(Boolean(action?.action_projection_only))}
+            </span>
             <span style={badgeStyle(action?.runs_shell ? "blocked" : "ready")}>
               shell {yesNo(Boolean(action?.runs_shell))}
+            </span>
+            <span style={badgeStyle(action?.runs_tools ? "blocked" : "ready")}>
+              tools {yesNo(Boolean(action?.runs_tools))}
+            </span>
+            <span style={badgeStyle(action?.runs_git ? "blocked" : "ready")}>
+              git {yesNo(Boolean(action?.runs_git))}
+            </span>
+            <span style={badgeStyle(action?.launches_browser ? "blocked" : "ready")}>
+              browser {yesNo(Boolean(action?.launches_browser))}
+            </span>
+            <span style={badgeStyle(action?.captures_screen ? "blocked" : "ready")}>
+              screen {yesNo(Boolean(action?.captures_screen))}
             </span>
             <span style={badgeStyle(action?.writes_receipts ? "blocked" : "ready")}>
               writes receipts {yesNo(Boolean(action?.writes_receipts))}
             </span>
+            <span style={badgeStyle(action?.writes_registry ? "blocked" : "ready")}>
+              registry {yesNo(Boolean(action?.writes_registry))}
+            </span>
+            <span style={badgeStyle(action?.writes_memory ? "blocked" : "ready")}>
+              memory {yesNo(Boolean(action?.writes_memory))}
+            </span>
             <span style={badgeStyle(action?.grants_mutation_authority ? "blocked" : "ready")}>
               authority {yesNo(Boolean(action?.grants_mutation_authority))}
+            </span>
+            <span style={badgeStyle(action?.marks_stage16_closed ? "blocked" : "ready")}>
+              stage close {yesNo(Boolean(action?.marks_stage16_closed))}
             </span>
             <span style={badgeStyle(presentation?.operator_confirmation_required ? "blocked" : "ready")}>
               confirmation {yesNo(Boolean(presentation?.operator_confirmation_required))}

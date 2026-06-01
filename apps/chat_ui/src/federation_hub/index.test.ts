@@ -571,10 +571,20 @@ test("federation sleep-continuity action parser preserves selected read-only ste
     "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json",
   );
   assert.deepEqual(action.prior_live_readback_blockers, []);
+  assert.equal(action.action_projection_only, true);
   assert.equal(action.mutation_available_from_ui, false);
   assert.equal(action.writes_evidence, false);
+  assert.equal(action.writes_receipts, false);
+  assert.equal(action.writes_registry, false);
+  assert.equal(action.writes_memory, false);
+  assert.equal(action.runs_tools, false);
   assert.equal(action.runs_shell, false);
+  assert.equal(action.runs_git, false);
+  assert.equal(action.launches_browser, false);
+  assert.equal(action.captures_screen, false);
   assert.equal(action.grants_execution_authority, false);
+  assert.equal(action.grants_mutation_authority, false);
+  assert.equal(action.marks_stage16_closed, false);
   assert.equal(action.routes.sleep_continuity_action, "/federation/sleep-continuity-action");
   assert.equal(action.routes.sleep_continuity_runbook, "/federation/sleep-continuity-runbook");
   assert.equal(action.routes.stage_closure_decision, "/federation/stage-closure-decision");
