@@ -52126,6 +52126,55 @@ Latest validation for Stage 16 prior-live blocker display:
 - `cd apps/chat_ui; npm run build`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 federation panel shows selected evidence paths
+
+Roadmap area: Stage 16 / Federation, operator-visible sleep-continuity
+evidence targeting.
+
+Material change:
+
+- `/federation/sleep-continuity-action` now carries explicit
+  `pre_sleep_evidence_path` and `post_resume_evidence_path` fields from the
+  selected runbook step when those paths are known.
+- `FederationHubPanel` now renders those selected sleep-continuity evidence
+  paths in the selected readback section, so the current post-resume action
+  shows the exact pre-sleep evidence artifact it depends on instead of forcing
+  the operator to read it out of a command string.
+- API and UI contracts prove the post-resume action preserves the explicit
+  pre-sleep evidence path from `/federation/sleep-continuity-action` through the
+  presentation model.
+- This is read-only inspectability. It does not execute routes, run shell
+  commands, write evidence, write receipts, mutate registry state, write memory,
+  grant execution authority, grant mutation authority, infer workstation
+  sleep/resume, or mark Stage 16 closed.
+- Stage 16 remains open until live post-resume evidence and the receipt-backed
+  completion/closure gates are satisfied.
+
+Latest validation for Stage 16 selected evidence-path display:
+
+- `cd apps/chat_ui; npm run test -- federation_hub`
+  Result: `passed; 187 passed`.
+- `cd apps/chat_ui; npm run build`
+  Result: `passed`.
+- `$env:FRANCIS_PYTEST_SESSION_RETENTION_ROOT='data/test_runs/pytest/t';
+  python -m pytest
+  tests/test_api_federation.py::test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marker
+  -q --tb=short`
+  Result: `passed; 1 passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- Direct TestClient `/federation/sleep-continuity-action` readback:
+  `status=capture_post_resume_evidence`, `selected_step_id=capture_post_resume_evidence`,
+  `pre_sleep_evidence_path=<latest pre-sleep evidence artifact>`,
+  `post_resume_evidence_path=""`, and
+  `next_smallest_truthful_gap=stage16_sleep_continuity_runtime_readback`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

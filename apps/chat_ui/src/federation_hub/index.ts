@@ -247,6 +247,8 @@ export type FederationSleepContinuityRunbookStep = {
   title?: string;
   command?: string;
   latest_evidence_path?: string;
+  pre_sleep_evidence_path?: string;
+  post_resume_evidence_path?: string;
   method?: string;
   route?: string;
   required_scope?: string;
@@ -319,6 +321,8 @@ export type FederationSleepContinuityPresentation = {
   method?: string;
   required_scope?: string;
   evidence_path?: string;
+  pre_sleep_evidence_path?: string;
+  post_resume_evidence_path?: string;
   blockers: string[];
   prior_live_readback_blockers: string[];
   pre_sleep_evidence_ready: boolean;
@@ -347,6 +351,8 @@ export type FederationSleepContinuityActionReadback = {
   method?: string;
   required_scope?: string;
   evidence_path?: string;
+  pre_sleep_evidence_path?: string;
+  post_resume_evidence_path?: string;
   blockers: string[];
   prior_live_readback_blockers: string[];
   pre_sleep_evidence_ready: boolean;
@@ -848,6 +854,8 @@ function parseFederationSleepContinuityRunbookStep(raw: unknown): FederationSlee
     title: optionalString(raw.title),
     command: optionalString(raw.command),
     latest_evidence_path: optionalString(raw.latest_evidence_path),
+    pre_sleep_evidence_path: optionalString(raw.pre_sleep_evidence_path),
+    post_resume_evidence_path: optionalString(raw.post_resume_evidence_path),
     method: optionalString(raw.method),
     route: optionalString(raw.route),
     required_scope: optionalString(raw.required_scope),
@@ -925,6 +933,8 @@ export function parseFederationSleepContinuityAction(raw: unknown): FederationSl
     method: optionalString(body.method),
     required_scope: optionalString(body.required_scope),
     evidence_path: optionalString(body.evidence_path),
+    pre_sleep_evidence_path: optionalString(body.pre_sleep_evidence_path),
+    post_resume_evidence_path: optionalString(body.post_resume_evidence_path),
     blockers: stringList(body.blockers),
     prior_live_readback_blockers: stringList(body.prior_live_readback_blockers),
     pre_sleep_evidence_ready: safeBoolean(body.pre_sleep_evidence_ready),
@@ -1014,6 +1024,8 @@ function buildFederationSleepContinuityPresentation(
     method: selectedStep?.method,
     required_scope: selectedStep?.required_scope,
     evidence_path: selectedStep?.latest_evidence_path,
+    pre_sleep_evidence_path: selectedStep?.pre_sleep_evidence_path,
+    post_resume_evidence_path: selectedStep?.post_resume_evidence_path,
     blockers: opts.blockers,
     prior_live_readback_blockers: [],
     pre_sleep_evidence_ready: opts.preSleepEvidenceReady,
@@ -1100,6 +1112,8 @@ export function presentFederationSleepContinuityAction(
     method: action.method ?? selectedStep?.method,
     required_scope: action.required_scope ?? selectedStep?.required_scope,
     evidence_path: action.evidence_path ?? selectedStep?.latest_evidence_path,
+    pre_sleep_evidence_path: action.pre_sleep_evidence_path ?? selectedStep?.pre_sleep_evidence_path,
+    post_resume_evidence_path: action.post_resume_evidence_path ?? selectedStep?.post_resume_evidence_path,
     blockers: action.blockers,
     prior_live_readback_blockers: action.prior_live_readback_blockers,
     pre_sleep_evidence_ready: action.pre_sleep_evidence_ready,

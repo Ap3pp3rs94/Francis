@@ -1022,6 +1022,7 @@ def _stage16_sleep_continuity_runbook_steps(
                 "scripts/federation-stage16-sleep-continuity-evidence.ps1 -Mode PostResume -CommitEvidence "
                 f"-PreSleepEvidencePath {pre_sleep_arg} -OperatorConfirmedSleepResume"
             ),
+            "pre_sleep_evidence_path": pre_sleep_path,
             "pre_sleep_evidence_required": True,
             "pre_sleep_evidence_available": bool(latest_pre_sleep_evidence.get("present")),
             "expected_output": "post-resume evidence JSON path",
@@ -1037,6 +1038,8 @@ def _stage16_sleep_continuity_runbook_steps(
                 "scripts/federation-stage16-sleep-continuity-runtime-proof.ps1 -Mode Status -CommitReceipts "
                 f"-PreSleepEvidencePath {pre_sleep_arg} -PostResumeEvidencePath {post_resume_arg}"
             ),
+            "pre_sleep_evidence_path": pre_sleep_path,
+            "post_resume_evidence_path": post_resume_path,
             "pre_sleep_evidence_required": True,
             "pre_sleep_evidence_available": bool(latest_pre_sleep_evidence.get("present")),
             "post_resume_evidence_required": True,
@@ -1249,6 +1252,8 @@ def stage16_sleep_continuity_action() -> dict[str, Any]:
         "method": _safe_str(selected_step.get("method")).strip(),
         "required_scope": _safe_str(selected_step.get("required_scope")).strip(),
         "evidence_path": _safe_str(selected_step.get("latest_evidence_path")).strip(),
+        "pre_sleep_evidence_path": _safe_str(selected_step.get("pre_sleep_evidence_path")).strip(),
+        "post_resume_evidence_path": _safe_str(selected_step.get("post_resume_evidence_path")).strip(),
         "blockers": blockers,
         "prior_live_readback_blockers": prior_live_blockers,
         "pre_sleep_evidence_ready": pre_sleep_evidence_ready,

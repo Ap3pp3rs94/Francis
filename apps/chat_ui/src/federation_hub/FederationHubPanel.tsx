@@ -191,6 +191,21 @@ export function FederationHubPanel(props: { baseUrl: string }) {
             expected <code>{selectedAction.expected_output}</code>
           </div>
         ) : null}
+        {presentation?.pre_sleep_evidence_path ? (
+          <div style={{ fontSize: 11, color: MUTED, marginTop: 8 }}>
+            pre-sleep evidence <code>{presentation.pre_sleep_evidence_path}</code>
+          </div>
+        ) : null}
+        {presentation?.post_resume_evidence_path ? (
+          <div style={{ fontSize: 11, color: MUTED, marginTop: 8 }}>
+            post-resume evidence <code>{presentation.post_resume_evidence_path}</code>
+          </div>
+        ) : null}
+        {presentation?.evidence_path ? (
+          <div style={{ fontSize: 11, color: MUTED, marginTop: 8 }}>
+            evidence <code>{presentation.evidence_path}</code>
+          </div>
+        ) : null}
       </div>
 
       <div style={{ display: "grid", gap: 10, marginTop: 12 }}>

@@ -502,6 +502,8 @@ test("federation sleep-continuity action parser preserves selected read-only ste
       id: "capture_post_resume_evidence",
       command:
         'scripts/federation-stage16-sleep-continuity-evidence.ps1 -Mode PostResume -CommitEvidence -PreSleepEvidencePath "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json" -OperatorConfirmedSleepResume',
+      pre_sleep_evidence_path:
+        "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json",
       pre_sleep_evidence_required: true,
       pre_sleep_evidence_available: true,
       post_resume_evidence_required: false,
@@ -513,6 +515,8 @@ test("federation sleep-continuity action parser preserves selected read-only ste
     },
     primary_command:
       'scripts/federation-stage16-sleep-continuity-evidence.ps1 -Mode PostResume -CommitEvidence -PreSleepEvidencePath "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json" -OperatorConfirmedSleepResume',
+    pre_sleep_evidence_path:
+      "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json",
     blockers: ["workstation_sleep_continuity_validated"],
     prior_live_readback_blockers: [],
     pre_sleep_evidence_ready: true,
@@ -556,8 +560,16 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   assert.equal(action.status, "capture_post_resume_evidence");
   assert.equal(action.selected_step_id, "capture_post_resume_evidence");
   assert.equal(action.selected_action?.id, "capture_post_resume_evidence");
+  assert.equal(
+    action.selected_action?.pre_sleep_evidence_path,
+    "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json",
+  );
   assert.equal(action.selected_action?.operator_confirmation_required, true);
   assert.equal(action.primary_command?.includes("-OperatorConfirmedSleepResume"), true);
+  assert.equal(
+    action.pre_sleep_evidence_path,
+    "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json",
+  );
   assert.deepEqual(action.prior_live_readback_blockers, []);
   assert.equal(action.mutation_available_from_ui, false);
   assert.equal(action.writes_evidence, false);
@@ -578,6 +590,10 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   assert.equal(presentation.readback_route, "/federation/sleep-continuity-action");
   assert.equal(presentation.runbook_route, "/federation/sleep-continuity-runbook");
   assert.equal(presentation.closure_decision_route, "/federation/stage-closure-decision");
+  assert.equal(
+    presentation.pre_sleep_evidence_path,
+    "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json",
+  );
   assert.deepEqual(presentation.blockers, ["workstation_sleep_continuity_validated"]);
   assert.deepEqual(presentation.prior_live_readback_blockers, []);
   assert.equal(presentation.pre_sleep_evidence_ready, true);

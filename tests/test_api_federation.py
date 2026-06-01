@@ -1250,6 +1250,8 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert body["pre_sleep_evidence"]["writes_runtime_readback"] is False
     assert body["pre_sleep_evidence"]["marks_stage16_closed"] is False
     assert body["steps"][0]["latest_evidence_path"] == str(pre_sleep_path.resolve())
+    assert body["steps"][1]["pre_sleep_evidence_path"] == str(pre_sleep_path.resolve())
+    assert body["steps"][2]["pre_sleep_evidence_path"] == str(pre_sleep_path.resolve())
     assert body["steps"][1]["pre_sleep_evidence_available"] is True
     assert body["steps"][2]["pre_sleep_evidence_available"] is True
     assert body["steps"][2]["post_resume_evidence_available"] is False
@@ -1278,6 +1280,8 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     action = client.get("/federation/sleep-continuity-action").json()
     assert action["status"] == "capture_post_resume_evidence"
     assert action["selected_step_id"] == "capture_post_resume_evidence"
+    assert action["pre_sleep_evidence_path"] == str(pre_sleep_path.resolve())
+    assert action["post_resume_evidence_path"] == ""
     assert "-OperatorConfirmedSleepResume" in action["primary_command"]
     assert action["pre_sleep_evidence_ready"] is True
     assert action["post_resume_evidence_ready"] is False
