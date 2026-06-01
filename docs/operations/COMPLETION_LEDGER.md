@@ -55583,6 +55583,58 @@ Latest validation for Stage 16 post-receipt sequence handoff:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 primary status mirrors post-receipt handoff
+
+Roadmap area: Stage 16 / Federation, sleep-continuity confirmation receipt
+truthfulness.
+
+Material change:
+
+- `/federation/status` now mirrors the receipt-backed post-resume sequence
+  handoff from the dedicated readiness route.
+- The primary Federation Hub status surface now displays the status-level
+  sequence next step, blocked-until-current-receipt state, and
+  available-after-receipt state.
+- The mirrored status fields remain read-only. They do not record a
+  sleep/resume confirmation, do not infer physical sleep/resume, do not execute
+  post-resume capture, do not write evidence or receipts, and do not mark Stage
+  16 closed.
+- Fresh local status readback for `actor=codex.builder` still reports
+  `sleep_continuity_receipt_backed_sequence_ready=false`,
+  `sleep_continuity_receipt_backed_sequence_next_step=record_current_matching_sleep_resume_confirmation_receipt`,
+  `sleep_continuity_receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt=true`,
+  `sleep_continuity_next_step=write_sleep_resume_confirmation_receipt`, and
+  `next_smallest_truthful_gap=stage16_sleep_resume_confirmation_receipt`.
+
+Latest validation for Stage 16 primary status post-receipt handoff:
+
+- `python -m pytest
+  tests/test_api_federation.py::test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marker
+  tests/test_api_federation.py::test_federation_stage16_sleep_resume_confirmation_records_operator_receipt
+  tests/test_api_federation.py::test_federation_stage16_sleep_resume_confirmation_readback_blocks_stale_receipt
+  -q --tb=short --maxfail=1`
+  Result: `passed; 3 passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `npm run test -- federation_hub`
+  Result: `passed; 199 passed`.
+- `npm run build`
+  Result: `passed`.
+- Direct FastAPI `TestClient` readback of
+  `/federation/status?actor=codex.builder`
+  Result: `passed; sleep_continuity_receipt_backed_sequence_ready=false`,
+  `sleep_continuity_receipt_backed_sequence_available_after_current_matching_confirmation_receipt=false`,
+  `sleep_continuity_next_step=write_sleep_resume_confirmation_receipt`, and
+  `next_smallest_truthful_gap=stage16_sleep_resume_confirmation_receipt`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

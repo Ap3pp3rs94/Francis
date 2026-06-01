@@ -2334,6 +2334,36 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
         "sleep_resume_confirmation_receipt_missing"
     ]
     assert pending_status["sleep_continuity_receipt_backed_sequence_requires_confirmation_receipt"] is True
+    assert (
+        pending_status["sleep_continuity_receipt_backed_sequence_next_step"]
+        == "record_current_matching_sleep_resume_confirmation_receipt"
+    )
+    assert (
+        pending_status["sleep_continuity_receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt"]
+        is True
+    )
+    assert (
+        pending_status["sleep_continuity_receipt_backed_sequence_current_matching_confirmation_receipt_required"]
+        is True
+    )
+    assert (
+        pending_status["sleep_continuity_receipt_backed_sequence_available_after_current_matching_confirmation_receipt"]
+        is False
+    )
+    assert pending_status["sleep_continuity_receipt_backed_sequence_hidden_until_confirmation_receipt"] is True
+    assert (
+        pending_status["sleep_continuity_receipt_backed_sequence_runs_after_physical_sleep_resume_receipt_only"] is True
+    )
+    assert pending_status["sleep_continuity_receipt_backed_sequence_post_receipt_handoff"]["status"] == (
+        "blocked_until_current_confirmation_receipt"
+    )
+    assert pending_status["sleep_continuity_receipt_backed_sequence_post_receipt_handoff"]["blockers"] == [
+        "sleep_resume_confirmation_receipt_missing"
+    ]
+    assert (
+        pending_status["sleep_continuity_receipt_backed_sequence_post_receipt_handoff"]["marks_stage16_closed_when_run"]
+        is False
+    )
     assert pending_status["sleep_continuity_receipt_backed_sequence_writes_evidence_when_run"] is False
     assert pending_status["sleep_continuity_receipt_backed_sequence_writes_receipts_when_run"] is False
     assert pending_status["sleep_continuity_confirmation_receipt_command_ready"] is True
@@ -2596,6 +2626,36 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     assert receipt_ready_status["sleep_continuity_receipt_backed_sequence_ready"] is True
     assert receipt_ready_status["sleep_continuity_receipt_backed_sequence_blockers"] == []
     assert receipt_ready_status["sleep_continuity_receipt_backed_sequence_requires_confirmation_receipt"] is True
+    assert receipt_ready_status["sleep_continuity_receipt_backed_sequence_next_step"] == (
+        "run_receipt_backed_post_resume_sequence"
+    )
+    assert (
+        receipt_ready_status[
+            "sleep_continuity_receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt"
+        ]
+        is False
+    )
+    assert (
+        receipt_ready_status["sleep_continuity_receipt_backed_sequence_current_matching_confirmation_receipt_required"]
+        is True
+    )
+    assert (
+        receipt_ready_status[
+            "sleep_continuity_receipt_backed_sequence_available_after_current_matching_confirmation_receipt"
+        ]
+        is True
+    )
+    assert receipt_ready_status["sleep_continuity_receipt_backed_sequence_hidden_until_confirmation_receipt"] is False
+    assert (
+        receipt_ready_status["sleep_continuity_receipt_backed_sequence_runs_after_physical_sleep_resume_receipt_only"]
+        is True
+    )
+    assert receipt_ready_status["sleep_continuity_receipt_backed_sequence_post_receipt_handoff"]["status"] == "ready"
+    assert (
+        receipt_ready_status["sleep_continuity_receipt_backed_sequence_post_receipt_handoff"]["confirmation_receipt_id"]
+        == body["receipt_id"]
+    )
+    assert receipt_ready_status["sleep_continuity_receipt_backed_sequence_post_receipt_handoff"]["blockers"] == []
     assert receipt_ready_status["sleep_continuity_receipt_backed_sequence_writes_evidence_when_run"] is True
     assert receipt_ready_status["sleep_continuity_receipt_backed_sequence_writes_receipts_when_run"] is True
     assert receipt_ready_status["sleep_continuity_confirmation_receipt_command_ready"] is False

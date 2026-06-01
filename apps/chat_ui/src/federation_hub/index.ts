@@ -192,6 +192,13 @@ export type FederationStage16Status = {
   sleep_continuity_receipt_backed_sequence_ready: boolean;
   sleep_continuity_receipt_backed_sequence_blockers: string[];
   sleep_continuity_receipt_backed_sequence_requires_confirmation_receipt: boolean;
+  sleep_continuity_receipt_backed_sequence_next_step?: string;
+  sleep_continuity_receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt: boolean;
+  sleep_continuity_receipt_backed_sequence_current_matching_confirmation_receipt_required: boolean;
+  sleep_continuity_receipt_backed_sequence_available_after_current_matching_confirmation_receipt: boolean;
+  sleep_continuity_receipt_backed_sequence_hidden_until_confirmation_receipt: boolean;
+  sleep_continuity_receipt_backed_sequence_runs_after_physical_sleep_resume_receipt_only: boolean;
+  sleep_continuity_receipt_backed_sequence_post_receipt_handoff?: Record<string, unknown>;
   sleep_continuity_receipt_backed_sequence_writes_evidence_when_run: boolean;
   sleep_continuity_receipt_backed_sequence_writes_receipts_when_run: boolean;
   sleep_continuity_next_step?: string;
@@ -1762,6 +1769,29 @@ export function parseFederationStage16Status(raw: unknown): FederationStage16Sta
     sleep_continuity_receipt_backed_sequence_requires_confirmation_receipt: safeBoolean(
       body.sleep_continuity_receipt_backed_sequence_requires_confirmation_receipt,
     ),
+    sleep_continuity_receipt_backed_sequence_next_step: optionalString(
+      body.sleep_continuity_receipt_backed_sequence_next_step,
+    ),
+    sleep_continuity_receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt: safeBoolean(
+      body.sleep_continuity_receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt,
+    ),
+    sleep_continuity_receipt_backed_sequence_current_matching_confirmation_receipt_required: safeBoolean(
+      body.sleep_continuity_receipt_backed_sequence_current_matching_confirmation_receipt_required,
+    ),
+    sleep_continuity_receipt_backed_sequence_available_after_current_matching_confirmation_receipt: safeBoolean(
+      body.sleep_continuity_receipt_backed_sequence_available_after_current_matching_confirmation_receipt,
+    ),
+    sleep_continuity_receipt_backed_sequence_hidden_until_confirmation_receipt: safeBoolean(
+      body.sleep_continuity_receipt_backed_sequence_hidden_until_confirmation_receipt,
+    ),
+    sleep_continuity_receipt_backed_sequence_runs_after_physical_sleep_resume_receipt_only: safeBoolean(
+      body.sleep_continuity_receipt_backed_sequence_runs_after_physical_sleep_resume_receipt_only,
+    ),
+    sleep_continuity_receipt_backed_sequence_post_receipt_handoff: isRecord(
+      body.sleep_continuity_receipt_backed_sequence_post_receipt_handoff,
+    )
+      ? body.sleep_continuity_receipt_backed_sequence_post_receipt_handoff
+      : undefined,
     sleep_continuity_receipt_backed_sequence_writes_evidence_when_run: safeBoolean(
       body.sleep_continuity_receipt_backed_sequence_writes_evidence_when_run,
     ),

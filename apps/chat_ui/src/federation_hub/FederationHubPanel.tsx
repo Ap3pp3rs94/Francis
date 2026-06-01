@@ -409,6 +409,25 @@ export function FederationHubPanel(props: { baseUrl: string }) {
             <code>{yesNo(Boolean(status?.sleep_continuity_confirmation_receipt_latest_matches_current_pre_sleep))}</code>
             {" / "}latest <code>{codeValue(status?.sleep_continuity_confirmation_receipt_latest_receipt_id)}</code>
           </div>
+          <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
+            status sequence next <code>{codeValue(status?.sleep_continuity_receipt_backed_sequence_next_step)}</code>
+            {" / "}blocked until receipt{" "}
+            <code>
+              {yesNo(
+                Boolean(
+                  status?.sleep_continuity_receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt,
+                ),
+              )}
+            </code>
+            {" / "}after receipt{" "}
+            <code>
+              {yesNo(
+                Boolean(
+                  status?.sleep_continuity_receipt_backed_sequence_available_after_current_matching_confirmation_receipt,
+                ),
+              )}
+            </code>
+          </div>
           {sequenceReadiness ? (
             <>
               <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>

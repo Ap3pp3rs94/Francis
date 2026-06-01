@@ -3999,6 +3999,51 @@ def status(actor: str = "") -> dict[str, Any]:
         sleep_continuity_receipt_backed_sequence_ready = bool(
             sleep_continuity_confirmation_receipt_readback.get("receipt_backed_sequence_ready")
         )
+        sleep_continuity_receipt_backed_sequence_blockers = _parse_list(
+            sleep_continuity_confirmation_receipt_readback.get("receipt_backed_sequence_blockers")
+        )
+        sleep_continuity_receipt_backed_sequence_next_step = (
+            "run_receipt_backed_post_resume_sequence"
+            if sleep_continuity_receipt_backed_sequence_ready and not sleep_continuity_receipt_backed_sequence_blockers
+            else "record_current_matching_sleep_resume_confirmation_receipt"
+        )
+        sleep_continuity_receipt_backed_sequence_blocked_until_receipt = (
+            not sleep_continuity_receipt_backed_sequence_ready
+            or bool(sleep_continuity_receipt_backed_sequence_blockers)
+        )
+        sleep_continuity_receipt_backed_sequence_available_after_receipt = (
+            sleep_continuity_receipt_backed_sequence_ready and not sleep_continuity_receipt_backed_sequence_blockers
+        )
+        sleep_continuity_receipt_backed_sequence_handoff = {
+            "status": "ready"
+            if sleep_continuity_receipt_backed_sequence_available_after_receipt
+            else "blocked_until_current_confirmation_receipt",
+            "next_step": sleep_continuity_receipt_backed_sequence_next_step,
+            "blocked_until_current_matching_confirmation_receipt": (
+                sleep_continuity_receipt_backed_sequence_blocked_until_receipt
+            ),
+            "current_matching_confirmation_receipt_required": True,
+            "available_after_current_matching_confirmation_receipt": (
+                sleep_continuity_receipt_backed_sequence_available_after_receipt
+            ),
+            "command_visible": sleep_continuity_receipt_backed_sequence_available_after_receipt,
+            "confirmation_receipt_id": _safe_str(
+                sleep_continuity_confirmation_receipt_readback.get("latest_receipt_id")
+            ).strip()
+            if sleep_continuity_receipt_backed_sequence_available_after_receipt
+            else "",
+            "blockers": sleep_continuity_receipt_backed_sequence_blockers,
+            "runs_after_physical_sleep_resume_receipt_only": True,
+            "requires_operator_confirmed_sleep_resume": True,
+            "writes_evidence_when_run": bool(
+                sleep_continuity_confirmation_receipt_readback.get("receipt_backed_sequence_writes_evidence_when_run")
+            ),
+            "writes_receipts_when_run": bool(
+                sleep_continuity_confirmation_receipt_readback.get("receipt_backed_sequence_writes_receipts_when_run")
+            ),
+            "marks_stage16_closed_when_run": False,
+            "read_only_projection": True,
+        }
         sleep_continuity_confirmation_receipt_command = _stage16_sleep_resume_confirmation_command_projection(
             pre_sleep_evidence_path=_safe_str(latest_pre_sleep_evidence.get("evidence_path")).strip(),
             ready=(
@@ -4203,13 +4248,26 @@ def status(actor: str = "") -> dict[str, Any]:
                 sleep_continuity_confirmation_receipt_readback.get("latest_receipt_usable_for_receipt_backed_sequence")
             ),
             "sleep_continuity_receipt_backed_sequence_ready": bool(sleep_continuity_receipt_backed_sequence_ready),
-            "sleep_continuity_receipt_backed_sequence_blockers": _parse_list(
-                sleep_continuity_confirmation_receipt_readback.get("receipt_backed_sequence_blockers")
-            ),
+            "sleep_continuity_receipt_backed_sequence_blockers": sleep_continuity_receipt_backed_sequence_blockers,
             "sleep_continuity_receipt_backed_sequence_requires_confirmation_receipt": bool(
                 sleep_continuity_confirmation_receipt_readback.get(
                     "receipt_backed_sequence_requires_confirmation_receipt"
                 )
+            ),
+            "sleep_continuity_receipt_backed_sequence_next_step": (sleep_continuity_receipt_backed_sequence_next_step),
+            "sleep_continuity_receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt": (
+                sleep_continuity_receipt_backed_sequence_blocked_until_receipt
+            ),
+            "sleep_continuity_receipt_backed_sequence_current_matching_confirmation_receipt_required": True,
+            "sleep_continuity_receipt_backed_sequence_available_after_current_matching_confirmation_receipt": (
+                sleep_continuity_receipt_backed_sequence_available_after_receipt
+            ),
+            "sleep_continuity_receipt_backed_sequence_hidden_until_confirmation_receipt": (
+                not sleep_continuity_receipt_backed_sequence_available_after_receipt
+            ),
+            "sleep_continuity_receipt_backed_sequence_runs_after_physical_sleep_resume_receipt_only": True,
+            "sleep_continuity_receipt_backed_sequence_post_receipt_handoff": (
+                sleep_continuity_receipt_backed_sequence_handoff
             ),
             "sleep_continuity_receipt_backed_sequence_writes_evidence_when_run": bool(
                 sleep_continuity_confirmation_receipt_readback.get("receipt_backed_sequence_writes_evidence_when_run")
