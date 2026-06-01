@@ -109,6 +109,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
   const governance = action?.governance;
   const latestPreSleepEvidence = status?.latest_pre_sleep_evidence;
   const latestPostResumeEvidence = status?.latest_post_resume_evidence;
+  const selectedActionReadiness = presentation?.selected_action_readiness;
 
   return (
     <section style={panelStyle}>
@@ -236,6 +237,37 @@ export function FederationHubPanel(props: { baseUrl: string }) {
                 </span>
               ))}
             </div>
+          </div>
+        ) : null}
+        {selectedActionReadiness ? (
+          <div style={{ marginTop: 8 }}>
+            <div style={{ fontSize: 11, color: MUTED }}>
+              readiness <code>{codeValue(selectedActionReadiness.status)}</code>
+              {" / "}ready <code>{yesNo(selectedActionReadiness.ready_to_run)}</code>
+            </div>
+            {selectedActionReadiness.run_blockers.length ? (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                {selectedActionReadiness.run_blockers.map((blocker) => (
+                  <span key={`federation-readiness-blocker-${blocker}`} style={badgeStyle("blocked")}>
+                    {blocker}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            {selectedActionReadiness.remaining_evidence_gates.length ? (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                {selectedActionReadiness.remaining_evidence_gates.map((gate) => (
+                  <span key={`federation-evidence-gate-${gate}`} style={badgeStyle("blocked")}>
+                    {gate}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            {selectedActionReadiness.next_operator_step ? (
+              <div style={{ fontSize: 11, color: MUTED, marginTop: 8, overflowWrap: "anywhere" }}>
+                next operator step <code>{selectedActionReadiness.next_operator_step}</code>
+              </div>
+            ) : null}
           </div>
         ) : null}
         {presentation?.pre_sleep_evidence_path ? (

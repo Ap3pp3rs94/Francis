@@ -310,6 +310,21 @@ export type FederationSleepContinuityActionState =
   | "record_stage16_closure_decision"
   | "stage16_closed";
 
+export type FederationSleepContinuitySelectedActionReadiness = {
+  status?: string;
+  ready_to_run: boolean;
+  run_blockers: string[];
+  remaining_evidence_gates: string[];
+  met_conditions: string[];
+  next_operator_step?: string;
+  selected_step_id?: string;
+  pre_sleep_evidence_ready: boolean;
+  post_resume_evidence_ready: boolean;
+  operator_confirmation_required: boolean;
+  writes_evidence_when_run: boolean;
+  writes_receipts_when_run: boolean;
+};
+
 export type FederationSleepContinuityPresentation = {
   state: FederationSleepContinuityActionState;
   status_label: string;
@@ -335,6 +350,7 @@ export type FederationSleepContinuityPresentation = {
   operator_action_required: boolean;
   operator_confirmation_required: boolean;
   operator_confirmation_requirements: string[];
+  selected_action_readiness?: FederationSleepContinuitySelectedActionReadiness;
   writes_evidence_when_run: boolean;
   writes_receipts_when_run: boolean;
   expected_output?: string;
@@ -368,6 +384,8 @@ export type FederationSleepContinuityActionReadback = {
   stage16_closed_by_receipt: boolean;
   operator_action_required: boolean;
   operator_confirmation_required: boolean;
+  operator_confirmation_requirements: string[];
+  selected_action_readiness?: FederationSleepContinuitySelectedActionReadiness;
   writes_evidence_when_run: boolean;
   writes_receipts_when_run: boolean;
   mutation_available_from_ui: boolean;
@@ -452,6 +470,26 @@ function stringRecord(v: unknown): Record<string, string> {
     if (safeKey && safeValue) out[safeKey] = safeValue;
   }
   return out;
+}
+
+function parseFederationSleepContinuitySelectedActionReadiness(
+  raw: unknown,
+): FederationSleepContinuitySelectedActionReadiness | undefined {
+  if (!isRecord(raw)) return undefined;
+  return {
+    status: optionalString(raw.status),
+    ready_to_run: safeBoolean(raw.ready_to_run),
+    run_blockers: stringList(raw.run_blockers),
+    remaining_evidence_gates: stringList(raw.remaining_evidence_gates),
+    met_conditions: stringList(raw.met_conditions),
+    next_operator_step: optionalString(raw.next_operator_step),
+    selected_step_id: optionalString(raw.selected_step_id),
+    pre_sleep_evidence_ready: safeBoolean(raw.pre_sleep_evidence_ready),
+    post_resume_evidence_ready: safeBoolean(raw.post_resume_evidence_ready),
+    operator_confirmation_required: safeBoolean(raw.operator_confirmation_required),
+    writes_evidence_when_run: safeBoolean(raw.writes_evidence_when_run),
+    writes_receipts_when_run: safeBoolean(raw.writes_receipts_when_run),
+  };
 }
 
 function buildQuery(params: Record<string, unknown>): string {
@@ -953,6 +991,7 @@ export function parseFederationSleepContinuityAction(raw: unknown): FederationSl
     operator_action_required: safeBoolean(body.operator_action_required),
     operator_confirmation_required: safeBoolean(body.operator_confirmation_required),
     operator_confirmation_requirements: stringList(body.operator_confirmation_requirements),
+    selected_action_readiness: parseFederationSleepContinuitySelectedActionReadiness(body.selected_action_readiness),
     writes_evidence_when_run: safeBoolean(body.writes_evidence_when_run),
     writes_receipts_when_run: safeBoolean(body.writes_receipts_when_run),
     mutation_available_from_ui: safeBoolean(body.mutation_available_from_ui),
@@ -1046,6 +1085,7 @@ function buildFederationSleepContinuityPresentation(
     operator_action_required: selectedStep?.operator_action_required ?? false,
     operator_confirmation_required: selectedStep?.operator_confirmation_required ?? false,
     operator_confirmation_requirements: [],
+    selected_action_readiness: undefined,
     writes_evidence_when_run: selectedStep?.writes_evidence_when_run ?? false,
     writes_receipts_when_run: selectedStep?.writes_receipts_when_run ?? false,
     expected_output: selectedStep?.expected_output,
@@ -1138,6 +1178,7 @@ export function presentFederationSleepContinuityAction(
     operator_confirmation_required:
       action.operator_confirmation_required || selectedStep?.operator_confirmation_required === true,
     operator_confirmation_requirements: action.operator_confirmation_requirements,
+    selected_action_readiness: action.selected_action_readiness,
     writes_evidence_when_run: action.writes_evidence_when_run || selectedStep?.writes_evidence_when_run === true,
     writes_receipts_when_run: action.writes_receipts_when_run || selectedStep?.writes_receipts_when_run === true,
     expected_output: action.expected_output ?? selectedStep?.expected_output,

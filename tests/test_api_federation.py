@@ -1290,6 +1290,17 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
         "pre_sleep_evidence_path_matches_latest_pre_sleep_artifact",
         "post_resume_capture_uses_operator_confirmed_sleep_resume_flag",
     ]
+    assert action["selected_action_readiness"]["status"] == "waiting_for_operator_confirmation"
+    assert action["selected_action_readiness"]["ready_to_run"] is False
+    assert action["selected_action_readiness"]["run_blockers"] == ["operator_confirmed_sleep_resume_missing"]
+    assert action["selected_action_readiness"]["remaining_evidence_gates"] == ["post_resume_evidence_missing"]
+    assert action["selected_action_readiness"]["met_conditions"] == [
+        "pre_sleep_evidence_available",
+        "selected_command_requires_operator_confirmed_sleep_resume_flag",
+    ]
+    assert action["selected_action_readiness"]["next_operator_step"] == (
+        "operator_confirm_sleep_resume_then_capture_post_resume_evidence"
+    )
     assert "-OperatorConfirmedSleepResume" in action["primary_command"]
     assert action["pre_sleep_evidence_ready"] is True
     assert action["post_resume_evidence_ready"] is False
@@ -1360,6 +1371,14 @@ def test_federation_stage16_sleep_continuity_runbook_uses_linked_post_resume_mar
     assert "federation-stage16-sleep-continuity-runtime-proof.ps1" in action["primary_command"]
     assert action["expected_output"] == "workstation_sleep_continuity_validated live runtime readback receipt"
     assert action["operator_confirmation_requirements"] == []
+    assert action["selected_action_readiness"]["status"] == "ready_to_commit_sleep_continuity_readback"
+    assert action["selected_action_readiness"]["ready_to_run"] is True
+    assert action["selected_action_readiness"]["run_blockers"] == []
+    assert action["selected_action_readiness"]["remaining_evidence_gates"] == []
+    assert action["selected_action_readiness"]["met_conditions"] == [
+        "pre_sleep_evidence_available",
+        "post_resume_evidence_available",
+    ]
     assert action["pre_sleep_evidence_ready"] is True
     assert action["post_resume_evidence_ready"] is True
     assert action["operator_confirmation_required"] is False
