@@ -52004,6 +52004,35 @@ Latest validation for Stage 16 backend sleep-action UI presentation:
 - `cd apps/chat_ui; npm run build`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 federation panel uses action presentation model
+
+Roadmap area: Stage 16 / Federation, workstation sleep continuity runtime
+readback.
+
+Material change:
+
+- `FederationHubPanel` now derives its visible sleep action label, selected
+  step, blockers, evidence readiness flags, selected command readback, and UI
+  mutation/confirmation guards from `presentFederationSleepContinuityAction(...)`.
+- The panel still fetches `/federation/status` for stage posture and
+  `/federation/sleep-continuity-action` for the backend-selected action, but it
+  no longer duplicates action-presentation decisions directly in JSX.
+- This keeps the operator-visible Federation tab aligned with the typed
+  presentation contract validated by the UI client tests.
+- This remains read-only. It does not execute the selected command, post the
+  selected route, write evidence, write receipts, write registry state, write
+  memory, grant execution authority, grant mutation authority, infer workstation
+  sleep/resume, or mark Stage 16 closed.
+- Stage 16 remains open until live post-resume evidence and the receipt-backed
+  completion/closure gates are satisfied.
+
+Latest validation for Stage 16 federation panel presentation model:
+
+- `cd apps/chat_ui; npm run test -- federation_hub`
+  Result: `passed; 187 passed`.
+- `cd apps/chat_ui; npm run build`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

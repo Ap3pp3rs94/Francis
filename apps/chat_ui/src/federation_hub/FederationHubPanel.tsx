@@ -3,7 +3,9 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FederationApiError,
   FederationClient,
+  presentFederationSleepContinuityAction,
   type FederationSleepContinuityActionReadback,
+  type FederationSleepContinuityPresentation,
   type FederationStage16Status,
 } from "./index";
 
@@ -65,6 +67,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
   const client = useMemo(() => new FederationClient(props.baseUrl), [props.baseUrl]);
   const [status, setStatus] = useState<FederationStage16Status | null>(null);
   const [action, setAction] = useState<FederationSleepContinuityActionReadback | null>(null);
+  const [presentation, setPresentation] = useState<FederationSleepContinuityPresentation | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadedAt, setLoadedAt] = useState<number | null>(null);
@@ -79,6 +82,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
       ]);
       setStatus(nextStatus);
       setAction(nextAction);
+      setPresentation(presentFederationSleepContinuityAction(nextAction));
       setLoadedAt(Date.now());
     } catch (err) {
       setError(errorText(err));
@@ -91,7 +95,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
     void refresh();
   }, [refresh]);
 
-  const blockers = action?.blockers.length ? action.blockers : status?.completion_review_blockers ?? [];
+  const blockers = presentation?.blockers.length ? presentation.blockers : status?.completion_review_blockers ?? [];
   const selectedAction = action?.selected_action;
 
   return (
@@ -100,7 +104,8 @@ export function FederationHubPanel(props: { baseUrl: string }) {
         <div>
           <div style={{ fontSize: 16, fontWeight: 600 }}>Federation</div>
           <div style={{ fontSize: 12, color: MUTED, marginTop: 6 }}>
-            Stage 16 / next <code>{codeValue(action?.next_smallest_truthful_gap ?? status?.next_smallest_truthful_gap)}</code>
+            Stage 16 / next{" "}
+            <code>{codeValue(presentation?.next_smallest_truthful_gap ?? status?.next_smallest_truthful_gap)}</code>
           </div>
         </div>
         <button style={buttonStyle} onClick={() => void refresh()} disabled={loading}>
@@ -127,24 +132,26 @@ export function FederationHubPanel(props: { baseUrl: string }) {
         <div style={{ border: `1px solid ${PANEL_BORDER}`, borderRadius: 10, padding: 10, background: "#121212" }}>
           <div style={{ fontSize: 11, color: MUTED }}>Sleep action</div>
           <div style={{ marginTop: 8 }}>
-            <span style={badgeStyle(codeValue(action?.status, "unknown"))}>{codeValue(action?.status, "unknown")}</span>
+            <span style={badgeStyle(codeValue(presentation?.state, "unknown"))}>
+              {presentation?.status_label ?? codeValue(action?.status, "unknown")}
+            </span>
           </div>
           <div style={{ fontSize: 11, color: MUTED, marginTop: 8 }}>
-            selected <code>{codeValue(action?.selected_step_id)}</code>
+            selected <code>{codeValue(presentation?.selected_step_id)}</code>
           </div>
         </div>
 
         <div style={{ border: `1px solid ${PANEL_BORDER}`, borderRadius: 10, padding: 10, background: "#121212" }}>
           <div style={{ fontSize: 11, color: MUTED }}>Evidence</div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
-            <span style={badgeStyle(`pre_sleep_${yesNo(Boolean(action?.pre_sleep_evidence_ready))}`)}>
-              pre {yesNo(Boolean(action?.pre_sleep_evidence_ready))}
+            <span style={badgeStyle(`pre_sleep_${yesNo(Boolean(presentation?.pre_sleep_evidence_ready))}`)}>
+              pre {yesNo(Boolean(presentation?.pre_sleep_evidence_ready))}
             </span>
-            <span style={badgeStyle(`post_resume_${yesNo(Boolean(action?.post_resume_evidence_ready))}`)}>
-              post {yesNo(Boolean(action?.post_resume_evidence_ready))}
+            <span style={badgeStyle(`post_resume_${yesNo(Boolean(presentation?.post_resume_evidence_ready))}`)}>
+              post {yesNo(Boolean(presentation?.post_resume_evidence_ready))}
             </span>
-            <span style={badgeStyle(`continuity_${yesNo(Boolean(action?.sleep_continuity_ready))}`)}>
-              continuity {yesNo(Boolean(action?.sleep_continuity_ready))}
+            <span style={badgeStyle(`continuity_${yesNo(Boolean(presentation?.sleep_continuity_ready))}`)}>
+              continuity {yesNo(Boolean(presentation?.sleep_continuity_ready))}
             </span>
           </div>
         </div>
@@ -153,10 +160,10 @@ export function FederationHubPanel(props: { baseUrl: string }) {
       <div style={{ border: `1px solid ${PANEL_BORDER}`, borderRadius: 10, padding: 10, background: "#121212", marginTop: 12 }}>
         <div style={{ fontSize: 12, fontWeight: 600 }}>Selected readback</div>
         <div style={{ fontSize: 11, color: MUTED, marginTop: 6 }}>
-          scope <code>{codeValue(action?.required_scope)}</code>
-          {" / "}route <code>{codeValue(action?.primary_route)}</code>
+          scope <code>{codeValue(presentation?.required_scope)}</code>
+          {" / "}route <code>{codeValue(presentation?.primary_route)}</code>
         </div>
-        {action?.primary_command ? (
+        {presentation?.primary_command ? (
           <pre
             style={{
               margin: "8px 0 0",
@@ -170,7 +177,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
               fontSize: 11,
             }}
           >
-            {action.primary_command}
+            {presentation.primary_command}
           </pre>
         ) : null}
         {selectedAction?.expected_output ? (
@@ -199,8 +206,8 @@ export function FederationHubPanel(props: { baseUrl: string }) {
         <div>
           <div style={{ fontSize: 12, fontWeight: 600 }}>Guards</div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
-            <span style={badgeStyle(action?.mutation_available_from_ui ? "blocked" : "ready")}>
-              ui mutation {yesNo(Boolean(action?.mutation_available_from_ui))}
+            <span style={badgeStyle(presentation?.mutation_available_from_ui ? "blocked" : "ready")}>
+              ui mutation {yesNo(Boolean(presentation?.mutation_available_from_ui))}
             </span>
             <span style={badgeStyle(action?.runs_shell ? "blocked" : "ready")}>
               shell {yesNo(Boolean(action?.runs_shell))}
@@ -211,8 +218,8 @@ export function FederationHubPanel(props: { baseUrl: string }) {
             <span style={badgeStyle(action?.grants_mutation_authority ? "blocked" : "ready")}>
               authority {yesNo(Boolean(action?.grants_mutation_authority))}
             </span>
-            <span style={badgeStyle(action?.operator_confirmation_required ? "blocked" : "ready")}>
-              confirmation {yesNo(Boolean(action?.operator_confirmation_required))}
+            <span style={badgeStyle(presentation?.operator_confirmation_required ? "blocked" : "ready")}>
+              confirmation {yesNo(Boolean(presentation?.operator_confirmation_required))}
             </span>
           </div>
         </div>
