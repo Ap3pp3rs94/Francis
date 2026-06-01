@@ -1206,6 +1206,23 @@ def _stage16_prior_live_readback_blockers(blockers: list[str]) -> list[str]:
     return [blocker for blocker in blockers if blocker != "workstation_sleep_continuity_validated"]
 
 
+def _stage16_sleep_continuity_confirmation_requirements(step_id: str) -> list[str]:
+    if step_id == "capture_post_resume_evidence":
+        return [
+            "operator_confirms_workstation_entered_sleep_or_suspend_after_pre_sleep_evidence",
+            "operator_confirms_workstation_resumed_before_post_resume_capture",
+            "pre_sleep_evidence_path_matches_latest_pre_sleep_artifact",
+            "post_resume_capture_uses_operator_confirmed_sleep_resume_flag",
+        ]
+    if step_id == "record_operator_stage_closure_decision":
+        return [
+            "operator_reviewed_stage16_completion_evidence",
+            "completion_review_ready_to_close",
+            "stage16_closure_receipt_not_already_recorded",
+        ]
+    return []
+
+
 def stage16_sleep_continuity_action() -> dict[str, Any]:
     runbook = stage16_sleep_continuity_runbook()
     blockers = _parse_list(runbook.get("missing_readbacks"))
@@ -1237,6 +1254,8 @@ def stage16_sleep_continuity_action() -> dict[str, Any]:
     ):
         state = "capture_pre_sleep_evidence"
         selected_step = _stage16_sleep_continuity_step(runbook, "capture_pre_sleep_evidence")
+    selected_step_id = _safe_str(selected_step.get("id")).strip()
+    confirmation_requirements = _stage16_sleep_continuity_confirmation_requirements(selected_step_id)
 
     return {
         "ok": True,
@@ -1245,7 +1264,7 @@ def stage16_sleep_continuity_action() -> dict[str, Any]:
         "source_id": "federation",
         "status": state,
         "action_projection_only": True,
-        "selected_step_id": _safe_str(selected_step.get("id")).strip(),
+        "selected_step_id": selected_step_id,
         "selected_step_title": _safe_str(selected_step.get("title")).strip(),
         "selected_action": selected_step,
         "primary_command": _safe_str(selected_step.get("command")).strip(),
@@ -1265,6 +1284,7 @@ def stage16_sleep_continuity_action() -> dict[str, Any]:
         "stage16_closed_by_receipt": stage16_closed_by_receipt,
         "operator_action_required": bool(selected_step.get("operator_action_required")),
         "operator_confirmation_required": bool(selected_step.get("operator_confirmation_required")),
+        "operator_confirmation_requirements": confirmation_requirements,
         "writes_evidence_when_run": bool(selected_step.get("writes_evidence_when_run")),
         "writes_receipts_when_run": bool(selected_step.get("writes_receipts_when_run")),
         "mutation_available_from_ui": False,
@@ -1276,6 +1296,7 @@ def stage16_sleep_continuity_action() -> dict[str, Any]:
             "uses_status_and_runbook_readbacks": True,
             "prior_live_readback_blockers_take_precedence": True,
             "does_not_infer_sleep_from_delay": True,
+            "confirmation_requirements_projected": bool(confirmation_requirements),
             "does_not_run_selected_command": True,
             "does_not_post_selected_route": True,
             "writes_evidence": False,

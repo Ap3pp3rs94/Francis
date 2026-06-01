@@ -226,6 +226,18 @@ export function FederationHubPanel(props: { baseUrl: string }) {
             expected <code>{presentation.expected_output}</code>
           </div>
         ) : null}
+        {presentation?.operator_confirmation_requirements.length ? (
+          <div style={{ marginTop: 8 }}>
+            <div style={{ fontSize: 11, color: MUTED }}>confirmation requirements</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+              {presentation.operator_confirmation_requirements.map((requirement) => (
+                <span key={`federation-confirmation-requirement-${requirement}`} style={badgeStyle("blocked")}>
+                  {requirement}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
         {presentation?.pre_sleep_evidence_path ? (
           <div style={{ fontSize: 11, color: MUTED, marginTop: 8 }}>
             pre-sleep evidence <code>{presentation.pre_sleep_evidence_path}</code>

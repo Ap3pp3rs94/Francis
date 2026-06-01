@@ -259,6 +259,7 @@ export type FederationSleepContinuityRunbookStep = {
   post_resume_evidence_available: boolean;
   operator_action_required: boolean;
   operator_confirmation_required: boolean;
+  operator_confirmation_requirements: string[];
   writes_evidence_when_run: boolean;
   writes_receipts_when_run: boolean;
   payload_contract?: Record<string, unknown>;
@@ -333,6 +334,7 @@ export type FederationSleepContinuityPresentation = {
   stage16_closed_by_receipt: boolean;
   operator_action_required: boolean;
   operator_confirmation_required: boolean;
+  operator_confirmation_requirements: string[];
   writes_evidence_when_run: boolean;
   writes_receipts_when_run: boolean;
   expected_output?: string;
@@ -950,6 +952,7 @@ export function parseFederationSleepContinuityAction(raw: unknown): FederationSl
     stage16_closed_by_receipt: safeBoolean(body.stage16_closed_by_receipt),
     operator_action_required: safeBoolean(body.operator_action_required),
     operator_confirmation_required: safeBoolean(body.operator_confirmation_required),
+    operator_confirmation_requirements: stringList(body.operator_confirmation_requirements),
     writes_evidence_when_run: safeBoolean(body.writes_evidence_when_run),
     writes_receipts_when_run: safeBoolean(body.writes_receipts_when_run),
     mutation_available_from_ui: safeBoolean(body.mutation_available_from_ui),
@@ -1042,6 +1045,7 @@ function buildFederationSleepContinuityPresentation(
     stage16_closed_by_receipt: opts.stage16ClosedByReceipt,
     operator_action_required: selectedStep?.operator_action_required ?? false,
     operator_confirmation_required: selectedStep?.operator_confirmation_required ?? false,
+    operator_confirmation_requirements: [],
     writes_evidence_when_run: selectedStep?.writes_evidence_when_run ?? false,
     writes_receipts_when_run: selectedStep?.writes_receipts_when_run ?? false,
     expected_output: selectedStep?.expected_output,
@@ -1133,6 +1137,7 @@ export function presentFederationSleepContinuityAction(
     operator_action_required: action.operator_action_required || selectedStep?.operator_action_required === true,
     operator_confirmation_required:
       action.operator_confirmation_required || selectedStep?.operator_confirmation_required === true,
+    operator_confirmation_requirements: action.operator_confirmation_requirements,
     writes_evidence_when_run: action.writes_evidence_when_run || selectedStep?.writes_evidence_when_run === true,
     writes_receipts_when_run: action.writes_receipts_when_run || selectedStep?.writes_receipts_when_run === true,
     expected_output: action.expected_output ?? selectedStep?.expected_output,

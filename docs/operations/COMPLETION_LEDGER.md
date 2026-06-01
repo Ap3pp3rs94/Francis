@@ -52362,6 +52362,50 @@ Latest validation for Stage 16 sleep action selected step summary:
   tests/test_api_federation.py`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 sleep action exposes confirmation requirements
+
+Roadmap area: Stage 16 / Federation, workstation sleep-continuity gate
+truthfulness.
+
+Material change:
+
+- `/federation/sleep-continuity-action` now exposes a bounded
+  `operator_confirmation_requirements` list for the selected action.
+- The current post-resume capture posture requires explicit operator
+  confirmation that the workstation slept or suspended after pre-sleep evidence,
+  resumed before capture, uses the latest pre-sleep artifact, and runs with the
+  operator-confirmed sleep/resume flag.
+- The federation UI parser, presenter, and panel preserve and render those
+  confirmation requirements without making them clickable or executable.
+- This is read-only inspectability. It does not execute routes, run shell
+  commands, write evidence, write receipts, mutate registry state, write memory,
+  grant execution authority, grant mutation authority, infer workstation
+  sleep/resume, or mark Stage 16 closed.
+- Stage 16 remains open until live post-resume evidence and the receipt-backed
+  completion/closure gates are satisfied.
+
+Latest validation for Stage 16 sleep action confirmation requirements:
+
+- `python -m pytest
+  tests/test_api_federation.py::test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marker
+  tests/test_api_federation.py::test_federation_stage16_sleep_continuity_runbook_uses_linked_post_resume_marker
+  -q --tb=short`
+  Result: `passed; 2 passed`.
+- `python -m pytest tests/test_api_federation.py -q --tb=short`
+  Result: `passed`.
+- `cd apps/chat_ui; npm run test -- federation_hub`
+  Result: `passed; 187 passed`.
+- `cd apps/chat_ui; npm run build`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -1284,11 +1284,18 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert action["pre_sleep_evidence_path"] == str(pre_sleep_path.resolve())
     assert action["post_resume_evidence_path"] == ""
     assert action["expected_output"] == "post-resume evidence JSON path"
+    assert action["operator_confirmation_requirements"] == [
+        "operator_confirms_workstation_entered_sleep_or_suspend_after_pre_sleep_evidence",
+        "operator_confirms_workstation_resumed_before_post_resume_capture",
+        "pre_sleep_evidence_path_matches_latest_pre_sleep_artifact",
+        "post_resume_capture_uses_operator_confirmed_sleep_resume_flag",
+    ]
     assert "-OperatorConfirmedSleepResume" in action["primary_command"]
     assert action["pre_sleep_evidence_ready"] is True
     assert action["post_resume_evidence_ready"] is False
     assert action["operator_action_required"] is True
     assert action["operator_confirmation_required"] is True
+    assert action["governance"]["confirmation_requirements_projected"] is True
     assert action["writes_evidence_when_run"] is True
     assert action["writes_receipts_when_run"] is False
     assert action["mutation_available_from_ui"] is False
@@ -1352,6 +1359,7 @@ def test_federation_stage16_sleep_continuity_runbook_uses_linked_post_resume_mar
     assert action["selected_step_title"] == "Commit sleep continuity runtime proof receipt"
     assert "federation-stage16-sleep-continuity-runtime-proof.ps1" in action["primary_command"]
     assert action["expected_output"] == "workstation_sleep_continuity_validated live runtime readback receipt"
+    assert action["operator_confirmation_requirements"] == []
     assert action["pre_sleep_evidence_ready"] is True
     assert action["post_resume_evidence_ready"] is True
     assert action["operator_confirmation_required"] is False

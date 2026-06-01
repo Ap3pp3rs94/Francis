@@ -530,6 +530,12 @@ test("federation sleep-continuity action parser preserves selected read-only ste
     stage16_closed_by_receipt: false,
     operator_action_required: true,
     operator_confirmation_required: true,
+    operator_confirmation_requirements: [
+      "operator_confirms_workstation_entered_sleep_or_suspend_after_pre_sleep_evidence",
+      "operator_confirms_workstation_resumed_before_post_resume_capture",
+      "pre_sleep_evidence_path_matches_latest_pre_sleep_artifact",
+      "post_resume_capture_uses_operator_confirmed_sleep_resume_flag",
+    ],
     writes_evidence_when_run: true,
     writes_receipts_when_run: false,
     mutation_available_from_ui: false,
@@ -556,6 +562,7 @@ test("federation sleep-continuity action parser preserves selected read-only ste
       read_only: true,
       action_projection_only: true,
       does_not_infer_sleep_from_delay: true,
+      confirmation_requirements_projected: true,
       does_not_run_selected_command: true,
       does_not_post_selected_route: true,
     },
@@ -574,6 +581,12 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   assert.equal(action.selected_action?.operator_confirmation_required, true);
   assert.equal(action.selected_action?.expected_output, "post-resume evidence JSON path");
   assert.equal(action.expected_output, "post-resume evidence JSON path");
+  assert.deepEqual(action.operator_confirmation_requirements, [
+    "operator_confirms_workstation_entered_sleep_or_suspend_after_pre_sleep_evidence",
+    "operator_confirms_workstation_resumed_before_post_resume_capture",
+    "pre_sleep_evidence_path_matches_latest_pre_sleep_artifact",
+    "post_resume_capture_uses_operator_confirmed_sleep_resume_flag",
+  ]);
   assert.equal(action.primary_command?.includes("-OperatorConfirmedSleepResume"), true);
   assert.equal(
     action.pre_sleep_evidence_path,
@@ -602,6 +615,7 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   assert.equal(action.governance?.read_only, true);
   assert.equal(action.governance?.action_projection_only, true);
   assert.equal(action.governance?.does_not_infer_sleep_from_delay, true);
+  assert.equal(action.governance?.confirmation_requirements_projected, true);
   assert.equal(action.governance?.does_not_run_selected_command, true);
   assert.equal(action.governance?.does_not_post_selected_route, true);
 
@@ -625,6 +639,7 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   assert.equal(presentation.post_resume_evidence_ready, false);
   assert.equal(presentation.operator_action_required, true);
   assert.equal(presentation.operator_confirmation_required, true);
+  assert.deepEqual(presentation.operator_confirmation_requirements, action.operator_confirmation_requirements);
   assert.equal(presentation.writes_evidence_when_run, true);
   assert.equal(presentation.writes_receipts_when_run, false);
   assert.equal(presentation.mutation_available_from_ui, false);
