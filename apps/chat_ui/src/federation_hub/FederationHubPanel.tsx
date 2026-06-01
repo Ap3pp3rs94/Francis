@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FederationApiError,
   FederationClient,
+  isFederationSleepContinuityOperatorCommandBlockedByPendingConfirmation,
   isFederationSleepResumeConfirmationActorReadinessCurrent,
   presentFederationSleepContinuityAction,
   type FederationSleepContinuityActionReadback,
@@ -155,6 +156,18 @@ export function FederationHubPanel(props: { baseUrl: string }) {
   )
     ? actorReadiness
     : null;
+  const operatorCommandBlockedByPendingConfirmation =
+    isFederationSleepContinuityOperatorCommandBlockedByPendingConfirmation(presentation);
+  const visiblePrimaryCommand = operatorCommandBlockedByPendingConfirmation ? "" : presentation?.primary_command;
+  const visibleOperatorTerminalCommand = operatorCommandBlockedByPendingConfirmation
+    ? ""
+    : operatorTerminalInvocation?.copyable_command;
+  const visiblePostResumeCaptureCommand = operatorCommandBlockedByPendingConfirmation
+    ? ""
+    : operatorConfirmationHandoff?.post_resume_capture_copyable_command;
+  const visiblePostResumeSequenceCommand = operatorCommandBlockedByPendingConfirmation
+    ? ""
+    : operatorConfirmationHandoff?.post_resume_sequence_copyable_command;
 
   return (
     <section style={panelStyle}>
@@ -428,7 +441,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
           {" / "}runbook <code>{codeValue(presentation?.runbook_route)}</code>
           {" / "}closure <code>{codeValue(presentation?.closure_decision_route)}</code>
         </div>
-        {presentation?.primary_command ? (
+        {visiblePrimaryCommand ? (
           <pre
             style={{
               margin: "8px 0 0",
@@ -442,7 +455,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
               fontSize: 11,
             }}
           >
-            {presentation.primary_command}
+            {visiblePrimaryCommand}
           </pre>
         ) : null}
         {operatorTerminalInvocation ? (
@@ -458,7 +471,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
                 cwd <code>{operatorTerminalInvocation.working_directory}</code>
               </div>
             ) : null}
-            {operatorTerminalInvocation.copyable_command ? (
+            {visibleOperatorTerminalCommand ? (
               <pre
                 style={{
                   margin: "8px 0 0",
@@ -472,7 +485,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
                   fontSize: 11,
                 }}
               >
-                {operatorTerminalInvocation.copyable_command}
+                {visibleOperatorTerminalCommand}
               </pre>
             ) : null}
             {operatorTerminalInvocation.preconditions.length ? (
@@ -560,7 +573,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
                 {operatorConfirmationHandoff.confirmation_receipt_copyable_command}
               </pre>
             ) : null}
-            {operatorConfirmationHandoff.post_resume_capture_copyable_command ? (
+            {visiblePostResumeCaptureCommand ? (
               <pre
                 style={{
                   margin: "8px 0 0",
@@ -574,10 +587,10 @@ export function FederationHubPanel(props: { baseUrl: string }) {
                   fontSize: 11,
                 }}
               >
-                {operatorConfirmationHandoff.post_resume_capture_copyable_command}
+                {visiblePostResumeCaptureCommand}
               </pre>
             ) : null}
-            {operatorConfirmationHandoff.post_resume_sequence_copyable_command ? (
+            {visiblePostResumeSequenceCommand ? (
               <pre
                 style={{
                   margin: "8px 0 0",
@@ -591,7 +604,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
                   fontSize: 11,
                 }}
               >
-                {operatorConfirmationHandoff.post_resume_sequence_copyable_command}
+                {visiblePostResumeSequenceCommand}
               </pre>
             ) : null}
             {operatorConfirmationHandoff.post_resume_receipt_backed_sequence_copyable_command ? (

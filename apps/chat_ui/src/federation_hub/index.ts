@@ -1657,6 +1657,19 @@ export function isFederationSleepResumeConfirmationActorReadinessCurrent(
   return readinessActor === expectedActor;
 }
 
+export function isFederationSleepContinuityOperatorCommandBlockedByPendingConfirmation(
+  presentation: FederationSleepContinuityPresentation | null | undefined,
+): boolean {
+  if (!presentation) return false;
+  return (
+    presentation.operator_confirmation_pending ||
+    presentation.sleep_resume_confirmation_is_current_blocker ||
+    presentation.operator_terminal_invocation?.operator_confirmation_pending === true ||
+    presentation.operator_sleep_resume_gate?.operator_confirmation_pending === true ||
+    presentation.operator_confirmation_handoff?.operator_confirmation_pending === true
+  );
+}
+
 function parseFederationSleepContinuityRunbookStep(raw: unknown): FederationSleepContinuityRunbookStep | null {
   if (!isRecord(raw)) return null;
   const id = safeString(raw.id);

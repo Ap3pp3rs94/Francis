@@ -53890,6 +53890,33 @@ Latest validation for Stage 16 actor readiness Federation Hub visibility:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 Hub suppresses post-resume commands until confirmation
+
+Roadmap area: Stage 16 / Federation, workstation sleep-continuity operator
+confirmation UI safety.
+
+Material change:
+
+- Federation Hub now detects when the sleep-continuity action presentation is
+  blocked by pending operator sleep/resume confirmation.
+- While that confirmation is pending, the Hub suppresses the primary
+  post-resume command and terminal/post-resume copyable commands that must not
+  be run before confirmation.
+- The confirmation-receipt command remains visible because that is the
+  governed path for recording the operator confirmation receipt.
+- This remains read-only UI gating: it does not write receipts, capture
+  evidence, run shell, grant authority, or mark Stage 16 closed.
+
+Latest validation for Stage 16 pending-confirmation command suppression:
+
+- `npm run test -- federation_hub`
+  Result: `passed; 192 passed`.
+- `npm run build`
+  Result: `passed`.
+- `npx tsc --noEmit --pretty false 2>&1 | Select-String
+  "src/federation_hub/FederationHubPanel.tsx"`
+  Result: `passed; no_federation_panel_tsc_diagnostics`.
+
 ### 2026-06-01 - Stage 16 Hub hides stale actor-bound confirmation commands
 
 Roadmap area: Stage 16 / Federation, workstation sleep-continuity operator

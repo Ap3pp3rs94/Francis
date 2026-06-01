@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   FederationClient,
+  isFederationSleepContinuityOperatorCommandBlockedByPendingConfirmation,
   isFederationSleepResumeConfirmationActorReadinessCurrent,
   parseFederationCompletionReview,
   parseFederationLiveRuntimeReadbacks,
@@ -1581,6 +1582,7 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   assert.equal(presentation.operator_terminal_invocation?.operator_confirmation_pending, true);
   assert.equal(presentation.operator_terminal_invocation?.must_run_after_sleep_resume, true);
   assert.equal(presentation.operator_terminal_invocation?.projection_only, true);
+  assert.equal(isFederationSleepContinuityOperatorCommandBlockedByPendingConfirmation(presentation), true);
   assert.equal(presentation.operator_sleep_resume_gate?.status, "waiting_for_operator_sleep_resume_confirmation");
   assert.equal(presentation.operator_sleep_resume_gate?.pre_sleep_age_seconds, 300);
   assert.equal(presentation.operator_sleep_resume_gate?.current_ready_to_run, false);
@@ -2172,6 +2174,7 @@ test("federation sleep-continuity presentation advances to runtime proof after p
   assert.equal(presentation.selected_step_id, "commit_sleep_continuity_readback");
   assert.equal(presentation.primary_command?.includes("federation-stage16-sleep-continuity-runtime-proof.ps1"), true);
   assert.equal(presentation.operator_confirmation_required, false);
+  assert.equal(isFederationSleepContinuityOperatorCommandBlockedByPendingConfirmation(presentation), false);
   assert.equal(presentation.writes_evidence_when_run, false);
   assert.equal(presentation.writes_receipts_when_run, true);
   assert.equal(presentation.mutation_available_from_ui, false);
