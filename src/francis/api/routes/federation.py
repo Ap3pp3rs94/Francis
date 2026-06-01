@@ -3326,7 +3326,7 @@ def completion_review() -> dict[str, Any]:
 
 
 @router.get("/status")
-def status() -> dict[str, Any]:
+def status(actor: str = "") -> dict[str, Any]:
     try:
         registry = _load_registry()
         instances_obj = registry.get("instances") if isinstance(registry.get("instances"), dict) else {}
@@ -3388,6 +3388,8 @@ def status() -> dict[str, Any]:
             sleep_continuity_ready=sleep_continuity_ready,
             completion_ready=completion_ready,
         )
+        requested_actor = _safe_str(actor).strip()
+        requested_actor_ready = _stage16_sleep_resume_confirmation_actor_ready(requested_actor)
         sleep_continuity_confirmation_receipt_command = _stage16_sleep_resume_confirmation_command_projection(
             pre_sleep_evidence_path=_safe_str(latest_pre_sleep_evidence.get("evidence_path")).strip(),
             ready=(
@@ -3395,6 +3397,7 @@ def status() -> dict[str, Any]:
                 == "capture_post_resume_evidence"
                 and bool(sleep_continuity_action_summary.get("post_confirmation_ready_to_capture"))
             ),
+            actor=requested_actor if requested_actor_ready else "",
         )
         sleep_continuity_next_gap = _stage16_sleep_continuity_next_gap_for_status(
             completion_review_blockers=completion_review_blockers,
@@ -3490,6 +3493,17 @@ def status() -> dict[str, Any]:
             ).strip(),
             "sleep_continuity_confirmation_receipt_command_requires_scope": _safe_str(
                 sleep_continuity_confirmation_receipt_command.get("confirmation_receipt_command_requires_scope")
+            ).strip(),
+            "sleep_continuity_confirmation_receipt_requested_actor": _redacted_text(requested_actor)[:240],
+            "sleep_continuity_confirmation_receipt_requested_actor_ready": requested_actor_ready,
+            "sleep_continuity_confirmation_receipt_actor": _safe_str(
+                sleep_continuity_confirmation_receipt_command.get("confirmation_receipt_actor")
+            ).strip(),
+            "sleep_continuity_confirmation_receipt_actor_bound": bool(
+                sleep_continuity_confirmation_receipt_command.get("confirmation_receipt_actor_bound")
+            ),
+            "sleep_continuity_confirmation_receipt_actor_placeholder": _safe_str(
+                sleep_continuity_confirmation_receipt_command.get("confirmation_receipt_actor_placeholder")
             ).strip(),
             "sleep_continuity_confirmation_receipt_command_requires_actor_substitution": bool(
                 sleep_continuity_confirmation_receipt_command.get(

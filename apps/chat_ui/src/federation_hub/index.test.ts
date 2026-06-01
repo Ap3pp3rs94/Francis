@@ -452,7 +452,7 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
 
   try {
     const client = new FederationClient("http://127.0.0.1:8000");
-    const status = await client.getStatus({ timeoutMs: 50 });
+    const status = await client.getStatus({ actor: "test.federation.sleep", timeoutMs: 50 });
     const readbacks = await client.getLiveRuntimeReadbacks({ limit: 5, timeoutMs: 50 });
     const review = await client.getCompletionReview({ timeoutMs: 50 });
     const runbook = await client.getSleepContinuityRunbook({ timeoutMs: 50 });
@@ -469,7 +469,7 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
     });
 
     assert.deepEqual(requests, [
-      { path: "/federation/status", method: "GET", limit: null, actor: null },
+      { path: "/federation/status", method: "GET", limit: null, actor: "test.federation.sleep" },
       { path: "/federation/live-runtime-readbacks", method: "GET", limit: "5", actor: null },
       { path: "/federation/completion-review", method: "GET", limit: null, actor: null },
       { path: "/federation/sleep-continuity-runbook", method: "GET", limit: null, actor: null },

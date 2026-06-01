@@ -159,6 +159,11 @@ export type FederationStage16Status = {
   sleep_continuity_confirmation_receipt_command?: string;
   sleep_continuity_confirmation_receipt_copyable_command?: string;
   sleep_continuity_confirmation_receipt_command_requires_scope?: string;
+  sleep_continuity_confirmation_receipt_requested_actor?: string;
+  sleep_continuity_confirmation_receipt_requested_actor_ready: boolean;
+  sleep_continuity_confirmation_receipt_actor?: string;
+  sleep_continuity_confirmation_receipt_actor_bound: boolean;
+  sleep_continuity_confirmation_receipt_actor_placeholder?: string;
   sleep_continuity_confirmation_receipt_command_requires_actor_substitution: boolean;
   sleep_continuity_confirmation_receipt_command_next_readback_route?: string;
   sleep_continuity_confirmation_receipt_command_receipt_id_readback_field?: string;
@@ -1406,6 +1411,21 @@ export function parseFederationStage16Status(raw: unknown): FederationStage16Sta
     sleep_continuity_confirmation_receipt_command_requires_scope: optionalString(
       body.sleep_continuity_confirmation_receipt_command_requires_scope,
     ),
+    sleep_continuity_confirmation_receipt_requested_actor: optionalString(
+      body.sleep_continuity_confirmation_receipt_requested_actor,
+    ),
+    sleep_continuity_confirmation_receipt_requested_actor_ready: safeBoolean(
+      body.sleep_continuity_confirmation_receipt_requested_actor_ready,
+    ),
+    sleep_continuity_confirmation_receipt_actor: optionalString(
+      body.sleep_continuity_confirmation_receipt_actor,
+    ),
+    sleep_continuity_confirmation_receipt_actor_bound: safeBoolean(
+      body.sleep_continuity_confirmation_receipt_actor_bound,
+    ),
+    sleep_continuity_confirmation_receipt_actor_placeholder: optionalString(
+      body.sleep_continuity_confirmation_receipt_actor_placeholder,
+    ),
     sleep_continuity_confirmation_receipt_command_requires_actor_substitution: safeBoolean(
       body.sleep_continuity_confirmation_receipt_command_requires_actor_substitution,
     ),
@@ -2269,7 +2289,7 @@ export function presentFederationSleepContinuityAction(
 }
 
 export type FederationEndpoints = {
-  status: () => string;
+  status: (q?: { actor?: string }) => string;
   completionReview: () => string;
   sleepContinuityRunbook: () => string;
   sleepContinuityAction: (q?: { actor?: string }) => string;
@@ -2297,7 +2317,7 @@ export type FederationEndpoints = {
 
 export function defaultFederationEndpoints(): FederationEndpoints {
   return {
-    status: () => "/federation/status",
+    status: (q) => `/federation/status${buildQuery({ actor: q?.actor })}`,
     completionReview: () => "/federation/completion-review",
     sleepContinuityRunbook: () => "/federation/sleep-continuity-runbook",
     sleepContinuityAction: (q) => `/federation/sleep-continuity-action${buildQuery({ actor: q?.actor })}`,
@@ -2368,8 +2388,8 @@ export class FederationClient {
     return `${this.baseUrl}${path}`;
   }
 
-  async getStatus(opts?: { signal?: AbortSignal; timeoutMs?: number }): Promise<FederationStage16Status> {
-    const json = await fetchJson(this.url(this.endpoints.status()), {
+  async getStatus(opts?: { actor?: string; signal?: AbortSignal; timeoutMs?: number }): Promise<FederationStage16Status> {
+    const json = await fetchJson(this.url(this.endpoints.status({ actor: opts?.actor })), {
       method: "GET",
       signal: opts?.signal,
       timeoutMs: opts?.timeoutMs ?? this.defaultTimeoutMs,

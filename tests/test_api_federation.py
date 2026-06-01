@@ -1374,6 +1374,14 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
         status["sleep_continuity_confirmation_receipt_command_requires_scope"]
         == "federation.stage16.sleep_resume.confirmation.write"
     )
+    assert status["sleep_continuity_confirmation_receipt_requested_actor"] == ""
+    assert status["sleep_continuity_confirmation_receipt_requested_actor_ready"] is False
+    assert status["sleep_continuity_confirmation_receipt_actor"] == ""
+    assert status["sleep_continuity_confirmation_receipt_actor_bound"] is False
+    assert (
+        status["sleep_continuity_confirmation_receipt_actor_placeholder"]
+        == "<actor_with_federation.stage16.sleep_resume.confirmation.write>"
+    )
     assert status["sleep_continuity_confirmation_receipt_command_requires_actor_substitution"] is True
     assert (
         status["sleep_continuity_confirmation_receipt_command_next_readback_route"]
@@ -1385,6 +1393,20 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert status["sleep_continuity_confirmation_receipt_command_marks_stage16_closed"] is False
     assert status["sleep_continuity_confirmation_receipt_command_projection_only"] is True
     assert status["next_smallest_truthful_gap"] == "stage16_sleep_resume_confirmation_receipt"
+
+    actor_bound_status = client.get("/federation/status?actor=test.federation.sleep").json()
+    assert actor_bound_status["stage16_status"] == "stage16_contracts_ready_completion_blocked"
+    assert actor_bound_status["sleep_continuity_confirmation_receipt_requested_actor"] == "test.federation.sleep"
+    assert actor_bound_status["sleep_continuity_confirmation_receipt_requested_actor_ready"] is True
+    assert actor_bound_status["sleep_continuity_confirmation_receipt_actor"] == "test.federation.sleep"
+    assert actor_bound_status["sleep_continuity_confirmation_receipt_actor_bound"] is True
+    assert actor_bound_status["sleep_continuity_confirmation_receipt_actor_placeholder"] == ""
+    assert actor_bound_status["sleep_continuity_confirmation_receipt_command_requires_actor_substitution"] is False
+    assert "actor = 'test.federation.sleep'" in actor_bound_status["sleep_continuity_confirmation_receipt_command"]
+    assert str(pre_sleep_path.resolve()) in actor_bound_status["sleep_continuity_confirmation_receipt_command"]
+    assert actor_bound_status["sleep_continuity_confirmation_receipt_command_records_receipt"] is True
+    assert actor_bound_status["sleep_continuity_confirmation_receipt_command_writes_evidence"] is False
+    assert actor_bound_status["sleep_continuity_confirmation_receipt_command_marks_stage16_closed"] is False
 
     action = client.get("/federation/sleep-continuity-action").json()
     assert action["status"] == "capture_post_resume_evidence"
