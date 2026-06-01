@@ -147,6 +147,7 @@ export type FederationStage16Status = {
   sleep_continuity_next_step?: string;
   ready_count: number;
   required_count: number;
+  routes: Record<string, string>;
   next_smallest_truthful_gap?: string;
 };
 
@@ -178,6 +179,7 @@ export type FederationLiveRuntimeReadbacks = {
   live_runtime_readback_ready: boolean;
   missing_readbacks: string[];
   checks: FederationLiveRuntimeReadbackCheck[];
+  routes: Record<string, string>;
   next_smallest_truthful_gap?: string;
 };
 
@@ -196,6 +198,7 @@ export type FederationCompletionReview = {
   required_count: number;
   live_ready_count: number;
   live_required_count: number;
+  routes: Record<string, string>;
   next_smallest_truthful_gap?: string;
 };
 
@@ -235,6 +238,7 @@ export type FederationStage16ClosureDecisions = {
   grants_mutation_authority: boolean;
   latest_receipt?: FederationStage16ClosureReceipt;
   items: FederationStage16ClosureReceipt[];
+  routes: Record<string, string>;
   next_smallest_truthful_gap?: string;
 };
 
@@ -291,6 +295,7 @@ export type FederationSleepContinuityRunbook = {
   grants_execution_authority: boolean;
   grants_mutation_authority: boolean;
   marks_stage16_closed: boolean;
+  routes: Record<string, string>;
   next_smallest_truthful_gap?: string;
 };
 
@@ -362,6 +367,7 @@ export type FederationSleepContinuityActionReadback = {
   grants_execution_authority: boolean;
   grants_mutation_authority: boolean;
   marks_stage16_closed: boolean;
+  routes: Record<string, string>;
   governance?: Record<string, unknown>;
   next_smallest_truthful_gap?: string;
 };
@@ -419,6 +425,17 @@ function safeBoolean(v: unknown, fallback = false): boolean {
 function stringList(v: unknown): string[] {
   if (!Array.isArray(v)) return [];
   return v.map((x) => safeString(x)).filter((x) => x.length > 0);
+}
+
+function stringRecord(v: unknown): Record<string, string> {
+  if (!isRecord(v)) return {};
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(v)) {
+    const safeKey = safeString(key);
+    const safeValue = safeString(value);
+    if (safeKey && safeValue) out[safeKey] = safeValue;
+  }
+  return out;
 }
 
 function buildQuery(params: Record<string, unknown>): string {
@@ -693,6 +710,7 @@ export function parseFederationStage16Status(raw: unknown): FederationStage16Sta
     sleep_continuity_next_step: optionalString(body.sleep_continuity_next_step),
     ready_count: safeNumber(body.ready_count, 0),
     required_count: safeNumber(body.required_count, 0),
+    routes: stringRecord(body.routes),
     next_smallest_truthful_gap: optionalString(body.next_smallest_truthful_gap),
   };
 }
@@ -735,6 +753,7 @@ export function parseFederationLiveRuntimeReadbacks(raw: unknown): FederationLiv
     live_runtime_readback_ready: safeBoolean(body.live_runtime_readback_ready),
     missing_readbacks: stringList(body.missing_readbacks),
     checks,
+    routes: stringRecord(body.routes),
     next_smallest_truthful_gap: optionalString(body.next_smallest_truthful_gap),
   };
 }
@@ -756,6 +775,7 @@ export function parseFederationCompletionReview(raw: unknown): FederationComplet
     required_count: safeNumber(body.required_count, 0),
     live_ready_count: safeNumber(body.live_ready_count, 0),
     live_required_count: safeNumber(body.live_required_count, 0),
+    routes: stringRecord(body.routes),
     next_smallest_truthful_gap: optionalString(body.next_smallest_truthful_gap),
   };
 }
@@ -810,6 +830,7 @@ export function parseFederationStage16ClosureDecisions(raw: unknown): Federation
     grants_mutation_authority: safeBoolean(body.grants_mutation_authority),
     latest_receipt: latestReceipt ?? undefined,
     items,
+    routes: stringRecord(body.routes),
     next_smallest_truthful_gap: optionalString(body.next_smallest_truthful_gap),
   };
 }
@@ -879,6 +900,7 @@ export function parseFederationSleepContinuityRunbook(raw: unknown): FederationS
     grants_execution_authority: safeBoolean(body.grants_execution_authority),
     grants_mutation_authority: safeBoolean(body.grants_mutation_authority),
     marks_stage16_closed: safeBoolean(body.marks_stage16_closed),
+    routes: stringRecord(body.routes),
     next_smallest_truthful_gap: optionalString(body.next_smallest_truthful_gap),
   };
 }
@@ -923,6 +945,7 @@ export function parseFederationSleepContinuityAction(raw: unknown): FederationSl
     grants_execution_authority: safeBoolean(body.grants_execution_authority),
     grants_mutation_authority: safeBoolean(body.grants_mutation_authority),
     marks_stage16_closed: safeBoolean(body.marks_stage16_closed),
+    routes: stringRecord(body.routes),
     governance: isRecord(body.governance) ? body.governance : undefined,
     next_smallest_truthful_gap: optionalString(body.next_smallest_truthful_gap),
   };

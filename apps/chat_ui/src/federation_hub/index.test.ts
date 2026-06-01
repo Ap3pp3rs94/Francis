@@ -294,6 +294,12 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
         grants_execution_authority: false,
         grants_mutation_authority: false,
         marks_stage16_closed: false,
+        routes: {
+          sleep_continuity_action: "/federation/sleep-continuity-action",
+          sleep_continuity_runbook: "/federation/sleep-continuity-runbook",
+          stage_closure_decision: "/federation/stage-closure-decision",
+          ignored_number: 123,
+        },
         governance: {
           read_only: true,
           action_projection_only: true,
@@ -448,6 +454,10 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
     assert.equal(action.governance?.prior_live_readback_blockers_take_precedence, true);
     assert.equal(action.governance?.does_not_run_selected_command, true);
     assert.equal(action.next_smallest_truthful_gap, "stage16_live_federation_runtime_readback");
+    assert.equal(action.routes.sleep_continuity_action, "/federation/sleep-continuity-action");
+    assert.equal(action.routes.sleep_continuity_runbook, "/federation/sleep-continuity-runbook");
+    assert.equal(action.routes.stage_closure_decision, "/federation/stage-closure-decision");
+    assert.equal(action.routes.ignored_number, undefined);
 
     assert.equal(closure.status, "empty");
     assert.equal(closure.count, 0);
@@ -526,6 +536,12 @@ test("federation sleep-continuity action parser preserves selected read-only ste
     grants_execution_authority: false,
     grants_mutation_authority: false,
     marks_stage16_closed: false,
+    routes: {
+      sleep_continuity_action: "/federation/sleep-continuity-action",
+      sleep_continuity_runbook: "/federation/sleep-continuity-runbook",
+      stage_closure_decisions: "/federation/stage-closure-decisions",
+      malformed: false,
+    },
     governance: {
       read_only: true,
       action_projection_only: true,
@@ -545,6 +561,10 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   assert.equal(action.writes_evidence, false);
   assert.equal(action.runs_shell, false);
   assert.equal(action.grants_execution_authority, false);
+  assert.equal(action.routes.sleep_continuity_action, "/federation/sleep-continuity-action");
+  assert.equal(action.routes.sleep_continuity_runbook, "/federation/sleep-continuity-runbook");
+  assert.equal(action.routes.stage_closure_decisions, "/federation/stage-closure-decisions");
+  assert.equal(action.routes.malformed, undefined);
   assert.equal(action.governance?.does_not_post_selected_route, true);
 
   const presentation = presentFederationSleepContinuityAction(action);
