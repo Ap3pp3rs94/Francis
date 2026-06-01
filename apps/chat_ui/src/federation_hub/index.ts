@@ -415,6 +415,26 @@ export type FederationSleepContinuityOperatorSleepResumeGate = {
   projection_marks_stage16_closed: boolean;
 };
 
+export type FederationSleepContinuityOperatorConfirmationHandoff = {
+  status?: string;
+  selected_step_id?: string;
+  required_confirmation_requirements: string[];
+  operator_confirmation_source_required?: string;
+  operator_confirmation_pending: boolean;
+  confirmation_blocker?: string;
+  pre_sleep_evidence_path?: string;
+  pre_sleep_recorded_ts: number;
+  must_sleep_after_pre_sleep_recorded_ts: boolean;
+  must_resume_before_post_resume_capture: boolean;
+  post_resume_capture_command_ready_after_confirmation: boolean;
+  post_resume_capture_command?: string;
+  post_resume_capture_copyable_command?: string;
+  should_not_run_before_confirmation: boolean;
+  operator_terminal_command_ready: boolean;
+  readback_routes: Record<string, string>;
+  proof_boundary: Record<string, boolean>;
+};
+
 export type FederationSleepContinuityAfterManualExecutionReadback = {
   status?: string;
   selected_step_id?: string;
@@ -474,6 +494,7 @@ export type FederationSleepContinuityPresentation = {
   selected_action_readiness?: FederationSleepContinuitySelectedActionReadiness;
   operator_terminal_invocation?: FederationSleepContinuityOperatorTerminalInvocation;
   operator_sleep_resume_gate?: FederationSleepContinuityOperatorSleepResumeGate;
+  operator_confirmation_handoff?: FederationSleepContinuityOperatorConfirmationHandoff;
   after_manual_execution_readback?: FederationSleepContinuityAfterManualExecutionReadback;
   writes_evidence_when_run: boolean;
   writes_receipts_when_run: boolean;
@@ -517,6 +538,7 @@ export type FederationSleepContinuityActionReadback = {
   selected_action_readiness?: FederationSleepContinuitySelectedActionReadiness;
   operator_terminal_invocation?: FederationSleepContinuityOperatorTerminalInvocation;
   operator_sleep_resume_gate?: FederationSleepContinuityOperatorSleepResumeGate;
+  operator_confirmation_handoff?: FederationSleepContinuityOperatorConfirmationHandoff;
   after_manual_execution_readback?: FederationSleepContinuityAfterManualExecutionReadback;
   writes_evidence_when_run: boolean;
   writes_receipts_when_run: boolean;
@@ -600,6 +622,16 @@ function stringRecord(v: unknown): Record<string, string> {
     const safeKey = safeString(key);
     const safeValue = safeString(value);
     if (safeKey && safeValue) out[safeKey] = safeValue;
+  }
+  return out;
+}
+
+function booleanRecord(v: unknown): Record<string, boolean> {
+  if (!isRecord(v)) return {};
+  const out: Record<string, boolean> = {};
+  for (const [key, value] of Object.entries(v)) {
+    const safeKey = safeString(key);
+    if (safeKey && typeof value === "boolean") out[safeKey] = value;
   }
   return out;
 }
@@ -703,6 +735,33 @@ function parseFederationSleepContinuityOperatorSleepResumeGate(
     projection_writes_evidence: safeBoolean(raw.projection_writes_evidence),
     projection_writes_receipts: safeBoolean(raw.projection_writes_receipts),
     projection_marks_stage16_closed: safeBoolean(raw.projection_marks_stage16_closed),
+  };
+}
+
+function parseFederationSleepContinuityOperatorConfirmationHandoff(
+  raw: unknown,
+): FederationSleepContinuityOperatorConfirmationHandoff | undefined {
+  if (!isRecord(raw)) return undefined;
+  return {
+    status: optionalString(raw.status),
+    selected_step_id: optionalString(raw.selected_step_id),
+    required_confirmation_requirements: stringList(raw.required_confirmation_requirements),
+    operator_confirmation_source_required: optionalString(raw.operator_confirmation_source_required),
+    operator_confirmation_pending: safeBoolean(raw.operator_confirmation_pending),
+    confirmation_blocker: optionalString(raw.confirmation_blocker),
+    pre_sleep_evidence_path: optionalString(raw.pre_sleep_evidence_path),
+    pre_sleep_recorded_ts: safeNumber(raw.pre_sleep_recorded_ts, 0),
+    must_sleep_after_pre_sleep_recorded_ts: safeBoolean(raw.must_sleep_after_pre_sleep_recorded_ts),
+    must_resume_before_post_resume_capture: safeBoolean(raw.must_resume_before_post_resume_capture),
+    post_resume_capture_command_ready_after_confirmation: safeBoolean(
+      raw.post_resume_capture_command_ready_after_confirmation,
+    ),
+    post_resume_capture_command: optionalString(raw.post_resume_capture_command),
+    post_resume_capture_copyable_command: optionalString(raw.post_resume_capture_copyable_command),
+    should_not_run_before_confirmation: safeBoolean(raw.should_not_run_before_confirmation),
+    operator_terminal_command_ready: safeBoolean(raw.operator_terminal_command_ready),
+    readback_routes: stringRecord(raw.readback_routes),
+    proof_boundary: booleanRecord(raw.proof_boundary),
   };
 }
 
@@ -1275,6 +1334,9 @@ export function parseFederationSleepContinuityAction(raw: unknown): FederationSl
       body.operator_terminal_invocation,
     ),
     operator_sleep_resume_gate: parseFederationSleepContinuityOperatorSleepResumeGate(body.operator_sleep_resume_gate),
+    operator_confirmation_handoff: parseFederationSleepContinuityOperatorConfirmationHandoff(
+      body.operator_confirmation_handoff,
+    ),
     after_manual_execution_readback: parseFederationSleepContinuityAfterManualExecutionReadback(
       body.after_manual_execution_readback,
     ),
@@ -1373,9 +1435,15 @@ function buildFederationSleepContinuityPresentation(
     operator_action_required: selectedStep?.operator_action_required ?? false,
     operator_confirmation_required: selectedStep?.operator_confirmation_required ?? false,
     operator_confirmation_requirements: [],
+    current_ready_to_run: opts.status.sleep_continuity_action_current_ready_to_run,
+    operator_confirmation_pending: opts.status.sleep_continuity_operator_confirmation_pending,
+    post_confirmation_ready_to_capture: opts.status.sleep_continuity_post_confirmation_ready_to_capture,
+    sleep_resume_confirmation_is_current_blocker:
+      opts.status.sleep_continuity_sleep_resume_confirmation_is_current_blocker,
     selected_action_readiness: undefined,
     operator_terminal_invocation: undefined,
     operator_sleep_resume_gate: undefined,
+    operator_confirmation_handoff: undefined,
     after_manual_execution_readback: undefined,
     writes_evidence_when_run: selectedStep?.writes_evidence_when_run ?? false,
     writes_receipts_when_run: selectedStep?.writes_receipts_when_run ?? false,
@@ -1484,6 +1552,7 @@ export function presentFederationSleepContinuityAction(
     selected_action_readiness: action.selected_action_readiness,
     operator_terminal_invocation: action.operator_terminal_invocation,
     operator_sleep_resume_gate: action.operator_sleep_resume_gate,
+    operator_confirmation_handoff: action.operator_confirmation_handoff,
     after_manual_execution_readback: action.after_manual_execution_readback,
     writes_evidence_when_run: action.writes_evidence_when_run || selectedStep?.writes_evidence_when_run === true,
     writes_receipts_when_run: action.writes_receipts_when_run || selectedStep?.writes_receipts_when_run === true,

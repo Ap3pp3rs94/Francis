@@ -53181,6 +53181,55 @@ Latest validation for Stage 16 sleep runbook selected action summary:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 sleep action exposes operator confirmation handoff
+
+Roadmap area: Stage 16 / Federation, workstation sleep-continuity operator
+handoff truthfulness.
+
+Material change:
+
+- `/federation/sleep-continuity-action` now exposes
+  `operator_confirmation_handoff`, a read-only projection that packages the
+  exact manual sleep/resume confirmation requirements, source requirement,
+  pre-sleep evidence anchor, post-resume capture command readiness after
+  confirmation, readback routes, and proof-boundary guards.
+- Federation Hub preserves and displays the confirmation handoff alongside the
+  terminal invocation and sleep/resume gate.
+- The handoff explicitly states that the projection does not infer sleep from
+  elapsed time, run shell, write evidence, write receipts, grant authority, or
+  mark Stage 16 closed.
+- This does not execute the post-resume evidence command, write evidence, write
+  receipts, write memory, infer workstation sleep/resume, or mark Stage 16
+  closed.
+- Stage 16 remains open until operator-confirmed live workstation sleep/resume
+  evidence and receipt-backed completion/closure gates are satisfied.
+
+Latest validation for Stage 16 sleep action operator confirmation handoff:
+
+- `python -m pytest tests/test_api_federation.py -q --tb=short`
+  Result: `passed; 20 passed`.
+- `npm run test -- federation_hub`
+  Result: `passed; 188 passed`.
+- `npm run build`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- Live readback via `TestClient` for `/federation/sleep-continuity-action`
+  Result: `passed;
+  handoff_status=waiting_for_operator_sleep_resume_confirmation,
+  handoff_pending=true,
+  handoff_after_confirmation=true,
+  does_not_run_shell=true,
+  marks_stage16_closed=false`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

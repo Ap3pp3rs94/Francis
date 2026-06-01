@@ -115,6 +115,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
   const selectedActionReadiness = presentation?.selected_action_readiness;
   const operatorTerminalInvocation = presentation?.operator_terminal_invocation;
   const operatorSleepResumeGate = presentation?.operator_sleep_resume_gate;
+  const operatorConfirmationHandoff = presentation?.operator_confirmation_handoff;
   const afterManualExecutionReadback = presentation?.after_manual_execution_readback;
   const runbookSelectedActionSummary = runbook?.selected_action_summary;
 
@@ -292,6 +293,54 @@ export function FederationHubPanel(props: { baseUrl: string }) {
                 {operatorTerminalInvocation.preconditions.map((precondition) => (
                   <span key={`federation-terminal-precondition-${precondition}`} style={badgeStyle("blocked")}>
                     {precondition}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {operatorConfirmationHandoff ? (
+          <div style={{ marginTop: 8 }}>
+            <div style={{ fontSize: 11, color: MUTED }}>
+              confirmation handoff <code>{codeValue(operatorConfirmationHandoff.status)}</code>
+              {" / "}pending <code>{yesNo(operatorConfirmationHandoff.operator_confirmation_pending)}</code>
+              {" / "}after confirmation{" "}
+              <code>{yesNo(operatorConfirmationHandoff.post_resume_capture_command_ready_after_confirmation)}</code>
+              {" / "}no shell{" "}
+              <code>{yesNo(Boolean(operatorConfirmationHandoff.proof_boundary.does_not_run_shell))}</code>
+            </div>
+            {operatorConfirmationHandoff.operator_confirmation_source_required ? (
+              <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
+                source <code>{operatorConfirmationHandoff.operator_confirmation_source_required}</code>
+              </div>
+            ) : null}
+            {operatorConfirmationHandoff.pre_sleep_evidence_path ? (
+              <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
+                pre evidence <code>{operatorConfirmationHandoff.pre_sleep_evidence_path}</code>
+              </div>
+            ) : null}
+            {operatorConfirmationHandoff.post_resume_capture_copyable_command ? (
+              <pre
+                style={{
+                  margin: "8px 0 0",
+                  padding: 10,
+                  borderRadius: 10,
+                  border: `1px solid ${PANEL_BORDER}`,
+                  background: "#101010",
+                  color: TEXT,
+                  whiteSpace: "pre-wrap",
+                  overflowWrap: "anywhere",
+                  fontSize: 11,
+                }}
+              >
+                {operatorConfirmationHandoff.post_resume_capture_copyable_command}
+              </pre>
+            ) : null}
+            {operatorConfirmationHandoff.required_confirmation_requirements.length ? (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                {operatorConfirmationHandoff.required_confirmation_requirements.map((requirement) => (
+                  <span key={`federation-confirmation-handoff-requirement-${requirement}`} style={badgeStyle("blocked")}>
+                    {requirement}
                   </span>
                 ))}
               </div>

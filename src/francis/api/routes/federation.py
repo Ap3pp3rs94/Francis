@@ -1531,6 +1531,69 @@ def _stage16_sleep_continuity_operator_sleep_resume_gate(
     }
 
 
+def _stage16_sleep_continuity_operator_confirmation_handoff(
+    *,
+    selected_step: dict[str, Any],
+    operator_terminal_invocation: dict[str, Any],
+    operator_sleep_resume_gate: dict[str, Any],
+    confirmation_requirements: list[str],
+) -> dict[str, Any]:
+    step_id = _safe_str(selected_step.get("id")).strip()
+    confirmation_required = bool(operator_sleep_resume_gate.get("confirmation_required"))
+    operator_confirmation_pending = bool(operator_sleep_resume_gate.get("operator_confirmation_pending"))
+    ready_after_confirmation = bool(operator_sleep_resume_gate.get("ready_after_operator_confirmation"))
+    if operator_confirmation_pending:
+        status = "waiting_for_operator_sleep_resume_confirmation"
+    elif confirmation_required:
+        status = "operator_confirmation_not_currently_runnable"
+    else:
+        status = "operator_confirmation_not_required_for_selected_step"
+    copyable_command = _safe_str(operator_terminal_invocation.get("copyable_command")).strip()
+    return {
+        "status": status,
+        "selected_step_id": step_id,
+        "required_confirmation_requirements": confirmation_requirements,
+        "operator_confirmation_source_required": "manual_operator_confirmation_after_physical_sleep_resume"
+        if confirmation_required
+        else "",
+        "operator_confirmation_pending": operator_confirmation_pending,
+        "confirmation_blocker": _safe_str(operator_sleep_resume_gate.get("confirmation_blocker")).strip(),
+        "pre_sleep_evidence_path": _safe_str(operator_sleep_resume_gate.get("pre_sleep_evidence_path")).strip(),
+        "pre_sleep_recorded_ts": int(operator_sleep_resume_gate.get("pre_sleep_recorded_ts") or 0),
+        "must_sleep_after_pre_sleep_recorded_ts": bool(
+            operator_sleep_resume_gate.get("must_sleep_after_pre_sleep_recorded_ts")
+        ),
+        "must_resume_before_post_resume_capture": bool(
+            operator_sleep_resume_gate.get("must_resume_before_post_resume_capture")
+        ),
+        "post_resume_capture_command_ready_after_confirmation": ready_after_confirmation,
+        "post_resume_capture_command": _safe_str(operator_terminal_invocation.get("command")).strip()
+        if step_id == "capture_post_resume_evidence"
+        else "",
+        "post_resume_capture_copyable_command": copyable_command if step_id == "capture_post_resume_evidence" else "",
+        "should_not_run_before_confirmation": bool(
+            operator_terminal_invocation.get("should_not_run_before_confirmation")
+        ),
+        "operator_terminal_command_ready": bool(operator_terminal_invocation.get("operator_terminal_command_ready")),
+        "readback_routes": {
+            "status": _federation_routes()["status"],
+            "sleep_continuity_action": _federation_routes()["sleep_continuity_action"],
+            "sleep_continuity_runbook": _federation_routes()["sleep_continuity_runbook"],
+            "completion_review": _federation_routes()["completion_review"],
+        },
+        "proof_boundary": {
+            "projection_only": True,
+            "requires_manual_operator_confirmation": confirmation_required,
+            "does_not_infer_sleep_from_delay": True,
+            "does_not_run_shell": True,
+            "does_not_write_evidence": True,
+            "does_not_write_receipts": True,
+            "does_not_mark_stage16_closed": True,
+            "does_not_grant_authority": True,
+        },
+    }
+
+
 def _stage16_sleep_continuity_after_manual_execution_readback(
     *,
     selected_step: dict[str, Any],
@@ -1713,6 +1776,12 @@ def stage16_sleep_continuity_action() -> dict[str, Any]:
         else {},
         confirmation_requirements=confirmation_requirements,
     )
+    operator_confirmation_handoff = _stage16_sleep_continuity_operator_confirmation_handoff(
+        selected_step=selected_step,
+        operator_terminal_invocation=operator_terminal_invocation,
+        operator_sleep_resume_gate=operator_sleep_resume_gate,
+        confirmation_requirements=confirmation_requirements,
+    )
     after_manual_execution_readback = _stage16_sleep_continuity_after_manual_execution_readback(
         selected_step=selected_step,
         selected_action_readiness=selected_action_readiness,
@@ -1766,6 +1835,7 @@ def stage16_sleep_continuity_action() -> dict[str, Any]:
         "selected_action_readiness": selected_action_readiness,
         "operator_terminal_invocation": operator_terminal_invocation,
         "operator_sleep_resume_gate": operator_sleep_resume_gate,
+        "operator_confirmation_handoff": operator_confirmation_handoff,
         "after_manual_execution_readback": after_manual_execution_readback,
         "writes_evidence_when_run": bool(selected_step.get("writes_evidence_when_run")),
         "writes_receipts_when_run": bool(selected_step.get("writes_receipts_when_run")),
@@ -1782,6 +1852,7 @@ def stage16_sleep_continuity_action() -> dict[str, Any]:
             "selected_action_readiness_projected": True,
             "operator_terminal_invocation_projected": True,
             "operator_sleep_resume_gate_projected": True,
+            "operator_confirmation_handoff_projected": True,
             "after_manual_execution_readback_projected": True,
             "does_not_run_selected_command": True,
             "does_not_post_selected_route": True,

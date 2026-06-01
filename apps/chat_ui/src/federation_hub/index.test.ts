@@ -672,6 +672,47 @@ test("federation sleep-continuity action parser preserves selected read-only ste
       projection_writes_receipts: false,
       projection_marks_stage16_closed: false,
     },
+    operator_confirmation_handoff: {
+      status: "waiting_for_operator_sleep_resume_confirmation",
+      selected_step_id: "capture_post_resume_evidence",
+      required_confirmation_requirements: [
+        "operator_confirms_workstation_entered_sleep_or_suspend_after_pre_sleep_evidence",
+        "operator_confirms_workstation_resumed_before_post_resume_capture",
+        "pre_sleep_evidence_path_matches_latest_pre_sleep_artifact",
+        "post_resume_capture_uses_operator_confirmed_sleep_resume_flag",
+      ],
+      operator_confirmation_source_required: "manual_operator_confirmation_after_physical_sleep_resume",
+      operator_confirmation_pending: true,
+      confirmation_blocker: "operator_confirmed_sleep_resume_missing",
+      pre_sleep_evidence_path:
+        "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json",
+      pre_sleep_recorded_ts: 1_800_030_000,
+      must_sleep_after_pre_sleep_recorded_ts: true,
+      must_resume_before_post_resume_capture: true,
+      post_resume_capture_command_ready_after_confirmation: true,
+      post_resume_capture_command:
+        'scripts/federation-stage16-sleep-continuity-evidence.ps1 -Mode PostResume -CommitEvidence -PreSleepEvidencePath "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json" -OperatorConfirmedSleepResume',
+      post_resume_capture_copyable_command:
+        'Set-Location -LiteralPath \'D:\\Francis\'; scripts/federation-stage16-sleep-continuity-evidence.ps1 -Mode PostResume -CommitEvidence -PreSleepEvidencePath "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json" -OperatorConfirmedSleepResume',
+      should_not_run_before_confirmation: true,
+      operator_terminal_command_ready: true,
+      readback_routes: {
+        status: "/federation/status",
+        sleep_continuity_action: "/federation/sleep-continuity-action",
+        sleep_continuity_runbook: "/federation/sleep-continuity-runbook",
+        completion_review: "/federation/completion-review",
+      },
+      proof_boundary: {
+        projection_only: true,
+        requires_manual_operator_confirmation: true,
+        does_not_infer_sleep_from_delay: true,
+        does_not_run_shell: true,
+        does_not_write_evidence: true,
+        does_not_write_receipts: true,
+        does_not_mark_stage16_closed: true,
+        does_not_grant_authority: true,
+      },
+    },
     after_manual_execution_readback: {
       status: "manual_execution_waiting_for_operator_confirmation",
       selected_step_id: "capture_post_resume_evidence",
@@ -820,6 +861,29 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   assert.equal(action.operator_sleep_resume_gate?.does_not_infer_sleep_from_delay, true);
   assert.equal(action.operator_sleep_resume_gate?.projection_runs_shell, false);
   assert.equal(action.operator_sleep_resume_gate?.projection_marks_stage16_closed, false);
+  assert.equal(action.operator_confirmation_handoff?.status, "waiting_for_operator_sleep_resume_confirmation");
+  assert.equal(action.operator_confirmation_handoff?.selected_step_id, "capture_post_resume_evidence");
+  assert.deepEqual(
+    action.operator_confirmation_handoff?.required_confirmation_requirements,
+    action.operator_confirmation_requirements,
+  );
+  assert.equal(
+    action.operator_confirmation_handoff?.operator_confirmation_source_required,
+    "manual_operator_confirmation_after_physical_sleep_resume",
+  );
+  assert.equal(action.operator_confirmation_handoff?.operator_confirmation_pending, true);
+  assert.equal(action.operator_confirmation_handoff?.confirmation_blocker, "operator_confirmed_sleep_resume_missing");
+  assert.equal(action.operator_confirmation_handoff?.pre_sleep_recorded_ts, 1_800_030_000);
+  assert.equal(action.operator_confirmation_handoff?.must_sleep_after_pre_sleep_recorded_ts, true);
+  assert.equal(action.operator_confirmation_handoff?.must_resume_before_post_resume_capture, true);
+  assert.equal(action.operator_confirmation_handoff?.post_resume_capture_command_ready_after_confirmation, true);
+  assert.equal(action.operator_confirmation_handoff?.post_resume_capture_command?.includes("-OperatorConfirmedSleepResume"), true);
+  assert.equal(action.operator_confirmation_handoff?.should_not_run_before_confirmation, true);
+  assert.equal(action.operator_confirmation_handoff?.operator_terminal_command_ready, true);
+  assert.equal(action.operator_confirmation_handoff?.readback_routes.status, "/federation/status");
+  assert.equal(action.operator_confirmation_handoff?.proof_boundary.projection_only, true);
+  assert.equal(action.operator_confirmation_handoff?.proof_boundary.does_not_run_shell, true);
+  assert.equal(action.operator_confirmation_handoff?.proof_boundary.does_not_mark_stage16_closed, true);
   assert.equal(
     action.after_manual_execution_readback?.status,
     "manual_execution_waiting_for_operator_confirmation",
@@ -936,6 +1000,13 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   assert.equal(presentation.operator_sleep_resume_gate?.post_confirmation_ready_to_capture, true);
   assert.equal(presentation.operator_sleep_resume_gate?.ready_after_operator_confirmation, true);
   assert.equal(presentation.operator_sleep_resume_gate?.does_not_infer_sleep_from_delay, true);
+  assert.equal(presentation.operator_confirmation_handoff?.status, "waiting_for_operator_sleep_resume_confirmation");
+  assert.equal(presentation.operator_confirmation_handoff?.operator_confirmation_pending, true);
+  assert.equal(
+    presentation.operator_confirmation_handoff?.post_resume_capture_command_ready_after_confirmation,
+    true,
+  );
+  assert.equal(presentation.operator_confirmation_handoff?.proof_boundary.does_not_run_shell, true);
   assert.equal(
     presentation.after_manual_execution_readback?.status,
     "manual_execution_waiting_for_operator_confirmation",

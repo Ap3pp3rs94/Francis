@@ -1392,6 +1392,36 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert sleep_gate["projection_writes_evidence"] is False
     assert sleep_gate["projection_writes_receipts"] is False
     assert sleep_gate["projection_marks_stage16_closed"] is False
+    confirmation_handoff = action["operator_confirmation_handoff"]
+    assert confirmation_handoff["status"] == "waiting_for_operator_sleep_resume_confirmation"
+    assert confirmation_handoff["selected_step_id"] == "capture_post_resume_evidence"
+    assert confirmation_handoff["required_confirmation_requirements"] == action["operator_confirmation_requirements"]
+    assert (
+        confirmation_handoff["operator_confirmation_source_required"]
+        == "manual_operator_confirmation_after_physical_sleep_resume"
+    )
+    assert confirmation_handoff["operator_confirmation_pending"] is True
+    assert confirmation_handoff["confirmation_blocker"] == "operator_confirmed_sleep_resume_missing"
+    assert confirmation_handoff["pre_sleep_evidence_path"] == str(pre_sleep_path.resolve())
+    assert confirmation_handoff["pre_sleep_recorded_ts"] == 1_800_030_000
+    assert confirmation_handoff["must_sleep_after_pre_sleep_recorded_ts"] is True
+    assert confirmation_handoff["must_resume_before_post_resume_capture"] is True
+    assert confirmation_handoff["post_resume_capture_command_ready_after_confirmation"] is True
+    assert confirmation_handoff["post_resume_capture_command"] == action["primary_command"]
+    assert action["primary_command"] in confirmation_handoff["post_resume_capture_copyable_command"]
+    assert confirmation_handoff["should_not_run_before_confirmation"] is True
+    assert confirmation_handoff["operator_terminal_command_ready"] is True
+    assert confirmation_handoff["readback_routes"]["status"] == "/federation/status"
+    assert confirmation_handoff["readback_routes"]["sleep_continuity_action"] == "/federation/sleep-continuity-action"
+    assert confirmation_handoff["readback_routes"]["completion_review"] == "/federation/completion-review"
+    assert confirmation_handoff["proof_boundary"]["projection_only"] is True
+    assert confirmation_handoff["proof_boundary"]["requires_manual_operator_confirmation"] is True
+    assert confirmation_handoff["proof_boundary"]["does_not_infer_sleep_from_delay"] is True
+    assert confirmation_handoff["proof_boundary"]["does_not_run_shell"] is True
+    assert confirmation_handoff["proof_boundary"]["does_not_write_evidence"] is True
+    assert confirmation_handoff["proof_boundary"]["does_not_write_receipts"] is True
+    assert confirmation_handoff["proof_boundary"]["does_not_mark_stage16_closed"] is True
+    assert confirmation_handoff["proof_boundary"]["does_not_grant_authority"] is True
     after_run = action["after_manual_execution_readback"]
     assert after_run["status"] == "manual_execution_waiting_for_operator_confirmation"
     assert after_run["selected_step_id"] == "capture_post_resume_evidence"
@@ -1424,6 +1454,7 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert action["operator_confirmation_required"] is True
     assert action["governance"]["confirmation_requirements_projected"] is True
     assert action["governance"]["operator_sleep_resume_gate_projected"] is True
+    assert action["governance"]["operator_confirmation_handoff_projected"] is True
     assert action["writes_evidence_when_run"] is True
     assert action["writes_receipts_when_run"] is False
     assert action["mutation_available_from_ui"] is False
@@ -1562,6 +1593,24 @@ def test_federation_stage16_sleep_continuity_runbook_uses_linked_post_resume_mar
     assert sleep_gate["does_not_infer_sleep_from_delay"] is True
     assert sleep_gate["projection_only"] is True
     assert sleep_gate["projection_runs_shell"] is False
+    confirmation_handoff = action["operator_confirmation_handoff"]
+    assert confirmation_handoff["status"] == "operator_confirmation_not_required_for_selected_step"
+    assert confirmation_handoff["selected_step_id"] == "commit_sleep_continuity_readback"
+    assert confirmation_handoff["required_confirmation_requirements"] == []
+    assert confirmation_handoff["operator_confirmation_source_required"] == ""
+    assert confirmation_handoff["operator_confirmation_pending"] is False
+    assert confirmation_handoff["confirmation_blocker"] == ""
+    assert confirmation_handoff["pre_sleep_recorded_ts"] == 1_800_030_000
+    assert confirmation_handoff["must_sleep_after_pre_sleep_recorded_ts"] is False
+    assert confirmation_handoff["must_resume_before_post_resume_capture"] is False
+    assert confirmation_handoff["post_resume_capture_command_ready_after_confirmation"] is False
+    assert confirmation_handoff["post_resume_capture_command"] == ""
+    assert confirmation_handoff["post_resume_capture_copyable_command"] == ""
+    assert confirmation_handoff["should_not_run_before_confirmation"] is False
+    assert confirmation_handoff["operator_terminal_command_ready"] is True
+    assert confirmation_handoff["proof_boundary"]["projection_only"] is True
+    assert confirmation_handoff["proof_boundary"]["requires_manual_operator_confirmation"] is False
+    assert confirmation_handoff["proof_boundary"]["does_not_mark_stage16_closed"] is True
     after_run = action["after_manual_execution_readback"]
     assert after_run["status"] == "manual_execution_projection_ready"
     assert after_run["selected_step_id"] == "commit_sleep_continuity_readback"
