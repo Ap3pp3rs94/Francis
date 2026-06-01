@@ -50550,6 +50550,69 @@ Latest validation for Stage 15 failure semantics:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-31 - Stage 15 Swarm completion review and closure receipt are recorded
+
+Roadmap area: Stage 15 / Swarm, completion review and governed stage closure.
+
+Material change:
+
+- Added read-only `GET /swarm/completion-review`.
+- Added `GET /swarm/stage-closure-decisions`.
+- Added permission/delegation-scoped `POST /swarm/stage-closure-decision`.
+- The completion review checks Stage 14 closure, unit roles, messaging model,
+  delegation etiquette, trace continuity, failure semantics, all-deliverables
+  readiness, one-Francis presence preservation, visible/auditable handoffs, and
+  specialization without authority multiplication.
+- Stage 15 closure decisions now accept Austin's full-operator delegation for
+  `codex.builder` when `FRANCIS_ENV_PROFILE` is `dev` or `workstation`, the
+  delegation is active, and `stage_closure_allowed=true`.
+- The live Stage 15 closure receipt was written through
+  `POST /swarm/stage-closure-decision` with `actor=codex.builder`,
+  `authority=delegated_operator`, delegation
+  `opdel_2a7e1182b90a5c98bea67233661065ba`, and receipt id
+  `swarm_stage15_closure_a630fe25a980`.
+- Current readback reports `status=stage15_closed_by_receipt`,
+  `stage15_closed_by_receipt=true`, `stage_closure_decision_required=false`,
+  and `next_smallest_truthful_gap=stage15_ledger_closure`.
+- The closure receipt does not mutate runtime stage state, write memory, run
+  tools, run shell, run git, launch browsers, capture the screen, or grant
+  execution/mutation authority.
+
+Latest validation for Stage 15 completion and closure:
+
+- Live local `TestClient` readback of GET `/swarm/completion-review`, POST
+  `/swarm/stage-closure-decision`, GET `/swarm/stage-closure-decisions`, and
+  GET `/swarm/status`.
+  Result: `before_status=ready; before_ready=true; before_required=true;
+  decision_status=recorded; receipt_id=swarm_stage15_closure_a630fe25a980;
+  authority=delegated_operator;
+  delegation_id=opdel_2a7e1182b90a5c98bea67233661065ba; closed=true;
+  readback_status=closed; readback_count=1;
+  after_status=stage15_closed_by_receipt;
+  after_next_gap=stage15_ledger_closure`.
+- Direct local `TestClient` readback after receipt recording.
+  Result: `status=stage15_closed_by_receipt; stage15_closed=true;
+  latest_closure=swarm_stage15_closure_a630fe25a980;
+  status_next_gap=stage15_ledger_closure; review_ready=true;
+  closure_required=false; review_next_gap=stage15_ledger_closure`.
+- `python -m pytest tests/test_api_swarm.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 9 passed`
+- `python -m mypy src/francis/swarm.py src/francis/api/routes/swarm.py
+  src/francis/api/app.py`
+  Result: `passed`
+- `python -m ruff check src/francis/swarm.py src/francis/api/routes/swarm.py
+  src/francis/api/app.py tests/test_api_swarm.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed; non-fatal Ruff cache write warning observed`
+- `python -m ruff format --check src/francis/swarm.py
+  src/francis/api/routes/swarm.py src/francis/api/app.py
+  tests/test_api_swarm.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

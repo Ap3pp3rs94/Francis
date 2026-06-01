@@ -391,3 +391,154 @@ def test_swarm_failure_semantics_contract_bounds_retry_and_deadletter(
     assert states["timed_out"]["terminal"] is True
     assert all(item["authority_granted"] is False for item in states.values())
     assert all(item["executes_action"] is False for item in states.values())
+
+
+def test_swarm_completion_review_is_ready_but_does_not_close_stage(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage14_closure_receipt(data_root)
+
+    client = TestClient(create_app())
+    review = client.get("/swarm/completion-review").json()
+
+    assert review["ok"] is True
+    assert review["kind"] == "francis.stage15.swarm.completion_review"
+    assert review["stage"] == "Stage 15 / Swarm"
+    assert review["status"] == "ready"
+    assert review["stage15_completion_review_ready"] is True
+    assert review["stage_closure_decision_required"] is True
+    assert review["stage14_closed_by_receipt"] is True
+    assert review["stage15_closed_by_receipt"] is False
+    assert review["ready_count"] == 6
+    assert review["required_count"] == 6
+    assert review["blockers"] == []
+    assert review["done_criteria"]["units_collaborate_safely"] is True
+    assert review["done_criteria"]["handoffs_visible_and_auditable"] is True
+    assert review["done_criteria"]["one_francis_presence_preserved"] is True
+    assert review["done_criteria"]["specialization_adds_precision_instead_of_chaos"] is True
+    assert review["writes_receipts"] is False
+    assert review["writes_memory"] is False
+    assert review["runs_tools"] is False
+    assert review["runs_shell"] is False
+    assert review["runs_git"] is False
+    assert review["launches_browser"] is False
+    assert review["captures_screen"] is False
+    assert review["grants_execution_authority"] is False
+    assert review["grants_mutation_authority"] is False
+    assert review["marks_stage_closed"] is False
+    assert review["governance"]["completion_review_only"] is True
+    assert review["governance"]["stage_closure_decision_required"] is True
+    assert review["governance"]["does_not_mark_stage_closed"] is True
+    assert review["next_smallest_truthful_gap"] == "stage15_operator_stage_closure_decision"
+    assert all(item["passed"] is True for item in review["checks"])
+
+
+def test_swarm_stage15_closure_uses_full_operator_delegation(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_ENV_PROFILE", "dev")
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+    _write_stage14_closure_receipt(data_root)
+
+    from francis.governance import approvals
+
+    delegation = approvals.create_operator_delegation_receipt(
+        delegating_actor="Austin",
+        receiving_actor="codex.builder",
+        granted_scope=[approvals.FULL_OPERATOR_AUTHORITY_SCOPE],
+        reason="austin_grants_codex_full_operator_authority",
+        expiry_policy="active_until_explicit_revocation",
+        governance_overrides={
+            "operator_decision_record": True,
+            "delegated_operator_authority": True,
+            "subdelegation_allowed": False,
+            "production_allowed": False,
+            "regulated_profile_allowed": False,
+            "memory_write": True,
+            "workflow_edits_allowed": True,
+            "stage_closure_allowed": True,
+        },
+    )
+    delegation_id = str(delegation["delegation_id"])
+
+    client = TestClient(create_app())
+    empty = client.get("/swarm/stage-closure-decisions").json()
+    assert empty["status"] == "empty"
+    assert empty["stage15_closed_by_receipt"] is False
+    assert empty["next_smallest_truthful_gap"] == "stage15_completion_review"
+
+    denied = client.post(
+        "/swarm/stage-closure-decision",
+        json={
+            "actor": "missing.scope",
+            "reason": "attempt without stage15 closure scope",
+            "decision": "close_stage15",
+        },
+    ).json()
+    assert denied["status"] == "denied"
+    assert denied["stage15_closed_by_receipt"] is False
+    assert denied["writes_receipt"] is False
+    assert denied["governance"]["required_scope"] == "swarm.stage15.closure.write"
+
+    closure = client.post(
+        "/swarm/stage-closure-decision",
+        json={
+            "actor": "codex.builder",
+            "reason": "stage15_closure_under_austin_delegation",
+            "decision": "close_stage15",
+            "notes": "completion review ready after failure semantics contract",
+        },
+    ).json()
+
+    assert closure["ok"] is True
+    assert closure["kind"] == "francis.stage15.swarm.stage15_closure_decision.record"
+    assert closure["status"] == "recorded"
+    assert closure["receipt_id"].startswith("swarm_stage15_closure_")
+    assert closure["decision"] == "close_stage15"
+    assert closure["authority"] == "delegated_operator"
+    assert closure["delegation_id"] == delegation_id
+    assert closure["delegated_operator_approval"] is True
+    assert closure["stage15_closed_by_receipt"] is True
+    assert closure["completion_review_ready"] is True
+    assert closure["writes_receipt"] is True
+    assert closure["writes_memory"] is False
+    assert closure["runs_tools"] is False
+    assert closure["runs_shell"] is False
+    assert closure["runs_git"] is False
+    assert closure["launches_browser"] is False
+    assert closure["captures_screen"] is False
+    assert closure["grants_execution_authority"] is False
+    assert closure["grants_mutation_authority"] is False
+    assert closure["governance"]["delegated_operator_authority"] is True
+    assert closure["governance"]["does_not_mutate_runtime_stage_state"] is True
+    assert closure["next_smallest_truthful_gap"] == "stage15_ledger_closure"
+
+    receipt = closure["receipt"]
+    assert receipt["actor"] == "codex.builder"
+    assert receipt["authority"] == "delegated_operator"
+    assert receipt["delegation_id"] == delegation_id
+    assert receipt["delegated_operator_approval"] is True
+    assert receipt["stage14_closure_receipt_id"] == "adversarial_hardening_stage14_closure_test"
+    assert receipt["done_criteria"]["units_collaborate_safely"] is True
+    assert receipt["done_criteria"]["handoffs_visible_and_auditable"] is True
+    assert receipt["done_criteria"]["one_francis_presence_preserved"] is True
+
+    readback = client.get("/swarm/stage-closure-decisions").json()
+    assert readback["status"] == "closed"
+    assert readback["latest_receipt_id"] == closure["receipt_id"]
+    assert readback["latest_decision"] == "close_stage15"
+    assert readback["stage15_closed_by_receipt"] is True
+    assert readback["items"][-1]["delegation_id"] == delegation_id
+    assert readback["next_smallest_truthful_gap"] == "stage15_ledger_closure"
+
+    status = client.get("/swarm/status").json()
+    assert status["status"] == "stage15_closed_by_receipt"
+    assert status["stage15_closed_by_receipt"] is True
+    assert status["stage15_latest_closure_receipt_id"] == closure["receipt_id"]
+    assert status["next_smallest_truthful_gap"] == "stage15_ledger_closure"

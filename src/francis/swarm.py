@@ -1,9 +1,15 @@
 from __future__ import annotations
 
-from typing import Any
+import json
+import time
+import uuid
+from pathlib import Path
+from typing import Any, Mapping
 
 from francis.adversarial_hardening import adversarial_hardening_stage14_operator_stage_closure_decision_readback
 from francis.collective.swarm import CollectiveLearning, EmergentBehavior, SwarmCoordinator
+from francis.kernel.paths import data_dir
+from francis.telemetry.audit import record as audit_record
 
 STAGE15_SWARM_STAGE = "Stage 15 / Swarm"
 SWARM_STATUS_KIND = "francis.stage15.swarm.status"
@@ -12,11 +18,17 @@ SWARM_MESSAGING_MODEL_CONTRACT_KIND = "francis.stage15.swarm.messaging_model_con
 SWARM_DELEGATION_ETIQUETTE_CONTRACT_KIND = "francis.stage15.swarm.delegation_etiquette_contract"
 SWARM_TRACE_CONTINUITY_CONTRACT_KIND = "francis.stage15.swarm.trace_continuity_contract"
 SWARM_FAILURE_SEMANTICS_CONTRACT_KIND = "francis.stage15.swarm.failure_semantics_contract"
+SWARM_COMPLETION_REVIEW_KIND = "francis.stage15.swarm.completion_review"
+SWARM_STAGE_CLOSURE_DECISION_KIND = "francis.stage15.swarm.stage15_closure_decision_receipt"
+SWARM_STAGE_CLOSURE_DECISIONS_KIND = "francis.stage15.swarm.stage15_closure_decision_receipts"
+SWARM_STAGE_CLOSURE_SCOPE = "swarm.stage15.closure.write"
 
 
 def swarm_status_snapshot() -> dict[str, Any]:
     stage14 = adversarial_hardening_stage14_operator_stage_closure_decision_readback(limit=5)
     stage14_closed = bool(stage14.get("stage14_closed_by_receipt"))
+    stage15_closure = swarm_stage15_operator_stage_closure_decision_readback(limit=5)
+    stage15_closed = bool(stage15_closure.get("stage15_closed_by_receipt"))
     unit_roles = swarm_unit_roles_contract()
     unit_roles_ready = bool(unit_roles.get("unit_roles_contract_ready"))
     messaging_model = swarm_messaging_model_contract()
@@ -77,7 +89,9 @@ def swarm_status_snapshot() -> dict[str, Any]:
         "kind": SWARM_STATUS_KIND,
         "stage": STAGE15_SWARM_STAGE,
         "source_id": "swarm",
-        "status": "stage15_failure_semantics_contract_ready"
+        "status": "stage15_closed_by_receipt"
+        if stage15_closed
+        else "stage15_failure_semantics_contract_ready"
         if stage14_closed
         and unit_roles_ready
         and messaging_model_ready
@@ -101,6 +115,8 @@ def swarm_status_snapshot() -> dict[str, Any]:
         else "stage15_started",
         "stage14_closed_by_receipt": stage14_closed,
         "stage14_latest_closure_receipt_id": _safe_text(stage14.get("latest_receipt_id")),
+        "stage15_closed_by_receipt": stage15_closed,
+        "stage15_latest_closure_receipt_id": _safe_text(stage15_closure.get("latest_receipt_id")),
         "unit_roles_contract_ready": unit_roles_ready,
         "messaging_model_contract_ready": messaging_model_ready,
         "delegation_etiquette_contract_ready": delegation_etiquette_ready,
@@ -116,10 +132,15 @@ def swarm_status_snapshot() -> dict[str, Any]:
             "delegation_etiquette_contract": "/swarm/delegation-etiquette-contract",
             "trace_continuity_contract": "/swarm/trace-continuity-contract",
             "failure_semantics_contract": "/swarm/failure-semantics-contract",
+            "completion_review": "/swarm/completion-review",
+            "stage_closure_decisions": "/swarm/stage-closure-decisions",
+            "stage_closure_decision": "/swarm/stage-closure-decision",
             "stage14_closure_readback": "/adversarial-hardening/stage-closure-decisions",
         },
         "governance": _governance(),
-        "next_smallest_truthful_gap": "stage15_completion_review"
+        "next_smallest_truthful_gap": "stage15_ledger_closure"
+        if stage15_closed
+        else "stage15_completion_review"
         if stage14_closed
         and unit_roles_ready
         and messaging_model_ready
@@ -565,6 +586,273 @@ def swarm_failure_semantics_contract() -> dict[str, Any]:
     }
 
 
+def swarm_completion_review() -> dict[str, Any]:
+    status = swarm_status_snapshot()
+    unit_roles = swarm_unit_roles_contract()
+    messaging = swarm_messaging_model_contract()
+    etiquette = swarm_delegation_etiquette_contract()
+    trace = swarm_trace_continuity_contract()
+    failure = swarm_failure_semantics_contract()
+    stage15_closed = bool(status.get("stage15_closed_by_receipt"))
+    deliverables = [item for item in status.get("deliverables", []) if isinstance(item, dict)]
+    ready_count = _safe_int(status.get("ready_count"))
+    required_count = _safe_int(status.get("required_count"))
+    checks = [
+        _review_check(
+            "stage14_ledger_closure_backstop",
+            passed=bool(status.get("stage14_closed_by_receipt")),
+            evidence=_safe_text(status.get("stage14_latest_closure_receipt_id"))
+            or "/adversarial-hardening/stage-closure-decisions",
+        ),
+        _review_check(
+            "unit_roles_contract_ready",
+            passed=bool(status.get("unit_roles_contract_ready")),
+            evidence="/swarm/unit-roles-contract",
+        ),
+        _review_check(
+            "messaging_model_contract_ready",
+            passed=bool(status.get("messaging_model_contract_ready")),
+            evidence="/swarm/messaging-model-contract",
+        ),
+        _review_check(
+            "delegation_etiquette_contract_ready",
+            passed=bool(status.get("delegation_etiquette_contract_ready")),
+            evidence="/swarm/delegation-etiquette-contract",
+        ),
+        _review_check(
+            "trace_continuity_contract_ready",
+            passed=bool(status.get("trace_continuity_contract_ready")),
+            evidence="/swarm/trace-continuity-contract",
+        ),
+        _review_check(
+            "failure_semantics_contract_ready",
+            passed=bool(status.get("failure_semantics_contract_ready")),
+            evidence="/swarm/failure-semantics-contract",
+        ),
+        _review_check(
+            "all_deliverables_ready",
+            passed=bool(deliverables)
+            and ready_count == required_count
+            and required_count >= 1
+            and all(bool(item.get("ready")) for item in deliverables),
+            evidence="swarm.status.deliverables",
+        ),
+        _review_check(
+            "one_francis_presence_preserved",
+            passed=bool(unit_roles.get("role_invariants", {}).get("operator_facing_identity_remains_francis"))
+            and bool(etiquette.get("authority_boundaries", {}).get("operator_facing_presence") == "Francis")
+            and bool(trace.get("sample_trace_projection", {}).get("operator_facing_presence") == "Francis"),
+            evidence="unit_roles + delegation_etiquette + trace_continuity",
+        ),
+        _review_check(
+            "handoffs_visible_and_auditable",
+            passed=bool(messaging.get("message_invariants", {}).get("swarm_trace_id_required"))
+            and bool(trace.get("trace_invariants", {}).get("one_trace_lineage_required"))
+            and bool(failure.get("deadletter_policy", {}).get("deadletter_operator_visible")),
+            evidence="messaging_model + trace_continuity + failure_semantics",
+        ),
+        _review_check(
+            "specialization_does_not_multiply_authority",
+            passed=bool(etiquette.get("authority_boundaries", {}).get("units_can_approve") is False)
+            and bool(failure.get("retry_policy", {}).get("retry_can_grant_authority") is False)
+            and bool(unit_roles.get("role_invariants", {}).get("unit_roles_do_not_grant_authority")),
+            evidence="unit_roles + delegation_etiquette + failure_semantics",
+        ),
+    ]
+    review_ready = all(bool(check.get("passed")) for check in checks)
+    blockers = [str(check["id"]) for check in checks if not bool(check.get("passed"))]
+    return {
+        "ok": True,
+        "kind": SWARM_COMPLETION_REVIEW_KIND,
+        "stage": STAGE15_SWARM_STAGE,
+        "source_id": "swarm",
+        "status": "ready" if review_ready else "blocked",
+        "stage15_completion_review_ready": review_ready,
+        "stage_closure_decision_required": review_ready and not stage15_closed,
+        "stage14_closed_by_receipt": bool(status.get("stage14_closed_by_receipt")),
+        "stage14_latest_closure_receipt_id": _safe_text(status.get("stage14_latest_closure_receipt_id")),
+        "stage15_closed_by_receipt": stage15_closed,
+        "stage15_latest_closure_receipt_id": _safe_text(status.get("stage15_latest_closure_receipt_id")),
+        "ready_count": ready_count,
+        "required_count": required_count,
+        "checks": checks,
+        "blockers": blockers,
+        "done_criteria": {
+            "units_collaborate_safely": bool(unit_roles.get("unit_roles_contract_ready"))
+            and bool(etiquette.get("delegation_etiquette_contract_ready"))
+            and bool(failure.get("failure_semantics_contract_ready")),
+            "handoffs_visible_and_auditable": bool(trace.get("trace_continuity_contract_ready"))
+            and bool(failure.get("failure_semantics_contract_ready")),
+            "one_francis_presence_preserved": bool(
+                unit_roles.get("role_invariants", {}).get("operator_facing_identity_remains_francis")
+            )
+            and bool(etiquette.get("authority_boundaries", {}).get("operator_facing_presence") == "Francis"),
+            "specialization_adds_precision_instead_of_chaos": bool(unit_roles.get("unit_roles_contract_ready"))
+            and bool(etiquette.get("delegation_etiquette_contract_ready")),
+        },
+        "reads_receipts": True,
+        "writes_receipts": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "marks_stage_closed": False,
+        "governance": {
+            **_governance(),
+            "completion_review_only": True,
+            "stage_closure_decision_required": review_ready and not stage15_closed,
+            "requires_stage14_ledger_closure": True,
+            "requires_unit_roles": True,
+            "requires_messaging_model": True,
+            "requires_delegation_etiquette": True,
+            "requires_trace_continuity": True,
+            "requires_failure_semantics": True,
+            "does_not_mark_stage_closed": True,
+        },
+        "routes": status.get("routes", {}),
+        "next_smallest_truthful_gap": "stage15_operator_stage_closure_decision"
+        if review_ready and not stage15_closed
+        else "stage15_ledger_closure"
+        if stage15_closed
+        else _safe_text(status.get("next_smallest_truthful_gap")) or "stage15_completion_review",
+    }
+
+
+def read_swarm_stage15_operator_stage_closure_decisions(*, limit: int = 20) -> list[dict[str, Any]]:
+    return _read_jsonl_tail(_stage15_operator_stage_closure_decision_path(), limit=_safe_limit(limit))
+
+
+def swarm_stage15_operator_stage_closure_decision_readback(*, limit: int = 20) -> dict[str, Any]:
+    safe_limit = _safe_limit(limit)
+    items = read_swarm_stage15_operator_stage_closure_decisions(limit=safe_limit)
+    latest = items[-1] if items else {}
+    stage15_closed = bool(latest.get("stage15_closed_by_receipt"))
+    return {
+        "ok": True,
+        "kind": SWARM_STAGE_CLOSURE_DECISIONS_KIND,
+        "stage": STAGE15_SWARM_STAGE,
+        "source_id": "swarm",
+        "status": "closed" if stage15_closed else "open" if items else "empty",
+        "items": items,
+        "count": len(items),
+        "limit": safe_limit,
+        "latest_receipt_id": _safe_text(latest.get("receipt_id")),
+        "latest_decision": _safe_text(latest.get("decision")),
+        "stage15_closed_by_receipt": stage15_closed,
+        "marks_runtime_stage_state": False,
+        "reads_receipts": True,
+        "writes_receipts": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            **_governance(),
+            "stage_closure_decision_receipt_readback": True,
+            "does_not_mutate_runtime_stage_state": True,
+            "does_not_mark_stage_closed": True,
+        },
+        "next_smallest_truthful_gap": "stage15_ledger_closure"
+        if stage15_closed
+        else "stage15_operator_stage_closure_decision"
+        if items
+        else "stage15_completion_review",
+    }
+
+
+def record_swarm_stage15_operator_stage_closure_decision(
+    *,
+    actor: Any,
+    reason: Any,
+    decision: Any,
+    review: dict[str, Any],
+    notes: Any = "",
+    authority: Any = "operator",
+    delegation_id: Any = "",
+    delegated_operator: bool = False,
+) -> dict[str, Any]:
+    safe_decision = _safe_stage15_closure_decision(decision)
+    closure_ready = bool(review.get("stage15_completion_review_ready"))
+    stage15_closed_by_receipt = safe_decision == "close_stage15" and closure_ready
+    receipt_id = f"swarm_stage15_closure_{uuid.uuid4().hex[:12]}"
+    clean_authority = _safe_text(authority) or "operator"
+    clean_delegation_id = _safe_text(delegation_id)
+    payload = {
+        "ok": True,
+        "kind": SWARM_STAGE_CLOSURE_DECISION_KIND,
+        "receipt_id": receipt_id,
+        "stage": STAGE15_SWARM_STAGE,
+        "source_id": "swarm",
+        "capture_mode": "explicit_operator_stage_closure_decision",
+        "target": "stage15_swarm",
+        "actor": _redacted_text(actor)[:240],
+        "reason": _redacted_text(reason)[:500],
+        "decision": safe_decision,
+        "notes": _redacted_text(notes)[:500],
+        "authority": clean_authority,
+        "delegation_id": clean_delegation_id,
+        "delegated_operator_approval": bool(delegated_operator),
+        "review_status": _safe_text(review.get("status")),
+        "completion_review_ready": closure_ready,
+        "stage15_completion_review_ready": closure_ready,
+        "stage14_closure_receipt_id": _safe_text(review.get("stage14_latest_closure_receipt_id")),
+        "ready_count": _safe_int(review.get("ready_count")),
+        "required_count": _safe_int(review.get("required_count")),
+        "blockers": _safe_text_list(review.get("blockers"), limit=20),
+        "done_criteria": _as_dict(review.get("done_criteria")),
+        "stage15_closed_by_receipt": stage15_closed_by_receipt,
+        "marks_runtime_stage_state": False,
+        "recorded_ts": _now_s(),
+        "writes_receipt": True,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            **_governance(),
+            "read_only": False,
+            "permission_scope": SWARM_STAGE_CLOSURE_SCOPE,
+            "explicit_operator_decision": True,
+            "stage_closure_decision": True,
+            "authority": clean_authority,
+            "delegation_id": clean_delegation_id,
+            "delegated_operator_authority": bool(delegated_operator),
+            "completion_review_ready": closure_ready,
+            "writes_receipt": True,
+            "does_not_write_receipts": False,
+            "does_not_mutate_runtime_stage_state": True,
+            "does_not_mark_stage_closed": True,
+        },
+        "next_smallest_truthful_gap": "stage15_ledger_closure"
+        if stage15_closed_by_receipt
+        else "stage15_operator_stage_closure_decision",
+    }
+    _append_jsonl(_stage15_operator_stage_closure_decision_path(), payload)
+    audit_record(
+        "swarm.stage15_closure_decision_recorded",
+        actor=payload["actor"],
+        reason=payload["reason"],
+        receipt_id=receipt_id,
+        decision=safe_decision,
+        authority=clean_authority,
+        delegation_id=clean_delegation_id,
+        stage15_closed_by_receipt=stage15_closed_by_receipt,
+    )
+    return payload
+
+
 def _unit_role(role_id: str, summary: str, *, allowed_actions: list[str]) -> dict[str, Any]:
     return {
         "id": role_id,
@@ -654,6 +942,15 @@ def _deliverable(
     }
 
 
+def _review_check(check_id: str, *, passed: bool, evidence: str) -> dict[str, Any]:
+    return {
+        "id": check_id,
+        "passed": passed,
+        "status": "passed" if passed else "blocked",
+        "evidence": evidence,
+    }
+
+
 def _governance() -> dict[str, Any]:
     return {
         "read_only": True,
@@ -671,6 +968,80 @@ def _governance() -> dict[str, Any]:
         "grants_execution_authority": False,
         "grants_mutation_authority": False,
     }
+
+
+def _stage15_operator_stage_closure_decision_path() -> Path:
+    return data_dir() / "logs" / "swarm" / "stage15_operator_stage_closure_decisions.jsonl"
+
+
+def _append_jsonl(path: Path, item: Mapping[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8", newline="\n") as handle:
+        handle.write(json.dumps(item, sort_keys=True, separators=(",", ":")))
+        handle.write("\n")
+
+
+def _read_jsonl_tail(path: Path, *, limit: int = 20) -> list[dict[str, Any]]:
+    if limit <= 0 or not path.is_file():
+        return []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    items: list[dict[str, Any]] = []
+    for line in lines[-limit:]:
+        try:
+            parsed = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            items.append(parsed)
+    return items
+
+
+def _safe_limit(value: Any, *, default: int = 20, maximum: int = 100) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return min(max(parsed, 1), maximum)
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_stage15_closure_decision(value: Any) -> str:
+    text = _safe_text(value)
+    if text in {"close_stage15", "do_not_close_stage15", "needs_more_evidence"}:
+        return text
+    return "needs_more_evidence"
+
+
+def _safe_text_list(value: Any, *, limit: int = 20) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    items: list[str] = []
+    for item in value[:limit]:
+        text = _safe_text(item)
+        if text:
+            items.append(text[:240])
+    return items
+
+
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _now_s() -> int:
+    return int(time.time())
+
+
+def _redacted_text(value: Any) -> str:
+    return " ".join(_safe_text(value).split())
 
 
 def _safe_text(value: Any) -> str:
