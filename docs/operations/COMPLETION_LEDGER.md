@@ -50184,6 +50184,59 @@ Latest validation for Stage 14 completion review:
   tests/test_api_adversarial_hardening.py tests/test_api_contract_chat_ui.py`
   Result: `passed`
 
+### 2026-05-31 - Stage 14 closure decision path is governed and auditable
+
+Roadmap area: Stage 14 / Adversarial Hardening, operator stage-closure
+decision after completion review.
+
+Material change:
+
+- Added `GET /adversarial-hardening/stage-closure-decisions`.
+- Added permission-scoped `POST /adversarial-hardening/stage-closure-decision`
+  guarded by `adversarial_hardening.stage14.closure.write`.
+- Stage 14 closure decisions now write auditable receipts to the
+  adversarial-hardening log when the completion review is ready and the actor
+  has the closure scope.
+- Stage 14 status now exposes `stage14_closed_by_receipt`,
+  `stage14_latest_closure_receipt_id`, and the closure-decision routes.
+- Closure receipts record actor, reason, decision, notes, ready counts,
+  blockers, done criteria, Stage 13 closure receipt linkage, timestamp, and
+  governance flags.
+- The closure decision path does not mutate runtime stage state, write memory,
+  write quarantine, run tools, run shell, run git, launch browsers, capture the
+  screen, or grant execution/mutation authority.
+- This implementation adds the governed path and tests it with isolated data.
+  It does not write a live Stage 14 project-closure receipt.
+
+Latest validation for Stage 14 closure decision path:
+
+- Direct local `TestClient` readback against isolated temp data for GET
+  `/adversarial-hardening/completion-review`, POST
+  `/adversarial-hardening/stage-closure-decision`, and GET
+  `/adversarial-hardening/status`.
+  Result: `before_status=ready; before_ready=true;
+  before_next_gap=stage14_operator_stage_closure_decision;
+  decision_status=recorded; closed=true;
+  after_status=stage14_closed_by_receipt;
+  after_next_gap=stage14_ledger_closure`.
+- `python -m pytest tests/test_api_adversarial_hardening.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 8 passed`
+- `python -m mypy src/francis/adversarial_hardening.py
+  src/francis/api/routes/adversarial_hardening.py`
+  Result: `passed`
+- `python -m ruff check src/francis/adversarial_hardening.py
+  src/francis/api/routes/adversarial_hardening.py
+  tests/test_api_adversarial_hardening.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/adversarial_hardening.py
+  src/francis/api/routes/adversarial_hardening.py
+  tests/test_api_adversarial_hardening.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

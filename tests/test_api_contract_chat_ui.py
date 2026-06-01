@@ -315,5 +315,7 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("GET", "/adversarial-hardening/red-team-regression-suite"),
         ("GET", "/adversarial-hardening/policy-bypass-regression-suite"),
         ("GET", "/adversarial-hardening/completion-review"),
+        ("GET", "/adversarial-hardening/stage-closure-decisions"),
+        ("POST", "/adversarial-hardening/stage-closure-decision"),
     ]
     _assert_has_endpoints(routes, endpoints)

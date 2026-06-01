@@ -64,6 +64,8 @@ def test_adversarial_hardening_status_blocks_until_stage13_closure(monkeypatch, 
     assert body["status"] == "awaiting_stage13_ledger_closure"
     assert body["stage13_closed_by_receipt"] is False
     assert body["stage13_latest_closure_receipt_id"] == ""
+    assert body["stage14_closed_by_receipt"] is False
+    assert body["stage14_latest_closure_receipt_id"] == ""
     assert body["injection_containment_contract_ready"] is False
     assert body["quarantine_model_contract_ready"] is False
     assert body["red_team_suite_ready"] is False
@@ -268,6 +270,8 @@ def test_adversarial_hardening_completion_review_is_ready_but_does_not_close_sta
     assert review["status"] == "ready"
     assert review["stage14_completion_review_ready"] is True
     assert review["stage_closure_decision_required"] is True
+    assert review["stage14_closed_by_receipt"] is False
+    assert review["stage14_latest_closure_receipt_id"] == ""
     assert review["stage13_closed_by_receipt"] is True
     assert review["injection_containment_contract_ready"] is True
     assert review["quarantine_model_contract_ready"] is True
@@ -297,6 +301,8 @@ def test_adversarial_hardening_completion_review_is_ready_but_does_not_close_sta
     assert review["governance"]["stage_closure_decision_required"] is True
     assert review["governance"]["does_not_mark_stage_closed"] is True
     assert review["routes"]["completion_review"] == "/adversarial-hardening/completion-review"
+    assert review["routes"]["stage_closure_decisions"] == "/adversarial-hardening/stage-closure-decisions"
+    assert review["routes"]["stage_closure_decision"] == "/adversarial-hardening/stage-closure-decision"
     assert review["next_smallest_truthful_gap"] == "stage14_operator_stage_closure_decision"
 
     checks = {item["id"]: item for item in review["checks"]}
@@ -313,6 +319,126 @@ def test_adversarial_hardening_completion_review_is_ready_but_does_not_close_sta
         "stage_not_marked_closed_by_review",
     }
     assert all(item["passed"] is True for item in checks.values())
+
+
+def test_adversarial_hardening_stage14_closure_decision_is_permissioned_and_auditable(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    actor = "test.stage14.operator"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({actor: ["adversarial_hardening.stage14.closure.write"]}),
+    )
+
+    client = TestClient(create_app())
+    empty = client.get("/adversarial-hardening/stage-closure-decisions").json()
+    assert empty["ok"] is True
+    assert empty["kind"] == "francis.stage14.adversarial_hardening.stage14_closure_decision_receipts"
+    assert empty["status"] == "empty"
+    assert empty["stage14_closed_by_receipt"] is False
+    assert empty["latest_receipt_id"] == ""
+    assert empty["writes_receipts"] is False
+    assert empty["writes_memory"] is False
+    assert empty["writes_quarantine"] is False
+    assert empty["governance"]["stage_closure_decision_receipt_readback"] is True
+    assert empty["governance"]["does_not_mutate_runtime_stage_state"] is True
+    assert empty["next_smallest_truthful_gap"] == "stage14_completion_review"
+
+    denied = client.post(
+        "/adversarial-hardening/stage-closure-decision",
+        json={
+            "actor": "missing.scope",
+            "reason": "attempt without stage14 closure scope",
+            "decision": "close_stage14",
+        },
+    ).json()
+    assert denied["status"] == "denied"
+    assert denied["stage14_closed_by_receipt"] is False
+    assert denied["writes_receipt"] is False
+    assert denied["governance"]["required_scope"] == "adversarial_hardening.stage14.closure.write"
+    assert denied["next_smallest_truthful_gap"] == "stage14_operator_stage_closure_decision"
+
+    blocked = client.post(
+        "/adversarial-hardening/stage-closure-decision",
+        json={
+            "actor": actor,
+            "reason": "attempt before stage13 closure",
+            "decision": "close_stage14",
+        },
+    ).json()
+    assert blocked["ok"] is False
+    assert blocked["status"] == "blocked_completion_review"
+    assert blocked["receipt_id"] == ""
+    assert blocked["stage14_closed_by_receipt"] is False
+    assert blocked["completion_review_ready"] is False
+    assert blocked["writes_receipt"] is False
+    assert blocked["governance"]["does_not_record_when_not_ready"] is True
+    assert blocked["next_smallest_truthful_gap"] == "stage13_ledger_closure"
+
+    _write_stage13_closure_receipt(data_root)
+    closure = client.post(
+        "/adversarial-hardening/stage-closure-decision",
+        json={
+            "actor": actor,
+            "reason": "operator reviewed stage14 adversarial hardening completion",
+            "decision": "close_stage14",
+            "notes": "completion review ready after policy bypass regression suite",
+        },
+    ).json()
+    assert closure["ok"] is True
+    assert closure["kind"] == "francis.stage14.adversarial_hardening.stage14_closure_decision.record"
+    assert closure["status"] == "recorded"
+    assert closure["receipt_id"].startswith("adversarial_hardening_stage14_closure_")
+    assert closure["decision"] == "close_stage14"
+    assert closure["stage14_closed_by_receipt"] is True
+    assert closure["completion_review_ready"] is True
+    assert closure["marks_runtime_stage_state"] is False
+    assert closure["writes_receipt"] is True
+    assert closure["writes_memory"] is False
+    assert closure["writes_quarantine"] is False
+    assert closure["runs_tools"] is False
+    assert closure["runs_shell"] is False
+    assert closure["runs_git"] is False
+    assert closure["launches_browser"] is False
+    assert closure["captures_screen"] is False
+    assert closure["grants_execution_authority"] is False
+    assert closure["grants_mutation_authority"] is False
+    assert closure["governance"]["required_scope"] == "adversarial_hardening.stage14.closure.write"
+    assert closure["governance"]["stage_closure_decision"] is True
+    assert closure["governance"]["completion_review_ready"] is True
+    assert closure["governance"]["does_not_mutate_runtime_stage_state"] is True
+    assert closure["next_smallest_truthful_gap"] == "stage14_ledger_closure"
+
+    receipt = closure["receipt"]
+    assert receipt["actor"] == actor
+    assert receipt["stage13_closure_receipt_id"] == "trust_calibration_stage13_closure_test"
+    assert receipt["done_criteria"]["content_cannot_grant_authority"] is True
+    assert receipt["governance"]["explicit_operator_decision"] is True
+    assert receipt["governance"]["writes_receipt"] is True
+    assert receipt["governance"]["does_not_write_receipts"] is False
+
+    closure_readback = client.get("/adversarial-hardening/stage-closure-decisions").json()
+    assert closure_readback["status"] == "closed"
+    assert closure_readback["latest_receipt_id"] == closure["receipt_id"]
+    assert closure_readback["latest_decision"] == "close_stage14"
+    assert closure_readback["stage14_closed_by_receipt"] is True
+    assert closure_readback["items"][-1]["receipt_id"] == closure["receipt_id"]
+    assert closure_readback["next_smallest_truthful_gap"] == "stage14_ledger_closure"
+
+    closed_status = client.get("/adversarial-hardening/status").json()
+    assert closed_status["status"] == "stage14_closed_by_receipt"
+    assert closed_status["stage14_closed_by_receipt"] is True
+    assert closed_status["stage14_latest_closure_receipt_id"] == closure["receipt_id"]
+    assert closed_status["next_smallest_truthful_gap"] == "stage14_ledger_closure"
+
+    closed_review = client.get("/adversarial-hardening/completion-review").json()
+    assert closed_review["stage14_completion_review_ready"] is True
+    assert closed_review["stage_closure_decision_required"] is False
+    assert closed_review["stage14_closed_by_receipt"] is True
+    assert closed_review["next_smallest_truthful_gap"] == "stage14_ledger_closure"
 
 
 def test_adversarial_hardening_policy_bypass_regression_suite_is_read_only_and_governed(

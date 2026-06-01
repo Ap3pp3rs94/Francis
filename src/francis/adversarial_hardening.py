@@ -1,11 +1,17 @@
 from __future__ import annotations
 
-from typing import Any
+import json
+import time
+import uuid
+from pathlib import Path
+from typing import Any, Mapping
 
 from francis.adversarial.defense.input_sanitizer import InputSanitizer
 from francis.adversarial.defense.output_verifier import OutputVerifier
 from francis.adversarial.detection.poisoning_detector import PoisoningDetector
 from francis.adversarial.recovery.containment import ContainmentPolicy
+from francis.kernel.paths import data_dir
+from francis.telemetry.audit import record as audit_record
 from francis.trust_calibration import trust_calibration_stage13_operator_stage_closure_decision_readback
 
 STAGE14_ADVERSARIAL_HARDENING_STAGE = "Stage 14 / Adversarial Hardening"
@@ -17,11 +23,20 @@ ADVERSARIAL_HARDENING_QUARANTINE_MODEL_KIND = "francis.stage14.adversarial_harde
 ADVERSARIAL_HARDENING_RED_TEAM_SUITE_KIND = "francis.stage14.adversarial_hardening.red_team_regression_suite"
 ADVERSARIAL_HARDENING_POLICY_BYPASS_SUITE_KIND = "francis.stage14.adversarial_hardening.policy_bypass_regression_suite"
 ADVERSARIAL_HARDENING_COMPLETION_REVIEW_KIND = "francis.stage14.adversarial_hardening.completion_review"
+ADVERSARIAL_HARDENING_STAGE_CLOSURE_DECISION_KIND = (
+    "francis.stage14.adversarial_hardening.stage14_closure_decision_receipt"
+)
+ADVERSARIAL_HARDENING_STAGE_CLOSURE_DECISIONS_KIND = (
+    "francis.stage14.adversarial_hardening.stage14_closure_decision_receipts"
+)
+ADVERSARIAL_HARDENING_STAGE_CLOSURE_SCOPE = "adversarial_hardening.stage14.closure.write"
 
 
 def adversarial_hardening_status_snapshot() -> dict[str, Any]:
     stage13 = trust_calibration_stage13_operator_stage_closure_decision_readback(limit=5)
     stage13_closed = bool(stage13.get("stage13_closed_by_receipt"))
+    stage14_closure = adversarial_hardening_stage14_operator_stage_closure_decision_readback(limit=5)
+    stage14_closed = bool(stage14_closure.get("stage14_closed_by_receipt"))
     injection_contract = adversarial_hardening_injection_containment_contract()
     injection_ready = bool(injection_contract.get("injection_containment_contract_ready"))
     quarantine_contract = adversarial_hardening_quarantine_model_contract()
@@ -73,7 +88,9 @@ def adversarial_hardening_status_snapshot() -> dict[str, Any]:
         "kind": ADVERSARIAL_HARDENING_STATUS_KIND,
         "stage": STAGE14_ADVERSARIAL_HARDENING_STAGE,
         "source_id": "adversarial_hardening",
-        "status": "stage14_policy_bypass_regression_suite_ready"
+        "status": "stage14_closed_by_receipt"
+        if stage14_closed
+        else "stage14_policy_bypass_regression_suite_ready"
         if stage13_closed and injection_ready and quarantine_ready and red_team_ready and policy_bypass_ready
         else "stage14_red_team_regression_suite_ready"
         if stage13_closed and injection_ready and quarantine_ready and red_team_ready
@@ -86,6 +103,8 @@ def adversarial_hardening_status_snapshot() -> dict[str, Any]:
         else "stage14_started",
         "stage13_closed_by_receipt": stage13_closed,
         "stage13_latest_closure_receipt_id": _safe_text(stage13.get("latest_receipt_id")),
+        "stage14_closed_by_receipt": stage14_closed,
+        "stage14_latest_closure_receipt_id": _safe_text(stage14_closure.get("latest_receipt_id")),
         "injection_containment_contract_ready": injection_ready,
         "quarantine_model_contract_ready": quarantine_ready,
         "red_team_suite_ready": red_team_ready,
@@ -100,10 +119,14 @@ def adversarial_hardening_status_snapshot() -> dict[str, Any]:
             "red_team_regression_suite": "/adversarial-hardening/red-team-regression-suite",
             "policy_bypass_regression_suite": "/adversarial-hardening/policy-bypass-regression-suite",
             "completion_review": "/adversarial-hardening/completion-review",
+            "stage_closure_decisions": "/adversarial-hardening/stage-closure-decisions",
+            "stage_closure_decision": "/adversarial-hardening/stage-closure-decision",
             "stage13_closure_readback": "/trust-calibration/stage-closure-decisions",
         },
         "governance": _governance(),
-        "next_smallest_truthful_gap": "stage14_completion_review"
+        "next_smallest_truthful_gap": "stage14_ledger_closure"
+        if stage14_closed
+        else "stage14_completion_review"
         if stage13_closed and injection_ready and quarantine_ready and red_team_ready and policy_bypass_ready
         else "stage14_policy_bypass_regression_suite"
         if stage13_closed and injection_ready and quarantine_ready and red_team_ready
@@ -453,6 +476,7 @@ def adversarial_hardening_completion_review() -> dict[str, Any]:
     status = adversarial_hardening_status_snapshot()
     policy_bypass_suite = adversarial_hardening_policy_bypass_regression_suite()
     quarantine_contract = adversarial_hardening_quarantine_model_contract()
+    stage14_closed = bool(status.get("stage14_closed_by_receipt"))
     deliverables = [item for item in status.get("deliverables", []) if isinstance(item, dict)]
     ready_count = _safe_int(status.get("ready_count"))
     required_count = _safe_int(status.get("required_count"))
@@ -523,7 +547,9 @@ def adversarial_hardening_completion_review() -> dict[str, Any]:
         "source_id": "adversarial_hardening",
         "status": "ready" if review_ready else "blocked",
         "stage14_completion_review_ready": review_ready,
-        "stage_closure_decision_required": review_ready,
+        "stage_closure_decision_required": review_ready and not stage14_closed,
+        "stage14_closed_by_receipt": stage14_closed,
+        "stage14_latest_closure_receipt_id": _safe_text(status.get("stage14_latest_closure_receipt_id")),
         "stage13_closed_by_receipt": bool(status.get("stage13_closed_by_receipt")),
         "stage13_latest_closure_receipt_id": _safe_text(status.get("stage13_latest_closure_receipt_id")),
         "injection_containment_contract_ready": bool(status.get("injection_containment_contract_ready")),
@@ -562,7 +588,7 @@ def adversarial_hardening_completion_review() -> dict[str, Any]:
         "governance": {
             **_governance(),
             "completion_review_only": True,
-            "stage_closure_decision_required": review_ready,
+            "stage_closure_decision_required": review_ready and not stage14_closed,
             "requires_stage13_ledger_closure": True,
             "requires_injection_containment": True,
             "requires_quarantine_model": True,
@@ -572,9 +598,146 @@ def adversarial_hardening_completion_review() -> dict[str, Any]:
         },
         "routes": status.get("routes", {}),
         "next_smallest_truthful_gap": "stage14_operator_stage_closure_decision"
-        if review_ready
+        if review_ready and not stage14_closed
+        else "stage14_ledger_closure"
+        if stage14_closed
         else _safe_text(status.get("next_smallest_truthful_gap")) or "stage14_completion_review",
     }
+
+
+def read_adversarial_hardening_stage14_operator_stage_closure_decisions(
+    *,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    return _read_jsonl_tail(_stage14_operator_stage_closure_decision_path(), limit=_safe_limit(limit))
+
+
+def adversarial_hardening_stage14_operator_stage_closure_decision_readback(
+    *,
+    limit: int = 20,
+) -> dict[str, Any]:
+    safe_limit = _safe_limit(limit)
+    items = read_adversarial_hardening_stage14_operator_stage_closure_decisions(limit=safe_limit)
+    latest = items[-1] if items else {}
+    stage14_closed = bool(latest.get("stage14_closed_by_receipt"))
+    return {
+        "ok": True,
+        "kind": ADVERSARIAL_HARDENING_STAGE_CLOSURE_DECISIONS_KIND,
+        "stage": STAGE14_ADVERSARIAL_HARDENING_STAGE,
+        "source_id": "adversarial_hardening",
+        "status": "closed" if stage14_closed else "open" if items else "empty",
+        "items": items,
+        "count": len(items),
+        "limit": safe_limit,
+        "latest_receipt_id": _safe_text(latest.get("receipt_id")),
+        "latest_decision": _safe_text(latest.get("decision")),
+        "stage14_closed_by_receipt": stage14_closed,
+        "marks_runtime_stage_state": False,
+        "reads_receipts": True,
+        "writes_receipts": False,
+        "writes_memory": False,
+        "writes_quarantine": False,
+        "scores_model_output": False,
+        "executes_actions": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            **_governance(),
+            "stage_closure_decision_receipt_readback": True,
+            "does_not_mutate_runtime_stage_state": True,
+            "does_not_mark_stage_closed": True,
+        },
+        "next_smallest_truthful_gap": "stage14_ledger_closure"
+        if stage14_closed
+        else "stage14_operator_stage_closure_decision"
+        if items
+        else "stage14_completion_review",
+    }
+
+
+def record_adversarial_hardening_stage14_operator_stage_closure_decision(
+    *,
+    actor: Any,
+    reason: Any,
+    decision: Any,
+    review: dict[str, Any],
+    notes: Any = "",
+) -> dict[str, Any]:
+    safe_decision = _safe_stage14_closure_decision(decision)
+    closure_ready = bool(review.get("stage14_completion_review_ready"))
+    stage14_closed_by_receipt = safe_decision == "close_stage14" and closure_ready
+    receipt_id = f"adversarial_hardening_stage14_closure_{uuid.uuid4().hex[:12]}"
+    payload = {
+        "ok": True,
+        "kind": ADVERSARIAL_HARDENING_STAGE_CLOSURE_DECISION_KIND,
+        "receipt_id": receipt_id,
+        "stage": STAGE14_ADVERSARIAL_HARDENING_STAGE,
+        "source_id": "adversarial_hardening",
+        "capture_mode": "explicit_operator_stage_closure_decision",
+        "target": "stage14_adversarial_hardening",
+        "actor": _redacted_text(actor)[:240],
+        "reason": _redacted_text(reason)[:500],
+        "decision": safe_decision,
+        "notes": _redacted_text(notes)[:500],
+        "review_status": _safe_text(review.get("status")),
+        "completion_review_ready": closure_ready,
+        "stage14_completion_review_ready": closure_ready,
+        "stage13_closure_receipt_id": _safe_text(review.get("stage13_latest_closure_receipt_id")),
+        "ready_count": _safe_int(review.get("ready_count")),
+        "required_count": _safe_int(review.get("required_count")),
+        "blockers": _safe_text_list(review.get("blockers"), limit=20),
+        "done_criteria": _as_dict(review.get("done_criteria")),
+        "stage14_closed_by_receipt": stage14_closed_by_receipt,
+        "marks_runtime_stage_state": False,
+        "recorded_ts": _now_s(),
+        "writes_receipt": True,
+        "writes_memory": False,
+        "writes_quarantine": False,
+        "scores_model_output": False,
+        "executes_actions": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            **_governance(),
+            "read_only": False,
+            "permission_scope": ADVERSARIAL_HARDENING_STAGE_CLOSURE_SCOPE,
+            "explicit_operator_decision": True,
+            "stage_closure_decision": True,
+            "completion_review_ready": closure_ready,
+            "requires_stage13_ledger_closure": True,
+            "requires_injection_containment": True,
+            "requires_quarantine_model": True,
+            "requires_red_team_regression_suite": True,
+            "requires_policy_bypass_regression_suite": True,
+            "writes_receipt": True,
+            "does_not_write_receipts": False,
+            "does_not_mutate_runtime_stage_state": True,
+            "does_not_mark_stage_closed": True,
+        },
+        "next_smallest_truthful_gap": "stage14_ledger_closure"
+        if stage14_closed_by_receipt
+        else "stage14_operator_stage_closure_decision",
+    }
+    _append_jsonl(_stage14_operator_stage_closure_decision_path(), payload)
+    audit_record(
+        "adversarial_hardening.stage14_closure_decision_recorded",
+        actor=payload["actor"],
+        reason=payload["reason"],
+        receipt_id=receipt_id,
+        decision=safe_decision,
+        stage14_closed_by_receipt=stage14_closed_by_receipt,
+    )
+    return payload
 
 
 def _policy_bypass_content_claim_case() -> dict[str, Any]:
@@ -877,11 +1040,74 @@ def _as_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _stage14_operator_stage_closure_decision_path() -> Path:
+    return data_dir() / "logs" / "adversarial_hardening" / "stage14_operator_stage_closure_decisions.jsonl"
+
+
+def _append_jsonl(path: Path, item: Mapping[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8", newline="\n") as handle:
+        handle.write(json.dumps(item, sort_keys=True, separators=(",", ":")))
+        handle.write("\n")
+
+
+def _read_jsonl_tail(path: Path, *, limit: int = 20) -> list[dict[str, Any]]:
+    if limit <= 0 or not path.is_file():
+        return []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    items: list[dict[str, Any]] = []
+    for line in lines[-limit:]:
+        try:
+            parsed = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            items.append(parsed)
+    return items
+
+
+def _safe_limit(value: Any, *, default: int = 20, maximum: int = 100) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return min(max(parsed, 1), maximum)
+
+
 def _safe_int(value: Any, default: int = 0) -> int:
     try:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _safe_stage14_closure_decision(value: Any) -> str:
+    text = _safe_text(value)
+    if text in {"close_stage14", "do_not_close_stage14", "needs_more_evidence"}:
+        return text
+    return "needs_more_evidence"
+
+
+def _safe_text_list(value: Any, *, limit: int = 20) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    items: list[str] = []
+    for item in value[:limit]:
+        text = _safe_text(item)
+        if text:
+            items.append(text[:240])
+    return items
+
+
+def _now_s() -> int:
+    return int(time.time())
+
+
+def _redacted_text(value: Any) -> str:
+    return " ".join(_safe_text(value).split())
 
 
 def _safe_text(value: Any) -> str:
