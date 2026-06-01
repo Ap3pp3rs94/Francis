@@ -474,6 +474,12 @@ export type FederationSleepResumeOperatorChecklist = {
   current_pre_sleep_age_guidance_threshold_seconds: number;
   preconditions_ready: boolean;
   ready_to_record_after_operator_confirmation: boolean;
+  current_pre_sleep_marker_fresh_for_confirmation: boolean;
+  confirmation_receipt_safe_after_physical_sleep_resume: boolean;
+  physical_confirmation_next_step?: string;
+  operator_must_not_record_receipt_before_sleep_resume: boolean;
+  operator_must_not_record_receipt_for_stale_pre_sleep_marker: boolean;
+  physical_confirmation_guard?: Record<string, unknown>;
   operator_physical_confirmation_required: boolean;
   operator_physical_confirmation_recorded: boolean;
   latest_confirmation_receipt_id?: string;
@@ -1977,6 +1983,22 @@ export function parseFederationSleepResumeOperatorChecklist(
     ready_to_record_after_operator_confirmation: safeBoolean(
       body.ready_to_record_after_operator_confirmation,
     ),
+    current_pre_sleep_marker_fresh_for_confirmation: safeBoolean(
+      body.current_pre_sleep_marker_fresh_for_confirmation,
+    ),
+    confirmation_receipt_safe_after_physical_sleep_resume: safeBoolean(
+      body.confirmation_receipt_safe_after_physical_sleep_resume,
+    ),
+    physical_confirmation_next_step: optionalString(body.physical_confirmation_next_step),
+    operator_must_not_record_receipt_before_sleep_resume: safeBoolean(
+      body.operator_must_not_record_receipt_before_sleep_resume,
+    ),
+    operator_must_not_record_receipt_for_stale_pre_sleep_marker: safeBoolean(
+      body.operator_must_not_record_receipt_for_stale_pre_sleep_marker,
+    ),
+    physical_confirmation_guard: isRecord(body.physical_confirmation_guard)
+      ? body.physical_confirmation_guard
+      : undefined,
     operator_physical_confirmation_required: safeBoolean(body.operator_physical_confirmation_required),
     operator_physical_confirmation_recorded: safeBoolean(body.operator_physical_confirmation_recorded),
     latest_confirmation_receipt_id: optionalString(body.latest_confirmation_receipt_id),

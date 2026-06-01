@@ -558,6 +558,15 @@ export function FederationHubPanel(props: { baseUrl: string }) {
                   {" / "}receipt <code>{codeValue(operatorChecklist.latest_confirmation_receipt_id)}</code>
                 </div>
                 <div style={{ fontSize: 11, color: MUTED, marginBottom: 6, overflowWrap: "anywhere" }}>
+                  physical next <code>{codeValue(operatorChecklist.physical_confirmation_next_step)}</code>
+                  {" / "}fresh for confirmation{" "}
+                  <code>{yesNo(operatorChecklist.current_pre_sleep_marker_fresh_for_confirmation)}</code>
+                  {" / "}safe after sleep/resume{" "}
+                  <code>{yesNo(operatorChecklist.confirmation_receipt_safe_after_physical_sleep_resume)}</code>
+                  {" / "}stale receipt guard{" "}
+                  <code>{yesNo(operatorChecklist.operator_must_not_record_receipt_for_stale_pre_sleep_marker)}</code>
+                </div>
+                <div style={{ fontSize: 11, color: MUTED, marginBottom: 6, overflowWrap: "anywhere" }}>
                   checklist pre age <code>{operatorChecklist.current_pre_sleep_age_seconds}s</code>
                   {" / "}freshness <code>{codeValue(operatorChecklist.current_pre_sleep_freshness_state)}</code>
                   {" / "}guidance <code>{codeValue(operatorChecklist.current_pre_sleep_age_guidance)}</code>

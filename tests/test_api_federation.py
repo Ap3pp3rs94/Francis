@@ -1449,6 +1449,28 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert checklist["current_pre_sleep_age_guidance_threshold_seconds"] == 3600
     assert checklist["preconditions_ready"] is True
     assert checklist["ready_to_record_after_operator_confirmation"] is True
+    assert checklist["current_pre_sleep_marker_fresh_for_confirmation"] is True
+    assert checklist["confirmation_receipt_safe_after_physical_sleep_resume"] is True
+    assert checklist["physical_confirmation_next_step"] == (
+        "physically_sleep_or_suspend_workstation_after_current_pre_sleep_marker"
+    )
+    assert checklist["operator_must_not_record_receipt_before_sleep_resume"] is True
+    assert checklist["operator_must_not_record_receipt_for_stale_pre_sleep_marker"] is False
+    assert checklist["physical_confirmation_guard"] == {
+        "status": "operator_confirmation_required",
+        "next_step": "physically_sleep_or_suspend_workstation_after_current_pre_sleep_marker",
+        "current_pre_sleep_marker_fresh_for_confirmation": True,
+        "safe_after_physical_sleep_resume": True,
+        "must_sleep_after_pre_sleep_recorded_ts": True,
+        "must_resume_before_receipt_record": True,
+        "must_not_record_receipt_before_sleep_resume": True,
+        "must_not_record_receipt_for_stale_pre_sleep_marker": False,
+        "recapture_recommended_before_sleep_resume": False,
+        "records_receipt_only": True,
+        "does_not_infer_sleep_from_delay": True,
+        "does_not_run_post_resume_capture": True,
+        "does_not_mark_stage16_closed": True,
+    }
     assert checklist["operator_physical_confirmation_required"] is True
     assert checklist["operator_physical_confirmation_recorded"] is False
     assert checklist["blockers"] == []
@@ -1492,6 +1514,8 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert checklist["governance"]["operator_checklist_only"] is True
     assert checklist["governance"]["requires_explicit_physical_operator_confirmation"] is True
     assert checklist["governance"]["does_not_infer_sleep_from_delay"] is True
+    assert checklist["governance"]["physical_confirmation_guard_read_only"] is True
+    assert checklist["governance"]["physical_confirmation_guard_does_not_write_receipt"] is True
     assert checklist["governance"]["does_not_write_receipts"] is True
     assert checklist["governance"]["does_not_mark_stage16_closed"] is True
     assert checklist["next_smallest_truthful_gap"] == "stage16_sleep_resume_confirmation_receipt"
@@ -2543,6 +2567,11 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     assert receipt_ready_checklist["current_pre_sleep_age_warning"] == ""
     assert receipt_ready_checklist["current_pre_sleep_age_guidance_threshold_seconds"] == 3600
     assert receipt_ready_checklist["ready_to_record_after_operator_confirmation"] is False
+    assert receipt_ready_checklist["current_pre_sleep_marker_fresh_for_confirmation"] is True
+    assert receipt_ready_checklist["confirmation_receipt_safe_after_physical_sleep_resume"] is False
+    assert receipt_ready_checklist["physical_confirmation_next_step"] == "run_receipt_backed_post_resume_sequence"
+    assert receipt_ready_checklist["operator_must_not_record_receipt_before_sleep_resume"] is False
+    assert receipt_ready_checklist["operator_must_not_record_receipt_for_stale_pre_sleep_marker"] is False
     assert receipt_ready_checklist["operator_physical_confirmation_required"] is True
     assert receipt_ready_checklist["operator_physical_confirmation_recorded"] is True
     assert receipt_ready_checklist["latest_confirmation_receipt_id"] == body["receipt_id"]
@@ -2682,6 +2711,20 @@ def test_federation_stage16_sleep_resume_confirmation_readback_blocks_stale_rece
     assert action["writes_evidence"] is False
     assert action["marks_stage16_closed"] is False
     assert action["next_smallest_truthful_gap"] == "stage16_sleep_resume_confirmation_receipt"
+
+    checklist = client.get(
+        "/federation/sleep-resume-confirmation/operator-checklist?actor=test.federation.sleep"
+    ).json()
+    assert checklist["status"] == "blocked_before_operator_physical_sleep_resume_confirmation"
+    assert checklist["current_pre_sleep_age_guidance"] == "recapture_recommended"
+    assert checklist["current_pre_sleep_marker_fresh_for_confirmation"] is False
+    assert checklist["confirmation_receipt_safe_after_physical_sleep_resume"] is False
+    assert checklist["physical_confirmation_next_step"] == "recapture_pre_sleep_marker_before_physical_sleep_resume"
+    assert checklist["operator_must_not_record_receipt_for_stale_pre_sleep_marker"] is True
+    assert checklist["physical_confirmation_guard"]["safe_after_physical_sleep_resume"] is False
+    assert checklist["physical_confirmation_guard"]["recapture_recommended_before_sleep_resume"] is True
+    assert checklist["physical_confirmation_guard"]["does_not_mark_stage16_closed"] is True
+    assert checklist["governance"]["physical_confirmation_guard_read_only"] is True
 
 
 def test_federation_stage16_sleep_continuity_runbook_uses_linked_post_resume_marker(

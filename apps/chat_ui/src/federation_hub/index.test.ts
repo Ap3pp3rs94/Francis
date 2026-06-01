@@ -1360,6 +1360,18 @@ test("FederationClient reads sleep-resume operator checklist as a read-only phys
       current_pre_sleep_age_guidance_threshold_seconds: 3600,
       preconditions_ready: true,
       ready_to_record_after_operator_confirmation: true,
+      current_pre_sleep_marker_fresh_for_confirmation: true,
+      confirmation_receipt_safe_after_physical_sleep_resume: true,
+      physical_confirmation_next_step: "physically_sleep_or_suspend_workstation_after_current_pre_sleep_marker",
+      operator_must_not_record_receipt_before_sleep_resume: true,
+      operator_must_not_record_receipt_for_stale_pre_sleep_marker: false,
+      physical_confirmation_guard: {
+        status: "operator_confirmation_required",
+        next_step: "physically_sleep_or_suspend_workstation_after_current_pre_sleep_marker",
+        safe_after_physical_sleep_resume: true,
+        recapture_recommended_before_sleep_resume: false,
+        does_not_mark_stage16_closed: true,
+      },
       operator_physical_confirmation_required: true,
       operator_physical_confirmation_recorded: false,
       latest_confirmation_receipt_id: "",
@@ -1437,6 +1449,16 @@ test("FederationClient reads sleep-resume operator checklist as a read-only phys
     assert.equal(checklist.current_pre_sleep_age_warning, undefined);
     assert.equal(checklist.current_pre_sleep_age_guidance_threshold_seconds, 3600);
     assert.equal(checklist.ready_to_record_after_operator_confirmation, true);
+    assert.equal(checklist.current_pre_sleep_marker_fresh_for_confirmation, true);
+    assert.equal(checklist.confirmation_receipt_safe_after_physical_sleep_resume, true);
+    assert.equal(
+      checklist.physical_confirmation_next_step,
+      "physically_sleep_or_suspend_workstation_after_current_pre_sleep_marker",
+    );
+    assert.equal(checklist.operator_must_not_record_receipt_before_sleep_resume, true);
+    assert.equal(checklist.operator_must_not_record_receipt_for_stale_pre_sleep_marker, false);
+    assert.equal(checklist.physical_confirmation_guard?.safe_after_physical_sleep_resume, true);
+    assert.equal(checklist.physical_confirmation_guard?.does_not_mark_stage16_closed, true);
     assert.equal(checklist.operator_physical_confirmation_required, true);
     assert.equal(checklist.operator_physical_confirmation_recorded, false);
     assert.equal(checklist.latest_confirmation_receipt_id, undefined);

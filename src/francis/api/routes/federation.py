@@ -1358,6 +1358,24 @@ def stage16_sleep_resume_confirmation_operator_checklist(actor: str = "") -> dic
         )
     )
     ready_after_physical_confirmation = preconditions_ready and not receipt_backed_sequence_ready
+    current_pre_sleep_marker_fresh_for_confirmation = (
+        bool(readback.get("current_pre_sleep_evidence_present"))
+        and bool(current_pre_sleep_path)
+        and not bool(readback.get("current_pre_sleep_recapture_recommended"))
+    )
+    confirmation_receipt_safe_after_physical_sleep_resume = (
+        ready_after_physical_confirmation and current_pre_sleep_marker_fresh_for_confirmation
+    )
+    if receipt_backed_sequence_ready:
+        physical_confirmation_next_step = "run_receipt_backed_post_resume_sequence"
+    elif not bool(readback.get("current_pre_sleep_evidence_present")):
+        physical_confirmation_next_step = "capture_pre_sleep_evidence_before_physical_sleep_resume"
+    elif bool(readback.get("current_pre_sleep_recapture_recommended")):
+        physical_confirmation_next_step = "recapture_pre_sleep_marker_before_physical_sleep_resume"
+    elif not preconditions_ready:
+        physical_confirmation_next_step = "resolve_confirmation_receipt_preconditions"
+    else:
+        physical_confirmation_next_step = "physically_sleep_or_suspend_workstation_after_current_pre_sleep_marker"
     operator_actions_remaining = (
         [
             "physically_sleep_or_suspend_workstation_after_current_pre_sleep_marker",
@@ -1446,6 +1464,35 @@ def stage16_sleep_resume_confirmation_operator_checklist(actor: str = "") -> dic
         ),
         "preconditions_ready": preconditions_ready,
         "ready_to_record_after_operator_confirmation": ready_after_physical_confirmation,
+        "current_pre_sleep_marker_fresh_for_confirmation": current_pre_sleep_marker_fresh_for_confirmation,
+        "confirmation_receipt_safe_after_physical_sleep_resume": confirmation_receipt_safe_after_physical_sleep_resume,
+        "physical_confirmation_next_step": physical_confirmation_next_step,
+        "operator_must_not_record_receipt_before_sleep_resume": ready_after_physical_confirmation
+        and not receipt_backed_sequence_ready,
+        "operator_must_not_record_receipt_for_stale_pre_sleep_marker": bool(
+            readback.get("current_pre_sleep_recapture_recommended")
+        ),
+        "physical_confirmation_guard": {
+            "status": physical_confirmation_status,
+            "next_step": physical_confirmation_next_step,
+            "current_pre_sleep_marker_fresh_for_confirmation": current_pre_sleep_marker_fresh_for_confirmation,
+            "safe_after_physical_sleep_resume": confirmation_receipt_safe_after_physical_sleep_resume,
+            "must_sleep_after_pre_sleep_recorded_ts": ready_after_physical_confirmation,
+            "must_resume_before_receipt_record": ready_after_physical_confirmation,
+            "must_not_record_receipt_before_sleep_resume": ready_after_physical_confirmation
+            and not receipt_backed_sequence_ready,
+            "must_not_record_receipt_for_stale_pre_sleep_marker": bool(
+                readback.get("current_pre_sleep_recapture_recommended")
+            ),
+            "recapture_recommended_before_sleep_resume": bool(readback.get("current_pre_sleep_recapture_recommended")),
+            "records_receipt_only": bool(record_readiness.get("records_receipt"))
+            and not bool(record_readiness.get("writes_evidence"))
+            and not bool(record_readiness.get("writes_runtime_readback"))
+            and not bool(record_readiness.get("marks_stage16_closed")),
+            "does_not_infer_sleep_from_delay": True,
+            "does_not_run_post_resume_capture": True,
+            "does_not_mark_stage16_closed": True,
+        },
         "operator_physical_confirmation_required": True,
         "operator_physical_confirmation_recorded": operator_physical_confirmation_recorded,
         "latest_confirmation_receipt_id": latest_receipt_id,
@@ -1485,6 +1532,8 @@ def stage16_sleep_resume_confirmation_operator_checklist(actor: str = "") -> dic
             "does_not_infer_sleep_from_delay": True,
             "dynamic_pre_sleep_age_guidance_only": True,
             "does_not_block_on_pre_sleep_age_guidance": True,
+            "physical_confirmation_guard_read_only": True,
+            "physical_confirmation_guard_does_not_write_receipt": True,
             "requires_explicit_physical_operator_confirmation": True,
             "does_not_write_receipts": True,
             "does_not_write_evidence": True,
