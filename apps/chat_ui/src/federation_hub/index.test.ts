@@ -539,6 +539,7 @@ test("federation sleep-continuity action parser preserves selected read-only ste
     routes: {
       sleep_continuity_action: "/federation/sleep-continuity-action",
       sleep_continuity_runbook: "/federation/sleep-continuity-runbook",
+      stage_closure_decision: "/federation/stage-closure-decision",
       stage_closure_decisions: "/federation/stage-closure-decisions",
       malformed: false,
     },
@@ -563,6 +564,7 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   assert.equal(action.grants_execution_authority, false);
   assert.equal(action.routes.sleep_continuity_action, "/federation/sleep-continuity-action");
   assert.equal(action.routes.sleep_continuity_runbook, "/federation/sleep-continuity-runbook");
+  assert.equal(action.routes.stage_closure_decision, "/federation/stage-closure-decision");
   assert.equal(action.routes.stage_closure_decisions, "/federation/stage-closure-decisions");
   assert.equal(action.routes.malformed, undefined);
   assert.equal(action.governance?.does_not_post_selected_route, true);
@@ -572,6 +574,9 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   assert.equal(presentation.status_label, "Capture post-resume evidence");
   assert.equal(presentation.selected_step_id, "capture_post_resume_evidence");
   assert.equal(presentation.primary_command?.includes("-OperatorConfirmedSleepResume"), true);
+  assert.equal(presentation.readback_route, "/federation/sleep-continuity-action");
+  assert.equal(presentation.runbook_route, "/federation/sleep-continuity-runbook");
+  assert.equal(presentation.closure_decision_route, "/federation/stage-closure-decision");
   assert.deepEqual(presentation.blockers, ["workstation_sleep_continuity_validated"]);
   assert.equal(presentation.pre_sleep_evidence_ready, true);
   assert.equal(presentation.post_resume_evidence_ready, false);

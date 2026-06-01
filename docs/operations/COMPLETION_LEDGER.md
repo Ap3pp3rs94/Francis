@@ -52063,6 +52063,39 @@ Latest validation for Stage 16 federation route readbacks:
 - `cd apps/chat_ui; npm run build`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 federation panel shows route sources
+
+Roadmap area: Stage 16 / Federation, operator-visible route/readback
+inspectability.
+
+Material change:
+
+- `FederationSleepContinuityPresentation` now carries the backend readback
+  route, runbook route, and closure-decision route selected from the parsed
+  `/federation/sleep-continuity-action` route map.
+- `FederationHubPanel` now renders those route sources in the selected readback
+  section so the operator can see which read-only backend route produced the
+  visible sleep-continuity action and which runbook/closure routes remain
+  relevant.
+- The UI contract proves the presentation model preserves
+  `/federation/sleep-continuity-action`,
+  `/federation/sleep-continuity-runbook`, and
+  `/federation/stage-closure-decision` without turning them into executable
+  browser actions.
+- This remains read-only. It does not execute routes, post decisions, write
+  evidence, write receipts, write registry state, write memory, grant execution
+  authority, grant mutation authority, infer workstation sleep/resume, or mark
+  Stage 16 closed.
+- Stage 16 remains open until live post-resume evidence and the receipt-backed
+  completion/closure gates are satisfied.
+
+Latest validation for Stage 16 federation route-source display:
+
+- `cd apps/chat_ui; npm run test -- federation_hub`
+  Result: `passed; 187 passed`.
+- `cd apps/chat_ui; npm run build`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

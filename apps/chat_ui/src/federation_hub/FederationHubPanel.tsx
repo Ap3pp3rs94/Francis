@@ -163,6 +163,11 @@ export function FederationHubPanel(props: { baseUrl: string }) {
           scope <code>{codeValue(presentation?.required_scope)}</code>
           {" / "}route <code>{codeValue(presentation?.primary_route)}</code>
         </div>
+        <div style={{ fontSize: 11, color: MUTED, marginTop: 6 }}>
+          readback <code>{codeValue(presentation?.readback_route)}</code>
+          {" / "}runbook <code>{codeValue(presentation?.runbook_route)}</code>
+          {" / "}closure <code>{codeValue(presentation?.closure_decision_route)}</code>
+        </div>
         {presentation?.primary_command ? (
           <pre
             style={{

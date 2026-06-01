@@ -313,6 +313,9 @@ export type FederationSleepContinuityPresentation = {
   selected_step_id?: string;
   primary_command?: string;
   primary_route?: string;
+  readback_route?: string;
+  runbook_route?: string;
+  closure_decision_route?: string;
   method?: string;
   required_scope?: string;
   evidence_path?: string;
@@ -1089,6 +1092,9 @@ export function presentFederationSleepContinuityAction(
     selected_step_id: action.selected_step_id,
     primary_command: action.primary_command ?? selectedStep?.command,
     primary_route: action.primary_route ?? selectedStep?.route,
+    readback_route: action.routes.sleep_continuity_action,
+    runbook_route: action.routes.sleep_continuity_runbook,
+    closure_decision_route: action.routes.stage_closure_decision,
     method: action.method ?? selectedStep?.method,
     required_scope: action.required_scope ?? selectedStep?.required_scope,
     evidence_path: action.evidence_path ?? selectedStep?.latest_evidence_path,
