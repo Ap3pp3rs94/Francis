@@ -1929,10 +1929,10 @@ test("federation sleep-continuity presentation gates post-resume capture on oper
     sleep_continuity_confirmation_blocker: "operator_confirmed_sleep_resume_missing",
     sleep_continuity_blocked_reason: "operator_confirmed_sleep_resume_missing",
     sleep_continuity_sleep_resume_confirmation_is_current_blocker: true,
-    sleep_continuity_next_step: "run_post_resume_evidence_with_operator_confirmation",
+    sleep_continuity_next_step: "write_sleep_resume_confirmation_receipt",
     ready_count: 6,
     required_count: 6,
-    next_smallest_truthful_gap: "stage16_sleep_continuity_runtime_readback",
+    next_smallest_truthful_gap: "stage16_sleep_resume_confirmation_receipt",
   });
   const runbook = parseFederationSleepContinuityRunbook({
     ok: true,
@@ -1981,7 +1981,7 @@ test("federation sleep-continuity presentation gates post-resume capture on oper
     grants_execution_authority: false,
     grants_mutation_authority: false,
     marks_stage16_closed: false,
-    next_smallest_truthful_gap: "stage16_sleep_continuity_runtime_readback",
+    next_smallest_truthful_gap: "stage16_sleep_resume_confirmation_receipt",
   });
 
   const presentation = presentFederationSleepContinuity(status, runbook);
@@ -2005,13 +2005,14 @@ test("federation sleep-continuity presentation gates post-resume capture on oper
   assert.equal(status.sleep_continuity_confirmation_blocker, "operator_confirmed_sleep_resume_missing");
   assert.equal(status.sleep_continuity_blocked_reason, "operator_confirmed_sleep_resume_missing");
   assert.equal(status.sleep_continuity_sleep_resume_confirmation_is_current_blocker, true);
+  assert.equal(status.sleep_continuity_next_step, "write_sleep_resume_confirmation_receipt");
   assert.equal(presentation.ready_to_close, false);
   assert.equal(presentation.operator_action_required, true);
   assert.equal(presentation.operator_confirmation_required, true);
   assert.equal(presentation.writes_evidence_when_run, true);
   assert.equal(presentation.writes_receipts_when_run, false);
   assert.equal(presentation.mutation_available_from_ui, false);
-  assert.equal(presentation.next_smallest_truthful_gap, "stage16_sleep_continuity_runtime_readback");
+  assert.equal(presentation.next_smallest_truthful_gap, "stage16_sleep_resume_confirmation_receipt");
 });
 
 test("federation sleep-continuity presentation surfaces post-resume evidence conflicts", () => {

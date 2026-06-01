@@ -54093,6 +54093,44 @@ Latest validation for Stage 16 receipt-first status wording:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 Hub fixture follows confirmation receipt gap
+
+Roadmap area: Stage 16 / Federation, Federation Hub sleep-continuity contract
+truthfulness.
+
+Material change:
+
+- Federation Hub's sleep-continuity contract fixture now uses
+  `write_sleep_resume_confirmation_receipt` as the status next step when
+  pre-sleep evidence exists but receipt-backed operator sleep/resume
+  confirmation is missing.
+- The same fixture now carries
+  `stage16_sleep_resume_confirmation_receipt` as the status/runbook/presentation
+  next smallest truthful gap for that pending-confirmation posture.
+- The test now asserts the receipt-first next-step field directly so the UI
+  contract does not drift back to post-resume capture before the confirmation
+  receipt exists.
+- This changes no runtime behavior, writes no receipt, runs no shell, grants no
+  authority, and does not mark Stage 16 closed.
+
+Latest validation for Stage 16 Federation Hub receipt-first fixture alignment:
+
+- `npm run test -- federation_hub`
+  Result: `passed; 192 passed`.
+- `npm run build`
+  Result: `passed`.
+- `npx tsc --noEmit --pretty false 2>&1 | Select-String
+  "src/federation_hub"`
+  Result: `failed; existing strict TypeScript diagnostics remain in
+  apps/chat_ui/src/federation_hub/index.ts`, so this is not counted as a green
+  validation gate for this slice.
+- `rg -n "run_post_resume_evidence_with_operator_confirmation"
+  apps/chat_ui/src/federation_hub src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed; no matches`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
