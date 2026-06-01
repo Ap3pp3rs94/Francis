@@ -54671,6 +54671,33 @@ Latest validation for Stage 16 local actor-scope remediation:
   next_smallest_truthful_gap=stage16_sleep_resume_confirmation_receipt;
   writes_receipt=false; writes_evidence=false; marks_stage16_closed=false`.
 
+### 2026-06-01 - Stage 16 Hub auto-preflights ready receipt actor safely
+
+Roadmap area: Stage 16 / Federation, sleep-continuity confirmation receipt
+operator surface.
+
+Material change:
+
+- Federation Hub now performs a one-shot actor-readiness preflight for the
+  default actor when the sleep-resume confirmation readback exposes a
+  placeholder receipt command.
+- The auto-preflight helper only returns true when the confirmations readback
+  is read-only, has current pre-sleep evidence, requires actor substitution,
+  and does not write receipts/evidence, grant authority, or mark Stage 16
+  closed from the readback surface.
+- The Hub records which actor was auto-checked so failed or unavailable
+  preflight does not loop; manual actor changes still reset the preflight.
+- This makes the already-scoped `codex.builder` confirmation command visible
+  without requiring an extra manual check, but still does not write the
+  physical sleep/resume confirmation receipt or close Stage 16.
+
+Latest validation for Stage 16 Hub auto-preflight:
+
+- `npm run test -- federation_hub`
+  Result: `passed; 193 passed`.
+- `npm run build`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

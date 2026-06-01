@@ -9,6 +9,7 @@ import {
   federationSleepResumeConfirmationVisibleCommands,
   isFederationSleepResumeConfirmationActorReadinessCurrent,
   presentFederationSleepContinuityAction,
+  shouldAutoCheckFederationSleepResumeConfirmationActorReadiness,
   type FederationSleepContinuityActionReadback,
   type FederationSleepContinuityPresentation,
   type FederationSleepContinuityRunbook,
@@ -88,6 +89,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
   const [confirmations, setConfirmations] = useState<FederationSleepResumeConfirmations | null>(null);
   const [actorReadiness, setActorReadiness] = useState<FederationSleepResumeConfirmationActorReadiness | null>(null);
   const [actorPreflightActor, setActorPreflightActor] = useState(DEFAULT_FEDERATION_SLEEP_RESUME_CONFIRMATION_ACTOR);
+  const [actorReadinessAutoCheckedActor, setActorReadinessAutoCheckedActor] = useState("");
   const [actorReadinessLoading, setActorReadinessLoading] = useState(false);
   const [presentation, setPresentation] = useState<FederationSleepContinuityPresentation | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -136,6 +138,29 @@ export function FederationHubPanel(props: { baseUrl: string }) {
       setActorReadinessLoading(false);
     }
   }, [actorPreflightActor, client]);
+
+  useEffect(() => {
+    const trimmedActor = actorPreflightActor.trim();
+    if (actorReadinessLoading || actorReadinessAutoCheckedActor === trimmedActor) return;
+    if (
+      !shouldAutoCheckFederationSleepResumeConfirmationActorReadiness({
+        confirmations,
+        actor: actorPreflightActor,
+        readiness: actorReadiness,
+      })
+    ) {
+      return;
+    }
+    setActorReadinessAutoCheckedActor(trimmedActor);
+    void checkActorReadiness();
+  }, [
+    actorPreflightActor,
+    actorReadiness,
+    actorReadinessAutoCheckedActor,
+    actorReadinessLoading,
+    checkActorReadiness,
+    confirmations,
+  ]);
 
   const blockers = presentation?.blockers.length ? presentation.blockers : status?.completion_review_blockers ?? [];
   const priorLiveReadbackBlockers = presentation?.prior_live_readback_blockers ?? [];
@@ -328,6 +353,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
               onChange={(event) => {
                 setActorPreflightActor(event.target.value);
                 setActorReadiness(null);
+                setActorReadinessAutoCheckedActor("");
               }}
               placeholder="actor id"
               style={{

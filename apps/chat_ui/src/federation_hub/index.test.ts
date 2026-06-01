@@ -19,6 +19,7 @@ import {
   parseFederationStage16ClosureDecisions,
   presentFederationSleepContinuity,
   presentFederationSleepContinuityAction,
+  shouldAutoCheckFederationSleepResumeConfirmationActorReadiness,
 } from "./index.ts";
 
 type FetchHandler = (url: string, init?: RequestInit) => Response | Promise<Response>;
@@ -842,6 +843,58 @@ test("parseFederationSleepResumeConfirmations preserves missing-receipt remedy c
   assert.equal(confirmations.confirmation_receipt_operator_steps[3]?.requires_current_receipt, true);
   assert.equal(confirmations.confirmation_receipt_operator_steps[3]?.writes_evidence_when_run, false);
   assert.equal(confirmations.confirmation_receipt_operator_steps[3]?.marks_stage16_closed_when_run, false);
+
+  assert.equal(
+    shouldAutoCheckFederationSleepResumeConfirmationActorReadiness({
+      confirmations,
+      actor: DEFAULT_FEDERATION_SLEEP_RESUME_CONFIRMATION_ACTOR,
+      readiness: null,
+    }),
+    true,
+  );
+  const currentReadiness = parseFederationSleepResumeConfirmationActorReadiness({
+    ok: true,
+    actor: DEFAULT_FEDERATION_SLEEP_RESUME_CONFIRMATION_ACTOR,
+    actor_present: true,
+    confirmation_receipt_actor_ready: true,
+    confirmation_receipt_command_ready: true,
+  });
+  assert.equal(
+    shouldAutoCheckFederationSleepResumeConfirmationActorReadiness({
+      confirmations,
+      actor: DEFAULT_FEDERATION_SLEEP_RESUME_CONFIRMATION_ACTOR,
+      readiness: currentReadiness,
+    }),
+    false,
+  );
+  assert.equal(
+    shouldAutoCheckFederationSleepResumeConfirmationActorReadiness({
+      confirmations,
+      actor: "",
+      readiness: null,
+    }),
+    false,
+  );
+  const unsafeConfirmations = parseFederationSleepResumeConfirmations({
+    current_pre_sleep_evidence_present: true,
+    confirmation_receipt_command_ready: true,
+    confirmation_receipt_actor_bound: false,
+    confirmation_receipt_actor_placeholder: "<actor>",
+    confirmation_receipt_actor_readiness_route: "/federation/sleep-resume-confirmation/actor-readiness",
+    confirmation_receipt_actor_readiness_query_param: "actor",
+    confirmation_receipt_command_requires_actor_substitution: true,
+    confirmation_receipt_command_writes_evidence: true,
+    confirmation_receipt_command_marks_stage16_closed: false,
+    confirmation_receipt_command_projection_only: true,
+  });
+  assert.equal(
+    shouldAutoCheckFederationSleepResumeConfirmationActorReadiness({
+      confirmations: unsafeConfirmations,
+      actor: DEFAULT_FEDERATION_SLEEP_RESUME_CONFIRMATION_ACTOR,
+      readiness: null,
+    }),
+    false,
+  );
 });
 
 test("parseFederationSleepResumeConfirmationActorReadiness preserves actor-bound command guards", () => {

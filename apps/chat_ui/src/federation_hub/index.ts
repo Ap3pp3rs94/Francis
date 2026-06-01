@@ -1742,6 +1742,34 @@ export function federationSleepResumeConfirmationActorReadinessVisibleCommands(
   };
 }
 
+export function shouldAutoCheckFederationSleepResumeConfirmationActorReadiness(opts: {
+  confirmations: FederationSleepResumeConfirmations | null | undefined;
+  actor: string;
+  readiness: FederationSleepResumeConfirmationActorReadiness | null | undefined;
+}): boolean {
+  const actor = opts.actor.trim();
+  const confirmations = opts.confirmations;
+  if (!actor || !confirmations) return false;
+  if (isFederationSleepResumeConfirmationActorReadinessCurrent(opts.readiness, actor)) return false;
+  return Boolean(
+    confirmations.current_pre_sleep_evidence_present &&
+      confirmations.confirmation_receipt_command_ready &&
+      confirmations.confirmation_receipt_command_requires_actor_substitution &&
+      !confirmations.confirmation_receipt_actor_bound &&
+      confirmations.confirmation_receipt_actor_placeholder &&
+      confirmations.confirmation_receipt_actor_readiness_route &&
+      confirmations.confirmation_receipt_actor_readiness_query_param === "actor" &&
+      confirmations.confirmation_receipt_command_projection_only &&
+      !confirmations.confirmation_receipt_command_writes_evidence &&
+      !confirmations.confirmation_receipt_command_marks_stage16_closed &&
+      !confirmations.writes_receipts &&
+      !confirmations.writes_evidence &&
+      !confirmations.marks_stage16_closed &&
+      !confirmations.grants_execution_authority &&
+      !confirmations.grants_mutation_authority,
+  );
+}
+
 export function parseFederationSleepResumeConfirmationActorReadiness(
   raw: unknown,
 ): FederationSleepResumeConfirmationActorReadiness {
