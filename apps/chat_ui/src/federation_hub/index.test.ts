@@ -369,6 +369,22 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
           "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json",
         latest_recorded_ts: 1_800_030_360,
         receipt_readback_ready: true,
+        current_pre_sleep_evidence_present: true,
+        current_pre_sleep_evidence_path:
+          "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json",
+        current_pre_sleep_recorded_ts: 1_800_030_000,
+        latest_receipt_is_operator_confirmed: true,
+        latest_receipt_matches_current_pre_sleep: true,
+        latest_receipt_usable_for_receipt_backed_sequence: true,
+        receipt_backed_sequence_ready: true,
+        receipt_backed_sequence_blockers: [],
+        receipt_backed_sequence_command:
+          'scripts/federation-stage16-sleep-continuity-post-resume-sequence.ps1 -Mode Run -CommitEvidence -CommitReceipts -PreSleepEvidencePath "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json" -OperatorConfirmedSleepResume -RequireConfirmationReceipt -ConfirmationReceiptId fedsleepconfirm_ui_test',
+        receipt_backed_sequence_copyable_command:
+          'Set-Location -LiteralPath \'D:\\Francis\'; scripts/federation-stage16-sleep-continuity-post-resume-sequence.ps1 -Mode Run -CommitEvidence -CommitReceipts -PreSleepEvidencePath "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json" -OperatorConfirmedSleepResume -RequireConfirmationReceipt -ConfirmationReceiptId fedsleepconfirm_ui_test',
+        receipt_backed_sequence_requires_confirmation_receipt: true,
+        receipt_backed_sequence_writes_evidence_when_run: true,
+        receipt_backed_sequence_writes_receipts_when_run: true,
         reads_receipts: true,
         writes_receipts: false,
         writes_evidence: false,
@@ -570,6 +586,19 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
     assert.equal(confirmations.latest_decision, "operator_confirmed_sleep_resume");
     assert.equal(confirmations.latest_pre_sleep_evidence_path, "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json");
     assert.equal(confirmations.receipt_readback_ready, true);
+    assert.equal(confirmations.current_pre_sleep_evidence_present, true);
+    assert.equal(confirmations.current_pre_sleep_evidence_path, "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json");
+    assert.equal(confirmations.latest_receipt_is_operator_confirmed, true);
+    assert.equal(confirmations.latest_receipt_matches_current_pre_sleep, true);
+    assert.equal(confirmations.latest_receipt_usable_for_receipt_backed_sequence, true);
+    assert.equal(confirmations.receipt_backed_sequence_ready, true);
+    assert.deepEqual(confirmations.receipt_backed_sequence_blockers, []);
+    assert.equal(confirmations.receipt_backed_sequence_command?.includes("-RequireConfirmationReceipt"), true);
+    assert.equal(confirmations.receipt_backed_sequence_command?.includes("fedsleepconfirm_ui_test"), true);
+    assert.equal(confirmations.receipt_backed_sequence_copyable_command?.includes(confirmations.receipt_backed_sequence_command ?? ""), true);
+    assert.equal(confirmations.receipt_backed_sequence_requires_confirmation_receipt, true);
+    assert.equal(confirmations.receipt_backed_sequence_writes_evidence_when_run, true);
+    assert.equal(confirmations.receipt_backed_sequence_writes_receipts_when_run, true);
     assert.equal(confirmations.writes_receipts, false);
     assert.equal(confirmations.writes_evidence, false);
     assert.equal(confirmations.writes_runtime_readback, false);

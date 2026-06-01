@@ -275,6 +275,19 @@ export type FederationSleepResumeConfirmations = {
   latest_pre_sleep_evidence_path?: string;
   latest_recorded_ts?: number;
   receipt_readback_ready: boolean;
+  current_pre_sleep_evidence_present: boolean;
+  current_pre_sleep_evidence_path?: string;
+  current_pre_sleep_recorded_ts?: number;
+  latest_receipt_is_operator_confirmed: boolean;
+  latest_receipt_matches_current_pre_sleep: boolean;
+  latest_receipt_usable_for_receipt_backed_sequence: boolean;
+  receipt_backed_sequence_ready: boolean;
+  receipt_backed_sequence_blockers: string[];
+  receipt_backed_sequence_command?: string;
+  receipt_backed_sequence_copyable_command?: string;
+  receipt_backed_sequence_requires_confirmation_receipt: boolean;
+  receipt_backed_sequence_writes_evidence_when_run: boolean;
+  receipt_backed_sequence_writes_receipts_when_run: boolean;
   reads_receipts: boolean;
   writes_receipts: boolean;
   writes_evidence: boolean;
@@ -1321,6 +1334,7 @@ export function parseFederationSleepResumeConfirmations(raw: unknown): Federatio
     : [];
   const latestReceipt = parseFederationSleepResumeConfirmationReceipt(body.latest_receipt);
   const latestRecordedTs = safeNumber(body.latest_recorded_ts, 0);
+  const currentPreSleepRecordedTs = safeNumber(body.current_pre_sleep_recorded_ts, 0);
   return {
     ok: safeBoolean(body.ok),
     kind: optionalString(body.kind),
@@ -1334,6 +1348,28 @@ export function parseFederationSleepResumeConfirmations(raw: unknown): Federatio
     latest_pre_sleep_evidence_path: optionalString(body.latest_pre_sleep_evidence_path),
     latest_recorded_ts: latestRecordedTs > 0 ? normalizeTs(latestRecordedTs) : undefined,
     receipt_readback_ready: safeBoolean(body.receipt_readback_ready),
+    current_pre_sleep_evidence_present: safeBoolean(body.current_pre_sleep_evidence_present),
+    current_pre_sleep_evidence_path: optionalString(body.current_pre_sleep_evidence_path),
+    current_pre_sleep_recorded_ts:
+      currentPreSleepRecordedTs > 0 ? normalizeTs(currentPreSleepRecordedTs) : undefined,
+    latest_receipt_is_operator_confirmed: safeBoolean(body.latest_receipt_is_operator_confirmed),
+    latest_receipt_matches_current_pre_sleep: safeBoolean(body.latest_receipt_matches_current_pre_sleep),
+    latest_receipt_usable_for_receipt_backed_sequence: safeBoolean(
+      body.latest_receipt_usable_for_receipt_backed_sequence,
+    ),
+    receipt_backed_sequence_ready: safeBoolean(body.receipt_backed_sequence_ready),
+    receipt_backed_sequence_blockers: stringList(body.receipt_backed_sequence_blockers),
+    receipt_backed_sequence_command: optionalString(body.receipt_backed_sequence_command),
+    receipt_backed_sequence_copyable_command: optionalString(body.receipt_backed_sequence_copyable_command),
+    receipt_backed_sequence_requires_confirmation_receipt: safeBoolean(
+      body.receipt_backed_sequence_requires_confirmation_receipt,
+    ),
+    receipt_backed_sequence_writes_evidence_when_run: safeBoolean(
+      body.receipt_backed_sequence_writes_evidence_when_run,
+    ),
+    receipt_backed_sequence_writes_receipts_when_run: safeBoolean(
+      body.receipt_backed_sequence_writes_receipts_when_run,
+    ),
     reads_receipts: safeBoolean(body.reads_receipts),
     writes_receipts: safeBoolean(body.writes_receipts),
     writes_evidence: safeBoolean(body.writes_evidence),

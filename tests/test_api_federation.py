@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -82,32 +84,34 @@ def _write_stage16_pre_sleep_evidence(
         / f"pre_sleep_{continuity_record_id}.json"
     )
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(
-            {
-                "evidence_kind": "stage16_sleep_continuity_pre_sleep",
-                "continuity_record_id": continuity_record_id,
-                "source_node_id": "stage16-local-workstation",
-                "paired_node_id": "stage16-local-loopback-node",
-                "trace_id": "trace-stage16-sleep-continuity-pre-test",
-                "authority_snapshot_id": "authsnap-stage16-sleep-pre-test",
-                "source_recorded_ts": 1_800_030_000,
-                "freshness_state": "fresh",
-                "capture_mode": "explicit_operator_pre_sleep_marker",
-                "governance": {
-                    "operator_supplied_evidence": True,
-                    "explicit_operator_confirmation_required": True,
-                    "does_not_infer_sleep_from_delay": True,
-                    "metadata_only": True,
-                    "contains_raw_private_data": False,
-                    "writes_runtime_readback": False,
-                    "marks_stage16_closed": False,
-                },
+    payload = json.dumps(
+        {
+            "evidence_kind": "stage16_sleep_continuity_pre_sleep",
+            "continuity_record_id": continuity_record_id,
+            "source_node_id": "stage16-local-workstation",
+            "paired_node_id": "stage16-local-loopback-node",
+            "trace_id": "trace-stage16-sleep-continuity-pre-test",
+            "authority_snapshot_id": "authsnap-stage16-sleep-pre-test",
+            "source_recorded_ts": 1_800_030_000,
+            "freshness_state": "fresh",
+            "capture_mode": "explicit_operator_pre_sleep_marker",
+            "governance": {
+                "operator_supplied_evidence": True,
+                "explicit_operator_confirmation_required": True,
+                "does_not_infer_sleep_from_delay": True,
+                "metadata_only": True,
+                "contains_raw_private_data": False,
+                "writes_runtime_readback": False,
+                "marks_stage16_closed": False,
             },
-            sort_keys=True,
-        ),
-        encoding="utf-8",
+        },
+        sort_keys=True,
     )
+    try:
+        path.write_text(payload, encoding="utf-8")
+    except FileNotFoundError:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(payload, encoding="utf-8")
     return path
 
 
@@ -156,6 +160,54 @@ def _write_stage16_post_resume_evidence(
         encoding="utf-8",
     )
     return path
+
+
+def _write_stage16_sleep_resume_confirmation_receipt(
+    data_root: Path,
+    *,
+    receipt_id: str,
+    pre_sleep_path: Path,
+    continuity_record_id: str = "stage16-sleep-pre",
+) -> None:
+    path = data_root / "logs" / "federation" / "stage16_sleep_resume_operator_confirmations.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "ok": True,
+                "kind": "francis.stage16.federation.sleep_resume_operator_confirmation_receipt",
+                "receipt_id": receipt_id,
+                "stage": "Stage 16 / Federation",
+                "source_id": "federation",
+                "target": "stage16_sleep_continuity",
+                "actor": "test.federation.sleep",
+                "reason": "operator confirmed sleep resume",
+                "decision": "operator_confirmed_sleep_resume",
+                "selected_step_id": "capture_post_resume_evidence",
+                "operator_confirmed_sleep_resume": True,
+                "pre_sleep_evidence_path": str(pre_sleep_path.resolve()),
+                "pre_sleep_recorded_ts": 1_800_030_000,
+                "continuity_record_id": continuity_record_id,
+                "trace_id": "trace-stage16-sleep-continuity-pre-test",
+                "post_resume_capture_allowed_after_confirmation": True,
+                "post_resume_sequence_available_after_confirmation": True,
+                "recorded_ts": 1_800_030_360,
+                "writes_evidence": False,
+                "writes_runtime_readback": False,
+                "writes_receipt": True,
+                "marks_stage16_closed": False,
+                "governance": {
+                    "explicit_operator_confirmation": True,
+                    "manual_operator_confirmation_after_physical_sleep_resume": True,
+                    "does_not_infer_sleep_from_delay": True,
+                    "does_not_mark_stage16_closed": True,
+                },
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
 
 
 def test_federation_hub_contract_lifecycle(monkeypatch, tmp_path: Path) -> None:
@@ -1584,6 +1636,14 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     empty_readback = client.get("/federation/sleep-resume-confirmations?limit=5").json()
     assert empty_readback["status"] == "empty"
     assert empty_readback["receipt_readback_ready"] is False
+    assert empty_readback["current_pre_sleep_evidence_present"] is True
+    assert empty_readback["current_pre_sleep_evidence_path"] == str(pre_sleep_path.resolve())
+    assert empty_readback["latest_receipt_matches_current_pre_sleep"] is False
+    assert empty_readback["latest_receipt_usable_for_receipt_backed_sequence"] is False
+    assert empty_readback["receipt_backed_sequence_ready"] is False
+    assert empty_readback["receipt_backed_sequence_blockers"] == ["sleep_resume_confirmation_receipt_missing"]
+    assert empty_readback["receipt_backed_sequence_command"] == ""
+    assert empty_readback["receipt_backed_sequence_copyable_command"] == ""
     assert empty_readback["writes_receipts"] is False
     assert empty_readback["writes_evidence"] is False
     assert empty_readback["writes_runtime_readback"] is False
@@ -1669,17 +1729,82 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     assert readback["latest_decision"] == "operator_confirmed_sleep_resume"
     assert readback["latest_pre_sleep_evidence_path"] == str(pre_sleep_path.resolve())
     assert readback["receipt_readback_ready"] is True
+    assert readback["current_pre_sleep_evidence_present"] is True
+    assert readback["current_pre_sleep_evidence_path"] == str(pre_sleep_path.resolve())
+    assert readback["latest_receipt_is_operator_confirmed"] is True
+    assert readback["latest_receipt_matches_current_pre_sleep"] is True
+    assert readback["latest_receipt_usable_for_receipt_backed_sequence"] is True
+    assert readback["receipt_backed_sequence_ready"] is True
+    assert readback["receipt_backed_sequence_blockers"] == []
+    assert body["receipt_id"] in readback["receipt_backed_sequence_command"]
+    assert "-RequireConfirmationReceipt" in readback["receipt_backed_sequence_command"]
+    assert str(pre_sleep_path.resolve()) in readback["receipt_backed_sequence_command"]
+    assert readback["receipt_backed_sequence_command"] in readback["receipt_backed_sequence_copyable_command"]
+    assert readback["receipt_backed_sequence_requires_confirmation_receipt"] is True
+    assert readback["receipt_backed_sequence_writes_evidence_when_run"] is True
+    assert readback["receipt_backed_sequence_writes_receipts_when_run"] is True
     assert readback["writes_receipts"] is False
     assert readback["writes_evidence"] is False
     assert readback["writes_runtime_readback"] is False
     assert readback["marks_stage16_closed"] is False
     assert readback["grants_execution_authority"] is False
     assert readback["governance"]["sleep_resume_confirmation_receipt_readback"] is True
+    assert readback["governance"]["checks_current_pre_sleep_evidence_path"] is True
+    assert readback["governance"]["receipt_backed_sequence_requires_current_matching_confirmation"] is True
     assert readback["governance"]["does_not_infer_sleep_from_delay"] is True
     assert readback["next_smallest_truthful_gap"] == "stage16_sleep_continuity_runtime_readback"
     assert not list(
         (data_root / "test_runs" / "federation-stage16-sleep-continuity-evidence").glob("post_resume_*.json")
     )
+
+
+def test_federation_stage16_sleep_resume_confirmation_readback_blocks_stale_receipt(
+    monkeypatch,
+    request: Any,
+) -> None:
+    temp_root = Path(tempfile.mkdtemp(prefix="francis-fed-stale-"))
+    request.addfinalizer(lambda: shutil.rmtree(temp_root, ignore_errors=True))
+    data_root = temp_root / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage15_closure_receipt(data_root, receipt_id="swarm_stage15_closure_for_stale_sleep_resume_confirmation")
+    original_pre_sleep_path = _write_stage16_pre_sleep_evidence(data_root, continuity_record_id="stage16-sleep-old")
+    receipt_id = "fedsleepconfirm_stale_pre_sleep"
+    _write_stage16_sleep_resume_confirmation_receipt(
+        data_root,
+        receipt_id=receipt_id,
+        pre_sleep_path=original_pre_sleep_path,
+        continuity_record_id="stage16-sleep-old",
+    )
+    current_pre_sleep_path = _write_stage16_pre_sleep_evidence(data_root, continuity_record_id="stage16-sleep-current")
+    os.utime(original_pre_sleep_path, (1_800_030_000, 1_800_030_000))
+    os.utime(current_pre_sleep_path, (1_800_030_400, 1_800_030_400))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    readback = client.get("/federation/sleep-resume-confirmations?limit=5").json()
+
+    assert readback["status"] == "sleep_resume_confirmation_readback_ready"
+    assert readback["latest_receipt_id"] == receipt_id
+    assert readback["latest_pre_sleep_evidence_path"] == str(original_pre_sleep_path.resolve())
+    assert readback["current_pre_sleep_evidence_present"] is True
+    assert readback["current_pre_sleep_evidence_path"] == str(current_pre_sleep_path.resolve())
+    assert readback["latest_receipt_is_operator_confirmed"] is True
+    assert readback["latest_receipt_matches_current_pre_sleep"] is False
+    assert readback["latest_receipt_usable_for_receipt_backed_sequence"] is False
+    assert readback["receipt_backed_sequence_ready"] is False
+    assert readback["receipt_backed_sequence_blockers"] == ["latest_sleep_resume_confirmation_pre_sleep_path_mismatch"]
+    assert readback["receipt_backed_sequence_command"] == ""
+    assert readback["receipt_backed_sequence_copyable_command"] == ""
+    assert readback["writes_evidence"] is False
+    assert readback["writes_runtime_readback"] is False
+    assert readback["marks_stage16_closed"] is False
+    assert readback["governance"]["checks_current_pre_sleep_evidence_path"] is True
+    assert readback["governance"]["receipt_backed_sequence_requires_current_matching_confirmation"] is True
+    assert readback["next_smallest_truthful_gap"] == "stage16_sleep_continuity_runtime_readback"
 
 
 def test_federation_stage16_sleep_continuity_runbook_uses_linked_post_resume_marker(

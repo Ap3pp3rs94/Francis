@@ -53298,6 +53298,54 @@ Latest validation for Stage 16 sleep post-resume operator sequence:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 sleep/resume confirmation readback checks current marker
+
+Roadmap area: Stage 16 / Federation, workstation sleep-continuity receipt
+readback.
+
+Material change:
+
+- `/federation/sleep-resume-confirmations` now compares the latest
+  sleep/resume confirmation receipt with the current latest pre-sleep evidence
+  marker.
+- The readback now reports whether current pre-sleep evidence is present,
+  whether the latest receipt is operator-confirmed, whether it matches the
+  current marker, and whether the receipt-backed post-resume sequence is ready.
+- When the latest receipt is stale or tied to a prior pre-sleep marker, the
+  readback blocks the receipt-backed sequence and reports
+  `latest_sleep_resume_confirmation_pre_sleep_path_mismatch`.
+- Federation Hub preserves these receipt-readback readiness and blocker fields.
+- This is readback-only: it does not capture post-resume evidence, write
+  runtime readbacks, infer workstation sleep/resume from elapsed time, grant
+  authority, write memory, or mark Stage 16 closed.
+- Stage 16 remains open until operator-confirmed live workstation sleep/resume
+  evidence and receipt-backed completion/closure gates are satisfied.
+
+Latest validation for Stage 16 sleep/resume confirmation readback alignment:
+
+- `python -m pytest tests/test_api_federation.py -q --tb=short --maxfail=1`
+  Result: `passed; 23 passed`.
+- `npm run test -- federation_hub`
+  Result: `passed; 188 passed`.
+- `npm run build`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- Live readback via `TestClient` for `/federation/sleep-resume-confirmations`
+  Result: `passed; status=empty, current_pre_sleep_evidence_present=true,
+  receipt_backed_sequence_ready=false,
+  receipt_backed_sequence_blockers=[sleep_resume_confirmation_receipt_missing],
+  writes_evidence=false, writes_runtime_readback=false,
+  marks_stage16_closed=false`.
+- `git diff --check`
+  Result: `passed`.
+
 ### 2026-06-01 - Stage 16 post-resume sequence requires confirmation receipt
 
 Roadmap area: Stage 16 / Federation, workstation sleep-continuity operator

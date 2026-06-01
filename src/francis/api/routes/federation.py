@@ -959,6 +959,32 @@ def stage16_sleep_resume_confirmation_readback(*, limit: int = 20) -> dict[str, 
     safe_limit = max(1, min(int(limit), 100))
     items = read_stage16_sleep_resume_confirmations(limit=safe_limit)
     latest_receipt = items[-1] if items else {}
+    current_pre_sleep = _latest_stage16_pre_sleep_evidence()
+    current_pre_sleep_path = _safe_str(current_pre_sleep.get("evidence_path")).strip()
+    latest_pre_sleep_path = _safe_str(latest_receipt.get("pre_sleep_evidence_path")).strip()
+    latest_decision = _safe_str(latest_receipt.get("decision")).strip()
+    latest_operator_confirmed = bool(latest_receipt.get("operator_confirmed_sleep_resume"))
+    latest_matches_current_pre_sleep = bool(
+        latest_receipt and current_pre_sleep_path and latest_pre_sleep_path == current_pre_sleep_path
+    )
+    receipt_backed_sequence_ready = latest_matches_current_pre_sleep and latest_operator_confirmed
+    receipt_backed_sequence_blockers: list[str] = []
+    if not bool(current_pre_sleep.get("present")):
+        receipt_backed_sequence_blockers.append("current_pre_sleep_evidence_missing")
+    if not latest_receipt:
+        receipt_backed_sequence_blockers.append("sleep_resume_confirmation_receipt_missing")
+    elif not latest_operator_confirmed or latest_decision != "operator_confirmed_sleep_resume":
+        receipt_backed_sequence_blockers.append("latest_sleep_resume_confirmation_not_operator_confirmed")
+    elif not latest_matches_current_pre_sleep:
+        receipt_backed_sequence_blockers.append("latest_sleep_resume_confirmation_pre_sleep_path_mismatch")
+    pre_sleep_arg = f'"{current_pre_sleep_path}"' if current_pre_sleep_path else "<pre_sleep.json>"
+    receipt_id_arg = _safe_str(latest_receipt.get("receipt_id")).strip() or "<confirmation_receipt_id>"
+    receipt_backed_sequence_command = (
+        "scripts/federation-stage16-sleep-continuity-post-resume-sequence.ps1 -Mode Run "
+        f"-CommitEvidence -CommitReceipts -PreSleepEvidencePath {pre_sleep_arg} "
+        "-OperatorConfirmedSleepResume -RequireConfirmationReceipt "
+        f"-ConfirmationReceiptId {receipt_id_arg}"
+    )
     return {
         "ok": True,
         "kind": _FEDERATION_SLEEP_RESUME_CONFIRMATIONS_KIND,
@@ -973,10 +999,28 @@ def stage16_sleep_resume_confirmation_readback(*, limit: int = 20) -> dict[str, 
         "latest_receipt": latest_receipt,
         "latest_receipt_id": _safe_str(latest_receipt.get("receipt_id")).strip(),
         "latest_actor": _safe_str(latest_receipt.get("actor")).strip(),
-        "latest_decision": _safe_str(latest_receipt.get("decision")).strip(),
-        "latest_pre_sleep_evidence_path": _safe_str(latest_receipt.get("pre_sleep_evidence_path")).strip(),
+        "latest_decision": latest_decision,
+        "latest_pre_sleep_evidence_path": latest_pre_sleep_path,
         "latest_recorded_ts": int(latest_receipt.get("recorded_ts") or 0),
         "receipt_readback_ready": bool(latest_receipt),
+        "current_pre_sleep_evidence_present": bool(current_pre_sleep.get("present")),
+        "current_pre_sleep_evidence_path": current_pre_sleep_path,
+        "current_pre_sleep_recorded_ts": int(current_pre_sleep.get("recorded_ts") or 0),
+        "latest_receipt_is_operator_confirmed": latest_operator_confirmed
+        and latest_decision == "operator_confirmed_sleep_resume",
+        "latest_receipt_matches_current_pre_sleep": latest_matches_current_pre_sleep,
+        "latest_receipt_usable_for_receipt_backed_sequence": receipt_backed_sequence_ready,
+        "receipt_backed_sequence_ready": receipt_backed_sequence_ready,
+        "receipt_backed_sequence_blockers": receipt_backed_sequence_blockers,
+        "receipt_backed_sequence_command": receipt_backed_sequence_command if receipt_backed_sequence_ready else "",
+        "receipt_backed_sequence_copyable_command": (
+            f"Set-Location -LiteralPath {_powershell_single_quote(str(repo_root()))}; {receipt_backed_sequence_command}"
+            if receipt_backed_sequence_ready
+            else ""
+        ),
+        "receipt_backed_sequence_requires_confirmation_receipt": True,
+        "receipt_backed_sequence_writes_evidence_when_run": receipt_backed_sequence_ready,
+        "receipt_backed_sequence_writes_receipts_when_run": receipt_backed_sequence_ready,
         "reads_receipts": True,
         "writes_receipts": False,
         "writes_evidence": False,
@@ -997,6 +1041,8 @@ def stage16_sleep_resume_confirmation_readback(*, limit: int = 20) -> dict[str, 
             "read_only": True,
             "sleep_resume_confirmation_receipt_readback": True,
             "receipt_readback_ready": bool(latest_receipt),
+            "checks_current_pre_sleep_evidence_path": True,
+            "receipt_backed_sequence_requires_current_matching_confirmation": True,
             "does_not_infer_sleep_from_delay": True,
             "does_not_write_receipts": True,
             "does_not_write_evidence": True,
