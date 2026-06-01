@@ -1384,6 +1384,67 @@ def _stage16_sleep_continuity_operator_terminal_invocation(
     }
 
 
+def _stage16_sleep_continuity_after_manual_execution_readback(
+    *,
+    selected_step: dict[str, Any],
+    selected_action_readiness: dict[str, Any],
+) -> dict[str, Any]:
+    step_id = _safe_str(selected_step.get("id")).strip()
+    routes = _federation_routes()
+    base = {
+        "status": "manual_execution_projection_ready" if step_id else "no_selected_manual_execution",
+        "selected_step_id": step_id,
+        "expected_output": _safe_str(selected_step.get("expected_output")).strip(),
+        "operator_terminal_command_ready": bool(selected_action_readiness.get("operator_terminal_command_ready")),
+        "ready_to_run": bool(selected_action_readiness.get("ready_to_run")),
+        "refresh_routes": {
+            "status": routes["status"],
+            "sleep_continuity_runbook": routes["sleep_continuity_runbook"],
+            "sleep_continuity_action": routes["sleep_continuity_action"],
+            "completion_review": routes["completion_review"],
+        },
+        "manual_execution_writes_evidence": bool(selected_step.get("writes_evidence_when_run")),
+        "manual_execution_writes_receipts": bool(selected_step.get("writes_receipts_when_run")),
+        "projection_only": True,
+        "projection_runs_shell": False,
+        "projection_writes_evidence": False,
+        "projection_writes_receipts": False,
+        "projection_marks_stage16_closed": False,
+    }
+    if step_id == "capture_post_resume_evidence":
+        return {
+            **base,
+            "expected_artifact_root": str(_stage16_sleep_continuity_evidence_root()),
+            "expected_artifact_prefix": "post_resume_",
+            "expected_artifact_kind": "stage16_sleep_continuity_post_resume",
+            "expected_status_after_success": "post_resume_evidence_ready",
+            "expected_action_status_after_success": "run_sleep_continuity_runtime_proof",
+            "expected_selected_step_id_after_success": "commit_sleep_continuity_readback",
+            "expected_next_step_after_success": "run_sleep_continuity_runtime_proof_with_committed_evidence",
+        }
+    if step_id == "commit_sleep_continuity_readback":
+        return {
+            **base,
+            "expected_artifact_root": str(data_dir() / "logs" / "federation"),
+            "expected_artifact_prefix": "live_runtime_readback",
+            "expected_artifact_kind": "francis.stage16.federation.live_runtime_readback_receipt",
+            "expected_status_after_success": "validated",
+            "expected_action_status_after_success": "record_stage16_closure_decision",
+            "expected_selected_step_id_after_success": "record_operator_stage_closure_decision",
+            "expected_next_step_after_success": "record_operator_stage_closure_decision_after_completion_review",
+        }
+    return {
+        **base,
+        "expected_artifact_root": "",
+        "expected_artifact_prefix": "",
+        "expected_artifact_kind": "",
+        "expected_status_after_success": "",
+        "expected_action_status_after_success": "",
+        "expected_selected_step_id_after_success": "",
+        "expected_next_step_after_success": "",
+    }
+
+
 def stage16_sleep_continuity_action() -> dict[str, Any]:
     runbook = stage16_sleep_continuity_runbook()
     blockers = _parse_list(runbook.get("missing_readbacks"))
@@ -1429,6 +1490,10 @@ def stage16_sleep_continuity_action() -> dict[str, Any]:
         selected_action_readiness=selected_action_readiness,
         confirmation_requirements=confirmation_requirements,
     )
+    after_manual_execution_readback = _stage16_sleep_continuity_after_manual_execution_readback(
+        selected_step=selected_step,
+        selected_action_readiness=selected_action_readiness,
+    )
 
     return {
         "ok": True,
@@ -1460,6 +1525,7 @@ def stage16_sleep_continuity_action() -> dict[str, Any]:
         "operator_confirmation_requirements": confirmation_requirements,
         "selected_action_readiness": selected_action_readiness,
         "operator_terminal_invocation": operator_terminal_invocation,
+        "after_manual_execution_readback": after_manual_execution_readback,
         "writes_evidence_when_run": bool(selected_step.get("writes_evidence_when_run")),
         "writes_receipts_when_run": bool(selected_step.get("writes_receipts_when_run")),
         "mutation_available_from_ui": False,
@@ -1474,6 +1540,7 @@ def stage16_sleep_continuity_action() -> dict[str, Any]:
             "confirmation_requirements_projected": bool(confirmation_requirements),
             "selected_action_readiness_projected": True,
             "operator_terminal_invocation_projected": True,
+            "after_manual_execution_readback_projected": True,
             "does_not_run_selected_command": True,
             "does_not_post_selected_route": True,
             "writes_evidence": False,

@@ -1331,6 +1331,27 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert invocation["projection_writes_evidence"] is False
     assert invocation["projection_writes_receipts"] is False
     assert invocation["projection_grants_authority"] is False
+    after_run = action["after_manual_execution_readback"]
+    assert after_run["status"] == "manual_execution_projection_ready"
+    assert after_run["selected_step_id"] == "capture_post_resume_evidence"
+    assert after_run["expected_artifact_root"] == str(
+        data_root / "test_runs" / "federation-stage16-sleep-continuity-evidence"
+    )
+    assert after_run["expected_artifact_prefix"] == "post_resume_"
+    assert after_run["expected_artifact_kind"] == "stage16_sleep_continuity_post_resume"
+    assert after_run["expected_status_after_success"] == "post_resume_evidence_ready"
+    assert after_run["expected_action_status_after_success"] == "run_sleep_continuity_runtime_proof"
+    assert after_run["expected_selected_step_id_after_success"] == "commit_sleep_continuity_readback"
+    assert after_run["expected_next_step_after_success"] == "run_sleep_continuity_runtime_proof_with_committed_evidence"
+    assert after_run["refresh_routes"]["status"] == "/federation/status"
+    assert after_run["refresh_routes"]["sleep_continuity_action"] == "/federation/sleep-continuity-action"
+    assert after_run["manual_execution_writes_evidence"] is True
+    assert after_run["manual_execution_writes_receipts"] is False
+    assert after_run["projection_only"] is True
+    assert after_run["projection_runs_shell"] is False
+    assert after_run["projection_writes_evidence"] is False
+    assert after_run["projection_writes_receipts"] is False
+    assert after_run["projection_marks_stage16_closed"] is False
     assert "-OperatorConfirmedSleepResume" in action["primary_command"]
     assert action["pre_sleep_evidence_ready"] is True
     assert action["post_resume_evidence_ready"] is False
@@ -1429,6 +1450,18 @@ def test_federation_stage16_sleep_continuity_runbook_uses_linked_post_resume_mar
     assert invocation["manual_execution_writes_receipts"] is True
     assert invocation["projection_only"] is True
     assert invocation["projection_runs_shell"] is False
+    after_run = action["after_manual_execution_readback"]
+    assert after_run["status"] == "manual_execution_projection_ready"
+    assert after_run["selected_step_id"] == "commit_sleep_continuity_readback"
+    assert after_run["expected_artifact_root"] == str(data_root / "logs" / "federation")
+    assert after_run["expected_artifact_prefix"] == "live_runtime_readback"
+    assert after_run["expected_artifact_kind"] == "francis.stage16.federation.live_runtime_readback_receipt"
+    assert after_run["expected_status_after_success"] == "validated"
+    assert after_run["expected_action_status_after_success"] == "record_stage16_closure_decision"
+    assert after_run["expected_selected_step_id_after_success"] == "record_operator_stage_closure_decision"
+    assert after_run["manual_execution_writes_evidence"] is False
+    assert after_run["manual_execution_writes_receipts"] is True
+    assert after_run["projection_marks_stage16_closed"] is False
     assert action["pre_sleep_evidence_ready"] is True
     assert action["post_resume_evidence_ready"] is True
     assert action["operator_confirmation_required"] is False

@@ -111,6 +111,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
   const latestPostResumeEvidence = status?.latest_post_resume_evidence;
   const selectedActionReadiness = presentation?.selected_action_readiness;
   const operatorTerminalInvocation = presentation?.operator_terminal_invocation;
+  const afterManualExecutionReadback = presentation?.after_manual_execution_readback;
 
   return (
     <section style={panelStyle}>
@@ -259,6 +260,28 @@ export function FederationHubPanel(props: { baseUrl: string }) {
                     {precondition}
                   </span>
                 ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {afterManualExecutionReadback ? (
+          <div style={{ marginTop: 8 }}>
+            <div style={{ fontSize: 11, color: MUTED }}>
+              after manual run <code>{codeValue(afterManualExecutionReadback.status)}</code>
+              {" / "}next action <code>{codeValue(afterManualExecutionReadback.expected_action_status_after_success)}</code>
+            </div>
+            {afterManualExecutionReadback.expected_artifact_root ? (
+              <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
+                artifact root <code>{afterManualExecutionReadback.expected_artifact_root}</code>
+              </div>
+            ) : null}
+            <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
+              artifact <code>{codeValue(afterManualExecutionReadback.expected_artifact_prefix)}</code>
+              {" / "}kind <code>{codeValue(afterManualExecutionReadback.expected_artifact_kind)}</code>
+            </div>
+            {afterManualExecutionReadback.expected_next_step_after_success ? (
+              <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
+                expected next step <code>{afterManualExecutionReadback.expected_next_step_after_success}</code>
               </div>
             ) : null}
           </div>

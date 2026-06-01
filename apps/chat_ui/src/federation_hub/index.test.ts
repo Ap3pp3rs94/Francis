@@ -596,6 +596,33 @@ test("federation sleep-continuity action parser preserves selected read-only ste
       projection_writes_receipts: false,
       projection_grants_authority: false,
     },
+    after_manual_execution_readback: {
+      status: "manual_execution_projection_ready",
+      selected_step_id: "capture_post_resume_evidence",
+      expected_output: "post-resume evidence JSON path",
+      operator_terminal_command_ready: true,
+      ready_to_run: false,
+      refresh_routes: {
+        status: "/federation/status",
+        sleep_continuity_runbook: "/federation/sleep-continuity-runbook",
+        sleep_continuity_action: "/federation/sleep-continuity-action",
+        completion_review: "/federation/completion-review",
+      },
+      manual_execution_writes_evidence: true,
+      manual_execution_writes_receipts: false,
+      projection_only: true,
+      projection_runs_shell: false,
+      projection_writes_evidence: false,
+      projection_writes_receipts: false,
+      projection_marks_stage16_closed: false,
+      expected_artifact_root: "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence",
+      expected_artifact_prefix: "post_resume_",
+      expected_artifact_kind: "stage16_sleep_continuity_post_resume",
+      expected_status_after_success: "post_resume_evidence_ready",
+      expected_action_status_after_success: "run_sleep_continuity_runtime_proof",
+      expected_selected_step_id_after_success: "commit_sleep_continuity_readback",
+      expected_next_step_after_success: "run_sleep_continuity_runtime_proof_with_committed_evidence",
+    },
     writes_evidence_when_run: true,
     writes_receipts_when_run: false,
     mutation_available_from_ui: false,
@@ -679,6 +706,30 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   assert.equal(action.operator_terminal_invocation?.projection_runs_shell, false);
   assert.equal(action.operator_terminal_invocation?.projection_writes_evidence, false);
   assert.equal(action.operator_terminal_invocation?.projection_grants_authority, false);
+  assert.equal(action.after_manual_execution_readback?.status, "manual_execution_projection_ready");
+  assert.equal(action.after_manual_execution_readback?.selected_step_id, "capture_post_resume_evidence");
+  assert.equal(
+    action.after_manual_execution_readback?.expected_artifact_root,
+    "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence",
+  );
+  assert.equal(action.after_manual_execution_readback?.expected_artifact_prefix, "post_resume_");
+  assert.equal(action.after_manual_execution_readback?.expected_artifact_kind, "stage16_sleep_continuity_post_resume");
+  assert.equal(action.after_manual_execution_readback?.expected_status_after_success, "post_resume_evidence_ready");
+  assert.equal(
+    action.after_manual_execution_readback?.expected_action_status_after_success,
+    "run_sleep_continuity_runtime_proof",
+  );
+  assert.equal(
+    action.after_manual_execution_readback?.expected_selected_step_id_after_success,
+    "commit_sleep_continuity_readback",
+  );
+  assert.equal(action.after_manual_execution_readback?.refresh_routes.status, "/federation/status");
+  assert.equal(
+    action.after_manual_execution_readback?.refresh_routes.sleep_continuity_action,
+    "/federation/sleep-continuity-action",
+  );
+  assert.equal(action.after_manual_execution_readback?.projection_runs_shell, false);
+  assert.equal(action.after_manual_execution_readback?.projection_marks_stage16_closed, false);
   assert.equal(
     action.selected_action_readiness?.next_operator_step,
     "operator_confirm_sleep_resume_then_capture_post_resume_evidence",
@@ -753,6 +804,12 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   assert.equal(presentation.operator_terminal_invocation?.copyable_command?.includes(action.primary_command ?? ""), true);
   assert.equal(presentation.operator_terminal_invocation?.must_run_after_sleep_resume, true);
   assert.equal(presentation.operator_terminal_invocation?.projection_only, true);
+  assert.equal(presentation.after_manual_execution_readback?.status, "manual_execution_projection_ready");
+  assert.equal(
+    presentation.after_manual_execution_readback?.expected_next_step_after_success,
+    "run_sleep_continuity_runtime_proof_with_committed_evidence",
+  );
+  assert.equal(presentation.after_manual_execution_readback?.projection_marks_stage16_closed, false);
   assert.equal(presentation.writes_evidence_when_run, true);
   assert.equal(presentation.writes_receipts_when_run, false);
   assert.equal(presentation.mutation_available_from_ui, false);

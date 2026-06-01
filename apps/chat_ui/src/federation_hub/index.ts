@@ -352,6 +352,29 @@ export type FederationSleepContinuityOperatorTerminalInvocation = {
   projection_grants_authority: boolean;
 };
 
+export type FederationSleepContinuityAfterManualExecutionReadback = {
+  status?: string;
+  selected_step_id?: string;
+  expected_output?: string;
+  operator_terminal_command_ready: boolean;
+  ready_to_run: boolean;
+  refresh_routes: Record<string, string>;
+  manual_execution_writes_evidence: boolean;
+  manual_execution_writes_receipts: boolean;
+  projection_only: boolean;
+  projection_runs_shell: boolean;
+  projection_writes_evidence: boolean;
+  projection_writes_receipts: boolean;
+  projection_marks_stage16_closed: boolean;
+  expected_artifact_root?: string;
+  expected_artifact_prefix?: string;
+  expected_artifact_kind?: string;
+  expected_status_after_success?: string;
+  expected_action_status_after_success?: string;
+  expected_selected_step_id_after_success?: string;
+  expected_next_step_after_success?: string;
+};
+
 export type FederationSleepContinuityPresentation = {
   state: FederationSleepContinuityActionState;
   status_label: string;
@@ -379,6 +402,7 @@ export type FederationSleepContinuityPresentation = {
   operator_confirmation_requirements: string[];
   selected_action_readiness?: FederationSleepContinuitySelectedActionReadiness;
   operator_terminal_invocation?: FederationSleepContinuityOperatorTerminalInvocation;
+  after_manual_execution_readback?: FederationSleepContinuityAfterManualExecutionReadback;
   writes_evidence_when_run: boolean;
   writes_receipts_when_run: boolean;
   expected_output?: string;
@@ -415,6 +439,7 @@ export type FederationSleepContinuityActionReadback = {
   operator_confirmation_requirements: string[];
   selected_action_readiness?: FederationSleepContinuitySelectedActionReadiness;
   operator_terminal_invocation?: FederationSleepContinuityOperatorTerminalInvocation;
+  after_manual_execution_readback?: FederationSleepContinuityAfterManualExecutionReadback;
   writes_evidence_when_run: boolean;
   writes_receipts_when_run: boolean;
   mutation_available_from_ui: boolean;
@@ -550,6 +575,34 @@ function parseFederationSleepContinuityOperatorTerminalInvocation(
     projection_writes_evidence: safeBoolean(raw.projection_writes_evidence),
     projection_writes_receipts: safeBoolean(raw.projection_writes_receipts),
     projection_grants_authority: safeBoolean(raw.projection_grants_authority),
+  };
+}
+
+function parseFederationSleepContinuityAfterManualExecutionReadback(
+  raw: unknown,
+): FederationSleepContinuityAfterManualExecutionReadback | undefined {
+  if (!isRecord(raw)) return undefined;
+  return {
+    status: optionalString(raw.status),
+    selected_step_id: optionalString(raw.selected_step_id),
+    expected_output: optionalString(raw.expected_output),
+    operator_terminal_command_ready: safeBoolean(raw.operator_terminal_command_ready),
+    ready_to_run: safeBoolean(raw.ready_to_run),
+    refresh_routes: stringRecord(raw.refresh_routes),
+    manual_execution_writes_evidence: safeBoolean(raw.manual_execution_writes_evidence),
+    manual_execution_writes_receipts: safeBoolean(raw.manual_execution_writes_receipts),
+    projection_only: safeBoolean(raw.projection_only),
+    projection_runs_shell: safeBoolean(raw.projection_runs_shell),
+    projection_writes_evidence: safeBoolean(raw.projection_writes_evidence),
+    projection_writes_receipts: safeBoolean(raw.projection_writes_receipts),
+    projection_marks_stage16_closed: safeBoolean(raw.projection_marks_stage16_closed),
+    expected_artifact_root: optionalString(raw.expected_artifact_root),
+    expected_artifact_prefix: optionalString(raw.expected_artifact_prefix),
+    expected_artifact_kind: optionalString(raw.expected_artifact_kind),
+    expected_status_after_success: optionalString(raw.expected_status_after_success),
+    expected_action_status_after_success: optionalString(raw.expected_action_status_after_success),
+    expected_selected_step_id_after_success: optionalString(raw.expected_selected_step_id_after_success),
+    expected_next_step_after_success: optionalString(raw.expected_next_step_after_success),
   };
 }
 
@@ -1056,6 +1109,9 @@ export function parseFederationSleepContinuityAction(raw: unknown): FederationSl
     operator_terminal_invocation: parseFederationSleepContinuityOperatorTerminalInvocation(
       body.operator_terminal_invocation,
     ),
+    after_manual_execution_readback: parseFederationSleepContinuityAfterManualExecutionReadback(
+      body.after_manual_execution_readback,
+    ),
     writes_evidence_when_run: safeBoolean(body.writes_evidence_when_run),
     writes_receipts_when_run: safeBoolean(body.writes_receipts_when_run),
     mutation_available_from_ui: safeBoolean(body.mutation_available_from_ui),
@@ -1151,6 +1207,7 @@ function buildFederationSleepContinuityPresentation(
     operator_confirmation_requirements: [],
     selected_action_readiness: undefined,
     operator_terminal_invocation: undefined,
+    after_manual_execution_readback: undefined,
     writes_evidence_when_run: selectedStep?.writes_evidence_when_run ?? false,
     writes_receipts_when_run: selectedStep?.writes_receipts_when_run ?? false,
     expected_output: selectedStep?.expected_output,
@@ -1245,6 +1302,7 @@ export function presentFederationSleepContinuityAction(
     operator_confirmation_requirements: action.operator_confirmation_requirements,
     selected_action_readiness: action.selected_action_readiness,
     operator_terminal_invocation: action.operator_terminal_invocation,
+    after_manual_execution_readback: action.after_manual_execution_readback,
     writes_evidence_when_run: action.writes_evidence_when_run || selectedStep?.writes_evidence_when_run === true,
     writes_receipts_when_run: action.writes_receipts_when_run || selectedStep?.writes_receipts_when_run === true,
     expected_output: action.expected_output ?? selectedStep?.expected_output,

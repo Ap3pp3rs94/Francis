@@ -52597,6 +52597,65 @@ Latest validation for Stage 16 sleep action terminal invocation handoff:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 sleep action projects after-run readback
+
+Roadmap area: Stage 16 / Federation, workstation sleep-continuity gate
+truthfulness.
+
+Material change:
+
+- `/federation/sleep-continuity-action` now exposes a read-only
+  `after_manual_execution_readback` projection for the selected sleep-continuity
+  action.
+- In the current post-resume capture posture, the projection shows the expected
+  post-resume evidence artifact root, file prefix, evidence kind, refresh
+  routes, expected status after success, expected selected next action, and
+  manual-execution effect flags.
+- The federation UI parser, presenter, and panel preserve and render this
+  after-run readback so the operator can verify what should change after
+  running the terminal command.
+- This is read-only inspectability. It does not execute routes, run shell
+  commands, write evidence, write receipts, mutate registry state, write memory,
+  grant execution authority, grant mutation authority, infer workstation
+  sleep/resume, or mark Stage 16 closed.
+- Stage 16 remains open until live post-resume evidence and the receipt-backed
+  completion/closure gates are satisfied.
+
+Latest validation for Stage 16 sleep action after-run readback:
+
+- Live FastAPI readback of `/federation/sleep-continuity-action`
+  Result: `status=capture_post_resume_evidence`,
+  `after_manual_execution_readback.status=manual_execution_projection_ready`,
+  `selected_step_id=capture_post_resume_evidence`,
+  `expected_artifact_root=D:\Francis\data\test_runs\federation-stage16-sleep-continuity-evidence`,
+  `expected_artifact_prefix=post_resume_`,
+  `expected_artifact_kind=stage16_sleep_continuity_post_resume`,
+  `expected_status_after_success=post_resume_evidence_ready`,
+  `expected_action_status_after_success=run_sleep_continuity_runtime_proof`,
+  `expected_selected_step_id_after_success=commit_sleep_continuity_readback`,
+  `expected_next_step_after_success=run_sleep_continuity_runtime_proof_with_committed_evidence`,
+  `manual_execution_writes_evidence=true`,
+  `manual_execution_writes_receipts=false`, `projection_runs_shell=false`,
+  `projection_writes_evidence=false`, `projection_writes_receipts=false`,
+  `projection_marks_stage16_closed=false`, and
+  `next_smallest_truthful_gap=stage16_sleep_continuity_runtime_readback`.
+- `python -m pytest tests/test_api_federation.py -q --tb=short`
+  Result: `passed; 19 passed`.
+- `cd apps/chat_ui; npm run test -- federation_hub`
+  Result: `passed; 187 passed`.
+- `cd apps/chat_ui; npm run build`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
