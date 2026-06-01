@@ -252,6 +252,16 @@ def test_system_exposes_mutating_route_authority_matrix() -> None:
     assert federation["governance_maturity"] == "permission_gated"
     assert "permission_gate" in federation["denial_behavior"]
 
+    federation_sleep_resume = entries["/federation/sleep-resume-confirmation"]
+    assert federation_sleep_resume["family"] == "federation"
+    assert federation_sleep_resume["required_actor"] == (
+        "payload.request_actor, payload.api_actor, payload.actor, or api.federation default"
+    )
+    assert federation_sleep_resume["required_scope"] == "federation.stage16.sleep_resume.confirmation.write"
+    assert federation_sleep_resume["governance_maturity"] == "permission_gated"
+    assert "confirmation receipt" in federation_sleep_resume["receipt_behavior"]
+    assert "does not write evidence" in federation_sleep_resume["notes"]
+
     industrial = entries["/industrial/assets"]
     assert industrial["family"] == "industrial"
     assert industrial["required_actor"] == (

@@ -1424,10 +1424,31 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     )
     assert confirmation_handoff["post_resume_sequence_writes_evidence_when_run"] is True
     assert confirmation_handoff["post_resume_sequence_writes_receipts_when_run"] is True
+    assert confirmation_handoff["confirmation_receipt_route"] == "/federation/sleep-resume-confirmation"
+    assert confirmation_handoff["confirmation_receipt_readback_route"] == "/federation/sleep-resume-confirmations"
+    assert (
+        confirmation_handoff["confirmation_receipt_required_scope"]
+        == "federation.stage16.sleep_resume.confirmation.write"
+    )
+    assert confirmation_handoff["confirmation_receipt_payload_contract"] == {
+        "actor": "operator or delegated builder actor with federation.stage16.sleep_resume.confirmation.write",
+        "operator_confirmed_sleep_resume": True,
+        "pre_sleep_evidence_path": str(pre_sleep_path.resolve()),
+        "reason": "operator confirms physical sleep/suspend and resume after the pre-sleep marker",
+    }
+    assert confirmation_handoff["confirmation_receipt_available_before_sequence"] is True
+    assert confirmation_handoff["confirmation_receipt_required_for_receipt_backed_workflow"] is True
+    assert confirmation_handoff["confirmation_receipt_writes_receipts"] is True
+    assert confirmation_handoff["confirmation_receipt_writes_evidence"] is False
+    assert confirmation_handoff["confirmation_receipt_marks_stage16_closed"] is False
     assert confirmation_handoff["should_not_run_before_confirmation"] is True
     assert confirmation_handoff["operator_terminal_command_ready"] is True
     assert confirmation_handoff["readback_routes"]["status"] == "/federation/status"
     assert confirmation_handoff["readback_routes"]["sleep_continuity_action"] == "/federation/sleep-continuity-action"
+    assert (
+        confirmation_handoff["readback_routes"]["sleep_resume_confirmations"]
+        == "/federation/sleep-resume-confirmations"
+    )
     assert confirmation_handoff["readback_routes"]["completion_review"] == "/federation/completion-review"
     assert confirmation_handoff["proof_boundary"]["projection_only"] is True
     assert confirmation_handoff["proof_boundary"]["requires_manual_operator_confirmation"] is True
@@ -1473,7 +1494,177 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert action["writes_evidence_when_run"] is True
     assert action["writes_receipts_when_run"] is False
     assert action["mutation_available_from_ui"] is False
+    assert action["routes"]["sleep_resume_confirmation"] == "/federation/sleep-resume-confirmation"
+    assert action["routes"]["sleep_resume_confirmations"] == "/federation/sleep-resume-confirmations"
     assert action["next_smallest_truthful_gap"] == "stage16_sleep_continuity_runtime_readback"
+
+
+def test_federation_stage16_sleep_resume_confirmation_denies_without_scope(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({"test.federation.write": ["federation.write"]}),
+    )
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    response = client.post(
+        "/federation/sleep-resume-confirmation",
+        json={
+            "actor": "test.federation.write",
+            "reason": "attempt sleep resume confirmation without scope",
+            "operator_confirmed_sleep_resume": True,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["status"] == "denied"
+    assert body["error"] == "api_permission_denied"
+    assert body["required_scope"] == "federation.stage16.sleep_resume.confirmation.write"
+    assert (
+        body["governance"]["next_step"]
+        == "configure_sleep_resume_confirmation_write_scope_before_operator_confirmation"
+    )
+    assert not (data_root / "logs" / "federation" / "stage16_sleep_resume_operator_confirmations.jsonl").exists()
+
+
+def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setattr("francis.api.routes.federation._now_s", lambda: 1_800_030_360)
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps(
+            {
+                "test.federation.write": ["federation.write"],
+                "test.federation.sleep": ["federation.stage16.sleep_resume.confirmation.write"],
+            }
+        ),
+    )
+    _write_stage15_closure_receipt(data_root, receipt_id="swarm_stage15_closure_for_sleep_resume_confirmation")
+    pre_sleep_path = _write_stage16_pre_sleep_evidence(data_root)
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    for readback_id in [
+        "live_pairing_flow_observed",
+        "live_selective_sync_observed",
+        "live_remote_approval_roundtrip_observed",
+        "live_revocation_roundtrip_observed",
+    ]:
+        _record_stage16_live_readback(client, readback_id)
+
+    empty_readback = client.get("/federation/sleep-resume-confirmations?limit=5").json()
+    assert empty_readback["status"] == "empty"
+    assert empty_readback["receipt_readback_ready"] is False
+    assert empty_readback["writes_receipts"] is False
+    assert empty_readback["writes_evidence"] is False
+    assert empty_readback["writes_runtime_readback"] is False
+    assert empty_readback["marks_stage16_closed"] is False
+
+    mismatch = client.post(
+        "/federation/sleep-resume-confirmation",
+        json={
+            "actor": "test.federation.sleep",
+            "reason": "operator confirmed sleep resume but path mismatch",
+            "operator_confirmed_sleep_resume": True,
+            "pre_sleep_evidence_path": str(data_root / "stale-pre-sleep.json"),
+        },
+    ).json()
+    assert mismatch["status"] == "blocked"
+    assert mismatch["receipt"] is None
+    assert mismatch["writes_receipt"] is False
+    assert mismatch["blockers"] == ["pre_sleep_evidence_path_mismatch"]
+
+    response = client.post(
+        "/federation/sleep-resume-confirmation",
+        json={
+            "actor": "test.federation.sleep",
+            "reason": "operator confirmed sleep resume token=sleepconfirmsecret123",
+            "operator_confirmed_sleep_resume": True,
+            "pre_sleep_evidence_path": str(pre_sleep_path.resolve()),
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["status"] == "recorded"
+    assert body["receipt_id"].startswith("fedsleepconfirm_")
+    assert body["decision"] == "operator_confirmed_sleep_resume"
+    assert body["writes_receipt"] is True
+    assert body["writes_evidence"] is False
+    assert body["writes_runtime_readback"] is False
+    assert body["writes_registry"] is False
+    assert body["writes_memory"] is False
+    assert body["runs_shell"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["marks_stage16_closed"] is False
+    assert body["action"]["status"] == "capture_post_resume_evidence"
+    assert body["action"]["operator_confirmation_pending"] is True
+    assert body["next_smallest_truthful_gap"] == "stage16_sleep_continuity_runtime_readback"
+
+    receipt = body["receipt"]
+    assert receipt["kind"] == "francis.stage16.federation.sleep_resume_operator_confirmation_receipt"
+    assert receipt["receipt_id"] == body["receipt_id"]
+    assert receipt["actor"] == "test.federation.sleep"
+    assert receipt["decision"] == "operator_confirmed_sleep_resume"
+    assert receipt["operator_confirmed_sleep_resume"] is True
+    assert receipt["selected_step_id"] == "capture_post_resume_evidence"
+    assert receipt["pre_sleep_evidence_path"] == str(pre_sleep_path.resolve())
+    assert receipt["pre_sleep_recorded_ts"] == 1_800_030_000
+    assert receipt["continuity_record_id"] == "stage16-sleep-pre"
+    assert receipt["trace_id"] == "trace-stage16-sleep-continuity-pre-test"
+    assert receipt["post_resume_capture_allowed_after_confirmation"] is True
+    assert receipt["post_resume_sequence_available_after_confirmation"] is True
+    assert receipt["writes_evidence"] is False
+    assert receipt["writes_runtime_readback"] is False
+    assert receipt["writes_receipt"] is True
+    assert receipt["marks_stage16_closed"] is False
+    assert receipt["governance"]["permission_scope"] == "federation.stage16.sleep_resume.confirmation.write"
+    assert receipt["governance"]["explicit_operator_confirmation"] is True
+    assert receipt["governance"]["manual_operator_confirmation_after_physical_sleep_resume"] is True
+    assert receipt["governance"]["does_not_infer_sleep_from_delay"] is True
+    assert receipt["governance"]["does_not_capture_post_resume_evidence"] is True
+    assert receipt["governance"]["does_not_write_runtime_readback"] is True
+    assert receipt["governance"]["does_not_mark_stage16_closed"] is True
+    assert receipt["governance"]["grants_execution_authority"] is False
+    assert receipt["governance"]["grants_mutation_authority"] is False
+    receipt_text = json.dumps(receipt, sort_keys=True)
+    assert "sleepconfirmsecret123" not in receipt_text
+
+    readback = client.get("/federation/sleep-resume-confirmations?limit=5").json()
+    assert readback["status"] == "sleep_resume_confirmation_readback_ready"
+    assert readback["count"] == 1
+    assert readback["total"] == 1
+    assert readback["latest_receipt_id"] == body["receipt_id"]
+    assert readback["latest_decision"] == "operator_confirmed_sleep_resume"
+    assert readback["latest_pre_sleep_evidence_path"] == str(pre_sleep_path.resolve())
+    assert readback["receipt_readback_ready"] is True
+    assert readback["writes_receipts"] is False
+    assert readback["writes_evidence"] is False
+    assert readback["writes_runtime_readback"] is False
+    assert readback["marks_stage16_closed"] is False
+    assert readback["grants_execution_authority"] is False
+    assert readback["governance"]["sleep_resume_confirmation_receipt_readback"] is True
+    assert readback["governance"]["does_not_infer_sleep_from_delay"] is True
+    assert readback["next_smallest_truthful_gap"] == "stage16_sleep_continuity_runtime_readback"
+    assert not list(
+        (data_root / "test_runs" / "federation-stage16-sleep-continuity-evidence").glob("post_resume_*.json")
+    )
 
 
 def test_federation_stage16_sleep_continuity_runbook_uses_linked_post_resume_marker(

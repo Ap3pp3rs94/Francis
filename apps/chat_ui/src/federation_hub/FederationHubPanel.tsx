@@ -316,6 +316,17 @@ export function FederationHubPanel(props: { baseUrl: string }) {
               {" / "}writes receipts{" "}
               <code>{yesNo(operatorConfirmationHandoff.post_resume_sequence_writes_receipts_when_run)}</code>
             </div>
+            <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
+              receipt route <code>{codeValue(operatorConfirmationHandoff.confirmation_receipt_route)}</code>
+              {" / "}readback <code>{codeValue(operatorConfirmationHandoff.confirmation_receipt_readback_route)}</code>
+            </div>
+            <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
+              receipt scope <code>{codeValue(operatorConfirmationHandoff.confirmation_receipt_required_scope)}</code>
+              {" / "}writes evidence{" "}
+              <code>{yesNo(operatorConfirmationHandoff.confirmation_receipt_writes_evidence)}</code>
+              {" / "}marks closed{" "}
+              <code>{yesNo(operatorConfirmationHandoff.confirmation_receipt_marks_stage16_closed)}</code>
+            </div>
             {operatorConfirmationHandoff.operator_confirmation_source_required ? (
               <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
                 source <code>{operatorConfirmationHandoff.operator_confirmation_source_required}</code>

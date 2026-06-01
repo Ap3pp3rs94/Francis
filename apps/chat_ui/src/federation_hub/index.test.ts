@@ -354,6 +354,62 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
       });
     }
 
+    if (parsed.pathname === "/federation/sleep-resume-confirmations") {
+      return jsonResponse({
+        ok: true,
+        kind: "francis.stage16.federation.sleep_resume_operator_confirmation_receipts",
+        stage: "Stage 16 / Federation",
+        status: "sleep_resume_confirmation_readback_ready",
+        count: 1,
+        total: 1,
+        latest_receipt_id: "fedsleepconfirm_ui_test",
+        latest_actor: "test.federation.sleep",
+        latest_decision: "operator_confirmed_sleep_resume",
+        latest_pre_sleep_evidence_path:
+          "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json",
+        latest_recorded_ts: 1_800_030_360,
+        receipt_readback_ready: true,
+        reads_receipts: true,
+        writes_receipts: false,
+        writes_evidence: false,
+        writes_runtime_readback: false,
+        marks_stage16_closed: false,
+        grants_execution_authority: false,
+        grants_mutation_authority: false,
+        latest_receipt: {
+          receipt_id: "fedsleepconfirm_ui_test",
+          actor: "test.federation.sleep",
+          decision: "operator_confirmed_sleep_resume",
+          operator_confirmed_sleep_resume: true,
+          pre_sleep_evidence_path:
+            "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json",
+          pre_sleep_recorded_ts: 1_800_030_000,
+          continuity_record_id: "stage16-sleep-continuity-test",
+          trace_id: "trace-stage16-sleep-continuity-test",
+          recorded_ts: 1_800_030_360,
+        },
+        items: [
+          {
+            receipt_id: "fedsleepconfirm_ui_test",
+            actor: "test.federation.sleep",
+            decision: "operator_confirmed_sleep_resume",
+            operator_confirmed_sleep_resume: true,
+            pre_sleep_evidence_path:
+              "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json",
+            pre_sleep_recorded_ts: 1_800_030_000,
+            continuity_record_id: "stage16-sleep-continuity-test",
+            trace_id: "trace-stage16-sleep-continuity-test",
+            recorded_ts: 1_800_030_360,
+          },
+        ],
+        routes: {
+          sleep_resume_confirmations: "/federation/sleep-resume-confirmations",
+          sleep_resume_confirmation: "/federation/sleep-resume-confirmation",
+        },
+        next_smallest_truthful_gap: "stage16_sleep_continuity_runtime_readback",
+      });
+    }
+
     return jsonResponse({ ok: false }, 404);
   });
 
@@ -365,6 +421,7 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
     const runbook = await client.getSleepContinuityRunbook({ timeoutMs: 50 });
     const action = await client.getSleepContinuityAction({ timeoutMs: 50 });
     const closure = await client.getStageClosureDecisions({ limit: 5, timeoutMs: 50 });
+    const confirmations = await client.getSleepResumeConfirmations({ limit: 3, timeoutMs: 50 });
     const presentation = await client.getSleepContinuityPresentation({ timeoutMs: 50 });
 
     assert.deepEqual(requests, [
@@ -374,6 +431,7 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
       { path: "/federation/sleep-continuity-runbook", method: "GET", limit: null },
       { path: "/federation/sleep-continuity-action", method: "GET", limit: null },
       { path: "/federation/stage-closure-decisions", method: "GET", limit: "5" },
+      { path: "/federation/sleep-resume-confirmations", method: "GET", limit: "3" },
       { path: "/federation/sleep-continuity-action", method: "GET", limit: null },
     ]);
     assert.equal(status.stage16_status, "stage16_contracts_ready_completion_blocked");
@@ -505,6 +563,19 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
     assert.equal(closure.captures_screen, false);
     assert.equal(closure.grants_execution_authority, false);
     assert.equal(closure.grants_mutation_authority, false);
+
+    assert.equal(confirmations.status, "sleep_resume_confirmation_readback_ready");
+    assert.equal(confirmations.count, 1);
+    assert.equal(confirmations.latest_receipt_id, "fedsleepconfirm_ui_test");
+    assert.equal(confirmations.latest_decision, "operator_confirmed_sleep_resume");
+    assert.equal(confirmations.latest_pre_sleep_evidence_path, "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json");
+    assert.equal(confirmations.receipt_readback_ready, true);
+    assert.equal(confirmations.writes_receipts, false);
+    assert.equal(confirmations.writes_evidence, false);
+    assert.equal(confirmations.writes_runtime_readback, false);
+    assert.equal(confirmations.marks_stage16_closed, false);
+    assert.equal(confirmations.latest_receipt?.operator_confirmed_sleep_resume, true);
+    assert.equal(confirmations.latest_receipt?.continuity_record_id, "stage16-sleep-continuity-test");
 
     assert.equal(presentation.state, "blocked_on_prior_live_readbacks");
     assert.deepEqual(presentation.blockers, ["live_pairing_flow_observed", "workstation_sleep_continuity_validated"]);
@@ -701,12 +772,28 @@ test("federation sleep-continuity action parser preserves selected read-only ste
         'Set-Location -LiteralPath \'D:\\Francis\'; scripts/federation-stage16-sleep-continuity-post-resume-sequence.ps1 -Mode Run -CommitEvidence -CommitReceipts -PreSleepEvidencePath "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json" -OperatorConfirmedSleepResume',
       post_resume_sequence_writes_evidence_when_run: true,
       post_resume_sequence_writes_receipts_when_run: true,
+      confirmation_receipt_route: "/federation/sleep-resume-confirmation",
+      confirmation_receipt_readback_route: "/federation/sleep-resume-confirmations",
+      confirmation_receipt_required_scope: "federation.stage16.sleep_resume.confirmation.write",
+      confirmation_receipt_payload_contract: {
+        actor: "operator or delegated builder actor with federation.stage16.sleep_resume.confirmation.write",
+        operator_confirmed_sleep_resume: true,
+        pre_sleep_evidence_path:
+          "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json",
+        reason: "operator confirms physical sleep/suspend and resume after the pre-sleep marker",
+      },
+      confirmation_receipt_available_before_sequence: true,
+      confirmation_receipt_required_for_receipt_backed_workflow: true,
+      confirmation_receipt_writes_receipts: true,
+      confirmation_receipt_writes_evidence: false,
+      confirmation_receipt_marks_stage16_closed: false,
       should_not_run_before_confirmation: true,
       operator_terminal_command_ready: true,
       readback_routes: {
         status: "/federation/status",
         sleep_continuity_action: "/federation/sleep-continuity-action",
         sleep_continuity_runbook: "/federation/sleep-continuity-runbook",
+        sleep_resume_confirmations: "/federation/sleep-resume-confirmations",
         completion_review: "/federation/completion-review",
       },
       proof_boundary: {
@@ -768,6 +855,8 @@ test("federation sleep-continuity action parser preserves selected read-only ste
     routes: {
       sleep_continuity_action: "/federation/sleep-continuity-action",
       sleep_continuity_runbook: "/federation/sleep-continuity-runbook",
+      sleep_resume_confirmation: "/federation/sleep-resume-confirmation",
+      sleep_resume_confirmations: "/federation/sleep-resume-confirmations",
       stage_closure_decision: "/federation/stage-closure-decision",
       stage_closure_decisions: "/federation/stage-closure-decisions",
       malformed: false,
@@ -895,9 +984,31 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   assert.equal(action.operator_confirmation_handoff?.post_resume_sequence_command?.includes("-CommitReceipts"), true);
   assert.equal(action.operator_confirmation_handoff?.post_resume_sequence_writes_evidence_when_run, true);
   assert.equal(action.operator_confirmation_handoff?.post_resume_sequence_writes_receipts_when_run, true);
+  assert.equal(action.operator_confirmation_handoff?.confirmation_receipt_route, "/federation/sleep-resume-confirmation");
+  assert.equal(
+    action.operator_confirmation_handoff?.confirmation_receipt_readback_route,
+    "/federation/sleep-resume-confirmations",
+  );
+  assert.equal(
+    action.operator_confirmation_handoff?.confirmation_receipt_required_scope,
+    "federation.stage16.sleep_resume.confirmation.write",
+  );
+  assert.equal(action.operator_confirmation_handoff?.confirmation_receipt_available_before_sequence, true);
+  assert.equal(action.operator_confirmation_handoff?.confirmation_receipt_required_for_receipt_backed_workflow, true);
+  assert.equal(action.operator_confirmation_handoff?.confirmation_receipt_writes_receipts, true);
+  assert.equal(action.operator_confirmation_handoff?.confirmation_receipt_writes_evidence, false);
+  assert.equal(action.operator_confirmation_handoff?.confirmation_receipt_marks_stage16_closed, false);
+  assert.equal(
+    action.operator_confirmation_handoff?.confirmation_receipt_payload_contract?.pre_sleep_evidence_path,
+    "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json",
+  );
   assert.equal(action.operator_confirmation_handoff?.should_not_run_before_confirmation, true);
   assert.equal(action.operator_confirmation_handoff?.operator_terminal_command_ready, true);
   assert.equal(action.operator_confirmation_handoff?.readback_routes.status, "/federation/status");
+  assert.equal(
+    action.operator_confirmation_handoff?.readback_routes.sleep_resume_confirmations,
+    "/federation/sleep-resume-confirmations",
+  );
   assert.equal(action.operator_confirmation_handoff?.proof_boundary.projection_only, true);
   assert.equal(action.operator_confirmation_handoff?.proof_boundary.does_not_run_shell, true);
   assert.equal(action.operator_confirmation_handoff?.proof_boundary.does_not_mark_stage16_closed, true);
@@ -957,6 +1068,8 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   assert.equal(action.marks_stage16_closed, false);
   assert.equal(action.routes.sleep_continuity_action, "/federation/sleep-continuity-action");
   assert.equal(action.routes.sleep_continuity_runbook, "/federation/sleep-continuity-runbook");
+  assert.equal(action.routes.sleep_resume_confirmation, "/federation/sleep-resume-confirmation");
+  assert.equal(action.routes.sleep_resume_confirmations, "/federation/sleep-resume-confirmations");
   assert.equal(action.routes.stage_closure_decision, "/federation/stage-closure-decision");
   assert.equal(action.routes.stage_closure_decisions, "/federation/stage-closure-decisions");
   assert.equal(action.routes.malformed, undefined);
@@ -1025,6 +1138,9 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   );
   assert.equal(presentation.operator_confirmation_handoff?.post_resume_sequence_available_after_confirmation, true);
   assert.equal(presentation.operator_confirmation_handoff?.post_resume_sequence_writes_receipts_when_run, true);
+  assert.equal(presentation.operator_confirmation_handoff?.confirmation_receipt_route, "/federation/sleep-resume-confirmation");
+  assert.equal(presentation.operator_confirmation_handoff?.confirmation_receipt_writes_receipts, true);
+  assert.equal(presentation.operator_confirmation_handoff?.confirmation_receipt_marks_stage16_closed, false);
   assert.equal(presentation.operator_confirmation_handoff?.proof_boundary.does_not_run_shell, true);
   assert.equal(
     presentation.after_manual_execution_readback?.status,

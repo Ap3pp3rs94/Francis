@@ -19,6 +19,7 @@ from francis.swarm import swarm_stage15_operator_stage_closure_decision_readback
 router = APIRouter()
 _FEDERATION_WRITE_SCOPE = "federation.write"
 _FEDERATION_STAGE16_CLOSURE_SCOPE = "federation.stage16.closure.write"
+_FEDERATION_SLEEP_RESUME_CONFIRMATION_SCOPE = "federation.stage16.sleep_resume.confirmation.write"
 _STAGE16_FEDERATION_STAGE = "Stage 16 / Federation"
 _FEDERATION_PAIRING_SCOPED_TRUST_CONTRACT_KIND = "francis.stage16.federation.pairing_scoped_trust_contract"
 _FEDERATION_SYNC_MODEL_CONTRACT_KIND = "francis.stage16.federation.sync_model_contract"
@@ -30,6 +31,8 @@ _FEDERATION_LIVE_RUNTIME_READBACK_KIND = "francis.stage16.federation.live_runtim
 _FEDERATION_LIVE_RUNTIME_READBACKS_KIND = "francis.stage16.federation.live_runtime_readback_receipts"
 _FEDERATION_SLEEP_CONTINUITY_RUNBOOK_KIND = "francis.stage16.federation.sleep_continuity_runbook"
 _FEDERATION_SLEEP_CONTINUITY_ACTION_KIND = "francis.stage16.federation.sleep_continuity_action"
+_FEDERATION_SLEEP_RESUME_CONFIRMATION_KIND = "francis.stage16.federation.sleep_resume_operator_confirmation_receipt"
+_FEDERATION_SLEEP_RESUME_CONFIRMATIONS_KIND = "francis.stage16.federation.sleep_resume_operator_confirmation_receipts"
 _FEDERATION_STAGE16_CLOSURE_DECISION_KIND = "francis.stage16.federation.stage16_operator_stage_closure_decision_receipt"
 _FEDERATION_STAGE16_CLOSURE_DECISIONS_KIND = (
     "francis.stage16.federation.stage16_operator_stage_closure_decision_receipts"
@@ -464,6 +467,8 @@ def _federation_routes() -> dict[str, str]:
         "completion_review": "/federation/completion-review",
         "sleep_continuity_runbook": "/federation/sleep-continuity-runbook",
         "sleep_continuity_action": "/federation/sleep-continuity-action",
+        "sleep_resume_confirmations": "/federation/sleep-resume-confirmations",
+        "sleep_resume_confirmation": "/federation/sleep-resume-confirmation",
         "stage_closure_decisions": "/federation/stage-closure-decisions",
         "stage_closure_decision": "/federation/stage-closure-decision",
         "live_runtime_readbacks": "/federation/live-runtime-readbacks",
@@ -513,6 +518,10 @@ def _runtime_readback_path() -> Path:
 
 def _stage16_operator_stage_closure_decision_path() -> Path:
     return data_dir() / "logs" / "federation" / "stage16_operator_stage_closure_decisions.jsonl"
+
+
+def _stage16_sleep_resume_confirmation_path() -> Path:
+    return data_dir() / "logs" / "federation" / "stage16_sleep_resume_operator_confirmations.jsonl"
 
 
 def _stage16_sleep_continuity_evidence_root() -> Path:
@@ -861,6 +870,142 @@ def stage16_operator_stage_closure_decision_readback(*, limit: int = 20) -> dict
         "next_smallest_truthful_gap": "stage16_ledger_closure"
         if stage16_closed_by_receipt
         else "stage16_operator_stage_closure_decision",
+    }
+
+
+def read_stage16_sleep_resume_confirmations(*, limit: int = 20) -> list[dict[str, Any]]:
+    return _read_jsonl_tail(_stage16_sleep_resume_confirmation_path(), limit=limit)
+
+
+def stage16_sleep_resume_confirmation_count() -> int:
+    path = _stage16_sleep_resume_confirmation_path()
+    if not path.exists() or not path.is_file():
+        return 0
+    return sum(1 for line in path.read_text(encoding="utf-8", errors="replace").splitlines() if line.strip())
+
+
+def record_stage16_sleep_resume_confirmation(
+    payload: dict[str, Any],
+    action: dict[str, Any],
+) -> dict[str, Any]:
+    sleep_gate = (
+        action.get("operator_sleep_resume_gate") if isinstance(action.get("operator_sleep_resume_gate"), dict) else {}
+    )
+    operator_handoff = (
+        action.get("operator_confirmation_handoff")
+        if isinstance(action.get("operator_confirmation_handoff"), dict)
+        else {}
+    )
+    receipt = {
+        "ok": True,
+        "kind": _FEDERATION_SLEEP_RESUME_CONFIRMATION_KIND,
+        "receipt_id": f"fedsleepconfirm_{uuid.uuid4().hex[:12]}",
+        "stage": _STAGE16_FEDERATION_STAGE,
+        "source_id": "federation",
+        "target": "stage16_sleep_continuity",
+        "actor": _redacted_text(payload.get("actor") or payload.get("request_actor") or payload.get("api_actor"))[:240],
+        "reason": _redacted_text(payload.get("reason"))[:500],
+        "decision": "operator_confirmed_sleep_resume",
+        "selected_step_id": _safe_str(action.get("selected_step_id")).strip(),
+        "operator_confirmed_sleep_resume": True,
+        "pre_sleep_evidence_path": _safe_str(sleep_gate.get("pre_sleep_evidence_path")).strip(),
+        "pre_sleep_recorded_ts": int(sleep_gate.get("pre_sleep_recorded_ts") or 0),
+        "continuity_record_id": _safe_str(sleep_gate.get("continuity_record_id")).strip(),
+        "trace_id": _safe_str(sleep_gate.get("trace_id")).strip(),
+        "confirmation_requirements": _parse_list(action.get("operator_confirmation_requirements")),
+        "post_resume_capture_allowed_after_confirmation": bool(
+            action.get("post_confirmation_ready_to_capture")
+            or sleep_gate.get("post_resume_capture_allowed_after_operator_confirmation")
+        ),
+        "post_resume_sequence_available_after_confirmation": bool(
+            operator_handoff.get("post_resume_sequence_available_after_confirmation")
+        ),
+        "recorded_ts": _now_s(),
+        "writes_evidence": False,
+        "writes_runtime_readback": False,
+        "writes_receipt": True,
+        "writes_registry": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "marks_stage16_closed": False,
+        "governance": {
+            **_federation_governance(read_only=False),
+            "permission_scope": _FEDERATION_SLEEP_RESUME_CONFIRMATION_SCOPE,
+            "explicit_operator_confirmation": True,
+            "operator_confirmation_receipt": True,
+            "manual_operator_confirmation_after_physical_sleep_resume": True,
+            "requires_current_sleep_resume_action": True,
+            "requires_pre_sleep_evidence_path_match": True,
+            "does_not_infer_sleep_from_delay": True,
+            "does_not_capture_post_resume_evidence": True,
+            "does_not_write_runtime_readback": True,
+            "does_not_mark_stage16_closed": True,
+            "writes_receipt": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+    }
+    _append_jsonl(_stage16_sleep_resume_confirmation_path(), receipt)
+    return receipt
+
+
+def stage16_sleep_resume_confirmation_readback(*, limit: int = 20) -> dict[str, Any]:
+    safe_limit = max(1, min(int(limit), 100))
+    items = read_stage16_sleep_resume_confirmations(limit=safe_limit)
+    latest_receipt = items[-1] if items else {}
+    return {
+        "ok": True,
+        "kind": _FEDERATION_SLEEP_RESUME_CONFIRMATIONS_KIND,
+        "stage": _STAGE16_FEDERATION_STAGE,
+        "source_id": "federation",
+        "status": "sleep_resume_confirmation_readback_ready" if items else "empty",
+        "target": "stage16_sleep_continuity",
+        "items": items,
+        "count": len(items),
+        "total": stage16_sleep_resume_confirmation_count(),
+        "limit": safe_limit,
+        "latest_receipt": latest_receipt,
+        "latest_receipt_id": _safe_str(latest_receipt.get("receipt_id")).strip(),
+        "latest_actor": _safe_str(latest_receipt.get("actor")).strip(),
+        "latest_decision": _safe_str(latest_receipt.get("decision")).strip(),
+        "latest_pre_sleep_evidence_path": _safe_str(latest_receipt.get("pre_sleep_evidence_path")).strip(),
+        "latest_recorded_ts": int(latest_receipt.get("recorded_ts") or 0),
+        "receipt_readback_ready": bool(latest_receipt),
+        "reads_receipts": True,
+        "writes_receipts": False,
+        "writes_evidence": False,
+        "writes_runtime_readback": False,
+        "writes_registry": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "marks_stage16_closed": False,
+        "routes": _federation_routes(),
+        "governance": {
+            **_federation_governance(),
+            "read_only": True,
+            "sleep_resume_confirmation_receipt_readback": True,
+            "receipt_readback_ready": bool(latest_receipt),
+            "does_not_infer_sleep_from_delay": True,
+            "does_not_write_receipts": True,
+            "does_not_write_evidence": True,
+            "does_not_write_runtime_readback": True,
+            "does_not_mark_stage16_closed": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": "stage16_sleep_continuity_runtime_readback",
     }
 
 
@@ -1551,6 +1696,7 @@ def _stage16_sleep_continuity_operator_confirmation_handoff(
     copyable_command = _safe_str(operator_terminal_invocation.get("copyable_command")).strip()
     pre_sleep_evidence_path = _safe_str(operator_sleep_resume_gate.get("pre_sleep_evidence_path")).strip()
     pre_sleep_arg = f'"{pre_sleep_evidence_path}"' if pre_sleep_evidence_path else "<pre_sleep.json>"
+    routes = _federation_routes()
     sequence_command = (
         "scripts/federation-stage16-sleep-continuity-post-resume-sequence.ps1 -Mode Run "
         f"-CommitEvidence -CommitReceipts -PreSleepEvidencePath {pre_sleep_arg} -OperatorConfirmedSleepResume"
@@ -1587,15 +1733,30 @@ def _stage16_sleep_continuity_operator_confirmation_handoff(
         else "",
         "post_resume_sequence_writes_evidence_when_run": step_id == "capture_post_resume_evidence",
         "post_resume_sequence_writes_receipts_when_run": step_id == "capture_post_resume_evidence",
+        "confirmation_receipt_route": routes["sleep_resume_confirmation"],
+        "confirmation_receipt_readback_route": routes["sleep_resume_confirmations"],
+        "confirmation_receipt_required_scope": _FEDERATION_SLEEP_RESUME_CONFIRMATION_SCOPE,
+        "confirmation_receipt_payload_contract": {
+            "actor": "operator or delegated builder actor with federation.stage16.sleep_resume.confirmation.write",
+            "operator_confirmed_sleep_resume": True,
+            "pre_sleep_evidence_path": pre_sleep_evidence_path,
+            "reason": "operator confirms physical sleep/suspend and resume after the pre-sleep marker",
+        },
+        "confirmation_receipt_available_before_sequence": ready_after_confirmation,
+        "confirmation_receipt_required_for_receipt_backed_workflow": confirmation_required,
+        "confirmation_receipt_writes_receipts": True,
+        "confirmation_receipt_writes_evidence": False,
+        "confirmation_receipt_marks_stage16_closed": False,
         "should_not_run_before_confirmation": bool(
             operator_terminal_invocation.get("should_not_run_before_confirmation")
         ),
         "operator_terminal_command_ready": bool(operator_terminal_invocation.get("operator_terminal_command_ready")),
         "readback_routes": {
-            "status": _federation_routes()["status"],
-            "sleep_continuity_action": _federation_routes()["sleep_continuity_action"],
-            "sleep_continuity_runbook": _federation_routes()["sleep_continuity_runbook"],
-            "completion_review": _federation_routes()["completion_review"],
+            "status": routes["status"],
+            "sleep_continuity_action": routes["sleep_continuity_action"],
+            "sleep_continuity_runbook": routes["sleep_continuity_runbook"],
+            "sleep_resume_confirmations": routes["sleep_resume_confirmations"],
+            "completion_review": routes["completion_review"],
         },
         "proof_boundary": {
             "projection_only": True,
@@ -2917,6 +3078,156 @@ def get_sleep_continuity_runbook() -> dict[str, Any]:
 @router.get("/sleep-continuity-action")
 def get_sleep_continuity_action() -> dict[str, Any]:
     return stage16_sleep_continuity_action()
+
+
+@router.get("/sleep-resume-confirmations")
+def get_sleep_resume_confirmations(limit: int = 20) -> dict[str, Any]:
+    return stage16_sleep_resume_confirmation_readback(limit=limit)
+
+
+@router.post("/sleep-resume-confirmation")
+def post_sleep_resume_confirmation(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    route = "/federation/sleep-resume-confirmation"
+    actor = _federation_write_actor(payload)
+    permission = _federation_write_permission(
+        actor,
+        route=route,
+        method=request.method,
+        required_scope=_FEDERATION_SLEEP_RESUME_CONFIRMATION_SCOPE,
+    )
+    if not permission.allowed:
+        return _permission_denied_for_scope(
+            permission,
+            required_scope=_FEDERATION_SLEEP_RESUME_CONFIRMATION_SCOPE,
+            next_step="configure_sleep_resume_confirmation_write_scope_before_operator_confirmation",
+        )
+
+    action = stage16_sleep_continuity_action()
+    if not _to_bool(payload.get("operator_confirmed_sleep_resume"), default=False):
+        return {
+            "ok": False,
+            "kind": "francis.stage16.federation.sleep_resume_operator_confirmation.record",
+            "status": "denied",
+            "error": "operator_confirmed_sleep_resume_required",
+            "source_id": "federation",
+            "target": "stage16_sleep_continuity",
+            "action": action,
+            "receipt": None,
+            "receipt_id": "",
+            "writes_receipt": False,
+            "writes_evidence": False,
+            "writes_runtime_readback": False,
+            "marks_stage16_closed": False,
+            "governance": {
+                **_federation_governance(read_only=False),
+                "required_scope": _FEDERATION_SLEEP_RESUME_CONFIRMATION_SCOPE,
+                "route": str(request.url.path),
+                "explicit_operator_confirmation": True,
+                "requires_true_operator_confirmed_sleep_resume": True,
+                "does_not_infer_sleep_from_delay": True,
+                "does_not_write_receipt_on_denial": True,
+                "does_not_write_evidence": True,
+                "does_not_write_runtime_readback": True,
+                "does_not_mark_stage16_closed": True,
+                "grants_execution_authority": False,
+                "grants_mutation_authority": False,
+            },
+            "next_smallest_truthful_gap": "stage16_sleep_continuity_runtime_readback",
+        }
+
+    sleep_gate = (
+        action.get("operator_sleep_resume_gate") if isinstance(action.get("operator_sleep_resume_gate"), dict) else {}
+    )
+    current_pre_sleep_path = _safe_str(sleep_gate.get("pre_sleep_evidence_path")).strip()
+    requested_pre_sleep_path = _safe_str(payload.get("pre_sleep_evidence_path")).strip()
+    pre_sleep_path_matches = not requested_pre_sleep_path or requested_pre_sleep_path == current_pre_sleep_path
+    action_pending = (
+        _safe_str(action.get("selected_step_id")).strip() == "capture_post_resume_evidence"
+        and bool(action.get("operator_confirmation_pending"))
+        and bool(action.get("post_confirmation_ready_to_capture"))
+        and bool(action.get("pre_sleep_evidence_ready"))
+        and bool(sleep_gate.get("operator_confirmation_pending"))
+        and current_pre_sleep_path != ""
+    )
+    if not action_pending or not pre_sleep_path_matches:
+        return {
+            "ok": True,
+            "kind": "francis.stage16.federation.sleep_resume_operator_confirmation.record",
+            "status": "blocked",
+            "source_id": "federation",
+            "target": "stage16_sleep_continuity",
+            "action": action,
+            "receipt": None,
+            "receipt_id": "",
+            "writes_receipt": False,
+            "writes_evidence": False,
+            "writes_runtime_readback": False,
+            "marks_stage16_closed": False,
+            "blockers": [
+                blocker
+                for blocker, present in (
+                    ("sleep_resume_confirmation_not_current_selected_action", not action_pending),
+                    ("pre_sleep_evidence_path_mismatch", not pre_sleep_path_matches),
+                )
+                if present
+            ],
+            "current_pre_sleep_evidence_path": current_pre_sleep_path,
+            "requested_pre_sleep_evidence_path": requested_pre_sleep_path,
+            "governance": {
+                **_federation_governance(read_only=False),
+                "required_scope": _FEDERATION_SLEEP_RESUME_CONFIRMATION_SCOPE,
+                "route": str(request.url.path),
+                "explicit_operator_confirmation": True,
+                "requires_current_sleep_resume_action": True,
+                "requires_pre_sleep_evidence_path_match": True,
+                "does_not_write_receipt_when_not_current": True,
+                "does_not_write_evidence": True,
+                "does_not_write_runtime_readback": True,
+                "does_not_mark_stage16_closed": True,
+                "grants_execution_authority": False,
+                "grants_mutation_authority": False,
+            },
+            "next_smallest_truthful_gap": "stage16_sleep_continuity_runtime_readback",
+        }
+
+    receipt = record_stage16_sleep_resume_confirmation(payload, action)
+    return {
+        "ok": True,
+        "kind": "francis.stage16.federation.sleep_resume_operator_confirmation.record",
+        "status": "recorded",
+        "source_id": "federation",
+        "target": "stage16_sleep_continuity",
+        "action": action,
+        "receipt": receipt,
+        "receipt_id": receipt.get("receipt_id", ""),
+        "decision": receipt.get("decision", ""),
+        "writes_receipt": True,
+        "writes_evidence": False,
+        "writes_runtime_readback": False,
+        "writes_registry": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "marks_stage16_closed": False,
+        "governance": {
+            **_federation_governance(read_only=False),
+            "required_scope": _FEDERATION_SLEEP_RESUME_CONFIRMATION_SCOPE,
+            "route": str(request.url.path),
+            "explicit_operator_confirmation": True,
+            "does_not_infer_sleep_from_delay": True,
+            "does_not_write_evidence": True,
+            "does_not_write_runtime_readback": True,
+            "does_not_mark_stage16_closed": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": "stage16_sleep_continuity_runtime_readback",
+    }
 
 
 @router.get("/stage-closure-decisions")

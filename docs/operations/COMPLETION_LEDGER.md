@@ -53298,6 +53298,72 @@ Latest validation for Stage 16 sleep post-resume operator sequence:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 sleep/resume confirmation is receipt-backed
+
+Roadmap area: Stage 16 / Federation, workstation sleep-continuity operator
+confirmation auditability.
+
+Material change:
+
+- Added a bounded sleep/resume confirmation receipt route at
+  `/federation/sleep-resume-confirmation` and readback route at
+  `/federation/sleep-resume-confirmations`.
+- The write route requires
+  `federation.stage16.sleep_resume.confirmation.write`, requires the current
+  selected action to be the post-resume capture gate, requires
+  `operator_confirmed_sleep_resume=true`, and blocks mismatched pre-sleep
+  evidence paths without writing a receipt.
+- `/federation/sleep-continuity-action` now exposes those receipt routes and
+  payload contract in `operator_confirmation_handoff` so the confirmation can
+  be audited before the operator-run post-resume sequence.
+- Federation Hub preserves the receipt-backed handoff fields and exposes a
+  readback client for sleep/resume confirmation receipts.
+- The mutating-route authority matrix now explicitly covers this new
+  Federation confirmation route and closes stale coverage gaps for existing
+  Stage 12-15 closure/trust-calibration POST routes.
+- This does not execute post-resume evidence capture, write runtime readbacks,
+  infer sleep/resume from elapsed time, grant authority, write memory, or mark
+  Stage 16 closed.
+- Stage 16 remains open until operator-confirmed live workstation sleep/resume
+  evidence and receipt-backed completion/closure gates are satisfied.
+
+Latest validation for Stage 16 sleep/resume confirmation receipts:
+
+- `python -m pytest tests/test_api_federation.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  tests/test_api_mutating_route_authority_matrix.py -q --tb=short --maxfail=1`
+  Result: `passed`.
+- `npm run test -- federation_hub`
+  Result: `passed; 188 passed`.
+- `npm run build`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py
+  src/francis/api/mutation_authority_matrix.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_federation.py
+  tests/test_api_contract_chat_ui.py
+  tests/test_api_mutating_route_authority_matrix.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  src/francis/api/mutation_authority_matrix.py tests/test_api_federation.py
+  tests/test_api_contract_chat_ui.py
+  tests/test_api_mutating_route_authority_matrix.py`
+  Result: `passed`.
+- Live readback via `TestClient` for
+  `/federation/sleep-continuity-action` and
+  `/federation/sleep-resume-confirmations`
+  Result: `passed;
+  action_status=capture_post_resume_evidence,
+  handoff_status=waiting_for_operator_sleep_resume_confirmation,
+  confirmation_route=/federation/sleep-resume-confirmation,
+  confirmation_readback_route=/federation/sleep-resume-confirmations,
+  receipt_readback_status=empty,
+  receipt_total=0,
+  marks_stage16_closed=false`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
