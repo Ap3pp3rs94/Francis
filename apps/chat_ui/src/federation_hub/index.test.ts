@@ -1255,6 +1255,89 @@ test("federation sleep-continuity presentation gates post-resume capture on oper
   assert.equal(presentation.next_smallest_truthful_gap, "stage16_sleep_continuity_runtime_readback");
 });
 
+test("federation sleep-continuity presentation surfaces post-resume evidence conflicts", () => {
+  const status = parseFederationStage16Status({
+    ok: true,
+    stage16_status: "stage16_contracts_ready_completion_blocked",
+    stage16_completion_review_ready: false,
+    live_runtime_readback_ready: true,
+    completion_review_blockers: ["workstation_sleep_continuity_validated"],
+    sleep_continuity_status: "post_resume_evidence_conflict",
+    sleep_continuity_ready: false,
+    pre_sleep_evidence_ready: true,
+    post_resume_evidence_ready: false,
+    post_resume_evidence_conflict: true,
+    latest_post_resume_evidence: {
+      present: false,
+      status: "pre_sleep_path_mismatch",
+      candidate_evidence_path:
+        "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\post_resume_mismatch.json",
+      expected_pre_sleep_evidence_path:
+        "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_latest.json",
+      candidate_pre_sleep_evidence_path:
+        "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stale.json",
+      linked_to_latest_pre_sleep: false,
+      conflict_detected: true,
+    },
+    sleep_continuity_next_step: "recapture_post_resume_evidence_for_latest_pre_sleep",
+    ready_count: 6,
+    required_count: 6,
+    next_smallest_truthful_gap: "stage16_sleep_continuity_runtime_readback",
+  });
+  const runbook = parseFederationSleepContinuityRunbook({
+    ok: true,
+    status: "post_resume_evidence_conflict",
+    runbook_only: true,
+    prerequisite_readbacks_ready: true,
+    sleep_continuity_readback_id: "workstation_sleep_continuity_validated",
+    sleep_continuity_ready: false,
+    pre_sleep_evidence_ready: true,
+    post_resume_evidence_ready: false,
+    post_resume_evidence_conflict: true,
+    ready_to_close: false,
+    stage16_closed_by_receipt: false,
+    missing_readbacks: ["workstation_sleep_continuity_validated"],
+    steps: [
+      {
+        id: "capture_post_resume_evidence",
+        command:
+          'scripts/federation-stage16-sleep-continuity-evidence.ps1 -Mode PostResume -CommitEvidence -PreSleepEvidencePath "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_latest.json" -OperatorConfirmedSleepResume',
+        pre_sleep_evidence_required: true,
+        pre_sleep_evidence_available: true,
+        post_resume_evidence_required: false,
+        post_resume_evidence_available: false,
+        operator_action_required: true,
+        operator_confirmation_required: true,
+        writes_evidence_when_run: true,
+        writes_receipts_when_run: false,
+      },
+    ],
+    writes_evidence: false,
+    writes_receipts: false,
+    writes_registry: false,
+    writes_memory: false,
+    runs_tools: false,
+    runs_shell: false,
+    runs_git: false,
+    launches_browser: false,
+    captures_screen: false,
+    grants_execution_authority: false,
+    grants_mutation_authority: false,
+    marks_stage16_closed: false,
+    next_smallest_truthful_gap: "stage16_sleep_continuity_runtime_readback",
+  });
+
+  const presentation = presentFederationSleepContinuity(status, runbook);
+
+  assert.equal(status.post_resume_evidence_conflict, true);
+  assert.equal(runbook.post_resume_evidence_conflict, true);
+  assert.equal(status.latest_post_resume_evidence?.status, "pre_sleep_path_mismatch");
+  assert.equal(presentation.state, "capture_post_resume_evidence");
+  assert.equal(presentation.post_resume_evidence_ready, false);
+  assert.equal(presentation.post_resume_evidence_conflict, true);
+  assert.equal(status.sleep_continuity_next_step, "recapture_post_resume_evidence_for_latest_pre_sleep");
+});
+
 test("federation sleep-continuity presentation advances to runtime proof after post-resume evidence", () => {
   const status = parseFederationStage16Status({
     ok: true,

@@ -52851,6 +52851,50 @@ Latest validation for Stage 16 sleep runtime proof pre/post evidence linkage:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 sleep post-resume evidence conflict is visible
+
+Roadmap area: Stage 16 / Federation, workstation sleep-continuity stale-state
+confusion hardening.
+
+Material change:
+
+- `/federation/sleep-continuity-runbook`,
+  `/federation/sleep-continuity-action`, and `/federation/status` now surface a
+  first-class `post_resume_evidence_conflict` readback when the newest
+  post-resume evidence for the latest continuity record points at a different
+  pre-sleep evidence artifact.
+- Mismatched post-resume artifacts now expose bounded conflict metadata:
+  candidate evidence path, candidate pre-sleep path, expected pre-sleep path,
+  and `stale_state_confusion_blocker=post_resume_pre_sleep_path_mismatch`.
+- The sleep-continuity action keeps the path read-only and routes the operator
+  back to recapturing post-resume evidence for the latest pre-sleep artifact
+  instead of collapsing the mismatch into ordinary missing evidence.
+- The Federation Hub evidence panel now shows the conflict bit and the expected
+  versus candidate pre-sleep paths.
+- This does not write evidence, write receipts, run shell, infer sleep/resume,
+  grant authority, write memory, or mark Stage 16 closed.
+- Stage 16 remains open until operator-confirmed live workstation sleep/resume
+  evidence and receipt-backed completion/closure gates are satisfied.
+
+Latest validation for Stage 16 sleep post-resume evidence conflict readback:
+
+- `python -m pytest tests/test_api_federation.py -q --tb=short`
+  Result: `passed; 20 passed`.
+- `npm run test -- federation_hub`
+  Result: `passed; 188 passed`.
+- `npm run build`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

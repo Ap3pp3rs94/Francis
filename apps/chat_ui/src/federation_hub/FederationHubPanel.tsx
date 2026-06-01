@@ -109,6 +109,9 @@ export function FederationHubPanel(props: { baseUrl: string }) {
   const governance = action?.governance;
   const latestPreSleepEvidence = status?.latest_pre_sleep_evidence;
   const latestPostResumeEvidence = status?.latest_post_resume_evidence;
+  const postResumeEvidenceConflict =
+    Boolean(presentation?.post_resume_evidence_conflict) ||
+    recordBoolean(latestPostResumeEvidence, "conflict_detected");
   const selectedActionReadiness = presentation?.selected_action_readiness;
   const operatorTerminalInvocation = presentation?.operator_terminal_invocation;
   const operatorSleepResumeGate = presentation?.operator_sleep_resume_gate;
@@ -175,6 +178,9 @@ export function FederationHubPanel(props: { baseUrl: string }) {
             <span style={badgeStyle(`post_resume_${yesNo(Boolean(presentation?.post_resume_evidence_ready))}`)}>
               post {yesNo(Boolean(presentation?.post_resume_evidence_ready))}
             </span>
+            <span style={badgeStyle(`post_resume_conflict_${yesNo(postResumeEvidenceConflict)}`)}>
+              conflict {yesNo(postResumeEvidenceConflict)}
+            </span>
             <span style={badgeStyle(`continuity_${yesNo(Boolean(presentation?.sleep_continuity_ready))}`)}>
               continuity {yesNo(Boolean(presentation?.sleep_continuity_ready))}
             </span>
@@ -194,6 +200,16 @@ export function FederationHubPanel(props: { baseUrl: string }) {
           <div style={{ fontSize: 11, color: MUTED, marginTop: 8, overflowWrap: "anywhere" }}>
             post linked <code>{yesNo(recordBoolean(latestPostResumeEvidence, "linked_to_latest_pre_sleep"))}</code>
           </div>
+          {postResumeEvidenceConflict ? (
+            <>
+              <div style={{ fontSize: 11, color: MUTED, marginTop: 8, overflowWrap: "anywhere" }}>
+                expected pre <code>{codeValue(recordString(latestPostResumeEvidence, "expected_pre_sleep_evidence_path"))}</code>
+              </div>
+              <div style={{ fontSize: 11, color: MUTED, marginTop: 8, overflowWrap: "anywhere" }}>
+                candidate pre <code>{codeValue(recordString(latestPostResumeEvidence, "candidate_pre_sleep_evidence_path"))}</code>
+              </div>
+            </>
+          ) : null}
         </div>
       </div>
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -110,14 +111,16 @@ def _write_stage16_pre_sleep_evidence(
     return path
 
 
-def _write_stage16_post_resume_evidence(data_root: Path, pre_sleep_path: Path) -> Path:
-    continuity_record_id = "stage16-sleep-pre"
-    path = (
-        data_root
-        / "test_runs"
-        / "federation-stage16-sleep-continuity-evidence"
-        / f"post_resume_{continuity_record_id}.json"
-    )
+def _write_stage16_post_resume_evidence(
+    data_root: Path,
+    pre_sleep_path: Path,
+    *,
+    continuity_record_id: str = "stage16-sleep-pre",
+    file_suffix: str | None = None,
+    received_ts: int = 1_800_030_120,
+) -> Path:
+    file_id = file_suffix or continuity_record_id
+    path = data_root / "test_runs" / "federation-stage16-sleep-continuity-evidence" / f"post_resume_{file_id}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(
@@ -128,7 +131,7 @@ def _write_stage16_post_resume_evidence(data_root: Path, pre_sleep_path: Path) -
                 "paired_node_id": "stage16-local-loopback-node",
                 "trace_id": "trace-stage16-sleep-continuity-pre-test",
                 "authority_snapshot_id": "authsnap-stage16-sleep-pre-test",
-                "received_ts": 1_800_030_120,
+                "received_ts": received_ts,
                 "freshness_state": "fresh",
                 "redaction_summary": "metadata_only_no_private_payload",
                 "sleep_observed": True,
@@ -1518,6 +1521,101 @@ def test_federation_stage16_sleep_continuity_runbook_uses_linked_post_resume_mar
     assert action["writes_evidence_when_run"] is False
     assert action["writes_receipts_when_run"] is True
     assert action["mutation_available_from_ui"] is False
+
+
+def test_federation_stage16_sleep_continuity_blocks_mismatched_post_resume_marker(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setattr("francis.api.routes.federation._now_s", lambda: 1_800_030_300)
+    _write_stage15_closure_receipt(data_root, receipt_id="swarm_stage15_closure_for_mismatch_runbook")
+    pre_sleep_path = _write_stage16_pre_sleep_evidence(data_root)
+    linked_post_resume_path = _write_stage16_post_resume_evidence(
+        data_root,
+        pre_sleep_path,
+        file_suffix="linked",
+        received_ts=1_800_030_120,
+    )
+    stale_pre_sleep_path = (
+        data_root / "test_runs" / "federation-stage16-sleep-continuity-evidence" / "pre_sleep_stale_stage16.json"
+    )
+    mismatched_post_resume_path = _write_stage16_post_resume_evidence(
+        data_root,
+        stale_pre_sleep_path,
+        file_suffix="bad",
+        received_ts=1_800_030_240,
+    )
+    os.utime(linked_post_resume_path, (1_800_030_120, 1_800_030_120))
+    os.utime(mismatched_post_resume_path, (1_800_030_240, 1_800_030_240))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    for readback_id in [
+        "live_pairing_flow_observed",
+        "live_selective_sync_observed",
+        "live_remote_approval_roundtrip_observed",
+        "live_revocation_roundtrip_observed",
+    ]:
+        _record_stage16_live_readback(client, readback_id)
+
+    body = client.get("/federation/sleep-continuity-runbook").json()
+
+    assert body["status"] == "post_resume_evidence_conflict"
+    assert body["pre_sleep_evidence_ready"] is True
+    assert body["post_resume_evidence_ready"] is False
+    assert body["post_resume_evidence_conflict"] is True
+    assert body["post_resume_evidence"]["present"] is False
+    assert body["post_resume_evidence"]["status"] == "pre_sleep_path_mismatch"
+    assert body["post_resume_evidence"]["evidence_path"] == ""
+    assert body["post_resume_evidence"]["candidate_evidence_path"] == str(mismatched_post_resume_path.resolve())
+    assert body["post_resume_evidence"]["candidate_file_name"] == mismatched_post_resume_path.name
+    assert body["post_resume_evidence"]["candidate_pre_sleep_evidence_path"] == str(stale_pre_sleep_path.resolve())
+    assert body["post_resume_evidence"]["expected_pre_sleep_evidence_path"] == str(pre_sleep_path.resolve())
+    assert body["post_resume_evidence"]["pre_sleep_evidence_path"] == str(stale_pre_sleep_path.resolve())
+    assert body["post_resume_evidence"]["linked_to_latest_pre_sleep"] is False
+    assert body["post_resume_evidence"]["conflict_detected"] is True
+    assert body["post_resume_evidence"]["stale_state_confusion_blocker"] == "post_resume_pre_sleep_path_mismatch"
+    assert body["steps"][2]["post_resume_evidence_available"] is False
+    assert f'-PostResumeEvidencePath "{linked_post_resume_path.resolve()}"' not in body["steps"][2]["command"]
+    assert body["governance"]["reads_post_resume_evidence_metadata"] is True
+    assert body["writes_receipts"] is False
+    assert body["marks_stage16_closed"] is False
+
+    status = client.get("/federation/status").json()
+    assert status["sleep_continuity_status"] == "post_resume_evidence_conflict"
+    assert status["post_resume_evidence_ready"] is False
+    assert status["post_resume_evidence_conflict"] is True
+    assert status["latest_post_resume_evidence"]["candidate_evidence_path"] == str(
+        mismatched_post_resume_path.resolve()
+    )
+    assert status["sleep_continuity_next_step"] == "recapture_post_resume_evidence_for_latest_pre_sleep"
+
+    action = client.get("/federation/sleep-continuity-action").json()
+    assert action["status"] == "capture_post_resume_evidence"
+    assert action["selected_step_id"] == "capture_post_resume_evidence"
+    assert action["post_resume_evidence_ready"] is False
+    assert action["post_resume_evidence_conflict"] is True
+    assert action["post_resume_evidence_path"] == ""
+    assert action["selected_action_readiness"]["remaining_evidence_gates"] == [
+        "post_resume_evidence_pre_sleep_path_mismatch"
+    ]
+    assert (
+        action["selected_action_readiness"]["next_operator_step"]
+        == "operator_recapture_post_resume_evidence_for_latest_pre_sleep"
+    )
+    assert action["selected_action_readiness"]["post_resume_evidence_conflict"] is True
+    sleep_gate = action["operator_sleep_resume_gate"]
+    assert sleep_gate["post_resume_evidence_present"] is False
+    assert sleep_gate["post_resume_evidence_status"] == "pre_sleep_path_mismatch"
+    assert sleep_gate["post_resume_evidence_conflict"] is True
+    assert sleep_gate["post_resume_candidate_evidence_path"] == str(mismatched_post_resume_path.resolve())
+    assert sleep_gate["expected_pre_sleep_evidence_path"] == str(pre_sleep_path.resolve())
+    assert sleep_gate["candidate_pre_sleep_evidence_path"] == str(stale_pre_sleep_path.resolve())
 
 
 def test_federation_stage16_completion_review_accepts_live_or_manual_runtime_readback_evidence(

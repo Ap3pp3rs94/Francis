@@ -142,6 +142,7 @@ export type FederationStage16Status = {
   sleep_continuity_ready: boolean;
   pre_sleep_evidence_ready: boolean;
   post_resume_evidence_ready: boolean;
+  post_resume_evidence_conflict: boolean;
   latest_pre_sleep_evidence?: Record<string, unknown>;
   latest_post_resume_evidence?: Record<string, unknown>;
   sleep_continuity_next_step?: string;
@@ -279,6 +280,7 @@ export type FederationSleepContinuityRunbook = {
   pre_sleep_evidence_ready: boolean;
   post_resume_evidence?: Record<string, unknown>;
   post_resume_evidence_ready: boolean;
+  post_resume_evidence_conflict: boolean;
   ready_to_close: boolean;
   stage16_closed_by_receipt: boolean;
   missing_readbacks: string[];
@@ -323,6 +325,7 @@ export type FederationSleepContinuitySelectedActionReadiness = {
   selected_step_id?: string;
   pre_sleep_evidence_ready: boolean;
   post_resume_evidence_ready: boolean;
+  post_resume_evidence_conflict: boolean;
   operator_confirmation_required: boolean;
   writes_evidence_when_run: boolean;
   writes_receipts_when_run: boolean;
@@ -369,6 +372,10 @@ export type FederationSleepContinuityOperatorSleepResumeGate = {
   trace_id?: string;
   post_resume_evidence_present: boolean;
   post_resume_evidence_status?: string;
+  post_resume_evidence_conflict: boolean;
+  post_resume_candidate_evidence_path?: string;
+  expected_pre_sleep_evidence_path?: string;
+  candidate_pre_sleep_evidence_path?: string;
   must_sleep_after_pre_sleep_recorded_ts: boolean;
   must_resume_before_post_resume_capture: boolean;
   post_resume_capture_allowed_after_operator_confirmation: boolean;
@@ -425,6 +432,7 @@ export type FederationSleepContinuityPresentation = {
   prior_live_readback_blockers: string[];
   pre_sleep_evidence_ready: boolean;
   post_resume_evidence_ready: boolean;
+  post_resume_evidence_conflict: boolean;
   sleep_continuity_ready: boolean;
   ready_to_close: boolean;
   stage16_closed_by_receipt: boolean;
@@ -463,6 +471,7 @@ export type FederationSleepContinuityActionReadback = {
   prior_live_readback_blockers: string[];
   pre_sleep_evidence_ready: boolean;
   post_resume_evidence_ready: boolean;
+  post_resume_evidence_conflict: boolean;
   sleep_continuity_ready: boolean;
   ready_to_close: boolean;
   stage16_closed_by_receipt: boolean;
@@ -576,6 +585,7 @@ function parseFederationSleepContinuitySelectedActionReadiness(
     selected_step_id: optionalString(raw.selected_step_id),
     pre_sleep_evidence_ready: safeBoolean(raw.pre_sleep_evidence_ready),
     post_resume_evidence_ready: safeBoolean(raw.post_resume_evidence_ready),
+    post_resume_evidence_conflict: safeBoolean(raw.post_resume_evidence_conflict),
     operator_confirmation_required: safeBoolean(raw.operator_confirmation_required),
     writes_evidence_when_run: safeBoolean(raw.writes_evidence_when_run),
     writes_receipts_when_run: safeBoolean(raw.writes_receipts_when_run),
@@ -632,6 +642,10 @@ function parseFederationSleepContinuityOperatorSleepResumeGate(
     trace_id: optionalString(raw.trace_id),
     post_resume_evidence_present: safeBoolean(raw.post_resume_evidence_present),
     post_resume_evidence_status: optionalString(raw.post_resume_evidence_status),
+    post_resume_evidence_conflict: safeBoolean(raw.post_resume_evidence_conflict),
+    post_resume_candidate_evidence_path: optionalString(raw.post_resume_candidate_evidence_path),
+    expected_pre_sleep_evidence_path: optionalString(raw.expected_pre_sleep_evidence_path),
+    candidate_pre_sleep_evidence_path: optionalString(raw.candidate_pre_sleep_evidence_path),
     must_sleep_after_pre_sleep_recorded_ts: safeBoolean(raw.must_sleep_after_pre_sleep_recorded_ts),
     must_resume_before_post_resume_capture: safeBoolean(raw.must_resume_before_post_resume_capture),
     post_resume_capture_allowed_after_operator_confirmation: safeBoolean(
@@ -940,6 +954,7 @@ export function parseFederationStage16Status(raw: unknown): FederationStage16Sta
     sleep_continuity_ready: safeBoolean(body.sleep_continuity_ready),
     pre_sleep_evidence_ready: safeBoolean(body.pre_sleep_evidence_ready),
     post_resume_evidence_ready: safeBoolean(body.post_resume_evidence_ready),
+    post_resume_evidence_conflict: safeBoolean(body.post_resume_evidence_conflict),
     latest_pre_sleep_evidence: isRecord(body.latest_pre_sleep_evidence)
       ? body.latest_pre_sleep_evidence
       : undefined,
@@ -1122,6 +1137,7 @@ export function parseFederationSleepContinuityRunbook(raw: unknown): FederationS
     pre_sleep_evidence_ready: safeBoolean(body.pre_sleep_evidence_ready),
     post_resume_evidence: isRecord(body.post_resume_evidence) ? body.post_resume_evidence : undefined,
     post_resume_evidence_ready: safeBoolean(body.post_resume_evidence_ready),
+    post_resume_evidence_conflict: safeBoolean(body.post_resume_evidence_conflict),
     ready_to_close: safeBoolean(body.ready_to_close),
     stage16_closed_by_receipt: safeBoolean(body.stage16_closed_by_receipt),
     missing_readbacks: stringList(body.missing_readbacks),
@@ -1170,6 +1186,7 @@ export function parseFederationSleepContinuityAction(raw: unknown): FederationSl
     prior_live_readback_blockers: stringList(body.prior_live_readback_blockers),
     pre_sleep_evidence_ready: safeBoolean(body.pre_sleep_evidence_ready),
     post_resume_evidence_ready: safeBoolean(body.post_resume_evidence_ready),
+    post_resume_evidence_conflict: safeBoolean(body.post_resume_evidence_conflict),
     sleep_continuity_ready: safeBoolean(body.sleep_continuity_ready),
     ready_to_close: safeBoolean(body.ready_to_close),
     stage16_closed_by_receipt: safeBoolean(body.stage16_closed_by_receipt),
@@ -1249,6 +1266,7 @@ function buildFederationSleepContinuityPresentation(
     blockers: string[];
     preSleepEvidenceReady: boolean;
     postResumeEvidenceReady: boolean;
+    postResumeEvidenceConflict: boolean;
     sleepContinuityReady: boolean;
     readyToClose: boolean;
     stage16ClosedByReceipt: boolean;
@@ -1271,6 +1289,7 @@ function buildFederationSleepContinuityPresentation(
     prior_live_readback_blockers: [],
     pre_sleep_evidence_ready: opts.preSleepEvidenceReady,
     post_resume_evidence_ready: opts.postResumeEvidenceReady,
+    post_resume_evidence_conflict: opts.postResumeEvidenceConflict,
     sleep_continuity_ready: opts.sleepContinuityReady,
     ready_to_close: opts.readyToClose,
     stage16_closed_by_receipt: opts.stage16ClosedByReceipt,
@@ -1299,6 +1318,8 @@ export function presentFederationSleepContinuity(
 ): FederationSleepContinuityPresentation {
   const preSleepEvidenceReady = status.pre_sleep_evidence_ready || runbook?.pre_sleep_evidence_ready === true;
   const postResumeEvidenceReady = status.post_resume_evidence_ready || runbook?.post_resume_evidence_ready === true;
+  const postResumeEvidenceConflict =
+    status.post_resume_evidence_conflict || runbook?.post_resume_evidence_conflict === true;
   const sleepContinuityReady = status.sleep_continuity_ready || runbook?.sleep_continuity_ready === true;
   const readyToClose = status.stage16_completion_review_ready || runbook?.ready_to_close === true;
   const stage16ClosedByReceipt =
@@ -1336,6 +1357,7 @@ export function presentFederationSleepContinuity(
     blockers,
     preSleepEvidenceReady,
     postResumeEvidenceReady,
+    postResumeEvidenceConflict,
     sleepContinuityReady,
     readyToClose,
     stage16ClosedByReceipt,
@@ -1366,6 +1388,7 @@ export function presentFederationSleepContinuityAction(
     prior_live_readback_blockers: action.prior_live_readback_blockers,
     pre_sleep_evidence_ready: action.pre_sleep_evidence_ready,
     post_resume_evidence_ready: action.post_resume_evidence_ready,
+    post_resume_evidence_conflict: action.post_resume_evidence_conflict,
     sleep_continuity_ready: action.sleep_continuity_ready,
     ready_to_close: action.ready_to_close,
     stage16_closed_by_receipt: action.stage16_closed_by_receipt,

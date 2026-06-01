@@ -930,6 +930,7 @@ def _latest_stage16_post_resume_evidence(*, latest_pre_sleep_evidence: dict[str,
             "evidence_path": "",
             "status": "missing_pre_sleep_evidence",
             "linked_to_latest_pre_sleep": False,
+            "conflict_detected": False,
         }
     if not evidence_root.exists() or not evidence_root.is_dir():
         return {
@@ -938,6 +939,7 @@ def _latest_stage16_post_resume_evidence(*, latest_pre_sleep_evidence: dict[str,
             "evidence_path": "",
             "status": "missing",
             "linked_to_latest_pre_sleep": False,
+            "conflict_detected": False,
         }
 
     root_real = evidence_root.resolve()
@@ -968,8 +970,16 @@ def _latest_stage16_post_resume_evidence(*, latest_pre_sleep_evidence: dict[str,
             "evidence_root": str(root_real),
             "evidence_path": str(resolved) if linked_to_latest_pre_sleep else "",
             "file_name": resolved.name if linked_to_latest_pre_sleep else "",
+            "candidate_evidence_path": str(resolved),
+            "candidate_file_name": resolved.name,
+            "candidate_pre_sleep_evidence_path": raw_pre_path,
+            "expected_pre_sleep_evidence_path": pre_sleep_path,
             "pre_sleep_evidence_path": raw_pre_path,
             "linked_to_latest_pre_sleep": linked_to_latest_pre_sleep,
+            "conflict_detected": not linked_to_latest_pre_sleep,
+            "stale_state_confusion_blocker": "post_resume_pre_sleep_path_mismatch"
+            if not linked_to_latest_pre_sleep
+            else "",
             "recorded_ts": int(raw.get("received_ts") or raw.get("recorded_ts") or 0),
             "continuity_record_id": _safe_str(raw.get("continuity_record_id")).strip(),
             "source_node_id": _safe_str(raw.get("source_node_id")).strip(),
@@ -991,6 +1001,7 @@ def _latest_stage16_post_resume_evidence(*, latest_pre_sleep_evidence: dict[str,
         "evidence_path": "",
         "status": "missing",
         "linked_to_latest_pre_sleep": False,
+        "conflict_detected": False,
     }
 
 
@@ -1077,6 +1088,7 @@ def stage16_sleep_continuity_runbook() -> dict[str, Any]:
     latest_post_resume_evidence = _latest_stage16_post_resume_evidence(
         latest_pre_sleep_evidence=latest_pre_sleep_evidence
     )
+    post_resume_evidence_conflict = bool(latest_post_resume_evidence.get("conflict_detected"))
     checks_by_id = {
         _safe_str(item.get("id")).strip(): item for item in live_readbacks.get("checks", []) if isinstance(item, dict)
     }
@@ -1101,6 +1113,9 @@ def stage16_sleep_continuity_runbook() -> dict[str, Any]:
     elif ready_to_close:
         status_text = "ready_for_operator_stage_closure_decision"
         next_gap = "stage16_operator_stage_closure_decision"
+    elif prerequisite_readbacks_ready and post_resume_evidence_conflict and not sleep_continuity_ready:
+        status_text = "post_resume_evidence_conflict"
+        next_gap = "stage16_sleep_continuity_runtime_readback"
     elif prerequisite_readbacks_ready and not sleep_continuity_ready:
         status_text = "ready_for_operator_sleep_resume"
         next_gap = "stage16_sleep_continuity_runtime_readback"
@@ -1127,6 +1142,7 @@ def stage16_sleep_continuity_runbook() -> dict[str, Any]:
         "pre_sleep_evidence_ready": bool(latest_pre_sleep_evidence.get("present")),
         "post_resume_evidence": latest_post_resume_evidence,
         "post_resume_evidence_ready": bool(latest_post_resume_evidence.get("present")),
+        "post_resume_evidence_conflict": post_resume_evidence_conflict,
         "ready_to_close": ready_to_close,
         "stage16_closed_by_receipt": stage16_closed_by_receipt,
         "missing_readbacks": missing_readbacks,
@@ -1234,6 +1250,7 @@ def _stage16_sleep_continuity_selected_action_readiness(
     prior_live_blockers: list[str],
     pre_sleep_evidence_ready: bool,
     post_resume_evidence_ready: bool,
+    post_resume_evidence_conflict: bool,
 ) -> dict[str, Any]:
     step_id = _safe_str(selected_step.get("id")).strip()
     command = _safe_str(selected_step.get("command")).strip()
@@ -1287,6 +1304,8 @@ def _stage16_sleep_continuity_selected_action_readiness(
             run_blockers.append("operator_confirmed_sleep_resume_missing")
         if post_resume_evidence_ready:
             met_conditions.append("post_resume_evidence_available")
+        elif post_resume_evidence_conflict:
+            remaining_evidence_gates.append("post_resume_evidence_pre_sleep_path_mismatch")
         else:
             remaining_evidence_gates.append("post_resume_evidence_missing")
         status = "waiting_for_operator_confirmation" if run_blockers else "ready_to_capture_post_resume_evidence"
@@ -1335,12 +1354,15 @@ def _stage16_sleep_continuity_selected_action_readiness(
         "operator_terminal_command_ready": bool(command_validation) and not command_validation_blockers,
         "command_validation": command_validation,
         "command_validation_blockers": command_validation_blockers,
-        "next_operator_step": "operator_confirm_sleep_resume_then_capture_post_resume_evidence"
+        "next_operator_step": "operator_recapture_post_resume_evidence_for_latest_pre_sleep"
+        if step_id == "capture_post_resume_evidence" and post_resume_evidence_conflict
+        else "operator_confirm_sleep_resume_then_capture_post_resume_evidence"
         if step_id == "capture_post_resume_evidence" and run_blockers
         else _safe_str(selected_step.get("title")).strip(),
         "selected_step_id": step_id,
         "pre_sleep_evidence_ready": pre_sleep_evidence_ready,
         "post_resume_evidence_ready": post_resume_evidence_ready,
+        "post_resume_evidence_conflict": post_resume_evidence_conflict,
         "operator_confirmation_required": operator_confirmation_required,
         "writes_evidence_when_run": bool(selected_step.get("writes_evidence_when_run")),
         "writes_receipts_when_run": bool(selected_step.get("writes_receipts_when_run")),
@@ -1402,6 +1424,7 @@ def _stage16_sleep_continuity_operator_sleep_resume_gate(
     confirmation_required = step_id == "capture_post_resume_evidence"
     pre_sleep_present = bool(latest_pre_sleep_evidence.get("present"))
     post_resume_present = bool(latest_post_resume_evidence.get("present"))
+    post_resume_conflict = bool(latest_post_resume_evidence.get("conflict_detected"))
     operator_terminal_command_ready = bool(selected_action_readiness.get("operator_terminal_command_ready"))
     ready_after_operator_confirmation = (
         confirmation_required
@@ -1433,6 +1456,16 @@ def _stage16_sleep_continuity_operator_sleep_resume_gate(
         "trace_id": _safe_str(latest_pre_sleep_evidence.get("trace_id")).strip(),
         "post_resume_evidence_present": post_resume_present,
         "post_resume_evidence_status": _safe_str(latest_post_resume_evidence.get("status")).strip(),
+        "post_resume_evidence_conflict": post_resume_conflict,
+        "post_resume_candidate_evidence_path": _safe_str(
+            latest_post_resume_evidence.get("candidate_evidence_path")
+        ).strip(),
+        "expected_pre_sleep_evidence_path": _safe_str(
+            latest_post_resume_evidence.get("expected_pre_sleep_evidence_path")
+        ).strip(),
+        "candidate_pre_sleep_evidence_path": _safe_str(
+            latest_post_resume_evidence.get("candidate_pre_sleep_evidence_path")
+        ).strip(),
         "must_sleep_after_pre_sleep_recorded_ts": confirmation_required,
         "must_resume_before_post_resume_capture": confirmation_required,
         "post_resume_capture_allowed_after_operator_confirmation": ready_after_operator_confirmation,
@@ -1515,6 +1548,7 @@ def stage16_sleep_continuity_action() -> dict[str, Any]:
     prior_live_blockers = _stage16_prior_live_readback_blockers(blockers)
     pre_sleep_evidence_ready = bool(runbook.get("pre_sleep_evidence_ready"))
     post_resume_evidence_ready = bool(runbook.get("post_resume_evidence_ready"))
+    post_resume_evidence_conflict = bool(runbook.get("post_resume_evidence_conflict"))
     sleep_continuity_ready = bool(runbook.get("sleep_continuity_ready"))
     ready_to_close = bool(runbook.get("ready_to_close"))
     stage16_closed_by_receipt = bool(runbook.get("stage16_closed_by_receipt"))
@@ -1548,6 +1582,7 @@ def stage16_sleep_continuity_action() -> dict[str, Any]:
         prior_live_blockers=prior_live_blockers,
         pre_sleep_evidence_ready=pre_sleep_evidence_ready,
         post_resume_evidence_ready=post_resume_evidence_ready,
+        post_resume_evidence_conflict=post_resume_evidence_conflict,
     )
     operator_terminal_invocation = _stage16_sleep_continuity_operator_terminal_invocation(
         selected_step=selected_step,
@@ -1592,6 +1627,7 @@ def stage16_sleep_continuity_action() -> dict[str, Any]:
         "prior_live_readback_blockers": prior_live_blockers,
         "pre_sleep_evidence_ready": pre_sleep_evidence_ready,
         "post_resume_evidence_ready": post_resume_evidence_ready,
+        "post_resume_evidence_conflict": post_resume_evidence_conflict,
         "sleep_continuity_ready": sleep_continuity_ready,
         "ready_to_close": ready_to_close,
         "stage16_closed_by_receipt": stage16_closed_by_receipt,
@@ -2474,6 +2510,7 @@ def status() -> dict[str, Any]:
         )
         pre_sleep_evidence_ready = bool(latest_pre_sleep_evidence.get("present"))
         post_resume_evidence_ready = bool(latest_post_resume_evidence.get("present"))
+        post_resume_evidence_conflict = bool(latest_post_resume_evidence.get("conflict_detected"))
         completion_review_blockers = _parse_list(review.get("blockers"))
         sleep_continuity_ready = bool(
             _meta(review.get("done_criteria")).get("workstation_sleep_does_not_destroy_continuity")
@@ -2483,6 +2520,8 @@ def status() -> dict[str, Any]:
             if sleep_continuity_ready
             else "post_resume_evidence_ready"
             if post_resume_evidence_ready
+            else "post_resume_evidence_conflict"
+            if post_resume_evidence_conflict
             else "pre_sleep_evidence_ready"
             if pre_sleep_evidence_ready
             else "ready_for_operator_sleep_resume"
@@ -2540,12 +2579,15 @@ def status() -> dict[str, Any]:
             "sleep_continuity_ready": sleep_continuity_ready,
             "pre_sleep_evidence_ready": pre_sleep_evidence_ready,
             "post_resume_evidence_ready": post_resume_evidence_ready,
+            "post_resume_evidence_conflict": post_resume_evidence_conflict,
             "latest_pre_sleep_evidence": latest_pre_sleep_evidence,
             "latest_post_resume_evidence": latest_post_resume_evidence,
             "sleep_continuity_next_step": "record_stage16_operator_stage_closure_decision"
             if sleep_continuity_ready and completion_ready
             else "run_sleep_continuity_runtime_proof_with_committed_evidence"
             if post_resume_evidence_ready and not sleep_continuity_ready
+            else "recapture_post_resume_evidence_for_latest_pre_sleep"
+            if post_resume_evidence_conflict and pre_sleep_evidence_ready and not sleep_continuity_ready
             else "run_post_resume_evidence_with_operator_confirmation"
             if pre_sleep_evidence_ready and not sleep_continuity_ready
             else "capture_pre_sleep_evidence"
