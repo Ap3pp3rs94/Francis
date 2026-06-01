@@ -11,6 +11,7 @@ SWARM_UNIT_ROLES_CONTRACT_KIND = "francis.stage15.swarm.unit_roles_contract"
 SWARM_MESSAGING_MODEL_CONTRACT_KIND = "francis.stage15.swarm.messaging_model_contract"
 SWARM_DELEGATION_ETIQUETTE_CONTRACT_KIND = "francis.stage15.swarm.delegation_etiquette_contract"
 SWARM_TRACE_CONTINUITY_CONTRACT_KIND = "francis.stage15.swarm.trace_continuity_contract"
+SWARM_FAILURE_SEMANTICS_CONTRACT_KIND = "francis.stage15.swarm.failure_semantics_contract"
 
 
 def swarm_status_snapshot() -> dict[str, Any]:
@@ -24,6 +25,8 @@ def swarm_status_snapshot() -> dict[str, Any]:
     delegation_etiquette_ready = bool(delegation_etiquette.get("delegation_etiquette_contract_ready"))
     trace_continuity = swarm_trace_continuity_contract()
     trace_continuity_ready = bool(trace_continuity.get("trace_continuity_contract_ready"))
+    failure_semantics = swarm_failure_semantics_contract()
+    failure_semantics_ready = bool(failure_semantics.get("failure_semantics_contract_ready"))
     deliverables = [
         _deliverable(
             "stage14_ledger_closure_backstop",
@@ -63,8 +66,8 @@ def swarm_status_snapshot() -> dict[str, Any]:
         _deliverable(
             "failure_semantics",
             "Deadletter and retry semantics are explicit across units",
-            False,
-            "pending",
+            failure_semantics_ready,
+            "ready" if failure_semantics_ready else "pending",
             "stage15_failure_semantics_contract",
         ),
     ]
@@ -74,7 +77,14 @@ def swarm_status_snapshot() -> dict[str, Any]:
         "kind": SWARM_STATUS_KIND,
         "stage": STAGE15_SWARM_STAGE,
         "source_id": "swarm",
-        "status": "stage15_trace_continuity_contract_ready"
+        "status": "stage15_failure_semantics_contract_ready"
+        if stage14_closed
+        and unit_roles_ready
+        and messaging_model_ready
+        and delegation_etiquette_ready
+        and trace_continuity_ready
+        and failure_semantics_ready
+        else "stage15_trace_continuity_contract_ready"
         if stage14_closed
         and unit_roles_ready
         and messaging_model_ready
@@ -95,7 +105,7 @@ def swarm_status_snapshot() -> dict[str, Any]:
         "messaging_model_contract_ready": messaging_model_ready,
         "delegation_etiquette_contract_ready": delegation_etiquette_ready,
         "trace_continuity_contract_ready": trace_continuity_ready,
-        "failure_semantics_contract_ready": False,
+        "failure_semantics_contract_ready": failure_semantics_ready,
         "deliverables": deliverables,
         "ready_count": ready_count,
         "required_count": len(deliverables),
@@ -105,10 +115,18 @@ def swarm_status_snapshot() -> dict[str, Any]:
             "messaging_model_contract": "/swarm/messaging-model-contract",
             "delegation_etiquette_contract": "/swarm/delegation-etiquette-contract",
             "trace_continuity_contract": "/swarm/trace-continuity-contract",
+            "failure_semantics_contract": "/swarm/failure-semantics-contract",
             "stage14_closure_readback": "/adversarial-hardening/stage-closure-decisions",
         },
         "governance": _governance(),
-        "next_smallest_truthful_gap": "stage15_failure_semantics_contract"
+        "next_smallest_truthful_gap": "stage15_completion_review"
+        if stage14_closed
+        and unit_roles_ready
+        and messaging_model_ready
+        and delegation_etiquette_ready
+        and trace_continuity_ready
+        and failure_semantics_ready
+        else "stage15_failure_semantics_contract"
         if stage14_closed
         and unit_roles_ready
         and messaging_model_ready
@@ -456,6 +474,97 @@ def swarm_trace_continuity_contract() -> dict[str, Any]:
     }
 
 
+def swarm_failure_semantics_contract() -> dict[str, Any]:
+    trace = swarm_trace_continuity_contract()
+    trace_ready = bool(trace.get("trace_continuity_contract_ready"))
+    failure_states = [
+        _failure_state("accepted", "handoff accepted by receiver", terminal=False, retryable=False),
+        _failure_state("rejected", "handoff rejected with reason and evidence refs", terminal=True, retryable=False),
+        _failure_state(
+            "deadlettered",
+            "handoff cannot be processed without operator-visible review",
+            terminal=True,
+            retryable=False,
+        ),
+        _failure_state(
+            "retry_requested", "bounded retry requested without executing automatically", terminal=False, retryable=True
+        ),
+        _failure_state(
+            "timed_out",
+            "handoff exceeded bounded wait and must be deadlettered or reviewed",
+            terminal=True,
+            retryable=False,
+        ),
+    ]
+    retry_policy = {
+        "automatic_retry_executes": False,
+        "max_contract_retry_attempts": 1,
+        "retry_requires_same_swarm_trace_id": True,
+        "retry_requires_parent_message_id": True,
+        "retry_requires_reason": True,
+        "retry_can_grant_authority": False,
+    }
+    deadletter_policy = {
+        "deadletter_requires_trace_context": True,
+        "deadletter_requires_failure_reason": True,
+        "deadletter_operator_visible": True,
+        "deadletter_preserves_one_francis_presence": True,
+        "deadletter_writes_memory": False,
+        "deadletter_runs_tools": False,
+    }
+    failure_ready = (
+        trace_ready
+        and len(failure_states) >= 5
+        and all(bool(state.get("state")) for state in failure_states)
+        and all(
+            value is False
+            for key, value in retry_policy.items()
+            if key.endswith("executes") or key.endswith("authority")
+        )
+        and all(
+            bool(value)
+            for key, value in deadletter_policy.items()
+            if key not in {"deadletter_writes_memory", "deadletter_runs_tools"}
+        )
+        and not bool(deadletter_policy.get("deadletter_writes_memory"))
+        and not bool(deadletter_policy.get("deadletter_runs_tools"))
+    )
+    return {
+        "ok": True,
+        "kind": SWARM_FAILURE_SEMANTICS_CONTRACT_KIND,
+        "stage": STAGE15_SWARM_STAGE,
+        "source_id": "swarm",
+        "status": "ready" if failure_ready else "blocked",
+        "trace_continuity_contract_ready": trace_ready,
+        "failure_semantics_contract_ready": failure_ready,
+        "failure_states": failure_states,
+        "failure_state_count": len(failure_states),
+        "retry_policy": retry_policy,
+        "deadletter_policy": deadletter_policy,
+        "delivery_semantics": {
+            "contract_only": True,
+            "sends_messages": False,
+            "starts_workers": False,
+            "executes_retries": False,
+            "writes_deadletters": False,
+        },
+        "reads_receipts": True,
+        "writes_receipts": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": _governance(),
+        "next_smallest_truthful_gap": "stage15_completion_review"
+        if failure_ready
+        else "stage15_trace_continuity_contract",
+    }
+
+
 def _unit_role(role_id: str, summary: str, *, allowed_actions: list[str]) -> dict[str, Any]:
     return {
         "id": role_id,
@@ -502,6 +611,19 @@ def _trace_field(field: str, description: str, *, required: bool) -> dict[str, A
         "required": required,
         "authority_bearing": False,
         "operator_visible": field in {"swarm_trace_id", "root_objective_id", "decision_state"},
+    }
+
+
+def _failure_state(state: str, summary: str, *, terminal: bool, retryable: bool) -> dict[str, Any]:
+    return {
+        "state": state,
+        "summary": summary,
+        "terminal": terminal,
+        "retryable": retryable,
+        "requires_trace_context": True,
+        "requires_evidence_refs": True,
+        "authority_granted": False,
+        "executes_action": False,
     }
 
 

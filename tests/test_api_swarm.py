@@ -132,20 +132,21 @@ def test_swarm_unit_roles_contract_is_ready_after_stage14_closure(monkeypatch, t
     assert source_contracts["emergent_behavior_signal_detector"]["observed"] is True
 
     status = client.get("/swarm/status").json()
-    assert status["status"] == "stage15_trace_continuity_contract_ready"
+    assert status["status"] == "stage15_failure_semantics_contract_ready"
     assert status["stage14_closed_by_receipt"] is True
     assert status["unit_roles_contract_ready"] is True
     assert status["messaging_model_contract_ready"] is True
     assert status["delegation_etiquette_contract_ready"] is True
     assert status["trace_continuity_contract_ready"] is True
-    assert status["failure_semantics_contract_ready"] is False
-    assert status["ready_count"] == 5
+    assert status["failure_semantics_contract_ready"] is True
+    assert status["ready_count"] == 6
     assert status["required_count"] == 6
     assert status["routes"]["unit_roles_contract"] == "/swarm/unit-roles-contract"
     assert status["routes"]["messaging_model_contract"] == "/swarm/messaging-model-contract"
     assert status["routes"]["delegation_etiquette_contract"] == "/swarm/delegation-etiquette-contract"
     assert status["routes"]["trace_continuity_contract"] == "/swarm/trace-continuity-contract"
-    assert status["next_smallest_truthful_gap"] == "stage15_failure_semantics_contract"
+    assert status["routes"]["failure_semantics_contract"] == "/swarm/failure-semantics-contract"
+    assert status["next_smallest_truthful_gap"] == "stage15_completion_review"
 
 
 def test_swarm_messaging_model_contract_preserves_trace_and_authority_boundaries(
@@ -331,3 +332,62 @@ def test_swarm_trace_continuity_contract_preserves_one_lineage(
         "decision_state",
     } == set(fields)
     assert all(item["authority_bearing"] is False for item in fields.values())
+
+
+def test_swarm_failure_semantics_contract_bounds_retry_and_deadletter(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage14_closure_receipt(data_root)
+
+    client = TestClient(create_app())
+    contract = client.get("/swarm/failure-semantics-contract").json()
+
+    assert contract["ok"] is True
+    assert contract["kind"] == "francis.stage15.swarm.failure_semantics_contract"
+    assert contract["stage"] == "Stage 15 / Swarm"
+    assert contract["status"] == "ready"
+    assert contract["trace_continuity_contract_ready"] is True
+    assert contract["failure_semantics_contract_ready"] is True
+    assert contract["failure_state_count"] == 5
+    assert contract["retry_policy"]["automatic_retry_executes"] is False
+    assert contract["retry_policy"]["max_contract_retry_attempts"] == 1
+    assert contract["retry_policy"]["retry_requires_same_swarm_trace_id"] is True
+    assert contract["retry_policy"]["retry_requires_parent_message_id"] is True
+    assert contract["retry_policy"]["retry_requires_reason"] is True
+    assert contract["retry_policy"]["retry_can_grant_authority"] is False
+    assert contract["deadletter_policy"]["deadletter_requires_trace_context"] is True
+    assert contract["deadletter_policy"]["deadletter_requires_failure_reason"] is True
+    assert contract["deadletter_policy"]["deadletter_operator_visible"] is True
+    assert contract["deadletter_policy"]["deadletter_preserves_one_francis_presence"] is True
+    assert contract["deadletter_policy"]["deadletter_writes_memory"] is False
+    assert contract["deadletter_policy"]["deadletter_runs_tools"] is False
+    assert contract["delivery_semantics"]["contract_only"] is True
+    assert contract["delivery_semantics"]["sends_messages"] is False
+    assert contract["delivery_semantics"]["starts_workers"] is False
+    assert contract["delivery_semantics"]["executes_retries"] is False
+    assert contract["delivery_semantics"]["writes_deadletters"] is False
+    assert contract["writes_receipts"] is False
+    assert contract["writes_memory"] is False
+    assert contract["runs_tools"] is False
+    assert contract["runs_shell"] is False
+    assert contract["runs_git"] is False
+    assert contract["launches_browser"] is False
+    assert contract["captures_screen"] is False
+    assert contract["grants_execution_authority"] is False
+    assert contract["grants_mutation_authority"] is False
+    assert contract["governance"]["does_not_create_agent_zoo"] is True
+    assert contract["governance"]["does_not_multiply_authority"] is True
+    assert contract["next_smallest_truthful_gap"] == "stage15_completion_review"
+
+    states = {item["state"]: item for item in contract["failure_states"]}
+    assert set(states) == {"accepted", "rejected", "deadlettered", "retry_requested", "timed_out"}
+    assert states["retry_requested"]["retryable"] is True
+    assert states["accepted"]["terminal"] is False
+    assert states["rejected"]["terminal"] is True
+    assert states["deadlettered"]["terminal"] is True
+    assert states["timed_out"]["terminal"] is True
+    assert all(item["authority_granted"] is False for item in states.values())
+    assert all(item["executes_action"] is False for item in states.values())

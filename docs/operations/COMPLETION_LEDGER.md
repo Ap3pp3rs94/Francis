@@ -50499,6 +50499,57 @@ Latest validation for Stage 15 trace continuity:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-31 - Stage 15 Swarm failure semantics are contract-bound
+
+Roadmap area: Stage 15 / Swarm, failure semantics before completion review.
+
+Material change:
+
+- Added read-only `GET /swarm/failure-semantics-contract`.
+- Stage 15 status now advances from `stage15_trace_continuity_contract_ready`
+  to `stage15_failure_semantics_contract_ready`.
+- The contract defines five bounded states: `accepted`, `rejected`,
+  `deadlettered`, `retry_requested`, and `timed_out`.
+- Retry policy is bounded and non-executing: automatic retry does not execute,
+  retry cannot grant authority, retry requires the same swarm trace id, retry
+  requires a parent message id, and retry requires a reason.
+- Deadletter policy requires trace context, failure reason, operator-visible
+  posture, and one-Francis presence preservation while not writing memory or
+  running tools.
+- The route is contract-only: it does not send messages, start workers, write
+  receipts, write memory, execute retries, write deadletters, run shell, run
+  git, launch browsers, capture the screen, or grant execution/mutation
+  authority.
+- Current readback reports `status=stage15_failure_semantics_contract_ready`,
+  `ready_count=6`, `required_count=6`,
+  `failure_semantics_contract_ready=true`, `failure_state_count=5`, and
+  `next_smallest_truthful_gap=stage15_completion_review`.
+
+Latest validation for Stage 15 failure semantics:
+
+- Direct local `TestClient` readback of GET `/swarm/status` and GET
+  `/swarm/failure-semantics-contract`.
+  Result: `status=stage15_failure_semantics_contract_ready; ready_count=6;
+  required_count=6; failure_ready=true; failure_state_count=5;
+  status_next_gap=stage15_completion_review`.
+- `python -m pytest tests/test_api_swarm.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 7 passed`
+- `python -m mypy src/francis/swarm.py src/francis/api/routes/swarm.py
+  src/francis/api/app.py`
+  Result: `passed`
+- `python -m ruff check src/francis/swarm.py src/francis/api/routes/swarm.py
+  src/francis/api/app.py tests/test_api_swarm.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/swarm.py
+  src/francis/api/routes/swarm.py src/francis/api/app.py
+  tests/test_api_swarm.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

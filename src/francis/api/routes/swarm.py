@@ -6,6 +6,7 @@ from fastapi import APIRouter
 
 from francis.swarm import (
     swarm_delegation_etiquette_contract,
+    swarm_failure_semantics_contract,
     swarm_messaging_model_contract,
     swarm_status_snapshot,
     swarm_trace_continuity_contract,
@@ -38,3 +39,8 @@ def delegation_etiquette_contract() -> dict[str, Any]:
 @router.get("/trace-continuity-contract")
 def trace_continuity_contract() -> dict[str, Any]:
     return swarm_trace_continuity_contract()
+
+
+@router.get("/failure-semantics-contract")
+def failure_semantics_contract() -> dict[str, Any]:
+    return swarm_failure_semantics_contract()
