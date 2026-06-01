@@ -1403,6 +1403,17 @@ test("FederationClient reads sleep-resume operator checklist as a read-only phys
       confirmation_receipt_payload_contract: {
         operator_confirmed_sleep_resume: true,
       },
+      confirmation_receipt_command_ready: true,
+      confirmation_receipt_command_visible_after_physical_sleep_resume: true,
+      confirmation_receipt_command_after_physical_sleep_resume:
+        "$body = @{ actor = 'test.federation.sleep'; operator_confirmed_sleep_resume = $true } | ConvertTo-Json -Depth 6; Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/federation/sleep-resume-confirmation' -ContentType 'application/json' -Body $body",
+      confirmation_receipt_copyable_command_after_physical_sleep_resume:
+        "Set-Location -LiteralPath 'D:\\Francis'; $body = @{ actor = 'test.federation.sleep'; operator_confirmed_sleep_resume = $true } | ConvertTo-Json -Depth 6; Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/federation/sleep-resume-confirmation' -ContentType 'application/json' -Body $body",
+      confirmation_receipt_command_runs_after_physical_sleep_resume_only: true,
+      confirmation_receipt_command_records_receipt: true,
+      confirmation_receipt_command_writes_evidence: false,
+      confirmation_receipt_command_marks_stage16_closed: false,
+      confirmation_receipt_command_projection_only: true,
       records_receipt: true,
       writes_receipts: false,
       writes_evidence: false,
@@ -1467,6 +1478,25 @@ test("FederationClient reads sleep-resume operator checklist as a read-only phys
     assert.equal(checklist.checklist[0]?.passed, true);
     assert.equal(checklist.checklist[1]?.operator_action_required, true);
     assert.equal(checklist.confirmation_receipt_route, "/federation/sleep-resume-confirmation");
+    assert.equal(checklist.confirmation_receipt_command_ready, true);
+    assert.equal(checklist.confirmation_receipt_command_visible_after_physical_sleep_resume, true);
+    assert.equal(
+      checklist.confirmation_receipt_command_after_physical_sleep_resume?.includes(
+        "/federation/sleep-resume-confirmation",
+      ),
+      true,
+    );
+    assert.equal(
+      checklist.confirmation_receipt_copyable_command_after_physical_sleep_resume?.includes(
+        checklist.confirmation_receipt_command_after_physical_sleep_resume ?? "",
+      ),
+      true,
+    );
+    assert.equal(checklist.confirmation_receipt_command_runs_after_physical_sleep_resume_only, true);
+    assert.equal(checklist.confirmation_receipt_command_records_receipt, true);
+    assert.equal(checklist.confirmation_receipt_command_writes_evidence, false);
+    assert.equal(checklist.confirmation_receipt_command_marks_stage16_closed, false);
+    assert.equal(checklist.confirmation_receipt_command_projection_only, true);
     assert.equal(checklist.records_receipt, true);
     assert.equal(checklist.writes_receipts, false);
     assert.equal(checklist.writes_evidence, false);

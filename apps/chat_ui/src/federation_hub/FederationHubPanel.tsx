@@ -567,6 +567,32 @@ export function FederationHubPanel(props: { baseUrl: string }) {
                   <code>{yesNo(operatorChecklist.operator_must_not_record_receipt_for_stale_pre_sleep_marker)}</code>
                 </div>
                 <div style={{ fontSize: 11, color: MUTED, marginBottom: 6, overflowWrap: "anywhere" }}>
+                  receipt command <code>{yesNo(operatorChecklist.confirmation_receipt_command_ready)}</code>
+                  {" / "}visible after sleep/resume{" "}
+                  <code>{yesNo(operatorChecklist.confirmation_receipt_command_visible_after_physical_sleep_resume)}</code>
+                  {" / "}records receipt <code>{yesNo(operatorChecklist.confirmation_receipt_command_records_receipt)}</code>
+                  {" / "}writes evidence <code>{yesNo(operatorChecklist.confirmation_receipt_command_writes_evidence)}</code>
+                  {" / "}marks closed{" "}
+                  <code>{yesNo(operatorChecklist.confirmation_receipt_command_marks_stage16_closed)}</code>
+                </div>
+                {operatorChecklist.confirmation_receipt_copyable_command_after_physical_sleep_resume ? (
+                  <pre
+                    style={{
+                      margin: "8px 0",
+                      padding: 10,
+                      borderRadius: 10,
+                      border: `1px solid ${PANEL_BORDER}`,
+                      background: "#101010",
+                      color: TEXT,
+                      whiteSpace: "pre-wrap",
+                      overflowWrap: "anywhere",
+                      fontSize: 11,
+                    }}
+                  >
+                    {operatorChecklist.confirmation_receipt_copyable_command_after_physical_sleep_resume}
+                  </pre>
+                ) : null}
+                <div style={{ fontSize: 11, color: MUTED, marginBottom: 6, overflowWrap: "anywhere" }}>
                   checklist pre age <code>{operatorChecklist.current_pre_sleep_age_seconds}s</code>
                   {" / "}freshness <code>{codeValue(operatorChecklist.current_pre_sleep_freshness_state)}</code>
                   {" / "}guidance <code>{codeValue(operatorChecklist.current_pre_sleep_age_guidance)}</code>

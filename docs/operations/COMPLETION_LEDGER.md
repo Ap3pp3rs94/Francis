@@ -55288,6 +55288,58 @@ Latest validation for Stage 16 pre-sleep age/freshness readbacks:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 confirmation checklist carries guarded receipt command
+
+Roadmap area: Stage 16 / Federation, sleep-continuity confirmation receipt
+truthfulness.
+
+Material change:
+
+- `/federation/sleep-resume-confirmation/operator-checklist` now carries the
+  exact confirmation receipt command and copyable PowerShell command under the
+  physical confirmation guard.
+- The command is labeled as visible only after physical sleep/resume and
+  remains bounded to receipt recording only:
+  `confirmation_receipt_command_records_receipt=true`,
+  `confirmation_receipt_command_writes_evidence=false`, and
+  `confirmation_receipt_command_marks_stage16_closed=false`.
+- Federation Hub parses and displays the guarded receipt command inside the
+  Stage 16 sleep/resume checklist panel.
+- This does not record the receipt, does not run post-resume capture, does not
+  infer sleep from elapsed time, and does not mark Stage 16 closed.
+- Fresh local readback for `actor=codex.builder` reports
+  `confirmation_receipt_command_ready=true`,
+  `confirmation_receipt_command_visible_after_physical_sleep_resume=true`,
+  `confirmation_receipt_command_runs_after_physical_sleep_resume_only=true`,
+  and `next_smallest_truthful_gap=stage16_sleep_resume_confirmation_receipt`.
+
+Latest validation for Stage 16 guarded confirmation receipt command:
+
+- `python -m pytest
+  tests/test_api_federation.py::test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marker
+  tests/test_api_federation.py::test_federation_stage16_sleep_resume_confirmation_records_operator_receipt
+  tests/test_api_federation.py::test_federation_stage16_sleep_resume_confirmation_readback_blocks_stale_receipt
+  -q --tb=short --maxfail=1`
+  Result: `passed; 3 passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `npm run test -- federation_hub`
+  Result: `passed; 199 passed`.
+- `npm run build`
+  Result: `passed`.
+- Direct FastAPI `TestClient` readback of
+  `/federation/sleep-resume-confirmation/operator-checklist?actor=codex.builder`
+  Result: `passed; confirmation receipt command ready and copyable,
+  writes_evidence=false, marks_stage16_closed=false`.
+- `git diff --check`
+  Result: `passed`.
+
 ### 2026-06-01 - Stage 16 physical confirmation guard is explicit
 
 Roadmap area: Stage 16 / Federation, sleep-continuity confirmation receipt

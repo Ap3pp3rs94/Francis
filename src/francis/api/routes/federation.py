@@ -1376,6 +1376,14 @@ def stage16_sleep_resume_confirmation_operator_checklist(actor: str = "") -> dic
         physical_confirmation_next_step = "resolve_confirmation_receipt_preconditions"
     else:
         physical_confirmation_next_step = "physically_sleep_or_suspend_workstation_after_current_pre_sleep_marker"
+    confirmation_receipt_command_ready = bool(readback.get("confirmation_receipt_command_ready"))
+    confirmation_receipt_command = _safe_str(readback.get("confirmation_receipt_command")).strip()
+    confirmation_receipt_copyable_command = _safe_str(readback.get("confirmation_receipt_copyable_command")).strip()
+    confirmation_receipt_command_visible_after_physical_sleep_resume = (
+        confirmation_receipt_safe_after_physical_sleep_resume
+        and confirmation_receipt_command_ready
+        and bool(confirmation_receipt_copyable_command)
+    )
     operator_actions_remaining = (
         [
             "physically_sleep_or_suspend_workstation_after_current_pre_sleep_marker",
@@ -1489,6 +1497,18 @@ def stage16_sleep_resume_confirmation_operator_checklist(actor: str = "") -> dic
             and not bool(record_readiness.get("writes_evidence"))
             and not bool(record_readiness.get("writes_runtime_readback"))
             and not bool(record_readiness.get("marks_stage16_closed")),
+            "confirmation_receipt_command_visible_after_physical_sleep_resume": (
+                confirmation_receipt_command_visible_after_physical_sleep_resume
+            ),
+            "confirmation_receipt_command_records_receipt": bool(
+                readback.get("confirmation_receipt_command_records_receipt")
+            ),
+            "confirmation_receipt_command_writes_evidence": bool(
+                readback.get("confirmation_receipt_command_writes_evidence")
+            ),
+            "confirmation_receipt_command_marks_stage16_closed": bool(
+                readback.get("confirmation_receipt_command_marks_stage16_closed")
+            ),
             "does_not_infer_sleep_from_delay": True,
             "does_not_run_post_resume_capture": True,
             "does_not_mark_stage16_closed": True,
@@ -1509,6 +1529,31 @@ def stage16_sleep_resume_confirmation_operator_checklist(actor: str = "") -> dic
             "pre_sleep_evidence_path": current_pre_sleep_path,
             "reason": "operator confirms physical sleep/suspend and resume after the pre-sleep marker",
         },
+        "confirmation_receipt_command_ready": confirmation_receipt_command_ready,
+        "confirmation_receipt_command_visible_after_physical_sleep_resume": (
+            confirmation_receipt_command_visible_after_physical_sleep_resume
+        ),
+        "confirmation_receipt_command_after_physical_sleep_resume": (
+            confirmation_receipt_command if confirmation_receipt_command_visible_after_physical_sleep_resume else ""
+        ),
+        "confirmation_receipt_copyable_command_after_physical_sleep_resume": (
+            confirmation_receipt_copyable_command
+            if confirmation_receipt_command_visible_after_physical_sleep_resume
+            else ""
+        ),
+        "confirmation_receipt_command_runs_after_physical_sleep_resume_only": (
+            confirmation_receipt_command_ready and not receipt_backed_sequence_ready
+        ),
+        "confirmation_receipt_command_records_receipt": bool(
+            readback.get("confirmation_receipt_command_records_receipt")
+        ),
+        "confirmation_receipt_command_writes_evidence": bool(
+            readback.get("confirmation_receipt_command_writes_evidence")
+        ),
+        "confirmation_receipt_command_marks_stage16_closed": bool(
+            readback.get("confirmation_receipt_command_marks_stage16_closed")
+        ),
+        "confirmation_receipt_command_projection_only": True,
         "records_receipt": bool(record_readiness.get("records_receipt")),
         "writes_receipts": False,
         "writes_evidence": False,

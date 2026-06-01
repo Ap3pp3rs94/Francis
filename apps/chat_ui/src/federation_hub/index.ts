@@ -491,6 +491,15 @@ export type FederationSleepResumeOperatorChecklist = {
   confirmation_receipt_readback_route?: string;
   confirmation_receipt_actor_readiness_route?: string;
   confirmation_receipt_payload_contract?: Record<string, unknown>;
+  confirmation_receipt_command_ready: boolean;
+  confirmation_receipt_command_visible_after_physical_sleep_resume: boolean;
+  confirmation_receipt_command_after_physical_sleep_resume?: string;
+  confirmation_receipt_copyable_command_after_physical_sleep_resume?: string;
+  confirmation_receipt_command_runs_after_physical_sleep_resume_only: boolean;
+  confirmation_receipt_command_records_receipt: boolean;
+  confirmation_receipt_command_writes_evidence: boolean;
+  confirmation_receipt_command_marks_stage16_closed: boolean;
+  confirmation_receipt_command_projection_only: boolean;
   records_receipt: boolean;
   writes_receipts: boolean;
   writes_evidence: boolean;
@@ -2014,6 +2023,25 @@ export function parseFederationSleepResumeOperatorChecklist(
     confirmation_receipt_payload_contract: isRecord(body.confirmation_receipt_payload_contract)
       ? body.confirmation_receipt_payload_contract
       : undefined,
+    confirmation_receipt_command_ready: safeBoolean(body.confirmation_receipt_command_ready),
+    confirmation_receipt_command_visible_after_physical_sleep_resume: safeBoolean(
+      body.confirmation_receipt_command_visible_after_physical_sleep_resume,
+    ),
+    confirmation_receipt_command_after_physical_sleep_resume: optionalString(
+      body.confirmation_receipt_command_after_physical_sleep_resume,
+    ),
+    confirmation_receipt_copyable_command_after_physical_sleep_resume: optionalString(
+      body.confirmation_receipt_copyable_command_after_physical_sleep_resume,
+    ),
+    confirmation_receipt_command_runs_after_physical_sleep_resume_only: safeBoolean(
+      body.confirmation_receipt_command_runs_after_physical_sleep_resume_only,
+    ),
+    confirmation_receipt_command_records_receipt: safeBoolean(body.confirmation_receipt_command_records_receipt),
+    confirmation_receipt_command_writes_evidence: safeBoolean(body.confirmation_receipt_command_writes_evidence),
+    confirmation_receipt_command_marks_stage16_closed: safeBoolean(
+      body.confirmation_receipt_command_marks_stage16_closed,
+    ),
+    confirmation_receipt_command_projection_only: safeBoolean(body.confirmation_receipt_command_projection_only),
     records_receipt: safeBoolean(body.records_receipt),
     writes_receipts: safeBoolean(body.writes_receipts),
     writes_evidence: safeBoolean(body.writes_evidence),

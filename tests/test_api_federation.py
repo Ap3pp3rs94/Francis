@@ -1467,6 +1467,10 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
         "must_not_record_receipt_for_stale_pre_sleep_marker": False,
         "recapture_recommended_before_sleep_resume": False,
         "records_receipt_only": True,
+        "confirmation_receipt_command_visible_after_physical_sleep_resume": True,
+        "confirmation_receipt_command_records_receipt": True,
+        "confirmation_receipt_command_writes_evidence": False,
+        "confirmation_receipt_command_marks_stage16_closed": False,
         "does_not_infer_sleep_from_delay": True,
         "does_not_run_post_resume_capture": True,
         "does_not_mark_stage16_closed": True,
@@ -1503,6 +1507,19 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
         "pre_sleep_evidence_path": str(pre_sleep_path.resolve()),
         "reason": "operator confirms physical sleep/suspend and resume after the pre-sleep marker",
     }
+    assert checklist["confirmation_receipt_command_ready"] is True
+    assert checklist["confirmation_receipt_command_visible_after_physical_sleep_resume"] is True
+    assert "actor = 'test.federation.sleep'" in checklist["confirmation_receipt_command_after_physical_sleep_resume"]
+    assert str(pre_sleep_path.resolve()) in checklist["confirmation_receipt_command_after_physical_sleep_resume"]
+    assert (
+        checklist["confirmation_receipt_command_after_physical_sleep_resume"]
+        in checklist["confirmation_receipt_copyable_command_after_physical_sleep_resume"]
+    )
+    assert checklist["confirmation_receipt_command_runs_after_physical_sleep_resume_only"] is True
+    assert checklist["confirmation_receipt_command_records_receipt"] is True
+    assert checklist["confirmation_receipt_command_writes_evidence"] is False
+    assert checklist["confirmation_receipt_command_marks_stage16_closed"] is False
+    assert checklist["confirmation_receipt_command_projection_only"] is True
     assert checklist["records_receipt"] is True
     assert checklist["writes_receipts"] is False
     assert checklist["writes_evidence"] is False
@@ -2572,6 +2589,10 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     assert receipt_ready_checklist["physical_confirmation_next_step"] == "run_receipt_backed_post_resume_sequence"
     assert receipt_ready_checklist["operator_must_not_record_receipt_before_sleep_resume"] is False
     assert receipt_ready_checklist["operator_must_not_record_receipt_for_stale_pre_sleep_marker"] is False
+    assert receipt_ready_checklist["confirmation_receipt_command_ready"] is False
+    assert receipt_ready_checklist["confirmation_receipt_command_visible_after_physical_sleep_resume"] is False
+    assert receipt_ready_checklist["confirmation_receipt_command_after_physical_sleep_resume"] == ""
+    assert receipt_ready_checklist["confirmation_receipt_copyable_command_after_physical_sleep_resume"] == ""
     assert receipt_ready_checklist["operator_physical_confirmation_required"] is True
     assert receipt_ready_checklist["operator_physical_confirmation_recorded"] is True
     assert receipt_ready_checklist["latest_confirmation_receipt_id"] == body["receipt_id"]
@@ -2721,8 +2742,15 @@ def test_federation_stage16_sleep_resume_confirmation_readback_blocks_stale_rece
     assert checklist["confirmation_receipt_safe_after_physical_sleep_resume"] is False
     assert checklist["physical_confirmation_next_step"] == "recapture_pre_sleep_marker_before_physical_sleep_resume"
     assert checklist["operator_must_not_record_receipt_for_stale_pre_sleep_marker"] is True
+    assert checklist["confirmation_receipt_command_ready"] is True
+    assert checklist["confirmation_receipt_command_visible_after_physical_sleep_resume"] is False
+    assert checklist["confirmation_receipt_command_after_physical_sleep_resume"] == ""
     assert checklist["physical_confirmation_guard"]["safe_after_physical_sleep_resume"] is False
     assert checklist["physical_confirmation_guard"]["recapture_recommended_before_sleep_resume"] is True
+    assert (
+        checklist["physical_confirmation_guard"]["confirmation_receipt_command_visible_after_physical_sleep_resume"]
+        is False
+    )
     assert checklist["physical_confirmation_guard"]["does_not_mark_stage16_closed"] is True
     assert checklist["governance"]["physical_confirmation_guard_read_only"] is True
 
