@@ -54295,6 +54295,32 @@ Latest validation for Stage 16 Hub post-resume handoff command gating:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 Hub gates receipt-backed sequence command display
+
+Roadmap area: Stage 16 / Federation, Federation Hub sleep/resume confirmation
+contract truthfulness.
+
+Material change:
+
+- Federation Hub now routes the sleep-resume confirmations card through a
+  receipt-command visibility contract.
+- The Hub keeps the confirmation-receipt write command visible only when the
+  readback says that remedy command is ready.
+- The Hub hides the receipt-backed post-resume sequence command unless the
+  latest confirmation receipt is usable, the receipt-backed sequence is ready,
+  and there are no receipt-backed sequence blockers.
+- This is UI command-surface gating only: it writes no receipt, runs no shell,
+  captures no evidence, grants no authority, and does not mark Stage 16 closed.
+
+Latest validation for Stage 16 Hub receipt-backed sequence command display:
+
+- `npm run test -- federation_hub`
+  Result: `passed; 192 passed`.
+- `npm run build`
+  Result: `passed`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

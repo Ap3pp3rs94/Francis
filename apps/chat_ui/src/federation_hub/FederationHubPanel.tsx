@@ -4,6 +4,7 @@ import {
   FederationApiError,
   FederationClient,
   federationSleepContinuityVisibleOperatorCommands,
+  federationSleepResumeConfirmationVisibleCommands,
   isFederationSleepResumeConfirmationActorReadinessCurrent,
   presentFederationSleepContinuityAction,
   type FederationSleepContinuityActionReadback,
@@ -150,6 +151,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
   const runbookSelectedActionSummary = runbook?.selected_action_summary;
   const confirmationReceiptBlockers = confirmations?.receipt_backed_sequence_blockers ?? [];
   const confirmationReceiptOperatorSteps = confirmations?.confirmation_receipt_operator_steps ?? [];
+  const visibleConfirmationCommands = federationSleepResumeConfirmationVisibleCommands(confirmations);
   const visibleActorReadiness = isFederationSleepResumeConfirmationActorReadinessCurrent(
     actorReadiness,
     actorPreflightActor,
@@ -386,7 +388,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
               ))}
             </div>
           ) : null}
-          {confirmations.confirmation_receipt_copyable_command ? (
+          {visibleConfirmationCommands.confirmation_receipt_copyable_command ? (
             <pre
               style={{
                 margin: "8px 0 0",
@@ -400,10 +402,10 @@ export function FederationHubPanel(props: { baseUrl: string }) {
                 fontSize: 11,
               }}
             >
-              {confirmations.confirmation_receipt_copyable_command}
+              {visibleConfirmationCommands.confirmation_receipt_copyable_command}
             </pre>
           ) : null}
-          {confirmations.receipt_backed_sequence_copyable_command ? (
+          {visibleConfirmationCommands.receipt_backed_sequence_copyable_command ? (
             <pre
               style={{
                 margin: "8px 0 0",
@@ -417,7 +419,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
                 fontSize: 11,
               }}
             >
-              {confirmations.receipt_backed_sequence_copyable_command}
+              {visibleConfirmationCommands.receipt_backed_sequence_copyable_command}
             </pre>
           ) : null}
         </div>

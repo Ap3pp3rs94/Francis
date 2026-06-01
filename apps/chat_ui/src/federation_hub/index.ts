@@ -339,6 +339,11 @@ export type FederationSleepResumeConfirmations = {
   next_smallest_truthful_gap?: string;
 };
 
+export type FederationSleepResumeConfirmationVisibleCommands = {
+  confirmation_receipt_copyable_command?: string;
+  receipt_backed_sequence_copyable_command?: string;
+};
+
 export type FederationSleepResumeConfirmationActorReadiness = {
   ok: boolean;
   kind?: string;
@@ -1588,6 +1593,24 @@ export function parseFederationSleepResumeConfirmations(raw: unknown): Federatio
     items,
     routes: stringRecord(body.routes),
     next_smallest_truthful_gap: optionalString(body.next_smallest_truthful_gap),
+  };
+}
+
+export function federationSleepResumeConfirmationVisibleCommands(
+  confirmations: FederationSleepResumeConfirmations | null | undefined,
+): FederationSleepResumeConfirmationVisibleCommands {
+  if (!confirmations) return {};
+  const receiptBackedSequenceVisible =
+    confirmations.receipt_backed_sequence_ready &&
+    confirmations.latest_receipt_usable_for_receipt_backed_sequence &&
+    confirmations.receipt_backed_sequence_blockers.length === 0;
+  return {
+    confirmation_receipt_copyable_command: confirmations.confirmation_receipt_command_ready
+      ? confirmations.confirmation_receipt_copyable_command
+      : undefined,
+    receipt_backed_sequence_copyable_command: receiptBackedSequenceVisible
+      ? confirmations.receipt_backed_sequence_copyable_command
+      : undefined,
   };
 }
 

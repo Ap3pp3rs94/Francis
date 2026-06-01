@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   FederationClient,
   federationSleepContinuityVisibleOperatorCommands,
+  federationSleepResumeConfirmationVisibleCommands,
   isFederationSleepContinuityOperatorCommandBlockedByPendingConfirmation,
   isFederationSleepResumeConfirmationActorReadinessCurrent,
   parseFederationCompletionReview,
@@ -610,6 +611,14 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
     assert.equal(confirmations.receipt_backed_sequence_command?.includes("-RequireConfirmationReceipt"), true);
     assert.equal(confirmations.receipt_backed_sequence_command?.includes("fedsleepconfirm_ui_test"), true);
     assert.equal(confirmations.receipt_backed_sequence_copyable_command?.includes(confirmations.receipt_backed_sequence_command ?? ""), true);
+    const visibleConfirmationCommands = federationSleepResumeConfirmationVisibleCommands(confirmations);
+    assert.equal(visibleConfirmationCommands.confirmation_receipt_copyable_command, undefined);
+    assert.equal(
+      visibleConfirmationCommands.receipt_backed_sequence_copyable_command?.includes(
+        confirmations.receipt_backed_sequence_command ?? "",
+      ),
+      true,
+    );
     assert.equal(confirmations.confirmation_receipt_command_ready, false);
     assert.equal(confirmations.confirmation_receipt_actor_placeholder, undefined);
     assert.equal(confirmations.confirmation_receipt_command, undefined);
@@ -663,6 +672,8 @@ test("parseFederationSleepResumeConfirmations preserves missing-receipt remedy c
     latest_receipt_usable_for_receipt_backed_sequence: false,
     receipt_backed_sequence_ready: false,
     receipt_backed_sequence_blockers: ["sleep_resume_confirmation_receipt_missing"],
+    receipt_backed_sequence_copyable_command:
+      "Set-Location -LiteralPath 'D:\\Francis'; scripts/federation-stage16-sleep-continuity-post-resume-sequence.ps1 -Mode Run -RequireConfirmationReceipt -ConfirmationReceiptId stale_or_missing",
     receipt_backed_sequence_requires_confirmation_receipt: true,
     receipt_backed_sequence_writes_evidence_when_run: false,
     receipt_backed_sequence_writes_receipts_when_run: false,
@@ -762,6 +773,7 @@ test("parseFederationSleepResumeConfirmations preserves missing-receipt remedy c
   assert.equal(confirmations.status, "empty");
   assert.deepEqual(confirmations.receipt_backed_sequence_blockers, ["sleep_resume_confirmation_receipt_missing"]);
   assert.equal(confirmations.receipt_backed_sequence_ready, false);
+  assert.equal(confirmations.receipt_backed_sequence_copyable_command?.includes("stale_or_missing"), true);
   assert.equal(confirmations.confirmation_receipt_command_ready, true);
   assert.equal(confirmations.confirmation_receipt_actor, undefined);
   assert.equal(confirmations.confirmation_receipt_actor_bound, false);
@@ -784,6 +796,14 @@ test("parseFederationSleepResumeConfirmations preserves missing-receipt remedy c
     ),
     true,
   );
+  const visibleCommands = federationSleepResumeConfirmationVisibleCommands(confirmations);
+  assert.equal(
+    visibleCommands.confirmation_receipt_copyable_command?.includes(
+      confirmations.confirmation_receipt_command ?? "",
+    ),
+    true,
+  );
+  assert.equal(visibleCommands.receipt_backed_sequence_copyable_command, undefined);
   assert.equal(confirmations.confirmation_receipt_command_records_receipt, true);
   assert.equal(confirmations.confirmation_receipt_command_writes_evidence, false);
   assert.equal(confirmations.confirmation_receipt_command_marks_stage16_closed, false);
