@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FederationApiError,
   FederationClient,
+  isFederationSleepResumeConfirmationActorReadinessCurrent,
   presentFederationSleepContinuityAction,
   type FederationSleepContinuityActionReadback,
   type FederationSleepContinuityPresentation,
@@ -148,6 +149,12 @@ export function FederationHubPanel(props: { baseUrl: string }) {
   const runbookSelectedActionSummary = runbook?.selected_action_summary;
   const confirmationReceiptBlockers = confirmations?.receipt_backed_sequence_blockers ?? [];
   const confirmationReceiptOperatorSteps = confirmations?.confirmation_receipt_operator_steps ?? [];
+  const visibleActorReadiness = isFederationSleepResumeConfirmationActorReadinessCurrent(
+    actorReadiness,
+    actorPreflightActor,
+  )
+    ? actorReadiness
+    : null;
 
   return (
     <section style={panelStyle}>
@@ -303,7 +310,10 @@ export function FederationHubPanel(props: { baseUrl: string }) {
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
             <input
               value={actorPreflightActor}
-              onChange={(event) => setActorPreflightActor(event.target.value)}
+              onChange={(event) => {
+                setActorPreflightActor(event.target.value);
+                setActorReadiness(null);
+              }}
               placeholder="actor id"
               style={{
                 minWidth: 220,
@@ -320,22 +330,22 @@ export function FederationHubPanel(props: { baseUrl: string }) {
               {actorReadinessLoading ? "Checking" : "Check Actor"}
             </button>
           </div>
-          {actorReadiness ? (
+          {visibleActorReadiness ? (
             <>
               <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
-                actor status <code>{codeValue(actorReadiness.status)}</code>
-                {" / "}ready <code>{yesNo(actorReadiness.confirmation_receipt_actor_ready)}</code>
-                {" / "}safe command <code>{yesNo(actorReadiness.safe_to_use_in_confirmation_command)}</code>
-                {" / "}writes receipt <code>{yesNo(actorReadiness.writes_receipt)}</code>
-                {" / "}marks closed <code>{yesNo(actorReadiness.marks_stage16_closed)}</code>
+                actor status <code>{codeValue(visibleActorReadiness.status)}</code>
+                {" / "}ready <code>{yesNo(visibleActorReadiness.confirmation_receipt_actor_ready)}</code>
+                {" / "}safe command <code>{yesNo(visibleActorReadiness.safe_to_use_in_confirmation_command)}</code>
+                {" / "}writes receipt <code>{yesNo(visibleActorReadiness.writes_receipt)}</code>
+                {" / "}marks closed <code>{yesNo(visibleActorReadiness.marks_stage16_closed)}</code>
               </div>
               <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
-                next <code>{codeValue(actorReadiness.next_step)}</code>
-                {" / "}bound actor <code>{codeValue(actorReadiness.confirmation_receipt_actor)}</code>
+                next <code>{codeValue(visibleActorReadiness.next_step)}</code>
+                {" / "}bound actor <code>{codeValue(visibleActorReadiness.confirmation_receipt_actor)}</code>
                 {" / "}substitution{" "}
-                <code>{yesNo(actorReadiness.confirmation_receipt_command_requires_actor_substitution)}</code>
+                <code>{yesNo(visibleActorReadiness.confirmation_receipt_command_requires_actor_substitution)}</code>
               </div>
-              {actorReadiness.confirmation_receipt_copyable_command ? (
+              {visibleActorReadiness.confirmation_receipt_copyable_command ? (
                 <pre
                   style={{
                     margin: "8px 0 0",
@@ -349,7 +359,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
                     fontSize: 11,
                   }}
                 >
-                  {actorReadiness.confirmation_receipt_copyable_command}
+                  {visibleActorReadiness.confirmation_receipt_copyable_command}
                 </pre>
               ) : null}
             </>

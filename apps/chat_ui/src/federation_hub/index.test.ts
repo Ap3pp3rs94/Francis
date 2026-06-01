@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   FederationClient,
+  isFederationSleepResumeConfirmationActorReadinessCurrent,
   parseFederationCompletionReview,
   parseFederationLiveRuntimeReadbacks,
   parseFederationSleepContinuityAction,
@@ -911,6 +912,65 @@ test("FederationClient reads sleep-resume confirmation actor readiness without m
   } finally {
     restoreFetch();
   }
+});
+
+test("isFederationSleepResumeConfirmationActorReadinessCurrent rejects stale actor-bound command state", () => {
+  const readiness = parseFederationSleepResumeConfirmationActorReadiness({
+    ok: true,
+    status: "actor_ready_for_sleep_resume_confirmation",
+    actor: "test.federation.sleep",
+    actor_present: true,
+    actor_placeholder_rejected: false,
+    permission_allowed: true,
+    confirmation_receipt_actor_ready: true,
+    safe_to_use_in_confirmation_command: true,
+    confirmation_receipt_command_ready: true,
+    confirmation_receipt_actor: "test.federation.sleep",
+    confirmation_receipt_actor_bound: true,
+    confirmation_receipt_command_requires_actor_substitution: false,
+    confirmation_receipt_command_records_receipt: true,
+    confirmation_receipt_command_writes_evidence: false,
+    confirmation_receipt_command_marks_stage16_closed: false,
+    confirmation_receipt_command_projection_only: true,
+    reads_permission_gate: true,
+    writes_receipt: false,
+    writes_evidence: false,
+    writes_runtime_readback: false,
+    marks_stage16_closed: false,
+    grants_execution_authority: false,
+    grants_mutation_authority: false,
+  });
+  const missingReadiness = parseFederationSleepResumeConfirmationActorReadiness({
+    ok: true,
+    status: "actor_missing",
+    actor: "",
+    actor_present: false,
+    actor_placeholder_rejected: false,
+    permission_allowed: false,
+    confirmation_receipt_actor_ready: false,
+    safe_to_use_in_confirmation_command: false,
+    confirmation_receipt_command_ready: false,
+    confirmation_receipt_actor_bound: false,
+    confirmation_receipt_command_requires_actor_substitution: false,
+    confirmation_receipt_command_records_receipt: false,
+    confirmation_receipt_command_writes_evidence: false,
+    confirmation_receipt_command_marks_stage16_closed: false,
+    confirmation_receipt_command_projection_only: true,
+    reads_permission_gate: true,
+    writes_receipt: false,
+    writes_evidence: false,
+    writes_runtime_readback: false,
+    marks_stage16_closed: false,
+    grants_execution_authority: false,
+    grants_mutation_authority: false,
+  });
+
+  assert.equal(isFederationSleepResumeConfirmationActorReadinessCurrent(readiness, "test.federation.sleep"), true);
+  assert.equal(isFederationSleepResumeConfirmationActorReadinessCurrent(readiness, " test.federation.sleep "), true);
+  assert.equal(isFederationSleepResumeConfirmationActorReadinessCurrent(readiness, "test.federation.other"), false);
+  assert.equal(isFederationSleepResumeConfirmationActorReadinessCurrent(readiness, ""), false);
+  assert.equal(isFederationSleepResumeConfirmationActorReadinessCurrent(missingReadiness, ""), true);
+  assert.equal(isFederationSleepResumeConfirmationActorReadinessCurrent(null, "test.federation.sleep"), false);
 });
 
 test("federation sleep-continuity action parser preserves selected read-only step", () => {

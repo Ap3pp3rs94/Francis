@@ -1644,6 +1644,19 @@ export function parseFederationSleepResumeConfirmationActorReadiness(
   };
 }
 
+export function isFederationSleepResumeConfirmationActorReadinessCurrent(
+  readiness: FederationSleepResumeConfirmationActorReadiness | null | undefined,
+  actor: string,
+): boolean {
+  if (!readiness) return false;
+  const expectedActor = actor.trim();
+  const readinessActor = (readiness.actor ?? "").trim();
+  if (!expectedActor) {
+    return !readiness.actor_present && !readinessActor;
+  }
+  return readinessActor === expectedActor;
+}
+
 function parseFederationSleepContinuityRunbookStep(raw: unknown): FederationSleepContinuityRunbookStep | null {
   if (!isRecord(raw)) return null;
   const id = safeString(raw.id);

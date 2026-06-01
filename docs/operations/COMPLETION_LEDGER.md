@@ -53890,6 +53890,53 @@ Latest validation for Stage 16 actor readiness Federation Hub visibility:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 Hub hides stale actor-bound confirmation commands
+
+Roadmap area: Stage 16 / Federation, workstation sleep-continuity operator
+confirmation UI safety.
+
+Material change:
+
+- Federation Hub now treats sleep/resume confirmation actor-readiness results
+  as current only when the returned actor still matches the actor field.
+- Editing the actor field clears the previous readiness result immediately, so
+  a command generated for one actor is not left visible after the operator
+  changes the actor.
+- Actor-bound confirmation commands are hidden when the actor input no longer
+  matches the backend readiness readback.
+- This remains a read-only UI safety guard: it does not post confirmation
+  receipts, run shell, write evidence, grant authority, or mark Stage 16
+  closed.
+
+Latest validation for Stage 16 Hub stale actor-command guarding:
+
+- `npm run test -- federation_hub`
+  Result: `passed; 192 passed`.
+- `npm run build`
+  Result: `passed`.
+- `python -m pytest tests/test_api_federation.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`.
+- `npx tsc --noEmit --pretty false 2>&1 | Select-String
+  "src/federation_hub/FederationHubPanel.tsx"`
+  Result: `passed; no_federation_panel_tsc_diagnostics`.
+- `npx tsc --noEmit --pretty false 2>&1 | Select-String
+  "src/federation_hub"`
+  Result: `failed; existing strict TypeScript diagnostics remain in
+  apps/chat_ui/src/federation_hub/index.ts`, so this is not counted as a green
+  validation gate for the repository.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
