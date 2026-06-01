@@ -715,6 +715,75 @@ def test_plugins_capability_pack_migration_plan_projects_review_candidates(monke
     assert candidate["suggested_pack_governance"]["execution_authority"] is False
 
 
+def test_plugins_capability_pack_metadata_receipts_bulk_from_migration_plan(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Bulk Migration Plan Plugin",
+            "description": "Stage 17 bulk metadata receipt coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": _forge_promotion_meta("bulk_migration_plan"),
+        },
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    plugin_id = str(built_body["plugin_id"])
+
+    plan = client.get("/plugins/capabilities/packs/migration/plan").json()
+    candidate = next(item for item in plan["candidates"] if plugin_id in item["capability_ids_sample"])
+
+    recorded = client.post(
+        "/plugins/capabilities/packs/metadata/receipts/bulk-from-plan",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "record reviewed migration plan candidates",
+            "pack_ids": [candidate["pack_id"]],
+        },
+    )
+
+    assert recorded.status_code == 200
+    recorded_body = recorded.json()
+    assert recorded_body["ok"] is True
+    assert recorded_body["status"] == "recorded"
+    assert recorded_body["recorded_pack_count"] == 1
+    assert recorded_body["recorded_capability_count"] == 1
+    assert recorded_body["remaining_candidate_total"] < plan["candidate_total"]
+    assert recorded_body["governance"]["writes_registry_metadata"] is True
+    assert recorded_body["governance"]["writes_receipts"] is True
+    assert recorded_body["governance"]["promotion_authority"] is False
+    assert recorded_body["governance"]["execution_authority"] is False
+    receipt_ref = recorded_body["recorded"][0]
+    assert receipt_ref["pack_id"] == candidate["pack_id"]
+    assert Path(str(receipt_ref["receipt_path"])).exists()
+
+    catalog = client.get("/plugins/capabilities/catalog?limit=5000").json()
+    entry = next(item for item in catalog["items"] if item["capability"] == plugin_id)
+    assert entry["metadata"]["pack_id"] == candidate["pack_id"]
+    assert entry["metadata"]["pack_version"] == candidate["pack_version"]
+    assert entry["metadata"]["pack_metadata_source"] == "metadata_receipt"
+    assert entry["metadata"]["pack_metadata_receipt_id"] == receipt_ref["receipt_id"]
+    assert entry["metadata"]["promotion_rules"] == candidate["suggested_promotion_rules"]
+    assert entry["metadata"]["pack_governance"]["operator_review_required"] is True
+
+    receipts = client.get("/plugins/capabilities/packs/metadata/receipts?limit=10").json()
+    receipt = next(item for item in receipts["items"] if item["receipt_id"] == receipt_ref["receipt_id"])
+    assert receipt["governance"]["route"] == "/plugins/capabilities/packs/metadata/receipts/bulk-from-plan"
+    assert receipt["expanded_from_migration_plan"] is False
+    assert receipt["metadata_context"]["bulk_from_migration_plan"] is True
+
+
 def test_plugins_capability_pack_quality_standards_projects_pack_evidence(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

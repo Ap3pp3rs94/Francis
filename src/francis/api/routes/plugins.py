@@ -1104,6 +1104,7 @@ def _write_capability_pack_metadata_receipt(
     capability_ids: list[str],
     previous_metadata: dict[str, dict[str, Any]],
     recorded_ts: int,
+    route_path: str = "/plugins/capabilities/packs/metadata/receipts",
 ) -> dict[str, Any]:
     payload_meta = redact_governed_metadata(payload.meta)
     receipt = {
@@ -1128,7 +1129,7 @@ def _write_capability_pack_metadata_receipt(
         "governance": {
             "gate": "permission_gate",
             "scope": _PLUGIN_WRITE_SCOPE,
-            "route": "/plugins/capabilities/packs/metadata/receipts",
+            "route": route_path,
             "writes_registry_metadata": True,
             "writes_receipt": True,
             "promotion_authority": False,
@@ -2173,6 +2174,16 @@ class CapabilityPackMetadataReceiptIn(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
+class CapabilityPackMetadataReceiptBulkFromPlanIn(BaseModel):
+    actor: str = ""
+    reason: str = "reviewed_stage17_migration_plan"
+    pack_ids: list[str] = Field(default_factory=list)
+    max_pack_count: int = 50
+    max_total_capability_count: int = 5000
+    max_capability_count_per_pack: int = 500
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
 class PluginRunIn(BaseModel):
     id: str
     action: str
@@ -2557,6 +2568,135 @@ def capability_pack_promotion_rules() -> dict[str, object]:
         return {"ok": False, "kind": "plugin.capability_pack.promotion_rules", "error": api_error_message(exc)}
 
 
+def _record_capability_pack_metadata_receipt_unchecked(
+    payload: CapabilityPackMetadataReceiptIn,
+    *,
+    route_path: str,
+) -> dict[str, object]:
+    pack_id = _validate_plugin_id(_safe_str(payload.pack_id).strip())
+    pack_version = _safe_str(payload.pack_version).strip()
+    if not pack_version:
+        return {"ok": False, "applied": False, "status": "blocked", "error": "pack_version_required"}
+
+    capability_ids: list[str] = []
+    for raw_id in _unique_texts(payload.capability_ids, limit=500):
+        capability_ids.append(_validate_plugin_id(raw_id))
+
+    registry = _load_registry()
+    _sync_generated_plugins(registry)
+    prewrite_catalog = _save_registry_and_catalog(registry)
+    prewrite_runtime_catalog = _read_runtime_catalog_payload(prewrite_catalog)
+    prewrite_marketplace = marketplace_from_plugin_catalog(prewrite_runtime_catalog)
+
+    source_pack_id = _safe_str(payload.source_pack_id).strip() or pack_id
+    source_pack_version = _safe_str(payload.source_pack_version).strip() or pack_version
+    if payload.include_current_pack_capabilities and not capability_ids:
+        source_pack_id = _validate_plugin_id(source_pack_id)
+        expanded_ids = _capability_ids_for_pack(
+            prewrite_marketplace.catalog(),
+            pack_id=source_pack_id,
+            pack_version=source_pack_version,
+        )
+        if len(expanded_ids) > 500:
+            return {
+                "ok": False,
+                "applied": False,
+                "status": "blocked",
+                "error": "source_pack_capability_limit_exceeded",
+                "capability_count": len(expanded_ids),
+                "limit": 500,
+            }
+        capability_ids = expanded_ids
+    if not capability_ids:
+        return {"ok": False, "applied": False, "status": "blocked", "error": "capability_ids_required"}
+
+    missing = [capability_id for capability_id in capability_ids if _read_plugin(registry, capability_id) is None]
+    if missing:
+        return {
+            "ok": False,
+            "applied": False,
+            "status": "blocked",
+            "error": "capability_not_found",
+            "missing_capability_ids": missing,
+        }
+
+    recorded_ts = _now_s()
+    receipt_id = _capability_pack_metadata_receipt_id(pack_id, recorded_ts)
+    receipt_path = _capability_pack_metadata_receipt_path(receipt_id)
+    pack_name = _safe_str(payload.pack_name).strip() or pack_id
+    promotion_rules = _unique_texts(payload.promotion_rules, limit=50)
+    pack_governance = dict(payload.pack_governance or {})
+    previous_metadata: dict[str, dict[str, Any]] = {}
+
+    for capability_id in capability_ids:
+        current = _read_plugin(registry, capability_id)
+        if current is None:
+            continue
+        meta = dict(current.get("meta") or {}) if isinstance(current.get("meta"), dict) else {}
+        previous_metadata[capability_id] = {
+            "pack_id": _safe_str(meta.get("pack_id")).strip(),
+            "pack_version": _safe_str(meta.get("pack_version")).strip(),
+            "pack_metadata_source": _safe_str(meta.get("pack_metadata_source")).strip(),
+            "pack_metadata_receipt_id": _safe_str(meta.get("pack_metadata_receipt_id")).strip(),
+        }
+        meta.update(
+            {
+                "pack_id": pack_id,
+                "pack_version": pack_version,
+                "pack_name": pack_name,
+                "pack_metadata_source": "metadata_receipt",
+                "pack_metadata_receipt_id": receipt_id,
+                "pack_metadata_receipt_path": str(receipt_path),
+            }
+        )
+        if promotion_rules:
+            meta["promotion_rules"] = promotion_rules
+        if pack_governance:
+            meta["pack_governance"] = pack_governance
+        current["meta"] = meta
+        current["updated_ts"] = recorded_ts
+        _write_plugin(registry, _normalize_plugin_record(capability_id, current))
+
+    catalog = _save_registry_and_catalog(registry)
+    receipt = _write_capability_pack_metadata_receipt(
+        receipt_id=receipt_id,
+        receipt_path=receipt_path,
+        payload=payload,
+        pack_id=pack_id,
+        pack_version=pack_version,
+        pack_name=pack_name,
+        capability_ids=capability_ids,
+        previous_metadata=previous_metadata,
+        recorded_ts=recorded_ts,
+        route_path=route_path,
+    )
+    runtime_catalog = _read_runtime_catalog_payload(catalog)
+    marketplace = marketplace_from_plugin_catalog(runtime_catalog)
+
+    return {
+        "ok": True,
+        "applied": True,
+        "status": "recorded",
+        "receipt_id": receipt_id,
+        "receipt_path": str(receipt_path),
+        "receipt": receipt,
+        "capability_count": len(capability_ids),
+        "catalog": catalog,
+        "pack_readiness": analyze_capability_pack_readiness(marketplace.catalog()),
+        "governance": {
+            "scope": _PLUGIN_WRITE_SCOPE,
+            "route": route_path,
+            "writes_registry_metadata": True,
+            "writes_receipt": True,
+            "promotion_authority": False,
+            "execution_authority": False,
+            "approval_authority": False,
+            "memory_write": False,
+            "mutates_generated_artifacts": False,
+        },
+    }
+
+
 @router.post("/capabilities/packs/metadata/receipts")
 def record_capability_pack_metadata_receipt(
     payload: CapabilityPackMetadataReceiptIn,
@@ -2566,120 +2706,244 @@ def record_capability_pack_metadata_receipt(
         permission = _write_permission(payload.actor, route=request.url.path, method=request.method)
         if not permission.allowed:
             return _permission_denied(permission)
+        return _record_capability_pack_metadata_receipt_unchecked(payload, route_path=request.url.path)
+    except Exception as exc:
+        return {"ok": False, "applied": False, "status": "error", "error": api_error_message(exc)}
 
-        pack_id = _validate_plugin_id(_safe_str(payload.pack_id).strip())
-        pack_version = _safe_str(payload.pack_version).strip()
-        if not pack_version:
-            return {"ok": False, "applied": False, "status": "blocked", "error": "pack_version_required"}
 
-        capability_ids: list[str] = []
-        for raw_id in _unique_texts(payload.capability_ids, limit=500):
-            capability_ids.append(_validate_plugin_id(raw_id))
+@router.post("/capabilities/packs/metadata/receipts/bulk-from-plan")
+def record_capability_pack_metadata_receipts_from_plan(
+    payload: CapabilityPackMetadataReceiptBulkFromPlanIn,
+    request: Request,
+) -> dict[str, object]:
+    try:
+        permission = _write_permission(payload.actor, route=request.url.path, method=request.method)
+        if not permission.allowed:
+            return _permission_denied(permission)
+
+        safe_max_pack_count = max(1, min(int(payload.max_pack_count or 50), 100))
+        safe_max_total_capability_count = max(1, min(int(payload.max_total_capability_count or 5000), 10000))
+        safe_max_capability_count_per_pack = max(1, min(int(payload.max_capability_count_per_pack or 500), 500))
+        selected_pack_ids = {_validate_plugin_id(raw_id) for raw_id in _unique_texts(payload.pack_ids, limit=100)}
 
         registry = _load_registry()
         _sync_generated_plugins(registry)
-        prewrite_catalog = _save_registry_and_catalog(registry)
-        prewrite_runtime_catalog = _read_runtime_catalog_payload(prewrite_catalog)
-        prewrite_marketplace = marketplace_from_plugin_catalog(prewrite_runtime_catalog)
-
-        source_pack_id = _safe_str(payload.source_pack_id).strip() or pack_id
-        source_pack_version = _safe_str(payload.source_pack_version).strip() or pack_version
-        if payload.include_current_pack_capabilities and not capability_ids:
-            source_pack_id = _validate_plugin_id(source_pack_id)
-            expanded_ids = _capability_ids_for_pack(
-                prewrite_marketplace.catalog(),
-                pack_id=source_pack_id,
-                pack_version=source_pack_version,
-            )
-            if len(expanded_ids) > 500:
-                return {
-                    "ok": False,
-                    "applied": False,
-                    "status": "blocked",
-                    "error": "source_pack_capability_limit_exceeded",
-                    "capability_count": len(expanded_ids),
-                    "limit": 500,
-                }
-            capability_ids = expanded_ids
-        if not capability_ids:
-            return {"ok": False, "applied": False, "status": "blocked", "error": "capability_ids_required"}
-
-        missing = [capability_id for capability_id in capability_ids if _read_plugin(registry, capability_id) is None]
-        if missing:
+        catalog = _save_registry_and_catalog(registry)
+        runtime_catalog = _read_runtime_catalog_payload(catalog)
+        marketplace = marketplace_from_plugin_catalog(runtime_catalog)
+        entries = marketplace.catalog()
+        plan = analyze_capability_pack_migration_plan(entries)
+        raw_candidates = plan.get("candidates")
+        candidates = (
+            [candidate for candidate in raw_candidates if isinstance(candidate, dict)]
+            if isinstance(raw_candidates, list)
+            else []
+        )
+        if selected_pack_ids:
+            candidates = [
+                candidate
+                for candidate in candidates
+                if _safe_str(candidate.get("pack_id")).strip() in selected_pack_ids
+            ]
+        if not candidates:
+            return {
+                "ok": True,
+                "applied": False,
+                "status": "no_candidates",
+                "recorded_pack_count": 0,
+                "recorded_capability_count": 0,
+                "plan": plan,
+                "governance": {
+                    "scope": _PLUGIN_WRITE_SCOPE,
+                    "route": request.url.path,
+                    "writes_registry_metadata": False,
+                    "writes_receipts": False,
+                    "promotion_authority": False,
+                    "execution_authority": False,
+                    "approval_authority": False,
+                },
+            }
+        if len(candidates) > safe_max_pack_count:
             return {
                 "ok": False,
                 "applied": False,
                 "status": "blocked",
-                "error": "capability_not_found",
-                "missing_capability_ids": missing,
+                "error": "candidate_pack_limit_exceeded",
+                "candidate_total": len(candidates),
+                "limit": safe_max_pack_count,
             }
 
+        prepared: list[dict[str, Any]] = []
+        total_capability_count = 0
+        blocked_candidates: list[dict[str, Any]] = []
+        for candidate in candidates:
+            pack_id = _validate_plugin_id(_safe_str(candidate.get("pack_id")).strip())
+            pack_version = _safe_str(candidate.get("pack_version")).strip()
+            capability_ids = _capability_ids_for_pack(entries, pack_id=pack_id, pack_version=pack_version)
+            capability_count = len(capability_ids)
+            total_capability_count += capability_count
+            if capability_count <= 0:
+                blocked_candidates.append({"pack_id": pack_id, "error": "capability_ids_required"})
+            if capability_count > safe_max_capability_count_per_pack:
+                blocked_candidates.append(
+                    {
+                        "pack_id": pack_id,
+                        "error": "candidate_capability_limit_exceeded",
+                        "capability_count": capability_count,
+                        "limit": safe_max_capability_count_per_pack,
+                    }
+                )
+            prepared.append(
+                {
+                    "candidate": candidate,
+                    "pack_id": pack_id,
+                    "pack_version": pack_version,
+                    "capability_ids": capability_ids,
+                }
+            )
+        if total_capability_count > safe_max_total_capability_count:
+            return {
+                "ok": False,
+                "applied": False,
+                "status": "blocked",
+                "error": "total_capability_limit_exceeded",
+                "capability_count": total_capability_count,
+                "limit": safe_max_total_capability_count,
+            }
+        if blocked_candidates:
+            return {
+                "ok": False,
+                "applied": False,
+                "status": "blocked",
+                "error": "candidate_preflight_failed",
+                "blocked_candidates": blocked_candidates,
+            }
+
+        pending_receipts: list[dict[str, Any]] = []
         recorded_ts = _now_s()
-        receipt_id = _capability_pack_metadata_receipt_id(pack_id, recorded_ts)
-        receipt_path = _capability_pack_metadata_receipt_path(receipt_id)
-        pack_name = _safe_str(payload.pack_name).strip() or pack_id
-        promotion_rules = _unique_texts(payload.promotion_rules, limit=50)
-        pack_governance = dict(payload.pack_governance or {})
-        previous_metadata: dict[str, dict[str, Any]] = {}
+        for item in prepared:
+            candidate = item["candidate"]
+            pack_id = item["pack_id"]
+            pack_version = item["pack_version"]
+            capability_ids = list(item["capability_ids"])
+            receipt_id = _capability_pack_metadata_receipt_id(pack_id, recorded_ts)
+            receipt_path = _capability_pack_metadata_receipt_path(receipt_id)
+            pack_name = _safe_str(candidate.get("pack_name")).strip() or pack_id
+            promotion_rules = _unique_texts(candidate.get("suggested_promotion_rules"), limit=50)
+            pack_governance = dict(candidate.get("suggested_pack_governance") or {})
+            previous_metadata: dict[str, dict[str, Any]] = {}
+            for capability_id in capability_ids:
+                current = _read_plugin(registry, capability_id)
+                if current is None:
+                    return {
+                        "ok": False,
+                        "applied": False,
+                        "status": "blocked",
+                        "error": "capability_not_found",
+                        "missing_capability_ids": [capability_id],
+                    }
+                meta = dict(current.get("meta") or {}) if isinstance(current.get("meta"), dict) else {}
+                previous_metadata[capability_id] = {
+                    "pack_id": _safe_str(meta.get("pack_id")).strip(),
+                    "pack_version": _safe_str(meta.get("pack_version")).strip(),
+                    "pack_metadata_source": _safe_str(meta.get("pack_metadata_source")).strip(),
+                    "pack_metadata_receipt_id": _safe_str(meta.get("pack_metadata_receipt_id")).strip(),
+                }
+                meta.update(
+                    {
+                        "pack_id": pack_id,
+                        "pack_version": pack_version,
+                        "pack_name": pack_name,
+                        "pack_metadata_source": "metadata_receipt",
+                        "pack_metadata_receipt_id": receipt_id,
+                        "pack_metadata_receipt_path": str(receipt_path),
+                    }
+                )
+                if promotion_rules:
+                    meta["promotion_rules"] = promotion_rules
+                if pack_governance:
+                    meta["pack_governance"] = pack_governance
+                current["meta"] = meta
+                current["updated_ts"] = recorded_ts
+                _write_plugin(registry, _normalize_plugin_record(capability_id, current))
 
-        for capability_id in capability_ids:
-            current = _read_plugin(registry, capability_id)
-            if current is None:
-                continue
-            meta = dict(current.get("meta") or {}) if isinstance(current.get("meta"), dict) else {}
-            previous_metadata[capability_id] = {
-                "pack_id": _safe_str(meta.get("pack_id")).strip(),
-                "pack_version": _safe_str(meta.get("pack_version")).strip(),
-                "pack_metadata_source": _safe_str(meta.get("pack_metadata_source")).strip(),
-                "pack_metadata_receipt_id": _safe_str(meta.get("pack_metadata_receipt_id")).strip(),
-            }
-            meta.update(
+            receipt_payload = CapabilityPackMetadataReceiptIn(
+                actor=payload.actor,
+                reason=f"{payload.reason}:{pack_id}",
+                pack_id=pack_id,
+                pack_version=pack_version,
+                pack_name=pack_name,
+                capability_ids=capability_ids,
+                source_pack_id=pack_id,
+                source_pack_version=pack_version,
+                promotion_rules=promotion_rules,
+                pack_governance=pack_governance,
+                meta={
+                    **redact_governed_metadata(payload.meta),
+                    "bulk_from_migration_plan": True,
+                    "source_candidate_blockers": candidate.get("blockers")
+                    if isinstance(candidate.get("blockers"), list)
+                    else [],
+                },
+            )
+            pending_receipts.append(
                 {
                     "pack_id": pack_id,
                     "pack_version": pack_version,
+                    "receipt_id": receipt_id,
+                    "receipt_path": receipt_path,
+                    "payload": receipt_payload,
                     "pack_name": pack_name,
-                    "pack_metadata_source": "metadata_receipt",
-                    "pack_metadata_receipt_id": receipt_id,
-                    "pack_metadata_receipt_path": str(receipt_path),
+                    "capability_ids": capability_ids,
+                    "previous_metadata": previous_metadata,
                 }
             )
-            if promotion_rules:
-                meta["promotion_rules"] = promotion_rules
-            if pack_governance:
-                meta["pack_governance"] = pack_governance
-            current["meta"] = meta
-            current["updated_ts"] = recorded_ts
-            _write_plugin(registry, _normalize_plugin_record(capability_id, current))
 
-        catalog = _save_registry_and_catalog(registry)
-        receipt = _write_capability_pack_metadata_receipt(
-            receipt_id=receipt_id,
-            receipt_path=receipt_path,
-            payload=payload,
-            pack_id=pack_id,
-            pack_version=pack_version,
-            pack_name=pack_name,
-            capability_ids=capability_ids,
-            previous_metadata=previous_metadata,
-            recorded_ts=recorded_ts,
-        )
-        runtime_catalog = _read_runtime_catalog_payload(catalog)
-        marketplace = marketplace_from_plugin_catalog(runtime_catalog)
+        _save_registry_and_catalog(registry)
+        recorded: list[dict[str, Any]] = []
+        for item in pending_receipts:
+            receipt = _write_capability_pack_metadata_receipt(
+                receipt_id=str(item["receipt_id"]),
+                receipt_path=item["receipt_path"],
+                payload=item["payload"],
+                pack_id=str(item["pack_id"]),
+                pack_version=str(item["pack_version"]),
+                pack_name=str(item["pack_name"]),
+                capability_ids=list(item["capability_ids"]),
+                previous_metadata=item["previous_metadata"],
+                recorded_ts=recorded_ts,
+                route_path=request.url.path,
+            )
+            recorded.append(
+                {
+                    "pack_id": item["pack_id"],
+                    "pack_version": item["pack_version"],
+                    "receipt_id": item["receipt_id"],
+                    "receipt_path": str(item["receipt_path"]),
+                    "capability_count": len(item["capability_ids"]),
+                    "receipt_status": receipt.get("status"),
+                }
+            )
 
+        refreshed_registry = _load_registry()
+        refreshed_catalog = _compile_runtime_catalog(refreshed_registry)
+        refreshed_runtime_catalog = _read_runtime_catalog_payload(refreshed_catalog)
+        refreshed_marketplace = marketplace_from_plugin_catalog(refreshed_runtime_catalog)
+        refreshed_plan = analyze_capability_pack_migration_plan(refreshed_marketplace.catalog())
         return {
             "ok": True,
             "applied": True,
             "status": "recorded",
-            "receipt_id": receipt_id,
-            "receipt_path": str(receipt_path),
-            "receipt": receipt,
-            "capability_count": len(capability_ids),
-            "catalog": catalog,
-            "pack_readiness": analyze_capability_pack_readiness(marketplace.catalog()),
+            "recorded_pack_count": len(recorded),
+            "recorded_capability_count": sum(int(item.get("capability_count") or 0) for item in recorded),
+            "recorded": recorded,
+            "remaining_candidate_total": int(refreshed_plan.get("candidate_total") or 0),
+            "next_smallest_truthful_gap": str(refreshed_plan.get("next_smallest_truthful_gap") or ""),
             "governance": {
                 "scope": _PLUGIN_WRITE_SCOPE,
+                "route": request.url.path,
                 "writes_registry_metadata": True,
-                "writes_receipt": True,
+                "writes_receipts": True,
                 "promotion_authority": False,
                 "execution_authority": False,
                 "approval_authority": False,

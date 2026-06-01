@@ -56270,6 +56270,64 @@ Validation risk:
 - Full local pytest was not rerun because focused pytest commands are still
   stalling in this workspace; GitHub CI remains the full-suite evidence gate.
 
+### 2026-06-01 - Stage 17 legacy generated pack metadata receipts bulk-reviewed
+
+Roadmap area: Stage 17 / Capability Economy, converting legacy generated
+capability packs from projected metadata to receipt-backed pack metadata.
+
+Material change:
+
+- Added `POST /plugins/capabilities/packs/metadata/receipts/bulk-from-plan`.
+- The route consumes the existing read-only migration plan, preflights selected
+  candidate pack count, per-pack capability count, and total capability count,
+  then writes normal `plugin.capability_pack.metadata_receipt` records for the
+  reviewed candidates.
+- The route uses the existing `plugins.write` permission gate and writes only
+  registry metadata plus metadata receipts; it does not promote, enable, or
+  execute capabilities, grant approval authority, mutate generated artifacts, or
+  write memory.
+- The chat UI API contract endpoint list now includes the bulk metadata receipt
+  route.
+
+Live execution:
+
+- Ran the bulk route as `codex.builder` with `plugins.write` against the local
+  Stage 17 migration plan.
+- Result: `recorded_pack_count=20`, `recorded_capability_count=3120`,
+  `remaining_candidate_total=0`.
+- Follow-up readback reported `GET /plugins/capabilities/packs/migration/plan`
+  with `candidate_total=0` and
+  `next_smallest_truthful_gap=stage17_capability_pack_quality_standards`.
+- Follow-up readbacks for quality standards and promotion rules both returned
+  `ok=True`, `status=blocked`, and
+  `next_smallest_truthful_gap=stage17_capability_pack_quality_tests`, proving the
+  metadata-receipt gap moved to the next truthful Stage 17 quality-evidence
+  gap.
+
+Latest validation for Stage 17 bulk metadata receipts:
+
+- Direct FastAPI `TestClient` validation of `/plugins/build`, migration plan
+  readback, `POST /plugins/capabilities/packs/metadata/receipts/bulk-from-plan`,
+  and catalog readback.
+  Result: `passed`; selected generated pack wrote one metadata receipt and the
+  generated plugin read back `pack_metadata_source=metadata_receipt`.
+- Direct invocation of
+  `tests/test_api_plugins.py::test_plugins_capability_pack_metadata_receipts_bulk_from_migration_plan`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/plugins.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/plugins.py
+  tests/test_api_plugins.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/plugins.py
+  tests/test_api_plugins.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`.
+
+Validation risk:
+
+- Full local pytest was not rerun because focused pytest commands are still
+  stalling in this workspace; GitHub CI remains the full-suite evidence gate.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
