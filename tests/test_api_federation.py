@@ -354,16 +354,20 @@ def test_federation_stage16_pairing_scoped_trust_contract_is_read_only_after_sta
 
     status = client.get("/federation/status").json()
     assert status["stage"] == "Stage 16 / Federation"
-    assert status["stage16_status"] == "stage16_remote_approval_contract_ready"
+    assert status["stage16_status"] == "stage16_node_attributed_continuity_contract_ready"
     assert status["pairing_scoped_trust_contract_ready"] is True
     assert status["sync_model_contract_ready"] is True
     assert status["remote_approval_contract_ready"] is True
-    assert status["ready_count"] == 4
+    assert status["revocation_contract_ready"] is True
+    assert status["node_attributed_continuity_contract_ready"] is True
+    assert status["ready_count"] == 6
     assert status["required_count"] == 6
     assert status["routes"]["pairing_scoped_trust_contract"] == "/federation/pairing-scoped-trust-contract"
     assert status["routes"]["sync_model_contract"] == "/federation/sync-model-contract"
     assert status["routes"]["remote_approval_contract"] == "/federation/remote-approval-contract"
-    assert status["next_smallest_truthful_gap"] == "stage16_revocation_surfaces"
+    assert status["routes"]["revocation_contract"] == "/federation/revocation-contract"
+    assert status["routes"]["node_attributed_continuity_contract"] == "/federation/node-attributed-continuity-contract"
+    assert status["next_smallest_truthful_gap"] == "stage16_completion_review"
 
 
 def test_federation_stage16_sync_model_contract_blocks_over_replication_and_stale_authority(
@@ -503,8 +507,143 @@ def test_federation_stage16_remote_approval_contract_is_receipt_referenced_and_n
     assert body["next_smallest_truthful_gap"] == "stage16_revocation_surfaces"
 
     status = client.get("/federation/status").json()
-    assert status["stage16_status"] == "stage16_remote_approval_contract_ready"
+    assert status["stage16_status"] == "stage16_node_attributed_continuity_contract_ready"
     assert status["remote_approval_contract_ready"] is True
-    assert status["ready_count"] == 4
+    assert status["revocation_contract_ready"] is True
+    assert status["node_attributed_continuity_contract_ready"] is True
+    assert status["ready_count"] == 6
     assert status["required_count"] == 6
-    assert status["next_smallest_truthful_gap"] == "stage16_revocation_surfaces"
+    assert status["next_smallest_truthful_gap"] == "stage16_completion_review"
+
+
+def test_federation_stage16_revocation_contract_is_scoped_and_propagation_bounded(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage15_closure_receipt(data_root, receipt_id="swarm_stage15_closure_for_revocation")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    response = client.get("/federation/revocation-contract")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "francis.stage16.federation.revocation_contract"
+    assert body["status"] == "ready"
+    assert body["stage15_latest_closure_receipt_id"] == "swarm_stage15_closure_for_revocation"
+    assert body["remote_approval_contract_ready"] is True
+    assert body["revocation_contract_ready"] is True
+    assert body["revocation_request_fields"] == [
+        "revocation_id",
+        "pairing_request_id",
+        "source_node_id",
+        "paired_node_id",
+        "revoked_scope",
+        "reason",
+        "trace_id",
+        "operator_receipt_id",
+        "recorded_ts",
+        "effective_ts",
+    ]
+    assert body["revocation_states"] == [
+        "requested",
+        "propagating",
+        "revoked",
+        "denied",
+        "deadlettered",
+    ]
+    assert body["propagation_rules"]["operator_receipt_required"] is True
+    assert body["propagation_rules"]["per_node_scope_required"] is True
+    assert body["propagation_rules"]["revocation_before_reuse_required"] is True
+    assert body["propagation_rules"]["stale_pairing_reuse_blocked"] is True
+    assert body["propagation_rules"]["remote_approval_relays_must_stop_after_revocation"] is True
+    assert body["propagation_rules"]["sync_lanes_must_stop_after_revocation"] is True
+    assert body["propagation_rules"]["subdelegation_allowed"] is False
+    assert body["propagation_rules"]["silent_reactivation_allowed"] is False
+    assert body["propagation_rules"]["authority_expansion_allowed"] is False
+    assert body["denial_behavior"]["unknown_pairing"] == "deadletter_unknown_pairing"
+    assert body["revocation_execution_enabled"] is False
+    assert body["writes_registry"] is False
+    assert body["writes_memory"] is False
+    assert body["runs_tools"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["next_smallest_truthful_gap"] == "stage16_node_attributed_continuity"
+
+
+def test_federation_stage16_node_attributed_continuity_contract_preserves_trace_and_freshness(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage15_closure_receipt(data_root, receipt_id="swarm_stage15_closure_for_node_continuity")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    response = client.get("/federation/node-attributed-continuity-contract")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "francis.stage16.federation.node_attributed_continuity_contract"
+    assert body["status"] == "ready"
+    assert body["stage15_latest_closure_receipt_id"] == "swarm_stage15_closure_for_node_continuity"
+    assert body["revocation_contract_ready"] is True
+    assert body["node_attributed_continuity_contract_ready"] is True
+    assert body["continuity_record_fields"] == [
+        "continuity_record_id",
+        "source_node_id",
+        "source_node_role",
+        "paired_node_id",
+        "sync_lane_id",
+        "trace_id",
+        "parent_receipt_id",
+        "source_recorded_ts",
+        "received_ts",
+        "freshness_state",
+        "redaction_summary",
+        "authority_snapshot_id",
+    ]
+    assert body["freshness_states"] == [
+        "fresh",
+        "stale",
+        "revoked",
+        "conflicted",
+        "deadlettered",
+    ]
+    assert body["continuity_rules"]["source_node_id_required"] is True
+    assert body["continuity_rules"]["trace_id_required"] is True
+    assert body["continuity_rules"]["freshness_badge_required"] is True
+    assert body["continuity_rules"]["redaction_summary_required"] is True
+    assert body["continuity_rules"]["revoked_links_cannot_present_current_state"] is True
+    assert body["continuity_rules"]["stale_state_cannot_imply_current_authority"] is True
+    assert body["continuity_rules"]["raw_private_data_allowed"] is False
+    assert body["continuity_rules"]["node_ambiguous_receipts_allowed"] is False
+    assert body["handback_policy"]["operator_visible_node_source"] is True
+    assert body["handback_policy"]["operator_visible_freshness"] is True
+    assert body["handback_policy"]["operator_visible_trace"] is True
+    assert body["handback_policy"]["operator_visible_redaction"] is True
+    assert body["handback_policy"]["hidden_federation_source_allowed"] is False
+    assert body["continuity_sync_execution_enabled"] is False
+    assert body["writes_registry"] is False
+    assert body["writes_memory"] is False
+    assert body["runs_tools"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["next_smallest_truthful_gap"] == "stage16_completion_review"
+
+    status = client.get("/federation/status").json()
+    assert status["stage16_status"] == "stage16_node_attributed_continuity_contract_ready"
+    assert status["ready_count"] == 6
+    assert status["required_count"] == 6
+    assert status["next_smallest_truthful_gap"] == "stage16_completion_review"

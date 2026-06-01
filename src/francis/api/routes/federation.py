@@ -21,6 +21,8 @@ _STAGE16_FEDERATION_STAGE = "Stage 16 / Federation"
 _FEDERATION_PAIRING_SCOPED_TRUST_CONTRACT_KIND = "francis.stage16.federation.pairing_scoped_trust_contract"
 _FEDERATION_SYNC_MODEL_CONTRACT_KIND = "francis.stage16.federation.sync_model_contract"
 _FEDERATION_REMOTE_APPROVAL_CONTRACT_KIND = "francis.stage16.federation.remote_approval_contract"
+_FEDERATION_REVOCATION_CONTRACT_KIND = "francis.stage16.federation.revocation_contract"
+_FEDERATION_NODE_CONTINUITY_CONTRACT_KIND = "francis.stage16.federation.node_attributed_continuity_contract"
 
 _ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._:-]{1,127}$")
 
@@ -408,6 +410,8 @@ def _federation_routes() -> dict[str, str]:
         "pairing_scoped_trust_contract": "/federation/pairing-scoped-trust-contract",
         "sync_model_contract": "/federation/sync-model-contract",
         "remote_approval_contract": "/federation/remote-approval-contract",
+        "revocation_contract": "/federation/revocation-contract",
+        "node_attributed_continuity_contract": "/federation/node-attributed-continuity-contract",
         "instances_list": "/federation/instances/list",
         "instances_get": "/federation/instances/get",
         "delegations_list": "/federation/delegations/list",
@@ -468,6 +472,8 @@ def _stage16_deliverables(
     pairing_contract_ready: bool,
     sync_model_contract_ready: bool,
     remote_approval_contract_ready: bool,
+    revocation_contract_ready: bool,
+    node_attributed_continuity_contract_ready: bool,
     stage15_closed: bool,
 ) -> list[dict[str, Any]]:
     return [
@@ -501,16 +507,16 @@ def _stage16_deliverables(
         ),
         _federation_deliverable(
             "revocation_surfaces",
-            "Runtime revocation surfaces are not implemented yet",
-            False,
-            "pending",
+            "Revocation contract is explicit, receipt-bound, scoped, and propagated before reuse",
+            revocation_contract_ready,
+            "ready" if revocation_contract_ready else "pending",
             "stage16_revocation_surfaces",
         ),
         _federation_deliverable(
             "node_attributed_continuity",
-            "Continuity readbacks are not yet attributed across paired nodes",
-            False,
-            "pending",
+            "Continuity records are node-attributed, freshness-badged, redacted, and trace-linked",
+            node_attributed_continuity_contract_ready,
+            "ready" if node_attributed_continuity_contract_ready else "pending",
             "stage16_node_attributed_continuity",
         ),
     ]
@@ -918,6 +924,203 @@ def remote_approval_contract() -> dict[str, Any]:
     }
 
 
+def revocation_contract() -> dict[str, Any]:
+    remote = remote_approval_contract()
+    remote_ready = bool(remote.get("remote_approval_contract_ready"))
+    revocation_request_fields = [
+        "revocation_id",
+        "pairing_request_id",
+        "source_node_id",
+        "paired_node_id",
+        "revoked_scope",
+        "reason",
+        "trace_id",
+        "operator_receipt_id",
+        "recorded_ts",
+        "effective_ts",
+    ]
+    revocation_states = [
+        "requested",
+        "propagating",
+        "revoked",
+        "denied",
+        "deadlettered",
+    ]
+    propagation_rules = {
+        "operator_receipt_required": True,
+        "per_node_scope_required": True,
+        "revocation_before_reuse_required": True,
+        "stale_pairing_reuse_blocked": True,
+        "remote_approval_relays_must_stop_after_revocation": True,
+        "sync_lanes_must_stop_after_revocation": True,
+        "node_attributed_receipt_required": True,
+        "trace_lineage_required": True,
+        "subdelegation_allowed": False,
+        "silent_reactivation_allowed": False,
+        "authority_expansion_allowed": False,
+    }
+    denial_behavior = {
+        "missing_operator_receipt": "deny_revocation_and_surface_receipt_gap",
+        "unknown_pairing": "deadletter_unknown_pairing",
+        "stale_pairing": "deny_reuse_and_require_repair",
+        "scope_mismatch": "deny_and_surface_scope_mismatch",
+        "propagation_failure": "deadletter_and_keep_scope_revoked_locally",
+    }
+    propagation_observed = (
+        bool(propagation_rules["operator_receipt_required"])
+        and bool(propagation_rules["per_node_scope_required"])
+        and bool(propagation_rules["revocation_before_reuse_required"])
+        and bool(propagation_rules["stale_pairing_reuse_blocked"])
+        and bool(propagation_rules["remote_approval_relays_must_stop_after_revocation"])
+        and bool(propagation_rules["sync_lanes_must_stop_after_revocation"])
+        and bool(propagation_rules["node_attributed_receipt_required"])
+        and bool(propagation_rules["trace_lineage_required"])
+        and not bool(propagation_rules["subdelegation_allowed"])
+        and not bool(propagation_rules["silent_reactivation_allowed"])
+        and not bool(propagation_rules["authority_expansion_allowed"])
+    )
+    contract_ready = (
+        remote_ready
+        and len(revocation_request_fields) == 10
+        and len(revocation_states) == 5
+        and propagation_observed
+        and len(denial_behavior) == 5
+    )
+    return {
+        "ok": True,
+        "kind": _FEDERATION_REVOCATION_CONTRACT_KIND,
+        "stage": _STAGE16_FEDERATION_STAGE,
+        "source_id": "federation",
+        "status": "ready" if contract_ready else "blocked",
+        "stage15_closed_by_receipt": bool(remote.get("stage15_closed_by_receipt")),
+        "stage15_latest_closure_receipt_id": _safe_str(remote.get("stage15_latest_closure_receipt_id")).strip(),
+        "remote_approval_contract_ready": remote_ready,
+        "revocation_contract_ready": contract_ready,
+        "revocation_request_fields": revocation_request_fields,
+        "revocation_states": revocation_states,
+        "propagation_rules": propagation_rules,
+        "denial_behavior": denial_behavior,
+        "routes": _federation_routes(),
+        "governance": _federation_governance(),
+        "revocation_execution_enabled": False,
+        "writes_registry": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "next_smallest_truthful_gap": "stage16_node_attributed_continuity"
+        if contract_ready
+        else _safe_str(remote.get("next_smallest_truthful_gap")).strip() or "stage16_remote_approval_support",
+    }
+
+
+def node_attributed_continuity_contract() -> dict[str, Any]:
+    revocation = revocation_contract()
+    revocation_ready = bool(revocation.get("revocation_contract_ready"))
+    continuity_record_fields = [
+        "continuity_record_id",
+        "source_node_id",
+        "source_node_role",
+        "paired_node_id",
+        "sync_lane_id",
+        "trace_id",
+        "parent_receipt_id",
+        "source_recorded_ts",
+        "received_ts",
+        "freshness_state",
+        "redaction_summary",
+        "authority_snapshot_id",
+    ]
+    freshness_states = [
+        "fresh",
+        "stale",
+        "revoked",
+        "conflicted",
+        "deadlettered",
+    ]
+    continuity_rules = {
+        "source_node_id_required": True,
+        "paired_node_id_required": True,
+        "trace_id_required": True,
+        "parent_receipt_required": True,
+        "freshness_badge_required": True,
+        "redaction_summary_required": True,
+        "authority_snapshot_required": True,
+        "revoked_links_cannot_present_current_state": True,
+        "stale_state_cannot_imply_current_authority": True,
+        "raw_private_data_allowed": False,
+        "node_ambiguous_receipts_allowed": False,
+    }
+    handback_policy = {
+        "operator_visible_node_source": True,
+        "operator_visible_freshness": True,
+        "operator_visible_trace": True,
+        "operator_visible_redaction": True,
+        "hidden_federation_source_allowed": False,
+    }
+    continuity_rules_observed = (
+        bool(continuity_rules["source_node_id_required"])
+        and bool(continuity_rules["paired_node_id_required"])
+        and bool(continuity_rules["trace_id_required"])
+        and bool(continuity_rules["parent_receipt_required"])
+        and bool(continuity_rules["freshness_badge_required"])
+        and bool(continuity_rules["redaction_summary_required"])
+        and bool(continuity_rules["authority_snapshot_required"])
+        and bool(continuity_rules["revoked_links_cannot_present_current_state"])
+        and bool(continuity_rules["stale_state_cannot_imply_current_authority"])
+        and not bool(continuity_rules["raw_private_data_allowed"])
+        and not bool(continuity_rules["node_ambiguous_receipts_allowed"])
+    )
+    handback_policy_observed = (
+        bool(handback_policy["operator_visible_node_source"])
+        and bool(handback_policy["operator_visible_freshness"])
+        and bool(handback_policy["operator_visible_trace"])
+        and bool(handback_policy["operator_visible_redaction"])
+        and not bool(handback_policy["hidden_federation_source_allowed"])
+    )
+    contract_ready = (
+        revocation_ready
+        and len(continuity_record_fields) == 12
+        and len(freshness_states) == 5
+        and continuity_rules_observed
+        and handback_policy_observed
+    )
+    return {
+        "ok": True,
+        "kind": _FEDERATION_NODE_CONTINUITY_CONTRACT_KIND,
+        "stage": _STAGE16_FEDERATION_STAGE,
+        "source_id": "federation",
+        "status": "ready" if contract_ready else "blocked",
+        "stage15_closed_by_receipt": bool(revocation.get("stage15_closed_by_receipt")),
+        "stage15_latest_closure_receipt_id": _safe_str(revocation.get("stage15_latest_closure_receipt_id")).strip(),
+        "revocation_contract_ready": revocation_ready,
+        "node_attributed_continuity_contract_ready": contract_ready,
+        "continuity_record_fields": continuity_record_fields,
+        "freshness_states": freshness_states,
+        "continuity_rules": continuity_rules,
+        "handback_policy": handback_policy,
+        "routes": _federation_routes(),
+        "governance": _federation_governance(),
+        "continuity_sync_execution_enabled": False,
+        "writes_registry": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "next_smallest_truthful_gap": "stage16_completion_review"
+        if contract_ready
+        else _safe_str(revocation.get("next_smallest_truthful_gap")).strip() or "stage16_revocation_surfaces",
+    }
+
+
 @router.get("/status")
 def status() -> dict[str, Any]:
     try:
@@ -936,11 +1139,17 @@ def status() -> dict[str, Any]:
         sync_ready = bool(sync_contract.get("sync_model_contract_ready"))
         remote_approval = remote_approval_contract()
         remote_approval_ready = bool(remote_approval.get("remote_approval_contract_ready"))
+        revocation = revocation_contract()
+        revocation_ready = bool(revocation.get("revocation_contract_ready"))
+        node_continuity = node_attributed_continuity_contract()
+        node_continuity_ready = bool(node_continuity.get("node_attributed_continuity_contract_ready"))
         stage15_closed = bool(pairing_contract.get("stage15_closed_by_receipt"))
         deliverables = _stage16_deliverables(
             pairing_contract_ready=pairing_ready,
             sync_model_contract_ready=sync_ready,
             remote_approval_contract_ready=remote_approval_ready,
+            revocation_contract_ready=revocation_ready,
+            node_attributed_continuity_contract_ready=node_continuity_ready,
             stage15_closed=stage15_closed,
         )
         return {
@@ -948,7 +1157,11 @@ def status() -> dict[str, Any]:
             "route": "federation",
             "status": "ready",
             "stage": _STAGE16_FEDERATION_STAGE,
-            "stage16_status": "stage16_remote_approval_contract_ready"
+            "stage16_status": "stage16_node_attributed_continuity_contract_ready"
+            if node_continuity_ready
+            else "stage16_revocation_contract_ready"
+            if revocation_ready
+            else "stage16_remote_approval_contract_ready"
             if remote_approval_ready
             else "stage16_sync_model_contract_ready"
             if sync_ready
@@ -964,12 +1177,18 @@ def status() -> dict[str, Any]:
             "pairing_scoped_trust_contract_ready": pairing_ready,
             "sync_model_contract_ready": sync_ready,
             "remote_approval_contract_ready": remote_approval_ready,
+            "revocation_contract_ready": revocation_ready,
+            "node_attributed_continuity_contract_ready": node_continuity_ready,
             "ready_count": sum(1 for item in deliverables if bool(item.get("ready"))),
             "required_count": len(deliverables),
             "deliverables": deliverables,
             "routes": _federation_routes(),
             "governance": _federation_governance(),
-            "next_smallest_truthful_gap": "stage16_revocation_surfaces"
+            "next_smallest_truthful_gap": "stage16_completion_review"
+            if node_continuity_ready
+            else "stage16_node_attributed_continuity"
+            if revocation_ready
+            else "stage16_revocation_surfaces"
             if remote_approval_ready
             else "stage16_remote_approval_support"
             if sync_ready
@@ -1012,6 +1231,16 @@ def get_sync_model_contract() -> dict[str, Any]:
 @router.get("/remote-approval-contract")
 def get_remote_approval_contract() -> dict[str, Any]:
     return remote_approval_contract()
+
+
+@router.get("/revocation-contract")
+def get_revocation_contract() -> dict[str, Any]:
+    return revocation_contract()
+
+
+@router.get("/node-attributed-continuity-contract")
+def get_node_attributed_continuity_contract() -> dict[str, Any]:
+    return node_attributed_continuity_contract()
 
 
 @router.get("/instances/list")

@@ -50789,6 +50789,73 @@ Latest validation for Stage 16 remote approval support:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-31 - Stage 16 Federation revocation and node continuity contracts are ready
+
+Roadmap area: Stage 16 / Federation, revocation surfaces and node-attributed
+continuity after remote approval support.
+
+Material change:
+
+- Added read-only `GET /federation/revocation-contract`.
+- Added read-only `GET /federation/node-attributed-continuity-contract`.
+- `/federation/status` now advances from
+  `stage16_remote_approval_contract_ready` to
+  `stage16_node_attributed_continuity_contract_ready`.
+- Revocation requests require pairing id, source node, paired node, revoked
+  scope, reason, trace id, operator receipt, recorded timestamp, and effective
+  timestamp.
+- Revocation states are bounded to `requested`, `propagating`, `revoked`,
+  `denied`, and `deadlettered`.
+- Revocation propagation requires an operator receipt, per-node scope,
+  revocation before reuse, stale-pairing reuse blocking, remote approval relay
+  shutdown, sync-lane shutdown, node-attributed receipt, and trace lineage.
+  It blocks subdelegation, silent reactivation, and authority expansion.
+- Node-attributed continuity records require source node, source role, paired
+  node, sync lane, trace id, parent receipt, source timestamp, received
+  timestamp, freshness state, redaction summary, and authority snapshot.
+- Freshness states are bounded to `fresh`, `stale`, `revoked`, `conflicted`,
+  and `deadlettered`.
+- Continuity handback requires operator-visible node source, freshness, trace,
+  and redaction. It blocks hidden federation source, raw private data, and
+  node-ambiguous receipts.
+- These surfaces are contract-only: they do not execute revocation, sync
+  continuity, mutate the federation registry, write memory, run tools, run
+  shell, run git, launch browsers, capture the screen, or grant
+  execution/mutation authority.
+- Current readback reports
+  `stage16_status=stage16_node_attributed_continuity_contract_ready`,
+  `stage15_closed_by_receipt=true`, `revocation_contract_ready=true`,
+  `node_attributed_continuity_contract_ready=true`, `ready_count=6`,
+  `required_count=6`, and
+  `next_smallest_truthful_gap=stage16_completion_review`.
+
+Latest validation for Stage 16 revocation and node continuity:
+
+- Direct local `TestClient` readback of GET `/federation/status`, GET
+  `/federation/revocation-contract`, and GET
+  `/federation/node-attributed-continuity-contract`.
+  Result:
+  `stage16_status=stage16_node_attributed_continuity_contract_ready;
+  stage15_closed=true; ready_count=6; required_count=6;
+  revocation_ready=true; node_continuity_ready=true;
+  status_next_gap=stage16_completion_review; revocation_status=ready;
+  revocation_next_gap=stage16_node_attributed_continuity; node_status=ready;
+  node_next_gap=stage16_completion_review`.
+- `python -m pytest tests/test_api_federation.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 9 passed`
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
