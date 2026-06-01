@@ -1347,7 +1347,7 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert status["sleep_continuity_confirmation_blocker"] == "operator_confirmed_sleep_resume_missing"
     assert status["sleep_continuity_blocked_reason"] == "operator_confirmed_sleep_resume_missing"
     assert status["sleep_continuity_sleep_resume_confirmation_is_current_blocker"] is True
-    assert status["sleep_continuity_next_step"] == "run_post_resume_evidence_with_operator_confirmation"
+    assert status["sleep_continuity_next_step"] == "write_sleep_resume_confirmation_receipt"
     assert status["next_smallest_truthful_gap"] == "stage16_sleep_resume_confirmation_receipt"
 
     action = client.get("/federation/sleep-continuity-action").json()

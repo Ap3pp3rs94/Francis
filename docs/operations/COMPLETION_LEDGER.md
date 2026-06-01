@@ -54055,6 +54055,44 @@ Latest validation for Stage 16 Hub stale actor-command guarding:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 status names confirmation receipt as next step
+
+Roadmap area: Stage 16 / Federation, workstation sleep-continuity truthfulness.
+
+Material change:
+
+- `/federation/status` now names `write_sleep_resume_confirmation_receipt` as
+  the top-level `sleep_continuity_next_step` when pre-sleep evidence exists but
+  receipt-backed operator sleep/resume confirmation is still missing.
+- This aligns the status summary with `/federation/sleep-continuity-action`,
+  `/federation/sleep-resume-confirmations`, and the current
+  `stage16_sleep_resume_confirmation_receipt` gap.
+- This does not write a confirmation receipt, run post-resume capture, mutate
+  runtime state, grant authority, or mark Stage 16 closed.
+
+Latest validation for Stage 16 receipt-first status wording:
+
+- `python -m pytest tests/test_api_federation.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 26 passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`.
+- Live `TestClient` readback:
+  Result: `passed; status_next_step=write_sleep_resume_confirmation_receipt,
+  status_next_gap=stage16_sleep_resume_confirmation_receipt,
+  confirmation_next_gap=stage16_sleep_resume_confirmation_receipt,
+  confirmation_status=empty,
+  receipt_backed_sequence_blockers=[sleep_resume_confirmation_receipt_missing]`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

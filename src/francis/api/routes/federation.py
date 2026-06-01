@@ -3378,7 +3378,7 @@ def status() -> dict[str, Any]:
             if post_resume_evidence_ready and not sleep_continuity_ready
             else "recapture_post_resume_evidence_for_latest_pre_sleep"
             if post_resume_evidence_conflict and pre_sleep_evidence_ready and not sleep_continuity_ready
-            else "run_post_resume_evidence_with_operator_confirmation"
+            else "write_sleep_resume_confirmation_receipt"
             if pre_sleep_evidence_ready and not sleep_continuity_ready
             else "capture_pre_sleep_evidence"
             if completion_review_blockers == ["workstation_sleep_continuity_validated"]
