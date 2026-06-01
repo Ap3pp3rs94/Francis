@@ -55129,6 +55129,41 @@ Latest validation for Stage 16 sleep/resume operator checklist:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 checklist reports recorded confirmation receipts truthfully
+
+Roadmap area: Stage 16 / Federation, sleep-continuity confirmation receipt
+operator surface.
+
+Material change:
+
+- The sleep/resume operator checklist now distinguishes the pre-receipt state
+  from the receipt-backed sequence-ready state.
+- When a current matching operator confirmation receipt exists, the checklist
+  reports `operator_physical_confirmation_recorded=true`, exposes the latest
+  confirmation receipt id, marks the physical confirmation checklist items as
+  `recorded`, and advances the projected next gap to
+  `stage16_sleep_continuity_runtime_readback`.
+- The checklist remains read-only and does not infer sleep from elapsed time,
+  execute shell commands, write evidence, write runtime readback, grant
+  authority, or close Stage 16.
+
+Latest validation for Stage 16 receipt-ready checklist readback:
+
+- `python -m pytest tests/test_api_federation.py -q --tb=short --maxfail=1`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `npm run test -- federation_hub`
+  Result: `passed; 198 passed`.
+- `npm run build`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

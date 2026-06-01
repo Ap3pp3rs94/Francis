@@ -2430,6 +2430,41 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     assert receipt_ready_status["sleep_continuity_next_step"] == "run_receipt_backed_post_resume_sequence"
     assert receipt_ready_status["next_smallest_truthful_gap"] == "stage16_sleep_continuity_runtime_readback"
 
+    receipt_ready_checklist = client.get(
+        "/federation/sleep-resume-confirmation/operator-checklist?actor=test.federation.sleep"
+    ).json()
+    assert receipt_ready_checklist["status"] == "receipt_backed_sequence_already_ready"
+    assert receipt_ready_checklist["actor"] == "test.federation.sleep"
+    assert receipt_ready_checklist["requested_actor_ready"] is True
+    assert receipt_ready_checklist["current_pre_sleep_evidence_path"] == str(pre_sleep_path.resolve())
+    assert receipt_ready_checklist["ready_to_record_after_operator_confirmation"] is False
+    assert receipt_ready_checklist["operator_physical_confirmation_required"] is True
+    assert receipt_ready_checklist["operator_physical_confirmation_recorded"] is True
+    assert receipt_ready_checklist["latest_confirmation_receipt_id"] == body["receipt_id"]
+    assert receipt_ready_checklist["receipt_backed_sequence_ready"] is True
+    assert receipt_ready_checklist["operator_actions_remaining"] == []
+    assert receipt_ready_checklist["blockers"] == [
+        "confirmation_receipt_command_not_ready",
+        "confirmation_receipt_command_does_not_record_receipt",
+        "receipt_backed_sequence_already_ready",
+    ]
+    receipt_ready_checks = {item["id"]: item for item in receipt_ready_checklist["checklist"]}
+    assert receipt_ready_checks["current_pre_sleep_marker_bound"]["passed"] is True
+    assert receipt_ready_checks["actor_has_confirmation_write_scope"]["passed"] is True
+    assert receipt_ready_checks["receipt_write_is_bounded"]["passed"] is False
+    assert receipt_ready_checks["operator_physically_slept_or_suspended_after_marker"]["status"] == "recorded"
+    assert receipt_ready_checks["operator_physically_slept_or_suspended_after_marker"]["passed"] is True
+    assert receipt_ready_checks["operator_physically_slept_or_suspended_after_marker"]["evidence"] == body["receipt_id"]
+    assert receipt_ready_checks["operator_resumed_before_receipt_record"]["status"] == "recorded"
+    assert receipt_ready_checks["operator_resumed_before_receipt_record"]["passed"] is True
+    assert receipt_ready_checklist["writes_receipts"] is False
+    assert receipt_ready_checklist["writes_evidence"] is False
+    assert receipt_ready_checklist["writes_runtime_readback"] is False
+    assert receipt_ready_checklist["marks_stage16_closed"] is False
+    assert receipt_ready_checklist["governance"]["operator_physical_confirmation_record_readback"] is True
+    assert receipt_ready_checklist["governance"]["does_not_infer_sleep_from_delay"] is True
+    assert receipt_ready_checklist["next_smallest_truthful_gap"] == "stage16_sleep_continuity_runtime_readback"
+
 
 def test_federation_stage16_sleep_resume_confirmation_readback_blocks_stale_receipt(
     monkeypatch,

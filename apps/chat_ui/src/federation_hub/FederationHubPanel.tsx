@@ -515,6 +515,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
                   {" / "}after physical confirmation{" "}
                   <code>{yesNo(operatorChecklist.ready_to_record_after_operator_confirmation)}</code>
                   {" / "}physical recorded <code>{yesNo(operatorChecklist.operator_physical_confirmation_recorded)}</code>
+                  {" / "}receipt <code>{codeValue(operatorChecklist.latest_confirmation_receipt_id)}</code>
                 </div>
                 {operatorChecklist.checklist.length ? (
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>

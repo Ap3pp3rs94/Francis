@@ -460,6 +460,7 @@ export type FederationSleepResumeOperatorChecklist = {
   ready_to_record_after_operator_confirmation: boolean;
   operator_physical_confirmation_required: boolean;
   operator_physical_confirmation_recorded: boolean;
+  latest_confirmation_receipt_id?: string;
   receipt_backed_sequence_ready: boolean;
   blockers: string[];
   operator_actions_remaining: string[];
@@ -1862,6 +1863,7 @@ export function parseFederationSleepResumeOperatorChecklist(
     ),
     operator_physical_confirmation_required: safeBoolean(body.operator_physical_confirmation_required),
     operator_physical_confirmation_recorded: safeBoolean(body.operator_physical_confirmation_recorded),
+    latest_confirmation_receipt_id: optionalString(body.latest_confirmation_receipt_id),
     receipt_backed_sequence_ready: safeBoolean(body.receipt_backed_sequence_ready),
     blockers: stringList(body.blockers),
     operator_actions_remaining: stringList(body.operator_actions_remaining),

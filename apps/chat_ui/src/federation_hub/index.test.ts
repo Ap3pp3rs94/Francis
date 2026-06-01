@@ -1330,6 +1330,7 @@ test("FederationClient reads sleep-resume operator checklist as a read-only phys
       ready_to_record_after_operator_confirmation: true,
       operator_physical_confirmation_required: true,
       operator_physical_confirmation_recorded: false,
+      latest_confirmation_receipt_id: "",
       receipt_backed_sequence_ready: false,
       blockers: [],
       operator_actions_remaining: [
@@ -1400,6 +1401,7 @@ test("FederationClient reads sleep-resume operator checklist as a read-only phys
     assert.equal(checklist.ready_to_record_after_operator_confirmation, true);
     assert.equal(checklist.operator_physical_confirmation_required, true);
     assert.equal(checklist.operator_physical_confirmation_recorded, false);
+    assert.equal(checklist.latest_confirmation_receipt_id, undefined);
     assert.deepEqual(checklist.blockers, []);
     assert.equal(checklist.checklist[0]?.id, "current_pre_sleep_marker_bound");
     assert.equal(checklist.checklist[0]?.passed, true);
@@ -1417,10 +1419,12 @@ test("FederationClient reads sleep-resume operator checklist as a read-only phys
     const parsed = parseFederationSleepResumeOperatorChecklist({
       ok: true,
       status: "blocked_before_operator_physical_sleep_resume_confirmation",
+      latest_confirmation_receipt_id: "fedsleepconfirm_existing",
       checklist: [{ id: "actor_has_confirmation_write_scope", passed: false, operator_action_required: false }],
       blockers: ["confirmation_receipt_actor_not_ready"],
     });
     assert.equal(parsed.status, "blocked_before_operator_physical_sleep_resume_confirmation");
+    assert.equal(parsed.latest_confirmation_receipt_id, "fedsleepconfirm_existing");
     assert.deepEqual(parsed.blockers, ["confirmation_receipt_actor_not_ready"]);
     assert.equal(parsed.checklist[0]?.passed, false);
   } finally {

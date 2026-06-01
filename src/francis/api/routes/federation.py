@@ -1284,6 +1284,8 @@ def stage16_sleep_resume_confirmation_operator_checklist(actor: str = "") -> dic
         pre_sleep_evidence_path=current_pre_sleep_path,
     )
     receipt_backed_sequence_ready = bool(readback.get("receipt_backed_sequence_ready"))
+    operator_physical_confirmation_recorded = receipt_backed_sequence_ready
+    latest_receipt_id = _safe_str(readback.get("latest_receipt_id")).strip()
     preconditions_ready = bool(record_readiness.get("ready"))
     receipt_write_bounded = bool(record_readiness.get("records_receipt")) and not any(
         bool(record_readiness.get(field))
@@ -1311,6 +1313,13 @@ def stage16_sleep_resume_confirmation_operator_checklist(actor: str = "") -> dic
         else "ready_for_operator_physical_sleep_resume_confirmation"
         if ready_after_physical_confirmation
         else "blocked_before_operator_physical_sleep_resume_confirmation"
+    )
+    physical_confirmation_status = (
+        "recorded"
+        if operator_physical_confirmation_recorded
+        else "operator_confirmation_required"
+        if ready_after_physical_confirmation
+        else "blocked"
     )
     checklist = [
         {
@@ -1341,14 +1350,16 @@ def stage16_sleep_resume_confirmation_operator_checklist(actor: str = "") -> dic
         },
         {
             "id": "operator_physically_slept_or_suspended_after_marker",
-            "status": "operator_confirmation_required" if ready_after_physical_confirmation else "blocked",
-            "passed": False,
+            "status": physical_confirmation_status,
+            "passed": operator_physical_confirmation_recorded,
+            "evidence": latest_receipt_id if operator_physical_confirmation_recorded else "",
             "operator_action_required": True,
         },
         {
             "id": "operator_resumed_before_receipt_record",
-            "status": "operator_confirmation_required" if ready_after_physical_confirmation else "blocked",
-            "passed": False,
+            "status": physical_confirmation_status,
+            "passed": operator_physical_confirmation_recorded,
+            "evidence": latest_receipt_id if operator_physical_confirmation_recorded else "",
             "operator_action_required": True,
         },
     ]
@@ -1368,7 +1379,8 @@ def stage16_sleep_resume_confirmation_operator_checklist(actor: str = "") -> dic
         "preconditions_ready": preconditions_ready,
         "ready_to_record_after_operator_confirmation": ready_after_physical_confirmation,
         "operator_physical_confirmation_required": True,
-        "operator_physical_confirmation_recorded": False,
+        "operator_physical_confirmation_recorded": operator_physical_confirmation_recorded,
+        "latest_confirmation_receipt_id": latest_receipt_id,
         "receipt_backed_sequence_ready": receipt_backed_sequence_ready,
         "blockers": _parse_list(record_readiness.get("blockers")),
         "operator_actions_remaining": operator_actions_remaining,
@@ -1401,6 +1413,7 @@ def stage16_sleep_resume_confirmation_operator_checklist(actor: str = "") -> dic
             **_federation_governance(),
             "read_only": True,
             "operator_checklist_only": True,
+            "operator_physical_confirmation_record_readback": True,
             "does_not_infer_sleep_from_delay": True,
             "requires_explicit_physical_operator_confirmation": True,
             "does_not_write_receipts": True,
