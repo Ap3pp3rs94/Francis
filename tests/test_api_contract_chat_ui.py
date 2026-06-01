@@ -317,5 +317,7 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("GET", "/adversarial-hardening/completion-review"),
         ("GET", "/adversarial-hardening/stage-closure-decisions"),
         ("POST", "/adversarial-hardening/stage-closure-decision"),
+        ("GET", "/swarm/status"),
+        ("GET", "/swarm/unit-roles-contract"),
     ]
     _assert_has_endpoints(routes, endpoints)

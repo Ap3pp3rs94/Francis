@@ -50299,6 +50299,56 @@ Latest validation for delegated Stage 14 closure:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-31 - Stage 15 Swarm starts with bounded unit roles
+
+Roadmap area: Stage 15 / Swarm, unit roles before messaging and delegation
+semantics.
+
+Material change:
+
+- Added read-only `GET /swarm/status`.
+- Added read-only `GET /swarm/unit-roles-contract`.
+- Stage 15 now uses the Stage 14 closure receipt readback as its backstop
+  before projecting any Swarm readiness.
+- The unit-roles contract binds four internal roles: `coordinator`,
+  `specialist`, `reviewer`, and `recorder`.
+- Every role is explicitly bounded: no approval authority, no execution
+  authority, no runtime mutation, no subdelegation, no policy override, and a
+  required trace context and handoff receipt.
+- The contract references existing swarm primitives without pretending they are
+  a complete collaboration runtime:
+  `SwarmCoordinator.register/list_members`, `CollectiveLearning.add_observation`,
+  and `EmergentBehavior.detect`.
+- Stage 15 status now reports unit roles ready, while messaging model,
+  delegation etiquette, trace continuity, and failure semantics remain pending.
+- The route is read-only: it does not write receipts, memory, shell, git,
+  browser state, or runtime authority.
+
+Latest validation for Stage 15 unit roles:
+
+- Direct local `TestClient` readback of GET `/swarm/status` and GET
+  `/swarm/unit-roles-contract`.
+  Result: `status=stage15_unit_roles_contract_ready; stage14_closed=true;
+  ready_count=2; required_count=6; unit_roles_ready=true; role_count=4;
+  next_gap=stage15_messaging_model_contract`.
+- `python -m pytest tests/test_api_swarm.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 3 passed`
+- `python -m mypy src/francis/swarm.py src/francis/api/routes/swarm.py
+  src/francis/api/app.py`
+  Result: `passed`
+- `python -m ruff check src/francis/swarm.py src/francis/api/routes/swarm.py
+  src/francis/api/app.py tests/test_api_swarm.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/swarm.py
+  src/francis/api/routes/swarm.py src/francis/api/app.py
+  tests/test_api_swarm.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
