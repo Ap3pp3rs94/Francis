@@ -1430,6 +1430,66 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert actor_bound_status["sleep_continuity_confirmation_receipt_record_writes_evidence"] is False
     assert actor_bound_status["sleep_continuity_confirmation_receipt_record_marks_stage16_closed"] is False
 
+    checklist = client.get(
+        "/federation/sleep-resume-confirmation/operator-checklist?actor=test.federation.sleep"
+    ).json()
+    assert checklist["ok"] is True
+    assert checklist["kind"] == "francis.stage16.federation.sleep_resume_operator_confirmation_operator_checklist"
+    assert checklist["status"] == "ready_for_operator_physical_sleep_resume_confirmation"
+    assert checklist["actor"] == "test.federation.sleep"
+    assert checklist["requested_actor_ready"] is True
+    assert checklist["required_scope"] == "federation.stage16.sleep_resume.confirmation.write"
+    assert checklist["current_pre_sleep_evidence_present"] is True
+    assert checklist["current_pre_sleep_evidence_path"] == str(pre_sleep_path.resolve())
+    assert checklist["preconditions_ready"] is True
+    assert checklist["ready_to_record_after_operator_confirmation"] is True
+    assert checklist["operator_physical_confirmation_required"] is True
+    assert checklist["operator_physical_confirmation_recorded"] is False
+    assert checklist["blockers"] == []
+    assert checklist["operator_actions_remaining"] == [
+        "physically_sleep_or_suspend_workstation_after_current_pre_sleep_marker",
+        "resume_workstation_before_recording_confirmation_receipt",
+        "record_confirmation_receipt_only_after_those_physical_steps",
+    ]
+    checks = {item["id"]: item for item in checklist["checklist"]}
+    assert checks["current_pre_sleep_marker_bound"]["passed"] is True
+    assert checks["current_pre_sleep_marker_bound"]["evidence"] == str(pre_sleep_path.resolve())
+    assert checks["actor_has_confirmation_write_scope"]["passed"] is True
+    assert checks["receipt_write_is_bounded"]["passed"] is True
+    assert checks["receipt_write_is_bounded"]["writes_receipt"] is True
+    assert checks["receipt_write_is_bounded"]["writes_evidence"] is False
+    assert checks["receipt_write_is_bounded"]["writes_runtime_readback"] is False
+    assert checks["receipt_write_is_bounded"]["marks_stage16_closed"] is False
+    assert checks["operator_physically_slept_or_suspended_after_marker"]["passed"] is False
+    assert checks["operator_physically_slept_or_suspended_after_marker"]["operator_action_required"] is True
+    assert checks["operator_resumed_before_receipt_record"]["passed"] is False
+    assert checklist["confirmation_receipt_route"] == "/federation/sleep-resume-confirmation"
+    assert checklist["confirmation_receipt_readback_route"] == "/federation/sleep-resume-confirmations"
+    assert (
+        checklist["confirmation_receipt_actor_readiness_route"]
+        == "/federation/sleep-resume-confirmation/actor-readiness"
+    )
+    assert checklist["confirmation_receipt_payload_contract"] == {
+        "actor": "operator or delegated builder actor with federation.stage16.sleep_resume.confirmation.write",
+        "operator_confirmed_sleep_resume": True,
+        "pre_sleep_evidence_path": str(pre_sleep_path.resolve()),
+        "reason": "operator confirms physical sleep/suspend and resume after the pre-sleep marker",
+    }
+    assert checklist["records_receipt"] is True
+    assert checklist["writes_receipts"] is False
+    assert checklist["writes_evidence"] is False
+    assert checklist["writes_runtime_readback"] is False
+    assert checklist["marks_stage16_closed"] is False
+    assert checklist["grants_execution_authority"] is False
+    assert checklist["grants_mutation_authority"] is False
+    assert checklist["governance"]["read_only"] is True
+    assert checklist["governance"]["operator_checklist_only"] is True
+    assert checklist["governance"]["requires_explicit_physical_operator_confirmation"] is True
+    assert checklist["governance"]["does_not_infer_sleep_from_delay"] is True
+    assert checklist["governance"]["does_not_write_receipts"] is True
+    assert checklist["governance"]["does_not_mark_stage16_closed"] is True
+    assert checklist["next_smallest_truthful_gap"] == "stage16_sleep_resume_confirmation_receipt"
+
     action = client.get("/federation/sleep-continuity-action").json()
     assert action["status"] == "capture_post_resume_evidence"
     assert action["selected_step_id"] == "capture_post_resume_evidence"

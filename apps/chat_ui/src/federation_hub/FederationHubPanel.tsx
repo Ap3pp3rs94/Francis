@@ -15,6 +15,7 @@ import {
   type FederationSleepContinuityPresentation,
   type FederationSleepContinuityRunbook,
   type FederationSleepResumeConfirmationActorReadiness,
+  type FederationSleepResumeOperatorChecklist,
   type FederationSleepResumeConfirmationRecordResponse,
   type FederationSleepResumeConfirmations,
   type FederationStage16Status,
@@ -89,6 +90,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
   const [runbook, setRunbook] = useState<FederationSleepContinuityRunbook | null>(null);
   const [action, setAction] = useState<FederationSleepContinuityActionReadback | null>(null);
   const [confirmations, setConfirmations] = useState<FederationSleepResumeConfirmations | null>(null);
+  const [operatorChecklist, setOperatorChecklist] = useState<FederationSleepResumeOperatorChecklist | null>(null);
   const [actorReadiness, setActorReadiness] = useState<FederationSleepResumeConfirmationActorReadiness | null>(null);
   const [actorPreflightActor, setActorPreflightActor] = useState(DEFAULT_FEDERATION_SLEEP_RESUME_CONFIRMATION_ACTOR);
   const [actorReadinessAutoCheckedActor, setActorReadinessAutoCheckedActor] = useState("");
@@ -106,7 +108,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
     setLoading(true);
     setError(null);
     try {
-      const [nextStatus, nextRunbook, nextAction, nextConfirmations] = await Promise.all([
+      const [nextStatus, nextRunbook, nextAction, nextConfirmations, nextOperatorChecklist] = await Promise.all([
         client.getStatus({ actor: actorPreflightActor, timeoutMs: 10_000 }),
         client.getSleepContinuityRunbook({ timeoutMs: 10_000 }),
         client.getSleepContinuityAction({ actor: actorPreflightActor, timeoutMs: 10_000 }),
@@ -115,11 +117,16 @@ export function FederationHubPanel(props: { baseUrl: string }) {
           actor: actorPreflightActor,
           timeoutMs: 10_000,
         }),
+        client.getSleepResumeConfirmationOperatorChecklist({
+          actor: actorPreflightActor,
+          timeoutMs: 10_000,
+        }),
       ]);
       setStatus(nextStatus);
       setRunbook(nextRunbook);
       setAction(nextAction);
       setConfirmations(nextConfirmations);
+      setOperatorChecklist(nextOperatorChecklist);
       setPresentation(presentFederationSleepContinuityAction(nextAction));
       setLoadedAt(Date.now());
     } catch (err) {
@@ -500,6 +507,38 @@ export function FederationHubPanel(props: { baseUrl: string }) {
               {" / "}writes evidence <code>{yesNo(receiptRecordReadiness.writes_evidence)}</code>
               {" / "}marks closed <code>{yesNo(receiptRecordReadiness.marks_stage16_closed)}</code>
             </div>
+            {operatorChecklist ? (
+              <>
+                <div style={{ fontSize: 11, color: MUTED, marginBottom: 6, overflowWrap: "anywhere" }}>
+                  checklist <code>{codeValue(operatorChecklist.status)}</code>
+                  {" / "}preconditions <code>{yesNo(operatorChecklist.preconditions_ready)}</code>
+                  {" / "}after physical confirmation{" "}
+                  <code>{yesNo(operatorChecklist.ready_to_record_after_operator_confirmation)}</code>
+                  {" / "}physical recorded <code>{yesNo(operatorChecklist.operator_physical_confirmation_recorded)}</code>
+                </div>
+                {operatorChecklist.checklist.length ? (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
+                    {operatorChecklist.checklist.map((item) => (
+                      <span
+                        key={`federation-sleep-operator-checklist-${item.id}`}
+                        style={badgeStyle(item.passed ? "ready" : "blocked")}
+                      >
+                        {codeValue(item.id)} {yesNo(item.passed)}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+                {operatorChecklist.operator_actions_remaining.length ? (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
+                    {operatorChecklist.operator_actions_remaining.map((item) => (
+                      <span key={`federation-sleep-operator-action-${item}`} style={badgeStyle("blocked")}>
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </>
+            ) : null}
             <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 11, color: MUTED }}>
               <input
                 type="checkbox"

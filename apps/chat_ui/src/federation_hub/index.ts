@@ -429,6 +429,57 @@ export type FederationSleepResumeReceiptRecordReadiness = {
   grants_mutation_authority: boolean;
 };
 
+export type FederationSleepResumeOperatorChecklistItem = {
+  id?: string;
+  status?: string;
+  passed: boolean;
+  evidence?: string;
+  required_scope?: string;
+  writes_receipt: boolean;
+  writes_evidence: boolean;
+  writes_runtime_readback: boolean;
+  marks_stage16_closed: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+  operator_action_required: boolean;
+};
+
+export type FederationSleepResumeOperatorChecklist = {
+  ok: boolean;
+  kind?: string;
+  stage?: string;
+  status?: string;
+  target?: string;
+  actor?: string;
+  requested_actor_ready: boolean;
+  required_scope?: string;
+  current_pre_sleep_evidence_present: boolean;
+  current_pre_sleep_evidence_path?: string;
+  current_pre_sleep_recorded_ts?: number;
+  preconditions_ready: boolean;
+  ready_to_record_after_operator_confirmation: boolean;
+  operator_physical_confirmation_required: boolean;
+  operator_physical_confirmation_recorded: boolean;
+  receipt_backed_sequence_ready: boolean;
+  blockers: string[];
+  operator_actions_remaining: string[];
+  checklist: FederationSleepResumeOperatorChecklistItem[];
+  confirmation_receipt_route?: string;
+  confirmation_receipt_readback_route?: string;
+  confirmation_receipt_actor_readiness_route?: string;
+  confirmation_receipt_payload_contract?: Record<string, unknown>;
+  records_receipt: boolean;
+  writes_receipts: boolean;
+  writes_evidence: boolean;
+  writes_runtime_readback: boolean;
+  marks_stage16_closed: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+  governance?: Record<string, unknown>;
+  routes: Record<string, string>;
+  next_smallest_truthful_gap?: string;
+};
+
 export type FederationSleepResumeConfirmationActorReadiness = {
   ok: boolean;
   kind?: string;
@@ -1760,6 +1811,82 @@ export function parseFederationSleepResumeConfirmationRecordResponse(
   };
 }
 
+function parseFederationSleepResumeOperatorChecklistItem(
+  raw: unknown,
+): FederationSleepResumeOperatorChecklistItem | null {
+  if (!isRecord(raw)) return null;
+  const id = optionalString(raw.id);
+  if (!id) return null;
+  return {
+    id,
+    status: optionalString(raw.status),
+    passed: safeBoolean(raw.passed),
+    evidence: optionalString(raw.evidence),
+    required_scope: optionalString(raw.required_scope),
+    writes_receipt: safeBoolean(raw.writes_receipt),
+    writes_evidence: safeBoolean(raw.writes_evidence),
+    writes_runtime_readback: safeBoolean(raw.writes_runtime_readback),
+    marks_stage16_closed: safeBoolean(raw.marks_stage16_closed),
+    grants_execution_authority: safeBoolean(raw.grants_execution_authority),
+    grants_mutation_authority: safeBoolean(raw.grants_mutation_authority),
+    operator_action_required: safeBoolean(raw.operator_action_required),
+  };
+}
+
+export function parseFederationSleepResumeOperatorChecklist(
+  raw: unknown,
+): FederationSleepResumeOperatorChecklist {
+  const body = isRecord(raw) ? raw : {};
+  const currentPreSleepRecordedTs = safeNumber(body.current_pre_sleep_recorded_ts, 0);
+  const checklist = Array.isArray(body.checklist)
+    ? body.checklist
+        .map(parseFederationSleepResumeOperatorChecklistItem)
+        .filter((x): x is FederationSleepResumeOperatorChecklistItem => x !== null)
+    : [];
+  return {
+    ok: safeBoolean(body.ok),
+    kind: optionalString(body.kind),
+    stage: optionalString(body.stage),
+    status: optionalString(body.status),
+    target: optionalString(body.target),
+    actor: optionalString(body.actor),
+    requested_actor_ready: safeBoolean(body.requested_actor_ready),
+    required_scope: optionalString(body.required_scope),
+    current_pre_sleep_evidence_present: safeBoolean(body.current_pre_sleep_evidence_present),
+    current_pre_sleep_evidence_path: optionalString(body.current_pre_sleep_evidence_path),
+    current_pre_sleep_recorded_ts:
+      currentPreSleepRecordedTs > 0 ? normalizeTs(currentPreSleepRecordedTs) : undefined,
+    preconditions_ready: safeBoolean(body.preconditions_ready),
+    ready_to_record_after_operator_confirmation: safeBoolean(
+      body.ready_to_record_after_operator_confirmation,
+    ),
+    operator_physical_confirmation_required: safeBoolean(body.operator_physical_confirmation_required),
+    operator_physical_confirmation_recorded: safeBoolean(body.operator_physical_confirmation_recorded),
+    receipt_backed_sequence_ready: safeBoolean(body.receipt_backed_sequence_ready),
+    blockers: stringList(body.blockers),
+    operator_actions_remaining: stringList(body.operator_actions_remaining),
+    checklist,
+    confirmation_receipt_route: optionalString(body.confirmation_receipt_route),
+    confirmation_receipt_readback_route: optionalString(body.confirmation_receipt_readback_route),
+    confirmation_receipt_actor_readiness_route: optionalString(
+      body.confirmation_receipt_actor_readiness_route,
+    ),
+    confirmation_receipt_payload_contract: isRecord(body.confirmation_receipt_payload_contract)
+      ? body.confirmation_receipt_payload_contract
+      : undefined,
+    records_receipt: safeBoolean(body.records_receipt),
+    writes_receipts: safeBoolean(body.writes_receipts),
+    writes_evidence: safeBoolean(body.writes_evidence),
+    writes_runtime_readback: safeBoolean(body.writes_runtime_readback),
+    marks_stage16_closed: safeBoolean(body.marks_stage16_closed),
+    grants_execution_authority: safeBoolean(body.grants_execution_authority),
+    grants_mutation_authority: safeBoolean(body.grants_mutation_authority),
+    governance: isRecord(body.governance) ? body.governance : undefined,
+    routes: stringRecord(body.routes),
+    next_smallest_truthful_gap: optionalString(body.next_smallest_truthful_gap),
+  };
+}
+
 function parseFederationSleepResumeConfirmationOperatorStep(
   raw: unknown,
 ): FederationSleepResumeConfirmationOperatorStep | null {
@@ -2533,6 +2660,7 @@ export type FederationEndpoints = {
   sleepResumeConfirmations: (q?: { limit?: number; actor?: string }) => string;
   sleepResumeConfirmation: () => string;
   sleepResumeConfirmationActorReadiness: (q?: { actor?: string }) => string;
+  sleepResumeConfirmationOperatorChecklist: (q?: { actor?: string }) => string;
   stageClosureDecisions: (q?: { limit?: number }) => string;
   liveRuntimeReadbacks: (q?: { limit?: number }) => string;
 
@@ -2564,6 +2692,8 @@ export function defaultFederationEndpoints(): FederationEndpoints {
     sleepResumeConfirmation: () => "/federation/sleep-resume-confirmation",
     sleepResumeConfirmationActorReadiness: (q) =>
       `/federation/sleep-resume-confirmation/actor-readiness${buildQuery({ actor: q?.actor })}`,
+    sleepResumeConfirmationOperatorChecklist: (q) =>
+      `/federation/sleep-resume-confirmation/operator-checklist${buildQuery({ actor: q?.actor })}`,
     stageClosureDecisions: (q) => `/federation/stage-closure-decisions${buildQuery({ limit: q?.limit })}`,
     liveRuntimeReadbacks: (q) => `/federation/live-runtime-readbacks${buildQuery({ limit: q?.limit })}`,
 
@@ -2714,6 +2844,22 @@ export class FederationClient {
       },
     );
     return parseFederationSleepResumeConfirmationActorReadiness(json);
+  }
+
+  async getSleepResumeConfirmationOperatorChecklist(opts?: {
+    actor?: string;
+    signal?: AbortSignal;
+    timeoutMs?: number;
+  }): Promise<FederationSleepResumeOperatorChecklist> {
+    const json = await fetchJson(
+      this.url(this.endpoints.sleepResumeConfirmationOperatorChecklist({ actor: opts?.actor })),
+      {
+        method: "GET",
+        signal: opts?.signal,
+        timeoutMs: opts?.timeoutMs ?? this.defaultTimeoutMs,
+      },
+    );
+    return parseFederationSleepResumeOperatorChecklist(json);
   }
 
   async recordSleepResumeConfirmation(opts: {

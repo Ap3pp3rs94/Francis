@@ -15,6 +15,7 @@ import {
   parseFederationSleepContinuityAction,
   parseFederationSleepContinuityRunbook,
   parseFederationSleepResumeConfirmationActorReadiness,
+  parseFederationSleepResumeOperatorChecklist,
   parseFederationSleepResumeConfirmationRecordResponse,
   parseFederationSleepResumeConfirmations,
   parseFederationStage16Status,
@@ -1296,6 +1297,132 @@ test("FederationClient records sleep-resume confirmation receipt through governe
     assert.equal(response.receipt?.actor, "test.federation.sleep");
     assert.equal(response.receipt?.operator_confirmed_sleep_resume, true);
     assert.equal(response.next_smallest_truthful_gap, "stage16_sleep_continuity_runtime_readback");
+  } finally {
+    restoreFetch();
+  }
+});
+
+test("FederationClient reads sleep-resume operator checklist as a read-only physical gate", async () => {
+  const requests: Array<{ path: string; method: string; actor: string | null }> = [];
+  const restoreFetch = installFetch(async (url, init) => {
+    const parsed = new URL(url);
+    requests.push({
+      path: parsed.pathname,
+      method: (init?.method ?? "GET").toUpperCase(),
+      actor: parsed.searchParams.get("actor"),
+    });
+    assert.equal(init?.method, "GET");
+    assert.equal(parsed.pathname, "/federation/sleep-resume-confirmation/operator-checklist");
+    return jsonResponse({
+      ok: true,
+      kind: "francis.stage16.federation.sleep_resume_operator_confirmation_operator_checklist",
+      stage: "Stage 16 / Federation",
+      status: "ready_for_operator_physical_sleep_resume_confirmation",
+      target: "stage16_sleep_continuity",
+      actor: "test.federation.sleep",
+      requested_actor_ready: true,
+      required_scope: "federation.stage16.sleep_resume.confirmation.write",
+      current_pre_sleep_evidence_present: true,
+      current_pre_sleep_evidence_path:
+        "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json",
+      current_pre_sleep_recorded_ts: 1_800_030_000,
+      preconditions_ready: true,
+      ready_to_record_after_operator_confirmation: true,
+      operator_physical_confirmation_required: true,
+      operator_physical_confirmation_recorded: false,
+      receipt_backed_sequence_ready: false,
+      blockers: [],
+      operator_actions_remaining: [
+        "physically_sleep_or_suspend_workstation_after_current_pre_sleep_marker",
+        "resume_workstation_before_recording_confirmation_receipt",
+      ],
+      checklist: [
+        {
+          id: "current_pre_sleep_marker_bound",
+          status: "ready",
+          passed: true,
+          evidence:
+            "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json",
+          operator_action_required: false,
+        },
+        {
+          id: "operator_physically_slept_or_suspended_after_marker",
+          status: "operator_confirmation_required",
+          passed: false,
+          operator_action_required: true,
+        },
+      ],
+      confirmation_receipt_route: "/federation/sleep-resume-confirmation",
+      confirmation_receipt_readback_route: "/federation/sleep-resume-confirmations",
+      confirmation_receipt_actor_readiness_route: "/federation/sleep-resume-confirmation/actor-readiness",
+      confirmation_receipt_payload_contract: {
+        operator_confirmed_sleep_resume: true,
+      },
+      records_receipt: true,
+      writes_receipts: false,
+      writes_evidence: false,
+      writes_runtime_readback: false,
+      marks_stage16_closed: false,
+      grants_execution_authority: false,
+      grants_mutation_authority: false,
+      governance: {
+        read_only: true,
+        operator_checklist_only: true,
+        requires_explicit_physical_operator_confirmation: true,
+        does_not_infer_sleep_from_delay: true,
+      },
+      routes: {
+        sleep_resume_confirmation_operator_checklist: "/federation/sleep-resume-confirmation/operator-checklist",
+      },
+      next_smallest_truthful_gap: "stage16_sleep_resume_confirmation_receipt",
+    });
+  });
+
+  try {
+    const client = new FederationClient("http://127.0.0.1:8000");
+    const checklist = await client.getSleepResumeConfirmationOperatorChecklist({
+      actor: "test.federation.sleep",
+      timeoutMs: 50,
+    });
+
+    assert.deepEqual(requests, [
+      {
+        path: "/federation/sleep-resume-confirmation/operator-checklist",
+        method: "GET",
+        actor: "test.federation.sleep",
+      },
+    ]);
+    assert.equal(checklist.ok, true);
+    assert.equal(checklist.status, "ready_for_operator_physical_sleep_resume_confirmation");
+    assert.equal(checklist.actor, "test.federation.sleep");
+    assert.equal(checklist.requested_actor_ready, true);
+    assert.equal(checklist.preconditions_ready, true);
+    assert.equal(checklist.ready_to_record_after_operator_confirmation, true);
+    assert.equal(checklist.operator_physical_confirmation_required, true);
+    assert.equal(checklist.operator_physical_confirmation_recorded, false);
+    assert.deepEqual(checklist.blockers, []);
+    assert.equal(checklist.checklist[0]?.id, "current_pre_sleep_marker_bound");
+    assert.equal(checklist.checklist[0]?.passed, true);
+    assert.equal(checklist.checklist[1]?.operator_action_required, true);
+    assert.equal(checklist.confirmation_receipt_route, "/federation/sleep-resume-confirmation");
+    assert.equal(checklist.records_receipt, true);
+    assert.equal(checklist.writes_receipts, false);
+    assert.equal(checklist.writes_evidence, false);
+    assert.equal(checklist.writes_runtime_readback, false);
+    assert.equal(checklist.marks_stage16_closed, false);
+    assert.equal(checklist.grants_execution_authority, false);
+    assert.equal(checklist.grants_mutation_authority, false);
+    assert.equal(checklist.governance?.read_only, true);
+
+    const parsed = parseFederationSleepResumeOperatorChecklist({
+      ok: true,
+      status: "blocked_before_operator_physical_sleep_resume_confirmation",
+      checklist: [{ id: "actor_has_confirmation_write_scope", passed: false, operator_action_required: false }],
+      blockers: ["confirmation_receipt_actor_not_ready"],
+    });
+    assert.equal(parsed.status, "blocked_before_operator_physical_sleep_resume_confirmation");
+    assert.deepEqual(parsed.blockers, ["confirmation_receipt_actor_not_ready"]);
+    assert.equal(parsed.checklist[0]?.passed, false);
   } finally {
     restoreFetch();
   }

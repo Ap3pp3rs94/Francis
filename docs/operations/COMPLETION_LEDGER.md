@@ -55086,6 +55086,49 @@ Latest validation for Stage 16 status receipt record prerequisites:
 - `npm run build`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 Hub exposes physical sleep/resume operator checklist
+
+Roadmap area: Stage 16 / Federation, sleep-continuity confirmation receipt
+operator surface.
+
+Material change:
+
+- `/federation/sleep-resume-confirmation/operator-checklist` now exposes a
+  read-only checklist for the final physical sleep/resume confirmation step.
+- The checklist is actor-bound, references the current pre-sleep evidence path,
+  reports receipt-record preconditions, names the remaining physical operator
+  actions, and proves the receipt write is bounded before the Hub enables its
+  receipt button.
+- Federation Hub now fetches and displays the checklist next to the receipt
+  readiness projection, without changing the guarded POST behavior.
+- This remains readback/UI truth hardening only: it did not execute the
+  receipt-writing mutation, capture evidence, write runtime readback, infer
+  physical sleep/resume, grant authority, or close Stage 16.
+- Fresh local checklist readback for `actor=codex.builder` reports
+  `status=ready_for_operator_physical_sleep_resume_confirmation`,
+  `preconditions_ready=true`, `ready_to_record_after_operator_confirmation=true`,
+  `operator_physical_confirmation_recorded=false`, `blockers=[]`,
+  `writes_evidence=false`, and `marks_stage16_closed=false`.
+
+Latest validation for Stage 16 sleep/resume operator checklist:
+
+- `python -m pytest tests/test_api_federation.py -q --tb=short --maxfail=1`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `npm run test -- federation_hub`
+  Result: `passed; 198 passed`.
+- `npm run build`
+  Result: `passed`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
