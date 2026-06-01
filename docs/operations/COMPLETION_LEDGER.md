@@ -54245,6 +54245,30 @@ Latest validation for Stage 16 Hub receipt operator-step sequence:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 Hub action fixture keeps pending confirmation on receipt gap
+
+Roadmap area: Stage 16 / Federation, Federation Hub sleep-continuity action
+contract truthfulness.
+
+Material change:
+
+- Federation Hub's pending-confirmation sleep-continuity action fixture now
+  reports `stage16_sleep_resume_confirmation_receipt` as the
+  `next_smallest_truthful_gap`.
+- The derived presentation assertion now preserves the same receipt gap while
+  post-resume capture is selected but blocked on operator confirmation.
+- This is UI contract alignment only: it writes no receipt, runs no shell,
+  captures no evidence, grants no authority, and does not mark Stage 16 closed.
+
+Latest validation for Stage 16 Hub pending-confirmation action gap:
+
+- `npm run test -- federation_hub`
+  Result: `passed; 192 passed`.
+- `npm run build`
+  Result: `passed`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
