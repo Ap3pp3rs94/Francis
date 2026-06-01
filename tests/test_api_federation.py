@@ -1280,8 +1280,10 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     action = client.get("/federation/sleep-continuity-action").json()
     assert action["status"] == "capture_post_resume_evidence"
     assert action["selected_step_id"] == "capture_post_resume_evidence"
+    assert action["selected_step_title"] == "Capture post-resume evidence"
     assert action["pre_sleep_evidence_path"] == str(pre_sleep_path.resolve())
     assert action["post_resume_evidence_path"] == ""
+    assert action["expected_output"] == "post-resume evidence JSON path"
     assert "-OperatorConfirmedSleepResume" in action["primary_command"]
     assert action["pre_sleep_evidence_ready"] is True
     assert action["post_resume_evidence_ready"] is False
@@ -1347,7 +1349,9 @@ def test_federation_stage16_sleep_continuity_runbook_uses_linked_post_resume_mar
     action = client.get("/federation/sleep-continuity-action").json()
     assert action["status"] == "run_sleep_continuity_runtime_proof"
     assert action["selected_step_id"] == "commit_sleep_continuity_readback"
+    assert action["selected_step_title"] == "Commit sleep continuity runtime proof receipt"
     assert "federation-stage16-sleep-continuity-runtime-proof.ps1" in action["primary_command"]
+    assert action["expected_output"] == "workstation_sleep_continuity_validated live runtime readback receipt"
     assert action["pre_sleep_evidence_ready"] is True
     assert action["post_resume_evidence_ready"] is True
     assert action["operator_confirmation_required"] is False

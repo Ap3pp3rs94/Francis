@@ -106,7 +106,6 @@ export function FederationHubPanel(props: { baseUrl: string }) {
 
   const blockers = presentation?.blockers.length ? presentation.blockers : status?.completion_review_blockers ?? [];
   const priorLiveReadbackBlockers = presentation?.prior_live_readback_blockers ?? [];
-  const selectedAction = action?.selected_action;
   const governance = action?.governance;
   const latestPreSleepEvidence = status?.latest_pre_sleep_evidence;
   const latestPostResumeEvidence = status?.latest_post_resume_evidence;
@@ -151,6 +150,9 @@ export function FederationHubPanel(props: { baseUrl: string }) {
           </div>
           <div style={{ fontSize: 11, color: MUTED, marginTop: 8 }}>
             selected <code>{codeValue(presentation?.selected_step_id)}</code>
+          </div>
+          <div style={{ fontSize: 11, color: MUTED, marginTop: 8, overflowWrap: "anywhere" }}>
+            title <code>{codeValue(presentation?.selected_step_title)}</code>
           </div>
           <div style={{ fontSize: 11, color: MUTED, marginTop: 8, overflowWrap: "anywhere" }}>
             status <code>{codeValue(status?.sleep_continuity_status)}</code>
@@ -219,9 +221,9 @@ export function FederationHubPanel(props: { baseUrl: string }) {
             {presentation.primary_command}
           </pre>
         ) : null}
-        {selectedAction?.expected_output ? (
+        {presentation?.expected_output ? (
           <div style={{ fontSize: 11, color: MUTED, marginTop: 8 }}>
-            expected <code>{selectedAction.expected_output}</code>
+            expected <code>{presentation.expected_output}</code>
           </div>
         ) : null}
         {presentation?.pre_sleep_evidence_path ? (

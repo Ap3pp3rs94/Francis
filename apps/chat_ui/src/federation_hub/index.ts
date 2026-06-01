@@ -313,6 +313,7 @@ export type FederationSleepContinuityPresentation = {
   state: FederationSleepContinuityActionState;
   status_label: string;
   selected_step_id?: string;
+  selected_step_title?: string;
   primary_command?: string;
   primary_route?: string;
   readback_route?: string;
@@ -334,6 +335,7 @@ export type FederationSleepContinuityPresentation = {
   operator_confirmation_required: boolean;
   writes_evidence_when_run: boolean;
   writes_receipts_when_run: boolean;
+  expected_output?: string;
   mutation_available_from_ui: boolean;
   next_smallest_truthful_gap?: string;
 };
@@ -345,11 +347,13 @@ export type FederationSleepContinuityActionReadback = {
   status?: FederationSleepContinuityActionState | string;
   action_projection_only: boolean;
   selected_step_id?: string;
+  selected_step_title?: string;
   selected_action?: FederationSleepContinuityRunbookStep;
   primary_command?: string;
   primary_route?: string;
   method?: string;
   required_scope?: string;
+  expected_output?: string;
   evidence_path?: string;
   pre_sleep_evidence_path?: string;
   post_resume_evidence_path?: string;
@@ -927,11 +931,13 @@ export function parseFederationSleepContinuityAction(raw: unknown): FederationSl
     status: optionalString(body.status),
     action_projection_only: safeBoolean(body.action_projection_only),
     selected_step_id: optionalString(body.selected_step_id),
+    selected_step_title: optionalString(body.selected_step_title),
     selected_action: selectedAction ?? undefined,
     primary_command: optionalString(body.primary_command),
     primary_route: optionalString(body.primary_route),
     method: optionalString(body.method),
     required_scope: optionalString(body.required_scope),
+    expected_output: optionalString(body.expected_output),
     evidence_path: optionalString(body.evidence_path),
     pre_sleep_evidence_path: optionalString(body.pre_sleep_evidence_path),
     post_resume_evidence_path: optionalString(body.post_resume_evidence_path),
@@ -1019,6 +1025,7 @@ function buildFederationSleepContinuityPresentation(
     state,
     status_label: labelForFederationSleepContinuityState(state),
     selected_step_id: selectedStep?.id,
+    selected_step_title: selectedStep?.title,
     primary_command: selectedStep?.command,
     primary_route: selectedStep?.route,
     method: selectedStep?.method,
@@ -1037,6 +1044,7 @@ function buildFederationSleepContinuityPresentation(
     operator_confirmation_required: selectedStep?.operator_confirmation_required ?? false,
     writes_evidence_when_run: selectedStep?.writes_evidence_when_run ?? false,
     writes_receipts_when_run: selectedStep?.writes_receipts_when_run ?? false,
+    expected_output: selectedStep?.expected_output,
     mutation_available_from_ui: false,
     next_smallest_truthful_gap:
       opts.status.next_smallest_truthful_gap ??
@@ -1104,6 +1112,7 @@ export function presentFederationSleepContinuityAction(
     state,
     status_label: labelForFederationSleepContinuityState(state),
     selected_step_id: action.selected_step_id,
+    selected_step_title: action.selected_step_title ?? selectedStep?.title,
     primary_command: action.primary_command ?? selectedStep?.command,
     primary_route: action.primary_route ?? selectedStep?.route,
     readback_route: action.routes.sleep_continuity_action,
@@ -1126,6 +1135,7 @@ export function presentFederationSleepContinuityAction(
       action.operator_confirmation_required || selectedStep?.operator_confirmation_required === true,
     writes_evidence_when_run: action.writes_evidence_when_run || selectedStep?.writes_evidence_when_run === true,
     writes_receipts_when_run: action.writes_receipts_when_run || selectedStep?.writes_receipts_when_run === true,
+    expected_output: action.expected_output ?? selectedStep?.expected_output,
     mutation_available_from_ui: false,
     next_smallest_truthful_gap: action.next_smallest_truthful_gap,
   };
