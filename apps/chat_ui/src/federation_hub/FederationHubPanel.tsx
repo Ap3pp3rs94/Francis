@@ -507,15 +507,18 @@ export function FederationHubPanel(props: { baseUrl: string }) {
               <code>{yesNo(recordBoolean(operatorConfirmationHandoff.proof_boundary, "does_not_run_shell"))}</code>
             </div>
             <div style={{ fontSize: 11, color: MUTED, marginTop: 6 }}>
-              sequence <code>{yesNo(operatorConfirmationHandoff.post_resume_sequence_available_after_confirmation)}</code>
+              post-confirmation sequence{" "}
+              <code>{yesNo(operatorConfirmationHandoff.post_resume_sequence_available_after_confirmation)}</code>
               {" / "}writes evidence{" "}
               <code>{yesNo(operatorConfirmationHandoff.post_resume_sequence_writes_evidence_when_run)}</code>
               {" / "}writes receipts{" "}
               <code>{yesNo(operatorConfirmationHandoff.post_resume_sequence_writes_receipts_when_run)}</code>
             </div>
             <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
-              receipt-backed sequence{" "}
+              receipt-backed projected{" "}
               <code>{yesNo(Boolean(operatorConfirmationHandoff.post_resume_receipt_backed_sequence_command))}</code>
+              {" / "}visible{" "}
+              <code>{yesNo(Boolean(visiblePostResumeReceiptBackedSequenceCommand))}</code>
               {" / "}requires receipt{" "}
               <code>
                 {yesNo(operatorConfirmationHandoff.post_resume_receipt_backed_sequence_requires_confirmation_receipt)}
@@ -538,6 +541,8 @@ export function FederationHubPanel(props: { baseUrl: string }) {
             </div>
             <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
               receipt command <code>{yesNo(operatorConfirmationHandoff.confirmation_receipt_command_ready)}</code>
+              {" / "}visible{" "}
+              <code>{yesNo(Boolean(visibleOperatorCommands.confirmation_receipt_copyable_command))}</code>
               {" / "}records receipt{" "}
               <code>{yesNo(operatorConfirmationHandoff.confirmation_receipt_command_records_receipt)}</code>
               {" / "}projection{" "}

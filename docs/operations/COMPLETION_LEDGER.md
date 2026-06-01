@@ -54321,6 +54321,32 @@ Latest validation for Stage 16 Hub receipt-backed sequence command display:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 Hub labels projected versus visible post-resume commands
+
+Roadmap area: Stage 16 / Federation, Federation Hub sleep/resume confirmation
+contract truthfulness.
+
+Material change:
+
+- Federation Hub now labels the post-resume sequence as a post-confirmation
+  sequence instead of a generally available sequence.
+- The handoff panel now shows whether the receipt-backed sequence command is
+  merely projected or actually visible under the current receipt gate.
+- The handoff panel also shows that the confirmation-receipt command is the
+  visible command while receipt-backed post-resume execution remains hidden.
+- This is UI wording and command-surface truthfulness only: it writes no
+  receipt, runs no shell, captures no evidence, grants no authority, and does
+  not mark Stage 16 closed.
+
+Latest validation for Stage 16 Hub projected-versus-visible command labels:
+
+- `npm run test -- federation_hub`
+  Result: `passed; 192 passed`.
+- `npm run build`
+  Result: `passed`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
