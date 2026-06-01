@@ -63,6 +63,10 @@ function codeValue(value: string | undefined, fallback = "none"): string {
   return text || fallback;
 }
 
+function recordBoolean(value: Record<string, unknown> | undefined, key: string): boolean {
+  return Boolean(value?.[key]);
+}
+
 export function FederationHubPanel(props: { baseUrl: string }) {
   const client = useMemo(() => new FederationClient(props.baseUrl), [props.baseUrl]);
   const [status, setStatus] = useState<FederationStage16Status | null>(null);
@@ -98,6 +102,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
   const blockers = presentation?.blockers.length ? presentation.blockers : status?.completion_review_blockers ?? [];
   const priorLiveReadbackBlockers = presentation?.prior_live_readback_blockers ?? [];
   const selectedAction = action?.selected_action;
+  const governance = action?.governance;
 
   return (
     <section style={panelStyle}>
@@ -244,6 +249,18 @@ export function FederationHubPanel(props: { baseUrl: string }) {
             </span>
             <span style={badgeStyle(action?.action_projection_only ? "ready" : "blocked")}>
               projection only {yesNo(Boolean(action?.action_projection_only))}
+            </span>
+            <span style={badgeStyle(recordBoolean(governance, "read_only") ? "ready" : "blocked")}>
+              read-only {yesNo(recordBoolean(governance, "read_only"))}
+            </span>
+            <span style={badgeStyle(recordBoolean(governance, "does_not_infer_sleep_from_delay") ? "ready" : "blocked")}>
+              no sleep inference {yesNo(recordBoolean(governance, "does_not_infer_sleep_from_delay"))}
+            </span>
+            <span style={badgeStyle(recordBoolean(governance, "does_not_run_selected_command") ? "ready" : "blocked")}>
+              no selected command {yesNo(recordBoolean(governance, "does_not_run_selected_command"))}
+            </span>
+            <span style={badgeStyle(recordBoolean(governance, "does_not_post_selected_route") ? "ready" : "blocked")}>
+              no selected route {yesNo(recordBoolean(governance, "does_not_post_selected_route"))}
             </span>
             <span style={badgeStyle(action?.runs_shell ? "blocked" : "ready")}>
               shell {yesNo(Boolean(action?.runs_shell))}

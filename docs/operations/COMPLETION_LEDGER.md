@@ -52234,6 +52234,34 @@ Latest validation for Stage 16 readback guard matrix display:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 federation panel shows governance denial guards
+
+Roadmap area: Stage 16 / Federation, operator-visible governance denial
+truthfulness.
+
+Material change:
+
+- `FederationHubPanel` now renders selected sleep-continuity action governance
+  denials for read-only status, no sleep inference from delay, no selected
+  command execution, and no selected route posting.
+- The UI contract now asserts those governance denial flags are preserved by
+  the action parser for the current post-resume evidence posture.
+- This is read-only inspectability. It does not execute routes, run shell
+  commands, write evidence, write receipts, mutate registry state, write memory,
+  grant execution authority, grant mutation authority, infer workstation
+  sleep/resume, or mark Stage 16 closed.
+- Stage 16 remains open until live post-resume evidence and the receipt-backed
+  completion/closure gates are satisfied.
+
+Latest validation for Stage 16 governance denial guard display:
+
+- `cd apps/chat_ui; npm run test -- federation_hub`
+  Result: `passed; 187 passed`.
+- `cd apps/chat_ui; npm run build`
+  Result: `passed`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

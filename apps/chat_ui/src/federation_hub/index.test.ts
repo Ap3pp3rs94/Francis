@@ -551,6 +551,7 @@ test("federation sleep-continuity action parser preserves selected read-only ste
     governance: {
       read_only: true,
       action_projection_only: true,
+      does_not_infer_sleep_from_delay: true,
       does_not_run_selected_command: true,
       does_not_post_selected_route: true,
     },
@@ -590,6 +591,10 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   assert.equal(action.routes.stage_closure_decision, "/federation/stage-closure-decision");
   assert.equal(action.routes.stage_closure_decisions, "/federation/stage-closure-decisions");
   assert.equal(action.routes.malformed, undefined);
+  assert.equal(action.governance?.read_only, true);
+  assert.equal(action.governance?.action_projection_only, true);
+  assert.equal(action.governance?.does_not_infer_sleep_from_delay, true);
+  assert.equal(action.governance?.does_not_run_selected_command, true);
   assert.equal(action.governance?.does_not_post_selected_route, true);
 
   const presentation = presentFederationSleepContinuityAction(action);
