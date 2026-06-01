@@ -1298,6 +1298,14 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
         "pre_sleep_evidence_available",
         "selected_command_requires_operator_confirmed_sleep_resume_flag",
     ]
+    assert action["selected_action_readiness"]["operator_terminal_command_ready"] is True
+    assert action["selected_action_readiness"]["command_validation"] == [
+        "selected_command_projected",
+        "latest_pre_sleep_evidence_path_bound",
+        "operator_confirmed_sleep_resume_flag_bound",
+        "post_resume_evidence_capture_command_bound",
+    ]
+    assert action["selected_action_readiness"]["command_validation_blockers"] == []
     assert action["selected_action_readiness"]["next_operator_step"] == (
         "operator_confirm_sleep_resume_then_capture_post_resume_evidence"
     )
@@ -1379,6 +1387,14 @@ def test_federation_stage16_sleep_continuity_runbook_uses_linked_post_resume_mar
         "pre_sleep_evidence_available",
         "post_resume_evidence_available",
     ]
+    assert action["selected_action_readiness"]["operator_terminal_command_ready"] is True
+    assert action["selected_action_readiness"]["command_validation"] == [
+        "selected_command_projected",
+        "pre_sleep_evidence_path_bound",
+        "post_resume_evidence_path_bound",
+        "runtime_receipt_commit_command_bound",
+    ]
+    assert action["selected_action_readiness"]["command_validation_blockers"] == []
     assert action["pre_sleep_evidence_ready"] is True
     assert action["post_resume_evidence_ready"] is True
     assert action["operator_confirmation_required"] is False

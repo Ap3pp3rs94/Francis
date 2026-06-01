@@ -545,6 +545,14 @@ test("federation sleep-continuity action parser preserves selected read-only ste
         "pre_sleep_evidence_available",
         "selected_command_requires_operator_confirmed_sleep_resume_flag",
       ],
+      operator_terminal_command_ready: true,
+      command_validation: [
+        "selected_command_projected",
+        "latest_pre_sleep_evidence_path_bound",
+        "operator_confirmed_sleep_resume_flag_bound",
+        "post_resume_evidence_capture_command_bound",
+      ],
+      command_validation_blockers: [],
       next_operator_step: "operator_confirm_sleep_resume_then_capture_post_resume_evidence",
       selected_step_id: "capture_post_resume_evidence",
       pre_sleep_evidence_ready: true,
@@ -612,6 +620,14 @@ test("federation sleep-continuity action parser preserves selected read-only ste
     "pre_sleep_evidence_available",
     "selected_command_requires_operator_confirmed_sleep_resume_flag",
   ]);
+  assert.equal(action.selected_action_readiness?.operator_terminal_command_ready, true);
+  assert.deepEqual(action.selected_action_readiness?.command_validation, [
+    "selected_command_projected",
+    "latest_pre_sleep_evidence_path_bound",
+    "operator_confirmed_sleep_resume_flag_bound",
+    "post_resume_evidence_capture_command_bound",
+  ]);
+  assert.deepEqual(action.selected_action_readiness?.command_validation_blockers, []);
   assert.equal(
     action.selected_action_readiness?.next_operator_step,
     "operator_confirm_sleep_resume_then_capture_post_resume_evidence",
@@ -674,6 +690,13 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   assert.deepEqual(presentation.selected_action_readiness?.met_conditions, [
     "pre_sleep_evidence_available",
     "selected_command_requires_operator_confirmed_sleep_resume_flag",
+  ]);
+  assert.equal(presentation.selected_action_readiness?.operator_terminal_command_ready, true);
+  assert.deepEqual(presentation.selected_action_readiness?.command_validation, [
+    "selected_command_projected",
+    "latest_pre_sleep_evidence_path_bound",
+    "operator_confirmed_sleep_resume_flag_bound",
+    "post_resume_evidence_capture_command_bound",
   ]);
   assert.equal(presentation.writes_evidence_when_run, true);
   assert.equal(presentation.writes_receipts_when_run, false);

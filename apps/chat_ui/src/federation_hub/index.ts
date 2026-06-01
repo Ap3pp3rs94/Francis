@@ -316,6 +316,9 @@ export type FederationSleepContinuitySelectedActionReadiness = {
   run_blockers: string[];
   remaining_evidence_gates: string[];
   met_conditions: string[];
+  operator_terminal_command_ready: boolean;
+  command_validation: string[];
+  command_validation_blockers: string[];
   next_operator_step?: string;
   selected_step_id?: string;
   pre_sleep_evidence_ready: boolean;
@@ -482,6 +485,9 @@ function parseFederationSleepContinuitySelectedActionReadiness(
     run_blockers: stringList(raw.run_blockers),
     remaining_evidence_gates: stringList(raw.remaining_evidence_gates),
     met_conditions: stringList(raw.met_conditions),
+    operator_terminal_command_ready: safeBoolean(raw.operator_terminal_command_ready),
+    command_validation: stringList(raw.command_validation),
+    command_validation_blockers: stringList(raw.command_validation_blockers),
     next_operator_step: optionalString(raw.next_operator_step),
     selected_step_id: optionalString(raw.selected_step_id),
     pre_sleep_evidence_ready: safeBoolean(raw.pre_sleep_evidence_ready),

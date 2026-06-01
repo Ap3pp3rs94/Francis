@@ -244,6 +244,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
             <div style={{ fontSize: 11, color: MUTED }}>
               readiness <code>{codeValue(selectedActionReadiness.status)}</code>
               {" / "}ready <code>{yesNo(selectedActionReadiness.ready_to_run)}</code>
+              {" / "}terminal command <code>{yesNo(selectedActionReadiness.operator_terminal_command_ready)}</code>
             </div>
             {selectedActionReadiness.run_blockers.length ? (
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
@@ -273,6 +274,27 @@ export function FederationHubPanel(props: { baseUrl: string }) {
                     </span>
                   ))}
                 </div>
+              </div>
+            ) : null}
+            {selectedActionReadiness.command_validation.length ? (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 11, color: MUTED }}>command validation</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                  {selectedActionReadiness.command_validation.map((check) => (
+                    <span key={`federation-command-validation-${check}`} style={badgeStyle("ready")}>
+                      {check}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {selectedActionReadiness.command_validation_blockers.length ? (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                {selectedActionReadiness.command_validation_blockers.map((blocker) => (
+                  <span key={`federation-command-validation-blocker-${blocker}`} style={badgeStyle("blocked")}>
+                    {blocker}
+                  </span>
+                ))}
               </div>
             ) : null}
             {selectedActionReadiness.next_operator_step ? (

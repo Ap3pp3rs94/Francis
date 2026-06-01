@@ -1237,6 +1237,15 @@ def _stage16_sleep_continuity_selected_action_readiness(
     run_blockers: list[str] = []
     remaining_evidence_gates: list[str] = []
     met_conditions: list[str] = []
+    command_validation: list[str] = []
+    command_validation_blockers: list[str] = []
+
+    if command:
+        command_validation.append("selected_command_projected")
+    else:
+        command_validation_blockers.append("selected_command_missing")
+    if prior_live_blockers:
+        command_validation_blockers.extend(f"prior_live_readback_missing:{blocker}" for blocker in prior_live_blockers)
 
     if prior_live_blockers:
         run_blockers.extend(f"prior_live_readback_missing:{blocker}" for blocker in prior_live_blockers)
@@ -1245,16 +1254,31 @@ def _stage16_sleep_continuity_selected_action_readiness(
             met_conditions.append("pre_sleep_evidence_already_available")
         else:
             remaining_evidence_gates.append("pre_sleep_evidence_missing")
+        if "-Mode PreSleep" in command and "-CommitEvidence" in command:
+            command_validation.append("pre_sleep_evidence_capture_command_bound")
+        else:
+            command_validation_blockers.append("pre_sleep_evidence_capture_command_missing")
         status = "ready_to_capture_pre_sleep_evidence" if not run_blockers else "blocked_on_prior_live_readbacks"
     elif step_id == "capture_post_resume_evidence":
         if pre_sleep_evidence_ready:
             met_conditions.append("pre_sleep_evidence_available")
+            if "-PreSleepEvidencePath" in command:
+                command_validation.append("latest_pre_sleep_evidence_path_bound")
+            else:
+                command_validation_blockers.append("latest_pre_sleep_evidence_path_missing")
         else:
             run_blockers.append("pre_sleep_evidence_missing")
+            command_validation_blockers.append("pre_sleep_evidence_missing")
         if "-OperatorConfirmedSleepResume" in command:
             met_conditions.append("selected_command_requires_operator_confirmed_sleep_resume_flag")
+            command_validation.append("operator_confirmed_sleep_resume_flag_bound")
         else:
             run_blockers.append("operator_confirmed_sleep_resume_flag_missing")
+            command_validation_blockers.append("operator_confirmed_sleep_resume_flag_missing")
+        if "-Mode PostResume" in command and "-CommitEvidence" in command:
+            command_validation.append("post_resume_evidence_capture_command_bound")
+        else:
+            command_validation_blockers.append("post_resume_evidence_capture_command_missing")
         if operator_confirmation_required:
             run_blockers.append("operator_confirmed_sleep_resume_missing")
         if post_resume_evidence_ready:
@@ -1265,16 +1289,34 @@ def _stage16_sleep_continuity_selected_action_readiness(
     elif step_id == "commit_sleep_continuity_readback":
         if pre_sleep_evidence_ready:
             met_conditions.append("pre_sleep_evidence_available")
+            if "-PreSleepEvidencePath" in command:
+                command_validation.append("pre_sleep_evidence_path_bound")
+            else:
+                command_validation_blockers.append("pre_sleep_evidence_path_missing")
         else:
             run_blockers.append("pre_sleep_evidence_missing")
+            command_validation_blockers.append("pre_sleep_evidence_missing")
         if post_resume_evidence_ready:
             met_conditions.append("post_resume_evidence_available")
+            if "-PostResumeEvidencePath" in command:
+                command_validation.append("post_resume_evidence_path_bound")
+            else:
+                command_validation_blockers.append("post_resume_evidence_path_missing")
         else:
             run_blockers.append("post_resume_evidence_missing")
+            command_validation_blockers.append("post_resume_evidence_missing")
+        if "-CommitReceipts" in command:
+            command_validation.append("runtime_receipt_commit_command_bound")
+        else:
+            command_validation_blockers.append("runtime_receipt_commit_command_missing")
         status = "ready_to_commit_sleep_continuity_readback" if not run_blockers else "blocked_on_missing_evidence"
     elif step_id == "record_operator_stage_closure_decision":
         if operator_confirmation_required:
             run_blockers.append("operator_stage_closure_decision_required")
+        if selected_step.get("method") == "POST" and selected_step.get("route") == "/federation/stage-closure-decision":
+            command_validation.append("stage_closure_route_bound")
+        else:
+            command_validation_blockers.append("stage_closure_route_missing")
         status = "waiting_for_operator_stage_closure_decision" if run_blockers else "ready_to_record_stage_closure"
     else:
         status = state or "blocked"
@@ -1286,6 +1328,9 @@ def _stage16_sleep_continuity_selected_action_readiness(
         "run_blockers": run_blockers,
         "remaining_evidence_gates": remaining_evidence_gates,
         "met_conditions": met_conditions,
+        "operator_terminal_command_ready": bool(command_validation) and not command_validation_blockers,
+        "command_validation": command_validation,
+        "command_validation_blockers": command_validation_blockers,
         "next_operator_step": "operator_confirm_sleep_resume_then_capture_post_resume_evidence"
         if step_id == "capture_post_resume_evidence" and run_blockers
         else _safe_str(selected_step.get("title")).strip(),

@@ -52485,6 +52485,63 @@ Latest validation for Stage 16 sleep action met readiness conditions:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 sleep action validates operator terminal command shape
+
+Roadmap area: Stage 16 / Federation, workstation sleep-continuity gate
+truthfulness.
+
+Material change:
+
+- `/federation/sleep-continuity-action` now includes read-only selected action
+  command validation in `selected_action_readiness`.
+- The current post-resume capture posture distinguishes
+  `operator_terminal_command_ready=true` from `ready_to_run=false`: the command
+  is structurally ready for the operator terminal, but Francis still requires
+  explicit operator confirmation that the workstation actually slept/suspended
+  and resumed before capture.
+- The validation proves the selected command is projected, the latest
+  pre-sleep evidence path is bound, `-OperatorConfirmedSleepResume` is present,
+  and the post-resume evidence capture command is bound.
+- The federation UI parser, presenter, and panel preserve and render those
+  command validation checks and any validation blockers.
+- This is read-only inspectability. It does not execute routes, run shell
+  commands, write evidence, write receipts, mutate registry state, write memory,
+  grant execution authority, grant mutation authority, infer workstation
+  sleep/resume, or mark Stage 16 closed.
+- Stage 16 remains open until live post-resume evidence and the receipt-backed
+  completion/closure gates are satisfied.
+
+Latest validation for Stage 16 sleep action command validation:
+
+- Live FastAPI readback of `/federation/sleep-continuity-action`
+  Result: `status=capture_post_resume_evidence`, `ready_to_run=false`,
+  `operator_terminal_command_ready=true`,
+  `command_validation=["selected_command_projected",
+  "latest_pre_sleep_evidence_path_bound",
+  "operator_confirmed_sleep_resume_flag_bound",
+  "post_resume_evidence_capture_command_bound"]`,
+  `command_validation_blockers=[]`,
+  `run_blockers=["operator_confirmed_sleep_resume_missing"]`,
+  `remaining_evidence_gates=["post_resume_evidence_missing"]`,
+  `mutation_available_from_ui=false`, and
+  `next_smallest_truthful_gap=stage16_sleep_continuity_runtime_readback`.
+- `python -m pytest tests/test_api_federation.py -q --tb=short`
+  Result: `passed; 19 passed`.
+- `cd apps/chat_ui; npm run test -- federation_hub`
+  Result: `passed; 187 passed`.
+- `cd apps/chat_ui; npm run build`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
