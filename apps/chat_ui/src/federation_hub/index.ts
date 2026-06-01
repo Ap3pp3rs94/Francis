@@ -853,6 +853,10 @@ function singleSleepContinuityBlocker(blockers: string[]): boolean {
   return blockers.length === 1 && blockers[0] === "workstation_sleep_continuity_validated";
 }
 
+function hasPriorLiveReadbackBlocker(blockers: string[]): boolean {
+  return blockers.some((blocker) => blocker !== "workstation_sleep_continuity_validated");
+}
+
 function buildFederationSleepContinuityPresentation(
   state: FederationSleepContinuityActionState,
   opts: {
@@ -924,6 +928,8 @@ export function presentFederationSleepContinuity(
   let selectedStep: FederationSleepContinuityRunbookStep | undefined;
   if (stage16ClosedByReceipt) {
     state = "stage16_closed";
+  } else if (hasPriorLiveReadbackBlocker(blockers)) {
+    state = "blocked_on_prior_live_readbacks";
   } else if (readyToClose) {
     state = "record_stage16_closure_decision";
     selectedStep = findFederationSleepContinuityStep(runbook, "record_operator_stage_closure_decision");
@@ -1098,6 +1104,19 @@ export class FederationClient {
       timeoutMs: opts?.timeoutMs ?? this.defaultTimeoutMs,
     });
     return parseFederationStage16ClosureDecisions(json);
+  }
+
+  async getSleepContinuityPresentation(opts?: {
+    signal?: AbortSignal;
+    timeoutMs?: number;
+  }): Promise<FederationSleepContinuityPresentation> {
+    const timeoutMs = opts?.timeoutMs ?? this.defaultTimeoutMs;
+    const [status, runbook, closure] = await Promise.all([
+      this.getStatus({ signal: opts?.signal, timeoutMs }),
+      this.getSleepContinuityRunbook({ signal: opts?.signal, timeoutMs }),
+      this.getStageClosureDecisions({ limit: 1, signal: opts?.signal, timeoutMs }),
+    ]);
+    return presentFederationSleepContinuity(status, runbook, closure);
   }
 
   async listInstances(opts?: {

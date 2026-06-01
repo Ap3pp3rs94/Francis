@@ -51833,6 +51833,38 @@ Latest validation for Stage 16 sleep-continuity UI presentation:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 sleep-continuity client presentation is read-only
+
+Roadmap area: Stage 16 / Federation, workstation sleep continuity runtime
+readback.
+
+Material change:
+
+- `FederationClient` now exposes `getSleepContinuityPresentation(...)`, a
+  read-only helper that fetches `/federation/status`,
+  `/federation/sleep-continuity-runbook`, and
+  `/federation/stage-closure-decisions?limit=1`, then returns the bounded UI
+  presentation model.
+- The presentation helper now treats any non-sleep-continuity blocker in
+  `/federation/status` as higher precedence than runbook evidence, so stale or
+  optimistic runbook data cannot push the UI toward post-resume proof while
+  earlier live-runtime readbacks remain missing.
+- The UI contract test proves this precedence using a deliberately conflicting
+  readback: status blocked on `live_pairing_flow_observed` while the runbook has
+  post-resume evidence. The returned state remains
+  `blocked_on_prior_live_readbacks`.
+- This remains presentation-only. It performs only GET requests, does not run
+  commands, write evidence, write receipts, write registry state, write memory,
+  grant execution authority, grant mutation authority, infer workstation
+  sleep/resume, or mark Stage 16 closed.
+
+Latest validation for Stage 16 sleep-continuity client presentation:
+
+- `cd apps/chat_ui; npm run test -- federation_hub`
+  Result: `passed; 186 passed`.
+- `cd apps/chat_ui; npm run build`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

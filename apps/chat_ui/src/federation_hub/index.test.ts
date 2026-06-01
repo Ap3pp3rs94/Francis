@@ -291,6 +291,7 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
     const review = await client.getCompletionReview({ timeoutMs: 50 });
     const runbook = await client.getSleepContinuityRunbook({ timeoutMs: 50 });
     const closure = await client.getStageClosureDecisions({ limit: 5, timeoutMs: 50 });
+    const presentation = await client.getSleepContinuityPresentation({ timeoutMs: 50 });
 
     assert.deepEqual(requests, [
       { path: "/federation/status", method: "GET", limit: null },
@@ -298,6 +299,9 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
       { path: "/federation/completion-review", method: "GET", limit: null },
       { path: "/federation/sleep-continuity-runbook", method: "GET", limit: null },
       { path: "/federation/stage-closure-decisions", method: "GET", limit: "5" },
+      { path: "/federation/status", method: "GET", limit: null },
+      { path: "/federation/sleep-continuity-runbook", method: "GET", limit: null },
+      { path: "/federation/stage-closure-decisions", method: "GET", limit: "1" },
     ]);
     assert.equal(status.stage16_status, "stage16_contracts_ready_completion_blocked");
     assert.equal(status.stage16_completion_review_ready, false);
@@ -393,6 +397,14 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
     assert.equal(closure.captures_screen, false);
     assert.equal(closure.grants_execution_authority, false);
     assert.equal(closure.grants_mutation_authority, false);
+
+    assert.equal(presentation.state, "blocked_on_prior_live_readbacks");
+    assert.deepEqual(presentation.blockers, ["live_pairing_flow_observed", "workstation_sleep_continuity_validated"]);
+    assert.equal(presentation.selected_step_id, undefined);
+    assert.equal(presentation.post_resume_evidence_ready, true);
+    assert.equal(presentation.writes_evidence_when_run, false);
+    assert.equal(presentation.writes_receipts_when_run, false);
+    assert.equal(presentation.mutation_available_from_ui, false);
   } finally {
     restoreFetch();
   }
