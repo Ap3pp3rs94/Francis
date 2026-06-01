@@ -16,6 +16,7 @@ ADVERSARIAL_HARDENING_INJECTION_CONTAINMENT_KIND = (
 ADVERSARIAL_HARDENING_QUARANTINE_MODEL_KIND = "francis.stage14.adversarial_hardening.quarantine_model_contract"
 ADVERSARIAL_HARDENING_RED_TEAM_SUITE_KIND = "francis.stage14.adversarial_hardening.red_team_regression_suite"
 ADVERSARIAL_HARDENING_POLICY_BYPASS_SUITE_KIND = "francis.stage14.adversarial_hardening.policy_bypass_regression_suite"
+ADVERSARIAL_HARDENING_COMPLETION_REVIEW_KIND = "francis.stage14.adversarial_hardening.completion_review"
 
 
 def adversarial_hardening_status_snapshot() -> dict[str, Any]:
@@ -98,6 +99,7 @@ def adversarial_hardening_status_snapshot() -> dict[str, Any]:
             "quarantine_model_contract": "/adversarial-hardening/quarantine-model-contract",
             "red_team_regression_suite": "/adversarial-hardening/red-team-regression-suite",
             "policy_bypass_regression_suite": "/adversarial-hardening/policy-bypass-regression-suite",
+            "completion_review": "/adversarial-hardening/completion-review",
             "stage13_closure_readback": "/trust-calibration/stage-closure-decisions",
         },
         "governance": _governance(),
@@ -447,6 +449,134 @@ def adversarial_hardening_policy_bypass_regression_suite() -> dict[str, Any]:
     }
 
 
+def adversarial_hardening_completion_review() -> dict[str, Any]:
+    status = adversarial_hardening_status_snapshot()
+    policy_bypass_suite = adversarial_hardening_policy_bypass_regression_suite()
+    quarantine_contract = adversarial_hardening_quarantine_model_contract()
+    deliverables = [item for item in status.get("deliverables", []) if isinstance(item, dict)]
+    ready_count = _safe_int(status.get("ready_count"))
+    required_count = _safe_int(status.get("required_count"))
+    policy_invariants = _as_dict(policy_bypass_suite.get("policy_invariants"))
+    checks = [
+        _review_check(
+            "stage13_ledger_closure_backstop",
+            passed=bool(status.get("stage13_closed_by_receipt")),
+            evidence=_safe_text(status.get("stage13_latest_closure_receipt_id"))
+            or "/trust-calibration/stage-closure-decisions",
+        ),
+        _review_check(
+            "injection_containment_contract_ready",
+            passed=bool(status.get("injection_containment_contract_ready")),
+            evidence="/adversarial-hardening/injection-containment-contract",
+        ),
+        _review_check(
+            "quarantine_model_contract_ready",
+            passed=bool(status.get("quarantine_model_contract_ready")),
+            evidence="/adversarial-hardening/quarantine-model-contract",
+        ),
+        _review_check(
+            "red_team_suite_ready",
+            passed=bool(status.get("red_team_suite_ready")),
+            evidence="/adversarial-hardening/red-team-regression-suite",
+        ),
+        _review_check(
+            "policy_bypass_regression_suite_ready",
+            passed=bool(status.get("policy_bypass_regression_suite_ready")),
+            evidence="/adversarial-hardening/policy-bypass-regression-suite",
+        ),
+        _review_check(
+            "all_deliverables_ready",
+            passed=bool(deliverables)
+            and ready_count == required_count
+            and required_count >= 1
+            and all(bool(item.get("ready")) for item in deliverables),
+            evidence="adversarial_hardening.status.deliverables",
+        ),
+        _review_check(
+            "content_cannot_grant_authority",
+            passed=bool(policy_invariants.get("content_cannot_grant_authority")),
+            evidence="policy_bypass_regression_suite.policy_invariants.content_cannot_grant_authority",
+        ),
+        _review_check(
+            "policy_bypasses_tested_continuously",
+            passed=bool(policy_bypass_suite.get("policy_bypass_regression_suite_ready"))
+            and _safe_int(policy_bypass_suite.get("case_count")) >= 5,
+            evidence="/adversarial-hardening/policy-bypass-regression-suite",
+        ),
+        _review_check(
+            "suspicious_input_becomes_evidence_backed_review_item",
+            passed=bool(quarantine_contract.get("suspicious_input_becomes_review_item")),
+            evidence="/adversarial-hardening/quarantine-model-contract",
+        ),
+        _review_check(
+            "stage_not_marked_closed_by_review",
+            passed=True,
+            evidence="completion_review_is_read_only",
+        ),
+    ]
+    review_ready = all(bool(check.get("passed")) for check in checks)
+    blockers = [str(check["id"]) for check in checks if not bool(check.get("passed"))]
+    return {
+        "ok": True,
+        "kind": ADVERSARIAL_HARDENING_COMPLETION_REVIEW_KIND,
+        "stage": STAGE14_ADVERSARIAL_HARDENING_STAGE,
+        "source_id": "adversarial_hardening",
+        "status": "ready" if review_ready else "blocked",
+        "stage14_completion_review_ready": review_ready,
+        "stage_closure_decision_required": review_ready,
+        "stage13_closed_by_receipt": bool(status.get("stage13_closed_by_receipt")),
+        "stage13_latest_closure_receipt_id": _safe_text(status.get("stage13_latest_closure_receipt_id")),
+        "injection_containment_contract_ready": bool(status.get("injection_containment_contract_ready")),
+        "quarantine_model_contract_ready": bool(status.get("quarantine_model_contract_ready")),
+        "red_team_suite_ready": bool(status.get("red_team_suite_ready")),
+        "policy_bypass_regression_suite_ready": bool(status.get("policy_bypass_regression_suite_ready")),
+        "ready_count": ready_count,
+        "required_count": required_count,
+        "checks": checks,
+        "blockers": blockers,
+        "done_criteria": {
+            "content_cannot_grant_authority": bool(policy_invariants.get("content_cannot_grant_authority")),
+            "policy_bypasses_tested_continuously": bool(
+                policy_bypass_suite.get("policy_bypass_regression_suite_ready")
+            ),
+            "suspicious_input_becomes_evidence_backed_review_items": bool(
+                quarantine_contract.get("suspicious_input_becomes_review_item")
+            ),
+            "system_stays_governed_in_hostile_environments": bool(status.get("red_team_suite_ready"))
+            and bool(policy_bypass_suite.get("policy_bypass_regression_suite_ready")),
+        },
+        "reads_receipts": True,
+        "writes_receipts": False,
+        "writes_memory": False,
+        "writes_quarantine": False,
+        "scores_model_output": False,
+        "executes_actions": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "marks_stage_closed": False,
+        "governance": {
+            **_governance(),
+            "completion_review_only": True,
+            "stage_closure_decision_required": review_ready,
+            "requires_stage13_ledger_closure": True,
+            "requires_injection_containment": True,
+            "requires_quarantine_model": True,
+            "requires_red_team_regression_suite": True,
+            "requires_policy_bypass_regression_suite": True,
+            "does_not_mark_stage_closed": True,
+        },
+        "routes": status.get("routes", {}),
+        "next_smallest_truthful_gap": "stage14_operator_stage_closure_decision"
+        if review_ready
+        else _safe_text(status.get("next_smallest_truthful_gap")) or "stage14_completion_review",
+    }
+
+
 def _policy_bypass_content_claim_case() -> dict[str, Any]:
     result = InputSanitizer().sanitize_user_text(
         (
@@ -706,6 +836,15 @@ def _deliverable(
     }
 
 
+def _review_check(check_id: str, *, passed: bool, evidence: str) -> dict[str, Any]:
+    return {
+        "id": check_id,
+        "passed": passed,
+        "status": "passed" if passed else "blocked",
+        "evidence": evidence,
+    }
+
+
 def _governance() -> dict[str, Any]:
     return {
         "read_only": True,
@@ -732,6 +871,17 @@ def _signal_codes(signals: Any) -> list[str]:
         if code:
             codes.append(code)
     return codes
+
+
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def _safe_text(value: Any) -> str:

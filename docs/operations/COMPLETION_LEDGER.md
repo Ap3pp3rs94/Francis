@@ -50138,6 +50138,52 @@ Latest validation for Stage 14 policy-bypass regression suite:
   tests/test_api_adversarial_hardening.py tests/test_api_contract_chat_ui.py`
   Result: `passed`
 
+### 2026-05-31 - Stage 14 completion review is ready but does not close the stage
+
+Roadmap area: Stage 14 / Adversarial Hardening, completion review before
+operator closure decision.
+
+Material change:
+
+- Added read-only `/adversarial-hardening/completion-review`.
+- The completion review checks the Stage 13 closure backstop, injection
+  containment, quarantine model, red-team regression suite, policy-bypass
+  regression suite, all-deliverables readiness, content/authority separation,
+  continuous policy-bypass testing, evidence-backed suspicious-input review,
+  and the rule that completion review itself does not mark the stage closed.
+- The review reports the Stage 14 roadmap done criteria as ready, but it
+  intentionally does not write a stage-closure receipt or mutate runtime stage
+  state.
+- Current readback reports `status=ready`,
+  `stage14_completion_review_ready=true`,
+  `stage_closure_decision_required=true`, `ready_count=5`,
+  `required_count=5`, `blocker_count=0`, `marks_stage_closed=false`, and
+  `next_smallest_truthful_gap=stage14_operator_stage_closure_decision`.
+
+Latest validation for Stage 14 completion review:
+
+- Direct local `TestClient` readback of GET
+  `/adversarial-hardening/completion-review`.
+  Result: `status=ready; stage14_completion_review_ready=true;
+  stage_closure_decision_required=true; ready_count=5; required_count=5;
+  blocker_count=0; marks_stage_closed=false;
+  next_smallest_truthful_gap=stage14_operator_stage_closure_decision`.
+- `python -m pytest tests/test_api_adversarial_hardening.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short`
+  Result: `passed; 7 passed`
+- `python -m mypy src/francis/adversarial_hardening.py
+  src/francis/api/routes/adversarial_hardening.py`
+  Result: `passed`
+- `python -m ruff check src/francis/adversarial_hardening.py
+  src/francis/api/routes/adversarial_hardening.py
+  tests/test_api_adversarial_hardening.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/adversarial_hardening.py
+  src/francis/api/routes/adversarial_hardening.py
+  tests/test_api_adversarial_hardening.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

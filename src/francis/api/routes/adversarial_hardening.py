@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import APIRouter
 
 from francis.adversarial_hardening import (
+    adversarial_hardening_completion_review,
     adversarial_hardening_injection_containment_contract,
     adversarial_hardening_policy_bypass_regression_suite,
     adversarial_hardening_quarantine_model_contract,
@@ -38,3 +39,8 @@ def red_team_regression_suite() -> dict[str, Any]:
 @router.get("/policy-bypass-regression-suite")
 def policy_bypass_regression_suite() -> dict[str, Any]:
     return adversarial_hardening_policy_bypass_regression_suite()
+
+
+@router.get("/completion-review")
+def completion_review() -> dict[str, Any]:
+    return adversarial_hardening_completion_review()

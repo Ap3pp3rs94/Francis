@@ -252,6 +252,69 @@ def test_adversarial_hardening_red_team_regression_suite_replays_bounded_corpus(
     assert status["next_smallest_truthful_gap"] == "stage14_completion_review"
 
 
+def test_adversarial_hardening_completion_review_is_ready_but_does_not_close_stage(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage13_closure_receipt(data_root)
+
+    client = TestClient(create_app())
+    review = client.get("/adversarial-hardening/completion-review").json()
+
+    assert review["ok"] is True
+    assert review["kind"] == "francis.stage14.adversarial_hardening.completion_review"
+    assert review["status"] == "ready"
+    assert review["stage14_completion_review_ready"] is True
+    assert review["stage_closure_decision_required"] is True
+    assert review["stage13_closed_by_receipt"] is True
+    assert review["injection_containment_contract_ready"] is True
+    assert review["quarantine_model_contract_ready"] is True
+    assert review["red_team_suite_ready"] is True
+    assert review["policy_bypass_regression_suite_ready"] is True
+    assert review["ready_count"] == 5
+    assert review["required_count"] == 5
+    assert review["blockers"] == []
+    assert review["done_criteria"]["content_cannot_grant_authority"] is True
+    assert review["done_criteria"]["policy_bypasses_tested_continuously"] is True
+    assert review["done_criteria"]["suspicious_input_becomes_evidence_backed_review_items"] is True
+    assert review["done_criteria"]["system_stays_governed_in_hostile_environments"] is True
+    assert review["reads_receipts"] is True
+    assert review["writes_receipts"] is False
+    assert review["writes_memory"] is False
+    assert review["writes_quarantine"] is False
+    assert review["executes_actions"] is False
+    assert review["runs_tools"] is False
+    assert review["runs_shell"] is False
+    assert review["runs_git"] is False
+    assert review["launches_browser"] is False
+    assert review["captures_screen"] is False
+    assert review["grants_execution_authority"] is False
+    assert review["grants_mutation_authority"] is False
+    assert review["marks_stage_closed"] is False
+    assert review["governance"]["completion_review_only"] is True
+    assert review["governance"]["stage_closure_decision_required"] is True
+    assert review["governance"]["does_not_mark_stage_closed"] is True
+    assert review["routes"]["completion_review"] == "/adversarial-hardening/completion-review"
+    assert review["next_smallest_truthful_gap"] == "stage14_operator_stage_closure_decision"
+
+    checks = {item["id"]: item for item in review["checks"]}
+    assert set(checks) == {
+        "stage13_ledger_closure_backstop",
+        "injection_containment_contract_ready",
+        "quarantine_model_contract_ready",
+        "red_team_suite_ready",
+        "policy_bypass_regression_suite_ready",
+        "all_deliverables_ready",
+        "content_cannot_grant_authority",
+        "policy_bypasses_tested_continuously",
+        "suspicious_input_becomes_evidence_backed_review_item",
+        "stage_not_marked_closed_by_review",
+    }
+    assert all(item["passed"] is True for item in checks.values())
+
+
 def test_adversarial_hardening_policy_bypass_regression_suite_is_read_only_and_governed(
     monkeypatch,
     tmp_path: Path,
