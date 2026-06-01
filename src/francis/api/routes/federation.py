@@ -1851,6 +1851,8 @@ def _stage16_sleep_continuity_selected_action_readiness(
         "command_validation_blockers": command_validation_blockers,
         "next_operator_step": "operator_recapture_post_resume_evidence_for_latest_pre_sleep"
         if step_id == "capture_post_resume_evidence" and post_resume_evidence_conflict
+        else "operator_write_sleep_resume_confirmation_receipt"
+        if step_id == "capture_post_resume_evidence" and "operator_confirmed_sleep_resume_missing" in run_blockers
         else "operator_confirm_sleep_resume_then_capture_post_resume_evidence"
         if step_id == "capture_post_resume_evidence" and run_blockers
         else _safe_str(selected_step.get("title")).strip(),

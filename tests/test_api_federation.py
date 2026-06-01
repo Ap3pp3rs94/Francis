@@ -1384,7 +1384,7 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     ]
     assert action["selected_action_readiness"]["command_validation_blockers"] == []
     assert action["selected_action_readiness"]["next_operator_step"] == (
-        "operator_confirm_sleep_resume_then_capture_post_resume_evidence"
+        "operator_write_sleep_resume_confirmation_receipt"
     )
     from francis.kernel.paths import repo_root
 

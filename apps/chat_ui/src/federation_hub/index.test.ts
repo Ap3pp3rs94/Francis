@@ -1041,7 +1041,7 @@ test("federation sleep-continuity action parser preserves selected read-only ste
         "post_resume_evidence_capture_command_bound",
       ],
       command_validation_blockers: [],
-      next_operator_step: "operator_confirm_sleep_resume_then_capture_post_resume_evidence",
+      next_operator_step: "operator_write_sleep_resume_confirmation_receipt",
       selected_step_id: "capture_post_resume_evidence",
       pre_sleep_evidence_ready: true,
       post_resume_evidence_ready: false,
@@ -1503,7 +1503,7 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   assert.equal(action.after_manual_execution_readback?.projection_marks_stage16_closed, false);
   assert.equal(
     action.selected_action_readiness?.next_operator_step,
-    "operator_confirm_sleep_resume_then_capture_post_resume_evidence",
+    "operator_write_sleep_resume_confirmation_receipt",
   );
   assert.equal(action.primary_command?.includes("-OperatorConfirmedSleepResume"), true);
   assert.equal(

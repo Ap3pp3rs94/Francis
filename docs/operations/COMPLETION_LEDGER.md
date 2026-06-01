@@ -54131,6 +54131,50 @@ Latest validation for Stage 16 Federation Hub receipt-first fixture alignment:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 action handoff names receipt-writing next
+
+Roadmap area: Stage 16 / Federation, workstation sleep-continuity action
+handoff truthfulness.
+
+Material change:
+
+- `/federation/sleep-continuity-action` now reports
+  `operator_write_sleep_resume_confirmation_receipt` as the selected action
+  readiness `next_operator_step` when post-resume capture is selected but
+  receipt-backed operator sleep/resume confirmation is missing.
+- The older `operator_confirm_sleep_resume_then_capture_post_resume_evidence`
+  wording remains only as a fallback for non-receipt capture blockers.
+- Federation Hub tests now assert the receipt-writing next operator step.
+- This does not write the confirmation receipt, capture post-resume evidence,
+  mutate runtime state, grant authority, or mark Stage 16 closed.
+
+Latest validation for Stage 16 receipt-writing action handoff:
+
+- `python -m pytest tests/test_api_federation.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 26 passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`.
+- `npm run test -- federation_hub`
+  Result: `passed; 192 passed`.
+- `npm run build`
+  Result: `passed`.
+- Live `TestClient` readback:
+  Result: `passed; action_status=capture_post_resume_evidence,
+  readiness_status=waiting_for_operator_confirmation,
+  next_operator_step=operator_write_sleep_resume_confirmation_receipt,
+  action_next_gap=stage16_sleep_resume_confirmation_receipt,
+  status_next_step=write_sleep_resume_confirmation_receipt`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
