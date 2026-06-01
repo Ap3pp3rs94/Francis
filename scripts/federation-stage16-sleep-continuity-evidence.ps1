@@ -102,6 +102,8 @@ function New-GovernancePayload {
     grants_execution_authority = $false
     grants_mutation_authority = $false
     subdelegation_allowed = $false
+    committed_pre_sleep_path_must_stay_under_project_evidence_root = $true
+    committed_pre_sleep_path_traversal_blocked = $true
   }
 }
 
@@ -112,6 +114,19 @@ function Write-JsonFile {
   )
   $Utf8NoBom = [System.Text.UTF8Encoding]::new($false)
   [System.IO.File]::WriteAllText($Path, (($Payload | ConvertTo-Json -Depth 8) + [Environment]::NewLine), $Utf8NoBom)
+}
+
+function Test-PathInsideRoot {
+  param(
+    [string]$Path,
+    [string]$Root
+  )
+  $FullPath = [System.IO.Path]::GetFullPath($Path).TrimEnd('\', '/')
+  $FullRoot = [System.IO.Path]::GetFullPath($Root).TrimEnd('\', '/')
+  return (
+    $FullPath.Equals($FullRoot, [System.StringComparison]::OrdinalIgnoreCase) -or
+    $FullPath.StartsWith(($FullRoot + [System.IO.Path]::DirectorySeparatorChar), [System.StringComparison]::OrdinalIgnoreCase)
+  )
 }
 
 $ProjectEvidenceRoot = [System.IO.Path]::GetFullPath((Join-Path $RepoRoot 'data\test_runs\federation-stage16-sleep-continuity-evidence'))
@@ -215,6 +230,10 @@ if ($Mode -eq 'PostResume') {
   $PrePath = [System.IO.Path]::GetFullPath($PreSleepEvidencePath)
   if (-not (Test-Path -LiteralPath $PrePath -PathType Leaf)) {
     Write-Stage16Failure -ErrorCode 'pre_sleep_evidence_file_missing' -EvidenceRoot $EvidenceRoot
+    exit 1
+  }
+  if ($CommitEvidence -and -not (Test-PathInsideRoot -Path $PrePath -Root $ProjectEvidenceRoot)) {
+    Write-Stage16Failure -ErrorCode 'pre_sleep_evidence_path_outside_commit_root' -EvidenceRoot $EvidenceRoot
     exit 1
   }
 

@@ -52718,6 +52718,55 @@ Latest validation for Stage 16 operator sleep/resume gate:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 sleep evidence commit path rejects external pre-sleep markers
+
+Roadmap area: Stage 16 / Federation, workstation sleep-continuity gate
+truthfulness and stale-state/path-boundary safety.
+
+Material change:
+
+- `scripts/federation-stage16-sleep-continuity-evidence.ps1` now rejects
+  `PostResume -CommitEvidence` when `-PreSleepEvidencePath` resolves outside
+  the project Stage 16 sleep-continuity evidence root.
+- The script's governance payload now declares that committed pre-sleep paths
+  must stay under the project evidence root and that committed pre-sleep path
+  traversal is blocked.
+- This prevents an operator-edited commit command from mixing an external or
+  stale pre-sleep marker into the committed Stage 16 evidence directory.
+- This does not write runtime readbacks, mark Stage 16 closed, infer
+  workstation sleep/resume, grant authority, or change the UI command surface.
+- Stage 16 remains open until live post-resume evidence and the receipt-backed
+  completion/closure gates are satisfied.
+
+Latest validation for Stage 16 committed sleep evidence path guard:
+
+- Live PowerShell status readback:
+  `.\scripts\federation-stage16-sleep-continuity-evidence.ps1 -Mode Status
+  -CommitEvidence`
+  Result: `status=ready_for_operator_evidence`, `commit_evidence=true`,
+  `evidence_written=false`,
+  `evidence_root=D:\Francis\data\test_runs\federation-stage16-sleep-continuity-evidence`,
+  `committed_pre_sleep_path_must_stay_under_project_evidence_root=true`,
+  `committed_pre_sleep_path_traversal_blocked=true`, and
+  `next_smallest_truthful_gap=stage16_sleep_continuity_runtime_readback`.
+- PowerShell parser check for
+  `scripts/federation-stage16-sleep-continuity-evidence.ps1`
+  Result: `passed; parser_ok`.
+- `python -m pytest
+  tests/test_federation_stage16_sleep_continuity_evidence_script.py
+  -q --tb=short`
+  Result: `passed; 6 passed`.
+- `python -m pytest tests/test_api_federation.py -q --tb=short`
+  Result: `passed; 19 passed`.
+- `python -m ruff check
+  tests/test_federation_stage16_sleep_continuity_evidence_script.py`
+  Result: `passed`.
+- `python -m ruff format --check
+  tests/test_federation_stage16_sleep_continuity_evidence_script.py`
+  Result: `passed`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

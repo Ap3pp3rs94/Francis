@@ -81,6 +81,8 @@ def test_federation_stage16_sleep_continuity_evidence_status_is_read_only(tmp_pa
     assert payload["governance"]["does_not_infer_sleep_from_delay"] is True
     assert payload["governance"]["writes_runtime_readback"] is False
     assert payload["governance"]["marks_stage16_closed"] is False
+    assert payload["governance"]["committed_pre_sleep_path_must_stay_under_project_evidence_root"] is True
+    assert payload["governance"]["committed_pre_sleep_path_traversal_blocked"] is True
     assert not output_dir.exists()
 
 
@@ -218,6 +220,51 @@ def test_federation_stage16_sleep_continuity_evidence_post_resume_feeds_runtime_
     assert proof_payload["readback_id"] == "workstation_sleep_continuity_validated"
     assert proof_payload["ready_count"] == 1
     assert proof_payload["ready_to_close"] is False
+
+
+def test_federation_stage16_sleep_continuity_evidence_commit_rejects_external_pre_sleep_path(
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "external_evidence"
+    record_id = "stage16-sleep-external-root-test"
+    pre_proc = _run_evidence(
+        "-Mode",
+        "PreSleep",
+        "-OutputDir",
+        str(output_dir),
+        "-ContinuityRecordId",
+        record_id,
+    )
+    assert pre_proc.returncode == 0, pre_proc.stderr or pre_proc.stdout
+    pre_payload = json.loads(pre_proc.stdout)
+
+    proc = _run_evidence(
+        "-Mode",
+        "PostResume",
+        "-CommitEvidence",
+        "-PreSleepEvidencePath",
+        pre_payload["evidence_path"],
+        "-OperatorConfirmedSleepResume",
+        env={"FRANCIS_ENV_PROFILE": "dev"},
+    )
+
+    assert proc.returncode == 1
+    payload = json.loads(proc.stdout)
+    assert payload["status"] == "blocked"
+    assert payload["error"] == "pre_sleep_evidence_path_outside_commit_root"
+    assert payload["commit_evidence"] is True
+    assert payload["evidence_written"] is False
+    assert payload["writes_runtime_readback"] is False
+    assert payload["marks_stage16_closed"] is False
+
+    project_post_resume = (
+        _repo_root()
+        / "data"
+        / "test_runs"
+        / "federation-stage16-sleep-continuity-evidence"
+        / f"post_resume_{record_id}.json"
+    )
+    assert not project_post_resume.exists()
 
 
 def test_federation_stage16_sleep_continuity_evidence_blocks_commit_in_production() -> None:
