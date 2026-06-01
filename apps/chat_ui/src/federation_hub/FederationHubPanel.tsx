@@ -330,6 +330,14 @@ export function FederationHubPanel(props: { baseUrl: string }) {
             {" / "}marks closed <code>{yesNo(confirmations.confirmation_receipt_command_marks_stage16_closed)}</code>
           </div>
           <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
+            status actor <code>{codeValue(status?.sleep_continuity_confirmation_receipt_actor)}</code>
+            {" / "}accepted{" "}
+            <code>{yesNo(Boolean(status?.sleep_continuity_confirmation_receipt_requested_actor_ready))}</code>
+            {" / "}bound <code>{yesNo(Boolean(status?.sleep_continuity_confirmation_receipt_actor_bound))}</code>
+            {" / "}substitution{" "}
+            <code>{yesNo(Boolean(status?.sleep_continuity_confirmation_receipt_command_requires_actor_substitution))}</code>
+          </div>
+          <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
             requested actor <code>{codeValue(confirmations.confirmation_receipt_requested_actor)}</code>
             {" / "}accepted{" "}
             <code>{yesNo(confirmations.confirmation_receipt_requested_actor_ready)}</code>

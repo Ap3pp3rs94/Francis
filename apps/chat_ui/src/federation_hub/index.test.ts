@@ -99,6 +99,22 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
         sleep_continuity_confirmation_blocker: "",
         sleep_continuity_blocked_reason: "prior_live_readback_missing",
         sleep_continuity_sleep_resume_confirmation_is_current_blocker: false,
+        sleep_continuity_confirmation_receipt_requested_actor: parsed.searchParams.get("actor") ?? "",
+        sleep_continuity_confirmation_receipt_requested_actor_ready:
+          parsed.searchParams.get("actor") === "test.federation.sleep",
+        sleep_continuity_confirmation_receipt_actor:
+          parsed.searchParams.get("actor") === "test.federation.sleep" ? "test.federation.sleep" : "",
+        sleep_continuity_confirmation_receipt_actor_bound: parsed.searchParams.get("actor") === "test.federation.sleep",
+        sleep_continuity_confirmation_receipt_actor_placeholder:
+          parsed.searchParams.get("actor") === "test.federation.sleep"
+            ? ""
+            : "<actor_with_federation.stage16.sleep_resume.confirmation.write>",
+        sleep_continuity_confirmation_receipt_command_requires_actor_substitution:
+          parsed.searchParams.get("actor") !== "test.federation.sleep",
+        sleep_continuity_confirmation_receipt_command_records_receipt: true,
+        sleep_continuity_confirmation_receipt_command_writes_evidence: false,
+        sleep_continuity_confirmation_receipt_command_marks_stage16_closed: false,
+        sleep_continuity_confirmation_receipt_command_projection_only: true,
         sleep_continuity_next_step: "stage16_live_federation_runtime_readback",
         ready_count: 6,
         required_count: 6,
@@ -498,6 +514,16 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
     assert.equal(status.sleep_continuity_confirmation_blocker, undefined);
     assert.equal(status.sleep_continuity_blocked_reason, "prior_live_readback_missing");
     assert.equal(status.sleep_continuity_sleep_resume_confirmation_is_current_blocker, false);
+    assert.equal(status.sleep_continuity_confirmation_receipt_requested_actor, "test.federation.sleep");
+    assert.equal(status.sleep_continuity_confirmation_receipt_requested_actor_ready, true);
+    assert.equal(status.sleep_continuity_confirmation_receipt_actor, "test.federation.sleep");
+    assert.equal(status.sleep_continuity_confirmation_receipt_actor_bound, true);
+    assert.equal(status.sleep_continuity_confirmation_receipt_actor_placeholder, undefined);
+    assert.equal(status.sleep_continuity_confirmation_receipt_command_requires_actor_substitution, false);
+    assert.equal(status.sleep_continuity_confirmation_receipt_command_records_receipt, true);
+    assert.equal(status.sleep_continuity_confirmation_receipt_command_writes_evidence, false);
+    assert.equal(status.sleep_continuity_confirmation_receipt_command_marks_stage16_closed, false);
+    assert.equal(status.sleep_continuity_confirmation_receipt_command_projection_only, true);
     assert.equal(status.sleep_continuity_next_step, "stage16_live_federation_runtime_readback");
     assert.equal(status.next_smallest_truthful_gap, "stage16_live_federation_runtime_readback");
 

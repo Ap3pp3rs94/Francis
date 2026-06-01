@@ -54911,6 +54911,31 @@ Latest validation for Stage 16 status receipt actor binding:
   confirmation_receipt_command_writes_evidence=false;
   confirmation_receipt_command_marks_stage16_closed=false`.
 
+### 2026-06-01 - Stage 16 Hub shows status-level receipt actor binding
+
+Roadmap area: Stage 16 / Federation, sleep-continuity confirmation receipt
+operator surface.
+
+Material change:
+
+- Federation Hub now displays the status-level sleep/resume confirmation
+  receipt actor, whether `/federation/status` accepted the requested actor,
+  whether the command is actor-bound, and whether actor substitution is still
+  required.
+- The Federation Hub client contract now asserts that the status request sends
+  the configured receipt actor and preserves the returned actor-bound receipt
+  fields.
+- This is display-only: it does not write receipts, capture evidence, run
+  shell from the UI, grant authority, infer workstation sleep/resume, or close
+  Stage 16.
+
+Latest validation for Stage 16 Hub status receipt actor display:
+
+- `npm run test -- federation_hub`
+  Result: `passed; 193 passed`.
+- `npm run build`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
