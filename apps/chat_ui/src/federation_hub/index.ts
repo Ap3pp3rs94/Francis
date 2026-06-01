@@ -294,6 +294,37 @@ export type FederationSleepContinuityRunbook = {
   next_smallest_truthful_gap?: string;
 };
 
+export type FederationSleepContinuityActionState =
+  | "blocked_on_prior_live_readbacks"
+  | "capture_pre_sleep_evidence"
+  | "capture_post_resume_evidence"
+  | "run_sleep_continuity_runtime_proof"
+  | "record_stage16_closure_decision"
+  | "stage16_closed";
+
+export type FederationSleepContinuityPresentation = {
+  state: FederationSleepContinuityActionState;
+  status_label: string;
+  selected_step_id?: string;
+  primary_command?: string;
+  primary_route?: string;
+  method?: string;
+  required_scope?: string;
+  evidence_path?: string;
+  blockers: string[];
+  pre_sleep_evidence_ready: boolean;
+  post_resume_evidence_ready: boolean;
+  sleep_continuity_ready: boolean;
+  ready_to_close: boolean;
+  stage16_closed_by_receipt: boolean;
+  operator_action_required: boolean;
+  operator_confirmation_required: boolean;
+  writes_evidence_when_run: boolean;
+  writes_receipts_when_run: boolean;
+  mutation_available_from_ui: boolean;
+  next_smallest_truthful_gap?: string;
+};
+
 export type FederationListResponse<T> = { items: T[] };
 
 export class FederationApiError extends Error {
@@ -809,6 +840,116 @@ export function parseFederationSleepContinuityRunbook(raw: unknown): FederationS
     marks_stage16_closed: safeBoolean(body.marks_stage16_closed),
     next_smallest_truthful_gap: optionalString(body.next_smallest_truthful_gap),
   };
+}
+
+function findFederationSleepContinuityStep(
+  runbook: FederationSleepContinuityRunbook | undefined,
+  id: string,
+): FederationSleepContinuityRunbookStep | undefined {
+  return runbook?.steps.find((step) => step.id === id);
+}
+
+function singleSleepContinuityBlocker(blockers: string[]): boolean {
+  return blockers.length === 1 && blockers[0] === "workstation_sleep_continuity_validated";
+}
+
+function buildFederationSleepContinuityPresentation(
+  state: FederationSleepContinuityActionState,
+  opts: {
+    status: FederationStage16Status;
+    runbook?: FederationSleepContinuityRunbook;
+    closure?: FederationStage16ClosureDecisions;
+    selectedStep?: FederationSleepContinuityRunbookStep;
+    blockers: string[];
+    preSleepEvidenceReady: boolean;
+    postResumeEvidenceReady: boolean;
+    sleepContinuityReady: boolean;
+    readyToClose: boolean;
+    stage16ClosedByReceipt: boolean;
+  },
+): FederationSleepContinuityPresentation {
+  const labelByState: Record<FederationSleepContinuityActionState, string> = {
+    blocked_on_prior_live_readbacks: "Blocked on prior live readbacks",
+    capture_pre_sleep_evidence: "Capture pre-sleep evidence",
+    capture_post_resume_evidence: "Capture post-resume evidence",
+    run_sleep_continuity_runtime_proof: "Run sleep-continuity runtime proof",
+    record_stage16_closure_decision: "Record Stage 16 closure decision",
+    stage16_closed: "Stage 16 closed by receipt",
+  };
+  const selectedStep = opts.selectedStep;
+  return {
+    state,
+    status_label: labelByState[state],
+    selected_step_id: selectedStep?.id,
+    primary_command: selectedStep?.command,
+    primary_route: selectedStep?.route,
+    method: selectedStep?.method,
+    required_scope: selectedStep?.required_scope,
+    evidence_path: selectedStep?.latest_evidence_path,
+    blockers: opts.blockers,
+    pre_sleep_evidence_ready: opts.preSleepEvidenceReady,
+    post_resume_evidence_ready: opts.postResumeEvidenceReady,
+    sleep_continuity_ready: opts.sleepContinuityReady,
+    ready_to_close: opts.readyToClose,
+    stage16_closed_by_receipt: opts.stage16ClosedByReceipt,
+    operator_action_required: selectedStep?.operator_action_required ?? false,
+    operator_confirmation_required: selectedStep?.operator_confirmation_required ?? false,
+    writes_evidence_when_run: selectedStep?.writes_evidence_when_run ?? false,
+    writes_receipts_when_run: selectedStep?.writes_receipts_when_run ?? false,
+    mutation_available_from_ui: false,
+    next_smallest_truthful_gap:
+      opts.status.next_smallest_truthful_gap ??
+      opts.runbook?.next_smallest_truthful_gap ??
+      opts.closure?.next_smallest_truthful_gap,
+  };
+}
+
+export function presentFederationSleepContinuity(
+  status: FederationStage16Status,
+  runbook?: FederationSleepContinuityRunbook,
+  closure?: FederationStage16ClosureDecisions,
+): FederationSleepContinuityPresentation {
+  const preSleepEvidenceReady = status.pre_sleep_evidence_ready || runbook?.pre_sleep_evidence_ready === true;
+  const postResumeEvidenceReady = status.post_resume_evidence_ready || runbook?.post_resume_evidence_ready === true;
+  const sleepContinuityReady = status.sleep_continuity_ready || runbook?.sleep_continuity_ready === true;
+  const readyToClose = status.stage16_completion_review_ready || runbook?.ready_to_close === true;
+  const stage16ClosedByReceipt =
+    closure?.stage16_closed_by_receipt === true ||
+    runbook?.stage16_closed_by_receipt === true ||
+    status.stage16_status === "stage16_closed_by_receipt";
+  const blockers =
+    status.completion_review_blockers.length > 0 ? status.completion_review_blockers : runbook?.missing_readbacks ?? [];
+
+  let state: FederationSleepContinuityActionState = "blocked_on_prior_live_readbacks";
+  let selectedStep: FederationSleepContinuityRunbookStep | undefined;
+  if (stage16ClosedByReceipt) {
+    state = "stage16_closed";
+  } else if (readyToClose) {
+    state = "record_stage16_closure_decision";
+    selectedStep = findFederationSleepContinuityStep(runbook, "record_operator_stage_closure_decision");
+  } else if (postResumeEvidenceReady) {
+    state = "run_sleep_continuity_runtime_proof";
+    selectedStep = findFederationSleepContinuityStep(runbook, "commit_sleep_continuity_readback");
+  } else if (preSleepEvidenceReady) {
+    state = "capture_post_resume_evidence";
+    selectedStep = findFederationSleepContinuityStep(runbook, "capture_post_resume_evidence");
+  } else if (singleSleepContinuityBlocker(blockers) || runbook?.status === "ready_for_operator_sleep_resume") {
+    state = "capture_pre_sleep_evidence";
+    selectedStep = findFederationSleepContinuityStep(runbook, "capture_pre_sleep_evidence");
+  }
+
+  return buildFederationSleepContinuityPresentation(state, {
+    status,
+    runbook,
+    closure,
+    selectedStep,
+    blockers,
+    preSleepEvidenceReady,
+    postResumeEvidenceReady,
+    sleepContinuityReady,
+    readyToClose,
+    stage16ClosedByReceipt,
+  });
 }
 
 export type FederationEndpoints = {

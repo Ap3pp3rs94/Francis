@@ -51788,6 +51788,51 @@ Latest validation for Stage 16 post-resume evidence readback:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 sleep-continuity actions are UI-presentable without mutation
+
+Roadmap area: Stage 16 / Federation, workstation sleep continuity runtime
+readback.
+
+Material change:
+
+- `apps/chat_ui/src/federation_hub/index.ts` now exports a framework-agnostic
+  `presentFederationSleepContinuity(...)` helper for the operator UI.
+- The helper turns `/federation/status`, `/federation/sleep-continuity-runbook`,
+  and `/federation/stage-closure-decisions` readbacks into explicit action
+  states: prior-readback blocked, pre-sleep capture, post-resume capture,
+  runtime proof, closure decision, or receipt-backed closed.
+- The helper preserves operator confirmation requirements, selected command or
+  route metadata, receipt/evidence write expectations, blockers, and the next
+  smallest truthful gap.
+- This is presentation-only. It does not run shell commands, write evidence,
+  write receipts, write registry state, write memory, grant execution authority,
+  grant mutation authority, infer workstation sleep/resume, or mark Stage 16
+  closed.
+
+Current project-data readback:
+
+- `/federation/status` reports
+  `stage16_status=stage16_contracts_ready_completion_blocked;
+  sleep_continuity_status=pre_sleep_evidence_ready;
+  pre_sleep_evidence_ready=true;
+  post_resume_evidence_ready=false;
+  sleep_continuity_ready=false;
+  sleep_continuity_next_step=run_post_resume_evidence_with_operator_confirmation;
+  next_smallest_truthful_gap=stage16_sleep_continuity_runtime_readback`.
+
+Latest validation for Stage 16 sleep-continuity UI presentation:
+
+- `cd apps/chat_ui; npm run test -- federation_hub`
+  Result: `passed; 186 passed`.
+- `cd apps/chat_ui; npm run build`
+  Result: `passed`.
+- Direct `/federation/status` TestClient readback
+  Result: `passed; pre_sleep_evidence_ready=true;
+  post_resume_evidence_ready=false; sleep_continuity_ready=false;
+  next_smallest_truthful_gap=stage16_sleep_continuity_runtime_readback`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

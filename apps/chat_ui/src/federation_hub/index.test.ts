@@ -8,6 +8,7 @@ import {
   parseFederationSleepContinuityRunbook,
   parseFederationStage16Status,
   parseFederationStage16ClosureDecisions,
+  presentFederationSleepContinuity,
 } from "./index.ts";
 
 type FetchHandler = (url: string, init?: RequestInit) => Response | Promise<Response>;
@@ -668,4 +669,260 @@ test("federation Stage 16 parsers preserve ready receipt-backed posture", () => 
   assert.equal(runbook.grants_mutation_authority, false);
   assert.equal(runbook.marks_stage16_closed, false);
   assert.equal(runbook.next_smallest_truthful_gap, "stage16_sleep_continuity_runtime_readback");
+});
+
+test("federation sleep-continuity presentation gates post-resume capture on operator confirmation", () => {
+  const status = parseFederationStage16Status({
+    ok: true,
+    stage16_status: "stage16_contracts_ready_completion_blocked",
+    stage16_completion_review_ready: false,
+    live_runtime_readback_ready: true,
+    completion_review_blockers: ["workstation_sleep_continuity_validated"],
+    sleep_continuity_status: "pre_sleep_evidence_ready",
+    sleep_continuity_ready: false,
+    pre_sleep_evidence_ready: true,
+    post_resume_evidence_ready: false,
+    latest_pre_sleep_evidence: {
+      present: true,
+      evidence_path:
+        "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json",
+    },
+    latest_post_resume_evidence: {
+      present: false,
+    },
+    sleep_continuity_next_step: "run_post_resume_evidence_with_operator_confirmation",
+    ready_count: 6,
+    required_count: 6,
+    next_smallest_truthful_gap: "stage16_sleep_continuity_runtime_readback",
+  });
+  const runbook = parseFederationSleepContinuityRunbook({
+    ok: true,
+    status: "ready_for_operator_sleep_resume",
+    runbook_only: true,
+    prerequisite_readbacks_ready: true,
+    sleep_continuity_readback_id: "workstation_sleep_continuity_validated",
+    sleep_continuity_ready: false,
+    pre_sleep_evidence_ready: true,
+    pre_sleep_evidence: {
+      present: true,
+      evidence_path:
+        "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json",
+    },
+    post_resume_evidence_ready: false,
+    post_resume_evidence: {
+      present: false,
+    },
+    ready_to_close: false,
+    stage16_closed_by_receipt: false,
+    missing_readbacks: ["workstation_sleep_continuity_validated"],
+    steps: [
+      {
+        id: "capture_post_resume_evidence",
+        command:
+          'scripts/federation-stage16-sleep-continuity-evidence.ps1 -Mode PostResume -CommitEvidence -PreSleepEvidencePath "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json" -OperatorConfirmedSleepResume',
+        pre_sleep_evidence_required: true,
+        pre_sleep_evidence_available: true,
+        post_resume_evidence_required: false,
+        post_resume_evidence_available: false,
+        operator_action_required: true,
+        operator_confirmation_required: true,
+        writes_evidence_when_run: true,
+        writes_receipts_when_run: false,
+      },
+    ],
+    writes_evidence: false,
+    writes_receipts: false,
+    writes_registry: false,
+    writes_memory: false,
+    runs_tools: false,
+    runs_shell: false,
+    runs_git: false,
+    launches_browser: false,
+    captures_screen: false,
+    grants_execution_authority: false,
+    grants_mutation_authority: false,
+    marks_stage16_closed: false,
+    next_smallest_truthful_gap: "stage16_sleep_continuity_runtime_readback",
+  });
+
+  const presentation = presentFederationSleepContinuity(status, runbook);
+
+  assert.equal(presentation.state, "capture_post_resume_evidence");
+  assert.equal(presentation.selected_step_id, "capture_post_resume_evidence");
+  assert.equal(presentation.primary_command?.includes("-OperatorConfirmedSleepResume"), true);
+  assert.deepEqual(presentation.blockers, ["workstation_sleep_continuity_validated"]);
+  assert.equal(presentation.pre_sleep_evidence_ready, true);
+  assert.equal(presentation.post_resume_evidence_ready, false);
+  assert.equal(presentation.sleep_continuity_ready, false);
+  assert.equal(presentation.ready_to_close, false);
+  assert.equal(presentation.operator_action_required, true);
+  assert.equal(presentation.operator_confirmation_required, true);
+  assert.equal(presentation.writes_evidence_when_run, true);
+  assert.equal(presentation.writes_receipts_when_run, false);
+  assert.equal(presentation.mutation_available_from_ui, false);
+  assert.equal(presentation.next_smallest_truthful_gap, "stage16_sleep_continuity_runtime_readback");
+});
+
+test("federation sleep-continuity presentation advances to runtime proof after post-resume evidence", () => {
+  const status = parseFederationStage16Status({
+    ok: true,
+    stage16_status: "stage16_contracts_ready_completion_blocked",
+    stage16_completion_review_ready: false,
+    live_runtime_readback_ready: true,
+    completion_review_blockers: ["workstation_sleep_continuity_validated"],
+    sleep_continuity_status: "post_resume_evidence_ready",
+    sleep_continuity_ready: false,
+    pre_sleep_evidence_ready: true,
+    post_resume_evidence_ready: true,
+    sleep_continuity_next_step: "run_sleep_continuity_runtime_proof",
+    ready_count: 6,
+    required_count: 6,
+    next_smallest_truthful_gap: "stage16_sleep_continuity_runtime_readback",
+  });
+  const runbook = parseFederationSleepContinuityRunbook({
+    ok: true,
+    status: "ready_for_runtime_proof",
+    runbook_only: true,
+    prerequisite_readbacks_ready: true,
+    sleep_continuity_readback_id: "workstation_sleep_continuity_validated",
+    sleep_continuity_ready: false,
+    pre_sleep_evidence_ready: true,
+    post_resume_evidence_ready: true,
+    ready_to_close: false,
+    stage16_closed_by_receipt: false,
+    missing_readbacks: ["workstation_sleep_continuity_validated"],
+    steps: [
+      {
+        id: "commit_sleep_continuity_readback",
+        command:
+          'scripts/federation-stage16-sleep-continuity-runtime-proof.ps1 -Mode Status -CommitReceipts -PreSleepEvidencePath "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json" -PostResumeEvidencePath "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\post_resume_stage16.json"',
+        pre_sleep_evidence_required: true,
+        pre_sleep_evidence_available: true,
+        post_resume_evidence_required: true,
+        post_resume_evidence_available: true,
+        operator_action_required: true,
+        operator_confirmation_required: false,
+        writes_evidence_when_run: false,
+        writes_receipts_when_run: true,
+      },
+    ],
+    writes_evidence: false,
+    writes_receipts: false,
+    writes_registry: false,
+    writes_memory: false,
+    runs_tools: false,
+    runs_shell: false,
+    runs_git: false,
+    launches_browser: false,
+    captures_screen: false,
+    grants_execution_authority: false,
+    grants_mutation_authority: false,
+    marks_stage16_closed: false,
+    next_smallest_truthful_gap: "stage16_sleep_continuity_runtime_readback",
+  });
+
+  const presentation = presentFederationSleepContinuity(status, runbook);
+
+  assert.equal(presentation.state, "run_sleep_continuity_runtime_proof");
+  assert.equal(presentation.selected_step_id, "commit_sleep_continuity_readback");
+  assert.equal(presentation.primary_command?.includes("federation-stage16-sleep-continuity-runtime-proof.ps1"), true);
+  assert.equal(presentation.operator_confirmation_required, false);
+  assert.equal(presentation.writes_evidence_when_run, false);
+  assert.equal(presentation.writes_receipts_when_run, true);
+  assert.equal(presentation.mutation_available_from_ui, false);
+});
+
+test("federation sleep-continuity presentation separates closure action from closed receipt", () => {
+  const status = parseFederationStage16Status({
+    ok: true,
+    stage16_status: "stage16_completion_review_ready",
+    stage16_completion_review_ready: true,
+    live_runtime_readback_ready: true,
+    completion_review_blockers: [],
+    sleep_continuity_status: "validated",
+    sleep_continuity_ready: true,
+    pre_sleep_evidence_ready: true,
+    post_resume_evidence_ready: true,
+    sleep_continuity_next_step: "record_stage16_operator_stage_closure_decision",
+    ready_count: 6,
+    required_count: 6,
+    next_smallest_truthful_gap: "stage16_operator_stage_closure_decision",
+  });
+  const runbook = parseFederationSleepContinuityRunbook({
+    ok: true,
+    status: "ready_to_close",
+    runbook_only: true,
+    prerequisite_readbacks_ready: true,
+    sleep_continuity_readback_id: "workstation_sleep_continuity_validated",
+    sleep_continuity_ready: true,
+    pre_sleep_evidence_ready: true,
+    post_resume_evidence_ready: true,
+    ready_to_close: true,
+    stage16_closed_by_receipt: false,
+    missing_readbacks: [],
+    steps: [
+      {
+        id: "record_operator_stage_closure_decision",
+        method: "POST",
+        route: "/federation/stage-closure-decision",
+        required_scope: "federation.stage16.closure.write",
+        operator_action_required: true,
+        operator_confirmation_required: true,
+        writes_evidence_when_run: false,
+        writes_receipts_when_run: true,
+      },
+    ],
+    writes_evidence: false,
+    writes_receipts: false,
+    writes_registry: false,
+    writes_memory: false,
+    runs_tools: false,
+    runs_shell: false,
+    runs_git: false,
+    launches_browser: false,
+    captures_screen: false,
+    grants_execution_authority: false,
+    grants_mutation_authority: false,
+    marks_stage16_closed: false,
+    next_smallest_truthful_gap: "stage16_operator_stage_closure_decision",
+  });
+  const closure = parseFederationStage16ClosureDecisions({
+    ok: true,
+    status: "stage_closure_decision_readback_ready",
+    count: 1,
+    total: 1,
+    latest_receipt_id: "fedstage16close_test",
+    latest_decision: "close_stage16",
+    receipt_readback_ready: true,
+    stage16_closed_by_receipt: true,
+    marks_runtime_stage_state: false,
+    reads_receipts: true,
+    writes_receipts: false,
+    writes_registry: false,
+    writes_memory: false,
+    runs_tools: false,
+    runs_shell: false,
+    runs_git: false,
+    launches_browser: false,
+    captures_screen: false,
+    grants_execution_authority: false,
+    grants_mutation_authority: false,
+    next_smallest_truthful_gap: "stage16_ledger_closure",
+  });
+
+  const closureAction = presentFederationSleepContinuity(status, runbook);
+  const closed = presentFederationSleepContinuity(status, runbook, closure);
+
+  assert.equal(closureAction.state, "record_stage16_closure_decision");
+  assert.equal(closureAction.primary_route, "/federation/stage-closure-decision");
+  assert.equal(closureAction.required_scope, "federation.stage16.closure.write");
+  assert.equal(closureAction.operator_confirmation_required, true);
+  assert.equal(closureAction.writes_receipts_when_run, true);
+  assert.equal(closureAction.mutation_available_from_ui, false);
+
+  assert.equal(closed.state, "stage16_closed");
+  assert.equal(closed.stage16_closed_by_receipt, true);
+  assert.equal(closed.selected_step_id, undefined);
+  assert.equal(closed.writes_receipts_when_run, false);
+  assert.equal(closed.mutation_available_from_ui, false);
 });
