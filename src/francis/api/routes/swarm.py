@@ -8,6 +8,7 @@ from francis.swarm import (
     swarm_delegation_etiquette_contract,
     swarm_messaging_model_contract,
     swarm_status_snapshot,
+    swarm_trace_continuity_contract,
     swarm_unit_roles_contract,
 )
 
@@ -32,3 +33,8 @@ def messaging_model_contract() -> dict[str, Any]:
 @router.get("/delegation-etiquette-contract")
 def delegation_etiquette_contract() -> dict[str, Any]:
     return swarm_delegation_etiquette_contract()
+
+
+@router.get("/trace-continuity-contract")
+def trace_continuity_contract() -> dict[str, Any]:
+    return swarm_trace_continuity_contract()

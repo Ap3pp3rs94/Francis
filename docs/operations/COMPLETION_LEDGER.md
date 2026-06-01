@@ -50450,6 +50450,55 @@ Latest validation for Stage 15 delegation etiquette:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-31 - Stage 15 Swarm trace continuity preserves one lineage
+
+Roadmap area: Stage 15 / Swarm, trace continuity before failure semantics.
+
+Material change:
+
+- Added read-only `GET /swarm/trace-continuity-contract`.
+- Stage 15 status now advances from
+  `stage15_delegation_etiquette_contract_ready` to
+  `stage15_trace_continuity_contract_ready`.
+- The contract defines a required trace projection with swarm trace id,
+  message id, parent message id, root objective id, sender role, receiver role,
+  handoff reason, evidence refs, and decision state.
+- The contract requires one trace lineage, parent/child links after the first
+  message, root objective preservation, one Francis operator-facing presence,
+  a handoff reason, and non-authority-bearing trace fields.
+- The route is contract-only: it does not send messages, start workers, write
+  receipts, write memory, run tools, run shell, run git, launch browsers,
+  capture the screen, or grant execution/mutation authority.
+- Current readback reports `status=stage15_trace_continuity_contract_ready`,
+  `ready_count=5`, `required_count=6`, `trace_continuity_contract_ready=true`,
+  `required_trace_field_count=9`, and
+  `next_smallest_truthful_gap=stage15_failure_semantics_contract`.
+
+Latest validation for Stage 15 trace continuity:
+
+- Direct local `TestClient` readback of GET `/swarm/status` and GET
+  `/swarm/trace-continuity-contract`.
+  Result: `status=stage15_trace_continuity_contract_ready; ready_count=5;
+  required_count=6; trace_ready=true; required_trace_fields=9;
+  status_next_gap=stage15_failure_semantics_contract`.
+- `python -m pytest tests/test_api_swarm.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 6 passed`
+- `python -m mypy src/francis/swarm.py src/francis/api/routes/swarm.py
+  src/francis/api/app.py`
+  Result: `passed`
+- `python -m ruff check src/francis/swarm.py src/francis/api/routes/swarm.py
+  src/francis/api/app.py tests/test_api_swarm.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/swarm.py
+  src/francis/api/routes/swarm.py src/francis/api/app.py
+  tests/test_api_swarm.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -132,19 +132,20 @@ def test_swarm_unit_roles_contract_is_ready_after_stage14_closure(monkeypatch, t
     assert source_contracts["emergent_behavior_signal_detector"]["observed"] is True
 
     status = client.get("/swarm/status").json()
-    assert status["status"] == "stage15_delegation_etiquette_contract_ready"
+    assert status["status"] == "stage15_trace_continuity_contract_ready"
     assert status["stage14_closed_by_receipt"] is True
     assert status["unit_roles_contract_ready"] is True
     assert status["messaging_model_contract_ready"] is True
     assert status["delegation_etiquette_contract_ready"] is True
-    assert status["trace_continuity_contract_ready"] is False
+    assert status["trace_continuity_contract_ready"] is True
     assert status["failure_semantics_contract_ready"] is False
-    assert status["ready_count"] == 4
+    assert status["ready_count"] == 5
     assert status["required_count"] == 6
     assert status["routes"]["unit_roles_contract"] == "/swarm/unit-roles-contract"
     assert status["routes"]["messaging_model_contract"] == "/swarm/messaging-model-contract"
     assert status["routes"]["delegation_etiquette_contract"] == "/swarm/delegation-etiquette-contract"
-    assert status["next_smallest_truthful_gap"] == "stage15_trace_continuity_contract"
+    assert status["routes"]["trace_continuity_contract"] == "/swarm/trace-continuity-contract"
+    assert status["next_smallest_truthful_gap"] == "stage15_failure_semantics_contract"
 
 
 def test_swarm_messaging_model_contract_preserves_trace_and_authority_boundaries(
@@ -270,3 +271,63 @@ def test_swarm_delegation_etiquette_contract_blocks_agent_zoo_dynamics(
     assert all(item["authority_granted"] is False for item in rules.values())
     assert all(item["operator_identity_split"] is False for item in rules.values())
     assert all(item["subdelegation_allowed"] is False for item in rules.values())
+
+
+def test_swarm_trace_continuity_contract_preserves_one_lineage(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage14_closure_receipt(data_root)
+
+    client = TestClient(create_app())
+    contract = client.get("/swarm/trace-continuity-contract").json()
+
+    assert contract["ok"] is True
+    assert contract["kind"] == "francis.stage15.swarm.trace_continuity_contract"
+    assert contract["stage"] == "Stage 15 / Swarm"
+    assert contract["status"] == "ready"
+    assert contract["delegation_etiquette_contract_ready"] is True
+    assert contract["trace_continuity_contract_ready"] is True
+    assert contract["required_trace_field_count"] == 9
+    assert set(contract["trace_states"]) == {"accepted", "rejected", "deadlettered", "retry_requested"}
+    assert contract["trace_invariants"]["one_trace_lineage_required"] is True
+    assert contract["trace_invariants"]["parent_child_links_required_after_first_message"] is True
+    assert contract["trace_invariants"]["root_objective_preserved"] is True
+    assert contract["trace_invariants"]["operator_facing_presence_remains_francis"] is True
+    assert contract["trace_invariants"]["handoff_reason_required"] is True
+    assert contract["trace_invariants"]["trace_fields_do_not_grant_authority"] is True
+    assert contract["sample_trace_projection"]["message_count"] == 3
+    assert contract["sample_trace_projection"]["operator_facing_presence"] == "Francis"
+    assert contract["sample_trace_projection"]["authority_granted"] is False
+    assert contract["delivery_semantics"]["contract_only"] is True
+    assert contract["delivery_semantics"]["sends_messages"] is False
+    assert contract["delivery_semantics"]["starts_workers"] is False
+    assert contract["delivery_semantics"]["requires_failure_semantics_before_retry_execution"] is True
+    assert contract["writes_receipts"] is False
+    assert contract["writes_memory"] is False
+    assert contract["runs_tools"] is False
+    assert contract["runs_shell"] is False
+    assert contract["runs_git"] is False
+    assert contract["launches_browser"] is False
+    assert contract["captures_screen"] is False
+    assert contract["grants_execution_authority"] is False
+    assert contract["grants_mutation_authority"] is False
+    assert contract["governance"]["does_not_create_agent_zoo"] is True
+    assert contract["governance"]["does_not_multiply_authority"] is True
+    assert contract["next_smallest_truthful_gap"] == "stage15_failure_semantics_contract"
+
+    fields = {item["field"]: item for item in contract["trace_fields"]}
+    assert {
+        "swarm_trace_id",
+        "message_id",
+        "parent_message_id",
+        "root_objective_id",
+        "sender_role",
+        "receiver_role",
+        "handoff_reason",
+        "evidence_refs",
+        "decision_state",
+    } == set(fields)
+    assert all(item["authority_bearing"] is False for item in fields.values())

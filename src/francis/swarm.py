@@ -10,6 +10,7 @@ SWARM_STATUS_KIND = "francis.stage15.swarm.status"
 SWARM_UNIT_ROLES_CONTRACT_KIND = "francis.stage15.swarm.unit_roles_contract"
 SWARM_MESSAGING_MODEL_CONTRACT_KIND = "francis.stage15.swarm.messaging_model_contract"
 SWARM_DELEGATION_ETIQUETTE_CONTRACT_KIND = "francis.stage15.swarm.delegation_etiquette_contract"
+SWARM_TRACE_CONTINUITY_CONTRACT_KIND = "francis.stage15.swarm.trace_continuity_contract"
 
 
 def swarm_status_snapshot() -> dict[str, Any]:
@@ -21,6 +22,8 @@ def swarm_status_snapshot() -> dict[str, Any]:
     messaging_model_ready = bool(messaging_model.get("messaging_model_contract_ready"))
     delegation_etiquette = swarm_delegation_etiquette_contract()
     delegation_etiquette_ready = bool(delegation_etiquette.get("delegation_etiquette_contract_ready"))
+    trace_continuity = swarm_trace_continuity_contract()
+    trace_continuity_ready = bool(trace_continuity.get("trace_continuity_contract_ready"))
     deliverables = [
         _deliverable(
             "stage14_ledger_closure_backstop",
@@ -53,8 +56,8 @@ def swarm_status_snapshot() -> dict[str, Any]:
         _deliverable(
             "trace_continuity",
             "Swarm handoffs preserve one trace lineage across specialized units",
-            False,
-            "pending",
+            trace_continuity_ready,
+            "ready" if trace_continuity_ready else "pending",
             "stage15_trace_continuity_contract",
         ),
         _deliverable(
@@ -71,7 +74,13 @@ def swarm_status_snapshot() -> dict[str, Any]:
         "kind": SWARM_STATUS_KIND,
         "stage": STAGE15_SWARM_STAGE,
         "source_id": "swarm",
-        "status": "stage15_delegation_etiquette_contract_ready"
+        "status": "stage15_trace_continuity_contract_ready"
+        if stage14_closed
+        and unit_roles_ready
+        and messaging_model_ready
+        and delegation_etiquette_ready
+        and trace_continuity_ready
+        else "stage15_delegation_etiquette_contract_ready"
         if stage14_closed and unit_roles_ready and messaging_model_ready and delegation_etiquette_ready
         else "stage15_messaging_model_contract_ready"
         if stage14_closed and unit_roles_ready and messaging_model_ready
@@ -85,7 +94,7 @@ def swarm_status_snapshot() -> dict[str, Any]:
         "unit_roles_contract_ready": unit_roles_ready,
         "messaging_model_contract_ready": messaging_model_ready,
         "delegation_etiquette_contract_ready": delegation_etiquette_ready,
-        "trace_continuity_contract_ready": False,
+        "trace_continuity_contract_ready": trace_continuity_ready,
         "failure_semantics_contract_ready": False,
         "deliverables": deliverables,
         "ready_count": ready_count,
@@ -95,10 +104,17 @@ def swarm_status_snapshot() -> dict[str, Any]:
             "unit_roles_contract": "/swarm/unit-roles-contract",
             "messaging_model_contract": "/swarm/messaging-model-contract",
             "delegation_etiquette_contract": "/swarm/delegation-etiquette-contract",
+            "trace_continuity_contract": "/swarm/trace-continuity-contract",
             "stage14_closure_readback": "/adversarial-hardening/stage-closure-decisions",
         },
         "governance": _governance(),
-        "next_smallest_truthful_gap": "stage15_trace_continuity_contract"
+        "next_smallest_truthful_gap": "stage15_failure_semantics_contract"
+        if stage14_closed
+        and unit_roles_ready
+        and messaging_model_ready
+        and delegation_etiquette_ready
+        and trace_continuity_ready
+        else "stage15_trace_continuity_contract"
         if stage14_closed and unit_roles_ready and messaging_model_ready and delegation_etiquette_ready
         else "stage15_delegation_etiquette_contract"
         if stage14_closed and unit_roles_ready and messaging_model_ready
@@ -367,6 +383,79 @@ def swarm_delegation_etiquette_contract() -> dict[str, Any]:
     }
 
 
+def swarm_trace_continuity_contract() -> dict[str, Any]:
+    etiquette = swarm_delegation_etiquette_contract()
+    etiquette_ready = bool(etiquette.get("delegation_etiquette_contract_ready"))
+    trace_fields = [
+        _trace_field("swarm_trace_id", "stable lineage for the whole swarm task", required=True),
+        _trace_field("message_id", "current handoff envelope id", required=True),
+        _trace_field("parent_message_id", "immediate causal predecessor", required=True),
+        _trace_field("root_objective_id", "operator-facing objective id", required=True),
+        _trace_field("sender_role", "bounded sender role", required=True),
+        _trace_field("receiver_role", "bounded receiver role", required=True),
+        _trace_field("handoff_reason", "why the handoff exists", required=True),
+        _trace_field("evidence_refs", "bounded evidence references", required=True),
+        _trace_field("decision_state", "accepted, rejected, deadlettered, or retry_requested", required=True),
+    ]
+    trace_states = ["accepted", "rejected", "deadlettered", "retry_requested"]
+    invariants = {
+        "one_trace_lineage_required": True,
+        "parent_child_links_required_after_first_message": True,
+        "root_objective_preserved": True,
+        "operator_facing_presence_remains_francis": True,
+        "handoff_reason_required": True,
+        "trace_fields_do_not_grant_authority": True,
+    }
+    trace_ready = (
+        etiquette_ready
+        and len(trace_fields) >= 9
+        and all(bool(field.get("field")) for field in trace_fields)
+        and all(bool(value) for value in invariants.values())
+        and set(trace_states) == {"accepted", "rejected", "deadlettered", "retry_requested"}
+    )
+    return {
+        "ok": True,
+        "kind": SWARM_TRACE_CONTINUITY_CONTRACT_KIND,
+        "stage": STAGE15_SWARM_STAGE,
+        "source_id": "swarm",
+        "status": "ready" if trace_ready else "blocked",
+        "delegation_etiquette_contract_ready": etiquette_ready,
+        "trace_continuity_contract_ready": trace_ready,
+        "trace_fields": trace_fields,
+        "required_trace_field_count": sum(1 for field in trace_fields if bool(field.get("required"))),
+        "trace_states": trace_states,
+        "trace_invariants": invariants,
+        "sample_trace_projection": {
+            "root_objective_id": "operator_objective",
+            "swarm_trace_id": "trace_stage15_contract",
+            "message_count": 3,
+            "roles": ["coordinator", "specialist", "reviewer"],
+            "operator_facing_presence": "Francis",
+            "authority_granted": False,
+        },
+        "delivery_semantics": {
+            "contract_only": True,
+            "sends_messages": False,
+            "starts_workers": False,
+            "requires_failure_semantics_before_retry_execution": True,
+        },
+        "reads_receipts": True,
+        "writes_receipts": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": _governance(),
+        "next_smallest_truthful_gap": "stage15_failure_semantics_contract"
+        if trace_ready
+        else "stage15_delegation_etiquette_contract",
+    }
+
+
 def _unit_role(role_id: str, summary: str, *, allowed_actions: list[str]) -> dict[str, Any]:
     return {
         "id": role_id,
@@ -403,6 +492,16 @@ def _etiquette_rule(rule_id: str, summary: str) -> dict[str, Any]:
         "operator_identity_split": False,
         "subdelegation_allowed": False,
         "requires_trace_context": True,
+    }
+
+
+def _trace_field(field: str, description: str, *, required: bool) -> dict[str, Any]:
+    return {
+        "field": field,
+        "description": description,
+        "required": required,
+        "authority_bearing": False,
+        "operator_visible": field in {"swarm_trace_id", "root_objective_id", "decision_state"},
     }
 
 
