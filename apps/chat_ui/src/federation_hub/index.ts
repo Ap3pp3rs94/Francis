@@ -339,6 +339,9 @@ export type FederationSleepContinuityOperatorTerminalInvocation = {
   copyable_command?: string;
   selected_step_id?: string;
   operator_confirmation_required: boolean;
+  operator_confirmation_pending: boolean;
+  copyable_after_operator_confirmation: boolean;
+  should_not_run_before_confirmation: boolean;
   must_run_after_sleep_resume: boolean;
   preconditions: string[];
   command_validation: string[];
@@ -604,6 +607,9 @@ function parseFederationSleepContinuityOperatorTerminalInvocation(
     copyable_command: optionalString(raw.copyable_command),
     selected_step_id: optionalString(raw.selected_step_id),
     operator_confirmation_required: safeBoolean(raw.operator_confirmation_required),
+    operator_confirmation_pending: safeBoolean(raw.operator_confirmation_pending),
+    copyable_after_operator_confirmation: safeBoolean(raw.copyable_after_operator_confirmation),
+    should_not_run_before_confirmation: safeBoolean(raw.should_not_run_before_confirmation),
     must_run_after_sleep_resume: safeBoolean(raw.must_run_after_sleep_resume),
     preconditions: stringList(raw.preconditions),
     command_validation: stringList(raw.command_validation),

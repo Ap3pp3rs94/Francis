@@ -562,7 +562,7 @@ test("federation sleep-continuity action parser preserves selected read-only ste
       writes_receipts_when_run: false,
     },
     operator_terminal_invocation: {
-      status: "command_ready_for_operator_terminal",
+      status: "command_waiting_for_operator_confirmation",
       shell: "powershell",
       working_directory: "D:\\Francis",
       command:
@@ -571,6 +571,9 @@ test("federation sleep-continuity action parser preserves selected read-only ste
         'Set-Location -LiteralPath \'D:\\Francis\'; scripts/federation-stage16-sleep-continuity-evidence.ps1 -Mode PostResume -CommitEvidence -PreSleepEvidencePath "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json" -OperatorConfirmedSleepResume',
       selected_step_id: "capture_post_resume_evidence",
       operator_confirmation_required: true,
+      operator_confirmation_pending: true,
+      copyable_after_operator_confirmation: true,
+      should_not_run_before_confirmation: true,
       must_run_after_sleep_resume: true,
       preconditions: [
         "operator_confirms_workstation_entered_sleep_or_suspend_after_pre_sleep_evidence",
@@ -726,12 +729,15 @@ test("federation sleep-continuity action parser preserves selected read-only ste
     "post_resume_evidence_capture_command_bound",
   ]);
   assert.deepEqual(action.selected_action_readiness?.command_validation_blockers, []);
-  assert.equal(action.operator_terminal_invocation?.status, "command_ready_for_operator_terminal");
+  assert.equal(action.operator_terminal_invocation?.status, "command_waiting_for_operator_confirmation");
   assert.equal(action.operator_terminal_invocation?.shell, "powershell");
   assert.equal(action.operator_terminal_invocation?.working_directory, "D:\\Francis");
   assert.equal(action.operator_terminal_invocation?.command, action.primary_command);
   assert.equal(action.operator_terminal_invocation?.copyable_command?.includes("Set-Location -LiteralPath"), true);
   assert.equal(action.operator_terminal_invocation?.operator_confirmation_required, true);
+  assert.equal(action.operator_terminal_invocation?.operator_confirmation_pending, true);
+  assert.equal(action.operator_terminal_invocation?.copyable_after_operator_confirmation, true);
+  assert.equal(action.operator_terminal_invocation?.should_not_run_before_confirmation, true);
   assert.equal(action.operator_terminal_invocation?.must_run_after_sleep_resume, true);
   assert.deepEqual(action.operator_terminal_invocation?.preconditions, action.operator_confirmation_requirements);
   assert.deepEqual(action.operator_terminal_invocation?.run_blockers, ["operator_confirmed_sleep_resume_missing"]);
@@ -860,8 +866,9 @@ test("federation sleep-continuity action parser preserves selected read-only ste
     "operator_confirmed_sleep_resume_flag_bound",
     "post_resume_evidence_capture_command_bound",
   ]);
-  assert.equal(presentation.operator_terminal_invocation?.status, "command_ready_for_operator_terminal");
+  assert.equal(presentation.operator_terminal_invocation?.status, "command_waiting_for_operator_confirmation");
   assert.equal(presentation.operator_terminal_invocation?.copyable_command?.includes(action.primary_command ?? ""), true);
+  assert.equal(presentation.operator_terminal_invocation?.operator_confirmation_pending, true);
   assert.equal(presentation.operator_terminal_invocation?.must_run_after_sleep_resume, true);
   assert.equal(presentation.operator_terminal_invocation?.projection_only, true);
   assert.equal(presentation.operator_sleep_resume_gate?.status, "waiting_for_operator_sleep_resume_confirmation");

@@ -1316,7 +1316,7 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     from francis.kernel.paths import repo_root
 
     invocation = action["operator_terminal_invocation"]
-    assert invocation["status"] == "command_ready_for_operator_terminal"
+    assert invocation["status"] == "command_waiting_for_operator_confirmation"
     assert invocation["shell"] == "powershell"
     assert invocation["working_directory"] == str(repo_root())
     assert invocation["command"] == action["primary_command"]
@@ -1324,6 +1324,9 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert action["primary_command"] in invocation["copyable_command"]
     assert invocation["selected_step_id"] == "capture_post_resume_evidence"
     assert invocation["operator_confirmation_required"] is True
+    assert invocation["operator_confirmation_pending"] is True
+    assert invocation["copyable_after_operator_confirmation"] is True
+    assert invocation["should_not_run_before_confirmation"] is True
     assert invocation["must_run_after_sleep_resume"] is True
     assert invocation["preconditions"] == action["operator_confirmation_requirements"]
     assert invocation["ready_to_run"] is False
@@ -1477,6 +1480,9 @@ def test_federation_stage16_sleep_continuity_runbook_uses_linked_post_resume_mar
     assert invocation["status"] == "command_ready_for_operator_terminal"
     assert invocation["selected_step_id"] == "commit_sleep_continuity_readback"
     assert invocation["operator_confirmation_required"] is False
+    assert invocation["operator_confirmation_pending"] is False
+    assert invocation["copyable_after_operator_confirmation"] is False
+    assert invocation["should_not_run_before_confirmation"] is False
     assert invocation["must_run_after_sleep_resume"] is False
     assert invocation["preconditions"] == []
     assert invocation["ready_to_run"] is True

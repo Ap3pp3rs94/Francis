@@ -1387,8 +1387,25 @@ def _stage16_sleep_continuity_operator_terminal_invocation(
     step_id = _safe_str(selected_step.get("id")).strip()
     working_directory = str(repo_root())
     command_ready = bool(selected_action_readiness.get("operator_terminal_command_ready"))
+    ready_to_run = bool(selected_action_readiness.get("ready_to_run"))
+    run_blockers = _parse_list(selected_action_readiness.get("run_blockers"))
+    operator_confirmation_required = bool(selected_step.get("operator_confirmation_required"))
+    operator_confirmation_pending = (
+        command_ready
+        and operator_confirmation_required
+        and "operator_confirmed_sleep_resume_missing" in run_blockers
+        and not ready_to_run
+    )
+    if not command_ready:
+        status = "command_not_ready_for_operator_terminal"
+    elif operator_confirmation_pending:
+        status = "command_waiting_for_operator_confirmation"
+    elif not ready_to_run:
+        status = "command_waiting_on_readiness"
+    else:
+        status = "command_ready_for_operator_terminal"
     return {
-        "status": "command_ready_for_operator_terminal" if command_ready else "command_not_ready_for_operator_terminal",
+        "status": status,
         "shell": "powershell",
         "working_directory": working_directory,
         "command": command,
@@ -1396,13 +1413,16 @@ def _stage16_sleep_continuity_operator_terminal_invocation(
         if command
         else "",
         "selected_step_id": step_id,
-        "operator_confirmation_required": bool(selected_step.get("operator_confirmation_required")),
+        "operator_confirmation_required": operator_confirmation_required,
+        "operator_confirmation_pending": operator_confirmation_pending,
+        "copyable_after_operator_confirmation": operator_confirmation_pending,
+        "should_not_run_before_confirmation": operator_confirmation_pending,
         "must_run_after_sleep_resume": step_id == "capture_post_resume_evidence",
         "preconditions": confirmation_requirements,
         "command_validation": _parse_list(selected_action_readiness.get("command_validation")),
         "command_validation_blockers": _parse_list(selected_action_readiness.get("command_validation_blockers")),
-        "run_blockers": _parse_list(selected_action_readiness.get("run_blockers")),
-        "ready_to_run": bool(selected_action_readiness.get("ready_to_run")),
+        "run_blockers": run_blockers,
+        "ready_to_run": ready_to_run,
         "operator_terminal_command_ready": command_ready,
         "manual_execution_writes_evidence": bool(selected_step.get("writes_evidence_when_run")),
         "manual_execution_writes_receipts": bool(selected_step.get("writes_receipts_when_run")),

@@ -52943,6 +52943,55 @@ Latest validation for Stage 16 sleep runbook evidence-specific statuses:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 sleep terminal handoff separates bound command from runnable command
+
+Roadmap area: Stage 16 / Federation, workstation sleep-continuity operator
+handoff truthfulness.
+
+Material change:
+
+- `/federation/sleep-continuity-action` now reports
+  `operator_terminal_invocation.status=command_waiting_for_operator_confirmation`
+  when the post-resume evidence command is syntactically bound but must not be
+  run until the operator has actually slept/suspended and resumed the
+  workstation.
+- The terminal handoff now exposes `operator_confirmation_pending`,
+  `copyable_after_operator_confirmation`, and
+  `should_not_run_before_confirmation` so UI surfaces can distinguish a
+  copyable projected command from an immediately runnable command.
+- The Federation Hub parser and panel preserve and display the confirmation
+  pending flag.
+- The runtime-proof handoff remains `command_ready_for_operator_terminal` once
+  linked post-resume evidence exists and no operator sleep/resume confirmation
+  is pending.
+- This does not run shell, write evidence, write receipts, infer sleep/resume,
+  grant authority, write memory, or mark Stage 16 closed.
+- Stage 16 remains open until operator-confirmed live workstation sleep/resume
+  evidence and receipt-backed completion/closure gates are satisfied.
+
+Latest validation for Stage 16 sleep terminal handoff confirmation status:
+
+- `python -m pytest tests/test_api_federation.py -q --tb=short`
+  Result: `passed; 20 passed`.
+- `npm run test -- federation_hub`
+  Result: `passed; 188 passed`.
+- `npm run build`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- Live readback via `TestClient` for `/federation/sleep-continuity-action`
+  Result: `passed;
+  terminal_status=command_waiting_for_operator_confirmation,
+  operator_confirmation_pending=true`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

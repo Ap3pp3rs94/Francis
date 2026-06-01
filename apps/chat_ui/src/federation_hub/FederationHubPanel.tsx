@@ -247,6 +247,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
               terminal invocation <code>{codeValue(operatorTerminalInvocation.status)}</code>
               {" / "}shell <code>{codeValue(operatorTerminalInvocation.shell)}</code>
               {" / "}ready <code>{yesNo(operatorTerminalInvocation.operator_terminal_command_ready)}</code>
+              {" / "}confirmation pending <code>{yesNo(operatorTerminalInvocation.operator_confirmation_pending)}</code>
             </div>
             {operatorTerminalInvocation.working_directory ? (
               <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
