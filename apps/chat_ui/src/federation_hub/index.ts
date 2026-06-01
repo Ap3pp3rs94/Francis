@@ -138,6 +138,11 @@ export type FederationStage16Status = {
   stage16_completion_review_ready: boolean;
   live_runtime_readback_ready: boolean;
   completion_review_blockers: string[];
+  sleep_continuity_status?: string;
+  sleep_continuity_ready: boolean;
+  pre_sleep_evidence_ready: boolean;
+  latest_pre_sleep_evidence?: Record<string, unknown>;
+  sleep_continuity_next_step?: string;
   ready_count: number;
   required_count: number;
   next_smallest_truthful_gap?: string;
@@ -597,6 +602,13 @@ export function parseFederationStage16Status(raw: unknown): FederationStage16Sta
     stage16_completion_review_ready: safeBoolean(body.stage16_completion_review_ready),
     live_runtime_readback_ready: safeBoolean(body.live_runtime_readback_ready),
     completion_review_blockers: stringList(body.completion_review_blockers),
+    sleep_continuity_status: optionalString(body.sleep_continuity_status),
+    sleep_continuity_ready: safeBoolean(body.sleep_continuity_ready),
+    pre_sleep_evidence_ready: safeBoolean(body.pre_sleep_evidence_ready),
+    latest_pre_sleep_evidence: isRecord(body.latest_pre_sleep_evidence)
+      ? body.latest_pre_sleep_evidence
+      : undefined,
+    sleep_continuity_next_step: optionalString(body.sleep_continuity_next_step),
     ready_count: safeNumber(body.ready_count, 0),
     required_count: safeNumber(body.required_count, 0),
     next_smallest_truthful_gap: optionalString(body.next_smallest_truthful_gap),

@@ -1916,6 +1916,23 @@ def status() -> dict[str, Any]:
         )
         closure_readback = stage16_operator_stage_closure_decision_readback(limit=1)
         stage16_closed_by_receipt = bool(closure_readback.get("stage16_closed_by_receipt"))
+        latest_pre_sleep_evidence = _latest_stage16_pre_sleep_evidence()
+        pre_sleep_evidence_ready = bool(latest_pre_sleep_evidence.get("present"))
+        completion_review_blockers = _parse_list(review.get("blockers"))
+        sleep_continuity_ready = bool(
+            _meta(review.get("done_criteria")).get("workstation_sleep_does_not_destroy_continuity")
+        )
+        sleep_continuity_status = (
+            "validated"
+            if sleep_continuity_ready
+            else "pre_sleep_evidence_ready"
+            if pre_sleep_evidence_ready
+            else "ready_for_operator_sleep_resume"
+            if completion_review_blockers == ["workstation_sleep_continuity_validated"]
+            else "blocked_on_prior_live_readbacks"
+            if "workstation_sleep_continuity_validated" in completion_review_blockers
+            else "not_applicable"
+        )
         stage15_closed = bool(pairing_contract.get("stage15_closed_by_receipt"))
         deliverables = _stage16_deliverables(
             pairing_contract_ready=pairing_ready,
@@ -1960,7 +1977,18 @@ def status() -> dict[str, Any]:
             "stage16_closed_by_receipt": stage16_closed_by_receipt,
             "latest_stage_closure_decision_receipt": closure_readback.get("latest_receipt", {}),
             "live_runtime_readback_ready": bool(review.get("live_runtime_readback_ready")),
-            "completion_review_blockers": _parse_list(review.get("blockers")),
+            "completion_review_blockers": completion_review_blockers,
+            "sleep_continuity_status": sleep_continuity_status,
+            "sleep_continuity_ready": sleep_continuity_ready,
+            "pre_sleep_evidence_ready": pre_sleep_evidence_ready,
+            "latest_pre_sleep_evidence": latest_pre_sleep_evidence,
+            "sleep_continuity_next_step": "record_stage16_operator_stage_closure_decision"
+            if sleep_continuity_ready and completion_ready
+            else "run_post_resume_evidence_with_operator_confirmation"
+            if pre_sleep_evidence_ready and not sleep_continuity_ready
+            else "capture_pre_sleep_evidence"
+            if completion_review_blockers == ["workstation_sleep_continuity_validated"]
+            else completion_next_gap,
             "ready_count": sum(1 for item in deliverables if bool(item.get("ready"))),
             "required_count": len(deliverables),
             "deliverables": deliverables,

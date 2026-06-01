@@ -69,6 +69,13 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
         stage16_completion_review_ready: false,
         live_runtime_readback_ready: false,
         completion_review_blockers: ["live_pairing_flow_observed", "workstation_sleep_continuity_validated"],
+        sleep_continuity_status: "blocked_on_prior_live_readbacks",
+        sleep_continuity_ready: false,
+        pre_sleep_evidence_ready: false,
+        latest_pre_sleep_evidence: {
+          present: false,
+        },
+        sleep_continuity_next_step: "stage16_live_federation_runtime_readback",
         ready_count: 6,
         required_count: 6,
         next_smallest_truthful_gap: "stage16_live_federation_runtime_readback",
@@ -279,6 +286,11 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
       "live_pairing_flow_observed",
       "workstation_sleep_continuity_validated",
     ]);
+    assert.equal(status.sleep_continuity_status, "blocked_on_prior_live_readbacks");
+    assert.equal(status.sleep_continuity_ready, false);
+    assert.equal(status.pre_sleep_evidence_ready, false);
+    assert.equal(status.latest_pre_sleep_evidence?.present, false);
+    assert.equal(status.sleep_continuity_next_step, "stage16_live_federation_runtime_readback");
     assert.equal(status.next_smallest_truthful_gap, "stage16_live_federation_runtime_readback");
 
     assert.equal(readbacks.status, "empty");
@@ -368,6 +380,15 @@ test("federation Stage 16 parsers preserve ready receipt-backed posture", () => 
     stage16_completion_review_ready: true,
     live_runtime_readback_ready: true,
     completion_review_blockers: [],
+    sleep_continuity_status: "validated",
+    sleep_continuity_ready: true,
+    pre_sleep_evidence_ready: true,
+    latest_pre_sleep_evidence: {
+      present: true,
+      evidence_path:
+        "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json",
+    },
+    sleep_continuity_next_step: "record_stage16_operator_stage_closure_decision",
     ready_count: 6,
     required_count: 6,
     next_smallest_truthful_gap: "stage16_operator_stage_closure_decision",
@@ -539,6 +560,14 @@ test("federation Stage 16 parsers preserve ready receipt-backed posture", () => 
   assert.equal(status.stage16_completion_review_ready, true);
   assert.equal(status.live_runtime_readback_ready, true);
   assert.deepEqual(status.completion_review_blockers, []);
+  assert.equal(status.sleep_continuity_status, "validated");
+  assert.equal(status.sleep_continuity_ready, true);
+  assert.equal(status.pre_sleep_evidence_ready, true);
+  assert.equal(
+    status.latest_pre_sleep_evidence?.evidence_path,
+    "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json",
+  );
+  assert.equal(status.sleep_continuity_next_step, "record_stage16_operator_stage_closure_decision");
   assert.equal(status.next_smallest_truthful_gap, "stage16_operator_stage_closure_decision");
 
   assert.equal(readbacks.live_runtime_readback_ready, true);

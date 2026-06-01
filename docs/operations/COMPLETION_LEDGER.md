@@ -51680,6 +51680,59 @@ Latest validation for Stage 16 pre-sleep marker readback:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 status surfaces sleep-continuity next step
+
+Roadmap area: Stage 16 / Federation, workstation sleep continuity runtime
+readback.
+
+Material change:
+
+- `/federation/status` now includes the sleep-continuity gate posture directly:
+  `sleep_continuity_status`, `sleep_continuity_ready`,
+  `pre_sleep_evidence_ready`, `latest_pre_sleep_evidence`, and
+  `sleep_continuity_next_step`.
+- The status payload now reports the same read-only pre-sleep evidence metadata
+  already exposed by `/federation/sleep-continuity-runbook`, so ordinary
+  federation status readers can see that the next truthful action is
+  post-resume evidence collection.
+- `apps/chat_ui/src/federation_hub/index.ts` now preserves these status fields
+  for the operator UI.
+- This does not run post-resume evidence collection, infer sleep/resume from a
+  time delay, write receipts, write registry state, write memory, grant
+  authority, or mark Stage 16 closed.
+
+Current project-data readback:
+
+- `/federation/status` reports
+  `stage16_status=stage16_contracts_ready_completion_blocked;
+  sleep_continuity_status=pre_sleep_evidence_ready;
+  pre_sleep_evidence_ready=true;
+  sleep_continuity_ready=false;
+  completion_review_blockers=[workstation_sleep_continuity_validated];
+  sleep_continuity_next_step=run_post_resume_evidence_with_operator_confirmation;
+  next_smallest_truthful_gap=stage16_sleep_continuity_runtime_readback`.
+
+Latest validation for Stage 16 status sleep-continuity readback:
+
+- `python -m pytest tests/test_api_federation.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`.
+- `cd apps/chat_ui; npm run test -- federation_hub`
+  Result: `passed; 183 passed`.
+- `cd apps/chat_ui; npm run build`
+  Result: `passed`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

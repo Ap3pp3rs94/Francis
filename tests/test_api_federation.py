@@ -1178,6 +1178,19 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert body["marks_stage16_closed"] is False
     assert not (data_root / "logs" / "federation" / "stage16_operator_stage_closure_decisions.jsonl").exists()
 
+    status = client.get("/federation/status").json()
+    assert status["stage16_status"] == "stage16_contracts_ready_completion_blocked"
+    assert status["sleep_continuity_status"] == "pre_sleep_evidence_ready"
+    assert status["sleep_continuity_ready"] is False
+    assert status["pre_sleep_evidence_ready"] is True
+    assert status["latest_pre_sleep_evidence"]["present"] is True
+    assert status["latest_pre_sleep_evidence"]["evidence_path"] == str(pre_sleep_path.resolve())
+    assert status["latest_pre_sleep_evidence"]["metadata_only"] is True
+    assert status["latest_pre_sleep_evidence"]["writes_runtime_readback"] is False
+    assert status["latest_pre_sleep_evidence"]["marks_stage16_closed"] is False
+    assert status["sleep_continuity_next_step"] == "run_post_resume_evidence_with_operator_confirmation"
+    assert status["next_smallest_truthful_gap"] == "stage16_sleep_continuity_runtime_readback"
+
 
 def test_federation_stage16_completion_review_accepts_live_or_manual_runtime_readback_evidence(
     monkeypatch,
