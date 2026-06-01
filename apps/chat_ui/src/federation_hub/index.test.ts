@@ -80,14 +80,19 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
         stage: "Stage 16 / Federation",
         status: "empty",
         count: 0,
+        receipt_ready_count: 0,
         ready_count: 0,
         required_count: 5,
+        completion_eligible_readback_count: 0,
+        readback_receipts_ready: false,
         live_runtime_readback_ready: false,
         missing_readbacks: ["live_pairing_flow_observed", "workstation_sleep_continuity_validated"],
         checks: [
           {
             id: "live_pairing_flow_observed",
             passed: false,
+            receipt_ready: false,
+            completion_evidence: false,
             status: "not_observed",
             receipt_id: "",
             evidence: "no live_pairing_flow_observed receipt has been recorded",
@@ -142,8 +147,11 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
 
     assert.equal(readbacks.status, "empty");
     assert.equal(readbacks.count, 0);
+    assert.equal(readbacks.receipt_ready_count, 0);
     assert.equal(readbacks.ready_count, 0);
     assert.equal(readbacks.required_count, 5);
+    assert.equal(readbacks.completion_eligible_readback_count, 0);
+    assert.equal(readbacks.readback_receipts_ready, false);
     assert.equal(readbacks.live_runtime_readback_ready, false);
     assert.deepEqual(readbacks.missing_readbacks, [
       "live_pairing_flow_observed",
@@ -151,6 +159,8 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
     ]);
     assert.equal(readbacks.checks[0]?.id, "live_pairing_flow_observed");
     assert.equal(readbacks.checks[0]?.passed, false);
+    assert.equal(readbacks.checks[0]?.receipt_ready, false);
+    assert.equal(readbacks.checks[0]?.completion_evidence, false);
 
     assert.equal(review.status, "blocked");
     assert.equal(review.contract_readiness_ready, true);
@@ -181,16 +191,22 @@ test("federation Stage 16 parsers preserve ready receipt-backed posture", () => 
     ok: true,
     status: "ready",
     count: 5,
+    receipt_ready_count: 5,
     ready_count: 5,
     required_count: 5,
+    completion_eligible_readback_count: 5,
+    readback_receipts_ready: true,
     live_runtime_readback_ready: true,
     missing_readbacks: [],
     checks: [
       {
         id: "live_remote_approval_roundtrip_observed",
         passed: true,
+        receipt_ready: true,
+        completion_evidence: true,
         status: "observed",
         receipt_id: "fedlive_live_remote_approval_roundtrip_observed_test",
+        proof_kind: "live_runtime_probe",
         source_node_id: "workstation",
         paired_node_id: "phone",
         trace_id: "trace-fed-live",
@@ -221,8 +237,12 @@ test("federation Stage 16 parsers preserve ready receipt-backed posture", () => 
   assert.equal(status.next_smallest_truthful_gap, "stage16_operator_stage_closure_decision");
 
   assert.equal(readbacks.live_runtime_readback_ready, true);
+  assert.equal(readbacks.readback_receipts_ready, true);
+  assert.equal(readbacks.receipt_ready_count, 5);
   assert.equal(readbacks.ready_count, 5);
+  assert.equal(readbacks.completion_eligible_readback_count, 5);
   assert.equal(readbacks.checks[0]?.receipt_id, "fedlive_live_remote_approval_roundtrip_observed_test");
+  assert.equal(readbacks.checks[0]?.proof_kind, "live_runtime_probe");
   assert.equal(readbacks.checks[0]?.trace_id, "trace-fed-live");
   assert.equal(readbacks.next_smallest_truthful_gap, "stage16_completion_review");
 

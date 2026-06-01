@@ -51059,6 +51059,68 @@ Latest validation for Stage 16 federation UI readback contract:
 - `npm run build` from `apps/chat_ui`
   Result: `passed`
 
+### 2026-05-31 - Stage 16 Federation completion now rejects isolated proof receipts
+
+Roadmap area: Stage 16 / Federation, live runtime evidence before any closure
+decision.
+
+Material change:
+
+- Completion review now distinguishes readback receipt validity from
+  completion-eligible live evidence.
+- `scripted_local_runtime_probe` receipts can prove the receipt path and appear
+  in readback summaries, but they no longer satisfy Stage 16 closure evidence.
+- Stage 16 completion-eligible readbacks require `live_runtime_probe` or
+  `manual_operator_runtime_readback` proof kinds.
+- `/federation/live-runtime-readbacks` now exposes receipt readiness,
+  completion evidence, proof kind, `receipt_ready_count`,
+  `completion_eligible_readback_count`, and `readback_receipts_ready`.
+- The isolated proof script was updated to pass only when receipt-path proof is
+  valid and completion remains blocked pending real live federation evidence.
+- This prevents a local scripted proof from being mistaken for multi-node live
+  federation readiness.
+
+Latest validation for Stage 16 live evidence hardening:
+
+- `scripts/federation-stage16-live-runtime-readback-proof.ps1 -Mode Status`
+  Result:
+  `proof_passed; readback_receipts_ready=true;
+  live_runtime_readback_ready=false; completion_eligible_readback_count=0;
+  completion_review_ready=false;
+  isolated_completion_review_next_smallest_truthful_gap=stage16_live_federation_runtime_readback`.
+- Direct current-data `TestClient` readback of GET
+  `/federation/live-runtime-readbacks` and GET `/federation/completion-review`.
+  Result:
+  `readbacks_status=empty; receipt_ready_count=0; ready_count=0;
+  completion_eligible_readback_count=0; readback_receipts_ready=false;
+  live_runtime_readback_ready=false; completion_status=blocked;
+  completion_ready=false; ready_to_close=false;
+  next_gap=stage16_live_federation_runtime_readback`.
+- `python -m pytest tests/test_api_federation.py
+  tests/test_federation_stage16_live_runtime_readback_proof_script.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  --tb=short --maxfail=1`
+  Result: `passed; 14 passed`
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py
+  tests/test_federation_stage16_live_runtime_readback_proof_script.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py
+  tests/test_federation_stage16_live_runtime_readback_proof_script.py`
+  Result: `passed`
+- `node --test --experimental-strip-types src/federation_hub/index.test.ts`
+  from `apps/chat_ui`
+  Result: `passed; 2 passed`
+- `npm run test` from `apps/chat_ui`
+  Result: `passed; 183 passed`
+- `npm run build` from `apps/chat_ui`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

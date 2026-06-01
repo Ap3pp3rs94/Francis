@@ -56,9 +56,13 @@ def test_federation_stage16_live_runtime_readback_proof_records_isolated_receipt
     assert payload["denied_unscoped_write"] is True
     assert payload["before_live_runtime_readback_ready"] is False
     assert payload["before_completion_review_ready"] is False
-    assert payload["live_runtime_readback_ready"] is True
-    assert payload["completion_review_ready"] is True
-    assert payload["isolated_completion_review_next_smallest_truthful_gap"] == "stage16_operator_stage_closure_decision"
+    assert payload["readback_receipts_ready"] is True
+    assert payload["live_runtime_readback_ready"] is False
+    assert payload["completion_eligible_readback_count"] == 0
+    assert payload["completion_review_ready"] is False
+    assert (
+        payload["isolated_completion_review_next_smallest_truthful_gap"] == "stage16_live_federation_runtime_readback"
+    )
     assert payload["next_smallest_truthful_gap"] == "stage16_live_federation_runtime_readback"
     assert payload["recommended_next_slice"] == "collect_real_live_federation_runtime_readbacks"
     assert payload["readback_receipts_recorded"] == 5
@@ -105,9 +109,11 @@ def test_federation_stage16_live_runtime_readback_proof_records_isolated_receipt
     assert checks["permission_gate_blocks_unscoped_write"]["status"] == "denied"
     assert checks["five_readback_receipts_written"]["status"] == "receipts_ready"
     assert checks["receipt_file_readback"]["status"] == "jsonl_ready"
-    assert checks["readback_summary_consumes_receipts"]["status"] == "ready"
-    assert checks["completion_review_consumes_receipts"]["status"] == "ready"
-    assert checks["status_surface_reflects_isolated_readiness"]["status"] == "stage16_completion_review_ready"
+    assert checks["readback_summary_consumes_receipts"]["status"] == "partial"
+    assert checks["completion_review_consumes_receipts"]["status"] == "blocked"
+    assert (
+        checks["status_surface_reflects_isolated_readiness"]["status"] == "stage16_contracts_ready_completion_blocked"
+    )
     assert all(item["passed"] for item in payload["checks"])
 
 

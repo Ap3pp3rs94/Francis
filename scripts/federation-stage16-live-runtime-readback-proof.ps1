@@ -227,26 +227,30 @@ def _run() -> tuple[int, dict[str, Any]]:
     )
     after_checks = _as_list(after_readbacks.get("checks"))
     readback_checks_ready = (
-        after_readbacks.get("status") == "ready"
-        and after_readbacks.get("ready_count") == len(READBACK_IDS)
+        after_readbacks.get("status") == "partial"
+        and after_readbacks.get("receipt_ready_count") == len(READBACK_IDS)
+        and after_readbacks.get("ready_count") == 0
         and after_readbacks.get("required_count") == len(READBACK_IDS)
-        and after_readbacks.get("live_runtime_readback_ready") is True
-        and after_readbacks.get("missing_readbacks") == []
+        and after_readbacks.get("readback_receipts_ready") is True
+        and after_readbacks.get("live_runtime_readback_ready") is False
+        and after_readbacks.get("missing_readbacks") == READBACK_IDS
         and {str(item.get("id")) for item in after_checks if isinstance(item, dict)} == set(READBACK_IDS)
+        and all(item.get("receipt_ready") is True for item in after_checks if isinstance(item, dict))
+        and all(item.get("completion_evidence") is False for item in after_checks if isinstance(item, dict))
     )
     completion_ready = (
-        after_review.get("status") == "ready"
+        after_review.get("status") == "blocked"
         and after_review.get("contract_readiness_ready") is True
-        and after_review.get("live_runtime_readback_ready") is True
-        and after_review.get("stage16_completion_review_ready") is True
-        and after_review.get("ready_to_close") is True
-        and after_review.get("next_smallest_truthful_gap") == "stage16_operator_stage_closure_decision"
+        and after_review.get("live_runtime_readback_ready") is False
+        and after_review.get("stage16_completion_review_ready") is False
+        and after_review.get("ready_to_close") is False
+        and after_review.get("next_smallest_truthful_gap") == "stage16_live_federation_runtime_readback"
     )
     status_ready = (
-        status.get("stage16_status") == "stage16_completion_review_ready"
-        and status.get("stage16_completion_review_ready") is True
-        and status.get("live_runtime_readback_ready") is True
-        and status.get("next_smallest_truthful_gap") == "stage16_operator_stage_closure_decision"
+        status.get("stage16_status") == "stage16_contracts_ready_completion_blocked"
+        and status.get("stage16_completion_review_ready") is False
+        and status.get("live_runtime_readback_ready") is False
+        and status.get("next_smallest_truthful_gap") == "stage16_live_federation_runtime_readback"
     )
     receipt_file_ready = len(receipt_lines) == len(READBACK_IDS)
 
@@ -331,7 +335,9 @@ def _run() -> tuple[int, dict[str, Any]]:
             "denied_unscoped_write": denied_ok,
             "before_live_runtime_readback_ready": before_readbacks.get("live_runtime_readback_ready"),
             "before_completion_review_ready": before_review.get("stage16_completion_review_ready"),
+            "readback_receipts_ready": after_readbacks.get("readback_receipts_ready"),
             "live_runtime_readback_ready": after_readbacks.get("live_runtime_readback_ready"),
+            "completion_eligible_readback_count": after_readbacks.get("completion_eligible_readback_count"),
             "completion_review_ready": after_review.get("stage16_completion_review_ready"),
             "isolated_completion_review_next_smallest_truthful_gap": after_review.get("next_smallest_truthful_gap"),
             "project_stage_closure_changed": False,

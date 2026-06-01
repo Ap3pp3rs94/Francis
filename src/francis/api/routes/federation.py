@@ -520,6 +520,11 @@ def _runtime_readback_ready(item: dict[str, Any]) -> bool:
     )
 
 
+def _runtime_readback_counts_for_completion(item: dict[str, Any]) -> bool:
+    proof_kind = _safe_str(item.get("proof_kind")).strip()
+    return _runtime_readback_ready(item) and proof_kind in {"live_runtime_probe", "manual_operator_runtime_readback"}
+
+
 def _latest_live_readback_by_id(items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     latest: dict[str, dict[str, Any]] = {}
     for item in items:
@@ -539,13 +544,17 @@ def live_runtime_readback_summary(*, limit: int = 100) -> dict[str, Any]:
     checks: list[dict[str, Any]] = []
     for readback_id in _STAGE16_LIVE_READBACK_IDS:
         item = latest_by_id.get(readback_id, {})
-        passed = _runtime_readback_ready(item)
+        receipt_ready = _runtime_readback_ready(item)
+        completion_evidence = _runtime_readback_counts_for_completion(item)
         checks.append(
             {
                 "id": readback_id,
-                "passed": passed,
-                "status": "observed" if passed else "not_observed",
+                "passed": completion_evidence,
+                "receipt_ready": receipt_ready,
+                "completion_evidence": completion_evidence,
+                "status": "observed" if completion_evidence else "receipt_only" if receipt_ready else "not_observed",
                 "receipt_id": _safe_str(item.get("receipt_id")).strip(),
+                "proof_kind": _safe_str(item.get("proof_kind")).strip(),
                 "source_node_id": _safe_str(item.get("source_node_id")).strip(),
                 "paired_node_id": _safe_str(item.get("paired_node_id")).strip(),
                 "trace_id": _safe_str(item.get("trace_id")).strip(),
@@ -562,10 +571,13 @@ def live_runtime_readback_summary(*, limit: int = 100) -> dict[str, Any]:
         "items": items,
         "checks": checks,
         "count": len(items),
-        "ready_count": sum(1 for item in checks if bool(item["passed"])),
+        "receipt_ready_count": sum(1 for item in checks if bool(item["receipt_ready"])),
+        "ready_count": sum(1 for item in checks if bool(item["completion_evidence"])),
+        "completion_eligible_readback_count": sum(1 for item in checks if bool(item["completion_evidence"])),
         "required_count": len(checks),
-        "live_runtime_readback_ready": all(bool(item["passed"]) for item in checks),
-        "missing_readbacks": [item["id"] for item in checks if not bool(item["passed"])],
+        "readback_receipts_ready": all(bool(item["receipt_ready"]) for item in checks),
+        "live_runtime_readback_ready": all(bool(item["completion_evidence"]) for item in checks),
+        "missing_readbacks": [item["id"] for item in checks if not bool(item["completion_evidence"])],
         "routes": _federation_routes(),
         "governance": {
             **_federation_governance(),

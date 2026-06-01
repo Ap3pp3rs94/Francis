@@ -146,8 +146,11 @@ export type FederationStage16Status = {
 export type FederationLiveRuntimeReadbackCheck = {
   id: string;
   passed: boolean;
+  receipt_ready: boolean;
+  completion_evidence: boolean;
   status?: string;
   receipt_id?: string;
+  proof_kind?: string;
   source_node_id?: string;
   paired_node_id?: string;
   trace_id?: string;
@@ -160,8 +163,11 @@ export type FederationLiveRuntimeReadbacks = {
   stage?: string;
   status?: string;
   count: number;
+  receipt_ready_count: number;
   ready_count: number;
   required_count: number;
+  completion_eligible_readback_count: number;
+  readback_receipts_ready: boolean;
   live_runtime_readback_ready: boolean;
   missing_readbacks: string[];
   checks: FederationLiveRuntimeReadbackCheck[];
@@ -513,8 +519,11 @@ function parseLiveRuntimeReadbackCheck(raw: unknown): FederationLiveRuntimeReadb
   return {
     id,
     passed: safeBoolean(raw.passed),
+    receipt_ready: safeBoolean(raw.receipt_ready),
+    completion_evidence: safeBoolean(raw.completion_evidence),
     status: optionalString(raw.status),
     receipt_id: optionalString(raw.receipt_id),
+    proof_kind: optionalString(raw.proof_kind),
     source_node_id: optionalString(raw.source_node_id),
     paired_node_id: optionalString(raw.paired_node_id),
     trace_id: optionalString(raw.trace_id),
@@ -533,8 +542,11 @@ export function parseFederationLiveRuntimeReadbacks(raw: unknown): FederationLiv
     stage: optionalString(body.stage),
     status: optionalString(body.status),
     count: safeNumber(body.count, 0),
+    receipt_ready_count: safeNumber(body.receipt_ready_count, 0),
     ready_count: safeNumber(body.ready_count, 0),
     required_count: safeNumber(body.required_count, 0),
+    completion_eligible_readback_count: safeNumber(body.completion_eligible_readback_count, 0),
+    readback_receipts_ready: safeBoolean(body.readback_receipts_ready),
     live_runtime_readback_ready: safeBoolean(body.live_runtime_readback_ready),
     missing_readbacks: stringList(body.missing_readbacks),
     checks,
