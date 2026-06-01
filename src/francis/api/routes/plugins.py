@@ -1110,6 +1110,9 @@ def _write_capability_pack_metadata_receipt(
         "pack_id": pack_id,
         "pack_version": pack_version,
         "pack_name": pack_name,
+        "source_pack_id": _safe_str(payload.source_pack_id).strip(),
+        "source_pack_version": _safe_str(payload.source_pack_version).strip(),
+        "expanded_from_migration_plan": bool(payload.include_current_pack_capabilities),
         "capability_ids": capability_ids,
         "capability_count": len(capability_ids),
         "actor": redact_governed_value(_safe_str(payload.actor).strip()),
@@ -1136,6 +1139,25 @@ def _write_capability_pack_metadata_receipt(
     redacted_receipt = _redact_plugin_receipt(receipt)
     _atomic_write_display_json(receipt_path, redacted_receipt)
     return redacted_receipt
+
+
+def _capability_ids_for_pack(
+    entries: list[dict[str, Any]],
+    *,
+    pack_id: str,
+    pack_version: str = "",
+) -> list[str]:
+    out: list[str] = []
+    for entry in entries:
+        metadata = entry.get("metadata") if isinstance(entry.get("metadata"), dict) else {}
+        if _safe_str(metadata.get("pack_id")).strip() != pack_id:
+            continue
+        if pack_version and _safe_str(metadata.get("pack_version")).strip() != pack_version:
+            continue
+        capability_id = _safe_str(entry.get("capability")).strip()
+        if capability_id and capability_id not in out:
+            out.append(capability_id)
+    return sorted(out)
 
 
 def _request_plugin_approval(
@@ -2133,6 +2155,9 @@ class CapabilityPackMetadataReceiptIn(BaseModel):
     pack_version: str
     pack_name: str = ""
     capability_ids: list[str] = Field(default_factory=list)
+    include_current_pack_capabilities: bool = False
+    source_pack_id: str = ""
+    source_pack_version: str = ""
     promotion_rules: list[str] = Field(default_factory=list)
     pack_governance: dict[str, Any] = Field(default_factory=dict)
     meta: dict[str, Any] = Field(default_factory=dict)
@@ -2494,11 +2519,35 @@ def record_capability_pack_metadata_receipt(
         capability_ids: list[str] = []
         for raw_id in _unique_texts(payload.capability_ids, limit=500):
             capability_ids.append(_validate_plugin_id(raw_id))
-        if not capability_ids:
-            return {"ok": False, "applied": False, "status": "blocked", "error": "capability_ids_required"}
 
         registry = _load_registry()
         _sync_generated_plugins(registry)
+        prewrite_catalog = _save_registry_and_catalog(registry)
+        prewrite_runtime_catalog = _read_runtime_catalog_payload(prewrite_catalog)
+        prewrite_marketplace = marketplace_from_plugin_catalog(prewrite_runtime_catalog)
+
+        source_pack_id = _safe_str(payload.source_pack_id).strip() or pack_id
+        source_pack_version = _safe_str(payload.source_pack_version).strip() or pack_version
+        if payload.include_current_pack_capabilities and not capability_ids:
+            source_pack_id = _validate_plugin_id(source_pack_id)
+            expanded_ids = _capability_ids_for_pack(
+                prewrite_marketplace.catalog(),
+                pack_id=source_pack_id,
+                pack_version=source_pack_version,
+            )
+            if len(expanded_ids) > 500:
+                return {
+                    "ok": False,
+                    "applied": False,
+                    "status": "blocked",
+                    "error": "source_pack_capability_limit_exceeded",
+                    "capability_count": len(expanded_ids),
+                    "limit": 500,
+                }
+            capability_ids = expanded_ids
+        if not capability_ids:
+            return {"ok": False, "applied": False, "status": "blocked", "error": "capability_ids_required"}
+
         missing = [capability_id for capability_id in capability_ids if _read_plugin(registry, capability_id) is None]
         if missing:
             return {

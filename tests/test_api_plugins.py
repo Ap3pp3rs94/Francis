@@ -690,6 +690,67 @@ def test_plugins_capability_pack_migration_plan_projects_review_candidates(monke
     assert candidate["suggested_pack_governance"]["execution_authority"] is False
 
 
+def test_plugins_capability_pack_metadata_receipt_expands_reviewed_migration_plan_candidate(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Expandable Migration Plan Plugin",
+            "description": "Stage 17 from-plan receipt expansion coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": _forge_promotion_meta("capability_migration_plan_expansion"),
+        },
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    plugin_id = str(built_body["plugin_id"])
+
+    plan = client.get("/plugins/capabilities/packs/migration/plan").json()
+    candidate = next(item for item in plan["candidates"] if plugin_id in item["capability_ids_sample"])
+
+    recorded = client.post(
+        "/plugins/capabilities/packs/metadata/receipts",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "record reviewed migration plan candidate",
+            "pack_id": "ops.reviewed_migration_pack",
+            "pack_version": "1.0.0",
+            "pack_name": "Ops Reviewed Migration Pack",
+            "include_current_pack_capabilities": True,
+            "source_pack_id": candidate["pack_id"],
+            "source_pack_version": candidate["pack_version"],
+            "promotion_rules": ["metadata_receipt_before_promotion"],
+            "pack_governance": {"scope": "build_dev", "operator_review_required": True},
+        },
+    )
+
+    assert recorded.status_code == 200
+    recorded_body = recorded.json()
+    assert recorded_body["ok"] is True
+    assert recorded_body["status"] == "recorded"
+    assert recorded_body["capability_count"] >= 1
+    assert recorded_body["receipt"]["expanded_from_migration_plan"] is True
+    assert recorded_body["receipt"]["source_pack_id"] == candidate["pack_id"]
+    assert recorded_body["receipt"]["source_pack_version"] == candidate["pack_version"]
+
+    catalog = client.get("/plugins/capabilities/catalog?limit=5000").json()
+    entry = next(item for item in catalog["items"] if item["capability"] == plugin_id)
+    assert entry["metadata"]["pack_id"] == "ops.reviewed_migration_pack"
+    assert entry["metadata"]["pack_metadata_source"] == "metadata_receipt"
+    assert entry["metadata"]["pack_metadata_receipt_id"] == recorded_body["receipt_id"]
+
+
 def test_plugins_run_risk_tier_enforces_trust_and_approval(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

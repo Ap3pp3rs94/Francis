@@ -56068,6 +56068,52 @@ Validation risk:
 - Full local pytest was not rerun because focused pytest commands were already
   stalling in this workspace; GitHub CI remains the full-suite evidence gate.
 
+### 2026-06-01 - Stage 17 migration-plan candidates can write reviewed metadata receipts
+
+Roadmap area: Stage 17 / Capability Economy, metadata-receipt operator review
+to receipt-backed pack metadata.
+
+Material change:
+
+- Capability pack metadata receipt writes can now expand capability IDs from a
+  reviewed migration-plan source pack by setting
+  `include_current_pack_capabilities=true`, `source_pack_id`, and
+  `source_pack_version`.
+- Expansion is explicit, bounded to 500 capabilities, and blocks instead of
+  partially applying if a source pack exceeds that limit.
+- Receipts now record `source_pack_id`, `source_pack_version`, and
+  `expanded_from_migration_plan`.
+- The route remains gated by `plugins.write` and still grants no promotion,
+  execution, approval, memory-write, or generated-artifact mutation authority.
+
+Latest validation for Stage 17 migration-plan receipt expansion:
+
+- Direct FastAPI `TestClient` validation of `/plugins/build`,
+  `GET /plugins/capabilities/packs/migration/plan`,
+  `POST /plugins/capabilities/packs/metadata/receipts` with
+  `include_current_pack_capabilities=true`, and catalog readback
+  Result: `passed`; receipt
+  `capability_pack_metadata_1780354466_ops-expandable-direct-plan` was written,
+  `source_pack_id=legacy.generated.expandabledirectplanplugin`,
+  `capability_count=1`, and catalog metadata read back
+  `pack_metadata_source=metadata_receipt`.
+- `python -m mypy src/francis/api/routes/plugins.py
+  src/francis/economy/markets/capability_pack_migration_plan.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/plugins.py
+  src/francis/economy/markets/capability_pack_migration_plan.py
+  tests/test_api_plugins.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/plugins.py
+  src/francis/economy/markets/capability_pack_migration_plan.py
+  tests/test_api_plugins.py`
+  Result: `passed`.
+
+Validation risk:
+
+- Full local pytest was not rerun because focused pytest commands were already
+  stalling in this workspace; GitHub CI remains the full-suite evidence gate.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
