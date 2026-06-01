@@ -165,6 +165,12 @@ export function FederationHubPanel(props: { baseUrl: string }) {
             status <code>{codeValue(status?.sleep_continuity_status)}</code>
           </div>
           <div style={{ fontSize: 11, color: MUTED, marginTop: 8, overflowWrap: "anywhere" }}>
+            action <code>{codeValue(status?.sleep_continuity_selected_action_id)}</code>
+            {" / "}current ready <code>{yesNo(Boolean(status?.sleep_continuity_action_current_ready_to_run))}</code>
+            {" / "}confirmation pending{" "}
+            <code>{yesNo(Boolean(status?.sleep_continuity_operator_confirmation_pending))}</code>
+          </div>
+          <div style={{ fontSize: 11, color: MUTED, marginTop: 8, overflowWrap: "anywhere" }}>
             next <code>{codeValue(status?.sleep_continuity_next_step)}</code>
           </div>
         </div>

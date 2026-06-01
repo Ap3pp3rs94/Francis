@@ -1600,6 +1600,51 @@ def _stage16_sleep_continuity_after_manual_execution_readback(
     }
 
 
+def _stage16_sleep_continuity_status_action_summary(
+    *,
+    completion_review_blockers: list[str],
+    pre_sleep_evidence_ready: bool,
+    post_resume_evidence_ready: bool,
+    post_resume_evidence_conflict: bool,
+    sleep_continuity_ready: bool,
+    completion_ready: bool,
+) -> dict[str, Any]:
+    selected_action_id = ""
+    current_ready_to_run = False
+    operator_confirmation_pending = False
+    post_confirmation_ready_to_capture = False
+    confirmation_blocker = ""
+    blocked_reason = ""
+
+    if sleep_continuity_ready and completion_ready:
+        selected_action_id = "record_operator_stage_closure_decision"
+        blocked_reason = "operator_stage_closure_decision_required"
+    elif post_resume_evidence_ready and not sleep_continuity_ready:
+        selected_action_id = "commit_sleep_continuity_readback"
+        current_ready_to_run = True
+    elif (pre_sleep_evidence_ready or post_resume_evidence_conflict) and not sleep_continuity_ready:
+        selected_action_id = "capture_post_resume_evidence"
+        operator_confirmation_pending = pre_sleep_evidence_ready
+        post_confirmation_ready_to_capture = pre_sleep_evidence_ready
+        confirmation_blocker = "operator_confirmed_sleep_resume_missing" if pre_sleep_evidence_ready else ""
+        blocked_reason = confirmation_blocker or "pre_sleep_evidence_missing"
+    elif completion_review_blockers == ["workstation_sleep_continuity_validated"]:
+        selected_action_id = "capture_pre_sleep_evidence"
+        current_ready_to_run = True
+    else:
+        blocked_reason = "prior_live_readback_missing"
+
+    return {
+        "selected_action_id": selected_action_id,
+        "current_ready_to_run": current_ready_to_run,
+        "operator_confirmation_pending": operator_confirmation_pending,
+        "post_confirmation_ready_to_capture": post_confirmation_ready_to_capture,
+        "sleep_resume_confirmation_is_current_blocker": operator_confirmation_pending,
+        "confirmation_blocker": confirmation_blocker,
+        "blocked_reason": blocked_reason,
+    }
+
+
 def stage16_sleep_continuity_action() -> dict[str, Any]:
     runbook = stage16_sleep_continuity_runbook()
     blockers = _parse_list(runbook.get("missing_readbacks"))
@@ -2604,6 +2649,14 @@ def status() -> dict[str, Any]:
             if "workstation_sleep_continuity_validated" in completion_review_blockers
             else "not_applicable"
         )
+        sleep_continuity_action_summary = _stage16_sleep_continuity_status_action_summary(
+            completion_review_blockers=completion_review_blockers,
+            pre_sleep_evidence_ready=pre_sleep_evidence_ready,
+            post_resume_evidence_ready=post_resume_evidence_ready,
+            post_resume_evidence_conflict=post_resume_evidence_conflict,
+            sleep_continuity_ready=sleep_continuity_ready,
+            completion_ready=completion_ready,
+        )
         stage15_closed = bool(pairing_contract.get("stage15_closed_by_receipt"))
         deliverables = _stage16_deliverables(
             pairing_contract_ready=pairing_ready,
@@ -2656,6 +2709,25 @@ def status() -> dict[str, Any]:
             "post_resume_evidence_conflict": post_resume_evidence_conflict,
             "latest_pre_sleep_evidence": latest_pre_sleep_evidence,
             "latest_post_resume_evidence": latest_post_resume_evidence,
+            "sleep_continuity_selected_action_id": _safe_str(
+                sleep_continuity_action_summary.get("selected_action_id")
+            ).strip(),
+            "sleep_continuity_action_current_ready_to_run": bool(
+                sleep_continuity_action_summary.get("current_ready_to_run")
+            ),
+            "sleep_continuity_operator_confirmation_pending": bool(
+                sleep_continuity_action_summary.get("operator_confirmation_pending")
+            ),
+            "sleep_continuity_post_confirmation_ready_to_capture": bool(
+                sleep_continuity_action_summary.get("post_confirmation_ready_to_capture")
+            ),
+            "sleep_continuity_confirmation_blocker": _safe_str(
+                sleep_continuity_action_summary.get("confirmation_blocker")
+            ).strip(),
+            "sleep_continuity_blocked_reason": _safe_str(sleep_continuity_action_summary.get("blocked_reason")).strip(),
+            "sleep_continuity_sleep_resume_confirmation_is_current_blocker": bool(
+                sleep_continuity_action_summary.get("sleep_resume_confirmation_is_current_blocker")
+            ),
             "sleep_continuity_next_step": "record_stage16_operator_stage_closure_decision"
             if sleep_continuity_ready and completion_ready
             else "run_sleep_continuity_runtime_proof_with_committed_evidence"

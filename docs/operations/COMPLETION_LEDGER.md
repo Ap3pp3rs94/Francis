@@ -53087,6 +53087,55 @@ Latest validation for Stage 16 sleep action current readiness:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 sleep status summarizes action readiness
+
+Roadmap area: Stage 16 / Federation, workstation sleep-continuity status
+truthfulness.
+
+Material change:
+
+- `/federation/status` now exposes a sleep-continuity action summary:
+  `sleep_continuity_selected_action_id`,
+  `sleep_continuity_action_current_ready_to_run`,
+  `sleep_continuity_operator_confirmation_pending`,
+  `sleep_continuity_post_confirmation_ready_to_capture`,
+  `sleep_continuity_confirmation_blocker`,
+  `sleep_continuity_blocked_reason`, and
+  `sleep_continuity_sleep_resume_confirmation_is_current_blocker`.
+- The summary is derived from current sleep evidence and completion-review
+  blockers without calling the action route or fabricating readiness.
+- Federation Hub status parsing and the sleep action panel now preserve and
+  display this high-level readiness summary before the operator opens the
+  selected action details.
+- This does not run shell, write evidence, write receipts, infer sleep/resume,
+  grant authority, write memory, or mark Stage 16 closed.
+- Stage 16 remains open until operator-confirmed live workstation sleep/resume
+  evidence and receipt-backed completion/closure gates are satisfied.
+
+Latest validation for Stage 16 sleep status action summary:
+
+- `python -m pytest tests/test_api_federation.py -q --tb=short`
+  Result: `passed; 20 passed`.
+- `npm run test -- federation_hub`
+  Result: `passed; 188 passed`.
+- `npm run build`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- Live readback via `TestClient` for `/federation/status`
+  Result: `passed;
+  sleep_continuity_selected_action_id=capture_post_resume_evidence,
+  sleep_continuity_action_current_ready_to_run=false,
+  sleep_continuity_operator_confirmation_pending=true`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

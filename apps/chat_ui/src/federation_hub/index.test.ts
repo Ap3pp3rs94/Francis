@@ -82,6 +82,13 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
         latest_post_resume_evidence: {
           present: false,
         },
+        sleep_continuity_selected_action_id: "",
+        sleep_continuity_action_current_ready_to_run: false,
+        sleep_continuity_operator_confirmation_pending: false,
+        sleep_continuity_post_confirmation_ready_to_capture: false,
+        sleep_continuity_confirmation_blocker: "",
+        sleep_continuity_blocked_reason: "prior_live_readback_missing",
+        sleep_continuity_sleep_resume_confirmation_is_current_blocker: false,
         sleep_continuity_next_step: "stage16_live_federation_runtime_readback",
         ready_count: 6,
         required_count: 6,
@@ -373,6 +380,13 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
     assert.equal(status.post_resume_evidence_ready, false);
     assert.equal(status.latest_pre_sleep_evidence?.present, false);
     assert.equal(status.latest_post_resume_evidence?.present, false);
+    assert.equal(status.sleep_continuity_selected_action_id, undefined);
+    assert.equal(status.sleep_continuity_action_current_ready_to_run, false);
+    assert.equal(status.sleep_continuity_operator_confirmation_pending, false);
+    assert.equal(status.sleep_continuity_post_confirmation_ready_to_capture, false);
+    assert.equal(status.sleep_continuity_confirmation_blocker, undefined);
+    assert.equal(status.sleep_continuity_blocked_reason, "prior_live_readback_missing");
+    assert.equal(status.sleep_continuity_sleep_resume_confirmation_is_current_blocker, false);
     assert.equal(status.sleep_continuity_next_step, "stage16_live_federation_runtime_readback");
     assert.equal(status.next_smallest_truthful_gap, "stage16_live_federation_runtime_readback");
 
@@ -1220,6 +1234,13 @@ test("federation sleep-continuity presentation gates post-resume capture on oper
       status: "missing",
       linked_to_latest_pre_sleep: false,
     },
+    sleep_continuity_selected_action_id: "capture_post_resume_evidence",
+    sleep_continuity_action_current_ready_to_run: false,
+    sleep_continuity_operator_confirmation_pending: true,
+    sleep_continuity_post_confirmation_ready_to_capture: true,
+    sleep_continuity_confirmation_blocker: "operator_confirmed_sleep_resume_missing",
+    sleep_continuity_blocked_reason: "operator_confirmed_sleep_resume_missing",
+    sleep_continuity_sleep_resume_confirmation_is_current_blocker: true,
     sleep_continuity_next_step: "run_post_resume_evidence_with_operator_confirmation",
     ready_count: 6,
     required_count: 6,
@@ -1289,6 +1310,13 @@ test("federation sleep-continuity presentation gates post-resume capture on oper
   assert.equal(status.latest_pre_sleep_evidence?.trace_id, "trace-stage16-sleep-continuity-test");
   assert.equal(status.latest_post_resume_evidence?.status, "missing");
   assert.equal(status.latest_post_resume_evidence?.linked_to_latest_pre_sleep, false);
+  assert.equal(status.sleep_continuity_selected_action_id, "capture_post_resume_evidence");
+  assert.equal(status.sleep_continuity_action_current_ready_to_run, false);
+  assert.equal(status.sleep_continuity_operator_confirmation_pending, true);
+  assert.equal(status.sleep_continuity_post_confirmation_ready_to_capture, true);
+  assert.equal(status.sleep_continuity_confirmation_blocker, "operator_confirmed_sleep_resume_missing");
+  assert.equal(status.sleep_continuity_blocked_reason, "operator_confirmed_sleep_resume_missing");
+  assert.equal(status.sleep_continuity_sleep_resume_confirmation_is_current_blocker, true);
   assert.equal(presentation.ready_to_close, false);
   assert.equal(presentation.operator_action_required, true);
   assert.equal(presentation.operator_confirmation_required, true);
@@ -1392,6 +1420,13 @@ test("federation sleep-continuity presentation advances to runtime proof after p
     sleep_continuity_ready: false,
     pre_sleep_evidence_ready: true,
     post_resume_evidence_ready: true,
+    sleep_continuity_selected_action_id: "commit_sleep_continuity_readback",
+    sleep_continuity_action_current_ready_to_run: true,
+    sleep_continuity_operator_confirmation_pending: false,
+    sleep_continuity_post_confirmation_ready_to_capture: false,
+    sleep_continuity_confirmation_blocker: "",
+    sleep_continuity_blocked_reason: "",
+    sleep_continuity_sleep_resume_confirmation_is_current_blocker: false,
     sleep_continuity_next_step: "run_sleep_continuity_runtime_proof",
     ready_count: 6,
     required_count: 6,
@@ -1441,6 +1476,12 @@ test("federation sleep-continuity presentation advances to runtime proof after p
 
   const presentation = presentFederationSleepContinuity(status, runbook);
 
+  assert.equal(status.sleep_continuity_selected_action_id, "commit_sleep_continuity_readback");
+  assert.equal(status.sleep_continuity_action_current_ready_to_run, true);
+  assert.equal(status.sleep_continuity_operator_confirmation_pending, false);
+  assert.equal(status.sleep_continuity_post_confirmation_ready_to_capture, false);
+  assert.equal(status.sleep_continuity_confirmation_blocker, undefined);
+  assert.equal(status.sleep_continuity_sleep_resume_confirmation_is_current_blocker, false);
   assert.equal(presentation.state, "run_sleep_continuity_runtime_proof");
   assert.equal(presentation.selected_step_id, "commit_sleep_continuity_readback");
   assert.equal(presentation.primary_command?.includes("federation-stage16-sleep-continuity-runtime-proof.ps1"), true);

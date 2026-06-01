@@ -145,6 +145,13 @@ export type FederationStage16Status = {
   post_resume_evidence_conflict: boolean;
   latest_pre_sleep_evidence?: Record<string, unknown>;
   latest_post_resume_evidence?: Record<string, unknown>;
+  sleep_continuity_selected_action_id?: string;
+  sleep_continuity_action_current_ready_to_run: boolean;
+  sleep_continuity_operator_confirmation_pending: boolean;
+  sleep_continuity_post_confirmation_ready_to_capture: boolean;
+  sleep_continuity_confirmation_blocker?: string;
+  sleep_continuity_blocked_reason?: string;
+  sleep_continuity_sleep_resume_confirmation_is_current_blocker: boolean;
   sleep_continuity_next_step?: string;
   ready_count: number;
   required_count: number;
@@ -989,6 +996,17 @@ export function parseFederationStage16Status(raw: unknown): FederationStage16Sta
     latest_post_resume_evidence: isRecord(body.latest_post_resume_evidence)
       ? body.latest_post_resume_evidence
       : undefined,
+    sleep_continuity_selected_action_id: optionalString(body.sleep_continuity_selected_action_id),
+    sleep_continuity_action_current_ready_to_run: safeBoolean(body.sleep_continuity_action_current_ready_to_run),
+    sleep_continuity_operator_confirmation_pending: safeBoolean(body.sleep_continuity_operator_confirmation_pending),
+    sleep_continuity_post_confirmation_ready_to_capture: safeBoolean(
+      body.sleep_continuity_post_confirmation_ready_to_capture,
+    ),
+    sleep_continuity_confirmation_blocker: optionalString(body.sleep_continuity_confirmation_blocker),
+    sleep_continuity_blocked_reason: optionalString(body.sleep_continuity_blocked_reason),
+    sleep_continuity_sleep_resume_confirmation_is_current_blocker: safeBoolean(
+      body.sleep_continuity_sleep_resume_confirmation_is_current_blocker,
+    ),
     sleep_continuity_next_step: optionalString(body.sleep_continuity_next_step),
     ready_count: safeNumber(body.ready_count, 0),
     required_count: safeNumber(body.required_count, 0),

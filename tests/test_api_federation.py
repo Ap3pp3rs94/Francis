@@ -1278,6 +1278,13 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert status["latest_pre_sleep_evidence"]["metadata_only"] is True
     assert status["latest_pre_sleep_evidence"]["writes_runtime_readback"] is False
     assert status["latest_pre_sleep_evidence"]["marks_stage16_closed"] is False
+    assert status["sleep_continuity_selected_action_id"] == "capture_post_resume_evidence"
+    assert status["sleep_continuity_action_current_ready_to_run"] is False
+    assert status["sleep_continuity_operator_confirmation_pending"] is True
+    assert status["sleep_continuity_post_confirmation_ready_to_capture"] is True
+    assert status["sleep_continuity_confirmation_blocker"] == "operator_confirmed_sleep_resume_missing"
+    assert status["sleep_continuity_blocked_reason"] == "operator_confirmed_sleep_resume_missing"
+    assert status["sleep_continuity_sleep_resume_confirmation_is_current_blocker"] is True
     assert status["sleep_continuity_next_step"] == "run_post_resume_evidence_with_operator_confirmation"
     assert status["next_smallest_truthful_gap"] == "stage16_sleep_continuity_runtime_readback"
 
@@ -1462,6 +1469,13 @@ def test_federation_stage16_sleep_continuity_runbook_uses_linked_post_resume_mar
     assert status["pre_sleep_evidence_ready"] is True
     assert status["post_resume_evidence_ready"] is True
     assert status["latest_post_resume_evidence"]["evidence_path"] == str(post_resume_path.resolve())
+    assert status["sleep_continuity_selected_action_id"] == "commit_sleep_continuity_readback"
+    assert status["sleep_continuity_action_current_ready_to_run"] is True
+    assert status["sleep_continuity_operator_confirmation_pending"] is False
+    assert status["sleep_continuity_post_confirmation_ready_to_capture"] is False
+    assert status["sleep_continuity_confirmation_blocker"] == ""
+    assert status["sleep_continuity_blocked_reason"] == ""
+    assert status["sleep_continuity_sleep_resume_confirmation_is_current_blocker"] is False
     assert status["sleep_continuity_next_step"] == "run_sleep_continuity_runtime_proof_with_committed_evidence"
     assert status["next_smallest_truthful_gap"] == "stage16_sleep_continuity_runtime_readback"
 
