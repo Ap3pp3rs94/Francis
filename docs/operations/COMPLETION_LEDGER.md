@@ -53890,6 +53890,54 @@ Latest validation for Stage 16 actor readiness Federation Hub visibility:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 next-gap readbacks point to confirmation receipt
+
+Roadmap area: Stage 16 / Federation, workstation sleep-continuity operator
+confirmation truthfulness.
+
+Material change:
+
+- Sleep/resume confirmation readbacks now report
+  `stage16_sleep_resume_confirmation_receipt` while the current
+  receipt-backed sequence is blocked by a missing, stale, or non-confirmed
+  operator sleep/resume confirmation receipt.
+- Sleep-continuity runbook/action projections now report
+  `stage16_sleep_resume_confirmation_receipt` when pre-sleep evidence is
+  present and the next truthful operator step is the explicit confirmation
+  receipt, not the runtime proof.
+- The actor-readiness preflight now reports the actor-readiness gap until a
+  scoped actor is usable, then the confirmation-receipt gap once the actor is
+  usable.
+- Once a current confirmation receipt exists, the next gap remains
+  `stage16_sleep_continuity_runtime_readback`.
+- This only changes read-only projections and denial/readback guidance; it
+  does not write receipts, capture evidence, run shell, grant authority, or
+  mark Stage 16 closed.
+
+Latest validation for Stage 16 confirmation-receipt next-gap readbacks:
+
+- `python -m pytest tests/test_api_federation.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed`.
+- `npm run test -- federation_hub`
+  Result: `passed; 192 passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`.
+- Live `TestClient` readback:
+  Result: `passed; confirmations_next_gap=stage16_sleep_resume_confirmation_receipt,
+  confirmations_blockers=[sleep_resume_confirmation_receipt_missing],
+  action_next_gap=stage16_sleep_resume_confirmation_receipt,
+  action_confirmation_pending=true`.
+- `git diff --check`
+  Result: `passed`.
+
 ### 2026-06-01 - Stage 16 Hub suppresses post-resume commands until confirmation
 
 Roadmap area: Stage 16 / Federation, workstation sleep-continuity operator

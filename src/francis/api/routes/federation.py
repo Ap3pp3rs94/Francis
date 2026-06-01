@@ -40,6 +40,10 @@ _FEDERATION_STAGE16_CLOSURE_DECISION_KIND = "francis.stage16.federation.stage16_
 _FEDERATION_STAGE16_CLOSURE_DECISIONS_KIND = (
     "francis.stage16.federation.stage16_operator_stage_closure_decision_receipts"
 )
+_STAGE16_SLEEP_CONTINUITY_PRE_SLEEP_EVIDENCE_GAP = "stage16_sleep_continuity_pre_sleep_evidence"
+_STAGE16_SLEEP_RESUME_CONFIRMATION_ACTOR_GAP = "stage16_sleep_resume_confirmation_actor_readiness"
+_STAGE16_SLEEP_RESUME_CONFIRMATION_RECEIPT_GAP = "stage16_sleep_resume_confirmation_receipt"
+_STAGE16_SLEEP_CONTINUITY_RUNTIME_READBACK_GAP = "stage16_sleep_continuity_runtime_readback"
 
 _STAGE16_LIVE_READBACK_IDS = (
     "live_pairing_flow_observed",
@@ -990,6 +994,12 @@ def stage16_sleep_resume_confirmation_actor_readiness(actor: str) -> dict[str, A
         ready=actor_ready and bool(current_pre_sleep.get("present")),
         actor=actor if actor_ready else "",
     )
+    if not bool(current_pre_sleep.get("present")):
+        next_gap = _STAGE16_SLEEP_CONTINUITY_PRE_SLEEP_EVIDENCE_GAP
+    elif actor_ready:
+        next_gap = _STAGE16_SLEEP_RESUME_CONFIRMATION_RECEIPT_GAP
+    else:
+        next_gap = _STAGE16_SLEEP_RESUME_CONFIRMATION_ACTOR_GAP
 
     return {
         "ok": True,
@@ -1043,7 +1053,7 @@ def stage16_sleep_resume_confirmation_actor_readiness(actor: str) -> dict[str, A
             "grants_execution_authority": False,
             "grants_mutation_authority": False,
         },
-        "next_smallest_truthful_gap": "stage16_sleep_continuity_runtime_readback",
+        "next_smallest_truthful_gap": next_gap,
     }
 
 
@@ -1085,6 +1095,10 @@ def stage16_sleep_resume_confirmation_readback(*, limit: int = 20) -> dict[str, 
         confirmation_command_ready=bool(confirmation_command.get("confirmation_receipt_command_ready")),
         receipt_backed_sequence_ready=receipt_backed_sequence_ready,
         receipt_backed_sequence_command_field="receipt_backed_sequence_copyable_command",
+    )
+    next_gap = _stage16_sleep_resume_confirmation_next_gap(
+        receipt_backed_sequence_ready=receipt_backed_sequence_ready,
+        blockers=receipt_backed_sequence_blockers,
     )
     return {
         "ok": True,
@@ -1146,6 +1160,7 @@ def stage16_sleep_resume_confirmation_readback(*, limit: int = 20) -> dict[str, 
             "receipt_readback_ready": bool(latest_receipt),
             "checks_current_pre_sleep_evidence_path": True,
             "receipt_backed_sequence_requires_current_matching_confirmation": True,
+            "receipt_backed_sequence_next_gap_projected": True,
             "does_not_infer_sleep_from_delay": True,
             "does_not_write_receipts": True,
             "does_not_write_evidence": True,
@@ -1154,8 +1169,29 @@ def stage16_sleep_resume_confirmation_readback(*, limit: int = 20) -> dict[str, 
             "grants_execution_authority": False,
             "grants_mutation_authority": False,
         },
-        "next_smallest_truthful_gap": "stage16_sleep_continuity_runtime_readback",
+        "next_smallest_truthful_gap": next_gap,
     }
+
+
+def _stage16_sleep_resume_confirmation_next_gap(
+    *,
+    receipt_backed_sequence_ready: bool,
+    blockers: list[str],
+) -> str:
+    if receipt_backed_sequence_ready:
+        return _STAGE16_SLEEP_CONTINUITY_RUNTIME_READBACK_GAP
+    if "current_pre_sleep_evidence_missing" in blockers:
+        return _STAGE16_SLEEP_CONTINUITY_PRE_SLEEP_EVIDENCE_GAP
+    if any(
+        blocker in blockers
+        for blocker in (
+            "sleep_resume_confirmation_receipt_missing",
+            "latest_sleep_resume_confirmation_not_operator_confirmed",
+            "latest_sleep_resume_confirmation_pre_sleep_path_mismatch",
+        )
+    ):
+        return _STAGE16_SLEEP_RESUME_CONFIRMATION_RECEIPT_GAP
+    return _STAGE16_SLEEP_CONTINUITY_RUNTIME_READBACK_GAP
 
 
 def _latest_stage16_pre_sleep_evidence() -> dict[str, Any]:
@@ -1419,16 +1455,16 @@ def stage16_sleep_continuity_runbook() -> dict[str, Any]:
         prerequisite_readbacks_ready and bool(latest_post_resume_evidence.get("present")) and not sleep_continuity_ready
     ):
         status_text = "post_resume_evidence_ready"
-        next_gap = "stage16_sleep_continuity_runtime_readback"
+        next_gap = _STAGE16_SLEEP_CONTINUITY_RUNTIME_READBACK_GAP
     elif prerequisite_readbacks_ready and post_resume_evidence_conflict and not sleep_continuity_ready:
         status_text = "post_resume_evidence_conflict"
-        next_gap = "stage16_sleep_continuity_runtime_readback"
+        next_gap = _STAGE16_SLEEP_RESUME_CONFIRMATION_RECEIPT_GAP
     elif prerequisite_readbacks_ready and bool(latest_pre_sleep_evidence.get("present")) and not sleep_continuity_ready:
         status_text = "pre_sleep_evidence_ready"
-        next_gap = "stage16_sleep_continuity_runtime_readback"
+        next_gap = _STAGE16_SLEEP_RESUME_CONFIRMATION_RECEIPT_GAP
     elif prerequisite_readbacks_ready and not sleep_continuity_ready:
         status_text = "ready_for_pre_sleep_evidence"
-        next_gap = "stage16_sleep_continuity_runtime_readback"
+        next_gap = _STAGE16_SLEEP_CONTINUITY_PRE_SLEEP_EVIDENCE_GAP
     else:
         status_text = "blocked_on_prior_live_readbacks"
         next_gap = (
@@ -3433,7 +3469,7 @@ def post_sleep_resume_confirmation(payload: dict[str, Any], request: Request) ->
                 "grants_execution_authority": False,
                 "grants_mutation_authority": False,
             },
-            "next_smallest_truthful_gap": "stage16_sleep_continuity_runtime_readback",
+            "next_smallest_truthful_gap": _STAGE16_SLEEP_RESUME_CONFIRMATION_ACTOR_GAP,
         }
     permission = _federation_write_permission(
         actor,
@@ -3478,7 +3514,7 @@ def post_sleep_resume_confirmation(payload: dict[str, Any], request: Request) ->
                 "grants_execution_authority": False,
                 "grants_mutation_authority": False,
             },
-            "next_smallest_truthful_gap": "stage16_sleep_continuity_runtime_readback",
+            "next_smallest_truthful_gap": _STAGE16_SLEEP_RESUME_CONFIRMATION_RECEIPT_GAP,
         }
 
     sleep_gate = (
@@ -3533,7 +3569,7 @@ def post_sleep_resume_confirmation(payload: dict[str, Any], request: Request) ->
                 "grants_execution_authority": False,
                 "grants_mutation_authority": False,
             },
-            "next_smallest_truthful_gap": "stage16_sleep_continuity_runtime_readback",
+            "next_smallest_truthful_gap": _STAGE16_SLEEP_RESUME_CONFIRMATION_RECEIPT_GAP,
         }
 
     receipt = record_stage16_sleep_resume_confirmation(payload, action)
@@ -3572,7 +3608,7 @@ def post_sleep_resume_confirmation(payload: dict[str, Any], request: Request) ->
             "grants_execution_authority": False,
             "grants_mutation_authority": False,
         },
-        "next_smallest_truthful_gap": "stage16_sleep_continuity_runtime_readback",
+        "next_smallest_truthful_gap": _STAGE16_SLEEP_CONTINUITY_RUNTIME_READBACK_GAP,
     }
 
 

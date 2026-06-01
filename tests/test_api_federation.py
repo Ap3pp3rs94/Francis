@@ -1261,7 +1261,7 @@ def test_federation_stage16_sleep_continuity_runbook_reports_ready_for_pre_sleep
     assert body["governance"]["runs_tools"] is False
     assert body["governance"]["runs_shell"] is False
     assert body["governance"]["grants_mutation_authority"] is False
-    assert body["next_smallest_truthful_gap"] == "stage16_sleep_continuity_runtime_readback"
+    assert body["next_smallest_truthful_gap"] == "stage16_sleep_continuity_pre_sleep_evidence"
 
 
 def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marker(
@@ -1636,7 +1636,7 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert action["routes"]["sleep_resume_confirmation_actor_readiness"] == (
         "/federation/sleep-resume-confirmation/actor-readiness"
     )
-    assert action["next_smallest_truthful_gap"] == "stage16_sleep_continuity_runtime_readback"
+    assert action["next_smallest_truthful_gap"] == "stage16_sleep_resume_confirmation_receipt"
 
 
 def test_federation_stage16_sleep_resume_confirmation_actor_readiness_is_read_only(
@@ -1674,6 +1674,7 @@ def test_federation_stage16_sleep_resume_confirmation_actor_readiness_is_read_on
     assert missing["writes_receipt"] is False
     assert missing["writes_evidence"] is False
     assert missing["marks_stage16_closed"] is False
+    assert missing["next_smallest_truthful_gap"] == "stage16_sleep_resume_confirmation_actor_readiness"
 
     placeholder = client.get(
         "/federation/sleep-resume-confirmation/actor-readiness",
@@ -1686,6 +1687,7 @@ def test_federation_stage16_sleep_resume_confirmation_actor_readiness_is_read_on
     assert placeholder["safe_to_use_in_confirmation_command"] is False
     assert placeholder["confirmation_receipt_command_ready"] is False
     assert placeholder["next_step"] == "replace_actor_placeholder_with_scoped_operator_or_delegated_builder_actor"
+    assert placeholder["next_smallest_truthful_gap"] == "stage16_sleep_resume_confirmation_actor_readiness"
     assert placeholder["governance"]["rejects_placeholder_actor"] is True
 
     unscoped = client.get(
@@ -1697,6 +1699,7 @@ def test_federation_stage16_sleep_resume_confirmation_actor_readiness_is_read_on
     assert unscoped["required_scope"] == "federation.stage16.sleep_resume.confirmation.write"
     assert unscoped["confirmation_receipt_actor_ready"] is False
     assert unscoped["confirmation_receipt_command_ready"] is False
+    assert unscoped["next_smallest_truthful_gap"] == "stage16_sleep_resume_confirmation_actor_readiness"
 
     scoped = client.get(
         "/federation/sleep-resume-confirmation/actor-readiness",
@@ -1718,6 +1721,7 @@ def test_federation_stage16_sleep_resume_confirmation_actor_readiness_is_read_on
     assert scoped["confirmation_receipt_command"] in scoped["confirmation_receipt_copyable_command"]
     assert scoped["target_route"] == "/federation/sleep-resume-confirmation"
     assert scoped["readiness_route"] == "/federation/sleep-resume-confirmation/actor-readiness"
+    assert scoped["next_smallest_truthful_gap"] == "stage16_sleep_resume_confirmation_receipt"
     assert scoped["governance"]["actor_scope_preflight"] is True
     assert scoped["governance"]["does_not_write_receipts"] is True
     assert scoped["governance"]["does_not_mark_stage16_closed"] is True
@@ -1845,6 +1849,7 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     assert empty_readback["receipt_backed_sequence_blockers"] == ["sleep_resume_confirmation_receipt_missing"]
     assert empty_readback["receipt_backed_sequence_command"] == ""
     assert empty_readback["receipt_backed_sequence_copyable_command"] == ""
+    assert empty_readback["next_smallest_truthful_gap"] == "stage16_sleep_resume_confirmation_receipt"
     assert empty_readback["confirmation_receipt_command_ready"] is True
     assert empty_readback["confirmation_receipt_actor"] == ""
     assert empty_readback["confirmation_receipt_actor_bound"] is False
@@ -2096,7 +2101,7 @@ def test_federation_stage16_sleep_resume_confirmation_readback_blocks_stale_rece
     assert readback["marks_stage16_closed"] is False
     assert readback["governance"]["checks_current_pre_sleep_evidence_path"] is True
     assert readback["governance"]["receipt_backed_sequence_requires_current_matching_confirmation"] is True
-    assert readback["next_smallest_truthful_gap"] == "stage16_sleep_continuity_runtime_readback"
+    assert readback["next_smallest_truthful_gap"] == "stage16_sleep_resume_confirmation_receipt"
 
 
 def test_federation_stage16_sleep_continuity_runbook_uses_linked_post_resume_marker(
