@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from francis.economy.markets.capability_catalog_coherence import analyze_capability_catalog_coherence
 from francis.economy.markets.capability_catalog_projection import marketplace_from_plugin_catalog
+from francis.economy.markets.capability_pack_readiness import analyze_capability_pack_readiness
 from francis.governance import approvals as approval_store
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.redaction import (
@@ -2120,6 +2121,17 @@ def build(payload: PluginBuildIn, request: Request) -> dict[str, object]:
                         "tests": build_meta.get("tests") or build_meta.get("test_refs") or [],
                         "docs": build_meta.get("docs") or build_meta.get("documentation") or [],
                         "known_limits": build_meta.get("known_limits") or build_meta.get("limits") or [],
+                        "pack_id": build_meta.get("pack_id") or build_meta.get("capability_pack_id") or "",
+                        "pack_version": build_meta.get("pack_version")
+                        or build_meta.get("capability_pack_version")
+                        or "",
+                        "pack_name": build_meta.get("pack_name") or build_meta.get("capability_pack_name") or "",
+                        "promotion_rules": build_meta.get("promotion_rules")
+                        or build_meta.get("promotion_rule_ids")
+                        or [],
+                        "pack_governance": build_meta.get("pack_governance")
+                        or build_meta.get("capability_pack_governance")
+                        or {},
                         "next_step": "review_validate_and_explicitly_enable_before_use",
                     },
                 },
@@ -2297,6 +2309,7 @@ def list_plugin_capabilities(
             },
             "summary": marketplace.summary(),
             "coherence": analyze_capability_catalog_coherence(all_items),
+            "pack_readiness": analyze_capability_pack_readiness(all_items),
             "catalog": {
                 "path": _safe_str(catalog.get("path")).strip(),
                 "version": int(runtime_catalog.get("version") or 0),

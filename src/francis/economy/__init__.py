@@ -13,6 +13,7 @@ from .markets.capability_catalog_projection import (
     marketplace_from_plugin_catalog,
 )
 from .markets.capability_marketplace import CapabilityListing, CapabilityMarketplace
+from .markets.capability_pack_readiness import analyze_capability_pack_readiness
 from .markets.compute_futures import ComputeFuture, ComputeFuturesMarket
 from .markets.data_exchange import DataExchange, DataOffer
 from .markets.pricing_engine import PricingEngine, PricingResult
@@ -40,6 +41,7 @@ __all__ = [
     "TotalCostOfOwnership",
     "capability_listings_from_plugin_catalog",
     "marketplace_from_plugin_catalog",
+    "analyze_capability_pack_readiness",
     "CapabilityListing",
     "CapabilityMarketplace",
     "ComputeFuture",

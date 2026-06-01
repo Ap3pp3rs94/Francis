@@ -55839,6 +55839,68 @@ Latest validation for executor lease receipt ordering:
 - `python -m ruff format --check tests/unit/test_executor_audit_references.py`
   Result: `passed`.
 
+### 2026-06-01 - Stage 17 capability pack readiness projection starts
+
+Roadmap area: Stage 17 / Capability Economy, versioned packs, promotion rules,
+quality standards, and governance traveling with reusable assets.
+
+Material change:
+
+- Capability Economy now has a read-only Stage 17 pack-readiness analyzer for
+  catalog entries.
+- `/plugins/capabilities/catalog` now includes `pack_readiness`, which reports
+  versioned pack metadata, promotion-rule readiness, quality-standard
+  readiness, validation receipt coverage, and whether governance travels with
+  each pack.
+- Generated plugin build metadata now preserves explicit Stage 17 pack fields:
+  `pack_id`, `pack_version`, `pack_name`, `promotion_rules`, and
+  `pack_governance`.
+- The projection does not promote, install, execute, price, or mutate
+  capabilities. It exposes current readiness only.
+- Current live-style readback with one staged pack reported that the pack was
+  ready, while the overall catalog remained `blocked` because the existing
+  generated capability catalog still has unpacked entries. The next smallest
+  truthful gap remains `stage17_versioned_capability_pack_metadata` until the
+  older catalog entries are packaged or retired.
+
+Latest validation for Stage 17 capability pack readiness:
+
+- Direct `analyze_capability_pack_readiness` module validation
+  Result: `passed`; ready pack readback returned
+  `next_smallest_truthful_gap=stage17_capability_pack_operator_surface`.
+- Direct FastAPI `TestClient` validation of `/plugins/build` followed by
+  `/plugins/capabilities/catalog?limit=5000`
+  Result: `passed`; staged pack read back as ready, overall catalog reported
+  `blocked`, `unpacked_count=3314`, and the unpacked capability sample was
+  bounded.
+- Direct invocation of the new unit test functions in
+  `tests/unit/test_capability_pack_readiness.py`
+  Result: `passed`.
+- `python -m mypy src/francis/economy/markets/capability_pack_readiness.py
+  src/francis/economy/markets/capability_catalog_projection.py
+  src/francis/api/routes/plugins.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/economy/markets/capability_pack_readiness.py
+  src/francis/economy/markets/capability_catalog_projection.py
+  src/francis/economy/markets/__init__.py src/francis/economy/__init__.py
+  src/francis/api/routes/plugins.py tests/unit/test_capability_pack_readiness.py
+  tests/test_api_plugins.py`
+  Result: `passed`.
+- `python -m ruff format --check
+  src/francis/economy/markets/capability_pack_readiness.py
+  src/francis/economy/markets/capability_catalog_projection.py
+  src/francis/economy/markets/__init__.py src/francis/economy/__init__.py
+  src/francis/api/routes/plugins.py tests/unit/test_capability_pack_readiness.py
+  tests/test_api_plugins.py`
+  Result: `passed`.
+- `git diff --check`
+  Result: `passed`.
+
+Validation risk:
+
+- The local pytest runner again stalled before producing output and was
+  stopped; no pytest pass is claimed for this entry.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

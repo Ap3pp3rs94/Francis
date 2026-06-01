@@ -63,6 +63,16 @@ def _catalog_metadata(plugin: Mapping[str, Any], metadata: Mapping[str, Any]) ->
         "validation_receipt_path",
         "known_limits",
         "proposal_evidence",
+        "pack_id",
+        "pack_version",
+        "pack_name",
+        "capability_pack_id",
+        "capability_pack_version",
+        "capability_pack_name",
+        "promotion_rules",
+        "promotion_rule_ids",
+        "pack_governance",
+        "capability_pack_governance",
     ):
         value = metadata.get(key)
         if value:

@@ -467,6 +467,8 @@ def test_plugins_capability_catalog_readback(monkeypatch, tmp_path: Path) -> Non
     assert body["catalog"]["total_tools"] >= 1
     assert Path(str(body["catalog"]["path"])).exists()
     assert body["coherence"]["total"] >= 1
+    assert body["pack_readiness"]["stage"] == "Stage 17 / Capability Economy"
+    assert body["pack_readiness"]["governance"]["read_only"] is True
     assert not any(gap["capability"] == plugin_id for gap in body["coherence"]["lineage_gaps"])
     assert not any(gap["capability"] == plugin_id for gap in body["coherence"]["validation_lineage_gaps"])
 
@@ -486,6 +488,67 @@ def test_plugins_capability_catalog_readback(monkeypatch, tmp_path: Path) -> Non
     filtered_ids = {str(item.get("capability")) for item in filtered_body["items"]}
     assert plugin_id in filtered_ids
     assert filtered_body["filters"] == {"status": "staged", "risk_tier": "normal", "source": ""}
+
+
+def test_plugins_capability_catalog_projects_stage17_pack_readiness(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    meta = {
+        **_forge_promotion_meta("capability_pack"),
+        "pack_id": "ops.capability_pack",
+        "pack_version": "1.0.0",
+        "pack_name": "Ops Capability Pack",
+        "promotion_rules": ["validated_before_promotion"],
+        "pack_governance": {
+            "risk_tier": "normal",
+            "approval_required": False,
+            "scope": "build_dev",
+        },
+    }
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Capability Pack Plugin",
+            "description": "Stage 17 pack readiness coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": meta,
+        },
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    plugin_id = str(built_body["plugin_id"])
+
+    catalog = client.get("/plugins/capabilities/catalog?limit=5000")
+    assert catalog.status_code == 200
+    body = catalog.json()
+    assert body["ok"] is True
+
+    entry = next(item for item in body["items"] if item["capability"] == plugin_id)
+    assert entry["metadata"]["pack_id"] == "ops.capability_pack"
+    assert entry["metadata"]["pack_version"] == "1.0.0"
+    assert entry["metadata"]["promotion_rules"] == ["validated_before_promotion"]
+    assert entry["metadata"]["pack_governance"]["scope"] == "build_dev"
+
+    readiness = body["pack_readiness"]
+    assert readiness["pack_total"] >= 1
+    assert readiness["ready_pack_count"] >= 1
+    assert readiness["unpacked_capabilities_truncated"] in {True, False}
+    pack = next(item for item in readiness["packs"] if item["pack_id"] == "ops.capability_pack")
+    assert pack["pack_id"] == "ops.capability_pack"
+    assert pack["pack_version"] == "1.0.0"
+    assert pack["pack_name"] == "Ops Capability Pack"
+    assert pack["ready"] is True
+    assert pack["governance_travels"] is True
+    assert pack["promotion_rules_ready"] is True
+    assert pack["quality_standards_ready"] is True
+    assert pack["capabilities"][0]["capability"] == plugin_id
 
 
 def test_plugins_run_risk_tier_enforces_trust_and_approval(monkeypatch, tmp_path: Path) -> None:
