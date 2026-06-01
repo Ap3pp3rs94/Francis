@@ -1368,8 +1368,12 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert sleep_gate["projection_writes_receipts"] is False
     assert sleep_gate["projection_marks_stage16_closed"] is False
     after_run = action["after_manual_execution_readback"]
-    assert after_run["status"] == "manual_execution_projection_ready"
+    assert after_run["status"] == "manual_execution_waiting_for_operator_confirmation"
     assert after_run["selected_step_id"] == "capture_post_resume_evidence"
+    assert after_run["ready_to_run"] is False
+    assert after_run["run_blockers"] == ["operator_confirmed_sleep_resume_missing"]
+    assert after_run["operator_confirmation_pending"] is True
+    assert after_run["should_not_expect_success_before_confirmation"] is True
     assert after_run["expected_artifact_root"] == str(
         data_root / "test_runs" / "federation-stage16-sleep-continuity-evidence"
     )
@@ -1512,6 +1516,10 @@ def test_federation_stage16_sleep_continuity_runbook_uses_linked_post_resume_mar
     after_run = action["after_manual_execution_readback"]
     assert after_run["status"] == "manual_execution_projection_ready"
     assert after_run["selected_step_id"] == "commit_sleep_continuity_readback"
+    assert after_run["ready_to_run"] is True
+    assert after_run["run_blockers"] == []
+    assert after_run["operator_confirmation_pending"] is False
+    assert after_run["should_not_expect_success_before_confirmation"] is False
     assert after_run["expected_artifact_root"] == str(data_root / "logs" / "federation")
     assert after_run["expected_artifact_prefix"] == "live_runtime_readback"
     assert after_run["expected_artifact_kind"] == "francis.stage16.federation.live_runtime_readback_receipt"

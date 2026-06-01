@@ -399,6 +399,9 @@ export type FederationSleepContinuityAfterManualExecutionReadback = {
   expected_output?: string;
   operator_terminal_command_ready: boolean;
   ready_to_run: boolean;
+  run_blockers: string[];
+  operator_confirmation_pending: boolean;
+  should_not_expect_success_before_confirmation: boolean;
   refresh_routes: Record<string, string>;
   manual_execution_writes_evidence: boolean;
   manual_execution_writes_receipts: boolean;
@@ -679,6 +682,9 @@ function parseFederationSleepContinuityAfterManualExecutionReadback(
     expected_output: optionalString(raw.expected_output),
     operator_terminal_command_ready: safeBoolean(raw.operator_terminal_command_ready),
     ready_to_run: safeBoolean(raw.ready_to_run),
+    run_blockers: stringList(raw.run_blockers),
+    operator_confirmation_pending: safeBoolean(raw.operator_confirmation_pending),
+    should_not_expect_success_before_confirmation: safeBoolean(raw.should_not_expect_success_before_confirmation),
     refresh_routes: stringRecord(raw.refresh_routes),
     manual_execution_writes_evidence: safeBoolean(raw.manual_execution_writes_evidence),
     manual_execution_writes_receipts: safeBoolean(raw.manual_execution_writes_receipts),

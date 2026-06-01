@@ -287,7 +287,17 @@ export function FederationHubPanel(props: { baseUrl: string }) {
             <div style={{ fontSize: 11, color: MUTED }}>
               after manual run <code>{codeValue(afterManualExecutionReadback.status)}</code>
               {" / "}next action <code>{codeValue(afterManualExecutionReadback.expected_action_status_after_success)}</code>
+              {" / "}confirmation pending <code>{yesNo(afterManualExecutionReadback.operator_confirmation_pending)}</code>
             </div>
+            {afterManualExecutionReadback.run_blockers.length ? (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                {afterManualExecutionReadback.run_blockers.map((blocker) => (
+                  <span key={`federation-after-manual-blocker-${blocker}`} style={badgeStyle("blocked")}>
+                    {blocker}
+                  </span>
+                ))}
+              </div>
+            ) : null}
             {afterManualExecutionReadback.expected_artifact_root ? (
               <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
                 artifact root <code>{afterManualExecutionReadback.expected_artifact_root}</code>

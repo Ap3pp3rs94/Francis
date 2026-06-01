@@ -1516,12 +1516,30 @@ def _stage16_sleep_continuity_after_manual_execution_readback(
 ) -> dict[str, Any]:
     step_id = _safe_str(selected_step.get("id")).strip()
     routes = _federation_routes()
+    ready_to_run = bool(selected_action_readiness.get("ready_to_run"))
+    run_blockers = _parse_list(selected_action_readiness.get("run_blockers"))
+    operator_confirmation_pending = (
+        bool(selected_step.get("operator_confirmation_required"))
+        and "operator_confirmed_sleep_resume_missing" in run_blockers
+        and not ready_to_run
+    )
+    if not step_id:
+        status = "no_selected_manual_execution"
+    elif operator_confirmation_pending:
+        status = "manual_execution_waiting_for_operator_confirmation"
+    elif not ready_to_run:
+        status = "manual_execution_not_ready"
+    else:
+        status = "manual_execution_projection_ready"
     base = {
-        "status": "manual_execution_projection_ready" if step_id else "no_selected_manual_execution",
+        "status": status,
         "selected_step_id": step_id,
         "expected_output": _safe_str(selected_step.get("expected_output")).strip(),
         "operator_terminal_command_ready": bool(selected_action_readiness.get("operator_terminal_command_ready")),
-        "ready_to_run": bool(selected_action_readiness.get("ready_to_run")),
+        "ready_to_run": ready_to_run,
+        "run_blockers": run_blockers,
+        "operator_confirmation_pending": operator_confirmation_pending,
+        "should_not_expect_success_before_confirmation": operator_confirmation_pending,
         "refresh_routes": {
             "status": routes["status"],
             "sleep_continuity_runbook": routes["sleep_continuity_runbook"],

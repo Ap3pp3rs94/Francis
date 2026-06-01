@@ -636,11 +636,14 @@ test("federation sleep-continuity action parser preserves selected read-only ste
       projection_marks_stage16_closed: false,
     },
     after_manual_execution_readback: {
-      status: "manual_execution_projection_ready",
+      status: "manual_execution_waiting_for_operator_confirmation",
       selected_step_id: "capture_post_resume_evidence",
       expected_output: "post-resume evidence JSON path",
       operator_terminal_command_ready: true,
       ready_to_run: false,
+      run_blockers: ["operator_confirmed_sleep_resume_missing"],
+      operator_confirmation_pending: true,
+      should_not_expect_success_before_confirmation: true,
       refresh_routes: {
         status: "/federation/status",
         sleep_continuity_runbook: "/federation/sleep-continuity-runbook",
@@ -772,8 +775,14 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   assert.equal(action.operator_sleep_resume_gate?.does_not_infer_sleep_from_delay, true);
   assert.equal(action.operator_sleep_resume_gate?.projection_runs_shell, false);
   assert.equal(action.operator_sleep_resume_gate?.projection_marks_stage16_closed, false);
-  assert.equal(action.after_manual_execution_readback?.status, "manual_execution_projection_ready");
+  assert.equal(
+    action.after_manual_execution_readback?.status,
+    "manual_execution_waiting_for_operator_confirmation",
+  );
   assert.equal(action.after_manual_execution_readback?.selected_step_id, "capture_post_resume_evidence");
+  assert.deepEqual(action.after_manual_execution_readback?.run_blockers, ["operator_confirmed_sleep_resume_missing"]);
+  assert.equal(action.after_manual_execution_readback?.operator_confirmation_pending, true);
+  assert.equal(action.after_manual_execution_readback?.should_not_expect_success_before_confirmation, true);
   assert.equal(
     action.after_manual_execution_readback?.expected_artifact_root,
     "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence",
@@ -875,7 +884,11 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   assert.equal(presentation.operator_sleep_resume_gate?.pre_sleep_age_seconds, 300);
   assert.equal(presentation.operator_sleep_resume_gate?.ready_after_operator_confirmation, true);
   assert.equal(presentation.operator_sleep_resume_gate?.does_not_infer_sleep_from_delay, true);
-  assert.equal(presentation.after_manual_execution_readback?.status, "manual_execution_projection_ready");
+  assert.equal(
+    presentation.after_manual_execution_readback?.status,
+    "manual_execution_waiting_for_operator_confirmation",
+  );
+  assert.equal(presentation.after_manual_execution_readback?.operator_confirmation_pending, true);
   assert.equal(
     presentation.after_manual_execution_readback?.expected_next_step_after_success,
     "run_sleep_continuity_runtime_proof_with_committed_evidence",
