@@ -491,6 +491,14 @@ export type FederationSleepResumeOperatorChecklist = {
   operator_physical_confirmation_recorded: boolean;
   latest_confirmation_receipt_id?: string;
   receipt_backed_sequence_ready: boolean;
+  receipt_backed_sequence_blockers: string[];
+  receipt_backed_sequence_readiness_route?: string;
+  receipt_backed_sequence_next_step?: string;
+  receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt: boolean;
+  receipt_backed_sequence_current_matching_confirmation_receipt_required: boolean;
+  receipt_backed_sequence_available_after_current_matching_confirmation_receipt: boolean;
+  receipt_backed_sequence_runs_after_physical_sleep_resume_receipt_only: boolean;
+  receipt_backed_sequence_post_receipt_handoff?: Record<string, unknown>;
   blockers: string[];
   operator_actions_remaining: string[];
   checklist: FederationSleepResumeOperatorChecklistItem[];
@@ -2049,6 +2057,24 @@ export function parseFederationSleepResumeOperatorChecklist(
     operator_physical_confirmation_recorded: safeBoolean(body.operator_physical_confirmation_recorded),
     latest_confirmation_receipt_id: optionalString(body.latest_confirmation_receipt_id),
     receipt_backed_sequence_ready: safeBoolean(body.receipt_backed_sequence_ready),
+    receipt_backed_sequence_blockers: stringList(body.receipt_backed_sequence_blockers),
+    receipt_backed_sequence_readiness_route: optionalString(body.receipt_backed_sequence_readiness_route),
+    receipt_backed_sequence_next_step: optionalString(body.receipt_backed_sequence_next_step),
+    receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt: safeBoolean(
+      body.receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt,
+    ),
+    receipt_backed_sequence_current_matching_confirmation_receipt_required: safeBoolean(
+      body.receipt_backed_sequence_current_matching_confirmation_receipt_required,
+    ),
+    receipt_backed_sequence_available_after_current_matching_confirmation_receipt: safeBoolean(
+      body.receipt_backed_sequence_available_after_current_matching_confirmation_receipt,
+    ),
+    receipt_backed_sequence_runs_after_physical_sleep_resume_receipt_only: safeBoolean(
+      body.receipt_backed_sequence_runs_after_physical_sleep_resume_receipt_only,
+    ),
+    receipt_backed_sequence_post_receipt_handoff: isRecord(body.receipt_backed_sequence_post_receipt_handoff)
+      ? body.receipt_backed_sequence_post_receipt_handoff
+      : undefined,
     blockers: stringList(body.blockers),
     operator_actions_remaining: stringList(body.operator_actions_remaining),
     checklist,

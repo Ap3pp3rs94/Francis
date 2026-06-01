@@ -1412,6 +1412,23 @@ test("FederationClient reads sleep-resume operator checklist as a read-only phys
       operator_physical_confirmation_recorded: false,
       latest_confirmation_receipt_id: "",
       receipt_backed_sequence_ready: false,
+      receipt_backed_sequence_blockers: ["sleep_resume_confirmation_receipt_missing"],
+      receipt_backed_sequence_readiness_route: "/federation/sleep-resume-confirmation/receipt-backed-sequence-readiness",
+      receipt_backed_sequence_next_step: "record_current_matching_sleep_resume_confirmation_receipt",
+      receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt: true,
+      receipt_backed_sequence_current_matching_confirmation_receipt_required: true,
+      receipt_backed_sequence_available_after_current_matching_confirmation_receipt: false,
+      receipt_backed_sequence_runs_after_physical_sleep_resume_receipt_only: true,
+      receipt_backed_sequence_post_receipt_handoff: {
+        status: "blocked_until_current_confirmation_receipt",
+        next_step: "record_current_matching_sleep_resume_confirmation_receipt",
+        blocked_until_current_matching_confirmation_receipt: true,
+        current_matching_confirmation_receipt_required: true,
+        available_after_current_matching_confirmation_receipt: false,
+        readiness_route: "/federation/sleep-resume-confirmation/receipt-backed-sequence-readiness",
+        blockers: ["sleep_resume_confirmation_receipt_missing"],
+        marks_stage16_closed_when_run: false,
+      },
       blockers: [],
       operator_actions_remaining: [
         "physically_sleep_or_suspend_workstation_after_current_pre_sleep_marker",
@@ -1509,6 +1526,24 @@ test("FederationClient reads sleep-resume operator checklist as a read-only phys
     assert.equal(checklist.operator_physical_confirmation_required, true);
     assert.equal(checklist.operator_physical_confirmation_recorded, false);
     assert.equal(checklist.latest_confirmation_receipt_id, undefined);
+    assert.equal(checklist.receipt_backed_sequence_ready, false);
+    assert.deepEqual(checklist.receipt_backed_sequence_blockers, ["sleep_resume_confirmation_receipt_missing"]);
+    assert.equal(
+      checklist.receipt_backed_sequence_readiness_route,
+      "/federation/sleep-resume-confirmation/receipt-backed-sequence-readiness",
+    );
+    assert.equal(
+      checklist.receipt_backed_sequence_next_step,
+      "record_current_matching_sleep_resume_confirmation_receipt",
+    );
+    assert.equal(checklist.receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt, true);
+    assert.equal(checklist.receipt_backed_sequence_current_matching_confirmation_receipt_required, true);
+    assert.equal(checklist.receipt_backed_sequence_available_after_current_matching_confirmation_receipt, false);
+    assert.equal(checklist.receipt_backed_sequence_runs_after_physical_sleep_resume_receipt_only, true);
+    assert.equal(
+      checklist.receipt_backed_sequence_post_receipt_handoff?.status,
+      "blocked_until_current_confirmation_receipt",
+    );
     assert.deepEqual(checklist.blockers, []);
     assert.equal(checklist.checklist[0]?.id, "current_pre_sleep_marker_bound");
     assert.equal(checklist.checklist[0]?.passed, true);

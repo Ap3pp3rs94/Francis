@@ -55635,6 +55635,59 @@ Latest validation for Stage 16 primary status post-receipt handoff:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 operator checklist mirrors post-receipt handoff
+
+Roadmap area: Stage 16 / Federation, sleep-continuity confirmation receipt
+truthfulness.
+
+Material change:
+
+- `/federation/sleep-resume-confirmation/operator-checklist` now mirrors the
+  receipt-backed post-resume sequence handoff already exposed by the dedicated
+  readiness route and primary status snapshot.
+- Federation Hub parses and displays the checklist-level post-receipt next
+  step, blocked-until-current-receipt state, available-after-receipt state,
+  and receipt-only guard.
+- The checklist remains read-only. It does not record a sleep/resume
+  confirmation, does not infer physical sleep/resume, does not execute
+  post-resume capture, does not write evidence or receipts, and does not mark
+  Stage 16 closed.
+- Fresh local checklist readback for `actor=codex.builder` still reports
+  `status=ready_for_operator_physical_sleep_resume_confirmation`,
+  `receipt_backed_sequence_ready=false`,
+  `receipt_backed_sequence_next_step=record_current_matching_sleep_resume_confirmation_receipt`,
+  `receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt=true`,
+  and `next_smallest_truthful_gap=stage16_sleep_resume_confirmation_receipt`.
+
+Latest validation for Stage 16 operator checklist post-receipt handoff:
+
+- `python -m pytest
+  tests/test_api_federation.py::test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marker
+  tests/test_api_federation.py::test_federation_stage16_sleep_resume_confirmation_records_operator_receipt
+  tests/test_api_federation.py::test_federation_stage16_sleep_resume_confirmation_readback_blocks_stale_receipt
+  -q --tb=short --maxfail=1`
+  Result: `passed; 3 passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `npm run test -- federation_hub`
+  Result: `passed; 199 passed`.
+- `npm run build`
+  Result: `passed`.
+- Direct FastAPI `TestClient` readback of
+  `/federation/sleep-resume-confirmation/operator-checklist?actor=codex.builder`
+  Result: `passed; status=ready_for_operator_physical_sleep_resume_confirmation`,
+  `receipt_backed_sequence_ready=false`,
+  `receipt_backed_sequence_available_after_current_matching_confirmation_receipt=false`,
+  and `next_smallest_truthful_gap=stage16_sleep_resume_confirmation_receipt`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

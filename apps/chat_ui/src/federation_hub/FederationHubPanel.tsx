@@ -609,6 +609,19 @@ export function FederationHubPanel(props: { baseUrl: string }) {
                   {" / "}marks closed{" "}
                   <code>{yesNo(operatorChecklist.confirmation_receipt_command_marks_stage16_closed)}</code>
                 </div>
+                <div style={{ fontSize: 11, color: MUTED, marginBottom: 6, overflowWrap: "anywhere" }}>
+                  post-receipt next <code>{codeValue(operatorChecklist.receipt_backed_sequence_next_step)}</code>
+                  {" / "}blocked until receipt{" "}
+                  <code>
+                    {yesNo(operatorChecklist.receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt)}
+                  </code>
+                  {" / "}after receipt{" "}
+                  <code>
+                    {yesNo(operatorChecklist.receipt_backed_sequence_available_after_current_matching_confirmation_receipt)}
+                  </code>
+                  {" / "}receipt only{" "}
+                  <code>{yesNo(operatorChecklist.receipt_backed_sequence_runs_after_physical_sleep_resume_receipt_only)}</code>
+                </div>
                 {operatorChecklist.confirmation_receipt_copyable_command_after_physical_sleep_resume ? (
                   <pre
                     style={{

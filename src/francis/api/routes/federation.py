@@ -1344,8 +1344,31 @@ def stage16_sleep_resume_confirmation_operator_checklist(actor: str = "") -> dic
         pre_sleep_evidence_path=current_pre_sleep_path,
     )
     receipt_backed_sequence_ready = bool(readback.get("receipt_backed_sequence_ready"))
-    operator_physical_confirmation_recorded = receipt_backed_sequence_ready
     latest_receipt_id = _safe_str(readback.get("latest_receipt_id")).strip()
+    receipt_backed_sequence_blockers = _parse_list(readback.get("receipt_backed_sequence_blockers"))
+    receipt_backed_sequence_available = receipt_backed_sequence_ready and not receipt_backed_sequence_blockers
+    receipt_backed_sequence_next_step = (
+        "run_receipt_backed_post_resume_sequence"
+        if receipt_backed_sequence_available
+        else "record_current_matching_sleep_resume_confirmation_receipt"
+    )
+    receipt_backed_sequence_handoff = {
+        "status": "ready" if receipt_backed_sequence_available else "blocked_until_current_confirmation_receipt",
+        "next_step": receipt_backed_sequence_next_step,
+        "blocked_until_current_matching_confirmation_receipt": not receipt_backed_sequence_available,
+        "current_matching_confirmation_receipt_required": True,
+        "available_after_current_matching_confirmation_receipt": receipt_backed_sequence_available,
+        "readiness_route": routes["sleep_resume_confirmation_receipt_backed_sequence_readiness"],
+        "confirmation_receipt_id": latest_receipt_id if receipt_backed_sequence_available else "",
+        "blockers": receipt_backed_sequence_blockers,
+        "runs_after_physical_sleep_resume_receipt_only": True,
+        "requires_operator_confirmed_sleep_resume": True,
+        "writes_evidence_when_run": bool(readback.get("receipt_backed_sequence_writes_evidence_when_run")),
+        "writes_receipts_when_run": bool(readback.get("receipt_backed_sequence_writes_receipts_when_run")),
+        "marks_stage16_closed_when_run": False,
+        "read_only_projection": True,
+    }
+    operator_physical_confirmation_recorded = receipt_backed_sequence_ready
     preconditions_ready = bool(record_readiness.get("ready"))
     receipt_write_bounded = bool(record_readiness.get("records_receipt")) and not any(
         bool(record_readiness.get(field))
@@ -1517,6 +1540,18 @@ def stage16_sleep_resume_confirmation_operator_checklist(actor: str = "") -> dic
         "operator_physical_confirmation_recorded": operator_physical_confirmation_recorded,
         "latest_confirmation_receipt_id": latest_receipt_id,
         "receipt_backed_sequence_ready": receipt_backed_sequence_ready,
+        "receipt_backed_sequence_blockers": receipt_backed_sequence_blockers,
+        "receipt_backed_sequence_readiness_route": routes[
+            "sleep_resume_confirmation_receipt_backed_sequence_readiness"
+        ],
+        "receipt_backed_sequence_next_step": receipt_backed_sequence_next_step,
+        "receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt": (
+            not receipt_backed_sequence_available
+        ),
+        "receipt_backed_sequence_current_matching_confirmation_receipt_required": True,
+        "receipt_backed_sequence_available_after_current_matching_confirmation_receipt": receipt_backed_sequence_available,
+        "receipt_backed_sequence_runs_after_physical_sleep_resume_receipt_only": True,
+        "receipt_backed_sequence_post_receipt_handoff": receipt_backed_sequence_handoff,
         "blockers": _parse_list(record_readiness.get("blockers")),
         "operator_actions_remaining": operator_actions_remaining,
         "checklist": checklist,
@@ -1579,6 +1614,8 @@ def stage16_sleep_resume_confirmation_operator_checklist(actor: str = "") -> dic
             "does_not_block_on_pre_sleep_age_guidance": True,
             "physical_confirmation_guard_read_only": True,
             "physical_confirmation_guard_does_not_write_receipt": True,
+            "post_receipt_handoff_projection": True,
+            "post_receipt_handoff_requires_current_matching_confirmation_receipt": True,
             "requires_explicit_physical_operator_confirmation": True,
             "does_not_write_receipts": True,
             "does_not_write_evidence": True,

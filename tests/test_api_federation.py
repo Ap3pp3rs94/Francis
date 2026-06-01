@@ -1477,6 +1477,24 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     }
     assert checklist["operator_physical_confirmation_required"] is True
     assert checklist["operator_physical_confirmation_recorded"] is False
+    assert checklist["receipt_backed_sequence_ready"] is False
+    assert checklist["receipt_backed_sequence_blockers"] == ["sleep_resume_confirmation_receipt_missing"]
+    assert (
+        checklist["receipt_backed_sequence_readiness_route"]
+        == "/federation/sleep-resume-confirmation/receipt-backed-sequence-readiness"
+    )
+    assert checklist["receipt_backed_sequence_next_step"] == "record_current_matching_sleep_resume_confirmation_receipt"
+    assert checklist["receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt"] is True
+    assert checklist["receipt_backed_sequence_current_matching_confirmation_receipt_required"] is True
+    assert checklist["receipt_backed_sequence_available_after_current_matching_confirmation_receipt"] is False
+    assert checklist["receipt_backed_sequence_runs_after_physical_sleep_resume_receipt_only"] is True
+    assert checklist["receipt_backed_sequence_post_receipt_handoff"]["status"] == (
+        "blocked_until_current_confirmation_receipt"
+    )
+    assert checklist["receipt_backed_sequence_post_receipt_handoff"]["blockers"] == [
+        "sleep_resume_confirmation_receipt_missing"
+    ]
+    assert checklist["receipt_backed_sequence_post_receipt_handoff"]["marks_stage16_closed_when_run"] is False
     assert checklist["blockers"] == []
     assert checklist["operator_actions_remaining"] == [
         "physically_sleep_or_suspend_workstation_after_current_pre_sleep_marker",
@@ -1533,6 +1551,8 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert checklist["governance"]["does_not_infer_sleep_from_delay"] is True
     assert checklist["governance"]["physical_confirmation_guard_read_only"] is True
     assert checklist["governance"]["physical_confirmation_guard_does_not_write_receipt"] is True
+    assert checklist["governance"]["post_receipt_handoff_projection"] is True
+    assert checklist["governance"]["post_receipt_handoff_requires_current_matching_confirmation_receipt"] is True
     assert checklist["governance"]["does_not_write_receipts"] is True
     assert checklist["governance"]["does_not_mark_stage16_closed"] is True
     assert checklist["next_smallest_truthful_gap"] == "stage16_sleep_resume_confirmation_receipt"
@@ -2707,6 +2727,22 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     assert receipt_ready_checklist["operator_physical_confirmation_recorded"] is True
     assert receipt_ready_checklist["latest_confirmation_receipt_id"] == body["receipt_id"]
     assert receipt_ready_checklist["receipt_backed_sequence_ready"] is True
+    assert receipt_ready_checklist["receipt_backed_sequence_blockers"] == []
+    assert receipt_ready_checklist["receipt_backed_sequence_next_step"] == "run_receipt_backed_post_resume_sequence"
+    assert (
+        receipt_ready_checklist["receipt_backed_sequence_blocked_until_current_matching_confirmation_receipt"] is False
+    )
+    assert receipt_ready_checklist["receipt_backed_sequence_current_matching_confirmation_receipt_required"] is True
+    assert (
+        receipt_ready_checklist["receipt_backed_sequence_available_after_current_matching_confirmation_receipt"] is True
+    )
+    assert receipt_ready_checklist["receipt_backed_sequence_runs_after_physical_sleep_resume_receipt_only"] is True
+    assert receipt_ready_checklist["receipt_backed_sequence_post_receipt_handoff"]["status"] == "ready"
+    assert (
+        receipt_ready_checklist["receipt_backed_sequence_post_receipt_handoff"]["confirmation_receipt_id"]
+        == body["receipt_id"]
+    )
+    assert receipt_ready_checklist["receipt_backed_sequence_post_receipt_handoff"]["blockers"] == []
     assert receipt_ready_checklist["operator_actions_remaining"] == []
     assert receipt_ready_checklist["blockers"] == [
         "confirmation_receipt_command_not_ready",
