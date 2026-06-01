@@ -55288,6 +55288,45 @@ Latest validation for Stage 16 pre-sleep age/freshness readbacks:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 pre-sleep evidence recaptured fresh marker
+
+Roadmap area: Stage 16 / Federation, sleep-continuity confirmation receipt
+truthfulness.
+
+Material change:
+
+- Ran the now-visible pre-sleep recapture command:
+  `scripts/federation-stage16-sleep-continuity-evidence.ps1 -Mode PreSleep
+  -CommitEvidence`.
+- The command wrote a fresh metadata-only pre-sleep marker under
+  `data/test_runs/federation-stage16-sleep-continuity-evidence/`.
+- Fresh local API readback now reports
+  `current_pre_sleep_age_guidance=fresh`,
+  `current_pre_sleep_recapture_recommended=false`, and
+  `pre_sleep_recapture_command_visible=false`.
+- Stage 16 remains correctly blocked on physical sleep/resume confirmation:
+  `/federation/sleep-continuity-runbook` and
+  `/federation/sleep-continuity-action?actor=codex.builder` both continue to
+  report `next_smallest_truthful_gap=stage16_sleep_resume_confirmation_receipt`.
+- This recapture did not write a sleep/resume confirmation receipt, did not
+  infer sleep from elapsed time, did not write runtime readback, and did not
+  mark Stage 16 closed.
+
+Latest validation for Stage 16 fresh pre-sleep recapture:
+
+- `scripts/federation-stage16-sleep-continuity-evidence.ps1 -Mode PreSleep
+  -CommitEvidence`
+  Result: `passed; status=pre_sleep_evidence_written`.
+- Direct FastAPI `TestClient` readback of `/federation/status`,
+  `/federation/sleep-continuity-runbook`, and
+  `/federation/sleep-continuity-action?actor=codex.builder`
+  Result: `passed; current_pre_sleep_age_guidance=fresh`,
+  `pre_sleep_recapture_command_visible=false`,
+  `writes_evidence=false`, `marks_stage16_closed=false`, and
+  `next_smallest_truthful_gap=stage16_sleep_resume_confirmation_receipt`.
+- `git status --short --branch`
+  Result: `clean; main aligned with origin/main before ledger update`.
+
 ### 2026-06-01 - Stage 16 stale pre-sleep recapture command is visible but read-only
 
 Roadmap area: Stage 16 / Federation, sleep-continuity confirmation receipt
