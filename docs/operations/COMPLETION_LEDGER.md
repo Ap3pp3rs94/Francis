@@ -52457,6 +52457,34 @@ Latest validation for Stage 16 sleep action readiness blockers:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 sleep action shows met readiness conditions
+
+Roadmap area: Stage 16 / Federation, workstation sleep-continuity gate
+truthfulness.
+
+Material change:
+
+- The federation UI now renders `selected_action_readiness.met_conditions` for
+  the selected sleep-continuity action.
+- The visible readiness block now distinguishes what is already satisfied
+  (`pre_sleep_evidence_available` and the required operator-confirmation flag
+  on the selected command) from the remaining run blocker and evidence gate.
+- This is read-only UI truthfulness. It does not execute routes, run shell
+  commands, write evidence, write receipts, mutate registry state, write memory,
+  grant execution authority, grant mutation authority, infer workstation
+  sleep/resume, or mark Stage 16 closed.
+- Stage 16 remains open until live post-resume evidence and the receipt-backed
+  completion/closure gates are satisfied.
+
+Latest validation for Stage 16 sleep action met readiness conditions:
+
+- `cd apps/chat_ui; npm run test -- federation_hub`
+  Result: `passed; 187 passed`.
+- `cd apps/chat_ui; npm run build`
+  Result: `passed`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

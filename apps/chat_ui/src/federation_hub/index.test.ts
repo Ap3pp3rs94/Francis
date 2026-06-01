@@ -608,6 +608,10 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   assert.equal(action.selected_action_readiness?.ready_to_run, false);
   assert.deepEqual(action.selected_action_readiness?.run_blockers, ["operator_confirmed_sleep_resume_missing"]);
   assert.deepEqual(action.selected_action_readiness?.remaining_evidence_gates, ["post_resume_evidence_missing"]);
+  assert.deepEqual(action.selected_action_readiness?.met_conditions, [
+    "pre_sleep_evidence_available",
+    "selected_command_requires_operator_confirmed_sleep_resume_flag",
+  ]);
   assert.equal(
     action.selected_action_readiness?.next_operator_step,
     "operator_confirm_sleep_resume_then_capture_post_resume_evidence",
@@ -667,6 +671,10 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   assert.deepEqual(presentation.operator_confirmation_requirements, action.operator_confirmation_requirements);
   assert.equal(presentation.selected_action_readiness?.status, "waiting_for_operator_confirmation");
   assert.deepEqual(presentation.selected_action_readiness?.run_blockers, ["operator_confirmed_sleep_resume_missing"]);
+  assert.deepEqual(presentation.selected_action_readiness?.met_conditions, [
+    "pre_sleep_evidence_available",
+    "selected_command_requires_operator_confirmed_sleep_resume_flag",
+  ]);
   assert.equal(presentation.writes_evidence_when_run, true);
   assert.equal(presentation.writes_receipts_when_run, false);
   assert.equal(presentation.mutation_available_from_ui, false);

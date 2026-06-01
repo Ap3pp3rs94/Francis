@@ -263,6 +263,18 @@ export function FederationHubPanel(props: { baseUrl: string }) {
                 ))}
               </div>
             ) : null}
+            {selectedActionReadiness.met_conditions.length ? (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 11, color: MUTED }}>met conditions</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                  {selectedActionReadiness.met_conditions.map((condition) => (
+                    <span key={`federation-met-condition-${condition}`} style={badgeStyle("ready")}>
+                      {condition}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             {selectedActionReadiness.next_operator_step ? (
               <div style={{ fontSize: 11, color: MUTED, marginTop: 8, overflowWrap: "anywhere" }}>
                 next operator step <code>{selectedActionReadiness.next_operator_step}</code>
