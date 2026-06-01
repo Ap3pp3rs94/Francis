@@ -817,6 +817,17 @@ test("federation sleep-continuity action parser preserves selected read-only ste
           "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json",
         reason: "operator confirms physical sleep/suspend and resume after the pre-sleep marker",
       },
+      confirmation_receipt_command_ready: true,
+      confirmation_receipt_actor_placeholder: "<actor_with_federation.stage16.sleep_resume.confirmation.write>",
+      confirmation_receipt_command:
+        "$body = @{ actor = '<actor_with_federation.stage16.sleep_resume.confirmation.write>'; reason = 'operator confirms physical sleep/suspend and resume after the pre-sleep marker'; operator_confirmed_sleep_resume = $true; pre_sleep_evidence_path = 'D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json' } | ConvertTo-Json -Depth 6; Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/federation/sleep-resume-confirmation' -ContentType 'application/json' -Body $body",
+      confirmation_receipt_copyable_command:
+        "Set-Location -LiteralPath 'D:\\Francis'; $body = @{ actor = '<actor_with_federation.stage16.sleep_resume.confirmation.write>'; reason = 'operator confirms physical sleep/suspend and resume after the pre-sleep marker'; operator_confirmed_sleep_resume = $true; pre_sleep_evidence_path = 'D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json' } | ConvertTo-Json -Depth 6; Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/federation/sleep-resume-confirmation' -ContentType 'application/json' -Body $body",
+      confirmation_receipt_command_requires_scope: "federation.stage16.sleep_resume.confirmation.write",
+      confirmation_receipt_command_records_receipt: true,
+      confirmation_receipt_command_writes_evidence: false,
+      confirmation_receipt_command_marks_stage16_closed: false,
+      confirmation_receipt_command_projection_only: true,
       confirmation_receipt_available_before_sequence: true,
       confirmation_receipt_required_for_receipt_backed_workflow: true,
       confirmation_receipt_writes_receipts: true,
@@ -1051,6 +1062,41 @@ test("federation sleep-continuity action parser preserves selected read-only ste
     action.operator_confirmation_handoff?.confirmation_receipt_required_scope,
     "federation.stage16.sleep_resume.confirmation.write",
   );
+  assert.equal(action.operator_confirmation_handoff?.confirmation_receipt_command_ready, true);
+  assert.equal(
+    action.operator_confirmation_handoff?.confirmation_receipt_actor_placeholder,
+    "<actor_with_federation.stage16.sleep_resume.confirmation.write>",
+  );
+  assert.equal(
+    action.operator_confirmation_handoff?.confirmation_receipt_command?.includes("Invoke-RestMethod -Method Post"),
+    true,
+  );
+  assert.equal(
+    action.operator_confirmation_handoff?.confirmation_receipt_command?.includes(
+      "http://127.0.0.1:8000/federation/sleep-resume-confirmation",
+    ),
+    true,
+  );
+  assert.equal(
+    action.operator_confirmation_handoff?.confirmation_receipt_command?.includes(
+      "operator_confirmed_sleep_resume = $true",
+    ),
+    true,
+  );
+  assert.equal(
+    action.operator_confirmation_handoff?.confirmation_receipt_copyable_command?.includes(
+      action.operator_confirmation_handoff.confirmation_receipt_command ?? "",
+    ),
+    true,
+  );
+  assert.equal(
+    action.operator_confirmation_handoff?.confirmation_receipt_command_requires_scope,
+    "federation.stage16.sleep_resume.confirmation.write",
+  );
+  assert.equal(action.operator_confirmation_handoff?.confirmation_receipt_command_records_receipt, true);
+  assert.equal(action.operator_confirmation_handoff?.confirmation_receipt_command_writes_evidence, false);
+  assert.equal(action.operator_confirmation_handoff?.confirmation_receipt_command_marks_stage16_closed, false);
+  assert.equal(action.operator_confirmation_handoff?.confirmation_receipt_command_projection_only, true);
   assert.equal(action.operator_confirmation_handoff?.confirmation_receipt_available_before_sequence, true);
   assert.equal(action.operator_confirmation_handoff?.confirmation_receipt_required_for_receipt_backed_workflow, true);
   assert.equal(action.operator_confirmation_handoff?.confirmation_receipt_writes_receipts, true);
@@ -1201,6 +1247,9 @@ test("federation sleep-continuity action parser preserves selected read-only ste
     true,
   );
   assert.equal(presentation.operator_confirmation_handoff?.confirmation_receipt_route, "/federation/sleep-resume-confirmation");
+  assert.equal(presentation.operator_confirmation_handoff?.confirmation_receipt_command_ready, true);
+  assert.equal(presentation.operator_confirmation_handoff?.confirmation_receipt_command_records_receipt, true);
+  assert.equal(presentation.operator_confirmation_handoff?.confirmation_receipt_command_projection_only, true);
   assert.equal(presentation.operator_confirmation_handoff?.confirmation_receipt_writes_receipts, true);
   assert.equal(presentation.operator_confirmation_handoff?.confirmation_receipt_marks_stage16_closed, false);
   assert.equal(presentation.operator_confirmation_handoff?.proof_boundary.does_not_run_shell, true);

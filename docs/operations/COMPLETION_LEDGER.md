@@ -53476,6 +53476,59 @@ Latest validation for Stage 16 sleep/resume confirmation receipts:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 sleep/resume confirmation command is projected
+
+Roadmap area: Stage 16 / Federation, workstation sleep-continuity operator
+confirmation handoff.
+
+Material change:
+
+- `/federation/sleep-continuity-action` now includes a copyable PowerShell
+  `Invoke-RestMethod` projection for writing the sleep/resume confirmation
+  receipt through `/federation/sleep-resume-confirmation`.
+- The projected receipt command carries the current pre-sleep evidence path,
+  `operator_confirmed_sleep_resume=true`, the required write scope, and an
+  actor placeholder for an operator or delegated builder actor that holds
+  `federation.stage16.sleep_resume.confirmation.write`.
+- The command projection is read-only until copied and run by the operator. The
+  API readback does not run the shell command, write evidence, write receipts,
+  grant authority, or mark Stage 16 closed.
+- Federation Hub preserves and displays the projected confirmation receipt
+  command separately from the post-resume capture and receipt-backed sequence
+  commands.
+- Stage 16 remains open until the operator performs a real workstation
+  sleep/resume, writes the matching confirmation receipt, runs the receipt-
+  backed post-resume sequence, and passes the later live completion gates.
+
+Latest validation for Stage 16 sleep/resume confirmation command projection:
+
+- `python -m pytest tests/test_api_federation.py -q --tb=short --maxfail=1`
+  Result: `passed`.
+- `npm run test -- federation_hub`
+  Result: `passed; 188 passed`.
+- `npm run build`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- Live readback via `TestClient` for `/federation/sleep-continuity-action`
+  Result: `passed;
+  status=capture_post_resume_evidence,
+  handoff_status=waiting_for_operator_sleep_resume_confirmation,
+  confirmation_receipt_command_ready=true,
+  has_confirmation_receipt_command=true,
+  has_confirmation_receipt_copyable_command=true,
+  command_records_receipt=true,
+  command_writes_evidence=false,
+  command_marks_stage16_closed=false,
+  command_projection_only=true,
+  next_smallest_truthful_gap=stage16_sleep_continuity_runtime_readback`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

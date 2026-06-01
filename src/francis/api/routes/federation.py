@@ -1757,6 +1757,26 @@ def _stage16_sleep_continuity_operator_confirmation_handoff(
     receipt_backed_sequence_copyable_command = (
         f"Set-Location -LiteralPath {_powershell_single_quote(str(repo_root()))}; {receipt_backed_sequence_command}"
     )
+    confirmation_receipt_command_ready = ready_after_confirmation and step_id == "capture_post_resume_evidence"
+    confirmation_actor_placeholder = f"<actor_with_{_FEDERATION_SLEEP_RESUME_CONFIRMATION_SCOPE}>"
+    confirmation_reason = "operator confirms physical sleep/suspend and resume after the pre-sleep marker"
+    confirmation_receipt_command = ""
+    confirmation_receipt_copyable_command = ""
+    if confirmation_receipt_command_ready:
+        confirmation_uri = f"http://127.0.0.1:8000{routes['sleep_resume_confirmation']}"
+        confirmation_receipt_command = (
+            "$body = @{ "
+            f"actor = {_powershell_single_quote(confirmation_actor_placeholder)}; "
+            f"reason = {_powershell_single_quote(confirmation_reason)}; "
+            "operator_confirmed_sleep_resume = $true; "
+            f"pre_sleep_evidence_path = {_powershell_single_quote(pre_sleep_evidence_path)} "
+            "} | ConvertTo-Json -Depth 6; "
+            f"Invoke-RestMethod -Method Post -Uri {_powershell_single_quote(confirmation_uri)} "
+            "-ContentType 'application/json' -Body $body"
+        )
+        confirmation_receipt_copyable_command = (
+            f"Set-Location -LiteralPath {_powershell_single_quote(str(repo_root()))}; {confirmation_receipt_command}"
+        )
     return {
         "status": status,
         "selected_step_id": step_id,
@@ -1804,8 +1824,19 @@ def _stage16_sleep_continuity_operator_confirmation_handoff(
             "actor": "operator or delegated builder actor with federation.stage16.sleep_resume.confirmation.write",
             "operator_confirmed_sleep_resume": True,
             "pre_sleep_evidence_path": pre_sleep_evidence_path,
-            "reason": "operator confirms physical sleep/suspend and resume after the pre-sleep marker",
+            "reason": confirmation_reason,
         },
+        "confirmation_receipt_command_ready": confirmation_receipt_command_ready,
+        "confirmation_receipt_actor_placeholder": confirmation_actor_placeholder
+        if confirmation_receipt_command_ready
+        else "",
+        "confirmation_receipt_command": confirmation_receipt_command,
+        "confirmation_receipt_copyable_command": confirmation_receipt_copyable_command,
+        "confirmation_receipt_command_requires_scope": _FEDERATION_SLEEP_RESUME_CONFIRMATION_SCOPE,
+        "confirmation_receipt_command_records_receipt": confirmation_receipt_command_ready,
+        "confirmation_receipt_command_writes_evidence": False,
+        "confirmation_receipt_command_marks_stage16_closed": False,
+        "confirmation_receipt_command_projection_only": True,
         "confirmation_receipt_available_before_sequence": ready_after_confirmation,
         "confirmation_receipt_required_for_receipt_backed_workflow": confirmation_required,
         "confirmation_receipt_writes_receipts": True,
@@ -1831,6 +1862,7 @@ def _stage16_sleep_continuity_operator_confirmation_handoff(
             "does_not_write_receipts": True,
             "does_not_mark_stage16_closed": True,
             "does_not_grant_authority": True,
+            "confirmation_receipt_command_projection_only": True,
             "receipt_backed_sequence_requires_confirmation_receipt": confirmation_required
             and step_id == "capture_post_resume_evidence",
         },

@@ -493,6 +493,15 @@ export type FederationSleepContinuityOperatorConfirmationHandoff = {
   confirmation_receipt_readback_route?: string;
   confirmation_receipt_required_scope?: string;
   confirmation_receipt_payload_contract?: Record<string, unknown>;
+  confirmation_receipt_command_ready: boolean;
+  confirmation_receipt_actor_placeholder?: string;
+  confirmation_receipt_command?: string;
+  confirmation_receipt_copyable_command?: string;
+  confirmation_receipt_command_requires_scope?: string;
+  confirmation_receipt_command_records_receipt: boolean;
+  confirmation_receipt_command_writes_evidence: boolean;
+  confirmation_receipt_command_marks_stage16_closed: boolean;
+  confirmation_receipt_command_projection_only: boolean;
   confirmation_receipt_available_before_sequence: boolean;
   confirmation_receipt_required_for_receipt_backed_workflow: boolean;
   confirmation_receipt_writes_receipts: boolean;
@@ -850,6 +859,15 @@ function parseFederationSleepContinuityOperatorConfirmationHandoff(
     confirmation_receipt_payload_contract: isRecord(raw.confirmation_receipt_payload_contract)
       ? raw.confirmation_receipt_payload_contract
       : undefined,
+    confirmation_receipt_command_ready: safeBoolean(raw.confirmation_receipt_command_ready),
+    confirmation_receipt_actor_placeholder: optionalString(raw.confirmation_receipt_actor_placeholder),
+    confirmation_receipt_command: optionalString(raw.confirmation_receipt_command),
+    confirmation_receipt_copyable_command: optionalString(raw.confirmation_receipt_copyable_command),
+    confirmation_receipt_command_requires_scope: optionalString(raw.confirmation_receipt_command_requires_scope),
+    confirmation_receipt_command_records_receipt: safeBoolean(raw.confirmation_receipt_command_records_receipt),
+    confirmation_receipt_command_writes_evidence: safeBoolean(raw.confirmation_receipt_command_writes_evidence),
+    confirmation_receipt_command_marks_stage16_closed: safeBoolean(raw.confirmation_receipt_command_marks_stage16_closed),
+    confirmation_receipt_command_projection_only: safeBoolean(raw.confirmation_receipt_command_projection_only),
     confirmation_receipt_available_before_sequence: safeBoolean(raw.confirmation_receipt_available_before_sequence),
     confirmation_receipt_required_for_receipt_backed_workflow: safeBoolean(
       raw.confirmation_receipt_required_for_receipt_backed_workflow,

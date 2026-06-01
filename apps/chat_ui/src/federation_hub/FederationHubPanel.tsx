@@ -339,6 +339,13 @@ export function FederationHubPanel(props: { baseUrl: string }) {
               {" / "}marks closed{" "}
               <code>{yesNo(operatorConfirmationHandoff.confirmation_receipt_marks_stage16_closed)}</code>
             </div>
+            <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
+              receipt command <code>{yesNo(operatorConfirmationHandoff.confirmation_receipt_command_ready)}</code>
+              {" / "}records receipt{" "}
+              <code>{yesNo(operatorConfirmationHandoff.confirmation_receipt_command_records_receipt)}</code>
+              {" / "}projection{" "}
+              <code>{yesNo(operatorConfirmationHandoff.confirmation_receipt_command_projection_only)}</code>
+            </div>
             {operatorConfirmationHandoff.operator_confirmation_source_required ? (
               <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
                 source <code>{operatorConfirmationHandoff.operator_confirmation_source_required}</code>
@@ -348,6 +355,23 @@ export function FederationHubPanel(props: { baseUrl: string }) {
               <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
                 pre evidence <code>{operatorConfirmationHandoff.pre_sleep_evidence_path}</code>
               </div>
+            ) : null}
+            {operatorConfirmationHandoff.confirmation_receipt_copyable_command ? (
+              <pre
+                style={{
+                  margin: "8px 0 0",
+                  padding: 10,
+                  borderRadius: 10,
+                  border: `1px solid ${PANEL_BORDER}`,
+                  background: "#101010",
+                  color: TEXT,
+                  whiteSpace: "pre-wrap",
+                  overflowWrap: "anywhere",
+                  fontSize: 11,
+                }}
+              >
+                {operatorConfirmationHandoff.confirmation_receipt_copyable_command}
+              </pre>
             ) : null}
             {operatorConfirmationHandoff.post_resume_capture_copyable_command ? (
               <pre

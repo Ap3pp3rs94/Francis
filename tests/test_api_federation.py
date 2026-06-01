@@ -1502,6 +1502,36 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
         "pre_sleep_evidence_path": str(pre_sleep_path.resolve()),
         "reason": "operator confirms physical sleep/suspend and resume after the pre-sleep marker",
     }
+    assert confirmation_handoff["confirmation_receipt_command_ready"] is True
+    assert (
+        confirmation_handoff["confirmation_receipt_actor_placeholder"]
+        == "<actor_with_federation.stage16.sleep_resume.confirmation.write>"
+    )
+    assert confirmation_handoff["confirmation_receipt_command"].startswith("$body = @{ ")
+    assert "Invoke-RestMethod -Method Post" in confirmation_handoff["confirmation_receipt_command"]
+    assert (
+        "http://127.0.0.1:8000/federation/sleep-resume-confirmation"
+        in (confirmation_handoff["confirmation_receipt_command"])
+    )
+    assert "operator_confirmed_sleep_resume = $true" in confirmation_handoff["confirmation_receipt_command"]
+    assert str(pre_sleep_path.resolve()) in confirmation_handoff["confirmation_receipt_command"]
+    assert (
+        confirmation_handoff["confirmation_receipt_actor_placeholder"]
+        in confirmation_handoff["confirmation_receipt_command"]
+    )
+    assert confirmation_handoff["confirmation_receipt_copyable_command"].startswith("Set-Location -LiteralPath ")
+    assert (
+        confirmation_handoff["confirmation_receipt_command"]
+        in confirmation_handoff["confirmation_receipt_copyable_command"]
+    )
+    assert (
+        confirmation_handoff["confirmation_receipt_command_requires_scope"]
+        == "federation.stage16.sleep_resume.confirmation.write"
+    )
+    assert confirmation_handoff["confirmation_receipt_command_records_receipt"] is True
+    assert confirmation_handoff["confirmation_receipt_command_writes_evidence"] is False
+    assert confirmation_handoff["confirmation_receipt_command_marks_stage16_closed"] is False
+    assert confirmation_handoff["confirmation_receipt_command_projection_only"] is True
     assert confirmation_handoff["confirmation_receipt_available_before_sequence"] is True
     assert confirmation_handoff["confirmation_receipt_required_for_receipt_backed_workflow"] is True
     assert confirmation_handoff["confirmation_receipt_writes_receipts"] is True
@@ -1524,6 +1554,7 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert confirmation_handoff["proof_boundary"]["does_not_write_receipts"] is True
     assert confirmation_handoff["proof_boundary"]["does_not_mark_stage16_closed"] is True
     assert confirmation_handoff["proof_boundary"]["does_not_grant_authority"] is True
+    assert confirmation_handoff["proof_boundary"]["confirmation_receipt_command_projection_only"] is True
     assert confirmation_handoff["proof_boundary"]["receipt_backed_sequence_requires_confirmation_receipt"] is True
     after_run = action["after_manual_execution_readback"]
     assert after_run["status"] == "manual_execution_waiting_for_operator_confirmation"
@@ -1961,6 +1992,18 @@ def test_federation_stage16_sleep_continuity_runbook_uses_linked_post_resume_mar
     assert confirmation_handoff["post_resume_receipt_backed_sequence_confirmation_receipt_id_placeholder"] == ""
     assert confirmation_handoff["post_resume_sequence_writes_evidence_when_run"] is False
     assert confirmation_handoff["post_resume_sequence_writes_receipts_when_run"] is False
+    assert confirmation_handoff["confirmation_receipt_command_ready"] is False
+    assert confirmation_handoff["confirmation_receipt_actor_placeholder"] == ""
+    assert confirmation_handoff["confirmation_receipt_command"] == ""
+    assert confirmation_handoff["confirmation_receipt_copyable_command"] == ""
+    assert (
+        confirmation_handoff["confirmation_receipt_command_requires_scope"]
+        == "federation.stage16.sleep_resume.confirmation.write"
+    )
+    assert confirmation_handoff["confirmation_receipt_command_records_receipt"] is False
+    assert confirmation_handoff["confirmation_receipt_command_writes_evidence"] is False
+    assert confirmation_handoff["confirmation_receipt_command_marks_stage16_closed"] is False
+    assert confirmation_handoff["confirmation_receipt_command_projection_only"] is True
     assert confirmation_handoff["should_not_run_before_confirmation"] is False
     assert confirmation_handoff["operator_terminal_command_ready"] is True
     assert confirmation_handoff["proof_boundary"]["projection_only"] is True
