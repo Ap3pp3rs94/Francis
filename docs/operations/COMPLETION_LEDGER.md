@@ -55164,6 +55164,57 @@ Latest validation for Stage 16 receipt-ready checklist readback:
 - `npm run build`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 exposes receipt-backed sequence readiness directly
+
+Roadmap area: Stage 16 / Federation, sleep-continuity confirmation receipt
+handoff.
+
+Material change:
+
+- `/federation/sleep-resume-confirmation/receipt-backed-sequence-readiness`
+  now exposes a read-only projection for the post-resume sequence that is
+  allowed only after a current matching operator sleep/resume confirmation
+  receipt exists.
+- The projection reports the current pre-sleep marker, latest confirmation
+  receipt id/decision, receipt-to-pre-sleep match state, sequence blockers,
+  command visibility, and the exact next gap.
+- Federation Hub now fetches and displays this sequence-readiness readback
+  separately from the broader confirmation receipt list.
+- The projection does not execute the post-resume sequence, write receipts,
+  write evidence, write runtime readback, run shell, grant authority, infer
+  physical sleep/resume, or close Stage 16.
+- Fresh local readback for `actor=codex.builder` reports
+  `status=blocked_until_current_confirmation_receipt`,
+  `receipt_backed_sequence_ready=false`,
+  `receipt_backed_sequence_blockers=["sleep_resume_confirmation_receipt_missing"]`,
+  `receipt_backed_sequence_command_visible=false`, `writes_evidence=false`,
+  `writes_receipts=false`, `runs_shell=false`, `marks_stage16_closed=false`,
+  and `next_smallest_truthful_gap=stage16_sleep_resume_confirmation_receipt`.
+
+Latest validation for Stage 16 receipt-backed sequence readiness:
+
+- `python -m pytest
+  tests/test_api_federation.py::test_federation_stage16_sleep_resume_confirmation_records_operator_receipt
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 2 passed`.
+- `python -m pytest tests/test_api_federation.py -q --tb=short --maxfail=1`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `npm run test -- federation_hub`
+  Result: `passed; 199 passed`.
+- `npm run build`
+  Result: `passed`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

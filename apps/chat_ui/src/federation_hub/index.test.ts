@@ -16,6 +16,7 @@ import {
   parseFederationSleepContinuityRunbook,
   parseFederationSleepResumeConfirmationActorReadiness,
   parseFederationSleepResumeOperatorChecklist,
+  parseFederationSleepResumeReceiptBackedSequenceReadiness,
   parseFederationSleepResumeConfirmationRecordResponse,
   parseFederationSleepResumeConfirmations,
   parseFederationStage16Status,
@@ -1427,6 +1428,140 @@ test("FederationClient reads sleep-resume operator checklist as a read-only phys
     assert.equal(parsed.latest_confirmation_receipt_id, "fedsleepconfirm_existing");
     assert.deepEqual(parsed.blockers, ["confirmation_receipt_actor_not_ready"]);
     assert.equal(parsed.checklist[0]?.passed, false);
+  } finally {
+    restoreFetch();
+  }
+});
+
+test("FederationClient reads receipt-backed sequence readiness as read-only projection", async () => {
+  const requests: Array<{ path: string; method: string; actor: string | null }> = [];
+  const restoreFetch = installFetch(async (url, init) => {
+    const parsed = new URL(url);
+    requests.push({
+      path: parsed.pathname,
+      method: (init?.method ?? "GET").toUpperCase(),
+      actor: parsed.searchParams.get("actor"),
+    });
+    assert.equal(init?.method, "GET");
+    assert.equal(parsed.pathname, "/federation/sleep-resume-confirmation/receipt-backed-sequence-readiness");
+    return jsonResponse({
+      ok: true,
+      kind: "francis.stage16.federation.sleep_resume_receipt_backed_sequence_readiness",
+      stage: "Stage 16 / Federation",
+      status: "ready_for_receipt_backed_post_resume_sequence",
+      target: "stage16_sleep_continuity",
+      actor: "test.federation.sleep",
+      current_pre_sleep_evidence_present: true,
+      current_pre_sleep_evidence_path:
+        "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json",
+      current_pre_sleep_recorded_ts: 1_800_030_000,
+      latest_receipt_id: "fedsleepconfirm_ui_ready",
+      latest_decision: "operator_confirmed_sleep_resume",
+      latest_actor: "test.federation.sleep",
+      latest_pre_sleep_evidence_path:
+        "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json",
+      latest_receipt_is_operator_confirmed: true,
+      latest_receipt_matches_current_pre_sleep: true,
+      latest_receipt_usable_for_receipt_backed_sequence: true,
+      receipt_backed_sequence_ready: true,
+      receipt_backed_sequence_blockers: [],
+      receipt_backed_sequence_command_visible: true,
+      receipt_backed_sequence_command:
+        "scripts/federation-stage16-sleep-continuity-post-resume-sequence.ps1 -Mode Run -CommitEvidence -CommitReceipts -RequireConfirmationReceipt -ConfirmationReceiptId fedsleepconfirm_ui_ready",
+      receipt_backed_sequence_copyable_command:
+        "Set-Location -LiteralPath 'D:\\Francis'; scripts/federation-stage16-sleep-continuity-post-resume-sequence.ps1 -Mode Run -CommitEvidence -CommitReceipts -RequireConfirmationReceipt -ConfirmationReceiptId fedsleepconfirm_ui_ready",
+      receipt_backed_sequence_requires_confirmation_receipt: true,
+      receipt_backed_sequence_confirmation_receipt_id: "fedsleepconfirm_ui_ready",
+      receipt_backed_sequence_operator_step: {
+        id: "run_receipt_backed_post_resume_sequence",
+        order: 4,
+        status: "ready",
+        command_field: "receipt_backed_sequence_copyable_command",
+        requires_current_receipt: true,
+        writes_receipts_when_run: true,
+        writes_evidence_when_run: true,
+        marks_stage16_closed_when_run: false,
+        operator_action_required: true,
+        read_only_projection: true,
+      },
+      operator_action_required: true,
+      writes_evidence_when_run: true,
+      writes_receipts_when_run: true,
+      marks_stage16_closed_when_run: false,
+      projection_only: true,
+      reads_receipts: true,
+      writes_receipts: false,
+      writes_evidence: false,
+      writes_runtime_readback: false,
+      marks_stage16_closed: false,
+      grants_execution_authority: false,
+      grants_mutation_authority: false,
+      confirmation_receipt_readback_route: "/federation/sleep-resume-confirmations",
+      operator_checklist_route: "/federation/sleep-resume-confirmation/operator-checklist",
+      sleep_continuity_action_route: "/federation/sleep-continuity-action",
+      governance: {
+        read_only: true,
+        receipt_backed_sequence_readiness_projection: true,
+        requires_current_matching_confirmation_receipt: true,
+        does_not_execute_sequence: true,
+        does_not_mark_stage16_closed: true,
+      },
+      routes: {
+        sleep_resume_confirmation_receipt_backed_sequence_readiness:
+          "/federation/sleep-resume-confirmation/receipt-backed-sequence-readiness",
+      },
+      next_smallest_truthful_gap: "stage16_sleep_continuity_runtime_readback",
+    });
+  });
+
+  try {
+    const client = new FederationClient("http://127.0.0.1:8000");
+    const readiness = await client.getSleepResumeReceiptBackedSequenceReadiness({
+      actor: "test.federation.sleep",
+      timeoutMs: 50,
+    });
+
+    assert.deepEqual(requests, [
+      {
+        path: "/federation/sleep-resume-confirmation/receipt-backed-sequence-readiness",
+        method: "GET",
+        actor: "test.federation.sleep",
+      },
+    ]);
+    assert.equal(readiness.ok, true);
+    assert.equal(readiness.status, "ready_for_receipt_backed_post_resume_sequence");
+    assert.equal(readiness.actor, "test.federation.sleep");
+    assert.equal(readiness.latest_receipt_id, "fedsleepconfirm_ui_ready");
+    assert.equal(readiness.receipt_backed_sequence_ready, true);
+    assert.deepEqual(readiness.receipt_backed_sequence_blockers, []);
+    assert.equal(readiness.receipt_backed_sequence_command_visible, true);
+    assert.equal(readiness.receipt_backed_sequence_operator_step?.id, "run_receipt_backed_post_resume_sequence");
+    assert.equal(readiness.operator_action_required, true);
+    assert.equal(readiness.writes_evidence_when_run, true);
+    assert.equal(readiness.writes_receipts_when_run, true);
+    assert.equal(readiness.writes_evidence, false);
+    assert.equal(readiness.writes_receipts, false);
+    assert.equal(readiness.writes_runtime_readback, false);
+    assert.equal(readiness.marks_stage16_closed, false);
+    assert.equal(readiness.marks_stage16_closed_when_run, false);
+    assert.equal(readiness.grants_execution_authority, false);
+    assert.equal(readiness.grants_mutation_authority, false);
+    assert.equal(readiness.governance?.does_not_execute_sequence, true);
+
+    const blocked = parseFederationSleepResumeReceiptBackedSequenceReadiness({
+      ok: true,
+      status: "blocked_until_current_confirmation_receipt",
+      receipt_backed_sequence_ready: false,
+      receipt_backed_sequence_blockers: ["sleep_resume_confirmation_receipt_missing"],
+      receipt_backed_sequence_command_visible: false,
+      writes_evidence_when_run: false,
+      writes_receipts_when_run: false,
+      marks_stage16_closed: false,
+    });
+    assert.equal(blocked.status, "blocked_until_current_confirmation_receipt");
+    assert.deepEqual(blocked.receipt_backed_sequence_blockers, ["sleep_resume_confirmation_receipt_missing"]);
+    assert.equal(blocked.receipt_backed_sequence_command_visible, false);
+    assert.equal(blocked.writes_evidence_when_run, false);
   } finally {
     restoreFetch();
   }

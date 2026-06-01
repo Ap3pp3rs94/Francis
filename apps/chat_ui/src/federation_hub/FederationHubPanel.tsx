@@ -16,6 +16,7 @@ import {
   type FederationSleepContinuityRunbook,
   type FederationSleepResumeConfirmationActorReadiness,
   type FederationSleepResumeOperatorChecklist,
+  type FederationSleepResumeReceiptBackedSequenceReadiness,
   type FederationSleepResumeConfirmationRecordResponse,
   type FederationSleepResumeConfirmations,
   type FederationStage16Status,
@@ -91,6 +92,8 @@ export function FederationHubPanel(props: { baseUrl: string }) {
   const [action, setAction] = useState<FederationSleepContinuityActionReadback | null>(null);
   const [confirmations, setConfirmations] = useState<FederationSleepResumeConfirmations | null>(null);
   const [operatorChecklist, setOperatorChecklist] = useState<FederationSleepResumeOperatorChecklist | null>(null);
+  const [sequenceReadiness, setSequenceReadiness] =
+    useState<FederationSleepResumeReceiptBackedSequenceReadiness | null>(null);
   const [actorReadiness, setActorReadiness] = useState<FederationSleepResumeConfirmationActorReadiness | null>(null);
   const [actorPreflightActor, setActorPreflightActor] = useState(DEFAULT_FEDERATION_SLEEP_RESUME_CONFIRMATION_ACTOR);
   const [actorReadinessAutoCheckedActor, setActorReadinessAutoCheckedActor] = useState("");
@@ -108,7 +111,14 @@ export function FederationHubPanel(props: { baseUrl: string }) {
     setLoading(true);
     setError(null);
     try {
-      const [nextStatus, nextRunbook, nextAction, nextConfirmations, nextOperatorChecklist] = await Promise.all([
+      const [
+        nextStatus,
+        nextRunbook,
+        nextAction,
+        nextConfirmations,
+        nextOperatorChecklist,
+        nextSequenceReadiness,
+      ] = await Promise.all([
         client.getStatus({ actor: actorPreflightActor, timeoutMs: 10_000 }),
         client.getSleepContinuityRunbook({ timeoutMs: 10_000 }),
         client.getSleepContinuityAction({ actor: actorPreflightActor, timeoutMs: 10_000 }),
@@ -121,12 +131,17 @@ export function FederationHubPanel(props: { baseUrl: string }) {
           actor: actorPreflightActor,
           timeoutMs: 10_000,
         }),
+        client.getSleepResumeReceiptBackedSequenceReadiness({
+          actor: actorPreflightActor,
+          timeoutMs: 10_000,
+        }),
       ]);
       setStatus(nextStatus);
       setRunbook(nextRunbook);
       setAction(nextAction);
       setConfirmations(nextConfirmations);
       setOperatorChecklist(nextOperatorChecklist);
+      setSequenceReadiness(nextSequenceReadiness);
       setPresentation(presentFederationSleepContinuityAction(nextAction));
       setLoadedAt(Date.now());
     } catch (err) {
@@ -194,6 +209,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
   const afterManualExecutionReadback = presentation?.after_manual_execution_readback;
   const runbookSelectedActionSummary = runbook?.selected_action_summary;
   const confirmationReceiptBlockers = confirmations?.receipt_backed_sequence_blockers ?? [];
+  const sequenceReadinessBlockers = sequenceReadiness?.receipt_backed_sequence_blockers ?? [];
   const confirmationReceiptOperatorSteps = confirmations?.confirmation_receipt_operator_steps ?? [];
   const visibleConfirmationCommands = federationSleepResumeConfirmationVisibleCommands(confirmations);
   const visibleActorReadiness = isFederationSleepResumeConfirmationActorReadinessCurrent(
@@ -387,6 +403,16 @@ export function FederationHubPanel(props: { baseUrl: string }) {
             <code>{yesNo(Boolean(status?.sleep_continuity_confirmation_receipt_latest_matches_current_pre_sleep))}</code>
             {" / "}latest <code>{codeValue(status?.sleep_continuity_confirmation_receipt_latest_receipt_id)}</code>
           </div>
+          {sequenceReadiness ? (
+            <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
+              sequence readback <code>{codeValue(sequenceReadiness.status)}</code>
+              {" / "}ready <code>{yesNo(sequenceReadiness.receipt_backed_sequence_ready)}</code>
+              {" / "}visible <code>{yesNo(sequenceReadiness.receipt_backed_sequence_command_visible)}</code>
+              {" / "}writes evidence <code>{yesNo(sequenceReadiness.writes_evidence_when_run)}</code>
+              {" / "}writes receipts <code>{yesNo(sequenceReadiness.writes_receipts_when_run)}</code>
+              {" / "}marks closed <code>{yesNo(sequenceReadiness.marks_stage16_closed_when_run)}</code>
+            </div>
+          ) : null}
           <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
             requested actor <code>{codeValue(confirmations.confirmation_receipt_requested_actor)}</code>
             {" / "}accepted{" "}
@@ -596,6 +622,15 @@ export function FederationHubPanel(props: { baseUrl: string }) {
               {status.sleep_continuity_receipt_backed_sequence_blockers.map((blocker) => (
                 <span key={`federation-status-receipt-sequence-blocker-${blocker}`} style={badgeStyle("blocked")}>
                   status {blocker}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          {sequenceReadinessBlockers.length ? (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+              {sequenceReadinessBlockers.map((blocker) => (
+                <span key={`federation-sequence-readiness-blocker-${blocker}`} style={badgeStyle("blocked")}>
+                  sequence {blocker}
                 </span>
               ))}
             </div>

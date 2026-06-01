@@ -2164,6 +2164,32 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     assert empty_readback["writes_runtime_readback"] is False
     assert empty_readback["marks_stage16_closed"] is False
 
+    empty_sequence_readiness = client.get(
+        "/federation/sleep-resume-confirmation/receipt-backed-sequence-readiness?actor=test.federation.sleep"
+    ).json()
+    assert empty_sequence_readiness["kind"] == (
+        "francis.stage16.federation.sleep_resume_receipt_backed_sequence_readiness"
+    )
+    assert empty_sequence_readiness["status"] == "blocked_until_current_confirmation_receipt"
+    assert empty_sequence_readiness["actor"] == "test.federation.sleep"
+    assert empty_sequence_readiness["current_pre_sleep_evidence_path"] == str(pre_sleep_path.resolve())
+    assert empty_sequence_readiness["latest_receipt_id"] == ""
+    assert empty_sequence_readiness["receipt_backed_sequence_ready"] is False
+    assert empty_sequence_readiness["receipt_backed_sequence_blockers"] == ["sleep_resume_confirmation_receipt_missing"]
+    assert empty_sequence_readiness["receipt_backed_sequence_command_visible"] is False
+    assert empty_sequence_readiness["receipt_backed_sequence_command"] == ""
+    assert empty_sequence_readiness["receipt_backed_sequence_copyable_command"] == ""
+    assert empty_sequence_readiness["operator_action_required"] is False
+    assert empty_sequence_readiness["writes_evidence_when_run"] is False
+    assert empty_sequence_readiness["writes_receipts_when_run"] is False
+    assert empty_sequence_readiness["writes_evidence"] is False
+    assert empty_sequence_readiness["writes_receipts"] is False
+    assert empty_sequence_readiness["runs_shell"] is False
+    assert empty_sequence_readiness["marks_stage16_closed"] is False
+    assert empty_sequence_readiness["governance"]["read_only"] is True
+    assert empty_sequence_readiness["governance"]["does_not_execute_sequence"] is True
+    assert empty_sequence_readiness["next_smallest_truthful_gap"] == "stage16_sleep_resume_confirmation_receipt"
+
     actor_bound_readback = client.get(
         "/federation/sleep-resume-confirmations?limit=5&actor=test.federation.sleep"
     ).json()
@@ -2391,6 +2417,49 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     assert not list(
         (data_root / "test_runs" / "federation-stage16-sleep-continuity-evidence").glob("post_resume_*.json")
     )
+
+    sequence_readiness = client.get(
+        "/federation/sleep-resume-confirmation/receipt-backed-sequence-readiness?actor=test.federation.sleep"
+    ).json()
+    assert sequence_readiness["status"] == "ready_for_receipt_backed_post_resume_sequence"
+    assert sequence_readiness["actor"] == "test.federation.sleep"
+    assert sequence_readiness["latest_receipt_id"] == body["receipt_id"]
+    assert sequence_readiness["latest_decision"] == "operator_confirmed_sleep_resume"
+    assert sequence_readiness["latest_receipt_is_operator_confirmed"] is True
+    assert sequence_readiness["latest_receipt_matches_current_pre_sleep"] is True
+    assert sequence_readiness["latest_receipt_usable_for_receipt_backed_sequence"] is True
+    assert sequence_readiness["receipt_backed_sequence_ready"] is True
+    assert sequence_readiness["receipt_backed_sequence_blockers"] == []
+    assert sequence_readiness["receipt_backed_sequence_command_visible"] is True
+    assert body["receipt_id"] in sequence_readiness["receipt_backed_sequence_command"]
+    assert "-RequireConfirmationReceipt" in sequence_readiness["receipt_backed_sequence_command"]
+    assert str(pre_sleep_path.resolve()) in sequence_readiness["receipt_backed_sequence_command"]
+    assert (
+        sequence_readiness["receipt_backed_sequence_command"]
+        in sequence_readiness["receipt_backed_sequence_copyable_command"]
+    )
+    assert sequence_readiness["receipt_backed_sequence_confirmation_receipt_id"] == body["receipt_id"]
+    assert (
+        sequence_readiness["receipt_backed_sequence_operator_step"]["id"] == "run_receipt_backed_post_resume_sequence"
+    )
+    assert sequence_readiness["operator_action_required"] is True
+    assert sequence_readiness["writes_evidence_when_run"] is True
+    assert sequence_readiness["writes_receipts_when_run"] is True
+    assert sequence_readiness["writes_receipts"] is False
+    assert sequence_readiness["writes_evidence"] is False
+    assert sequence_readiness["writes_runtime_readback"] is False
+    assert sequence_readiness["runs_shell"] is False
+    assert sequence_readiness["marks_stage16_closed"] is False
+    assert sequence_readiness["marks_stage16_closed_when_run"] is False
+    assert sequence_readiness["grants_execution_authority"] is False
+    assert sequence_readiness["grants_mutation_authority"] is False
+    assert sequence_readiness["confirmation_receipt_readback_route"] == "/federation/sleep-resume-confirmations"
+    assert sequence_readiness["operator_checklist_route"] == "/federation/sleep-resume-confirmation/operator-checklist"
+    assert sequence_readiness["governance"]["receipt_backed_sequence_readiness_projection"] is True
+    assert sequence_readiness["governance"]["requires_current_matching_confirmation_receipt"] is True
+    assert sequence_readiness["governance"]["does_not_write_evidence"] is True
+    assert sequence_readiness["governance"]["does_not_mark_stage16_closed"] is True
+    assert sequence_readiness["next_smallest_truthful_gap"] == "stage16_sleep_continuity_runtime_readback"
 
     receipt_ready_status = client.get("/federation/status?actor=test.federation.sleep").json()
     assert receipt_ready_status["sleep_continuity_confirmation_receipt_readback_status"] == (

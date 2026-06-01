@@ -481,6 +481,51 @@ export type FederationSleepResumeOperatorChecklist = {
   next_smallest_truthful_gap?: string;
 };
 
+export type FederationSleepResumeReceiptBackedSequenceReadiness = {
+  ok: boolean;
+  kind?: string;
+  stage?: string;
+  status?: string;
+  target?: string;
+  actor?: string;
+  current_pre_sleep_evidence_present: boolean;
+  current_pre_sleep_evidence_path?: string;
+  current_pre_sleep_recorded_ts?: number;
+  latest_receipt_id?: string;
+  latest_decision?: string;
+  latest_actor?: string;
+  latest_pre_sleep_evidence_path?: string;
+  latest_receipt_is_operator_confirmed: boolean;
+  latest_receipt_matches_current_pre_sleep: boolean;
+  latest_receipt_usable_for_receipt_backed_sequence: boolean;
+  receipt_backed_sequence_ready: boolean;
+  receipt_backed_sequence_blockers: string[];
+  receipt_backed_sequence_command_visible: boolean;
+  receipt_backed_sequence_command?: string;
+  receipt_backed_sequence_copyable_command?: string;
+  receipt_backed_sequence_requires_confirmation_receipt: boolean;
+  receipt_backed_sequence_confirmation_receipt_id?: string;
+  receipt_backed_sequence_operator_step?: FederationSleepResumeConfirmationOperatorStep;
+  operator_action_required: boolean;
+  writes_evidence_when_run: boolean;
+  writes_receipts_when_run: boolean;
+  marks_stage16_closed_when_run: boolean;
+  projection_only: boolean;
+  reads_receipts: boolean;
+  writes_receipts: boolean;
+  writes_evidence: boolean;
+  writes_runtime_readback: boolean;
+  marks_stage16_closed: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+  confirmation_receipt_readback_route?: string;
+  operator_checklist_route?: string;
+  sleep_continuity_action_route?: string;
+  governance?: Record<string, unknown>;
+  routes: Record<string, string>;
+  next_smallest_truthful_gap?: string;
+};
+
 export type FederationSleepResumeConfirmationActorReadiness = {
   ok: boolean;
   kind?: string;
@@ -1889,6 +1934,67 @@ export function parseFederationSleepResumeOperatorChecklist(
   };
 }
 
+export function parseFederationSleepResumeReceiptBackedSequenceReadiness(
+  raw: unknown,
+): FederationSleepResumeReceiptBackedSequenceReadiness {
+  const body = isRecord(raw) ? raw : {};
+  const currentPreSleepRecordedTs = safeNumber(body.current_pre_sleep_recorded_ts, 0);
+  const sequenceOperatorStep = parseFederationSleepResumeConfirmationOperatorStep(
+    body.receipt_backed_sequence_operator_step,
+  );
+  return {
+    ok: safeBoolean(body.ok),
+    kind: optionalString(body.kind),
+    stage: optionalString(body.stage),
+    status: optionalString(body.status),
+    target: optionalString(body.target),
+    actor: optionalString(body.actor),
+    current_pre_sleep_evidence_present: safeBoolean(body.current_pre_sleep_evidence_present),
+    current_pre_sleep_evidence_path: optionalString(body.current_pre_sleep_evidence_path),
+    current_pre_sleep_recorded_ts:
+      currentPreSleepRecordedTs > 0 ? normalizeTs(currentPreSleepRecordedTs) : undefined,
+    latest_receipt_id: optionalString(body.latest_receipt_id),
+    latest_decision: optionalString(body.latest_decision),
+    latest_actor: optionalString(body.latest_actor),
+    latest_pre_sleep_evidence_path: optionalString(body.latest_pre_sleep_evidence_path),
+    latest_receipt_is_operator_confirmed: safeBoolean(body.latest_receipt_is_operator_confirmed),
+    latest_receipt_matches_current_pre_sleep: safeBoolean(body.latest_receipt_matches_current_pre_sleep),
+    latest_receipt_usable_for_receipt_backed_sequence: safeBoolean(
+      body.latest_receipt_usable_for_receipt_backed_sequence,
+    ),
+    receipt_backed_sequence_ready: safeBoolean(body.receipt_backed_sequence_ready),
+    receipt_backed_sequence_blockers: stringList(body.receipt_backed_sequence_blockers),
+    receipt_backed_sequence_command_visible: safeBoolean(body.receipt_backed_sequence_command_visible),
+    receipt_backed_sequence_command: optionalString(body.receipt_backed_sequence_command),
+    receipt_backed_sequence_copyable_command: optionalString(body.receipt_backed_sequence_copyable_command),
+    receipt_backed_sequence_requires_confirmation_receipt: safeBoolean(
+      body.receipt_backed_sequence_requires_confirmation_receipt,
+    ),
+    receipt_backed_sequence_confirmation_receipt_id: optionalString(
+      body.receipt_backed_sequence_confirmation_receipt_id,
+    ),
+    receipt_backed_sequence_operator_step: sequenceOperatorStep ?? undefined,
+    operator_action_required: safeBoolean(body.operator_action_required),
+    writes_evidence_when_run: safeBoolean(body.writes_evidence_when_run),
+    writes_receipts_when_run: safeBoolean(body.writes_receipts_when_run),
+    marks_stage16_closed_when_run: safeBoolean(body.marks_stage16_closed_when_run),
+    projection_only: safeBoolean(body.projection_only),
+    reads_receipts: safeBoolean(body.reads_receipts),
+    writes_receipts: safeBoolean(body.writes_receipts),
+    writes_evidence: safeBoolean(body.writes_evidence),
+    writes_runtime_readback: safeBoolean(body.writes_runtime_readback),
+    marks_stage16_closed: safeBoolean(body.marks_stage16_closed),
+    grants_execution_authority: safeBoolean(body.grants_execution_authority),
+    grants_mutation_authority: safeBoolean(body.grants_mutation_authority),
+    confirmation_receipt_readback_route: optionalString(body.confirmation_receipt_readback_route),
+    operator_checklist_route: optionalString(body.operator_checklist_route),
+    sleep_continuity_action_route: optionalString(body.sleep_continuity_action_route),
+    governance: isRecord(body.governance) ? body.governance : undefined,
+    routes: stringRecord(body.routes),
+    next_smallest_truthful_gap: optionalString(body.next_smallest_truthful_gap),
+  };
+}
+
 function parseFederationSleepResumeConfirmationOperatorStep(
   raw: unknown,
 ): FederationSleepResumeConfirmationOperatorStep | null {
@@ -2663,6 +2769,7 @@ export type FederationEndpoints = {
   sleepResumeConfirmation: () => string;
   sleepResumeConfirmationActorReadiness: (q?: { actor?: string }) => string;
   sleepResumeConfirmationOperatorChecklist: (q?: { actor?: string }) => string;
+  sleepResumeReceiptBackedSequenceReadiness: (q?: { actor?: string }) => string;
   stageClosureDecisions: (q?: { limit?: number }) => string;
   liveRuntimeReadbacks: (q?: { limit?: number }) => string;
 
@@ -2696,6 +2803,8 @@ export function defaultFederationEndpoints(): FederationEndpoints {
       `/federation/sleep-resume-confirmation/actor-readiness${buildQuery({ actor: q?.actor })}`,
     sleepResumeConfirmationOperatorChecklist: (q) =>
       `/federation/sleep-resume-confirmation/operator-checklist${buildQuery({ actor: q?.actor })}`,
+    sleepResumeReceiptBackedSequenceReadiness: (q) =>
+      `/federation/sleep-resume-confirmation/receipt-backed-sequence-readiness${buildQuery({ actor: q?.actor })}`,
     stageClosureDecisions: (q) => `/federation/stage-closure-decisions${buildQuery({ limit: q?.limit })}`,
     liveRuntimeReadbacks: (q) => `/federation/live-runtime-readbacks${buildQuery({ limit: q?.limit })}`,
 
@@ -2862,6 +2971,22 @@ export class FederationClient {
       },
     );
     return parseFederationSleepResumeOperatorChecklist(json);
+  }
+
+  async getSleepResumeReceiptBackedSequenceReadiness(opts?: {
+    actor?: string;
+    signal?: AbortSignal;
+    timeoutMs?: number;
+  }): Promise<FederationSleepResumeReceiptBackedSequenceReadiness> {
+    const json = await fetchJson(
+      this.url(this.endpoints.sleepResumeReceiptBackedSequenceReadiness({ actor: opts?.actor })),
+      {
+        method: "GET",
+        signal: opts?.signal,
+        timeoutMs: opts?.timeoutMs ?? this.defaultTimeoutMs,
+      },
+    );
+    return parseFederationSleepResumeReceiptBackedSequenceReadiness(json);
   }
 
   async recordSleepResumeConfirmation(opts: {

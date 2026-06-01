@@ -39,6 +39,9 @@ _FEDERATION_SLEEP_RESUME_CONFIRMATION_ACTOR_READINESS_KIND = (
 _FEDERATION_SLEEP_RESUME_CONFIRMATION_OPERATOR_CHECKLIST_KIND = (
     "francis.stage16.federation.sleep_resume_operator_confirmation_operator_checklist"
 )
+_FEDERATION_SLEEP_RESUME_CONFIRMATION_RECEIPT_BACKED_SEQUENCE_READINESS_KIND = (
+    "francis.stage16.federation.sleep_resume_receipt_backed_sequence_readiness"
+)
 _FEDERATION_STAGE16_CLOSURE_DECISION_KIND = "francis.stage16.federation.stage16_operator_stage_closure_decision_receipt"
 _FEDERATION_STAGE16_CLOSURE_DECISIONS_KIND = (
     "francis.stage16.federation.stage16_operator_stage_closure_decision_receipts"
@@ -481,6 +484,9 @@ def _federation_routes() -> dict[str, str]:
         "sleep_resume_confirmation": "/federation/sleep-resume-confirmation",
         "sleep_resume_confirmation_actor_readiness": "/federation/sleep-resume-confirmation/actor-readiness",
         "sleep_resume_confirmation_operator_checklist": "/federation/sleep-resume-confirmation/operator-checklist",
+        "sleep_resume_confirmation_receipt_backed_sequence_readiness": (
+            "/federation/sleep-resume-confirmation/receipt-backed-sequence-readiness"
+        ),
         "stage_closure_decisions": "/federation/stage-closure-decisions",
         "stage_closure_decision": "/federation/stage-closure-decision",
         "live_runtime_readbacks": "/federation/live-runtime-readbacks",
@@ -1426,6 +1432,105 @@ def stage16_sleep_resume_confirmation_operator_checklist(actor: str = "") -> dic
         "next_smallest_truthful_gap": _STAGE16_SLEEP_RESUME_CONFIRMATION_RECEIPT_GAP
         if not receipt_backed_sequence_ready
         else _STAGE16_SLEEP_CONTINUITY_RUNTIME_READBACK_GAP,
+    }
+
+
+def stage16_sleep_resume_receipt_backed_sequence_readiness(actor: str = "") -> dict[str, Any]:
+    routes = _federation_routes()
+    requested_actor = _safe_str(actor).strip()
+    readback = stage16_sleep_resume_confirmation_readback(limit=1, actor=requested_actor)
+    sequence_ready = bool(readback.get("receipt_backed_sequence_ready"))
+    sequence_blockers = _parse_list(readback.get("receipt_backed_sequence_blockers"))
+    latest_receipt_id = _safe_str(readback.get("latest_receipt_id")).strip()
+    sequence_command = (
+        _safe_str(readback.get("receipt_backed_sequence_command")).strip()
+        if sequence_ready and not sequence_blockers
+        else ""
+    )
+    sequence_copyable_command = (
+        _safe_str(readback.get("receipt_backed_sequence_copyable_command")).strip()
+        if sequence_ready and not sequence_blockers
+        else ""
+    )
+    sequence_operator_step: dict[str, Any] = {}
+    operator_steps = readback.get("confirmation_receipt_operator_steps")
+    if isinstance(operator_steps, list):
+        for item in operator_steps:
+            if (
+                isinstance(item, dict)
+                and _safe_str(item.get("id")).strip() == "run_receipt_backed_post_resume_sequence"
+            ):
+                sequence_operator_step = {str(key): value for key, value in item.items() if isinstance(key, str)}
+                break
+    return {
+        "ok": True,
+        "kind": _FEDERATION_SLEEP_RESUME_CONFIRMATION_RECEIPT_BACKED_SEQUENCE_READINESS_KIND,
+        "stage": _STAGE16_FEDERATION_STAGE,
+        "source_id": "federation",
+        "status": "ready_for_receipt_backed_post_resume_sequence"
+        if sequence_ready and not sequence_blockers
+        else "blocked_until_current_confirmation_receipt",
+        "target": "stage16_sleep_continuity",
+        "actor": _redacted_text(requested_actor)[:240],
+        "current_pre_sleep_evidence_present": bool(readback.get("current_pre_sleep_evidence_present")),
+        "current_pre_sleep_evidence_path": _safe_str(readback.get("current_pre_sleep_evidence_path")).strip(),
+        "current_pre_sleep_recorded_ts": int(readback.get("current_pre_sleep_recorded_ts") or 0),
+        "latest_receipt_id": latest_receipt_id,
+        "latest_decision": _safe_str(readback.get("latest_decision")).strip(),
+        "latest_actor": _safe_str(readback.get("latest_actor")).strip(),
+        "latest_pre_sleep_evidence_path": _safe_str(readback.get("latest_pre_sleep_evidence_path")).strip(),
+        "latest_receipt_is_operator_confirmed": bool(readback.get("latest_receipt_is_operator_confirmed")),
+        "latest_receipt_matches_current_pre_sleep": bool(readback.get("latest_receipt_matches_current_pre_sleep")),
+        "latest_receipt_usable_for_receipt_backed_sequence": bool(
+            readback.get("latest_receipt_usable_for_receipt_backed_sequence")
+        ),
+        "receipt_backed_sequence_ready": sequence_ready,
+        "receipt_backed_sequence_blockers": sequence_blockers,
+        "receipt_backed_sequence_command_visible": bool(sequence_copyable_command),
+        "receipt_backed_sequence_command": sequence_command,
+        "receipt_backed_sequence_copyable_command": sequence_copyable_command,
+        "receipt_backed_sequence_requires_confirmation_receipt": True,
+        "receipt_backed_sequence_confirmation_receipt_id": latest_receipt_id if sequence_ready else "",
+        "receipt_backed_sequence_operator_step": sequence_operator_step,
+        "operator_action_required": sequence_ready and not sequence_blockers,
+        "writes_evidence_when_run": bool(readback.get("receipt_backed_sequence_writes_evidence_when_run")),
+        "writes_receipts_when_run": bool(readback.get("receipt_backed_sequence_writes_receipts_when_run")),
+        "marks_stage16_closed_when_run": False,
+        "projection_only": True,
+        "reads_receipts": True,
+        "writes_receipts": False,
+        "writes_evidence": False,
+        "writes_runtime_readback": False,
+        "writes_registry": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "marks_stage16_closed": False,
+        "confirmation_receipt_readback_route": routes["sleep_resume_confirmations"],
+        "operator_checklist_route": routes["sleep_resume_confirmation_operator_checklist"],
+        "sleep_continuity_action_route": routes["sleep_continuity_action"],
+        "routes": routes,
+        "governance": {
+            **_federation_governance(),
+            "read_only": True,
+            "receipt_backed_sequence_readiness_projection": True,
+            "requires_current_matching_confirmation_receipt": True,
+            "does_not_infer_sleep_from_delay": True,
+            "does_not_execute_sequence": True,
+            "does_not_write_receipts": True,
+            "does_not_write_evidence": True,
+            "does_not_write_runtime_readback": True,
+            "does_not_mark_stage16_closed": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": _safe_str(readback.get("next_smallest_truthful_gap")).strip()
+        or _STAGE16_SLEEP_RESUME_CONFIRMATION_RECEIPT_GAP,
     }
 
 
@@ -3930,6 +4035,11 @@ def get_sleep_resume_confirmation_actor_readiness(actor: str = "") -> dict[str, 
 @router.get("/sleep-resume-confirmation/operator-checklist")
 def get_sleep_resume_confirmation_operator_checklist(actor: str = "") -> dict[str, Any]:
     return stage16_sleep_resume_confirmation_operator_checklist(actor)
+
+
+@router.get("/sleep-resume-confirmation/receipt-backed-sequence-readiness")
+def get_sleep_resume_confirmation_receipt_backed_sequence_readiness(actor: str = "") -> dict[str, Any]:
+    return stage16_sleep_resume_receipt_backed_sequence_readiness(actor)
 
 
 @router.post("/sleep-resume-confirmation")
