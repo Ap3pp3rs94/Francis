@@ -305,6 +305,8 @@ export type FederationSleepResumeConfirmations = {
   receipt_backed_sequence_command?: string;
   receipt_backed_sequence_copyable_command?: string;
   confirmation_receipt_command_ready: boolean;
+  confirmation_receipt_actor?: string;
+  confirmation_receipt_actor_bound: boolean;
   confirmation_receipt_actor_placeholder?: string;
   confirmation_receipt_command?: string;
   confirmation_receipt_copyable_command?: string;
@@ -530,6 +532,8 @@ export type FederationSleepContinuityOperatorConfirmationHandoff = {
   confirmation_receipt_required_scope?: string;
   confirmation_receipt_payload_contract?: Record<string, unknown>;
   confirmation_receipt_command_ready: boolean;
+  confirmation_receipt_actor?: string;
+  confirmation_receipt_actor_bound: boolean;
   confirmation_receipt_actor_placeholder?: string;
   confirmation_receipt_command?: string;
   confirmation_receipt_copyable_command?: string;
@@ -904,6 +908,8 @@ function parseFederationSleepContinuityOperatorConfirmationHandoff(
       ? raw.confirmation_receipt_payload_contract
       : undefined,
     confirmation_receipt_command_ready: safeBoolean(raw.confirmation_receipt_command_ready),
+    confirmation_receipt_actor: optionalString(raw.confirmation_receipt_actor),
+    confirmation_receipt_actor_bound: safeBoolean(raw.confirmation_receipt_actor_bound),
     confirmation_receipt_actor_placeholder: optionalString(raw.confirmation_receipt_actor_placeholder),
     confirmation_receipt_command: optionalString(raw.confirmation_receipt_command),
     confirmation_receipt_copyable_command: optionalString(raw.confirmation_receipt_copyable_command),
@@ -1472,6 +1478,8 @@ export function parseFederationSleepResumeConfirmations(raw: unknown): Federatio
     receipt_backed_sequence_command: optionalString(body.receipt_backed_sequence_command),
     receipt_backed_sequence_copyable_command: optionalString(body.receipt_backed_sequence_copyable_command),
     confirmation_receipt_command_ready: safeBoolean(body.confirmation_receipt_command_ready),
+    confirmation_receipt_actor: optionalString(body.confirmation_receipt_actor),
+    confirmation_receipt_actor_bound: safeBoolean(body.confirmation_receipt_actor_bound),
     confirmation_receipt_actor_placeholder: optionalString(body.confirmation_receipt_actor_placeholder),
     confirmation_receipt_command: optionalString(body.confirmation_receipt_command),
     confirmation_receipt_copyable_command: optionalString(body.confirmation_receipt_copyable_command),

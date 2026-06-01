@@ -983,6 +983,13 @@ def stage16_sleep_resume_confirmation_actor_readiness(actor: str) -> dict[str, A
     else:
         status = "actor_scope_missing"
         next_step = "grant_federation_stage16_sleep_resume_confirmation_write_scope_before_receipt"
+    current_pre_sleep = _latest_stage16_pre_sleep_evidence()
+    current_pre_sleep_path = _safe_str(current_pre_sleep.get("evidence_path")).strip()
+    command_projection = _stage16_sleep_resume_confirmation_command_projection(
+        pre_sleep_evidence_path=current_pre_sleep_path,
+        ready=actor_ready and bool(current_pre_sleep.get("present")),
+        actor=actor if actor_ready else "",
+    )
 
     return {
         "ok": True,
@@ -998,12 +1005,15 @@ def stage16_sleep_resume_confirmation_actor_readiness(actor: str) -> dict[str, A
         "target_method": "POST",
         "target_route": routes["sleep_resume_confirmation"],
         "readiness_route": routes["sleep_resume_confirmation_actor_readiness"],
+        "current_pre_sleep_evidence_present": bool(current_pre_sleep.get("present")),
+        "current_pre_sleep_evidence_path": current_pre_sleep_path,
         "permission_allowed": bool(permission.allowed),
         "permission_reason": _safe_str(permission.reason).strip(),
         "permission_evidence": permission.evidence,
         "confirmation_receipt_actor_ready": actor_ready,
         "safe_to_use_in_confirmation_command": actor_ready,
         "next_step": next_step,
+        **command_projection,
         "reads_permission_gate": True,
         "writes_receipt": False,
         "writes_evidence": False,
@@ -1549,8 +1559,12 @@ def _stage16_sleep_resume_confirmation_command_projection(
     *,
     pre_sleep_evidence_path: str,
     ready: bool,
+    actor: str = "",
 ) -> dict[str, Any]:
     actor_placeholder = f"<actor_with_{_FEDERATION_SLEEP_RESUME_CONFIRMATION_SCOPE}>"
+    command_actor = _safe_str(actor).strip()
+    command_actor_bound = bool(command_actor)
+    command_actor_value = command_actor or actor_placeholder
     reason = "operator confirms physical sleep/suspend and resume after the pre-sleep marker"
     routes = _federation_routes()
     confirmation_uri = f"http://127.0.0.1:8000{routes['sleep_resume_confirmation']}"
@@ -1559,7 +1573,7 @@ def _stage16_sleep_resume_confirmation_command_projection(
     if ready:
         command = (
             "$body = @{ "
-            f"actor = {_powershell_single_quote(actor_placeholder)}; "
+            f"actor = {_powershell_single_quote(command_actor_value)}; "
             f"reason = {_powershell_single_quote(reason)}; "
             "operator_confirmed_sleep_resume = $true; "
             f"pre_sleep_evidence_path = {_powershell_single_quote(pre_sleep_evidence_path)} "
@@ -1570,11 +1584,13 @@ def _stage16_sleep_resume_confirmation_command_projection(
         copyable_command = f"Set-Location -LiteralPath {_powershell_single_quote(str(repo_root()))}; {command}"
     return {
         "confirmation_receipt_command_ready": ready,
-        "confirmation_receipt_actor_placeholder": actor_placeholder if ready else "",
+        "confirmation_receipt_actor": _redacted_text(command_actor)[:240] if ready and command_actor_bound else "",
+        "confirmation_receipt_actor_bound": ready and command_actor_bound,
+        "confirmation_receipt_actor_placeholder": actor_placeholder if ready and not command_actor_bound else "",
         "confirmation_receipt_command": command,
         "confirmation_receipt_copyable_command": copyable_command,
         "confirmation_receipt_command_requires_scope": _FEDERATION_SLEEP_RESUME_CONFIRMATION_SCOPE,
-        "confirmation_receipt_command_requires_actor_substitution": ready,
+        "confirmation_receipt_command_requires_actor_substitution": ready and not command_actor_bound,
         "confirmation_receipt_command_actor_scope": _FEDERATION_SLEEP_RESUME_CONFIRMATION_SCOPE if ready else "",
         "confirmation_receipt_actor_readiness_route": routes["sleep_resume_confirmation_actor_readiness"],
         "confirmation_receipt_actor_readiness_query_param": "actor",

@@ -663,6 +663,8 @@ test("parseFederationSleepResumeConfirmations preserves missing-receipt remedy c
     receipt_backed_sequence_writes_evidence_when_run: false,
     receipt_backed_sequence_writes_receipts_when_run: false,
     confirmation_receipt_command_ready: true,
+    confirmation_receipt_actor: "",
+    confirmation_receipt_actor_bound: false,
     confirmation_receipt_actor_placeholder: "<actor_with_federation.stage16.sleep_resume.confirmation.write>",
     confirmation_receipt_command:
       "$body = @{ actor = '<actor_with_federation.stage16.sleep_resume.confirmation.write>'; operator_confirmed_sleep_resume = $true; pre_sleep_evidence_path = 'D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json' } | ConvertTo-Json -Depth 6; Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/federation/sleep-resume-confirmation' -ContentType 'application/json' -Body $body",
@@ -726,6 +728,8 @@ test("parseFederationSleepResumeConfirmations preserves missing-receipt remedy c
   assert.deepEqual(confirmations.receipt_backed_sequence_blockers, ["sleep_resume_confirmation_receipt_missing"]);
   assert.equal(confirmations.receipt_backed_sequence_ready, false);
   assert.equal(confirmations.confirmation_receipt_command_ready, true);
+  assert.equal(confirmations.confirmation_receipt_actor, undefined);
+  assert.equal(confirmations.confirmation_receipt_actor_bound, false);
   assert.equal(
     confirmations.confirmation_receipt_actor_placeholder,
     "<actor_with_federation.stage16.sleep_resume.confirmation.write>",

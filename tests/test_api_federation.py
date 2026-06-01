@@ -1503,6 +1503,8 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
         "reason": "operator confirms physical sleep/suspend and resume after the pre-sleep marker",
     }
     assert confirmation_handoff["confirmation_receipt_command_ready"] is True
+    assert confirmation_handoff["confirmation_receipt_actor"] == ""
+    assert confirmation_handoff["confirmation_receipt_actor_bound"] is False
     assert (
         confirmation_handoff["confirmation_receipt_actor_placeholder"]
         == "<actor_with_federation.stage16.sleep_resume.confirmation.write>"
@@ -1654,6 +1656,7 @@ def test_federation_stage16_sleep_resume_confirmation_actor_readiness_is_read_on
             }
         ),
     )
+    pre_sleep_path = _write_stage16_pre_sleep_evidence(data_root)
 
     from fastapi.testclient import TestClient
 
@@ -1667,6 +1670,7 @@ def test_federation_stage16_sleep_resume_confirmation_actor_readiness_is_read_on
     assert missing["status"] == "actor_missing"
     assert missing["confirmation_receipt_actor_ready"] is False
     assert missing["safe_to_use_in_confirmation_command"] is False
+    assert missing["confirmation_receipt_command_ready"] is False
     assert missing["writes_receipt"] is False
     assert missing["writes_evidence"] is False
     assert missing["marks_stage16_closed"] is False
@@ -1680,6 +1684,7 @@ def test_federation_stage16_sleep_resume_confirmation_actor_readiness_is_read_on
     assert placeholder["permission_allowed"] is True
     assert placeholder["confirmation_receipt_actor_ready"] is False
     assert placeholder["safe_to_use_in_confirmation_command"] is False
+    assert placeholder["confirmation_receipt_command_ready"] is False
     assert placeholder["next_step"] == "replace_actor_placeholder_with_scoped_operator_or_delegated_builder_actor"
     assert placeholder["governance"]["rejects_placeholder_actor"] is True
 
@@ -1691,6 +1696,7 @@ def test_federation_stage16_sleep_resume_confirmation_actor_readiness_is_read_on
     assert unscoped["permission_allowed"] is False
     assert unscoped["required_scope"] == "federation.stage16.sleep_resume.confirmation.write"
     assert unscoped["confirmation_receipt_actor_ready"] is False
+    assert unscoped["confirmation_receipt_command_ready"] is False
 
     scoped = client.get(
         "/federation/sleep-resume-confirmation/actor-readiness",
@@ -1700,6 +1706,16 @@ def test_federation_stage16_sleep_resume_confirmation_actor_readiness_is_read_on
     assert scoped["permission_allowed"] is True
     assert scoped["confirmation_receipt_actor_ready"] is True
     assert scoped["safe_to_use_in_confirmation_command"] is True
+    assert scoped["current_pre_sleep_evidence_present"] is True
+    assert scoped["current_pre_sleep_evidence_path"] == str(pre_sleep_path.resolve())
+    assert scoped["confirmation_receipt_command_ready"] is True
+    assert scoped["confirmation_receipt_actor"] == "test.federation.sleep"
+    assert scoped["confirmation_receipt_actor_bound"] is True
+    assert scoped["confirmation_receipt_actor_placeholder"] == ""
+    assert scoped["confirmation_receipt_command_requires_actor_substitution"] is False
+    assert "actor = 'test.federation.sleep'" in scoped["confirmation_receipt_command"]
+    assert str(pre_sleep_path.resolve()) in scoped["confirmation_receipt_command"]
+    assert scoped["confirmation_receipt_command"] in scoped["confirmation_receipt_copyable_command"]
     assert scoped["target_route"] == "/federation/sleep-resume-confirmation"
     assert scoped["readiness_route"] == "/federation/sleep-resume-confirmation/actor-readiness"
     assert scoped["governance"]["actor_scope_preflight"] is True
@@ -1830,6 +1846,8 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     assert empty_readback["receipt_backed_sequence_command"] == ""
     assert empty_readback["receipt_backed_sequence_copyable_command"] == ""
     assert empty_readback["confirmation_receipt_command_ready"] is True
+    assert empty_readback["confirmation_receipt_actor"] == ""
+    assert empty_readback["confirmation_receipt_actor_bound"] is False
     assert (
         empty_readback["confirmation_receipt_actor_placeholder"]
         == "<actor_with_federation.stage16.sleep_resume.confirmation.write>"

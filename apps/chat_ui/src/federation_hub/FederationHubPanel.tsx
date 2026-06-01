@@ -259,6 +259,11 @@ export function FederationHubPanel(props: { baseUrl: string }) {
             {" / "}marks closed <code>{yesNo(confirmations.confirmation_receipt_command_marks_stage16_closed)}</code>
           </div>
           <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
+            actor bound <code>{yesNo(confirmations.confirmation_receipt_actor_bound)}</code>
+            {" / "}actor <code>{codeValue(confirmations.confirmation_receipt_actor)}</code>
+            {" / "}placeholder <code>{codeValue(confirmations.confirmation_receipt_actor_placeholder)}</code>
+          </div>
+          <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
             actor substitution <code>{yesNo(confirmations.confirmation_receipt_command_requires_actor_substitution)}</code>
             {" / "}actor scope <code>{codeValue(confirmations.confirmation_receipt_command_actor_scope)}</code>
             {" / "}actor preflight <code>{codeValue(confirmations.confirmation_receipt_actor_readiness_route)}</code>
