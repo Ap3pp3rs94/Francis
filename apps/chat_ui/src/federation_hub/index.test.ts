@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   FederationClient,
   federationSleepContinuityVisibleOperatorCommands,
+  federationSleepResumeConfirmationActorReadinessVisibleCommands,
   federationSleepResumeConfirmationVisibleCommands,
   isFederationSleepContinuityOperatorCommandBlockedByPendingConfirmation,
   isFederationSleepResumeConfirmationActorReadinessCurrent,
@@ -916,6 +917,10 @@ test("parseFederationSleepResumeConfirmationActorReadiness preserves actor-bound
   assert.equal(readiness.writes_receipt, false);
   assert.equal(readiness.writes_evidence, false);
   assert.equal(readiness.marks_stage16_closed, false);
+
+  const visibleCommands = federationSleepResumeConfirmationActorReadinessVisibleCommands(readiness);
+  assert.equal(visibleCommands.confirmation_receipt_copyable_command, readiness.confirmation_receipt_copyable_command);
+  assert.equal(visibleCommands.scope_remediation_copyable_command, undefined);
 });
 
 test("parseFederationSleepResumeConfirmationActorReadiness preserves scope remediation projection", () => {
@@ -994,6 +999,10 @@ test("parseFederationSleepResumeConfirmationActorReadiness preserves scope remed
   assert.equal(readiness.scope_remediation_would_mutate_process_environment_if_run, true);
   assert.equal(readiness.writes_receipt, false);
   assert.equal(readiness.marks_stage16_closed, false);
+
+  const visibleCommands = federationSleepResumeConfirmationActorReadinessVisibleCommands(readiness);
+  assert.equal(visibleCommands.confirmation_receipt_copyable_command, undefined);
+  assert.equal(visibleCommands.scope_remediation_copyable_command, readiness.scope_remediation_copyable_command);
 });
 
 test("FederationClient reads sleep-resume confirmation actor readiness without mutation", async () => {

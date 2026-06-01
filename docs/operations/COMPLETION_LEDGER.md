@@ -54501,6 +54501,44 @@ Latest validation for Stage 16 actor-readiness scope remediation:
   scope_remediation_writes_evidence=false;
   scope_remediation_marks_stage16_closed=false`.
 
+### 2026-06-01 - Stage 16 Hub displays actor scope remediation safely
+
+Roadmap area: Stage 16 / Federation, sleep-continuity confirmation receipt
+operator surface.
+
+Material change:
+
+- Federation Hub now displays the actor-readiness scope remediation command
+  when the selected actor lacks
+  `federation.stage16.sleep_resume.confirmation.write`.
+- The Hub separates that command from the receipt-write command: unscoped
+  actors show only the local `FRANCIS_API_ACTOR_SCOPES` remediation projection,
+  while scoped actors show the actor-bound confirmation receipt command.
+- The visible-command helper refuses to expose either command if the relevant
+  readback says it would write receipts or evidence from the readback surface,
+  grant authority, or mark Stage 16 closed.
+- This is UI command-surface truthfulness only: it does not apply scope, write a
+  receipt, capture evidence, grant authority, or close Stage 16.
+
+Latest validation for Stage 16 Hub actor scope remediation display:
+
+- `npm run test -- federation_hub`
+  Result: `passed; 193 passed`.
+- `npm run build`
+  Result: `passed`.
+- `python -m pytest tests/test_api_federation.py -q --tb=short --maxfail=1`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

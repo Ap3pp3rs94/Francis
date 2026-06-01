@@ -4,6 +4,7 @@ import {
   FederationApiError,
   FederationClient,
   federationSleepContinuityVisibleOperatorCommands,
+  federationSleepResumeConfirmationActorReadinessVisibleCommands,
   federationSleepResumeConfirmationVisibleCommands,
   isFederationSleepResumeConfirmationActorReadinessCurrent,
   presentFederationSleepContinuityAction,
@@ -158,6 +159,8 @@ export function FederationHubPanel(props: { baseUrl: string }) {
   )
     ? actorReadiness
     : null;
+  const visibleActorReadinessCommands =
+    federationSleepResumeConfirmationActorReadinessVisibleCommands(visibleActorReadiness);
   const visibleOperatorCommands = federationSleepContinuityVisibleOperatorCommands(presentation);
   const visiblePrimaryCommand = visibleOperatorCommands.primary_command;
   const visibleOperatorTerminalCommand = visibleOperatorCommands.operator_terminal_copyable_command;
@@ -356,7 +359,16 @@ export function FederationHubPanel(props: { baseUrl: string }) {
                 {" / "}substitution{" "}
                 <code>{yesNo(visibleActorReadiness.confirmation_receipt_command_requires_actor_substitution)}</code>
               </div>
-              {visibleActorReadiness.confirmation_receipt_copyable_command ? (
+              {visibleActorReadiness.scope_remediation_required ? (
+                <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
+                  scope remediation <code>{yesNo(visibleActorReadiness.scope_remediation_required)}</code>
+                  {" / "}env <code>{codeValue(visibleActorReadiness.scope_remediation_env_var)}</code>
+                  {" / "}scope <code>{codeValue(visibleActorReadiness.scope_remediation_required_scope)}</code>
+                  {" / "}writes receipt <code>{yesNo(visibleActorReadiness.scope_remediation_writes_receipts)}</code>
+                  {" / "}marks closed <code>{yesNo(visibleActorReadiness.scope_remediation_marks_stage16_closed)}</code>
+                </div>
+              ) : null}
+              {visibleActorReadinessCommands.scope_remediation_copyable_command ? (
                 <pre
                   style={{
                     margin: "8px 0 0",
@@ -370,7 +382,24 @@ export function FederationHubPanel(props: { baseUrl: string }) {
                     fontSize: 11,
                   }}
                 >
-                  {visibleActorReadiness.confirmation_receipt_copyable_command}
+                  {visibleActorReadinessCommands.scope_remediation_copyable_command}
+                </pre>
+              ) : null}
+              {visibleActorReadinessCommands.confirmation_receipt_copyable_command ? (
+                <pre
+                  style={{
+                    margin: "8px 0 0",
+                    padding: 10,
+                    borderRadius: 10,
+                    border: `1px solid ${PANEL_BORDER}`,
+                    background: "#101010",
+                    color: TEXT,
+                    whiteSpace: "pre-wrap",
+                    overflowWrap: "anywhere",
+                    fontSize: 11,
+                  }}
+                >
+                  {visibleActorReadinessCommands.confirmation_receipt_copyable_command}
                 </pre>
               ) : null}
             </>

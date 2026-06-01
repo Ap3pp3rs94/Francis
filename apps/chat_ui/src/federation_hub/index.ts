@@ -356,6 +356,11 @@ export type FederationSleepResumeConfirmationVisibleCommands = {
   receipt_backed_sequence_copyable_command?: string;
 };
 
+export type FederationSleepResumeConfirmationActorReadinessVisibleCommands = {
+  confirmation_receipt_copyable_command?: string;
+  scope_remediation_copyable_command?: string;
+};
+
 export type FederationSleepResumeConfirmationActorReadiness = {
   ok: boolean;
   kind?: string;
@@ -1695,6 +1700,42 @@ export function federationSleepResumeConfirmationVisibleCommands(
       : undefined,
     receipt_backed_sequence_copyable_command: receiptBackedSequenceVisible
       ? confirmations.receipt_backed_sequence_copyable_command
+      : undefined,
+  };
+}
+
+export function federationSleepResumeConfirmationActorReadinessVisibleCommands(
+  readiness: FederationSleepResumeConfirmationActorReadiness | null | undefined,
+): FederationSleepResumeConfirmationActorReadinessVisibleCommands {
+  const confirmationVisible = Boolean(
+    readiness?.confirmation_receipt_actor_ready &&
+      readiness.confirmation_receipt_command_ready &&
+      readiness.confirmation_receipt_actor_bound &&
+      !readiness.confirmation_receipt_command_requires_actor_substitution &&
+      readiness.confirmation_receipt_copyable_command &&
+      !readiness.writes_receipt &&
+      !readiness.writes_evidence &&
+      !readiness.marks_stage16_closed &&
+      !readiness.grants_execution_authority &&
+      !readiness.grants_mutation_authority,
+  );
+  const scopeRemediationVisible = Boolean(
+    readiness?.scope_remediation_required &&
+      readiness.scope_remediation_command_ready &&
+      readiness.scope_remediation_command_visible &&
+      readiness.scope_remediation_copyable_command &&
+      readiness.scope_remediation_projection_only &&
+      !readiness.scope_remediation_writes_receipts &&
+      !readiness.scope_remediation_writes_evidence &&
+      !readiness.scope_remediation_marks_stage16_closed &&
+      !readiness.scope_remediation_grants_authority,
+  );
+  return {
+    confirmation_receipt_copyable_command: confirmationVisible
+      ? readiness?.confirmation_receipt_copyable_command
+      : undefined,
+    scope_remediation_copyable_command: scopeRemediationVisible
+      ? readiness?.scope_remediation_copyable_command
       : undefined,
   };
 }
