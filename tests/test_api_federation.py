@@ -1709,6 +1709,7 @@ def test_federation_stage16_sleep_resume_confirmation_actor_readiness_is_read_on
     assert scoped["permission_allowed"] is True
     assert scoped["confirmation_receipt_actor_ready"] is True
     assert scoped["safe_to_use_in_confirmation_command"] is True
+    assert scoped["next_step"] == "write_sleep_resume_confirmation_receipt_after_real_sleep_resume"
     assert scoped["current_pre_sleep_evidence_present"] is True
     assert scoped["current_pre_sleep_evidence_path"] == str(pre_sleep_path.resolve())
     assert scoped["confirmation_receipt_command_ready"] is True

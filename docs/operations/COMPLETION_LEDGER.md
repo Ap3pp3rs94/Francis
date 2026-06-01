@@ -54175,6 +54175,48 @@ Latest validation for Stage 16 receipt-writing action handoff:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 actor preflight names receipt write
+
+Roadmap area: Stage 16 / Federation, sleep/resume confirmation actor preflight
+truthfulness.
+
+Material change:
+
+- `/federation/sleep-resume-confirmation/actor-readiness` now reports
+  `write_sleep_resume_confirmation_receipt_after_real_sleep_resume` as the
+  ready actor `next_step`.
+- The Federation Hub actor-readiness parser fixture now carries the same
+  receipt-first step and the `stage16_sleep_resume_confirmation_receipt` gap.
+- This remains a read-only permission preflight: it writes no receipt, captures
+  no evidence, mutates no runtime state, grants no authority, and does not mark
+  Stage 16 closed.
+
+Latest validation for Stage 16 actor preflight receipt-write wording:
+
+- `python -m pytest tests/test_api_federation.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 26 passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`.
+- `npm run test -- federation_hub`
+  Result: `passed; 192 passed`.
+- `npm run build`
+  Result: `passed`.
+- Live `TestClient` readback with scoped actor:
+  Result: `passed; status=actor_ready_for_sleep_resume_confirmation,
+  next_step=write_sleep_resume_confirmation_receipt_after_real_sleep_resume,
+  next_gap=stage16_sleep_resume_confirmation_receipt, command_ready=true,
+  writes_receipt=false, marks_stage16_closed=false`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

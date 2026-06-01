@@ -983,7 +983,7 @@ def stage16_sleep_resume_confirmation_actor_readiness(actor: str) -> dict[str, A
         next_step = "replace_actor_placeholder_with_scoped_operator_or_delegated_builder_actor"
     elif actor_ready:
         status = "actor_ready_for_sleep_resume_confirmation"
-        next_step = "use_actor_in_confirmation_receipt_command_after_real_sleep_resume"
+        next_step = "write_sleep_resume_confirmation_receipt_after_real_sleep_resume"
     else:
         status = "actor_scope_missing"
         next_step = "grant_federation_stage16_sleep_resume_confirmation_write_scope_before_receipt"

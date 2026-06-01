@@ -802,7 +802,7 @@ test("parseFederationSleepResumeConfirmationActorReadiness preserves actor-bound
     permission_reason: "actor_has_required_scopes",
     confirmation_receipt_actor_ready: true,
     safe_to_use_in_confirmation_command: true,
-    next_step: "use_actor_in_confirmation_receipt_command_after_real_sleep_resume",
+    next_step: "write_sleep_resume_confirmation_receipt_after_real_sleep_resume",
     confirmation_receipt_command_ready: true,
     confirmation_receipt_actor: "test.federation.sleep",
     confirmation_receipt_actor_bound: true,
@@ -830,12 +830,13 @@ test("parseFederationSleepResumeConfirmationActorReadiness preserves actor-bound
     marks_stage16_closed: false,
     grants_execution_authority: false,
     grants_mutation_authority: false,
-    next_smallest_truthful_gap: "stage16_sleep_continuity_runtime_readback",
+    next_smallest_truthful_gap: "stage16_sleep_resume_confirmation_receipt",
   });
 
   assert.equal(readiness.status, "actor_ready_for_sleep_resume_confirmation");
   assert.equal(readiness.actor, "test.federation.sleep");
   assert.equal(readiness.confirmation_receipt_actor_ready, true);
+  assert.equal(readiness.next_step, "write_sleep_resume_confirmation_receipt_after_real_sleep_resume");
   assert.equal(readiness.safe_to_use_in_confirmation_command, true);
   assert.equal(readiness.confirmation_receipt_actor_bound, true);
   assert.equal(readiness.confirmation_receipt_command_requires_actor_substitution, false);
