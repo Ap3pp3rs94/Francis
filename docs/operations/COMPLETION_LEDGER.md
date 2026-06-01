@@ -56167,6 +56167,68 @@ Validation risk:
 - Full local pytest was not rerun because focused pytest commands were already
   stalling in this workspace; GitHub CI remains the full-suite evidence gate.
 
+### 2026-06-01 - Stage 17 capability pack promotion rules are readable
+
+Roadmap area: Stage 17 / Capability Economy, explicit promotion discipline for
+versioned capability packs.
+
+Material change:
+
+- Added a read-only capability pack promotion-rules analyzer for Stage 17.
+- Added `GET /plugins/capabilities/packs/promotion/rules`, which reports
+  pack-level promotion rules, metadata receipt readiness, quality readiness,
+  governance travel, operator-review declaration, promoted-capability receipt
+  coverage, blockers, and a bounded failing capability sample.
+- The projection does not write receipts, mutate registry state, promote
+  capabilities, enable capabilities, execute capabilities, or grant approval
+  authority.
+- The chat UI API contract endpoint list now includes the promotion-rules
+  route.
+
+Latest validation for Stage 17 capability pack promotion rules:
+
+- Direct analyzer invocation for a staged generated pack with tests, docs,
+  validation receipt, proposal lineage, promotion rules, and pack governance.
+  Result: `passed`; analyzer reported `status=ready`,
+  `operator_review_declared=True`, and `promotion_authority=False`.
+- Direct FastAPI `TestClient` validation of `/plugins/build` followed by
+  `GET /plugins/capabilities/packs/promotion/rules`.
+  Result: `passed`; staged pack `ops.direct_rules` read back `ready=True`.
+  The global route status remained `blocked` and
+  `next_smallest_truthful_gap=stage17_capability_pack_metadata_receipts`
+  because existing legacy packs still need reviewed metadata receipts.
+- Direct mounted-route validation for
+  `/plugins/capabilities/packs/promotion/rules`
+  Result: `passed`.
+- Direct invocation of the new unit test functions in
+  `tests/unit/test_capability_pack_promotion_rules.py`
+  Result: `passed`.
+- `python -m mypy
+  src/francis/economy/markets/capability_pack_promotion_rules.py
+  src/francis/economy/markets/__init__.py src/francis/economy/__init__.py
+  src/francis/api/routes/plugins.py`
+  Result: `passed`.
+- `python -m ruff check
+  src/francis/economy/markets/capability_pack_promotion_rules.py
+  src/francis/economy/markets/__init__.py src/francis/economy/__init__.py
+  src/francis/api/routes/plugins.py
+  tests/unit/test_capability_pack_promotion_rules.py
+  tests/test_api_plugins.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`.
+- `python -m ruff format --check
+  src/francis/economy/markets/capability_pack_promotion_rules.py
+  src/francis/economy/markets/__init__.py src/francis/economy/__init__.py
+  src/francis/api/routes/plugins.py
+  tests/unit/test_capability_pack_promotion_rules.py
+  tests/test_api_plugins.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`.
+
+Validation risk:
+
+- Focused pytest commands for this slice were started but did not produce
+  output locally and were stopped; direct function/API validations passed.
+  GitHub CI remains the full-suite evidence gate.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

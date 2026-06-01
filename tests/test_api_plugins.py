@@ -745,6 +745,77 @@ def test_plugins_capability_pack_quality_standards_projects_pack_evidence(monkey
     assert all(item["capability"] != plugin_id for item in pack["failing_capabilities_sample"])
 
 
+def test_plugins_capability_pack_promotion_rules_project_governed_rule_readiness(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    meta = {
+        **_forge_promotion_meta("capability_promotion_rules"),
+        "pack_id": "ops.promotion_rules",
+        "pack_version": "1.0.0",
+        "pack_name": "Ops Promotion Rules Pack",
+        "promotion_rules": [
+            "metadata_receipt_before_promotion",
+            "quality_standards_before_promotion",
+            "operator_review_before_promotion",
+        ],
+        "pack_governance": {
+            "risk_tier": "normal",
+            "scope": "build_dev",
+            "operator_review_required": True,
+        },
+    }
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Capability Promotion Rules Plugin",
+            "description": "Stage 17 promotion rules coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": meta,
+        },
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    plugin_id = str(built_body["plugin_id"])
+
+    response = client.get("/plugins/capabilities/packs/promotion/rules")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "plugin.capability_pack.promotion_rules"
+    assert body["stage"] == "Stage 17 / Capability Economy"
+    assert body["requirements"]["explicit_promotion_rules"] is True
+    assert body["requirements"]["no_silent_promotion"] is True
+    assert body["governance"]["read_only"] is True
+    assert body["governance"]["does_not_write_receipts"] is True
+    assert body["governance"]["does_not_mutate_registry"] is True
+    assert body["governance"]["does_not_promote_capabilities"] is True
+    assert body["governance"]["promotion_authority"] is False
+    assert body["governance"]["execution_authority"] is False
+
+    pack = next(item for item in body["packs"] if item["pack_id"] == "ops.promotion_rules")
+    assert pack["ready"] is True
+    assert pack["blockers"] == []
+    assert pack["explicit_rules_ready"] is True
+    assert pack["metadata_receipts_ready"] is True
+    assert pack["quality_standards_ready"] is True
+    assert pack["governance_travels"] is True
+    assert pack["operator_review_declared"] is True
+    assert pack["promoted_capabilities_have_receipts"] is True
+    assert "operator_review_before_promotion" in pack["promotion_rules"]
+    assert all(item["capability"] != plugin_id for item in pack["failing_capabilities_sample"])
+
+
 def test_plugins_capability_pack_metadata_receipt_expands_reviewed_migration_plan_candidate(
     monkeypatch,
     tmp_path: Path,
