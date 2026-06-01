@@ -63,6 +63,7 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("GET", "/federation/node-attributed-continuity-contract"),
         ("GET", "/federation/completion-review"),
         ("GET", "/federation/sleep-continuity-runbook"),
+        ("GET", "/federation/sleep-continuity-action"),
         ("GET", "/federation/stage-closure-decisions"),
         ("GET", "/federation/live-runtime-readbacks"),
         ("POST", "/federation/stage-closure-decision"),

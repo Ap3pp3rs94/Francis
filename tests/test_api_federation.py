@@ -1105,6 +1105,35 @@ def test_federation_stage16_sleep_continuity_runbook_blocks_on_prior_live_readba
     assert body["next_smallest_truthful_gap"] == "stage16_live_federation_runtime_readback"
     assert not (data_root / "logs" / "federation" / "stage16_operator_stage_closure_decisions.jsonl").exists()
 
+    action = client.get("/federation/sleep-continuity-action").json()
+    assert action["ok"] is True
+    assert action["kind"] == "francis.stage16.federation.sleep_continuity_action"
+    assert action["status"] == "blocked_on_prior_live_readbacks"
+    assert action["selected_step_id"] == ""
+    assert action["selected_action"] == {}
+    assert action["primary_command"] == ""
+    assert action["prior_live_readback_blockers"] == [
+        "live_pairing_flow_observed",
+        "live_selective_sync_observed",
+        "live_remote_approval_roundtrip_observed",
+        "live_revocation_roundtrip_observed",
+    ]
+    assert action["post_resume_evidence_ready"] is False
+    assert action["operator_confirmation_required"] is False
+    assert action["writes_evidence_when_run"] is False
+    assert action["writes_receipts_when_run"] is False
+    assert action["mutation_available_from_ui"] is False
+    assert action["routes"]["sleep_continuity_action"] == "/federation/sleep-continuity-action"
+    assert action["governance"]["read_only"] is True
+    assert action["governance"]["action_projection_only"] is True
+    assert action["governance"]["prior_live_readback_blockers_take_precedence"] is True
+    assert action["governance"]["does_not_run_selected_command"] is True
+    assert action["governance"]["does_not_post_selected_route"] is True
+    assert action["governance"]["writes_receipts"] is False
+    assert action["governance"]["runs_shell"] is False
+    assert action["governance"]["grants_mutation_authority"] is False
+    assert action["marks_stage16_closed"] is False
+
 
 def test_federation_stage16_sleep_continuity_runbook_reports_ready_for_operator_sleep_resume(
     monkeypatch,
@@ -1246,6 +1275,19 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert status["sleep_continuity_next_step"] == "run_post_resume_evidence_with_operator_confirmation"
     assert status["next_smallest_truthful_gap"] == "stage16_sleep_continuity_runtime_readback"
 
+    action = client.get("/federation/sleep-continuity-action").json()
+    assert action["status"] == "capture_post_resume_evidence"
+    assert action["selected_step_id"] == "capture_post_resume_evidence"
+    assert "-OperatorConfirmedSleepResume" in action["primary_command"]
+    assert action["pre_sleep_evidence_ready"] is True
+    assert action["post_resume_evidence_ready"] is False
+    assert action["operator_action_required"] is True
+    assert action["operator_confirmation_required"] is True
+    assert action["writes_evidence_when_run"] is True
+    assert action["writes_receipts_when_run"] is False
+    assert action["mutation_available_from_ui"] is False
+    assert action["next_smallest_truthful_gap"] == "stage16_sleep_continuity_runtime_readback"
+
 
 def test_federation_stage16_sleep_continuity_runbook_uses_linked_post_resume_marker(
     monkeypatch,
@@ -1297,6 +1339,17 @@ def test_federation_stage16_sleep_continuity_runbook_uses_linked_post_resume_mar
     assert status["latest_post_resume_evidence"]["evidence_path"] == str(post_resume_path.resolve())
     assert status["sleep_continuity_next_step"] == "run_sleep_continuity_runtime_proof_with_committed_evidence"
     assert status["next_smallest_truthful_gap"] == "stage16_sleep_continuity_runtime_readback"
+
+    action = client.get("/federation/sleep-continuity-action").json()
+    assert action["status"] == "run_sleep_continuity_runtime_proof"
+    assert action["selected_step_id"] == "commit_sleep_continuity_readback"
+    assert "federation-stage16-sleep-continuity-runtime-proof.ps1" in action["primary_command"]
+    assert action["pre_sleep_evidence_ready"] is True
+    assert action["post_resume_evidence_ready"] is True
+    assert action["operator_confirmation_required"] is False
+    assert action["writes_evidence_when_run"] is False
+    assert action["writes_receipts_when_run"] is True
+    assert action["mutation_available_from_ui"] is False
 
 
 def test_federation_stage16_completion_review_accepts_live_or_manual_runtime_readback_evidence(

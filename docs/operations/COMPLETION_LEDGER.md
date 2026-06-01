@@ -51865,6 +51865,58 @@ Latest validation for Stage 16 sleep-continuity client presentation:
 - `cd apps/chat_ui; npm run build`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 sleep-continuity action readback is API-visible
+
+Roadmap area: Stage 16 / Federation, workstation sleep continuity runtime
+readback.
+
+Material change:
+
+- Added read-only `/federation/sleep-continuity-action`.
+- The endpoint projects the current selected sleep-continuity action from the
+  Stage 16 runbook and status posture without executing it.
+- It reports the selected step id, selected command or route, required scope,
+  blockers, pre/post evidence readiness, write expectations, operator
+  confirmation requirement, and no-mutation governance guards.
+- Prior live-runtime readback blockers take precedence over sleep evidence
+  metadata, so stale or optimistic evidence cannot hide earlier missing
+  federation readbacks.
+- The route is now part of the chat UI API contract surface.
+- This does not run commands, POST selected routes, write evidence, write
+  receipts, write registry state, write memory, grant execution authority,
+  grant mutation authority, infer workstation sleep/resume, or mark Stage 16
+  closed.
+
+Current project-data readback:
+
+- `/federation/sleep-continuity-action` reports
+  `status=capture_post_resume_evidence;
+  selected_step_id=capture_post_resume_evidence;
+  pre_sleep_evidence_ready=true;
+  post_resume_evidence_ready=false;
+  sleep_continuity_ready=false;
+  mutation_available_from_ui=false;
+  next_smallest_truthful_gap=stage16_sleep_continuity_runtime_readback`.
+
+Latest validation for Stage 16 sleep-continuity action readback:
+
+- `python -m pytest tests/test_api_federation.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 20 passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`.
+- Direct `/federation/sleep-continuity-action` TestClient readback
+  Result: `passed; status=capture_post_resume_evidence;
+  selected_step_id=capture_post_resume_evidence;
+  mutation_available_from_ui=false`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
