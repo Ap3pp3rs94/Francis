@@ -67,6 +67,11 @@ function recordBoolean(value: Record<string, unknown> | undefined, key: string):
   return Boolean(value?.[key]);
 }
 
+function recordString(value: Record<string, unknown> | undefined, key: string): string | undefined {
+  const raw = value?.[key];
+  return typeof raw === "string" ? raw : undefined;
+}
+
 export function FederationHubPanel(props: { baseUrl: string }) {
   const client = useMemo(() => new FederationClient(props.baseUrl), [props.baseUrl]);
   const [status, setStatus] = useState<FederationStage16Status | null>(null);
@@ -103,6 +108,8 @@ export function FederationHubPanel(props: { baseUrl: string }) {
   const priorLiveReadbackBlockers = presentation?.prior_live_readback_blockers ?? [];
   const selectedAction = action?.selected_action;
   const governance = action?.governance;
+  const latestPreSleepEvidence = status?.latest_pre_sleep_evidence;
+  const latestPostResumeEvidence = status?.latest_post_resume_evidence;
 
   return (
     <section style={panelStyle}>
@@ -165,6 +172,21 @@ export function FederationHubPanel(props: { baseUrl: string }) {
             <span style={badgeStyle(`continuity_${yesNo(Boolean(presentation?.sleep_continuity_ready))}`)}>
               continuity {yesNo(Boolean(presentation?.sleep_continuity_ready))}
             </span>
+          </div>
+          <div style={{ fontSize: 11, color: MUTED, marginTop: 8, overflowWrap: "anywhere" }}>
+            pre status <code>{codeValue(recordString(latestPreSleepEvidence, "status"))}</code>
+          </div>
+          <div style={{ fontSize: 11, color: MUTED, marginTop: 8, overflowWrap: "anywhere" }}>
+            pre id <code>{codeValue(recordString(latestPreSleepEvidence, "continuity_record_id"))}</code>
+          </div>
+          <div style={{ fontSize: 11, color: MUTED, marginTop: 8, overflowWrap: "anywhere" }}>
+            pre trace <code>{codeValue(recordString(latestPreSleepEvidence, "trace_id"))}</code>
+          </div>
+          <div style={{ fontSize: 11, color: MUTED, marginTop: 8, overflowWrap: "anywhere" }}>
+            post status <code>{codeValue(recordString(latestPostResumeEvidence, "status"))}</code>
+          </div>
+          <div style={{ fontSize: 11, color: MUTED, marginTop: 8, overflowWrap: "anywhere" }}>
+            post linked <code>{yesNo(recordBoolean(latestPostResumeEvidence, "linked_to_latest_pre_sleep"))}</code>
           </div>
         </div>
       </div>

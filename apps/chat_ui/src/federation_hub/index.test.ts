@@ -907,11 +907,16 @@ test("federation sleep-continuity presentation gates post-resume capture on oper
     post_resume_evidence_ready: false,
     latest_pre_sleep_evidence: {
       present: true,
+      status: "pre_sleep_evidence_available",
       evidence_path:
         "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json",
+      continuity_record_id: "stage16-sleep-continuity-test",
+      trace_id: "trace-stage16-sleep-continuity-test",
     },
     latest_post_resume_evidence: {
       present: false,
+      status: "missing",
+      linked_to_latest_pre_sleep: false,
     },
     sleep_continuity_next_step: "run_post_resume_evidence_with_operator_confirmation",
     ready_count: 6,
@@ -977,6 +982,11 @@ test("federation sleep-continuity presentation gates post-resume capture on oper
   assert.equal(presentation.pre_sleep_evidence_ready, true);
   assert.equal(presentation.post_resume_evidence_ready, false);
   assert.equal(presentation.sleep_continuity_ready, false);
+  assert.equal(status.latest_pre_sleep_evidence?.status, "pre_sleep_evidence_available");
+  assert.equal(status.latest_pre_sleep_evidence?.continuity_record_id, "stage16-sleep-continuity-test");
+  assert.equal(status.latest_pre_sleep_evidence?.trace_id, "trace-stage16-sleep-continuity-test");
+  assert.equal(status.latest_post_resume_evidence?.status, "missing");
+  assert.equal(status.latest_post_resume_evidence?.linked_to_latest_pre_sleep, false);
   assert.equal(presentation.ready_to_close, false);
   assert.equal(presentation.operator_action_required, true);
   assert.equal(presentation.operator_confirmation_required, true);

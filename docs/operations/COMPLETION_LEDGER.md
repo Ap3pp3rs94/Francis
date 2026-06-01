@@ -52290,6 +52290,36 @@ Latest validation for Stage 16 sleep-continuity next-step display:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 federation panel shows sleep evidence metadata
+
+Roadmap area: Stage 16 / Federation, operator-visible sleep-continuity evidence
+readback.
+
+Material change:
+
+- `FederationHubPanel` now renders metadata from the backend
+  `/federation/status` latest pre-sleep and post-resume evidence readbacks in
+  the Evidence card: pre-sleep status, continuity record id, trace id,
+  post-resume status, and whether the post-resume evidence is linked to the
+  latest pre-sleep artifact.
+- The UI contract now asserts those metadata fields are preserved by the
+  federation status parser in the post-resume capture posture.
+- This is read-only inspectability. It does not execute routes, run shell
+  commands, write evidence, write receipts, mutate registry state, write memory,
+  grant execution authority, grant mutation authority, infer workstation
+  sleep/resume, or mark Stage 16 closed.
+- Stage 16 remains open until live post-resume evidence and the receipt-backed
+  completion/closure gates are satisfied.
+
+Latest validation for Stage 16 sleep evidence metadata display:
+
+- `cd apps/chat_ui; npm run test -- federation_hub`
+  Result: `passed; 187 passed`.
+- `cd apps/chat_ui; npm run build`
+  Result: `passed`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
