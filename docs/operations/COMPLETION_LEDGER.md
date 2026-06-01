@@ -54347,6 +54347,33 @@ Latest validation for Stage 16 Hub projected-versus-visible command labels:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 Hub separates projected readiness from visible commands
+
+Roadmap area: Stage 16 / Federation, Federation Hub sleep/resume confirmation
+contract truthfulness.
+
+Material change:
+
+- Federation Hub now shows whether the selected sleep-continuity command is
+  actually visible alongside the backend's current-ready and confirmation
+  pending readbacks.
+- The terminal invocation line now labels command readiness as projected and
+  separately shows whether the terminal command is visible.
+- The selected-action readiness line now distinguishes terminal projected
+  readiness from terminal command visibility.
+- This is UI command-surface truthfulness only: it writes no receipt, runs no
+  shell, captures no evidence, grants no authority, and does not mark Stage 16
+  closed.
+
+Latest validation for Stage 16 Hub projected-readiness command labels:
+
+- `npm run test -- federation_hub`
+  Result: `passed; 192 passed`.
+- `npm run build`
+  Result: `passed`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

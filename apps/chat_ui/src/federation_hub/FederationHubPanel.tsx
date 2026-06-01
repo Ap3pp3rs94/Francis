@@ -218,6 +218,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
             {" / "}current ready <code>{yesNo(Boolean(status?.sleep_continuity_action_current_ready_to_run))}</code>
             {" / "}confirmation pending{" "}
             <code>{yesNo(Boolean(status?.sleep_continuity_operator_confirmation_pending))}</code>
+            {" / "}command visible <code>{yesNo(Boolean(visiblePrimaryCommand))}</code>
           </div>
           <div style={{ fontSize: 11, color: MUTED, marginTop: 8, overflowWrap: "anywhere" }}>
             next <code>{codeValue(status?.sleep_continuity_next_step)}</code>
@@ -460,7 +461,8 @@ export function FederationHubPanel(props: { baseUrl: string }) {
             <div style={{ fontSize: 11, color: MUTED }}>
               terminal invocation <code>{codeValue(operatorTerminalInvocation.status)}</code>
               {" / "}shell <code>{codeValue(operatorTerminalInvocation.shell)}</code>
-              {" / "}ready <code>{yesNo(operatorTerminalInvocation.operator_terminal_command_ready)}</code>
+              {" / "}projected <code>{yesNo(operatorTerminalInvocation.operator_terminal_command_ready)}</code>
+              {" / "}visible <code>{yesNo(Boolean(visibleOperatorTerminalCommand))}</code>
               {" / "}confirmation pending <code>{yesNo(operatorTerminalInvocation.operator_confirmation_pending)}</code>
             </div>
             {operatorTerminalInvocation.working_directory ? (
@@ -725,7 +727,8 @@ export function FederationHubPanel(props: { baseUrl: string }) {
             <div style={{ fontSize: 11, color: MUTED }}>
               readiness <code>{codeValue(selectedActionReadiness.status)}</code>
               {" / "}ready <code>{yesNo(selectedActionReadiness.ready_to_run)}</code>
-              {" / "}terminal command <code>{yesNo(selectedActionReadiness.operator_terminal_command_ready)}</code>
+              {" / "}terminal projected <code>{yesNo(selectedActionReadiness.operator_terminal_command_ready)}</code>
+              {" / "}terminal visible <code>{yesNo(Boolean(visibleOperatorTerminalCommand))}</code>
             </div>
             {selectedActionReadiness.run_blockers.length ? (
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
