@@ -1116,6 +1116,9 @@ def stage16_sleep_resume_confirmation_readback(*, limit: int = 20, actor: str = 
     )
     confirmation_operator_steps = _stage16_sleep_resume_confirmation_operator_steps(
         confirmation_command_ready=bool(confirmation_command.get("confirmation_receipt_command_ready")),
+        confirmation_command_requires_actor_substitution=bool(
+            confirmation_command.get("confirmation_receipt_command_requires_actor_substitution")
+        ),
         receipt_backed_sequence_ready=receipt_backed_sequence_ready,
         receipt_backed_sequence_command_field="receipt_backed_sequence_copyable_command",
     )
@@ -1725,24 +1728,28 @@ def _stage16_sleep_resume_confirmation_scope_remediation(
 def _stage16_sleep_resume_confirmation_operator_steps(
     *,
     confirmation_command_ready: bool,
+    confirmation_command_requires_actor_substitution: bool,
     receipt_backed_sequence_ready: bool,
     receipt_backed_sequence_command_field: str,
 ) -> list[dict[str, Any]]:
     routes = _federation_routes()
     readback_available = confirmation_command_ready or receipt_backed_sequence_ready
+    actor_substitution_required = confirmation_command_ready and confirmation_command_requires_actor_substitution
     return [
         {
             "id": "replace_actor_placeholder",
             "order": 1,
-            "status": "ready" if confirmation_command_ready else "blocked",
+            "status": "ready"
+            if actor_substitution_required
+            else ("not_required" if confirmation_command_ready else "blocked"),
             "command_field": "confirmation_receipt_copyable_command",
             "required_scope": _FEDERATION_SLEEP_RESUME_CONFIRMATION_SCOPE,
-            "requires_actor_substitution": confirmation_command_ready,
+            "requires_actor_substitution": actor_substitution_required,
             "requires_current_receipt": False,
             "writes_receipts_when_run": False,
             "writes_evidence_when_run": False,
             "marks_stage16_closed_when_run": False,
-            "operator_action_required": confirmation_command_ready,
+            "operator_action_required": actor_substitution_required,
             "read_only_projection": True,
         },
         {
@@ -1753,7 +1760,7 @@ def _stage16_sleep_resume_confirmation_operator_steps(
             "route": routes["sleep_resume_confirmation"],
             "command_field": "confirmation_receipt_copyable_command",
             "required_scope": _FEDERATION_SLEEP_RESUME_CONFIRMATION_SCOPE,
-            "requires_actor_substitution": confirmation_command_ready,
+            "requires_actor_substitution": actor_substitution_required,
             "requires_current_receipt": False,
             "writes_receipts_when_run": confirmation_command_ready,
             "writes_evidence_when_run": False,
@@ -2120,6 +2127,9 @@ def _stage16_sleep_continuity_operator_confirmation_handoff(
     )
     confirmation_operator_steps = _stage16_sleep_resume_confirmation_operator_steps(
         confirmation_command_ready=bool(confirmation_command.get("confirmation_receipt_command_ready")),
+        confirmation_command_requires_actor_substitution=bool(
+            confirmation_command.get("confirmation_receipt_command_requires_actor_substitution")
+        ),
         receipt_backed_sequence_ready=False,
         receipt_backed_sequence_command_field="post_resume_receipt_backed_sequence_copyable_command",
     )

@@ -2046,6 +2046,18 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     assert actor_bound_readback["confirmation_receipt_command_writes_evidence"] is False
     assert actor_bound_readback["confirmation_receipt_command_marks_stage16_closed"] is False
     assert actor_bound_readback["confirmation_receipt_command_projection_only"] is True
+    actor_bound_operator_steps = actor_bound_readback["confirmation_receipt_operator_steps"]
+    assert [step["status"] for step in actor_bound_operator_steps] == [
+        "not_required",
+        "ready",
+        "ready",
+        "blocked_until_current_confirmation_receipt",
+    ]
+    assert actor_bound_operator_steps[0]["requires_actor_substitution"] is False
+    assert actor_bound_operator_steps[0]["operator_action_required"] is False
+    assert actor_bound_operator_steps[1]["requires_actor_substitution"] is False
+    assert actor_bound_operator_steps[1]["writes_receipts_when_run"] is True
+    assert actor_bound_operator_steps[1]["operator_action_required"] is True
     assert actor_bound_readback["writes_receipts"] is False
     assert actor_bound_readback["writes_evidence"] is False
     assert actor_bound_readback["writes_runtime_readback"] is False

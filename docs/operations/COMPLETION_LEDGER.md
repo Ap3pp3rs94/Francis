@@ -54770,6 +54770,47 @@ Latest validation for Stage 16 Hub requested-actor display:
 - `npm run build`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 actor-bound receipt steps skip placeholder replacement
+
+Roadmap area: Stage 16 / Federation, sleep-continuity confirmation receipt
+operator surface.
+
+Material change:
+
+- The sleep-resume confirmation operator-step readback now distinguishes
+  command readiness from actor-placeholder replacement readiness.
+- When the confirmation command is already actor-bound, the
+  `replace_actor_placeholder` step reports `not_required` and does not show
+  actor substitution as an operator action.
+- Placeholder command projections still report actor substitution as required.
+- This is readback-only: it does not write receipts, capture evidence, run
+  shell from the API, grant authority, or close Stage 16.
+
+Latest validation for Stage 16 actor-bound operator steps:
+
+- `python -m pytest tests/test_api_federation.py -q --tb=short --maxfail=1`
+  Result: `passed; 26 passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `git diff --check`
+  Result: `passed`.
+- Fresh local readback:
+  `GET /federation/sleep-resume-confirmations?limit=3&actor=codex.builder`
+  Result: `requested_actor=codex.builder; requested_actor_ready=true;
+  confirmation_receipt_actor_bound=true;
+  confirmation_receipt_command_requires_actor_substitution=false;
+  operator_step_statuses=["not_required","ready","ready",
+  "blocked_until_current_confirmation_receipt"];
+  operator_step_requires_actor_substitution=[false,false,false,false];
+  writes_receipts=false; writes_evidence=false; marks_stage16_closed=false;
+  next_smallest_truthful_gap=stage16_sleep_resume_confirmation_receipt`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
