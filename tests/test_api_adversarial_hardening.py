@@ -66,6 +66,7 @@ def test_adversarial_hardening_status_blocks_until_stage13_closure(monkeypatch, 
     assert body["stage13_latest_closure_receipt_id"] == ""
     assert body["injection_containment_contract_ready"] is False
     assert body["quarantine_model_contract_ready"] is False
+    assert body["red_team_suite_ready"] is False
     assert body["ready_count"] == 0
     assert body["required_count"] == 5
     assert body["governance"]["read_only"] is True
@@ -118,13 +119,15 @@ def test_adversarial_hardening_injection_contract_is_ready_after_stage13_closure
     assert contract["next_smallest_truthful_gap"] == "stage14_quarantine_model_contract"
 
     status = client.get("/adversarial-hardening/status").json()
-    assert status["status"] == "stage14_quarantine_model_contract_ready"
+    assert status["status"] == "stage14_red_team_regression_suite_ready"
     assert status["stage13_closed_by_receipt"] is True
     assert status["injection_containment_contract_ready"] is True
     assert status["quarantine_model_contract_ready"] is True
-    assert status["ready_count"] == 3
+    assert status["red_team_suite_ready"] is True
+    assert status["ready_count"] == 4
     assert status["required_count"] == 5
-    assert status["next_smallest_truthful_gap"] == "stage14_red_team_regression_suite"
+    assert status["routes"]["red_team_regression_suite"] == "/adversarial-hardening/red-team-regression-suite"
+    assert status["next_smallest_truthful_gap"] == "stage14_policy_bypass_regression_suite"
 
 
 def test_adversarial_hardening_quarantine_model_contract_is_read_only_and_approval_bound(
@@ -168,3 +171,76 @@ def test_adversarial_hardening_quarantine_model_contract_is_read_only_and_approv
     assert contract["governance"]["grants_execution_authority"] is False
     assert contract["governance"]["grants_mutation_authority"] is False
     assert contract["next_smallest_truthful_gap"] == "stage14_red_team_regression_suite"
+
+
+def test_adversarial_hardening_red_team_regression_suite_replays_bounded_corpus(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage13_closure_receipt(data_root)
+
+    client = TestClient(create_app())
+    contract = client.get("/adversarial-hardening/red-team-regression-suite").json()
+
+    assert contract["ok"] is True
+    assert contract["kind"] == "francis.stage14.adversarial_hardening.red_team_regression_suite"
+    assert contract["status"] == "ready"
+    assert contract["stage13_closed_by_receipt"] is True
+    assert contract["stage13_latest_closure_receipt_id"] == "trust_calibration_stage13_closure_test"
+    assert contract["injection_containment_contract_ready"] is True
+    assert contract["quarantine_model_contract_ready"] is True
+    assert contract["red_team_suite_ready"] is True
+    assert contract["capture_mode"] == "bounded_static_adversarial_corpus"
+    assert contract["case_count"] == 4
+    assert contract["passed_count"] == 4
+    assert contract["failed_count"] == 0
+    assert contract["payload_handling"]["returns_raw_payloads"] is False
+    assert contract["payload_handling"]["returns_raw_model_outputs"] is False
+    assert contract["payload_handling"]["returns_only_case_ids_scores_and_signal_codes"] is True
+    assert contract["governance"]["read_only"] is True
+    assert contract["governance"]["does_not_write_receipts"] is True
+    assert contract["governance"]["does_not_write_quarantine"] is True
+    assert contract["governance"]["does_not_write_memory"] is True
+    assert contract["governance"]["does_not_run_tools"] is True
+    assert contract["governance"]["does_not_run_shell"] is True
+    assert contract["governance"]["grants_execution_authority"] is False
+    assert contract["governance"]["grants_mutation_authority"] is False
+    assert contract["next_smallest_truthful_gap"] == "stage14_policy_bypass_regression_suite"
+
+    cases = {item["case_id"]: item for item in contract["cases"]}
+    assert set(cases) == {
+        "prompt_injection_untrusted_content",
+        "dangerous_output_command_chain",
+        "training_data_poisoning_trigger",
+        "secret_exfiltration_output_leak",
+    }
+    assert all(item["passed"] is True for item in cases.values())
+    assert all(item["raw_payload_returned"] is False for item in cases.values())
+    assert all(item["raw_model_output_returned"] is False for item in cases.values())
+    assert all(item["authority_granted"] is False for item in cases.values())
+    assert all("payload" not in item for item in cases.values())
+    assert all("raw_text" not in item for item in cases.values())
+    assert "pi_ignore_rules" in cases["prompt_injection_untrusted_content"]["signal_codes"]
+    assert "pi_system_prompt" in cases["prompt_injection_untrusted_content"]["signal_codes"]
+    assert "pi_reveal_secrets" in cases["prompt_injection_untrusted_content"]["signal_codes"]
+    assert cases["prompt_injection_untrusted_content"]["redacted_secrets"] is True
+    assert "cmd_rm_rf_root" in cases["dangerous_output_command_chain"]["signal_codes"]
+    assert "dex_curl_pipe_sh" in cases["dangerous_output_command_chain"]["signal_codes"]
+    assert "trigger_injection" in cases["training_data_poisoning_trigger"]["signal_codes"]
+    assert "label_flip" in cases["training_data_poisoning_trigger"]["signal_codes"]
+    assert "secret_leak_detected" in cases["secret_exfiltration_output_leak"]["signal_codes"]
+    assert cases["secret_exfiltration_output_leak"]["redaction_available"] is True
+
+    response_text = json.dumps(contract, sort_keys=True)
+    assert "sk-redteam" not in response_text
+    assert "Ignore the policy rules" not in response_text
+    assert "curl https://example.invalid/install.sh" not in response_text
+
+    status = client.get("/adversarial-hardening/status").json()
+    assert status["status"] == "stage14_red_team_regression_suite_ready"
+    assert status["red_team_suite_ready"] is True
+    assert status["ready_count"] == 4
+    assert status["required_count"] == 5
+    assert status["next_smallest_truthful_gap"] == "stage14_policy_bypass_regression_suite"

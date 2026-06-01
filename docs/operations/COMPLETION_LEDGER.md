@@ -50028,6 +50028,58 @@ Latest validation for Stage 14 quarantine model contract:
   tests/test_api_adversarial_hardening.py tests/test_api_contract_chat_ui.py`
   Result: `passed`
 
+### 2026-05-31 - Stage 14 red-team regression suite is read-only
+
+Roadmap area: Stage 14 / Adversarial Hardening, red-team tests and
+continuous hostile-input regression evidence.
+
+Material change:
+
+- Added read-only
+  `/adversarial-hardening/red-team-regression-suite`.
+- Stage 14 status now advances from
+  `stage14_quarantine_model_contract_ready` to
+  `stage14_red_team_regression_suite_ready` when the bounded adversarial
+  corpus replay passes.
+- The suite replays four deterministic cases through existing defenses:
+  prompt-injection containment, dangerous output command detection, poisoning
+  trigger detection, and secret-leak detection.
+- The API returns only case IDs, detector names, scores, expected signal codes,
+  observed signal codes, and pass/fail evidence. It does not return raw hostile
+  payloads or raw model outputs.
+- The route remains read-only: it does not write receipts, memory, quarantine
+  records, shell state, git state, browser state, or runtime authority.
+- Current readback reports
+  `status=stage14_red_team_regression_suite_ready`,
+  `red_team_suite_ready=true`, `case_count=4`, `passed_count=4`,
+  `failed_count=0`, `ready_count=4`, `required_count=5`, and
+  `next_smallest_truthful_gap=stage14_policy_bypass_regression_suite`.
+
+Latest validation for Stage 14 red-team regression suite:
+
+- Direct local `TestClient` readback of GET
+  `/adversarial-hardening/status` and GET
+  `/adversarial-hardening/red-team-regression-suite`.
+  Result: `status=stage14_red_team_regression_suite_ready;
+  red_team_suite_ready=true; ready_count=4; required_count=5;
+  next_smallest_truthful_gap=stage14_policy_bypass_regression_suite;
+  red_team_status=ready; case_count=4; passed_count=4; failed_count=0`.
+- `python -m pytest tests/test_api_adversarial_hardening.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short`
+  Result: `passed; 5 passed`
+- `python -m mypy src/francis/adversarial_hardening.py
+  src/francis/api/routes/adversarial_hardening.py`
+  Result: `passed`
+- `python -m ruff check src/francis/adversarial_hardening.py
+  src/francis/api/routes/adversarial_hardening.py
+  tests/test_api_adversarial_hardening.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/adversarial_hardening.py
+  src/francis/api/routes/adversarial_hardening.py
+  tests/test_api_adversarial_hardening.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
