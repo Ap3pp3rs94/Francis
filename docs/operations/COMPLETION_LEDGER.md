@@ -50613,6 +50613,60 @@ Latest validation for Stage 15 completion and closure:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-31 - Stage 16 Federation starts with pairing and scoped-trust contract
+
+Roadmap area: Stage 16 / Federation, pairing flow and scoped trust before sync,
+remote approvals, and revocation.
+
+Material change:
+
+- Added read-only `GET /federation/pairing-scoped-trust-contract`.
+- `/federation/status` now exposes Stage 16 posture without changing the
+  existing federation health `status=ready` contract.
+- The contract uses the Stage 15 Swarm closure receipt readback as the Stage 16
+  backstop before projecting federation readiness.
+- The pairing contract defines explicit states: `unpaired`,
+  `pairing_requested`, `paired`, `degraded`, and `revoked`.
+- Required pairing fields are bounded to node identity, public-key fingerprint,
+  requested scopes, operator approval receipt, expiry policy, and revocation
+  route.
+- Scoped trust starts with presence, continuity-summary, and approval-relay
+  levels. It explicitly blocks raw private data, raw prompts, raw model
+  responses, secrets, credential material, raw memory bodies, execution tokens,
+  operator-unredacted payloads, silent approvals, and authority expansion.
+- This is contract-only: it does not pair nodes, sync state, relay remote
+  approvals, revoke live links, mutate the federation registry, write memory,
+  run tools, run shell, run git, launch browsers, capture the screen, or grant
+  execution/mutation authority.
+- Current readback reports `stage16_status=stage16_pairing_scoped_trust_contract_ready`,
+  `stage15_closed_by_receipt=true`, `pairing_scoped_trust_contract_ready=true`,
+  `ready_count=2`, `required_count=6`, and
+  `next_smallest_truthful_gap=stage16_sync_model_contract`.
+
+Latest validation for Stage 16 pairing and scoped trust:
+
+- Direct local `TestClient` readback of GET `/federation/status` and GET
+  `/federation/pairing-scoped-trust-contract`.
+  Result: `status=ready;
+  stage16_status=stage16_pairing_scoped_trust_contract_ready;
+  stage15_closed=true; pairing_ready=true; ready_count=2;
+  required_count=6; status_next_gap=stage16_sync_model_contract;
+  contract_status=ready; contract_next_gap=stage16_sync_model_contract`.
+- `python -m pytest tests/test_api_federation.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 5 passed`
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

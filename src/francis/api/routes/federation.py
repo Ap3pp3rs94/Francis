@@ -13,9 +13,12 @@ from fastapi import APIRouter, Request
 
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.kernel.paths import data_dir
+from francis.swarm import swarm_stage15_operator_stage_closure_decision_readback
 
 router = APIRouter()
 _FEDERATION_WRITE_SCOPE = "federation.write"
+_STAGE16_FEDERATION_STAGE = "Stage 16 / Federation"
+_FEDERATION_PAIRING_SCOPED_TRUST_CONTRACT_KIND = "francis.stage16.federation.pairing_scoped_trust_contract"
 
 _ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._:-]{1,127}$")
 
@@ -397,6 +400,222 @@ def _list_shared_knowledge(
     return {"items": page, "knowledge": page, "total": total, "limit": safe_limit, "offset": safe_offset}
 
 
+def _federation_routes() -> dict[str, str]:
+    return {
+        "status": "/federation/status",
+        "pairing_scoped_trust_contract": "/federation/pairing-scoped-trust-contract",
+        "instances_list": "/federation/instances/list",
+        "instances_get": "/federation/instances/get",
+        "delegations_list": "/federation/delegations/list",
+        "consensus_logs_list": "/federation/consensus_logs/list",
+        "shared_knowledge_list": "/federation/shared_knowledge/list",
+        "instances_upsert": "/federation/instances/upsert",
+        "delegations_record": "/federation/delegations/record",
+        "consensus_logs_append": "/federation/consensus_logs/append",
+        "shared_knowledge_publish": "/federation/shared_knowledge/publish",
+        "stage15_closure_readback": "/swarm/stage-closure-decisions",
+    }
+
+
+def _federation_governance(*, read_only: bool = True) -> dict[str, Any]:
+    return {
+        "read_only": read_only,
+        "stage16_contract_only": True,
+        "zero_trust_default": True,
+        "explicit_pairing_required": True,
+        "scoped_trust_required": True,
+        "revocation_required": True,
+        "node_identity_required": True,
+        "trace_lineage_required": True,
+        "selective_replication_required": True,
+        "raw_private_data_replication_allowed": False,
+        "hidden_trust_expansion_allowed": False,
+        "cloud_vagueness_allowed": False,
+        "writes_registry": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+    }
+
+
+def _federation_deliverable(
+    deliverable_id: str,
+    summary: str,
+    ready: bool,
+    status: str,
+    next_gap: str,
+) -> dict[str, Any]:
+    return {
+        "id": deliverable_id,
+        "summary": summary,
+        "ready": ready,
+        "status": status,
+        "next_smallest_truthful_gap": next_gap,
+    }
+
+
+def _stage16_pairing_deliverables(pairing_contract_ready: bool, stage15_closed: bool) -> list[dict[str, Any]]:
+    return [
+        _federation_deliverable(
+            "stage15_ledger_closure_backstop",
+            "Stage 15 Swarm closure receipt readback is present before federation topology expands",
+            stage15_closed,
+            "ready" if stage15_closed else "blocked",
+            "stage15_ledger_closure",
+        ),
+        _federation_deliverable(
+            "pairing_scoped_trust_contract",
+            "Pairing and scoped trust are explicit, node-attributed, revocable, and read-only",
+            pairing_contract_ready,
+            "ready" if pairing_contract_ready else "pending",
+            "stage16_pairing_scoped_trust_contract",
+        ),
+        _federation_deliverable(
+            "sync_model",
+            "Selective replication model is not implemented yet",
+            False,
+            "pending",
+            "stage16_sync_model_contract",
+        ),
+        _federation_deliverable(
+            "remote_approval_support",
+            "Remote approval relays are not implemented yet",
+            False,
+            "pending",
+            "stage16_remote_approval_support",
+        ),
+        _federation_deliverable(
+            "revocation_surfaces",
+            "Runtime revocation surfaces are not implemented yet",
+            False,
+            "pending",
+            "stage16_revocation_surfaces",
+        ),
+        _federation_deliverable(
+            "node_attributed_continuity",
+            "Continuity readbacks are not yet attributed across paired nodes",
+            False,
+            "pending",
+            "stage16_node_attributed_continuity",
+        ),
+    ]
+
+
+def pairing_scoped_trust_contract() -> dict[str, Any]:
+    stage15 = swarm_stage15_operator_stage_closure_decision_readback(limit=5)
+    stage15_closed = bool(stage15.get("stage15_closed_by_receipt"))
+    pairing_states = [
+        "unpaired",
+        "pairing_requested",
+        "paired",
+        "degraded",
+        "revoked",
+    ]
+    required_pairing_fields = [
+        "pairing_request_id",
+        "local_node_id",
+        "remote_node_id",
+        "remote_public_key_fingerprint",
+        "requested_scopes",
+        "operator_approval_receipt_id",
+        "expiry_policy",
+        "revocation_route",
+    ]
+    scoped_trust_levels = [
+        {
+            "id": "presence",
+            "allows": ["health_presence", "capability_inventory"],
+            "disallows": ["raw_private_data", "approval_decisions", "execution_authority"],
+        },
+        {
+            "id": "continuity_summary",
+            "allows": ["redacted_continuity_summary", "trace_metadata"],
+            "disallows": ["raw_memory_body", "secrets", "unscoped_replication"],
+        },
+        {
+            "id": "approval_relay",
+            "allows": ["approval_request_metadata", "decision_receipt_reference"],
+            "disallows": ["operator_impersonation", "silent_approval", "authority_expansion"],
+        },
+    ]
+    selective_replication = {
+        "allowed_classes": [
+            "node_identity",
+            "health_presence",
+            "capability_inventory",
+            "redacted_continuity_summary",
+            "trace_metadata",
+            "approval_request_metadata",
+            "decision_receipt_reference",
+        ],
+        "blocked_classes": [
+            "raw_private_data",
+            "raw_prompt_body",
+            "raw_model_response",
+            "secrets",
+            "credential_material",
+            "raw_memory_body",
+            "execution_tokens",
+            "operator_unredacted_payloads",
+        ],
+    }
+    invariants = {
+        "stage15_swarm_closed_before_federation": stage15_closed,
+        "pairing_is_explicit_not_ambient": True,
+        "trust_is_scoped_not_global": True,
+        "trust_is_revocable": True,
+        "node_identity_is_required": True,
+        "trace_lineage_is_preserved": True,
+        "remote_approval_cannot_impersonate_operator": True,
+        "raw_private_data_does_not_replicate_by_default": True,
+        "federation_does_not_expand_authority": True,
+        "cloud_vagueness_is_rejected": True,
+    }
+    contract_ready = (
+        stage15_closed
+        and len(pairing_states) == 5
+        and len(required_pairing_fields) == 8
+        and len(scoped_trust_levels) == 3
+        and all(bool(value) for value in invariants.values())
+    )
+    return {
+        "ok": True,
+        "kind": _FEDERATION_PAIRING_SCOPED_TRUST_CONTRACT_KIND,
+        "stage": _STAGE16_FEDERATION_STAGE,
+        "source_id": "federation",
+        "status": "ready" if contract_ready else "blocked",
+        "stage15_closed_by_receipt": stage15_closed,
+        "stage15_latest_closure_receipt_id": _safe_str(stage15.get("latest_receipt_id")).strip(),
+        "pairing_scoped_trust_contract_ready": contract_ready,
+        "pairing_states": pairing_states,
+        "required_pairing_fields": required_pairing_fields,
+        "scoped_trust_levels": scoped_trust_levels,
+        "selective_replication": selective_replication,
+        "invariants": invariants,
+        "routes": _federation_routes(),
+        "governance": _federation_governance(),
+        "writes_registry": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "next_smallest_truthful_gap": "stage16_sync_model_contract"
+        if contract_ready
+        else "stage15_ledger_closure"
+        if not stage15_closed
+        else "stage16_pairing_scoped_trust_contract",
+    }
+
+
 @router.get("/status")
 def status() -> dict[str, Any]:
     try:
@@ -409,10 +628,35 @@ def status() -> dict[str, Any]:
         ]
         online = len([i for i in instances if _safe_str(i.get("status")).strip().lower() == "online"])
         degraded = len([i for i in instances if _safe_str(i.get("status")).strip().lower() == "degraded"])
+        pairing_contract = pairing_scoped_trust_contract()
+        pairing_ready = bool(pairing_contract.get("pairing_scoped_trust_contract_ready"))
+        stage15_closed = bool(pairing_contract.get("stage15_closed_by_receipt"))
+        deliverables = _stage16_pairing_deliverables(pairing_ready, stage15_closed)
         return {
             "ok": True,
             "route": "federation",
             "status": "ready",
+            "stage": _STAGE16_FEDERATION_STAGE,
+            "stage16_status": "stage16_pairing_scoped_trust_contract_ready"
+            if pairing_ready
+            else "awaiting_stage15_ledger_closure"
+            if not stage15_closed
+            else "stage16_started",
+            "stage15_closed_by_receipt": stage15_closed,
+            "stage15_latest_closure_receipt_id": _safe_str(
+                pairing_contract.get("stage15_latest_closure_receipt_id")
+            ).strip(),
+            "pairing_scoped_trust_contract_ready": pairing_ready,
+            "ready_count": sum(1 for item in deliverables if bool(item.get("ready"))),
+            "required_count": len(deliverables),
+            "deliverables": deliverables,
+            "routes": _federation_routes(),
+            "governance": _federation_governance(),
+            "next_smallest_truthful_gap": "stage16_sync_model_contract"
+            if pairing_ready
+            else "stage15_ledger_closure"
+            if not stage15_closed
+            else "stage16_pairing_scoped_trust_contract",
             "ts": _now_s(),
             "counts": {
                 "instances": len(instances),
@@ -432,6 +676,11 @@ def health() -> dict[str, Any]:
     body = status()
     body["route"] = "federation.health"
     return body
+
+
+@router.get("/pairing-scoped-trust-contract")
+def get_pairing_scoped_trust_contract() -> dict[str, Any]:
+    return pairing_scoped_trust_contract()
 
 
 @router.get("/instances/list")

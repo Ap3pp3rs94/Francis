@@ -55,6 +55,8 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("GET", "/explanations/list"),
         ("GET", "/explanations/get"),
         ("GET", "/explanations/export"),
+        ("GET", "/federation/status"),
+        ("GET", "/federation/pairing-scoped-trust-contract"),
         ("GET", "/federation/instances/list"),
         ("GET", "/federation/instances/get"),
         ("GET", "/federation/delegations/list"),

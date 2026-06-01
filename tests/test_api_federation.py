@@ -4,6 +4,50 @@ import json
 from pathlib import Path
 
 
+def _write_stage15_closure_receipt(
+    data_root: Path,
+    *,
+    receipt_id: str = "swarm_stage15_closure_test",
+) -> None:
+    path = data_root / "logs" / "swarm" / "stage15_operator_stage_closure_decisions.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "ok": True,
+                "kind": "francis.stage15.swarm.stage15_closure_decision_receipt",
+                "receipt_id": receipt_id,
+                "stage": "Stage 15 / Swarm",
+                "source_id": "swarm",
+                "target": "stage15_swarm",
+                "actor": "test.operator",
+                "decision": "close_stage15",
+                "authority": "delegated_operator",
+                "delegation_id": "opdel_test_stage15",
+                "completion_review_ready": True,
+                "stage15_completion_review_ready": True,
+                "stage15_closed_by_receipt": True,
+                "ready_count": 6,
+                "required_count": 6,
+                "blockers": [],
+                "marks_runtime_stage_state": False,
+                "recorded_ts": 1_800_004_000,
+                "governance": {
+                    "explicit_operator_decision": True,
+                    "stage_closure_decision": True,
+                    "completion_review_ready": True,
+                    "does_not_mutate_runtime_stage_state": True,
+                    "grants_execution_authority": False,
+                    "grants_mutation_authority": False,
+                },
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
 def test_federation_hub_contract_lifecycle(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
@@ -244,3 +288,75 @@ def test_federation_pagination_time_filters_and_persistence(monkeypatch, tmp_pat
     assert isinstance(registry.get("delegations"), list)
     assert isinstance(registry.get("consensus_logs"), list)
     assert isinstance(registry.get("shared_knowledge"), list)
+
+
+def test_federation_stage16_pairing_scoped_trust_contract_is_read_only_after_stage15_closure(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage15_closure_receipt(data_root, receipt_id="swarm_stage15_closure_for_stage16")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    response = client.get("/federation/pairing-scoped-trust-contract")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "francis.stage16.federation.pairing_scoped_trust_contract"
+    assert body["stage"] == "Stage 16 / Federation"
+    assert body["status"] == "ready"
+    assert body["stage15_closed_by_receipt"] is True
+    assert body["stage15_latest_closure_receipt_id"] == "swarm_stage15_closure_for_stage16"
+    assert body["pairing_scoped_trust_contract_ready"] is True
+    assert body["pairing_states"] == [
+        "unpaired",
+        "pairing_requested",
+        "paired",
+        "degraded",
+        "revoked",
+    ]
+    assert body["required_pairing_fields"] == [
+        "pairing_request_id",
+        "local_node_id",
+        "remote_node_id",
+        "remote_public_key_fingerprint",
+        "requested_scopes",
+        "operator_approval_receipt_id",
+        "expiry_policy",
+        "revocation_route",
+    ]
+    assert {level["id"] for level in body["scoped_trust_levels"]} == {
+        "presence",
+        "continuity_summary",
+        "approval_relay",
+    }
+    assert "raw_private_data" in body["selective_replication"]["blocked_classes"]
+    assert "secrets" in body["selective_replication"]["blocked_classes"]
+    assert body["invariants"]["pairing_is_explicit_not_ambient"] is True
+    assert body["invariants"]["trust_is_scoped_not_global"] is True
+    assert body["invariants"]["federation_does_not_expand_authority"] is True
+    assert body["governance"]["read_only"] is True
+    assert body["governance"]["zero_trust_default"] is True
+    assert body["governance"]["raw_private_data_replication_allowed"] is False
+    assert body["governance"]["hidden_trust_expansion_allowed"] is False
+    assert body["writes_registry"] is False
+    assert body["writes_memory"] is False
+    assert body["runs_tools"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["next_smallest_truthful_gap"] == "stage16_sync_model_contract"
+
+    status = client.get("/federation/status").json()
+    assert status["stage"] == "Stage 16 / Federation"
+    assert status["stage16_status"] == "stage16_pairing_scoped_trust_contract_ready"
+    assert status["pairing_scoped_trust_contract_ready"] is True
+    assert status["ready_count"] == 2
+    assert status["required_count"] == 6
+    assert status["routes"]["pairing_scoped_trust_contract"] == "/federation/pairing-scoped-trust-contract"
+    assert status["next_smallest_truthful_gap"] == "stage16_sync_model_contract"
