@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 
 def _write_stage15_closure_receipt(
@@ -46,6 +47,26 @@ def _write_stage15_closure_receipt(
         + "\n",
         encoding="utf-8",
     )
+
+
+def _record_stage16_live_readback(client: Any, readback_id: str, *, proof_kind: str = "live_runtime_probe") -> None:
+    response = client.post(
+        "/federation/live-runtime-readback",
+        json={
+            "request_actor": "test.federation.write",
+            "reason": f"record {readback_id}",
+            "readback_id": readback_id,
+            "observed": True,
+            "proof_kind": proof_kind,
+            "source_node_id": "workstation-a",
+            "paired_node_id": "phone-a",
+            "trace_id": f"trace-fed-{readback_id}",
+            "parent_receipt_id": "swarm_stage15_closure_for_runbook",
+            "evidence_summary": f"bounded live runtime proof for {readback_id}",
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["readback_ready"] is True
 
 
 def test_federation_hub_contract_lifecycle(monkeypatch, tmp_path: Path) -> None:
@@ -935,6 +956,131 @@ def test_federation_stage16_partial_live_runtime_readbacks_surface_next_missing_
         "workstation_sleep_continuity_validated",
     ]
     assert status["next_smallest_truthful_gap"] == "stage16_revocation_runtime_readback"
+
+
+def test_federation_stage16_sleep_continuity_runbook_blocks_on_prior_live_readbacks(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage15_closure_receipt(data_root, receipt_id="swarm_stage15_closure_for_runbook_blocked")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    response = client.get("/federation/sleep-continuity-runbook")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "francis.stage16.federation.sleep_continuity_runbook"
+    assert body["status"] == "blocked_on_prior_live_readbacks"
+    assert body["runbook_only"] is True
+    assert body["prerequisite_readbacks_ready"] is False
+    assert body["sleep_continuity_ready"] is False
+    assert body["ready_to_close"] is False
+    assert body["stage16_closed_by_receipt"] is False
+    assert body["current_readback"]["ready_count"] == 0
+    assert body["current_readback"]["required_count"] == 5
+    assert body["missing_readbacks"] == [
+        "live_pairing_flow_observed",
+        "live_selective_sync_observed",
+        "live_remote_approval_roundtrip_observed",
+        "live_revocation_roundtrip_observed",
+        "workstation_sleep_continuity_validated",
+    ]
+    assert body["steps"][0]["id"] == "capture_pre_sleep_evidence"
+    assert body["steps"][1]["id"] == "capture_post_resume_evidence"
+    assert body["steps"][1]["operator_confirmation_required"] is True
+    assert body["steps"][2]["id"] == "commit_sleep_continuity_readback"
+    assert body["steps"][3]["id"] == "record_operator_stage_closure_decision"
+    assert body["steps"][3]["route"] == "/federation/stage-closure-decision"
+    assert body["routes"]["sleep_continuity_runbook"] == "/federation/sleep-continuity-runbook"
+    assert body["governance"]["read_only"] is True
+    assert body["governance"]["runbook_only"] is True
+    assert body["governance"]["does_not_infer_sleep_from_delay"] is True
+    assert body["governance"]["requires_explicit_sleep_resume_confirmation"] is True
+    assert body["governance"]["writes_evidence"] is False
+    assert body["governance"]["writes_receipts"] is False
+    assert body["writes_evidence"] is False
+    assert body["writes_receipts"] is False
+    assert body["runs_shell"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["marks_stage16_closed"] is False
+    assert body["next_smallest_truthful_gap"] == "stage16_live_federation_runtime_readback"
+    assert not (data_root / "logs" / "federation" / "stage16_operator_stage_closure_decisions.jsonl").exists()
+
+
+def test_federation_stage16_sleep_continuity_runbook_reports_ready_for_operator_sleep_resume(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage15_closure_receipt(data_root, receipt_id="swarm_stage15_closure_for_runbook")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    for readback_id in [
+        "live_pairing_flow_observed",
+        "live_selective_sync_observed",
+        "live_remote_approval_roundtrip_observed",
+        "live_revocation_roundtrip_observed",
+    ]:
+        _record_stage16_live_readback(client, readback_id)
+
+    response = client.get("/federation/sleep-continuity-runbook")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["status"] == "ready_for_operator_sleep_resume"
+    assert body["prerequisite_readback_ids"] == [
+        "live_pairing_flow_observed",
+        "live_selective_sync_observed",
+        "live_remote_approval_roundtrip_observed",
+        "live_revocation_roundtrip_observed",
+    ]
+    assert body["prerequisite_readbacks_ready"] is True
+    assert body["sleep_continuity_readback_id"] == "workstation_sleep_continuity_validated"
+    assert body["sleep_continuity_ready"] is False
+    assert body["sleep_continuity_check"]["id"] == "workstation_sleep_continuity_validated"
+    assert body["sleep_continuity_check"]["passed"] is False
+    assert body["missing_readbacks"] == ["workstation_sleep_continuity_validated"]
+    assert body["current_readback"]["ready_count"] == 4
+    assert body["current_readback"]["required_count"] == 5
+    assert body["completion_review"]["ready_to_close"] is False
+    assert body["completion_review"]["stage16_completion_review_ready"] is False
+    assert body["completion_review"]["blockers"] == ["workstation_sleep_continuity_validated"]
+    assert body["stage_closure_decision"]["status"] == "empty"
+    assert body["stage_closure_decision"]["stage16_closed_by_receipt"] is False
+    assert [step["id"] for step in body["steps"]] == [
+        "capture_pre_sleep_evidence",
+        "capture_post_resume_evidence",
+        "commit_sleep_continuity_readback",
+        "record_operator_stage_closure_decision",
+    ]
+    assert body["steps"][0]["command"] == (
+        "scripts/federation-stage16-sleep-continuity-evidence.ps1 -Mode PreSleep -CommitEvidence"
+    )
+    assert "-OperatorConfirmedSleepResume" in body["steps"][1]["command"]
+    assert "federation-stage16-sleep-continuity-runtime-proof.ps1" in body["steps"][2]["command"]
+    assert body["steps"][2]["writes_receipts_when_run"] is True
+    assert body["steps"][3]["required_scope"] == "federation.stage16.closure.write"
+    assert body["governance"]["read_only"] is True
+    assert body["governance"]["runbook_only"] is True
+    assert body["governance"]["writes_registry"] is False
+    assert body["governance"]["writes_memory"] is False
+    assert body["governance"]["runs_tools"] is False
+    assert body["governance"]["runs_shell"] is False
+    assert body["governance"]["grants_mutation_authority"] is False
+    assert body["next_smallest_truthful_gap"] == "stage16_sleep_continuity_runtime_readback"
 
 
 def test_federation_stage16_completion_review_accepts_live_or_manual_runtime_readback_evidence(

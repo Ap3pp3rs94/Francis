@@ -28,6 +28,7 @@ _FEDERATION_NODE_CONTINUITY_CONTRACT_KIND = "francis.stage16.federation.node_att
 _FEDERATION_COMPLETION_REVIEW_KIND = "francis.stage16.federation.completion_review"
 _FEDERATION_LIVE_RUNTIME_READBACK_KIND = "francis.stage16.federation.live_runtime_readback_receipt"
 _FEDERATION_LIVE_RUNTIME_READBACKS_KIND = "francis.stage16.federation.live_runtime_readback_receipts"
+_FEDERATION_SLEEP_CONTINUITY_RUNBOOK_KIND = "francis.stage16.federation.sleep_continuity_runbook"
 _FEDERATION_STAGE16_CLOSURE_DECISION_KIND = "francis.stage16.federation.stage16_operator_stage_closure_decision_receipt"
 _FEDERATION_STAGE16_CLOSURE_DECISIONS_KIND = (
     "francis.stage16.federation.stage16_operator_stage_closure_decision_receipts"
@@ -460,6 +461,7 @@ def _federation_routes() -> dict[str, str]:
         "revocation_contract": "/federation/revocation-contract",
         "node_attributed_continuity_contract": "/federation/node-attributed-continuity-contract",
         "completion_review": "/federation/completion-review",
+        "sleep_continuity_runbook": "/federation/sleep-continuity-runbook",
         "stage_closure_decisions": "/federation/stage-closure-decisions",
         "stage_closure_decision": "/federation/stage-closure-decision",
         "live_runtime_readbacks": "/federation/live-runtime-readbacks",
@@ -853,6 +855,175 @@ def stage16_operator_stage_closure_decision_readback(*, limit: int = 20) -> dict
         "next_smallest_truthful_gap": "stage16_ledger_closure"
         if stage16_closed_by_receipt
         else "stage16_operator_stage_closure_decision",
+    }
+
+
+def _stage16_sleep_continuity_runbook_steps() -> list[dict[str, Any]]:
+    return [
+        {
+            "id": "capture_pre_sleep_evidence",
+            "title": "Capture pre-sleep evidence",
+            "command": "scripts/federation-stage16-sleep-continuity-evidence.ps1 -Mode PreSleep -CommitEvidence",
+            "expected_output": "pre-sleep evidence JSON path",
+            "operator_action_required": True,
+            "writes_evidence_when_run": True,
+            "writes_receipts_when_run": False,
+            "operator_confirmation_required": False,
+        },
+        {
+            "id": "capture_post_resume_evidence",
+            "title": "Capture post-resume evidence",
+            "command": (
+                "scripts/federation-stage16-sleep-continuity-evidence.ps1 -Mode PostResume -CommitEvidence "
+                "-PreSleepEvidencePath <pre_sleep.json> -OperatorConfirmedSleepResume"
+            ),
+            "expected_output": "post-resume evidence JSON path",
+            "operator_action_required": True,
+            "writes_evidence_when_run": True,
+            "writes_receipts_when_run": False,
+            "operator_confirmation_required": True,
+        },
+        {
+            "id": "commit_sleep_continuity_readback",
+            "title": "Commit sleep continuity runtime proof receipt",
+            "command": (
+                "scripts/federation-stage16-sleep-continuity-runtime-proof.ps1 -Mode Status -CommitReceipts "
+                "-PreSleepEvidencePath <pre_sleep.json> -PostResumeEvidencePath <post_resume.json>"
+            ),
+            "expected_output": "workstation_sleep_continuity_validated live runtime readback receipt",
+            "operator_action_required": False,
+            "writes_evidence_when_run": False,
+            "writes_receipts_when_run": True,
+            "operator_confirmation_required": False,
+        },
+        {
+            "id": "record_operator_stage_closure_decision",
+            "title": "Record operator Stage 16 closure decision after completion review is ready",
+            "method": "POST",
+            "route": "/federation/stage-closure-decision",
+            "required_scope": _FEDERATION_STAGE16_CLOSURE_SCOPE,
+            "payload_contract": {
+                "actor": "operator or delegated builder actor with federation.stage16.closure.write",
+                "decision": "close_stage16",
+                "reason": "operator reviewed Stage 16 completion evidence",
+            },
+            "operator_action_required": True,
+            "writes_evidence_when_run": False,
+            "writes_receipts_when_run": True,
+            "operator_confirmation_required": True,
+        },
+    ]
+
+
+def stage16_sleep_continuity_runbook() -> dict[str, Any]:
+    live_readbacks = live_runtime_readback_summary(limit=200)
+    review = completion_review()
+    closure = stage16_operator_stage_closure_decision_readback(limit=1)
+    checks_by_id = {
+        _safe_str(item.get("id")).strip(): item for item in live_readbacks.get("checks", []) if isinstance(item, dict)
+    }
+    prerequisite_ids = [
+        "live_pairing_flow_observed",
+        "live_selective_sync_observed",
+        "live_remote_approval_roundtrip_observed",
+        "live_revocation_roundtrip_observed",
+    ]
+    prerequisite_readbacks_ready = all(
+        bool(checks_by_id.get(readback_id, {}).get("completion_evidence")) for readback_id in prerequisite_ids
+    )
+    sleep_check = checks_by_id.get("workstation_sleep_continuity_validated", {})
+    sleep_continuity_ready = bool(sleep_check.get("completion_evidence"))
+    ready_to_close = bool(review.get("ready_to_close"))
+    stage16_closed_by_receipt = bool(closure.get("stage16_closed_by_receipt"))
+    missing_readbacks = _parse_list(live_readbacks.get("missing_readbacks"))
+
+    if stage16_closed_by_receipt:
+        status_text = "stage16_closed_by_receipt"
+        next_gap = "stage16_ledger_closure"
+    elif ready_to_close:
+        status_text = "ready_for_operator_stage_closure_decision"
+        next_gap = "stage16_operator_stage_closure_decision"
+    elif prerequisite_readbacks_ready and not sleep_continuity_ready:
+        status_text = "ready_for_operator_sleep_resume"
+        next_gap = "stage16_sleep_continuity_runtime_readback"
+    else:
+        status_text = "blocked_on_prior_live_readbacks"
+        next_gap = (
+            _safe_str(live_readbacks.get("next_smallest_truthful_gap")).strip()
+            or "stage16_live_federation_runtime_readback"
+        )
+
+    return {
+        "ok": True,
+        "kind": _FEDERATION_SLEEP_CONTINUITY_RUNBOOK_KIND,
+        "stage": _STAGE16_FEDERATION_STAGE,
+        "source_id": "federation",
+        "status": status_text,
+        "runbook_only": True,
+        "prerequisite_readback_ids": prerequisite_ids,
+        "prerequisite_readbacks_ready": prerequisite_readbacks_ready,
+        "sleep_continuity_readback_id": "workstation_sleep_continuity_validated",
+        "sleep_continuity_ready": sleep_continuity_ready,
+        "sleep_continuity_check": sleep_check,
+        "ready_to_close": ready_to_close,
+        "stage16_closed_by_receipt": stage16_closed_by_receipt,
+        "missing_readbacks": missing_readbacks,
+        "current_readback": {
+            "status": _safe_str(live_readbacks.get("status")).strip(),
+            "ready_count": int(live_readbacks.get("ready_count") or 0),
+            "required_count": int(live_readbacks.get("required_count") or 0),
+            "missing_readbacks": missing_readbacks,
+            "next_smallest_truthful_gap": _safe_str(live_readbacks.get("next_smallest_truthful_gap")).strip(),
+        },
+        "completion_review": {
+            "status": _safe_str(review.get("status")).strip(),
+            "ready_to_close": ready_to_close,
+            "stage16_completion_review_ready": bool(review.get("stage16_completion_review_ready")),
+            "live_runtime_readback_ready": bool(review.get("live_runtime_readback_ready")),
+            "blockers": _parse_list(review.get("blockers")),
+            "next_smallest_truthful_gap": _safe_str(review.get("next_smallest_truthful_gap")).strip(),
+        },
+        "stage_closure_decision": {
+            "status": _safe_str(closure.get("status")).strip(),
+            "receipt_readback_ready": bool(closure.get("receipt_readback_ready")),
+            "stage16_closed_by_receipt": stage16_closed_by_receipt,
+            "latest_receipt_id": _safe_str(closure.get("latest_receipt_id")).strip(),
+        },
+        "steps": _stage16_sleep_continuity_runbook_steps(),
+        "routes": _federation_routes(),
+        "governance": {
+            **_federation_governance(),
+            "read_only": True,
+            "runbook_only": True,
+            "does_not_infer_sleep_from_delay": True,
+            "operator_confirmation_required": True,
+            "requires_explicit_sleep_resume_confirmation": True,
+            "writes_evidence": False,
+            "writes_receipts": False,
+            "writes_registry": False,
+            "writes_memory": False,
+            "runs_tools": False,
+            "runs_shell": False,
+            "runs_git": False,
+            "launches_browser": False,
+            "captures_screen": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+            "marks_stage16_closed": False,
+        },
+        "writes_evidence": False,
+        "writes_receipts": False,
+        "writes_registry": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "marks_stage16_closed": False,
+        "next_smallest_truthful_gap": next_gap,
     }
 
 
@@ -1791,6 +1962,11 @@ def get_node_attributed_continuity_contract() -> dict[str, Any]:
 @router.get("/completion-review")
 def get_completion_review() -> dict[str, Any]:
     return completion_review()
+
+
+@router.get("/sleep-continuity-runbook")
+def get_sleep_continuity_runbook() -> dict[str, Any]:
+    return stage16_sleep_continuity_runbook()
 
 
 @router.get("/stage-closure-decisions")

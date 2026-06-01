@@ -231,6 +231,53 @@ export type FederationStage16ClosureDecisions = {
   next_smallest_truthful_gap?: string;
 };
 
+export type FederationSleepContinuityRunbookStep = {
+  id: string;
+  title?: string;
+  command?: string;
+  method?: string;
+  route?: string;
+  required_scope?: string;
+  expected_output?: string;
+  operator_action_required: boolean;
+  operator_confirmation_required: boolean;
+  writes_evidence_when_run: boolean;
+  writes_receipts_when_run: boolean;
+  payload_contract?: Record<string, unknown>;
+};
+
+export type FederationSleepContinuityRunbook = {
+  ok: boolean;
+  kind?: string;
+  stage?: string;
+  status?: string;
+  runbook_only: boolean;
+  prerequisite_readback_ids: string[];
+  prerequisite_readbacks_ready: boolean;
+  sleep_continuity_readback_id?: string;
+  sleep_continuity_ready: boolean;
+  ready_to_close: boolean;
+  stage16_closed_by_receipt: boolean;
+  missing_readbacks: string[];
+  current_readback?: Record<string, unknown>;
+  completion_review?: Record<string, unknown>;
+  stage_closure_decision?: Record<string, unknown>;
+  steps: FederationSleepContinuityRunbookStep[];
+  writes_evidence: boolean;
+  writes_receipts: boolean;
+  writes_registry: boolean;
+  writes_memory: boolean;
+  runs_tools: boolean;
+  runs_shell: boolean;
+  runs_git: boolean;
+  launches_browser: boolean;
+  captures_screen: boolean;
+  grants_execution_authority: boolean;
+  grants_mutation_authority: boolean;
+  marks_stage16_closed: boolean;
+  next_smallest_truthful_gap?: string;
+};
+
 export type FederationListResponse<T> = { items: T[] };
 
 export class FederationApiError extends Error {
@@ -668,9 +715,70 @@ export function parseFederationStage16ClosureDecisions(raw: unknown): Federation
   };
 }
 
+function parseFederationSleepContinuityRunbookStep(raw: unknown): FederationSleepContinuityRunbookStep | null {
+  if (!isRecord(raw)) return null;
+  const id = safeString(raw.id);
+  if (!id) return null;
+  return {
+    id,
+    title: optionalString(raw.title),
+    command: optionalString(raw.command),
+    method: optionalString(raw.method),
+    route: optionalString(raw.route),
+    required_scope: optionalString(raw.required_scope),
+    expected_output: optionalString(raw.expected_output),
+    operator_action_required: safeBoolean(raw.operator_action_required),
+    operator_confirmation_required: safeBoolean(raw.operator_confirmation_required),
+    writes_evidence_when_run: safeBoolean(raw.writes_evidence_when_run),
+    writes_receipts_when_run: safeBoolean(raw.writes_receipts_when_run),
+    payload_contract: isRecord(raw.payload_contract) ? raw.payload_contract : undefined,
+  };
+}
+
+export function parseFederationSleepContinuityRunbook(raw: unknown): FederationSleepContinuityRunbook {
+  const body = isRecord(raw) ? raw : {};
+  const steps = Array.isArray(body.steps)
+    ? body.steps
+        .map(parseFederationSleepContinuityRunbookStep)
+        .filter((x): x is FederationSleepContinuityRunbookStep => x !== null)
+    : [];
+  return {
+    ok: safeBoolean(body.ok),
+    kind: optionalString(body.kind),
+    stage: optionalString(body.stage),
+    status: optionalString(body.status),
+    runbook_only: safeBoolean(body.runbook_only),
+    prerequisite_readback_ids: stringList(body.prerequisite_readback_ids),
+    prerequisite_readbacks_ready: safeBoolean(body.prerequisite_readbacks_ready),
+    sleep_continuity_readback_id: optionalString(body.sleep_continuity_readback_id),
+    sleep_continuity_ready: safeBoolean(body.sleep_continuity_ready),
+    ready_to_close: safeBoolean(body.ready_to_close),
+    stage16_closed_by_receipt: safeBoolean(body.stage16_closed_by_receipt),
+    missing_readbacks: stringList(body.missing_readbacks),
+    current_readback: isRecord(body.current_readback) ? body.current_readback : undefined,
+    completion_review: isRecord(body.completion_review) ? body.completion_review : undefined,
+    stage_closure_decision: isRecord(body.stage_closure_decision) ? body.stage_closure_decision : undefined,
+    steps,
+    writes_evidence: safeBoolean(body.writes_evidence),
+    writes_receipts: safeBoolean(body.writes_receipts),
+    writes_registry: safeBoolean(body.writes_registry),
+    writes_memory: safeBoolean(body.writes_memory),
+    runs_tools: safeBoolean(body.runs_tools),
+    runs_shell: safeBoolean(body.runs_shell),
+    runs_git: safeBoolean(body.runs_git),
+    launches_browser: safeBoolean(body.launches_browser),
+    captures_screen: safeBoolean(body.captures_screen),
+    grants_execution_authority: safeBoolean(body.grants_execution_authority),
+    grants_mutation_authority: safeBoolean(body.grants_mutation_authority),
+    marks_stage16_closed: safeBoolean(body.marks_stage16_closed),
+    next_smallest_truthful_gap: optionalString(body.next_smallest_truthful_gap),
+  };
+}
+
 export type FederationEndpoints = {
   status: () => string;
   completionReview: () => string;
+  sleepContinuityRunbook: () => string;
   stageClosureDecisions: (q?: { limit?: number }) => string;
   liveRuntimeReadbacks: (q?: { limit?: number }) => string;
 
@@ -695,6 +803,7 @@ export function defaultFederationEndpoints(): FederationEndpoints {
   return {
     status: () => "/federation/status",
     completionReview: () => "/federation/completion-review",
+    sleepContinuityRunbook: () => "/federation/sleep-continuity-runbook",
     stageClosureDecisions: (q) => `/federation/stage-closure-decisions${buildQuery({ limit: q?.limit })}`,
     liveRuntimeReadbacks: (q) => `/federation/live-runtime-readbacks${buildQuery({ limit: q?.limit })}`,
 
@@ -787,6 +896,18 @@ export class FederationClient {
       timeoutMs: opts?.timeoutMs ?? this.defaultTimeoutMs,
     });
     return parseFederationCompletionReview(json);
+  }
+
+  async getSleepContinuityRunbook(opts?: {
+    signal?: AbortSignal;
+    timeoutMs?: number;
+  }): Promise<FederationSleepContinuityRunbook> {
+    const json = await fetchJson(this.url(this.endpoints.sleepContinuityRunbook()), {
+      method: "GET",
+      signal: opts?.signal,
+      timeoutMs: opts?.timeoutMs ?? this.defaultTimeoutMs,
+    });
+    return parseFederationSleepContinuityRunbook(json);
   }
 
   async getStageClosureDecisions(opts?: {
