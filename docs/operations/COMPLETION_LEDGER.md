@@ -52895,6 +52895,54 @@ Latest validation for Stage 16 sleep post-resume evidence conflict readback:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 sleep runbook uses evidence-specific statuses
+
+Roadmap area: Stage 16 / Federation, workstation sleep-continuity operator
+readback truthfulness.
+
+Material change:
+
+- `/federation/sleep-continuity-runbook` now distinguishes the current
+  sleep-continuity evidence posture instead of collapsing every prerequisite
+  ready state into `ready_for_operator_sleep_resume`.
+- The runbook now reports `ready_for_pre_sleep_evidence` before pre-sleep
+  evidence exists, `pre_sleep_evidence_ready` after pre-sleep evidence is
+  captured, and `post_resume_evidence_ready` after linked post-resume evidence
+  exists but before the committed runtime proof receipt is written.
+- `/federation/status` now uses `ready_for_pre_sleep_evidence` before pre-sleep
+  evidence exists, preserving the already visible `pre_sleep_evidence_ready`,
+  `post_resume_evidence_conflict`, and `post_resume_evidence_ready` states.
+- The Federation Hub parser keeps backward compatibility with the older
+  `ready_for_operator_sleep_resume` runbook status while accepting the more
+  precise statuses.
+- This does not write evidence, write receipts, run shell, infer sleep/resume,
+  grant authority, write memory, or mark Stage 16 closed.
+- Stage 16 remains open until operator-confirmed live workstation sleep/resume
+  evidence and receipt-backed completion/closure gates are satisfied.
+
+Latest validation for Stage 16 sleep runbook evidence-specific statuses:
+
+- `python -m pytest tests/test_api_federation.py -q --tb=short`
+  Result: `passed; 20 passed`.
+- `npm run test -- federation_hub`
+  Result: `passed; 188 passed`.
+- `npm run build`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- Live readback via `TestClient` for `/federation/status` and
+  `/federation/sleep-continuity-runbook`
+  Result: `passed; runbook_status=pre_sleep_evidence_ready,
+  status_sleep=pre_sleep_evidence_ready`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

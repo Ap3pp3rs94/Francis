@@ -1113,11 +1113,19 @@ def stage16_sleep_continuity_runbook() -> dict[str, Any]:
     elif ready_to_close:
         status_text = "ready_for_operator_stage_closure_decision"
         next_gap = "stage16_operator_stage_closure_decision"
+    elif (
+        prerequisite_readbacks_ready and bool(latest_post_resume_evidence.get("present")) and not sleep_continuity_ready
+    ):
+        status_text = "post_resume_evidence_ready"
+        next_gap = "stage16_sleep_continuity_runtime_readback"
     elif prerequisite_readbacks_ready and post_resume_evidence_conflict and not sleep_continuity_ready:
         status_text = "post_resume_evidence_conflict"
         next_gap = "stage16_sleep_continuity_runtime_readback"
+    elif prerequisite_readbacks_ready and bool(latest_pre_sleep_evidence.get("present")) and not sleep_continuity_ready:
+        status_text = "pre_sleep_evidence_ready"
+        next_gap = "stage16_sleep_continuity_runtime_readback"
     elif prerequisite_readbacks_ready and not sleep_continuity_ready:
-        status_text = "ready_for_operator_sleep_resume"
+        status_text = "ready_for_pre_sleep_evidence"
         next_gap = "stage16_sleep_continuity_runtime_readback"
     else:
         status_text = "blocked_on_prior_live_readbacks"
@@ -1568,10 +1576,10 @@ def stage16_sleep_continuity_action() -> dict[str, Any]:
     elif pre_sleep_evidence_ready:
         state = "capture_post_resume_evidence"
         selected_step = _stage16_sleep_continuity_step(runbook, "capture_post_resume_evidence")
-    elif (
-        blockers == ["workstation_sleep_continuity_validated"]
-        or runbook.get("status") == "ready_for_operator_sleep_resume"
-    ):
+    elif blockers == ["workstation_sleep_continuity_validated"] or runbook.get("status") in {
+        "ready_for_operator_sleep_resume",
+        "ready_for_pre_sleep_evidence",
+    }:
         state = "capture_pre_sleep_evidence"
         selected_step = _stage16_sleep_continuity_step(runbook, "capture_pre_sleep_evidence")
     selected_step_id = _safe_str(selected_step.get("id")).strip()
@@ -2524,7 +2532,7 @@ def status() -> dict[str, Any]:
             if post_resume_evidence_conflict
             else "pre_sleep_evidence_ready"
             if pre_sleep_evidence_ready
-            else "ready_for_operator_sleep_resume"
+            else "ready_for_pre_sleep_evidence"
             if completion_review_blockers == ["workstation_sleep_continuity_validated"]
             else "blocked_on_prior_live_readbacks"
             if "workstation_sleep_continuity_validated" in completion_review_blockers

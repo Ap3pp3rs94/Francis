@@ -1138,7 +1138,7 @@ def test_federation_stage16_sleep_continuity_runbook_blocks_on_prior_live_readba
     assert action["marks_stage16_closed"] is False
 
 
-def test_federation_stage16_sleep_continuity_runbook_reports_ready_for_operator_sleep_resume(
+def test_federation_stage16_sleep_continuity_runbook_reports_ready_for_pre_sleep_evidence(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
@@ -1164,7 +1164,7 @@ def test_federation_stage16_sleep_continuity_runbook_reports_ready_for_operator_
     assert response.status_code == 200
     body = response.json()
     assert body["ok"] is True
-    assert body["status"] == "ready_for_operator_sleep_resume"
+    assert body["status"] == "ready_for_pre_sleep_evidence"
     assert body["prerequisite_readback_ids"] == [
         "live_pairing_flow_observed",
         "live_selective_sync_observed",
@@ -1240,7 +1240,7 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert response.status_code == 200
     body = response.json()
     assert body["ok"] is True
-    assert body["status"] == "ready_for_operator_sleep_resume"
+    assert body["status"] == "pre_sleep_evidence_ready"
     assert body["pre_sleep_evidence_ready"] is True
     assert body["pre_sleep_evidence"]["present"] is True
     assert body["post_resume_evidence_ready"] is False
@@ -1424,7 +1424,7 @@ def test_federation_stage16_sleep_continuity_runbook_uses_linked_post_resume_mar
 
     body = client.get("/federation/sleep-continuity-runbook").json()
 
-    assert body["status"] == "ready_for_operator_sleep_resume"
+    assert body["status"] == "post_resume_evidence_ready"
     assert body["pre_sleep_evidence_ready"] is True
     assert body["post_resume_evidence_ready"] is True
     assert body["post_resume_evidence"]["present"] is True

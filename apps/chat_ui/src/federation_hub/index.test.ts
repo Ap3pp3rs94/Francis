@@ -143,7 +143,7 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
         ok: true,
         kind: "francis.stage16.federation.sleep_continuity_runbook",
         stage: "Stage 16 / Federation",
-        status: "ready_for_operator_sleep_resume",
+        status: "post_resume_evidence_ready",
         runbook_only: true,
         prerequisite_readback_ids: [
           "live_pairing_flow_observed",
@@ -403,7 +403,7 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
     assert.equal(review.live_required_count, 5);
     assert.deepEqual(review.blockers, ["live_pairing_flow_observed", "workstation_sleep_continuity_validated"]);
 
-    assert.equal(runbook.status, "ready_for_operator_sleep_resume");
+    assert.equal(runbook.status, "post_resume_evidence_ready");
     assert.equal(runbook.runbook_only, true);
     assert.equal(runbook.prerequisite_readbacks_ready, true);
     assert.equal(runbook.sleep_continuity_readback_id, "workstation_sleep_continuity_validated");
@@ -996,7 +996,7 @@ test("federation Stage 16 parsers preserve ready receipt-backed posture", () => 
   });
   const runbook = parseFederationSleepContinuityRunbook({
     ok: true,
-    status: "ready_for_operator_sleep_resume",
+    status: "post_resume_evidence_ready",
     runbook_only: true,
     prerequisite_readback_ids: [
       "live_pairing_flow_observed",
@@ -1126,7 +1126,7 @@ test("federation Stage 16 parsers preserve ready receipt-backed posture", () => 
   assert.equal(closure.items[0]?.recorded_ts, 1_800_020_000);
   assert.equal(closure.next_smallest_truthful_gap, "stage16_ledger_closure");
 
-  assert.equal(runbook.status, "ready_for_operator_sleep_resume");
+  assert.equal(runbook.status, "post_resume_evidence_ready");
   assert.equal(runbook.runbook_only, true);
   assert.equal(runbook.prerequisite_readbacks_ready, true);
   assert.equal(runbook.sleep_continuity_ready, false);
@@ -1184,7 +1184,7 @@ test("federation sleep-continuity presentation gates post-resume capture on oper
   });
   const runbook = parseFederationSleepContinuityRunbook({
     ok: true,
-    status: "ready_for_operator_sleep_resume",
+    status: "pre_sleep_evidence_ready",
     runbook_only: true,
     prerequisite_readbacks_ready: true,
     sleep_continuity_readback_id: "workstation_sleep_continuity_validated",

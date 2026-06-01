@@ -1344,7 +1344,11 @@ export function presentFederationSleepContinuity(
   } else if (preSleepEvidenceReady) {
     state = "capture_post_resume_evidence";
     selectedStep = findFederationSleepContinuityStep(runbook, "capture_post_resume_evidence");
-  } else if (singleSleepContinuityBlocker(blockers) || runbook?.status === "ready_for_operator_sleep_resume") {
+  } else if (
+    singleSleepContinuityBlocker(blockers) ||
+    runbook?.status === "ready_for_operator_sleep_resume" ||
+    runbook?.status === "ready_for_pre_sleep_evidence"
+  ) {
     state = "capture_pre_sleep_evidence";
     selectedStep = findFederationSleepContinuityStep(runbook, "capture_pre_sleep_evidence");
   }
