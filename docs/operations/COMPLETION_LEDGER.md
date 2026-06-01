@@ -50667,6 +50667,66 @@ Latest validation for Stage 16 pairing and scoped trust:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-31 - Stage 16 Federation sync model is selective and stale-state aware
+
+Roadmap area: Stage 16 / Federation, sync model after pairing and scoped
+trust.
+
+Material change:
+
+- Added read-only `GET /federation/sync-model-contract`.
+- `/federation/status` now advances from
+  `stage16_pairing_scoped_trust_contract_ready` to
+  `stage16_sync_model_contract_ready`.
+- The sync model defines four allowlisted lanes: `presence`,
+  `continuity_summary`, `approval_relay_metadata`, and
+  `shared_knowledge_index`.
+- Every sync lane requires encryption and node-scoped trust.
+- Replication is allowlist-only, per-node scoped, trace-preserving, and
+  node-attributed. It blocks raw private data, raw memory bodies, credential
+  material, execution tokens, unscoped sync, and ambient cloud sync.
+- Conflict policy forbids silent overwrite, requires node-attributed conflicts,
+  sends authority or approval conflicts to operator review, preserves receipt
+  order, requires stale continuity badging, and deadletters unmergeable
+  conflicts.
+- Staleness policy requires source node id, source timestamp, received
+  timestamp, stale badge, and fresh readback before workstation-sleep
+  continuity can imply current state.
+- This is contract-only: it does not run sync, pair nodes, relay remote
+  approvals, revoke live links, mutate the federation registry, write memory,
+  run tools, run shell, run git, launch browsers, capture the screen, or grant
+  execution/mutation authority.
+- Current readback reports `stage16_status=stage16_sync_model_contract_ready`,
+  `stage15_closed_by_receipt=true`,
+  `pairing_scoped_trust_contract_ready=true`,
+  `sync_model_contract_ready=true`, `ready_count=3`, `required_count=6`, and
+  `next_smallest_truthful_gap=stage16_remote_approval_support`.
+
+Latest validation for Stage 16 sync model:
+
+- Direct local `TestClient` readback of GET `/federation/status` and GET
+  `/federation/sync-model-contract`.
+  Result: `stage16_status=stage16_sync_model_contract_ready;
+  stage15_closed=true; pairing_ready=true; sync_ready=true; ready_count=3;
+  required_count=6; status_next_gap=stage16_remote_approval_support;
+  sync_status=ready; sync_lanes=presence, continuity_summary,
+  approval_relay_metadata, shared_knowledge_index;
+  sync_next_gap=stage16_remote_approval_support`.
+- `python -m pytest tests/test_api_federation.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 6 passed`
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

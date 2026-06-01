@@ -354,9 +354,68 @@ def test_federation_stage16_pairing_scoped_trust_contract_is_read_only_after_sta
 
     status = client.get("/federation/status").json()
     assert status["stage"] == "Stage 16 / Federation"
-    assert status["stage16_status"] == "stage16_pairing_scoped_trust_contract_ready"
+    assert status["stage16_status"] == "stage16_sync_model_contract_ready"
     assert status["pairing_scoped_trust_contract_ready"] is True
-    assert status["ready_count"] == 2
+    assert status["sync_model_contract_ready"] is True
+    assert status["ready_count"] == 3
     assert status["required_count"] == 6
     assert status["routes"]["pairing_scoped_trust_contract"] == "/federation/pairing-scoped-trust-contract"
-    assert status["next_smallest_truthful_gap"] == "stage16_sync_model_contract"
+    assert status["routes"]["sync_model_contract"] == "/federation/sync-model-contract"
+    assert status["next_smallest_truthful_gap"] == "stage16_remote_approval_support"
+
+
+def test_federation_stage16_sync_model_contract_blocks_over_replication_and_stale_authority(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage15_closure_receipt(data_root, receipt_id="swarm_stage15_closure_for_sync")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    response = client.get("/federation/sync-model-contract")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "francis.stage16.federation.sync_model_contract"
+    assert body["stage"] == "Stage 16 / Federation"
+    assert body["status"] == "ready"
+    assert body["stage15_closed_by_receipt"] is True
+    assert body["stage15_latest_closure_receipt_id"] == "swarm_stage15_closure_for_sync"
+    assert body["pairing_scoped_trust_contract_ready"] is True
+    assert body["sync_model_contract_ready"] is True
+    assert [lane["id"] for lane in body["sync_lanes"]] == [
+        "presence",
+        "continuity_summary",
+        "approval_relay_metadata",
+        "shared_knowledge_index",
+    ]
+    assert all(lane["requires_encryption"] is True for lane in body["sync_lanes"])
+    assert all(lane["requires_node_scope"] is True for lane in body["sync_lanes"])
+    assert body["replication_rules"]["allowlist_only"] is True
+    assert body["replication_rules"]["per_node_scope_required"] is True
+    assert body["replication_rules"]["raw_private_data_replication_allowed"] is False
+    assert body["replication_rules"]["raw_memory_body_replication_allowed"] is False
+    assert body["replication_rules"]["credential_material_replication_allowed"] is False
+    assert body["replication_rules"]["execution_token_replication_allowed"] is False
+    assert body["replication_rules"]["ambient_cloud_sync_allowed"] is False
+    assert body["conflict_policy"]["silent_overwrite_allowed"] is False
+    assert body["conflict_policy"]["authority_or_approval_conflict_requires_operator_review"] is True
+    assert body["conflict_policy"]["deadletter_unmergeable_conflicts"] is True
+    assert body["staleness_policy"]["stale_badge_required"] is True
+    assert body["staleness_policy"]["stale_state_cannot_imply_current_authority"] is True
+    assert body["invariants"]["sync_is_selective_not_sync_everything"] is True
+    assert body["invariants"]["raw_private_data_is_blocked"] is True
+    assert body["invariants"]["raw_memory_body_is_blocked"] is True
+    assert body["sync_execution_enabled"] is False
+    assert body["writes_registry"] is False
+    assert body["writes_memory"] is False
+    assert body["runs_tools"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["next_smallest_truthful_gap"] == "stage16_remote_approval_support"

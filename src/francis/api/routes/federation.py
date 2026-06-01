@@ -19,6 +19,7 @@ router = APIRouter()
 _FEDERATION_WRITE_SCOPE = "federation.write"
 _STAGE16_FEDERATION_STAGE = "Stage 16 / Federation"
 _FEDERATION_PAIRING_SCOPED_TRUST_CONTRACT_KIND = "francis.stage16.federation.pairing_scoped_trust_contract"
+_FEDERATION_SYNC_MODEL_CONTRACT_KIND = "francis.stage16.federation.sync_model_contract"
 
 _ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._:-]{1,127}$")
 
@@ -404,6 +405,7 @@ def _federation_routes() -> dict[str, str]:
     return {
         "status": "/federation/status",
         "pairing_scoped_trust_contract": "/federation/pairing-scoped-trust-contract",
+        "sync_model_contract": "/federation/sync-model-contract",
         "instances_list": "/federation/instances/list",
         "instances_get": "/federation/instances/get",
         "delegations_list": "/federation/delegations/list",
@@ -459,7 +461,12 @@ def _federation_deliverable(
     }
 
 
-def _stage16_pairing_deliverables(pairing_contract_ready: bool, stage15_closed: bool) -> list[dict[str, Any]]:
+def _stage16_deliverables(
+    *,
+    pairing_contract_ready: bool,
+    sync_model_contract_ready: bool,
+    stage15_closed: bool,
+) -> list[dict[str, Any]]:
     return [
         _federation_deliverable(
             "stage15_ledger_closure_backstop",
@@ -477,9 +484,9 @@ def _stage16_pairing_deliverables(pairing_contract_ready: bool, stage15_closed: 
         ),
         _federation_deliverable(
             "sync_model",
-            "Selective replication model is not implemented yet",
-            False,
-            "pending",
+            "Selective replication model is allowlist-only, encrypted, scoped, and stale-state aware",
+            sync_model_contract_ready,
+            "ready" if sync_model_contract_ready else "pending",
             "stage16_sync_model_contract",
         ),
         _federation_deliverable(
@@ -616,6 +623,155 @@ def pairing_scoped_trust_contract() -> dict[str, Any]:
     }
 
 
+def sync_model_contract() -> dict[str, Any]:
+    pairing = pairing_scoped_trust_contract()
+    pairing_ready = bool(pairing.get("pairing_scoped_trust_contract_ready"))
+    selective_replication = (
+        pairing.get("selective_replication") if isinstance(pairing.get("selective_replication"), dict) else {}
+    )
+    sync_lanes = [
+        {
+            "id": "presence",
+            "allowed_classes": ["node_identity", "health_presence", "capability_inventory"],
+            "consistency": "eventual",
+            "max_staleness_seconds": 300,
+            "requires_encryption": True,
+            "requires_node_scope": True,
+        },
+        {
+            "id": "continuity_summary",
+            "allowed_classes": ["redacted_continuity_summary", "trace_metadata"],
+            "consistency": "eventual_with_stale_badge",
+            "max_staleness_seconds": 900,
+            "requires_encryption": True,
+            "requires_node_scope": True,
+        },
+        {
+            "id": "approval_relay_metadata",
+            "allowed_classes": ["approval_request_metadata", "decision_receipt_reference"],
+            "consistency": "receipt_ordered",
+            "max_staleness_seconds": 120,
+            "requires_encryption": True,
+            "requires_node_scope": True,
+        },
+        {
+            "id": "shared_knowledge_index",
+            "allowed_classes": ["shared_knowledge_metadata", "source_instance_id", "domain", "tags"],
+            "consistency": "eventual",
+            "max_staleness_seconds": 1800,
+            "requires_encryption": True,
+            "requires_node_scope": True,
+        },
+    ]
+    replication_rules = {
+        "allowlist_only": True,
+        "per_node_scope_required": True,
+        "pairing_contract_required": True,
+        "encryption_required": True,
+        "node_attribution_required": True,
+        "trace_lineage_required": True,
+        "operator_receipt_reference_required_for_approval_relay": True,
+        "raw_private_data_replication_allowed": False,
+        "raw_memory_body_replication_allowed": False,
+        "credential_material_replication_allowed": False,
+        "execution_token_replication_allowed": False,
+        "unscoped_sync_allowed": False,
+        "ambient_cloud_sync_allowed": False,
+    }
+    conflict_policy = {
+        "silent_overwrite_allowed": False,
+        "node_attributed_conflicts_required": True,
+        "authority_or_approval_conflict_requires_operator_review": True,
+        "stale_continuity_must_be_badged": True,
+        "receipt_order_preserved": True,
+        "deadletter_unmergeable_conflicts": True,
+    }
+    staleness_policy = {
+        "source_node_id_required": True,
+        "source_recorded_ts_required": True,
+        "received_ts_required": True,
+        "stale_badge_required": True,
+        "stale_state_cannot_imply_current_authority": True,
+        "workstation_sleep_continuity_requires_fresh_readback": True,
+    }
+    invariants = {
+        "pairing_scoped_trust_contract_ready": pairing_ready,
+        "sync_is_selective_not_sync_everything": True,
+        "sync_is_encrypted_by_default": True,
+        "sync_is_node_scoped": True,
+        "sync_preserves_trace_lineage": True,
+        "sync_preserves_node_attribution": True,
+        "raw_private_data_is_blocked": "raw_private_data" in _parse_list(selective_replication.get("blocked_classes")),
+        "raw_memory_body_is_blocked": "raw_memory_body" in _parse_list(selective_replication.get("blocked_classes")),
+        "secrets_are_blocked": "secrets" in _parse_list(selective_replication.get("blocked_classes")),
+        "stale_state_cannot_expand_authority": True,
+    }
+    replication_rules_observed = (
+        bool(replication_rules["allowlist_only"])
+        and bool(replication_rules["per_node_scope_required"])
+        and bool(replication_rules["pairing_contract_required"])
+        and bool(replication_rules["encryption_required"])
+        and bool(replication_rules["node_attribution_required"])
+        and bool(replication_rules["trace_lineage_required"])
+        and bool(replication_rules["operator_receipt_reference_required_for_approval_relay"])
+        and not bool(replication_rules["raw_private_data_replication_allowed"])
+        and not bool(replication_rules["raw_memory_body_replication_allowed"])
+        and not bool(replication_rules["credential_material_replication_allowed"])
+        and not bool(replication_rules["execution_token_replication_allowed"])
+        and not bool(replication_rules["unscoped_sync_allowed"])
+        and not bool(replication_rules["ambient_cloud_sync_allowed"])
+    )
+    conflict_policy_observed = (
+        not bool(conflict_policy["silent_overwrite_allowed"])
+        and bool(conflict_policy["node_attributed_conflicts_required"])
+        and bool(conflict_policy["authority_or_approval_conflict_requires_operator_review"])
+        and bool(conflict_policy["stale_continuity_must_be_badged"])
+        and bool(conflict_policy["receipt_order_preserved"])
+        and bool(conflict_policy["deadletter_unmergeable_conflicts"])
+    )
+    contract_ready = (
+        pairing_ready
+        and len(sync_lanes) == 4
+        and all(bool(lane.get("requires_encryption")) for lane in sync_lanes)
+        and all(bool(lane.get("requires_node_scope")) for lane in sync_lanes)
+        and replication_rules_observed
+        and conflict_policy_observed
+        and all(bool(value) for value in staleness_policy.values())
+        and all(bool(value) for value in invariants.values())
+    )
+    return {
+        "ok": True,
+        "kind": _FEDERATION_SYNC_MODEL_CONTRACT_KIND,
+        "stage": _STAGE16_FEDERATION_STAGE,
+        "source_id": "federation",
+        "status": "ready" if contract_ready else "blocked",
+        "stage15_closed_by_receipt": bool(pairing.get("stage15_closed_by_receipt")),
+        "stage15_latest_closure_receipt_id": _safe_str(pairing.get("stage15_latest_closure_receipt_id")).strip(),
+        "pairing_scoped_trust_contract_ready": pairing_ready,
+        "sync_model_contract_ready": contract_ready,
+        "sync_lanes": sync_lanes,
+        "replication_rules": replication_rules,
+        "conflict_policy": conflict_policy,
+        "staleness_policy": staleness_policy,
+        "invariants": invariants,
+        "routes": _federation_routes(),
+        "governance": _federation_governance(),
+        "sync_execution_enabled": False,
+        "writes_registry": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "next_smallest_truthful_gap": "stage16_remote_approval_support"
+        if contract_ready
+        else _safe_str(pairing.get("next_smallest_truthful_gap")).strip() or "stage16_pairing_scoped_trust_contract",
+    }
+
+
 @router.get("/status")
 def status() -> dict[str, Any]:
     try:
@@ -630,14 +786,22 @@ def status() -> dict[str, Any]:
         degraded = len([i for i in instances if _safe_str(i.get("status")).strip().lower() == "degraded"])
         pairing_contract = pairing_scoped_trust_contract()
         pairing_ready = bool(pairing_contract.get("pairing_scoped_trust_contract_ready"))
+        sync_contract = sync_model_contract()
+        sync_ready = bool(sync_contract.get("sync_model_contract_ready"))
         stage15_closed = bool(pairing_contract.get("stage15_closed_by_receipt"))
-        deliverables = _stage16_pairing_deliverables(pairing_ready, stage15_closed)
+        deliverables = _stage16_deliverables(
+            pairing_contract_ready=pairing_ready,
+            sync_model_contract_ready=sync_ready,
+            stage15_closed=stage15_closed,
+        )
         return {
             "ok": True,
             "route": "federation",
             "status": "ready",
             "stage": _STAGE16_FEDERATION_STAGE,
-            "stage16_status": "stage16_pairing_scoped_trust_contract_ready"
+            "stage16_status": "stage16_sync_model_contract_ready"
+            if sync_ready
+            else "stage16_pairing_scoped_trust_contract_ready"
             if pairing_ready
             else "awaiting_stage15_ledger_closure"
             if not stage15_closed
@@ -647,12 +811,15 @@ def status() -> dict[str, Any]:
                 pairing_contract.get("stage15_latest_closure_receipt_id")
             ).strip(),
             "pairing_scoped_trust_contract_ready": pairing_ready,
+            "sync_model_contract_ready": sync_ready,
             "ready_count": sum(1 for item in deliverables if bool(item.get("ready"))),
             "required_count": len(deliverables),
             "deliverables": deliverables,
             "routes": _federation_routes(),
             "governance": _federation_governance(),
-            "next_smallest_truthful_gap": "stage16_sync_model_contract"
+            "next_smallest_truthful_gap": "stage16_remote_approval_support"
+            if sync_ready
+            else "stage16_sync_model_contract"
             if pairing_ready
             else "stage15_ledger_closure"
             if not stage15_closed
@@ -681,6 +848,11 @@ def health() -> dict[str, Any]:
 @router.get("/pairing-scoped-trust-contract")
 def get_pairing_scoped_trust_contract() -> dict[str, Any]:
     return pairing_scoped_trust_contract()
+
+
+@router.get("/sync-model-contract")
+def get_sync_model_contract() -> dict[str, Any]:
+    return sync_model_contract()
 
 
 @router.get("/instances/list")
