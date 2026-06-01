@@ -656,6 +656,24 @@ export type FederationSleepContinuityRunbook = {
   sleep_continuity_ready: boolean;
   pre_sleep_evidence?: Record<string, unknown>;
   pre_sleep_evidence_ready: boolean;
+  pre_sleep_age_seconds: number;
+  pre_sleep_freshness_state?: string;
+  current_pre_sleep_age_guidance?: string;
+  current_pre_sleep_recapture_recommended: boolean;
+  current_pre_sleep_age_warning?: string;
+  current_pre_sleep_age_guidance_threshold_seconds: number;
+  pre_sleep_recapture_recommended: boolean;
+  pre_sleep_recapture_reason?: string;
+  pre_sleep_recapture_command_ready: boolean;
+  pre_sleep_recapture_command_visible: boolean;
+  pre_sleep_recapture_command?: string;
+  pre_sleep_recapture_copyable_command?: string;
+  pre_sleep_recapture_expected_output?: string;
+  pre_sleep_recapture_after_run_next_step?: string;
+  pre_sleep_recapture_writes_evidence_when_run: boolean;
+  pre_sleep_recapture_writes_receipts_when_run: boolean;
+  pre_sleep_recapture_marks_stage16_closed_when_run: boolean;
+  pre_sleep_recapture_projection_only: boolean;
   post_resume_evidence?: Record<string, unknown>;
   post_resume_evidence_ready: boolean;
   post_resume_evidence_conflict: boolean;
@@ -906,6 +924,9 @@ export type FederationSleepContinuityPresentation = {
   operator_sleep_resume_gate?: FederationSleepContinuityOperatorSleepResumeGate;
   operator_confirmation_handoff?: FederationSleepContinuityOperatorConfirmationHandoff;
   after_manual_execution_readback?: FederationSleepContinuityAfterManualExecutionReadback;
+  pre_sleep_recapture_recommended: boolean;
+  pre_sleep_recapture_command_visible: boolean;
+  pre_sleep_recapture_copyable_command?: string;
   writes_evidence_when_run: boolean;
   writes_receipts_when_run: boolean;
   expected_output?: string;
@@ -921,6 +942,7 @@ export type FederationSleepContinuityVisibleOperatorCommands = {
   post_resume_sequence_copyable_command?: string;
   post_resume_receipt_backed_sequence_copyable_command?: string;
   confirmation_receipt_copyable_command?: string;
+  pre_sleep_recapture_copyable_command?: string;
 };
 
 export type FederationSleepContinuityActionReadback = {
@@ -943,6 +965,24 @@ export type FederationSleepContinuityActionReadback = {
   blockers: string[];
   prior_live_readback_blockers: string[];
   pre_sleep_evidence_ready: boolean;
+  pre_sleep_age_seconds: number;
+  pre_sleep_freshness_state?: string;
+  current_pre_sleep_age_guidance?: string;
+  current_pre_sleep_recapture_recommended: boolean;
+  current_pre_sleep_age_warning?: string;
+  current_pre_sleep_age_guidance_threshold_seconds: number;
+  pre_sleep_recapture_recommended: boolean;
+  pre_sleep_recapture_reason?: string;
+  pre_sleep_recapture_command_ready: boolean;
+  pre_sleep_recapture_command_visible: boolean;
+  pre_sleep_recapture_command?: string;
+  pre_sleep_recapture_copyable_command?: string;
+  pre_sleep_recapture_expected_output?: string;
+  pre_sleep_recapture_after_run_next_step?: string;
+  pre_sleep_recapture_writes_evidence_when_run: boolean;
+  pre_sleep_recapture_writes_receipts_when_run: boolean;
+  pre_sleep_recapture_marks_stage16_closed_when_run: boolean;
+  pre_sleep_recapture_projection_only: boolean;
   post_resume_evidence_ready: boolean;
   post_resume_evidence_conflict: boolean;
   sleep_continuity_ready: boolean;
@@ -2451,6 +2491,7 @@ export function federationSleepContinuityVisibleOperatorCommands(
   const handoff = presentation?.operator_confirmation_handoff;
   return {
     blocked_by_pending_confirmation: blockedByPendingConfirmation,
+    pre_sleep_recapture_copyable_command: presentation?.pre_sleep_recapture_copyable_command,
     primary_command: blockedByPendingConfirmation ? undefined : presentation?.primary_command,
     operator_terminal_copyable_command: blockedByPendingConfirmation
       ? undefined
@@ -2529,6 +2570,33 @@ export function parseFederationSleepContinuityRunbook(raw: unknown): FederationS
     sleep_continuity_ready: safeBoolean(body.sleep_continuity_ready),
     pre_sleep_evidence: isRecord(body.pre_sleep_evidence) ? body.pre_sleep_evidence : undefined,
     pre_sleep_evidence_ready: safeBoolean(body.pre_sleep_evidence_ready),
+    pre_sleep_age_seconds: safeNumber(body.pre_sleep_age_seconds, 0),
+    pre_sleep_freshness_state: optionalString(body.pre_sleep_freshness_state),
+    current_pre_sleep_age_guidance: optionalString(body.current_pre_sleep_age_guidance),
+    current_pre_sleep_recapture_recommended: safeBoolean(body.current_pre_sleep_recapture_recommended),
+    current_pre_sleep_age_warning: optionalString(body.current_pre_sleep_age_warning),
+    current_pre_sleep_age_guidance_threshold_seconds: safeNumber(
+      body.current_pre_sleep_age_guidance_threshold_seconds,
+      0,
+    ),
+    pre_sleep_recapture_recommended: safeBoolean(body.pre_sleep_recapture_recommended),
+    pre_sleep_recapture_reason: optionalString(body.pre_sleep_recapture_reason),
+    pre_sleep_recapture_command_ready: safeBoolean(body.pre_sleep_recapture_command_ready),
+    pre_sleep_recapture_command_visible: safeBoolean(body.pre_sleep_recapture_command_visible),
+    pre_sleep_recapture_command: optionalString(body.pre_sleep_recapture_command),
+    pre_sleep_recapture_copyable_command: optionalString(body.pre_sleep_recapture_copyable_command),
+    pre_sleep_recapture_expected_output: optionalString(body.pre_sleep_recapture_expected_output),
+    pre_sleep_recapture_after_run_next_step: optionalString(body.pre_sleep_recapture_after_run_next_step),
+    pre_sleep_recapture_writes_evidence_when_run: safeBoolean(
+      body.pre_sleep_recapture_writes_evidence_when_run,
+    ),
+    pre_sleep_recapture_writes_receipts_when_run: safeBoolean(
+      body.pre_sleep_recapture_writes_receipts_when_run,
+    ),
+    pre_sleep_recapture_marks_stage16_closed_when_run: safeBoolean(
+      body.pre_sleep_recapture_marks_stage16_closed_when_run,
+    ),
+    pre_sleep_recapture_projection_only: safeBoolean(body.pre_sleep_recapture_projection_only),
     post_resume_evidence: isRecord(body.post_resume_evidence) ? body.post_resume_evidence : undefined,
     post_resume_evidence_ready: safeBoolean(body.post_resume_evidence_ready),
     post_resume_evidence_conflict: safeBoolean(body.post_resume_evidence_conflict),
@@ -2580,6 +2648,33 @@ export function parseFederationSleepContinuityAction(raw: unknown): FederationSl
     blockers: stringList(body.blockers),
     prior_live_readback_blockers: stringList(body.prior_live_readback_blockers),
     pre_sleep_evidence_ready: safeBoolean(body.pre_sleep_evidence_ready),
+    pre_sleep_age_seconds: safeNumber(body.pre_sleep_age_seconds, 0),
+    pre_sleep_freshness_state: optionalString(body.pre_sleep_freshness_state),
+    current_pre_sleep_age_guidance: optionalString(body.current_pre_sleep_age_guidance),
+    current_pre_sleep_recapture_recommended: safeBoolean(body.current_pre_sleep_recapture_recommended),
+    current_pre_sleep_age_warning: optionalString(body.current_pre_sleep_age_warning),
+    current_pre_sleep_age_guidance_threshold_seconds: safeNumber(
+      body.current_pre_sleep_age_guidance_threshold_seconds,
+      0,
+    ),
+    pre_sleep_recapture_recommended: safeBoolean(body.pre_sleep_recapture_recommended),
+    pre_sleep_recapture_reason: optionalString(body.pre_sleep_recapture_reason),
+    pre_sleep_recapture_command_ready: safeBoolean(body.pre_sleep_recapture_command_ready),
+    pre_sleep_recapture_command_visible: safeBoolean(body.pre_sleep_recapture_command_visible),
+    pre_sleep_recapture_command: optionalString(body.pre_sleep_recapture_command),
+    pre_sleep_recapture_copyable_command: optionalString(body.pre_sleep_recapture_copyable_command),
+    pre_sleep_recapture_expected_output: optionalString(body.pre_sleep_recapture_expected_output),
+    pre_sleep_recapture_after_run_next_step: optionalString(body.pre_sleep_recapture_after_run_next_step),
+    pre_sleep_recapture_writes_evidence_when_run: safeBoolean(
+      body.pre_sleep_recapture_writes_evidence_when_run,
+    ),
+    pre_sleep_recapture_writes_receipts_when_run: safeBoolean(
+      body.pre_sleep_recapture_writes_receipts_when_run,
+    ),
+    pre_sleep_recapture_marks_stage16_closed_when_run: safeBoolean(
+      body.pre_sleep_recapture_marks_stage16_closed_when_run,
+    ),
+    pre_sleep_recapture_projection_only: safeBoolean(body.pre_sleep_recapture_projection_only),
     post_resume_evidence_ready: safeBoolean(body.post_resume_evidence_ready),
     post_resume_evidence_conflict: safeBoolean(body.post_resume_evidence_conflict),
     sleep_continuity_ready: safeBoolean(body.sleep_continuity_ready),
@@ -2708,6 +2803,9 @@ function buildFederationSleepContinuityPresentation(
     operator_sleep_resume_gate: undefined,
     operator_confirmation_handoff: undefined,
     after_manual_execution_readback: undefined,
+    pre_sleep_recapture_recommended: opts.runbook?.pre_sleep_recapture_recommended === true,
+    pre_sleep_recapture_command_visible: opts.runbook?.pre_sleep_recapture_command_visible === true,
+    pre_sleep_recapture_copyable_command: opts.runbook?.pre_sleep_recapture_copyable_command,
     writes_evidence_when_run: selectedStep?.writes_evidence_when_run ?? false,
     writes_receipts_when_run: selectedStep?.writes_receipts_when_run ?? false,
     expected_output: selectedStep?.expected_output,
@@ -2799,6 +2897,9 @@ export function presentFederationSleepContinuityAction(
     blockers: action.blockers,
     prior_live_readback_blockers: action.prior_live_readback_blockers,
     pre_sleep_evidence_ready: action.pre_sleep_evidence_ready,
+    pre_sleep_recapture_recommended: action.pre_sleep_recapture_recommended,
+    pre_sleep_recapture_command_visible: action.pre_sleep_recapture_command_visible,
+    pre_sleep_recapture_copyable_command: action.pre_sleep_recapture_copyable_command,
     post_resume_evidence_ready: action.post_resume_evidence_ready,
     post_resume_evidence_conflict: action.post_resume_evidence_conflict,
     sleep_continuity_ready: action.sleep_continuity_ready,

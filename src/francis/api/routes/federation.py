@@ -1845,6 +1845,43 @@ def _stage16_sleep_continuity_runbook_steps(
     ]
 
 
+def _stage16_pre_sleep_recapture_projection(
+    *,
+    age_guidance: dict[str, Any],
+    prerequisite_readbacks_ready: bool,
+    sleep_continuity_ready: bool,
+    stage16_closed_by_receipt: bool,
+) -> dict[str, Any]:
+    command = "scripts/federation-stage16-sleep-continuity-evidence.ps1 -Mode PreSleep -CommitEvidence"
+    recapture_recommended = bool(age_guidance.get("current_pre_sleep_recapture_recommended"))
+    command_ready = (
+        recapture_recommended
+        and prerequisite_readbacks_ready
+        and not sleep_continuity_ready
+        and not stage16_closed_by_receipt
+    )
+    return {
+        "pre_sleep_recapture_recommended": recapture_recommended,
+        "pre_sleep_recapture_reason": _safe_str(age_guidance.get("current_pre_sleep_age_warning")).strip(),
+        "pre_sleep_recapture_command_ready": command_ready,
+        "pre_sleep_recapture_command_visible": command_ready,
+        "pre_sleep_recapture_command": command if command_ready else "",
+        "pre_sleep_recapture_copyable_command": (
+            f"Set-Location -LiteralPath {_powershell_single_quote(str(repo_root()))}; {command}"
+            if command_ready
+            else ""
+        ),
+        "pre_sleep_recapture_expected_output": "new pre-sleep evidence JSON path" if command_ready else "",
+        "pre_sleep_recapture_after_run_next_step": (
+            "refresh_sleep_continuity_readbacks_before_physical_sleep_resume" if command_ready else ""
+        ),
+        "pre_sleep_recapture_writes_evidence_when_run": command_ready,
+        "pre_sleep_recapture_writes_receipts_when_run": False,
+        "pre_sleep_recapture_marks_stage16_closed_when_run": False,
+        "pre_sleep_recapture_projection_only": True,
+    }
+
+
 def stage16_sleep_continuity_runbook() -> dict[str, Any]:
     live_readbacks = live_runtime_readback_summary(limit=200)
     review = completion_review()
@@ -1870,6 +1907,13 @@ def stage16_sleep_continuity_runbook() -> dict[str, Any]:
     sleep_continuity_ready = bool(sleep_check.get("completion_evidence"))
     ready_to_close = bool(review.get("ready_to_close"))
     stage16_closed_by_receipt = bool(closure.get("stage16_closed_by_receipt"))
+    pre_sleep_recorded_ts = int(latest_pre_sleep_evidence.get("recorded_ts") or 0)
+    pre_sleep_age_seconds = max(0, _now_s() - pre_sleep_recorded_ts) if pre_sleep_recorded_ts > 0 else 0
+    pre_sleep_age_guidance = _stage16_current_pre_sleep_age_guidance(
+        evidence_present=bool(latest_pre_sleep_evidence.get("present")),
+        recorded_ts=pre_sleep_recorded_ts,
+        age_seconds=pre_sleep_age_seconds,
+    )
     missing_readbacks = _parse_list(live_readbacks.get("missing_readbacks"))
     selected_action_summary = _stage16_sleep_continuity_status_action_summary(
         completion_review_blockers=_parse_list(review.get("blockers")),
@@ -1907,6 +1951,12 @@ def stage16_sleep_continuity_runbook() -> dict[str, Any]:
             or "stage16_live_federation_runtime_readback"
         )
 
+    pre_sleep_recapture = _stage16_pre_sleep_recapture_projection(
+        age_guidance=pre_sleep_age_guidance,
+        prerequisite_readbacks_ready=prerequisite_readbacks_ready,
+        sleep_continuity_ready=sleep_continuity_ready,
+        stage16_closed_by_receipt=stage16_closed_by_receipt,
+    )
     return {
         "ok": True,
         "kind": _FEDERATION_SLEEP_CONTINUITY_RUNBOOK_KIND,
@@ -1921,6 +1971,10 @@ def stage16_sleep_continuity_runbook() -> dict[str, Any]:
         "sleep_continuity_check": sleep_check,
         "pre_sleep_evidence": latest_pre_sleep_evidence,
         "pre_sleep_evidence_ready": bool(latest_pre_sleep_evidence.get("present")),
+        "pre_sleep_age_seconds": pre_sleep_age_seconds,
+        "pre_sleep_freshness_state": _safe_str(latest_pre_sleep_evidence.get("freshness_state")).strip(),
+        **pre_sleep_age_guidance,
+        **pre_sleep_recapture,
         "post_resume_evidence": latest_post_resume_evidence,
         "post_resume_evidence_ready": bool(latest_post_resume_evidence.get("present")),
         "post_resume_evidence_conflict": post_resume_evidence_conflict,
@@ -1961,6 +2015,9 @@ def stage16_sleep_continuity_runbook() -> dict[str, Any]:
             "reads_pre_sleep_evidence_metadata": True,
             "reads_post_resume_evidence_metadata": True,
             "does_not_infer_sleep_from_delay": True,
+            "dynamic_pre_sleep_age_guidance_only": True,
+            "pre_sleep_recapture_command_projection_only": True,
+            "does_not_run_pre_sleep_recapture_command": True,
             "operator_confirmation_required": True,
             "requires_explicit_sleep_resume_confirmation": True,
             "selected_action_summary_projected": True,
@@ -2841,6 +2898,34 @@ def stage16_sleep_continuity_action(*, actor: str = "") -> dict[str, Any]:
         "blockers": blockers,
         "prior_live_readback_blockers": prior_live_blockers,
         "pre_sleep_evidence_ready": pre_sleep_evidence_ready,
+        "pre_sleep_age_seconds": int(runbook.get("pre_sleep_age_seconds") or 0),
+        "pre_sleep_freshness_state": _safe_str(runbook.get("pre_sleep_freshness_state")).strip(),
+        "current_pre_sleep_age_guidance": _safe_str(runbook.get("current_pre_sleep_age_guidance")).strip(),
+        "current_pre_sleep_recapture_recommended": bool(runbook.get("current_pre_sleep_recapture_recommended")),
+        "current_pre_sleep_age_warning": _safe_str(runbook.get("current_pre_sleep_age_warning")).strip(),
+        "current_pre_sleep_age_guidance_threshold_seconds": int(
+            runbook.get("current_pre_sleep_age_guidance_threshold_seconds") or 0
+        ),
+        "pre_sleep_recapture_recommended": bool(runbook.get("pre_sleep_recapture_recommended")),
+        "pre_sleep_recapture_reason": _safe_str(runbook.get("pre_sleep_recapture_reason")).strip(),
+        "pre_sleep_recapture_command_ready": bool(runbook.get("pre_sleep_recapture_command_ready")),
+        "pre_sleep_recapture_command_visible": bool(runbook.get("pre_sleep_recapture_command_visible")),
+        "pre_sleep_recapture_command": _safe_str(runbook.get("pre_sleep_recapture_command")).strip(),
+        "pre_sleep_recapture_copyable_command": _safe_str(runbook.get("pre_sleep_recapture_copyable_command")).strip(),
+        "pre_sleep_recapture_expected_output": _safe_str(runbook.get("pre_sleep_recapture_expected_output")).strip(),
+        "pre_sleep_recapture_after_run_next_step": _safe_str(
+            runbook.get("pre_sleep_recapture_after_run_next_step")
+        ).strip(),
+        "pre_sleep_recapture_writes_evidence_when_run": bool(
+            runbook.get("pre_sleep_recapture_writes_evidence_when_run")
+        ),
+        "pre_sleep_recapture_writes_receipts_when_run": bool(
+            runbook.get("pre_sleep_recapture_writes_receipts_when_run")
+        ),
+        "pre_sleep_recapture_marks_stage16_closed_when_run": bool(
+            runbook.get("pre_sleep_recapture_marks_stage16_closed_when_run")
+        ),
+        "pre_sleep_recapture_projection_only": True,
         "post_resume_evidence_ready": post_resume_evidence_ready,
         "post_resume_evidence_conflict": post_resume_evidence_conflict,
         "sleep_continuity_ready": sleep_continuity_ready,
@@ -2871,6 +2956,9 @@ def stage16_sleep_continuity_action(*, actor: str = "") -> dict[str, Any]:
             "uses_status_and_runbook_readbacks": True,
             "prior_live_readback_blockers_take_precedence": True,
             "does_not_infer_sleep_from_delay": True,
+            "dynamic_pre_sleep_age_guidance_only": True,
+            "pre_sleep_recapture_command_projection_only": True,
+            "does_not_run_pre_sleep_recapture_command": True,
             "confirmation_requirements_projected": bool(confirmation_requirements),
             "selected_action_readiness_projected": True,
             "operator_terminal_invocation_projected": True,

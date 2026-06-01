@@ -55288,6 +55288,51 @@ Latest validation for Stage 16 pre-sleep age/freshness readbacks:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 stale pre-sleep recapture command is visible but read-only
+
+Roadmap area: Stage 16 / Federation, sleep-continuity confirmation receipt
+truthfulness.
+
+Material change:
+
+- `/federation/sleep-continuity-runbook` and
+  `/federation/sleep-continuity-action` now project a bounded pre-sleep
+  recapture command when the latest pre-sleep marker is old enough for
+  recapture guidance.
+- The projected command is copyable from Federation Hub:
+  `scripts/federation-stage16-sleep-continuity-evidence.ps1 -Mode PreSleep
+  -CommitEvidence`.
+- The projection is intentionally not a stage-closure signal. It does not run
+  the command, write receipts, infer physical sleep/resume, grant authority, or
+  mark Stage 16 closed.
+- The post-resume evidence command remains blocked behind explicit physical
+  sleep/resume confirmation; only the pre-sleep recapture remedy is visible
+  while the confirmation gate remains the next truthful gap.
+- The live Stage 16 gap remains
+  `stage16_sleep_resume_confirmation_receipt`.
+
+Latest validation for Stage 16 stale pre-sleep recapture command projection:
+
+- `python -m pytest
+  tests/test_api_federation.py::test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marker
+  tests/test_api_federation.py::test_federation_stage16_sleep_resume_confirmation_readback_blocks_stale_receipt
+  -q --tb=short --maxfail=1`
+  Result: `passed; 2 passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `npm run test -- federation_hub`
+  Result: `passed; 199 passed`.
+- `npm run build`
+  Result: `passed`.
+- `git diff --check`
+  Result: `passed`.
+
 ### 2026-06-01 - Stage 16 pre-sleep age guidance is dynamic and non-blocking
 
 Roadmap area: Stage 16 / Federation, sleep-continuity confirmation receipt

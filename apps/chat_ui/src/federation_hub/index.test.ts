@@ -1833,6 +1833,29 @@ test("federation sleep-continuity action parser preserves selected read-only ste
     blockers: ["workstation_sleep_continuity_validated"],
     prior_live_readback_blockers: [],
     pre_sleep_evidence_ready: true,
+    pre_sleep_age_seconds: 4500,
+    pre_sleep_freshness_state: "fresh",
+    current_pre_sleep_age_guidance: "recapture_recommended",
+    current_pre_sleep_recapture_recommended: true,
+    current_pre_sleep_age_warning:
+      "current_pre_sleep_marker_is_old_recapture_recommended_before_physical_sleep_resume",
+    current_pre_sleep_age_guidance_threshold_seconds: 3600,
+    pre_sleep_recapture_recommended: true,
+    pre_sleep_recapture_reason:
+      "current_pre_sleep_marker_is_old_recapture_recommended_before_physical_sleep_resume",
+    pre_sleep_recapture_command_ready: true,
+    pre_sleep_recapture_command_visible: true,
+    pre_sleep_recapture_command:
+      "scripts/federation-stage16-sleep-continuity-evidence.ps1 -Mode PreSleep -CommitEvidence",
+    pre_sleep_recapture_copyable_command:
+      "Set-Location -LiteralPath 'D:\\Francis'; scripts/federation-stage16-sleep-continuity-evidence.ps1 -Mode PreSleep -CommitEvidence",
+    pre_sleep_recapture_expected_output: "new pre-sleep evidence JSON path",
+    pre_sleep_recapture_after_run_next_step:
+      "refresh_sleep_continuity_readbacks_before_physical_sleep_resume",
+    pre_sleep_recapture_writes_evidence_when_run: true,
+    pre_sleep_recapture_writes_receipts_when_run: false,
+    pre_sleep_recapture_marks_stage16_closed_when_run: false,
+    pre_sleep_recapture_projection_only: true,
     post_resume_evidence_ready: false,
     sleep_continuity_ready: false,
     ready_to_close: false,
@@ -2101,6 +2124,9 @@ test("federation sleep-continuity action parser preserves selected read-only ste
       read_only: true,
       action_projection_only: true,
       does_not_infer_sleep_from_delay: true,
+      dynamic_pre_sleep_age_guidance_only: true,
+      pre_sleep_recapture_command_projection_only: true,
+      does_not_run_pre_sleep_recapture_command: true,
       confirmation_requirements_projected: true,
       does_not_run_selected_command: true,
       does_not_post_selected_route: true,
@@ -2356,6 +2382,39 @@ test("federation sleep-continuity action parser preserves selected read-only ste
     "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json",
   );
   assert.deepEqual(action.prior_live_readback_blockers, []);
+  assert.equal(action.pre_sleep_age_seconds, 4500);
+  assert.equal(action.pre_sleep_freshness_state, "fresh");
+  assert.equal(action.current_pre_sleep_age_guidance, "recapture_recommended");
+  assert.equal(action.current_pre_sleep_recapture_recommended, true);
+  assert.equal(
+    action.current_pre_sleep_age_warning,
+    "current_pre_sleep_marker_is_old_recapture_recommended_before_physical_sleep_resume",
+  );
+  assert.equal(action.current_pre_sleep_age_guidance_threshold_seconds, 3600);
+  assert.equal(action.pre_sleep_recapture_recommended, true);
+  assert.equal(
+    action.pre_sleep_recapture_reason,
+    "current_pre_sleep_marker_is_old_recapture_recommended_before_physical_sleep_resume",
+  );
+  assert.equal(action.pre_sleep_recapture_command_ready, true);
+  assert.equal(action.pre_sleep_recapture_command_visible, true);
+  assert.equal(
+    action.pre_sleep_recapture_command,
+    "scripts/federation-stage16-sleep-continuity-evidence.ps1 -Mode PreSleep -CommitEvidence",
+  );
+  assert.equal(
+    action.pre_sleep_recapture_copyable_command?.includes(action.pre_sleep_recapture_command ?? ""),
+    true,
+  );
+  assert.equal(action.pre_sleep_recapture_expected_output, "new pre-sleep evidence JSON path");
+  assert.equal(
+    action.pre_sleep_recapture_after_run_next_step,
+    "refresh_sleep_continuity_readbacks_before_physical_sleep_resume",
+  );
+  assert.equal(action.pre_sleep_recapture_writes_evidence_when_run, true);
+  assert.equal(action.pre_sleep_recapture_writes_receipts_when_run, false);
+  assert.equal(action.pre_sleep_recapture_marks_stage16_closed_when_run, false);
+  assert.equal(action.pre_sleep_recapture_projection_only, true);
   assert.equal(action.action_projection_only, true);
   assert.equal(action.mutation_available_from_ui, false);
   assert.equal(action.writes_evidence, false);
@@ -2380,6 +2439,9 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   assert.equal(action.governance?.read_only, true);
   assert.equal(action.governance?.action_projection_only, true);
   assert.equal(action.governance?.does_not_infer_sleep_from_delay, true);
+  assert.equal(action.governance?.dynamic_pre_sleep_age_guidance_only, true);
+  assert.equal(action.governance?.pre_sleep_recapture_command_projection_only, true);
+  assert.equal(action.governance?.does_not_run_pre_sleep_recapture_command, true);
   assert.equal(action.governance?.confirmation_requirements_projected, true);
   assert.equal(action.governance?.does_not_run_selected_command, true);
   assert.equal(action.governance?.does_not_post_selected_route, true);
@@ -2401,6 +2463,14 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   assert.deepEqual(presentation.blockers, ["workstation_sleep_continuity_validated"]);
   assert.deepEqual(presentation.prior_live_readback_blockers, []);
   assert.equal(presentation.pre_sleep_evidence_ready, true);
+  assert.equal(presentation.pre_sleep_recapture_recommended, true);
+  assert.equal(presentation.pre_sleep_recapture_command_visible, true);
+  assert.equal(
+    presentation.pre_sleep_recapture_copyable_command?.includes(
+      "federation-stage16-sleep-continuity-evidence.ps1",
+    ),
+    true,
+  );
   assert.equal(presentation.post_resume_evidence_ready, false);
   assert.equal(presentation.operator_action_required, true);
   assert.equal(presentation.operator_confirmation_required, true);
@@ -2438,6 +2508,12 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   assert.equal(visibleCommands.post_resume_capture_copyable_command, undefined);
   assert.equal(visibleCommands.post_resume_sequence_copyable_command, undefined);
   assert.equal(visibleCommands.post_resume_receipt_backed_sequence_copyable_command, undefined);
+  assert.equal(
+    visibleCommands.pre_sleep_recapture_copyable_command?.includes(
+      "federation-stage16-sleep-continuity-evidence.ps1",
+    ),
+    true,
+  );
   assert.equal(
     visibleCommands.confirmation_receipt_copyable_command?.includes(
       "http://127.0.0.1:8000/federation/sleep-resume-confirmation",

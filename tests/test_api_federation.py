@@ -2598,6 +2598,13 @@ def test_federation_stage16_sleep_resume_confirmation_readback_blocks_stale_rece
     from francis.api.app import create_app
 
     client = TestClient(create_app())
+    for readback_id in [
+        "live_pairing_flow_observed",
+        "live_selective_sync_observed",
+        "live_remote_approval_roundtrip_observed",
+        "live_revocation_roundtrip_observed",
+    ]:
+        _record_stage16_live_readback(client, readback_id)
 
     readback = client.get("/federation/sleep-resume-confirmations?limit=5").json()
 
@@ -2637,6 +2644,44 @@ def test_federation_stage16_sleep_resume_confirmation_readback_blocks_stale_rece
     assert readback["governance"]["dynamic_pre_sleep_age_guidance_only"] is True
     assert readback["governance"]["does_not_block_on_pre_sleep_age_guidance"] is True
     assert readback["next_smallest_truthful_gap"] == "stage16_sleep_resume_confirmation_receipt"
+
+    runbook = client.get("/federation/sleep-continuity-runbook").json()
+    assert runbook["status"] == "pre_sleep_evidence_ready"
+    assert runbook["pre_sleep_age_seconds"] == 4500
+    assert runbook["current_pre_sleep_age_guidance"] == "recapture_recommended"
+    assert runbook["current_pre_sleep_recapture_recommended"] is True
+    assert runbook["pre_sleep_recapture_recommended"] is True
+    assert runbook["pre_sleep_recapture_command_ready"] is True
+    assert runbook["pre_sleep_recapture_command_visible"] is True
+    assert (
+        runbook["pre_sleep_recapture_command"]
+        == "scripts/federation-stage16-sleep-continuity-evidence.ps1 -Mode PreSleep -CommitEvidence"
+    )
+    assert runbook["pre_sleep_recapture_command"] in runbook["pre_sleep_recapture_copyable_command"]
+    assert runbook["pre_sleep_recapture_writes_evidence_when_run"] is True
+    assert runbook["pre_sleep_recapture_writes_receipts_when_run"] is False
+    assert runbook["pre_sleep_recapture_marks_stage16_closed_when_run"] is False
+    assert runbook["pre_sleep_recapture_projection_only"] is True
+    assert runbook["governance"]["pre_sleep_recapture_command_projection_only"] is True
+    assert runbook["governance"]["does_not_run_pre_sleep_recapture_command"] is True
+    assert runbook["next_smallest_truthful_gap"] == "stage16_sleep_resume_confirmation_receipt"
+
+    action = client.get("/federation/sleep-continuity-action?actor=test.federation.sleep").json()
+    assert action["status"] == "capture_post_resume_evidence"
+    assert action["pre_sleep_age_seconds"] == 4500
+    assert action["current_pre_sleep_age_guidance"] == "recapture_recommended"
+    assert action["pre_sleep_recapture_recommended"] is True
+    assert action["pre_sleep_recapture_command_ready"] is True
+    assert action["pre_sleep_recapture_command_visible"] is True
+    assert action["pre_sleep_recapture_command"] in action["pre_sleep_recapture_copyable_command"]
+    assert action["pre_sleep_recapture_writes_evidence_when_run"] is True
+    assert action["pre_sleep_recapture_writes_receipts_when_run"] is False
+    assert action["pre_sleep_recapture_marks_stage16_closed_when_run"] is False
+    assert action["governance"]["pre_sleep_recapture_command_projection_only"] is True
+    assert action["governance"]["does_not_run_pre_sleep_recapture_command"] is True
+    assert action["writes_evidence"] is False
+    assert action["marks_stage16_closed"] is False
+    assert action["next_smallest_truthful_gap"] == "stage16_sleep_resume_confirmation_receipt"
 
 
 def test_federation_stage16_sleep_continuity_runbook_uses_linked_post_resume_marker(

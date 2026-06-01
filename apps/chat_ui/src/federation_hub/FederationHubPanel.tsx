@@ -230,6 +230,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
   const visiblePostResumeSequenceCommand = visibleOperatorCommands.post_resume_sequence_copyable_command;
   const visiblePostResumeReceiptBackedSequenceCommand =
     visibleOperatorCommands.post_resume_receipt_backed_sequence_copyable_command;
+  const visiblePreSleepRecaptureCommand = visibleOperatorCommands.pre_sleep_recapture_copyable_command;
   const visibleConfirmationReceiptBackedSequenceCommand =
     visibleSequenceReadinessCommands.receipt_backed_sequence_copyable_command;
   const receiptRecordReadiness = federationSleepResumeReceiptRecordReadiness({
@@ -704,6 +705,30 @@ export function FederationHubPanel(props: { baseUrl: string }) {
           {" / "}runbook <code>{codeValue(presentation?.runbook_route)}</code>
           {" / "}closure <code>{codeValue(presentation?.closure_decision_route)}</code>
         </div>
+        <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
+          pre recapture <code>{yesNo(Boolean(presentation?.pre_sleep_recapture_recommended))}</code>
+          {" / "}visible <code>{yesNo(Boolean(visiblePreSleepRecaptureCommand))}</code>
+          {" / "}writes evidence <code>{yesNo(Boolean(action?.pre_sleep_recapture_writes_evidence_when_run))}</code>
+          {" / "}marks closed{" "}
+          <code>{yesNo(Boolean(action?.pre_sleep_recapture_marks_stage16_closed_when_run))}</code>
+        </div>
+        {visiblePreSleepRecaptureCommand ? (
+          <pre
+            style={{
+              margin: "8px 0 0",
+              padding: 10,
+              borderRadius: 10,
+              border: `1px solid ${PANEL_BORDER}`,
+              background: "#101010",
+              color: TEXT,
+              whiteSpace: "pre-wrap",
+              overflowWrap: "anywhere",
+              fontSize: 11,
+            }}
+          >
+            {visiblePreSleepRecaptureCommand}
+          </pre>
+        ) : null}
         {visiblePrimaryCommand ? (
           <pre
             style={{
