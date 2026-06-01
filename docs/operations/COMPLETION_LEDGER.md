@@ -54608,6 +54608,69 @@ Latest validation for Stage 16 API actor-scope env bootstrapping:
   src/francis/api/app.py tests/test_api_federation.py`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 local actor scope remediation applied for builder
+
+Roadmap area: Stage 16 / Federation, sleep-continuity confirmation receipt
+operator surface.
+
+Material change:
+
+- Added `scripts/francis-api-actor-scope-env.ps1`, a governed local helper
+  that merges a single actor scope into the repo-local `.env` file and writes
+  an auditable receipt under
+  `data/approvals/actor_scope_env_receipts/`.
+- The helper validates actor/scope identifiers, rejects duplicate
+  `FRANCIS_API_ACTOR_SCOPES` lines, preserves existing actor scopes, is limited
+  to `dev` or `workstation` profiles, and blocks production/regulated profile
+  use.
+- Applied the helper locally for `codex.builder` with
+  `federation.stage16.sleep_resume.confirmation.write`, writing receipt
+  `apiscopeenv_1780310340_dfafcd32`.
+- A fresh local API app readback now reports `codex.builder` as
+  `actor_ready_for_sleep_resume_confirmation` with
+  `confirmation_receipt_command_ready=true` and
+  `next_smallest_truthful_gap=stage16_sleep_resume_confirmation_receipt`.
+- This does not write the sleep/resume confirmation receipt, capture evidence,
+  run shell from the API, or close Stage 16.
+
+Latest validation for Stage 16 local actor-scope remediation:
+
+- PowerShell parser check for `scripts/francis-api-actor-scope-env.ps1`
+  Result: `passed`.
+- `python -m pytest tests/test_francis_api_actor_scope_env_script.py -q
+  --tb=short --maxfail=1`
+  Result: `passed; 2 passed`.
+- `python -m pytest tests/test_francis_api_actor_scope_env_script.py
+  tests/test_api_federation.py -q --tb=short --maxfail=1`
+  Result: `passed; 28 passed`.
+- `python -m ruff check tests/test_francis_api_actor_scope_env_script.py`
+  Result: `passed`.
+- `python -m ruff format --check
+  tests/test_francis_api_actor_scope_env_script.py`
+  Result: `passed`.
+- `python -m ruff check tests/test_francis_api_actor_scope_env_script.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check
+  tests/test_francis_api_actor_scope_env_script.py tests/test_api_federation.py`
+  Result: `passed`.
+- Local apply:
+  `.\scripts\francis-api-actor-scope-env.ps1 -Mode Apply -Actor
+  codex.builder -Scope
+  federation.stage16.sleep_resume.confirmation.write -Reason
+  stage16_sleep_resume_confirmation_actor_scope_remediation`
+  Result: `ok=true; status=applied;
+  receipt_id=apiscopeenv_1780310340_dfafcd32;
+  writes_confirmation_receipt=false; writes_evidence=false;
+  marks_stage16_closed=false`.
+- Fresh local readback:
+  `GET /federation/sleep-resume-confirmation/actor-readiness?actor=codex.builder`
+  Result: `status=actor_ready_for_sleep_resume_confirmation;
+  permission_allowed=true; confirmation_receipt_command_ready=true;
+  scope_remediation_required=false;
+  next_smallest_truthful_gap=stage16_sleep_resume_confirmation_receipt;
+  writes_receipt=false; writes_evidence=false; marks_stage16_closed=false`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
