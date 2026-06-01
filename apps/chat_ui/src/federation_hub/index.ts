@@ -262,6 +262,25 @@ export type FederationSleepResumeConfirmationReceipt = {
   recorded_ts?: number;
 };
 
+export type FederationSleepResumeConfirmationOperatorStep = {
+  id?: string;
+  order: number;
+  status?: string;
+  method?: string;
+  route?: string;
+  command_field?: string;
+  readback_field?: string;
+  required_scope?: string;
+  required_readback_field?: string;
+  requires_actor_substitution: boolean;
+  requires_current_receipt: boolean;
+  writes_receipts_when_run: boolean;
+  writes_evidence_when_run: boolean;
+  marks_stage16_closed_when_run: boolean;
+  operator_action_required: boolean;
+  read_only_projection: boolean;
+};
+
 export type FederationSleepResumeConfirmations = {
   ok: boolean;
   kind?: string;
@@ -290,6 +309,12 @@ export type FederationSleepResumeConfirmations = {
   confirmation_receipt_command?: string;
   confirmation_receipt_copyable_command?: string;
   confirmation_receipt_command_requires_scope?: string;
+  confirmation_receipt_command_requires_actor_substitution: boolean;
+  confirmation_receipt_command_actor_scope?: string;
+  confirmation_receipt_command_next_readback_route?: string;
+  confirmation_receipt_command_receipt_id_readback_field?: string;
+  confirmation_receipt_command_next_operator_step?: string;
+  confirmation_receipt_operator_steps: FederationSleepResumeConfirmationOperatorStep[];
   confirmation_receipt_command_records_receipt: boolean;
   confirmation_receipt_command_writes_evidence: boolean;
   confirmation_receipt_command_marks_stage16_closed: boolean;
@@ -507,6 +532,12 @@ export type FederationSleepContinuityOperatorConfirmationHandoff = {
   confirmation_receipt_command?: string;
   confirmation_receipt_copyable_command?: string;
   confirmation_receipt_command_requires_scope?: string;
+  confirmation_receipt_command_requires_actor_substitution: boolean;
+  confirmation_receipt_command_actor_scope?: string;
+  confirmation_receipt_command_next_readback_route?: string;
+  confirmation_receipt_command_receipt_id_readback_field?: string;
+  confirmation_receipt_command_next_operator_step?: string;
+  confirmation_receipt_operator_steps: FederationSleepResumeConfirmationOperatorStep[];
   confirmation_receipt_command_records_receipt: boolean;
   confirmation_receipt_command_writes_evidence: boolean;
   confirmation_receipt_command_marks_stage16_closed: boolean;
@@ -873,6 +904,24 @@ function parseFederationSleepContinuityOperatorConfirmationHandoff(
     confirmation_receipt_command: optionalString(raw.confirmation_receipt_command),
     confirmation_receipt_copyable_command: optionalString(raw.confirmation_receipt_copyable_command),
     confirmation_receipt_command_requires_scope: optionalString(raw.confirmation_receipt_command_requires_scope),
+    confirmation_receipt_command_requires_actor_substitution: safeBoolean(
+      raw.confirmation_receipt_command_requires_actor_substitution,
+    ),
+    confirmation_receipt_command_actor_scope: optionalString(raw.confirmation_receipt_command_actor_scope),
+    confirmation_receipt_command_next_readback_route: optionalString(
+      raw.confirmation_receipt_command_next_readback_route,
+    ),
+    confirmation_receipt_command_receipt_id_readback_field: optionalString(
+      raw.confirmation_receipt_command_receipt_id_readback_field,
+    ),
+    confirmation_receipt_command_next_operator_step: optionalString(
+      raw.confirmation_receipt_command_next_operator_step,
+    ),
+    confirmation_receipt_operator_steps: Array.isArray(raw.confirmation_receipt_operator_steps)
+      ? raw.confirmation_receipt_operator_steps
+          .map(parseFederationSleepResumeConfirmationOperatorStep)
+          .filter((x): x is FederationSleepResumeConfirmationOperatorStep => x !== null)
+      : [],
     confirmation_receipt_command_records_receipt: safeBoolean(raw.confirmation_receipt_command_records_receipt),
     confirmation_receipt_command_writes_evidence: safeBoolean(raw.confirmation_receipt_command_writes_evidence),
     confirmation_receipt_command_marks_stage16_closed: safeBoolean(raw.confirmation_receipt_command_marks_stage16_closed),
@@ -1352,6 +1401,32 @@ function parseFederationSleepResumeConfirmationReceipt(
   };
 }
 
+function parseFederationSleepResumeConfirmationOperatorStep(
+  raw: unknown,
+): FederationSleepResumeConfirmationOperatorStep | null {
+  if (!isRecord(raw)) return null;
+  const id = optionalString(raw.id);
+  if (!id) return null;
+  return {
+    id,
+    order: safeNumber(raw.order, 0),
+    status: optionalString(raw.status),
+    method: optionalString(raw.method),
+    route: optionalString(raw.route),
+    command_field: optionalString(raw.command_field),
+    readback_field: optionalString(raw.readback_field),
+    required_scope: optionalString(raw.required_scope),
+    required_readback_field: optionalString(raw.required_readback_field),
+    requires_actor_substitution: safeBoolean(raw.requires_actor_substitution),
+    requires_current_receipt: safeBoolean(raw.requires_current_receipt),
+    writes_receipts_when_run: safeBoolean(raw.writes_receipts_when_run),
+    writes_evidence_when_run: safeBoolean(raw.writes_evidence_when_run),
+    marks_stage16_closed_when_run: safeBoolean(raw.marks_stage16_closed_when_run),
+    operator_action_required: safeBoolean(raw.operator_action_required),
+    read_only_projection: safeBoolean(raw.read_only_projection),
+  };
+}
+
 export function parseFederationSleepResumeConfirmations(raw: unknown): FederationSleepResumeConfirmations {
   const body = isRecord(raw) ? raw : {};
   const items = Array.isArray(body.items)
@@ -1393,6 +1468,24 @@ export function parseFederationSleepResumeConfirmations(raw: unknown): Federatio
     confirmation_receipt_command: optionalString(body.confirmation_receipt_command),
     confirmation_receipt_copyable_command: optionalString(body.confirmation_receipt_copyable_command),
     confirmation_receipt_command_requires_scope: optionalString(body.confirmation_receipt_command_requires_scope),
+    confirmation_receipt_command_requires_actor_substitution: safeBoolean(
+      body.confirmation_receipt_command_requires_actor_substitution,
+    ),
+    confirmation_receipt_command_actor_scope: optionalString(body.confirmation_receipt_command_actor_scope),
+    confirmation_receipt_command_next_readback_route: optionalString(
+      body.confirmation_receipt_command_next_readback_route,
+    ),
+    confirmation_receipt_command_receipt_id_readback_field: optionalString(
+      body.confirmation_receipt_command_receipt_id_readback_field,
+    ),
+    confirmation_receipt_command_next_operator_step: optionalString(
+      body.confirmation_receipt_command_next_operator_step,
+    ),
+    confirmation_receipt_operator_steps: Array.isArray(body.confirmation_receipt_operator_steps)
+      ? body.confirmation_receipt_operator_steps
+          .map(parseFederationSleepResumeConfirmationOperatorStep)
+          .filter((x): x is FederationSleepResumeConfirmationOperatorStep => x !== null)
+      : [],
     confirmation_receipt_command_records_receipt: safeBoolean(body.confirmation_receipt_command_records_receipt),
     confirmation_receipt_command_writes_evidence: safeBoolean(body.confirmation_receipt_command_writes_evidence),
     confirmation_receipt_command_marks_stage16_closed: safeBoolean(body.confirmation_receipt_command_marks_stage16_closed),

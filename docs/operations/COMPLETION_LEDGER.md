@@ -53615,6 +53615,67 @@ Latest validation for Stage 16 confirmation remedy UI visibility:
 - `python -m pytest tests/test_api_federation.py -q --tb=short --maxfail=1`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 sleep confirmation handoff has ordered operator steps
+
+Roadmap area: Stage 16 / Federation, workstation sleep-continuity operator
+confirmation handoff.
+
+Material change:
+
+- `/federation/sleep-continuity-action` and
+  `/federation/sleep-resume-confirmations` now expose an ordered read-only
+  operator sequence for the sleep/resume confirmation handoff.
+- The sequence distinguishes actor-placeholder substitution, receipt write,
+  receipt readback refresh, and the receipt-backed post-resume sequence.
+- The projection states the required actor scope, the next readback route, the
+  readback field that supplies the confirmation receipt id, and whether each
+  step writes receipts, writes evidence, or could mark Stage 16 closed.
+- Federation Hub preserves and renders the operator sequence in the sleep
+  confirmation receipt panel.
+- The projection remains non-mutating: it does not run shell, write receipts,
+  write evidence, grant authority, or mark Stage 16 closed. Stage 16 remains
+  blocked on a real operator-confirmed sleep/resume receipt and later runtime
+  readback gates.
+
+Latest validation for Stage 16 sleep confirmation ordered handoff:
+
+- `python -m pytest tests/test_api_federation.py -q --tb=short --maxfail=1`
+  Result: `passed`.
+- `npm run test -- federation_hub`
+  Result: `passed; 189 passed`.
+- `npm run build`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `npx tsc --noEmit --pretty false 2>&1 | Select-String
+  "src/federation_hub/FederationHubPanel.tsx"`
+  Result: `passed; no_federation_panel_tsc_diagnostics`. Full repository
+  `tsc --noEmit` remains blocked by pre-existing unrelated strictness errors
+  outside this slice.
+- Live readback via `TestClient` for `/federation/sleep-continuity-action`
+  and `/federation/sleep-resume-confirmations`
+  Result: `passed;
+  confirmation_receipt_command_ready=true,
+  confirmation_receipt_command_requires_actor_substitution=true,
+  confirmation_receipt_command_actor_scope=federation.stage16.sleep_resume.confirmation.write,
+  confirmation_receipt_command_next_readback_route=/federation/sleep-resume-confirmations,
+  confirmation_receipt_command_receipt_id_readback_field=latest_receipt_id,
+  confirmation_receipt_operator_steps=[replace_actor_placeholder,
+  write_sleep_resume_confirmation_receipt,
+  refresh_sleep_resume_confirmation_readback,
+  run_receipt_backed_post_resume_sequence],
+  run_receipt_backed_post_resume_sequence_status=blocked_until_current_confirmation_receipt,
+  marks_stage16_closed_when_run=false,
+  next_smallest_truthful_gap=stage16_sleep_continuity_runtime_readback`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

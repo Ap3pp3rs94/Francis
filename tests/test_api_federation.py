@@ -1528,6 +1528,38 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
         confirmation_handoff["confirmation_receipt_command_requires_scope"]
         == "federation.stage16.sleep_resume.confirmation.write"
     )
+    assert confirmation_handoff["confirmation_receipt_command_requires_actor_substitution"] is True
+    assert (
+        confirmation_handoff["confirmation_receipt_command_actor_scope"]
+        == "federation.stage16.sleep_resume.confirmation.write"
+    )
+    assert (
+        confirmation_handoff["confirmation_receipt_command_next_readback_route"]
+        == "/federation/sleep-resume-confirmations"
+    )
+    assert confirmation_handoff["confirmation_receipt_command_receipt_id_readback_field"] == "latest_receipt_id"
+    assert (
+        confirmation_handoff["confirmation_receipt_command_next_operator_step"]
+        == "refresh_sleep_resume_confirmations_for_current_receipt_id"
+    )
+    operator_steps = confirmation_handoff["confirmation_receipt_operator_steps"]
+    assert [step["id"] for step in operator_steps] == [
+        "replace_actor_placeholder",
+        "write_sleep_resume_confirmation_receipt",
+        "refresh_sleep_resume_confirmation_readback",
+        "run_receipt_backed_post_resume_sequence",
+    ]
+    assert operator_steps[0]["requires_actor_substitution"] is True
+    assert operator_steps[0]["required_scope"] == "federation.stage16.sleep_resume.confirmation.write"
+    assert operator_steps[1]["route"] == "/federation/sleep-resume-confirmation"
+    assert operator_steps[1]["writes_receipts_when_run"] is True
+    assert operator_steps[2]["route"] == "/federation/sleep-resume-confirmations"
+    assert operator_steps[2]["readback_field"] == "latest_receipt_id"
+    assert operator_steps[3]["status"] == "blocked_until_current_confirmation_receipt"
+    assert operator_steps[3]["command_field"] == "post_resume_receipt_backed_sequence_copyable_command"
+    assert operator_steps[3]["requires_current_receipt"] is True
+    assert operator_steps[3]["writes_evidence_when_run"] is False
+    assert all(step["read_only_projection"] is True for step in operator_steps)
     assert confirmation_handoff["confirmation_receipt_command_records_receipt"] is True
     assert confirmation_handoff["confirmation_receipt_command_writes_evidence"] is False
     assert confirmation_handoff["confirmation_receipt_command_marks_stage16_closed"] is False
@@ -1691,6 +1723,34 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
         empty_readback["confirmation_receipt_command_requires_scope"]
         == "federation.stage16.sleep_resume.confirmation.write"
     )
+    assert empty_readback["confirmation_receipt_command_requires_actor_substitution"] is True
+    assert (
+        empty_readback["confirmation_receipt_command_actor_scope"]
+        == "federation.stage16.sleep_resume.confirmation.write"
+    )
+    assert (
+        empty_readback["confirmation_receipt_command_next_readback_route"] == "/federation/sleep-resume-confirmations"
+    )
+    assert empty_readback["confirmation_receipt_command_receipt_id_readback_field"] == "latest_receipt_id"
+    assert (
+        empty_readback["confirmation_receipt_command_next_operator_step"]
+        == "refresh_sleep_resume_confirmations_for_current_receipt_id"
+    )
+    operator_steps = empty_readback["confirmation_receipt_operator_steps"]
+    assert [step["status"] for step in operator_steps] == [
+        "ready",
+        "ready",
+        "ready",
+        "blocked_until_current_confirmation_receipt",
+    ]
+    assert operator_steps[0]["requires_actor_substitution"] is True
+    assert operator_steps[1]["route"] == "/federation/sleep-resume-confirmation"
+    assert operator_steps[1]["writes_receipts_when_run"] is True
+    assert operator_steps[2]["readback_field"] == "latest_receipt_id"
+    assert operator_steps[3]["command_field"] == "receipt_backed_sequence_copyable_command"
+    assert operator_steps[3]["requires_current_receipt"] is True
+    assert operator_steps[3]["writes_evidence_when_run"] is False
+    assert all(step["marks_stage16_closed_when_run"] is False for step in operator_steps)
     assert empty_readback["confirmation_receipt_command_records_receipt"] is True
     assert empty_readback["confirmation_receipt_command_writes_evidence"] is False
     assert empty_readback["confirmation_receipt_command_marks_stage16_closed"] is False
@@ -1795,6 +1855,25 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     assert readback["confirmation_receipt_actor_placeholder"] == ""
     assert readback["confirmation_receipt_command"] == ""
     assert readback["confirmation_receipt_copyable_command"] == ""
+    assert readback["confirmation_receipt_command_requires_actor_substitution"] is False
+    assert readback["confirmation_receipt_command_actor_scope"] == ""
+    assert readback["confirmation_receipt_command_next_readback_route"] == ""
+    assert readback["confirmation_receipt_command_receipt_id_readback_field"] == ""
+    operator_steps = readback["confirmation_receipt_operator_steps"]
+    assert [step["status"] for step in operator_steps] == [
+        "blocked",
+        "blocked",
+        "ready",
+        "ready",
+    ]
+    assert operator_steps[0]["requires_actor_substitution"] is False
+    assert operator_steps[1]["writes_receipts_when_run"] is False
+    assert operator_steps[2]["route"] == "/federation/sleep-resume-confirmations"
+    assert operator_steps[3]["command_field"] == "receipt_backed_sequence_copyable_command"
+    assert operator_steps[3]["requires_current_receipt"] is True
+    assert operator_steps[3]["writes_evidence_when_run"] is True
+    assert operator_steps[3]["writes_receipts_when_run"] is True
+    assert operator_steps[3]["marks_stage16_closed_when_run"] is False
     assert (
         readback["confirmation_receipt_command_requires_scope"] == "federation.stage16.sleep_resume.confirmation.write"
     )

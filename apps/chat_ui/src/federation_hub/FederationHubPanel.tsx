@@ -127,6 +127,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
   const afterManualExecutionReadback = presentation?.after_manual_execution_readback;
   const runbookSelectedActionSummary = runbook?.selected_action_summary;
   const confirmationReceiptBlockers = confirmations?.receipt_backed_sequence_blockers ?? [];
+  const confirmationReceiptOperatorSteps = confirmations?.confirmation_receipt_operator_steps ?? [];
 
   return (
     <section style={panelStyle}>
@@ -257,6 +258,22 @@ export function FederationHubPanel(props: { baseUrl: string }) {
             {" / "}writes evidence <code>{yesNo(confirmations.confirmation_receipt_command_writes_evidence)}</code>
             {" / "}marks closed <code>{yesNo(confirmations.confirmation_receipt_command_marks_stage16_closed)}</code>
           </div>
+          <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
+            actor substitution <code>{yesNo(confirmations.confirmation_receipt_command_requires_actor_substitution)}</code>
+            {" / "}actor scope <code>{codeValue(confirmations.confirmation_receipt_command_actor_scope)}</code>
+            {" / "}next readback <code>{codeValue(confirmations.confirmation_receipt_command_next_readback_route)}</code>
+            {" / "}receipt field{" "}
+            <code>{codeValue(confirmations.confirmation_receipt_command_receipt_id_readback_field)}</code>
+          </div>
+          {confirmationReceiptOperatorSteps.length ? (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+              {confirmationReceiptOperatorSteps.map((step) => (
+                <span key={`federation-confirmation-operator-step-${step.order}-${step.id}`} style={badgeStyle(step.status ?? "")}>
+                  {step.order}. {codeValue(step.id)}: {codeValue(step.status)}
+                </span>
+              ))}
+            </div>
+          ) : null}
           {confirmations.current_pre_sleep_evidence_path ? (
             <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
               current pre path <code>{confirmations.current_pre_sleep_evidence_path}</code>

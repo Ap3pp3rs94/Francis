@@ -989,6 +989,11 @@ def stage16_sleep_resume_confirmation_readback(*, limit: int = 20) -> dict[str, 
         pre_sleep_evidence_path=current_pre_sleep_path,
         ready=bool(current_pre_sleep.get("present")) and not receipt_backed_sequence_ready,
     )
+    confirmation_operator_steps = _stage16_sleep_resume_confirmation_operator_steps(
+        confirmation_command_ready=bool(confirmation_command.get("confirmation_receipt_command_ready")),
+        receipt_backed_sequence_ready=receipt_backed_sequence_ready,
+        receipt_backed_sequence_command_field="receipt_backed_sequence_copyable_command",
+    )
     return {
         "ok": True,
         "kind": _FEDERATION_SLEEP_RESUME_CONFIRMATIONS_KIND,
@@ -1023,6 +1028,7 @@ def stage16_sleep_resume_confirmation_readback(*, limit: int = 20) -> dict[str, 
             else ""
         ),
         **confirmation_command,
+        "confirmation_receipt_operator_steps": confirmation_operator_steps,
         "receipt_backed_sequence_requires_confirmation_receipt": True,
         "receipt_backed_sequence_writes_evidence_when_run": receipt_backed_sequence_ready,
         "receipt_backed_sequence_writes_receipts_when_run": receipt_backed_sequence_ready,
@@ -1464,11 +1470,11 @@ def _stage16_sleep_resume_confirmation_command_projection(
 ) -> dict[str, Any]:
     actor_placeholder = f"<actor_with_{_FEDERATION_SLEEP_RESUME_CONFIRMATION_SCOPE}>"
     reason = "operator confirms physical sleep/suspend and resume after the pre-sleep marker"
+    routes = _federation_routes()
+    confirmation_uri = f"http://127.0.0.1:8000{routes['sleep_resume_confirmation']}"
     command = ""
     copyable_command = ""
     if ready:
-        routes = _federation_routes()
-        confirmation_uri = f"http://127.0.0.1:8000{routes['sleep_resume_confirmation']}"
         command = (
             "$body = @{ "
             f"actor = {_powershell_single_quote(actor_placeholder)}; "
@@ -1486,11 +1492,89 @@ def _stage16_sleep_resume_confirmation_command_projection(
         "confirmation_receipt_command": command,
         "confirmation_receipt_copyable_command": copyable_command,
         "confirmation_receipt_command_requires_scope": _FEDERATION_SLEEP_RESUME_CONFIRMATION_SCOPE,
+        "confirmation_receipt_command_requires_actor_substitution": ready,
+        "confirmation_receipt_command_actor_scope": _FEDERATION_SLEEP_RESUME_CONFIRMATION_SCOPE if ready else "",
+        "confirmation_receipt_command_next_readback_route": routes["sleep_resume_confirmations"] if ready else "",
+        "confirmation_receipt_command_receipt_id_readback_field": "latest_receipt_id" if ready else "",
+        "confirmation_receipt_command_next_operator_step": (
+            "refresh_sleep_resume_confirmations_for_current_receipt_id" if ready else ""
+        ),
         "confirmation_receipt_command_records_receipt": ready,
         "confirmation_receipt_command_writes_evidence": False,
         "confirmation_receipt_command_marks_stage16_closed": False,
         "confirmation_receipt_command_projection_only": True,
     }
+
+
+def _stage16_sleep_resume_confirmation_operator_steps(
+    *,
+    confirmation_command_ready: bool,
+    receipt_backed_sequence_ready: bool,
+    receipt_backed_sequence_command_field: str,
+) -> list[dict[str, Any]]:
+    routes = _federation_routes()
+    readback_available = confirmation_command_ready or receipt_backed_sequence_ready
+    return [
+        {
+            "id": "replace_actor_placeholder",
+            "order": 1,
+            "status": "ready" if confirmation_command_ready else "blocked",
+            "command_field": "confirmation_receipt_copyable_command",
+            "required_scope": _FEDERATION_SLEEP_RESUME_CONFIRMATION_SCOPE,
+            "requires_actor_substitution": confirmation_command_ready,
+            "requires_current_receipt": False,
+            "writes_receipts_when_run": False,
+            "writes_evidence_when_run": False,
+            "marks_stage16_closed_when_run": False,
+            "operator_action_required": confirmation_command_ready,
+            "read_only_projection": True,
+        },
+        {
+            "id": "write_sleep_resume_confirmation_receipt",
+            "order": 2,
+            "status": "ready" if confirmation_command_ready else "blocked",
+            "method": "POST",
+            "route": routes["sleep_resume_confirmation"],
+            "command_field": "confirmation_receipt_copyable_command",
+            "required_scope": _FEDERATION_SLEEP_RESUME_CONFIRMATION_SCOPE,
+            "requires_actor_substitution": confirmation_command_ready,
+            "requires_current_receipt": False,
+            "writes_receipts_when_run": confirmation_command_ready,
+            "writes_evidence_when_run": False,
+            "marks_stage16_closed_when_run": False,
+            "operator_action_required": confirmation_command_ready,
+            "read_only_projection": True,
+        },
+        {
+            "id": "refresh_sleep_resume_confirmation_readback",
+            "order": 3,
+            "status": "ready" if readback_available else "blocked",
+            "method": "GET",
+            "route": routes["sleep_resume_confirmations"],
+            "readback_field": "latest_receipt_id",
+            "requires_actor_substitution": False,
+            "requires_current_receipt": False,
+            "writes_receipts_when_run": False,
+            "writes_evidence_when_run": False,
+            "marks_stage16_closed_when_run": False,
+            "operator_action_required": readback_available,
+            "read_only_projection": True,
+        },
+        {
+            "id": "run_receipt_backed_post_resume_sequence",
+            "order": 4,
+            "status": "ready" if receipt_backed_sequence_ready else "blocked_until_current_confirmation_receipt",
+            "command_field": receipt_backed_sequence_command_field,
+            "requires_actor_substitution": False,
+            "requires_current_receipt": True,
+            "required_readback_field": "latest_receipt_id",
+            "writes_receipts_when_run": receipt_backed_sequence_ready,
+            "writes_evidence_when_run": receipt_backed_sequence_ready,
+            "marks_stage16_closed_when_run": False,
+            "operator_action_required": receipt_backed_sequence_ready,
+            "read_only_projection": True,
+        },
+    ]
 
 
 def _stage16_sleep_continuity_selected_action_readiness(
@@ -1803,6 +1887,11 @@ def _stage16_sleep_continuity_operator_confirmation_handoff(
         pre_sleep_evidence_path=pre_sleep_evidence_path,
         ready=ready_after_confirmation and step_id == "capture_post_resume_evidence",
     )
+    confirmation_operator_steps = _stage16_sleep_resume_confirmation_operator_steps(
+        confirmation_command_ready=bool(confirmation_command.get("confirmation_receipt_command_ready")),
+        receipt_backed_sequence_ready=False,
+        receipt_backed_sequence_command_field="post_resume_receipt_backed_sequence_copyable_command",
+    )
     return {
         "status": status,
         "selected_step_id": step_id,
@@ -1853,6 +1942,7 @@ def _stage16_sleep_continuity_operator_confirmation_handoff(
             "reason": confirmation_reason,
         },
         **confirmation_command,
+        "confirmation_receipt_operator_steps": confirmation_operator_steps,
         "confirmation_receipt_available_before_sequence": ready_after_confirmation,
         "confirmation_receipt_required_for_receipt_backed_workflow": confirmation_required,
         "confirmation_receipt_writes_receipts": True,

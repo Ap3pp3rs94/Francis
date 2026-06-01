@@ -669,6 +669,41 @@ test("parseFederationSleepResumeConfirmations preserves missing-receipt remedy c
     confirmation_receipt_copyable_command:
       "Set-Location -LiteralPath 'D:\\Francis'; $body = @{ actor = '<actor_with_federation.stage16.sleep_resume.confirmation.write>'; operator_confirmed_sleep_resume = $true; pre_sleep_evidence_path = 'D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json' } | ConvertTo-Json -Depth 6; Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/federation/sleep-resume-confirmation' -ContentType 'application/json' -Body $body",
     confirmation_receipt_command_requires_scope: "federation.stage16.sleep_resume.confirmation.write",
+    confirmation_receipt_command_requires_actor_substitution: true,
+    confirmation_receipt_command_actor_scope: "federation.stage16.sleep_resume.confirmation.write",
+    confirmation_receipt_command_next_readback_route: "/federation/sleep-resume-confirmations",
+    confirmation_receipt_command_receipt_id_readback_field: "latest_receipt_id",
+    confirmation_receipt_command_next_operator_step: "refresh_sleep_resume_confirmations_for_current_receipt_id",
+    confirmation_receipt_operator_steps: [
+      {
+        id: "replace_actor_placeholder",
+        order: 1,
+        status: "ready",
+        command_field: "confirmation_receipt_copyable_command",
+        required_scope: "federation.stage16.sleep_resume.confirmation.write",
+        requires_actor_substitution: true,
+        requires_current_receipt: false,
+        writes_receipts_when_run: false,
+        writes_evidence_when_run: false,
+        marks_stage16_closed_when_run: false,
+        operator_action_required: true,
+        read_only_projection: true,
+      },
+      {
+        id: "run_receipt_backed_post_resume_sequence",
+        order: 4,
+        status: "blocked_until_current_confirmation_receipt",
+        command_field: "receipt_backed_sequence_copyable_command",
+        requires_actor_substitution: false,
+        requires_current_receipt: true,
+        required_readback_field: "latest_receipt_id",
+        writes_receipts_when_run: false,
+        writes_evidence_when_run: false,
+        marks_stage16_closed_when_run: false,
+        operator_action_required: false,
+        read_only_projection: true,
+      },
+    ],
     confirmation_receipt_command_records_receipt: true,
     confirmation_receipt_command_writes_evidence: false,
     confirmation_receipt_command_marks_stage16_closed: false,
@@ -712,6 +747,25 @@ test("parseFederationSleepResumeConfirmations preserves missing-receipt remedy c
   assert.equal(confirmations.confirmation_receipt_command_writes_evidence, false);
   assert.equal(confirmations.confirmation_receipt_command_marks_stage16_closed, false);
   assert.equal(confirmations.confirmation_receipt_command_projection_only, true);
+  assert.equal(confirmations.confirmation_receipt_command_requires_actor_substitution, true);
+  assert.equal(
+    confirmations.confirmation_receipt_command_actor_scope,
+    "federation.stage16.sleep_resume.confirmation.write",
+  );
+  assert.equal(
+    confirmations.confirmation_receipt_command_next_readback_route,
+    "/federation/sleep-resume-confirmations",
+  );
+  assert.equal(confirmations.confirmation_receipt_command_receipt_id_readback_field, "latest_receipt_id");
+  assert.deepEqual(
+    confirmations.confirmation_receipt_operator_steps.map((step) => step.id),
+    ["replace_actor_placeholder", "run_receipt_backed_post_resume_sequence"],
+  );
+  assert.equal(confirmations.confirmation_receipt_operator_steps[0]?.requires_actor_substitution, true);
+  assert.equal(confirmations.confirmation_receipt_operator_steps[0]?.required_scope, "federation.stage16.sleep_resume.confirmation.write");
+  assert.equal(confirmations.confirmation_receipt_operator_steps[1]?.requires_current_receipt, true);
+  assert.equal(confirmations.confirmation_receipt_operator_steps[1]?.writes_evidence_when_run, false);
+  assert.equal(confirmations.confirmation_receipt_operator_steps[1]?.marks_stage16_closed_when_run, false);
 });
 
 test("federation sleep-continuity action parser preserves selected read-only step", () => {
