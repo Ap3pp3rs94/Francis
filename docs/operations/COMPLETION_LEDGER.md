@@ -50727,6 +50727,68 @@ Latest validation for Stage 16 sync model:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-31 - Stage 16 Federation remote approvals are receipt-referenced
+
+Roadmap area: Stage 16 / Federation, remote approval support after selective
+sync model.
+
+Material change:
+
+- Added read-only `GET /federation/remote-approval-contract`.
+- `/federation/status` now advances from
+  `stage16_sync_model_contract_ready` to
+  `stage16_remote_approval_contract_ready`.
+- Remote approval support is modeled as metadata and receipt references, not
+  live remote execution.
+- Approval request envelopes require source node, paired node, target operator,
+  requested action and scope, trace id, parent receipt, sync lane, recorded
+  timestamp, and expiry.
+- Decision receipt fields require decision id, request id, decision actor,
+  authority, source and paired node ids, trace id, parent receipt id, and
+  decision timestamp.
+- Relay states are bounded to `queued`, `delivered`, `decided`, `denied`,
+  `expired`, and `deadlettered`.
+- The contract allows approval metadata, decision/denial receipt references,
+  trace metadata, and node identity. It blocks raw private payloads, raw prompt
+  bodies, raw model responses, credential material, execution tokens,
+  operator-unredacted payloads, and remote operator impersonation.
+- Remote nodes cannot impersonate the operator, expand scope, grant execution
+  authority, silently approve, or preserve stale approval requests past expiry.
+- This is contract-only: it does not execute remote approvals, mutate the
+  federation registry, write memory, run tools, run shell, run git, launch
+  browsers, capture the screen, or grant execution/mutation authority.
+- Current readback reports `stage16_status=stage16_remote_approval_contract_ready`,
+  `stage15_closed_by_receipt=true`,
+  `pairing_scoped_trust_contract_ready=true`,
+  `sync_model_contract_ready=true`, `remote_approval_contract_ready=true`,
+  `ready_count=4`, `required_count=6`, and
+  `next_smallest_truthful_gap=stage16_revocation_surfaces`.
+
+Latest validation for Stage 16 remote approval support:
+
+- Direct local `TestClient` readback of GET `/federation/status` and GET
+  `/federation/remote-approval-contract`.
+  Result: `stage16_status=stage16_remote_approval_contract_ready;
+  stage15_closed=true; pairing_ready=true; sync_ready=true;
+  remote_ready=true; ready_count=4; required_count=6;
+  status_next_gap=stage16_revocation_surfaces; remote_status=ready;
+  relay_states=queued, delivered, decided, denied, expired, deadlettered;
+  remote_next_gap=stage16_revocation_surfaces`.
+- `python -m pytest tests/test_api_federation.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 7 passed`
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

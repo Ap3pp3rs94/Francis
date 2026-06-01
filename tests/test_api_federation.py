@@ -354,14 +354,16 @@ def test_federation_stage16_pairing_scoped_trust_contract_is_read_only_after_sta
 
     status = client.get("/federation/status").json()
     assert status["stage"] == "Stage 16 / Federation"
-    assert status["stage16_status"] == "stage16_sync_model_contract_ready"
+    assert status["stage16_status"] == "stage16_remote_approval_contract_ready"
     assert status["pairing_scoped_trust_contract_ready"] is True
     assert status["sync_model_contract_ready"] is True
-    assert status["ready_count"] == 3
+    assert status["remote_approval_contract_ready"] is True
+    assert status["ready_count"] == 4
     assert status["required_count"] == 6
     assert status["routes"]["pairing_scoped_trust_contract"] == "/federation/pairing-scoped-trust-contract"
     assert status["routes"]["sync_model_contract"] == "/federation/sync-model-contract"
-    assert status["next_smallest_truthful_gap"] == "stage16_remote_approval_support"
+    assert status["routes"]["remote_approval_contract"] == "/federation/remote-approval-contract"
+    assert status["next_smallest_truthful_gap"] == "stage16_revocation_surfaces"
 
 
 def test_federation_stage16_sync_model_contract_blocks_over_replication_and_stale_authority(
@@ -419,3 +421,90 @@ def test_federation_stage16_sync_model_contract_blocks_over_replication_and_stal
     assert body["grants_execution_authority"] is False
     assert body["grants_mutation_authority"] is False
     assert body["next_smallest_truthful_gap"] == "stage16_remote_approval_support"
+
+
+def test_federation_stage16_remote_approval_contract_is_receipt_referenced_and_non_executing(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage15_closure_receipt(data_root, receipt_id="swarm_stage15_closure_for_remote_approval")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    response = client.get("/federation/remote-approval-contract")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "francis.stage16.federation.remote_approval_contract"
+    assert body["stage"] == "Stage 16 / Federation"
+    assert body["status"] == "ready"
+    assert body["stage15_closed_by_receipt"] is True
+    assert body["stage15_latest_closure_receipt_id"] == "swarm_stage15_closure_for_remote_approval"
+    assert body["pairing_scoped_trust_contract_ready"] is True
+    assert body["sync_model_contract_ready"] is True
+    assert body["remote_approval_contract_ready"] is True
+    assert body["request_envelope_fields"] == [
+        "remote_approval_request_id",
+        "source_node_id",
+        "paired_node_id",
+        "target_operator_id",
+        "requested_action",
+        "requested_scope",
+        "trace_id",
+        "parent_receipt_id",
+        "sync_lane_id",
+        "recorded_ts",
+        "expires_at",
+    ]
+    assert body["decision_receipt_fields"] == [
+        "decision_receipt_id",
+        "remote_approval_request_id",
+        "decision",
+        "decision_actor",
+        "decision_authority",
+        "decision_recorded_ts",
+        "source_node_id",
+        "paired_node_id",
+        "trace_id",
+        "parent_receipt_id",
+    ]
+    assert body["relay_states"] == [
+        "queued",
+        "delivered",
+        "decided",
+        "denied",
+        "expired",
+        "deadlettered",
+    ]
+    assert "approval_request_metadata" in body["allowed_request_classes"]
+    assert "decision_receipt_reference" in body["allowed_request_classes"]
+    assert "remote_operator_impersonation" in body["blocked_request_classes"]
+    assert "raw_private_payload" in body["blocked_request_classes"]
+    assert body["safety_rules"]["operator_decision_receipt_required"] is True
+    assert body["safety_rules"]["remote_node_cannot_impersonate_operator"] is True
+    assert body["safety_rules"]["remote_node_cannot_expand_scope"] is True
+    assert body["safety_rules"]["stale_request_must_expire"] is True
+    assert body["governance_flags"]["remote_approval_execution_enabled"] is False
+    assert body["governance_flags"]["request_metadata_only"] is True
+    assert body["governance_flags"]["decision_receipt_reference_only"] is True
+    assert body["governance_flags"]["silent_approval_allowed"] is False
+    assert body["remote_approval_execution_enabled"] is False
+    assert body["writes_registry"] is False
+    assert body["writes_memory"] is False
+    assert body["runs_tools"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["next_smallest_truthful_gap"] == "stage16_revocation_surfaces"
+
+    status = client.get("/federation/status").json()
+    assert status["stage16_status"] == "stage16_remote_approval_contract_ready"
+    assert status["remote_approval_contract_ready"] is True
+    assert status["ready_count"] == 4
+    assert status["required_count"] == 6
+    assert status["next_smallest_truthful_gap"] == "stage16_revocation_surfaces"

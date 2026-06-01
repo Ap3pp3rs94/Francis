@@ -20,6 +20,7 @@ _FEDERATION_WRITE_SCOPE = "federation.write"
 _STAGE16_FEDERATION_STAGE = "Stage 16 / Federation"
 _FEDERATION_PAIRING_SCOPED_TRUST_CONTRACT_KIND = "francis.stage16.federation.pairing_scoped_trust_contract"
 _FEDERATION_SYNC_MODEL_CONTRACT_KIND = "francis.stage16.federation.sync_model_contract"
+_FEDERATION_REMOTE_APPROVAL_CONTRACT_KIND = "francis.stage16.federation.remote_approval_contract"
 
 _ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._:-]{1,127}$")
 
@@ -406,6 +407,7 @@ def _federation_routes() -> dict[str, str]:
         "status": "/federation/status",
         "pairing_scoped_trust_contract": "/federation/pairing-scoped-trust-contract",
         "sync_model_contract": "/federation/sync-model-contract",
+        "remote_approval_contract": "/federation/remote-approval-contract",
         "instances_list": "/federation/instances/list",
         "instances_get": "/federation/instances/get",
         "delegations_list": "/federation/delegations/list",
@@ -465,6 +467,7 @@ def _stage16_deliverables(
     *,
     pairing_contract_ready: bool,
     sync_model_contract_ready: bool,
+    remote_approval_contract_ready: bool,
     stage15_closed: bool,
 ) -> list[dict[str, Any]]:
     return [
@@ -491,9 +494,9 @@ def _stage16_deliverables(
         ),
         _federation_deliverable(
             "remote_approval_support",
-            "Remote approval relays are not implemented yet",
-            False,
-            "pending",
+            "Remote approval support is receipt-referenced, traceable, and cannot impersonate the operator",
+            remote_approval_contract_ready,
+            "ready" if remote_approval_contract_ready else "pending",
             "stage16_remote_approval_support",
         ),
         _federation_deliverable(
@@ -772,6 +775,149 @@ def sync_model_contract() -> dict[str, Any]:
     }
 
 
+def remote_approval_contract() -> dict[str, Any]:
+    sync = sync_model_contract()
+    sync_ready = bool(sync.get("sync_model_contract_ready"))
+    request_envelope_fields = [
+        "remote_approval_request_id",
+        "source_node_id",
+        "paired_node_id",
+        "target_operator_id",
+        "requested_action",
+        "requested_scope",
+        "trace_id",
+        "parent_receipt_id",
+        "sync_lane_id",
+        "recorded_ts",
+        "expires_at",
+    ]
+    decision_receipt_fields = [
+        "decision_receipt_id",
+        "remote_approval_request_id",
+        "decision",
+        "decision_actor",
+        "decision_authority",
+        "decision_recorded_ts",
+        "source_node_id",
+        "paired_node_id",
+        "trace_id",
+        "parent_receipt_id",
+    ]
+    allowed_request_classes = [
+        "approval_request_metadata",
+        "decision_receipt_reference",
+        "denial_receipt_reference",
+        "trace_metadata",
+        "node_identity",
+    ]
+    blocked_request_classes = [
+        "raw_private_payload",
+        "raw_prompt_body",
+        "raw_model_response",
+        "credential_material",
+        "execution_tokens",
+        "operator_unredacted_payloads",
+        "remote_operator_impersonation",
+    ]
+    relay_states = [
+        "queued",
+        "delivered",
+        "decided",
+        "denied",
+        "expired",
+        "deadlettered",
+    ]
+    safety_rules = {
+        "sync_model_contract_required": sync_ready,
+        "operator_decision_receipt_required": True,
+        "delegated_operator_receipt_allowed_if_governed": True,
+        "remote_node_cannot_impersonate_operator": True,
+        "remote_node_cannot_expand_scope": True,
+        "remote_node_cannot_grant_execution_authority": True,
+        "stale_request_must_expire": True,
+        "denial_receipt_required_for_rejected_or_expired": True,
+        "trace_id_required": True,
+        "source_node_id_required": True,
+        "paired_node_id_required": True,
+    }
+    governance_flags = {
+        "remote_approval_execution_enabled": False,
+        "request_metadata_only": True,
+        "decision_receipt_reference_only": True,
+        "raw_payload_replication_allowed": False,
+        "silent_approval_allowed": False,
+        "operator_impersonation_allowed": False,
+        "approval_scope_expansion_allowed": False,
+    }
+    safety_rules_observed = (
+        bool(safety_rules["sync_model_contract_required"])
+        and bool(safety_rules["operator_decision_receipt_required"])
+        and bool(safety_rules["delegated_operator_receipt_allowed_if_governed"])
+        and bool(safety_rules["remote_node_cannot_impersonate_operator"])
+        and bool(safety_rules["remote_node_cannot_expand_scope"])
+        and bool(safety_rules["remote_node_cannot_grant_execution_authority"])
+        and bool(safety_rules["stale_request_must_expire"])
+        and bool(safety_rules["denial_receipt_required_for_rejected_or_expired"])
+        and bool(safety_rules["trace_id_required"])
+        and bool(safety_rules["source_node_id_required"])
+        and bool(safety_rules["paired_node_id_required"])
+    )
+    governance_observed = (
+        not bool(governance_flags["remote_approval_execution_enabled"])
+        and bool(governance_flags["request_metadata_only"])
+        and bool(governance_flags["decision_receipt_reference_only"])
+        and not bool(governance_flags["raw_payload_replication_allowed"])
+        and not bool(governance_flags["silent_approval_allowed"])
+        and not bool(governance_flags["operator_impersonation_allowed"])
+        and not bool(governance_flags["approval_scope_expansion_allowed"])
+    )
+    contract_ready = (
+        sync_ready
+        and len(request_envelope_fields) == 11
+        and len(decision_receipt_fields) == 10
+        and len(relay_states) == 6
+        and "approval_request_metadata" in allowed_request_classes
+        and "decision_receipt_reference" in allowed_request_classes
+        and "remote_operator_impersonation" in blocked_request_classes
+        and safety_rules_observed
+        and governance_observed
+    )
+    return {
+        "ok": True,
+        "kind": _FEDERATION_REMOTE_APPROVAL_CONTRACT_KIND,
+        "stage": _STAGE16_FEDERATION_STAGE,
+        "source_id": "federation",
+        "status": "ready" if contract_ready else "blocked",
+        "stage15_closed_by_receipt": bool(sync.get("stage15_closed_by_receipt")),
+        "stage15_latest_closure_receipt_id": _safe_str(sync.get("stage15_latest_closure_receipt_id")).strip(),
+        "pairing_scoped_trust_contract_ready": bool(sync.get("pairing_scoped_trust_contract_ready")),
+        "sync_model_contract_ready": sync_ready,
+        "remote_approval_contract_ready": contract_ready,
+        "request_envelope_fields": request_envelope_fields,
+        "decision_receipt_fields": decision_receipt_fields,
+        "allowed_request_classes": allowed_request_classes,
+        "blocked_request_classes": blocked_request_classes,
+        "relay_states": relay_states,
+        "safety_rules": safety_rules,
+        "governance_flags": governance_flags,
+        "routes": _federation_routes(),
+        "governance": _federation_governance(),
+        "remote_approval_execution_enabled": False,
+        "writes_registry": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "next_smallest_truthful_gap": "stage16_revocation_surfaces"
+        if contract_ready
+        else _safe_str(sync.get("next_smallest_truthful_gap")).strip() or "stage16_sync_model_contract",
+    }
+
+
 @router.get("/status")
 def status() -> dict[str, Any]:
     try:
@@ -788,10 +934,13 @@ def status() -> dict[str, Any]:
         pairing_ready = bool(pairing_contract.get("pairing_scoped_trust_contract_ready"))
         sync_contract = sync_model_contract()
         sync_ready = bool(sync_contract.get("sync_model_contract_ready"))
+        remote_approval = remote_approval_contract()
+        remote_approval_ready = bool(remote_approval.get("remote_approval_contract_ready"))
         stage15_closed = bool(pairing_contract.get("stage15_closed_by_receipt"))
         deliverables = _stage16_deliverables(
             pairing_contract_ready=pairing_ready,
             sync_model_contract_ready=sync_ready,
+            remote_approval_contract_ready=remote_approval_ready,
             stage15_closed=stage15_closed,
         )
         return {
@@ -799,7 +948,9 @@ def status() -> dict[str, Any]:
             "route": "federation",
             "status": "ready",
             "stage": _STAGE16_FEDERATION_STAGE,
-            "stage16_status": "stage16_sync_model_contract_ready"
+            "stage16_status": "stage16_remote_approval_contract_ready"
+            if remote_approval_ready
+            else "stage16_sync_model_contract_ready"
             if sync_ready
             else "stage16_pairing_scoped_trust_contract_ready"
             if pairing_ready
@@ -812,12 +963,15 @@ def status() -> dict[str, Any]:
             ).strip(),
             "pairing_scoped_trust_contract_ready": pairing_ready,
             "sync_model_contract_ready": sync_ready,
+            "remote_approval_contract_ready": remote_approval_ready,
             "ready_count": sum(1 for item in deliverables if bool(item.get("ready"))),
             "required_count": len(deliverables),
             "deliverables": deliverables,
             "routes": _federation_routes(),
             "governance": _federation_governance(),
-            "next_smallest_truthful_gap": "stage16_remote_approval_support"
+            "next_smallest_truthful_gap": "stage16_revocation_surfaces"
+            if remote_approval_ready
+            else "stage16_remote_approval_support"
             if sync_ready
             else "stage16_sync_model_contract"
             if pairing_ready
@@ -853,6 +1007,11 @@ def get_pairing_scoped_trust_contract() -> dict[str, Any]:
 @router.get("/sync-model-contract")
 def get_sync_model_contract() -> dict[str, Any]:
     return sync_model_contract()
+
+
+@router.get("/remote-approval-contract")
+def get_remote_approval_contract() -> dict[str, Any]:
+    return remote_approval_contract()
 
 
 @router.get("/instances/list")
