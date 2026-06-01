@@ -54374,6 +54374,46 @@ Latest validation for Stage 16 Hub projected-readiness command labels:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 API exposes command visibility readbacks
+
+Roadmap area: Stage 16 / Federation, sleep-continuity command truthfulness.
+
+Material change:
+
+- Stage 16 sleep-continuity API payloads now distinguish projected or known
+  commands from commands that are visible and runnable in the current state.
+- Pending confirmation paths preserve projected post-resume commands while
+  marking terminal, post-resume capture, post-resume sequence, and
+  receipt-backed sequence commands as not visible.
+- The confirmation-receipt command remains visibly available while the operator
+  confirmation receipt is missing.
+- The runtime-proof-ready path marks the terminal command as visible only when
+  the backend says the selected action is ready to run.
+- Federation Hub contract parsing now preserves the same visibility readbacks
+  for operator-facing command gating.
+- This is API and UI contract truthfulness only: it writes no receipt, runs no
+  shell, captures no evidence, grants no authority, and does not mark Stage 16
+  closed.
+
+Latest validation for Stage 16 command visibility readbacks:
+
+- `python -m pytest tests/test_api_federation.py -q --tb=short --maxfail=1`
+  Result: `passed`.
+- `npm run test -- federation_hub`
+  Result: `passed; 192 passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `npm run build`
+  Result: `passed`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

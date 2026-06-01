@@ -479,6 +479,7 @@ export type FederationSleepContinuitySelectedActionReadiness = {
   remaining_evidence_gates: string[];
   met_conditions: string[];
   operator_terminal_command_ready: boolean;
+  operator_terminal_command_visible: boolean;
   command_validation: string[];
   command_validation_blockers: string[];
   next_operator_step?: string;
@@ -501,6 +502,7 @@ export type FederationSleepContinuityOperatorTerminalInvocation = {
   operator_confirmation_required: boolean;
   operator_confirmation_pending: boolean;
   copyable_after_operator_confirmation: boolean;
+  copyable_command_visible: boolean;
   should_not_run_before_confirmation: boolean;
   must_run_after_sleep_resume: boolean;
   preconditions: string[];
@@ -509,6 +511,7 @@ export type FederationSleepContinuityOperatorTerminalInvocation = {
   run_blockers: string[];
   ready_to_run: boolean;
   operator_terminal_command_ready: boolean;
+  operator_terminal_command_visible: boolean;
   manual_execution_writes_evidence: boolean;
   manual_execution_writes_receipts: boolean;
   projection_only: boolean;
@@ -547,6 +550,7 @@ export type FederationSleepContinuityOperatorSleepResumeGate = {
   post_confirmation_ready_to_capture: boolean;
   sleep_resume_confirmation_is_current_blocker: boolean;
   operator_terminal_command_ready: boolean;
+  operator_terminal_command_visible: boolean;
   ready_after_operator_confirmation: boolean;
   elapsed_time_is_not_confirmation: boolean;
   does_not_infer_sleep_from_delay: boolean;
@@ -569,12 +573,15 @@ export type FederationSleepContinuityOperatorConfirmationHandoff = {
   must_sleep_after_pre_sleep_recorded_ts: boolean;
   must_resume_before_post_resume_capture: boolean;
   post_resume_capture_command_ready_after_confirmation: boolean;
+  post_resume_capture_command_visible: boolean;
   post_resume_capture_command?: string;
   post_resume_capture_copyable_command?: string;
   post_resume_sequence_available_after_confirmation: boolean;
+  post_resume_sequence_command_visible: boolean;
   post_resume_sequence_command?: string;
   post_resume_sequence_copyable_command?: string;
   post_resume_receipt_backed_sequence_command?: string;
+  post_resume_receipt_backed_sequence_command_visible: boolean;
   post_resume_receipt_backed_sequence_copyable_command?: string;
   post_resume_receipt_backed_sequence_requires_confirmation_receipt: boolean;
   post_resume_receipt_backed_sequence_confirmation_receipt_id_placeholder?: string;
@@ -590,6 +597,7 @@ export type FederationSleepContinuityOperatorConfirmationHandoff = {
   confirmation_receipt_actor_placeholder?: string;
   confirmation_receipt_command?: string;
   confirmation_receipt_copyable_command?: string;
+  confirmation_receipt_command_visible: boolean;
   confirmation_receipt_command_requires_scope?: string;
   confirmation_receipt_command_requires_actor_substitution: boolean;
   confirmation_receipt_command_actor_scope?: string;
@@ -610,6 +618,7 @@ export type FederationSleepContinuityOperatorConfirmationHandoff = {
   confirmation_receipt_marks_stage16_closed: boolean;
   should_not_run_before_confirmation: boolean;
   operator_terminal_command_ready: boolean;
+  operator_terminal_command_visible: boolean;
   readback_routes: Record<string, string>;
   proof_boundary: Record<string, boolean>;
 };
@@ -619,6 +628,7 @@ export type FederationSleepContinuityAfterManualExecutionReadback = {
   selected_step_id?: string;
   expected_output?: string;
   operator_terminal_command_ready: boolean;
+  operator_terminal_command_visible: boolean;
   ready_to_run: boolean;
   run_blockers: string[];
   operator_confirmation_pending: boolean;
@@ -836,6 +846,7 @@ function parseFederationSleepContinuitySelectedActionReadiness(
     remaining_evidence_gates: stringList(raw.remaining_evidence_gates),
     met_conditions: stringList(raw.met_conditions),
     operator_terminal_command_ready: safeBoolean(raw.operator_terminal_command_ready),
+    operator_terminal_command_visible: safeBoolean(raw.operator_terminal_command_visible),
     command_validation: stringList(raw.command_validation),
     command_validation_blockers: stringList(raw.command_validation_blockers),
     next_operator_step: optionalString(raw.next_operator_step),
@@ -863,6 +874,7 @@ function parseFederationSleepContinuityOperatorTerminalInvocation(
     operator_confirmation_required: safeBoolean(raw.operator_confirmation_required),
     operator_confirmation_pending: safeBoolean(raw.operator_confirmation_pending),
     copyable_after_operator_confirmation: safeBoolean(raw.copyable_after_operator_confirmation),
+    copyable_command_visible: safeBoolean(raw.copyable_command_visible),
     should_not_run_before_confirmation: safeBoolean(raw.should_not_run_before_confirmation),
     must_run_after_sleep_resume: safeBoolean(raw.must_run_after_sleep_resume),
     preconditions: stringList(raw.preconditions),
@@ -871,6 +883,7 @@ function parseFederationSleepContinuityOperatorTerminalInvocation(
     run_blockers: stringList(raw.run_blockers),
     ready_to_run: safeBoolean(raw.ready_to_run),
     operator_terminal_command_ready: safeBoolean(raw.operator_terminal_command_ready),
+    operator_terminal_command_visible: safeBoolean(raw.operator_terminal_command_visible),
     manual_execution_writes_evidence: safeBoolean(raw.manual_execution_writes_evidence),
     manual_execution_writes_receipts: safeBoolean(raw.manual_execution_writes_receipts),
     projection_only: safeBoolean(raw.projection_only),
@@ -916,6 +929,7 @@ function parseFederationSleepContinuityOperatorSleepResumeGate(
     post_confirmation_ready_to_capture: safeBoolean(raw.post_confirmation_ready_to_capture),
     sleep_resume_confirmation_is_current_blocker: safeBoolean(raw.sleep_resume_confirmation_is_current_blocker),
     operator_terminal_command_ready: safeBoolean(raw.operator_terminal_command_ready),
+    operator_terminal_command_visible: safeBoolean(raw.operator_terminal_command_visible),
     ready_after_operator_confirmation: safeBoolean(raw.ready_after_operator_confirmation),
     elapsed_time_is_not_confirmation: safeBoolean(raw.elapsed_time_is_not_confirmation),
     does_not_infer_sleep_from_delay: safeBoolean(raw.does_not_infer_sleep_from_delay),
@@ -945,14 +959,19 @@ function parseFederationSleepContinuityOperatorConfirmationHandoff(
     post_resume_capture_command_ready_after_confirmation: safeBoolean(
       raw.post_resume_capture_command_ready_after_confirmation,
     ),
+    post_resume_capture_command_visible: safeBoolean(raw.post_resume_capture_command_visible),
     post_resume_capture_command: optionalString(raw.post_resume_capture_command),
     post_resume_capture_copyable_command: optionalString(raw.post_resume_capture_copyable_command),
     post_resume_sequence_available_after_confirmation: safeBoolean(
       raw.post_resume_sequence_available_after_confirmation,
     ),
+    post_resume_sequence_command_visible: safeBoolean(raw.post_resume_sequence_command_visible),
     post_resume_sequence_command: optionalString(raw.post_resume_sequence_command),
     post_resume_sequence_copyable_command: optionalString(raw.post_resume_sequence_copyable_command),
     post_resume_receipt_backed_sequence_command: optionalString(raw.post_resume_receipt_backed_sequence_command),
+    post_resume_receipt_backed_sequence_command_visible: safeBoolean(
+      raw.post_resume_receipt_backed_sequence_command_visible,
+    ),
     post_resume_receipt_backed_sequence_copyable_command: optionalString(
       raw.post_resume_receipt_backed_sequence_copyable_command,
     ),
@@ -976,6 +995,7 @@ function parseFederationSleepContinuityOperatorConfirmationHandoff(
     confirmation_receipt_actor_placeholder: optionalString(raw.confirmation_receipt_actor_placeholder),
     confirmation_receipt_command: optionalString(raw.confirmation_receipt_command),
     confirmation_receipt_copyable_command: optionalString(raw.confirmation_receipt_copyable_command),
+    confirmation_receipt_command_visible: safeBoolean(raw.confirmation_receipt_command_visible),
     confirmation_receipt_command_requires_scope: optionalString(raw.confirmation_receipt_command_requires_scope),
     confirmation_receipt_command_requires_actor_substitution: safeBoolean(
       raw.confirmation_receipt_command_requires_actor_substitution,
@@ -1012,6 +1032,7 @@ function parseFederationSleepContinuityOperatorConfirmationHandoff(
     confirmation_receipt_marks_stage16_closed: safeBoolean(raw.confirmation_receipt_marks_stage16_closed),
     should_not_run_before_confirmation: safeBoolean(raw.should_not_run_before_confirmation),
     operator_terminal_command_ready: safeBoolean(raw.operator_terminal_command_ready),
+    operator_terminal_command_visible: safeBoolean(raw.operator_terminal_command_visible),
     readback_routes: stringRecord(raw.readback_routes),
     proof_boundary: booleanRecord(raw.proof_boundary),
   };
@@ -1026,6 +1047,7 @@ function parseFederationSleepContinuityAfterManualExecutionReadback(
     selected_step_id: optionalString(raw.selected_step_id),
     expected_output: optionalString(raw.expected_output),
     operator_terminal_command_ready: safeBoolean(raw.operator_terminal_command_ready),
+    operator_terminal_command_visible: safeBoolean(raw.operator_terminal_command_visible),
     ready_to_run: safeBoolean(raw.ready_to_run),
     run_blockers: stringList(raw.run_blockers),
     operator_confirmation_pending: safeBoolean(raw.operator_confirmation_pending),

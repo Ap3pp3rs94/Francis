@@ -1840,13 +1840,15 @@ def _stage16_sleep_continuity_selected_action_readiness(
         status = state or "blocked"
 
     ready_to_run = not run_blockers
+    operator_terminal_command_ready = bool(command_validation) and not command_validation_blockers
     return {
         "status": status,
         "ready_to_run": ready_to_run,
         "run_blockers": run_blockers,
         "remaining_evidence_gates": remaining_evidence_gates,
         "met_conditions": met_conditions,
-        "operator_terminal_command_ready": bool(command_validation) and not command_validation_blockers,
+        "operator_terminal_command_ready": operator_terminal_command_ready,
+        "operator_terminal_command_visible": operator_terminal_command_ready and ready_to_run,
         "command_validation": command_validation,
         "command_validation_blockers": command_validation_blockers,
         "next_operator_step": "operator_recapture_post_resume_evidence_for_latest_pre_sleep"
@@ -1893,6 +1895,7 @@ def _stage16_sleep_continuity_operator_terminal_invocation(
         status = "command_waiting_on_readiness"
     else:
         status = "command_ready_for_operator_terminal"
+    command_visible = command_ready and ready_to_run and not operator_confirmation_pending
     return {
         "status": status,
         "shell": "powershell",
@@ -1905,6 +1908,7 @@ def _stage16_sleep_continuity_operator_terminal_invocation(
         "operator_confirmation_required": operator_confirmation_required,
         "operator_confirmation_pending": operator_confirmation_pending,
         "copyable_after_operator_confirmation": operator_confirmation_pending,
+        "copyable_command_visible": command_visible,
         "should_not_run_before_confirmation": operator_confirmation_pending,
         "must_run_after_sleep_resume": step_id == "capture_post_resume_evidence",
         "preconditions": confirmation_requirements,
@@ -1913,6 +1917,7 @@ def _stage16_sleep_continuity_operator_terminal_invocation(
         "run_blockers": run_blockers,
         "ready_to_run": ready_to_run,
         "operator_terminal_command_ready": command_ready,
+        "operator_terminal_command_visible": command_visible,
         "manual_execution_writes_evidence": bool(selected_step.get("writes_evidence_when_run")),
         "manual_execution_writes_receipts": bool(selected_step.get("writes_receipts_when_run")),
         "projection_only": True,
@@ -1999,6 +2004,7 @@ def _stage16_sleep_continuity_operator_sleep_resume_gate(
         "post_confirmation_ready_to_capture": ready_after_operator_confirmation,
         "sleep_resume_confirmation_is_current_blocker": operator_confirmation_pending,
         "operator_terminal_command_ready": operator_terminal_command_ready,
+        "operator_terminal_command_visible": operator_terminal_command_ready and current_ready_to_run,
         "ready_after_operator_confirmation": ready_after_operator_confirmation,
         "elapsed_time_is_not_confirmation": True,
         "does_not_infer_sleep_from_delay": True,
@@ -2050,6 +2056,13 @@ def _stage16_sleep_continuity_operator_confirmation_handoff(
         pre_sleep_evidence_path=pre_sleep_evidence_path,
         ready=ready_after_confirmation and step_id == "capture_post_resume_evidence",
     )
+    confirmation_receipt_command_visible = bool(confirmation_command.get("confirmation_receipt_command_ready"))
+    post_resume_command_visible = (
+        step_id == "capture_post_resume_evidence"
+        and ready_after_confirmation
+        and not operator_confirmation_pending
+        and bool(operator_terminal_invocation.get("operator_terminal_command_visible"))
+    )
     confirmation_operator_steps = _stage16_sleep_resume_confirmation_operator_steps(
         confirmation_command_ready=bool(confirmation_command.get("confirmation_receipt_command_ready")),
         receipt_backed_sequence_ready=False,
@@ -2073,11 +2086,13 @@ def _stage16_sleep_continuity_operator_confirmation_handoff(
             operator_sleep_resume_gate.get("must_resume_before_post_resume_capture")
         ),
         "post_resume_capture_command_ready_after_confirmation": ready_after_confirmation,
+        "post_resume_capture_command_visible": post_resume_command_visible,
         "post_resume_capture_command": _safe_str(operator_terminal_invocation.get("command")).strip()
         if step_id == "capture_post_resume_evidence"
         else "",
         "post_resume_capture_copyable_command": copyable_command if step_id == "capture_post_resume_evidence" else "",
         "post_resume_sequence_available_after_confirmation": ready_after_confirmation,
+        "post_resume_sequence_command_visible": post_resume_command_visible,
         "post_resume_sequence_command": sequence_command if step_id == "capture_post_resume_evidence" else "",
         "post_resume_sequence_copyable_command": sequence_copyable_command
         if step_id == "capture_post_resume_evidence"
@@ -2085,6 +2100,7 @@ def _stage16_sleep_continuity_operator_confirmation_handoff(
         "post_resume_receipt_backed_sequence_command": receipt_backed_sequence_command
         if step_id == "capture_post_resume_evidence"
         else "",
+        "post_resume_receipt_backed_sequence_command_visible": False,
         "post_resume_receipt_backed_sequence_copyable_command": receipt_backed_sequence_copyable_command
         if step_id == "capture_post_resume_evidence"
         else "",
@@ -2105,6 +2121,7 @@ def _stage16_sleep_continuity_operator_confirmation_handoff(
             "reason": confirmation_reason,
         },
         **confirmation_command,
+        "confirmation_receipt_command_visible": confirmation_receipt_command_visible,
         "confirmation_receipt_operator_steps": confirmation_operator_steps,
         "confirmation_receipt_available_before_sequence": ready_after_confirmation,
         "confirmation_receipt_required_for_receipt_backed_workflow": confirmation_required,
@@ -2115,6 +2132,9 @@ def _stage16_sleep_continuity_operator_confirmation_handoff(
             operator_terminal_invocation.get("should_not_run_before_confirmation")
         ),
         "operator_terminal_command_ready": bool(operator_terminal_invocation.get("operator_terminal_command_ready")),
+        "operator_terminal_command_visible": bool(
+            operator_terminal_invocation.get("operator_terminal_command_visible")
+        ),
         "readback_routes": {
             "status": routes["status"],
             "sleep_continuity_action": routes["sleep_continuity_action"],
@@ -2165,6 +2185,7 @@ def _stage16_sleep_continuity_after_manual_execution_readback(
         "selected_step_id": step_id,
         "expected_output": _safe_str(selected_step.get("expected_output")).strip(),
         "operator_terminal_command_ready": bool(selected_action_readiness.get("operator_terminal_command_ready")),
+        "operator_terminal_command_visible": bool(selected_action_readiness.get("operator_terminal_command_visible")),
         "ready_to_run": ready_to_run,
         "run_blockers": run_blockers,
         "operator_confirmation_pending": operator_confirmation_pending,
