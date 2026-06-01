@@ -943,6 +943,25 @@ function hasPriorLiveReadbackBlocker(blockers: string[]): boolean {
   return blockers.some((blocker) => blocker !== "workstation_sleep_continuity_validated");
 }
 
+const federationSleepContinuityLabelByState: Record<FederationSleepContinuityActionState, string> = {
+  blocked_on_prior_live_readbacks: "Blocked on prior live readbacks",
+  capture_pre_sleep_evidence: "Capture pre-sleep evidence",
+  capture_post_resume_evidence: "Capture post-resume evidence",
+  run_sleep_continuity_runtime_proof: "Run sleep-continuity runtime proof",
+  record_stage16_closure_decision: "Record Stage 16 closure decision",
+  stage16_closed: "Stage 16 closed by receipt",
+};
+
+function federationSleepContinuityActionState(value: unknown): FederationSleepContinuityActionState {
+  const state = safeString(value);
+  if (state in federationSleepContinuityLabelByState) return state as FederationSleepContinuityActionState;
+  return "blocked_on_prior_live_readbacks";
+}
+
+function labelForFederationSleepContinuityState(state: FederationSleepContinuityActionState): string {
+  return federationSleepContinuityLabelByState[state];
+}
+
 function buildFederationSleepContinuityPresentation(
   state: FederationSleepContinuityActionState,
   opts: {
@@ -958,18 +977,10 @@ function buildFederationSleepContinuityPresentation(
     stage16ClosedByReceipt: boolean;
   },
 ): FederationSleepContinuityPresentation {
-  const labelByState: Record<FederationSleepContinuityActionState, string> = {
-    blocked_on_prior_live_readbacks: "Blocked on prior live readbacks",
-    capture_pre_sleep_evidence: "Capture pre-sleep evidence",
-    capture_post_resume_evidence: "Capture post-resume evidence",
-    run_sleep_continuity_runtime_proof: "Run sleep-continuity runtime proof",
-    record_stage16_closure_decision: "Record Stage 16 closure decision",
-    stage16_closed: "Stage 16 closed by receipt",
-  };
   const selectedStep = opts.selectedStep;
   return {
     state,
-    status_label: labelByState[state],
+    status_label: labelForFederationSleepContinuityState(state),
     selected_step_id: selectedStep?.id,
     primary_command: selectedStep?.command,
     primary_route: selectedStep?.route,
@@ -1042,6 +1053,36 @@ export function presentFederationSleepContinuity(
     readyToClose,
     stage16ClosedByReceipt,
   });
+}
+
+export function presentFederationSleepContinuityAction(
+  action: FederationSleepContinuityActionReadback,
+): FederationSleepContinuityPresentation {
+  const state = federationSleepContinuityActionState(action.status);
+  const selectedStep = action.selected_action;
+  return {
+    state,
+    status_label: labelForFederationSleepContinuityState(state),
+    selected_step_id: action.selected_step_id,
+    primary_command: action.primary_command ?? selectedStep?.command,
+    primary_route: action.primary_route ?? selectedStep?.route,
+    method: action.method ?? selectedStep?.method,
+    required_scope: action.required_scope ?? selectedStep?.required_scope,
+    evidence_path: action.evidence_path ?? selectedStep?.latest_evidence_path,
+    blockers: action.blockers,
+    pre_sleep_evidence_ready: action.pre_sleep_evidence_ready,
+    post_resume_evidence_ready: action.post_resume_evidence_ready,
+    sleep_continuity_ready: action.sleep_continuity_ready,
+    ready_to_close: action.ready_to_close,
+    stage16_closed_by_receipt: action.stage16_closed_by_receipt,
+    operator_action_required: action.operator_action_required || selectedStep?.operator_action_required === true,
+    operator_confirmation_required:
+      action.operator_confirmation_required || selectedStep?.operator_confirmation_required === true,
+    writes_evidence_when_run: action.writes_evidence_when_run || selectedStep?.writes_evidence_when_run === true,
+    writes_receipts_when_run: action.writes_receipts_when_run || selectedStep?.writes_receipts_when_run === true,
+    mutation_available_from_ui: false,
+    next_smallest_truthful_gap: action.next_smallest_truthful_gap,
+  };
 }
 
 export type FederationEndpoints = {
@@ -1210,13 +1251,8 @@ export class FederationClient {
     signal?: AbortSignal;
     timeoutMs?: number;
   }): Promise<FederationSleepContinuityPresentation> {
-    const timeoutMs = opts?.timeoutMs ?? this.defaultTimeoutMs;
-    const [status, runbook, closure] = await Promise.all([
-      this.getStatus({ signal: opts?.signal, timeoutMs }),
-      this.getSleepContinuityRunbook({ signal: opts?.signal, timeoutMs }),
-      this.getStageClosureDecisions({ limit: 1, signal: opts?.signal, timeoutMs }),
-    ]);
-    return presentFederationSleepContinuity(status, runbook, closure);
+    const action = await this.getSleepContinuityAction(opts);
+    return presentFederationSleepContinuityAction(action);
   }
 
   async listInstances(opts?: {

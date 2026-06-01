@@ -10,6 +10,7 @@ import {
   parseFederationStage16Status,
   parseFederationStage16ClosureDecisions,
   presentFederationSleepContinuity,
+  presentFederationSleepContinuityAction,
 } from "./index.ts";
 
 type FetchHandler = (url: string, init?: RequestInit) => Response | Promise<Response>;
@@ -351,9 +352,7 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
       { path: "/federation/sleep-continuity-runbook", method: "GET", limit: null },
       { path: "/federation/sleep-continuity-action", method: "GET", limit: null },
       { path: "/federation/stage-closure-decisions", method: "GET", limit: "5" },
-      { path: "/federation/status", method: "GET", limit: null },
-      { path: "/federation/sleep-continuity-runbook", method: "GET", limit: null },
-      { path: "/federation/stage-closure-decisions", method: "GET", limit: "1" },
+      { path: "/federation/sleep-continuity-action", method: "GET", limit: null },
     ]);
     assert.equal(status.stage16_status, "stage16_contracts_ready_completion_blocked");
     assert.equal(status.stage16_completion_review_ready, false);
@@ -547,6 +546,21 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   assert.equal(action.runs_shell, false);
   assert.equal(action.grants_execution_authority, false);
   assert.equal(action.governance?.does_not_post_selected_route, true);
+
+  const presentation = presentFederationSleepContinuityAction(action);
+  assert.equal(presentation.state, "capture_post_resume_evidence");
+  assert.equal(presentation.status_label, "Capture post-resume evidence");
+  assert.equal(presentation.selected_step_id, "capture_post_resume_evidence");
+  assert.equal(presentation.primary_command?.includes("-OperatorConfirmedSleepResume"), true);
+  assert.deepEqual(presentation.blockers, ["workstation_sleep_continuity_validated"]);
+  assert.equal(presentation.pre_sleep_evidence_ready, true);
+  assert.equal(presentation.post_resume_evidence_ready, false);
+  assert.equal(presentation.operator_action_required, true);
+  assert.equal(presentation.operator_confirmation_required, true);
+  assert.equal(presentation.writes_evidence_when_run, true);
+  assert.equal(presentation.writes_receipts_when_run, false);
+  assert.equal(presentation.mutation_available_from_ui, false);
+  assert.equal(presentation.next_smallest_truthful_gap, "stage16_sleep_continuity_runtime_readback");
 });
 
 test("federation Stage 16 parsers preserve ready receipt-backed posture", () => {

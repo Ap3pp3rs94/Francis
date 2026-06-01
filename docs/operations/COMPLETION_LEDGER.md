@@ -51972,6 +51972,38 @@ Latest validation for Stage 16 federation operator-app visibility:
 - `cd apps/chat_ui; npm run build`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 sleep action presentation consumes backend readback
+
+Roadmap area: Stage 16 / Federation, workstation sleep continuity runtime
+readback.
+
+Material change:
+
+- `FederationClient.getSleepContinuityPresentation(...)` now consumes the
+  read-only `/federation/sleep-continuity-action` backend projection directly
+  instead of recomposing action state from `/federation/status`,
+  `/federation/sleep-continuity-runbook`, and
+  `/federation/stage-closure-decisions`.
+- Added `presentFederationSleepContinuityAction(...)` so UI presentation,
+  selected action fields, operator-confirmation flags, blocker lists, and
+  no-mutation guards use the same backend-selected action readback.
+- The existing composed helper remains available for parser-level contract
+  tests, but the client path now has one source of truth for the operator app's
+  visible Stage 16 sleep-continuity action.
+- This remains read-only. It does not execute the selected command, post the
+  selected route, write evidence, write receipts, write registry state, write
+  memory, grant execution authority, grant mutation authority, infer workstation
+  sleep/resume, or mark Stage 16 closed.
+- Stage 16 remains open until live post-resume evidence and the receipt-backed
+  completion/closure gates are satisfied.
+
+Latest validation for Stage 16 backend sleep-action UI presentation:
+
+- `cd apps/chat_ui; npm run test -- federation_hub`
+  Result: `passed; 187 passed`.
+- `cd apps/chat_ui; npm run build`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
