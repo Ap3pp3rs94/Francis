@@ -145,6 +145,12 @@ export function FederationHubPanel(props: { baseUrl: string }) {
           <div style={{ fontSize: 11, color: MUTED, marginTop: 8 }}>
             selected <code>{codeValue(presentation?.selected_step_id)}</code>
           </div>
+          <div style={{ fontSize: 11, color: MUTED, marginTop: 8, overflowWrap: "anywhere" }}>
+            status <code>{codeValue(status?.sleep_continuity_status)}</code>
+          </div>
+          <div style={{ fontSize: 11, color: MUTED, marginTop: 8, overflowWrap: "anywhere" }}>
+            next <code>{codeValue(status?.sleep_continuity_next_step)}</code>
+          </div>
         </div>
 
         <div style={{ border: `1px solid ${PANEL_BORDER}`, borderRadius: 10, padding: 10, background: "#121212" }}>
