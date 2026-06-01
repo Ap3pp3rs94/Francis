@@ -341,6 +341,10 @@ export type FederationSleepResumeConfirmations = {
   current_pre_sleep_recorded_ts?: number;
   current_pre_sleep_age_seconds: number;
   current_pre_sleep_freshness_state?: string;
+  current_pre_sleep_age_guidance?: string;
+  current_pre_sleep_recapture_recommended: boolean;
+  current_pre_sleep_age_warning?: string;
+  current_pre_sleep_age_guidance_threshold_seconds: number;
   confirmation_receipt_requested_actor?: string;
   confirmation_receipt_requested_actor_ready: boolean;
   latest_receipt_is_operator_confirmed: boolean;
@@ -464,6 +468,10 @@ export type FederationSleepResumeOperatorChecklist = {
   current_pre_sleep_recorded_ts?: number;
   current_pre_sleep_age_seconds: number;
   current_pre_sleep_freshness_state?: string;
+  current_pre_sleep_age_guidance?: string;
+  current_pre_sleep_recapture_recommended: boolean;
+  current_pre_sleep_age_warning?: string;
+  current_pre_sleep_age_guidance_threshold_seconds: number;
   preconditions_ready: boolean;
   ready_to_record_after_operator_confirmation: boolean;
   operator_physical_confirmation_required: boolean;
@@ -501,6 +509,10 @@ export type FederationSleepResumeReceiptBackedSequenceReadiness = {
   current_pre_sleep_recorded_ts?: number;
   current_pre_sleep_age_seconds: number;
   current_pre_sleep_freshness_state?: string;
+  current_pre_sleep_age_guidance?: string;
+  current_pre_sleep_recapture_recommended: boolean;
+  current_pre_sleep_age_warning?: string;
+  current_pre_sleep_age_guidance_threshold_seconds: number;
   latest_receipt_id?: string;
   latest_decision?: string;
   latest_actor?: string;
@@ -1914,6 +1926,13 @@ export function parseFederationSleepResumeOperatorChecklist(
       currentPreSleepRecordedTs > 0 ? normalizeTs(currentPreSleepRecordedTs) : undefined,
     current_pre_sleep_age_seconds: safeNumber(body.current_pre_sleep_age_seconds, 0),
     current_pre_sleep_freshness_state: optionalString(body.current_pre_sleep_freshness_state),
+    current_pre_sleep_age_guidance: optionalString(body.current_pre_sleep_age_guidance),
+    current_pre_sleep_recapture_recommended: safeBoolean(body.current_pre_sleep_recapture_recommended),
+    current_pre_sleep_age_warning: optionalString(body.current_pre_sleep_age_warning),
+    current_pre_sleep_age_guidance_threshold_seconds: safeNumber(
+      body.current_pre_sleep_age_guidance_threshold_seconds,
+      0,
+    ),
     preconditions_ready: safeBoolean(body.preconditions_ready),
     ready_to_record_after_operator_confirmation: safeBoolean(
       body.ready_to_record_after_operator_confirmation,
@@ -1967,6 +1986,13 @@ export function parseFederationSleepResumeReceiptBackedSequenceReadiness(
       currentPreSleepRecordedTs > 0 ? normalizeTs(currentPreSleepRecordedTs) : undefined,
     current_pre_sleep_age_seconds: safeNumber(body.current_pre_sleep_age_seconds, 0),
     current_pre_sleep_freshness_state: optionalString(body.current_pre_sleep_freshness_state),
+    current_pre_sleep_age_guidance: optionalString(body.current_pre_sleep_age_guidance),
+    current_pre_sleep_recapture_recommended: safeBoolean(body.current_pre_sleep_recapture_recommended),
+    current_pre_sleep_age_warning: optionalString(body.current_pre_sleep_age_warning),
+    current_pre_sleep_age_guidance_threshold_seconds: safeNumber(
+      body.current_pre_sleep_age_guidance_threshold_seconds,
+      0,
+    ),
     latest_receipt_id: optionalString(body.latest_receipt_id),
     latest_decision: optionalString(body.latest_decision),
     latest_actor: optionalString(body.latest_actor),
@@ -2064,6 +2090,13 @@ export function parseFederationSleepResumeConfirmations(raw: unknown): Federatio
       currentPreSleepRecordedTs > 0 ? normalizeTs(currentPreSleepRecordedTs) : undefined,
     current_pre_sleep_age_seconds: safeNumber(body.current_pre_sleep_age_seconds, 0),
     current_pre_sleep_freshness_state: optionalString(body.current_pre_sleep_freshness_state),
+    current_pre_sleep_age_guidance: optionalString(body.current_pre_sleep_age_guidance),
+    current_pre_sleep_recapture_recommended: safeBoolean(body.current_pre_sleep_recapture_recommended),
+    current_pre_sleep_age_warning: optionalString(body.current_pre_sleep_age_warning),
+    current_pre_sleep_age_guidance_threshold_seconds: safeNumber(
+      body.current_pre_sleep_age_guidance_threshold_seconds,
+      0,
+    ),
     confirmation_receipt_requested_actor: optionalString(body.confirmation_receipt_requested_actor),
     confirmation_receipt_requested_actor_ready: safeBoolean(body.confirmation_receipt_requested_actor_ready),
     latest_receipt_is_operator_confirmed: safeBoolean(body.latest_receipt_is_operator_confirmed),

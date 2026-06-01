@@ -55288,6 +55288,58 @@ Latest validation for Stage 16 pre-sleep age/freshness readbacks:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 pre-sleep age guidance is dynamic and non-blocking
+
+Roadmap area: Stage 16 / Federation, sleep-continuity confirmation receipt
+truthfulness.
+
+Material change:
+
+- Sleep/resume confirmation readbacks now compute dynamic pre-sleep marker age
+  guidance from the current marker timestamp instead of relying only on the
+  marker's stored freshness label.
+- `/federation/sleep-resume-confirmations`,
+  `/federation/sleep-resume-confirmation/operator-checklist`, and
+  `/federation/sleep-resume-confirmation/receipt-backed-sequence-readiness`
+  now expose `current_pre_sleep_age_guidance`,
+  `current_pre_sleep_recapture_recommended`,
+  `current_pre_sleep_age_warning`, and the guidance threshold.
+- Federation Hub parses and displays the same guidance on the operator
+  checklist and receipt-backed sequence-readiness surfaces.
+- This remains read-only guidance: marker age does not infer physical
+  sleep/resume, does not block the confirmation receipt gate by itself, does
+  not write receipts, write evidence, execute tools, grant authority, or mark
+  Stage 16 closed.
+- Fresh local readback for `actor=codex.builder` reports
+  `current_pre_sleep_age_guidance=recapture_recommended` for the old current
+  marker while keeping
+  `next_smallest_truthful_gap=stage16_sleep_resume_confirmation_receipt`,
+  `receipt_backed_sequence_ready=false`, `writes_evidence=false`, and
+  `marks_stage16_closed=false`.
+
+Latest validation for Stage 16 dynamic pre-sleep age guidance:
+
+- `python -m pytest
+  tests/test_api_federation.py::test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marker
+  tests/test_api_federation.py::test_federation_stage16_sleep_resume_confirmation_records_operator_receipt
+  tests/test_api_federation.py::test_federation_stage16_sleep_resume_confirmation_readback_blocks_stale_receipt
+  -q --tb=short --maxfail=1`
+  Result: `passed; 3 passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `npm run test -- federation_hub`
+  Result: `passed; 199 passed`.
+- `npm run build`
+  Result: `passed`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

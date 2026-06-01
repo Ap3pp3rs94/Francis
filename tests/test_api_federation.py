@@ -1443,6 +1443,10 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert checklist["current_pre_sleep_evidence_path"] == str(pre_sleep_path.resolve())
     assert checklist["current_pre_sleep_age_seconds"] == 300
     assert checklist["current_pre_sleep_freshness_state"] == "fresh"
+    assert checklist["current_pre_sleep_age_guidance"] == "fresh"
+    assert checklist["current_pre_sleep_recapture_recommended"] is False
+    assert checklist["current_pre_sleep_age_warning"] == ""
+    assert checklist["current_pre_sleep_age_guidance_threshold_seconds"] == 3600
     assert checklist["preconditions_ready"] is True
     assert checklist["ready_to_record_after_operator_confirmation"] is True
     assert checklist["operator_physical_confirmation_required"] is True
@@ -2102,6 +2106,10 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     assert empty_readback["current_pre_sleep_evidence_path"] == str(pre_sleep_path.resolve())
     assert empty_readback["current_pre_sleep_age_seconds"] == 360
     assert empty_readback["current_pre_sleep_freshness_state"] == "fresh"
+    assert empty_readback["current_pre_sleep_age_guidance"] == "fresh"
+    assert empty_readback["current_pre_sleep_recapture_recommended"] is False
+    assert empty_readback["current_pre_sleep_age_warning"] == ""
+    assert empty_readback["current_pre_sleep_age_guidance_threshold_seconds"] == 3600
     assert empty_readback["latest_receipt_matches_current_pre_sleep"] is False
     assert empty_readback["latest_receipt_usable_for_receipt_backed_sequence"] is False
     assert empty_readback["receipt_backed_sequence_ready"] is False
@@ -2179,6 +2187,10 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     assert empty_sequence_readiness["current_pre_sleep_evidence_path"] == str(pre_sleep_path.resolve())
     assert empty_sequence_readiness["current_pre_sleep_age_seconds"] == 360
     assert empty_sequence_readiness["current_pre_sleep_freshness_state"] == "fresh"
+    assert empty_sequence_readiness["current_pre_sleep_age_guidance"] == "fresh"
+    assert empty_sequence_readiness["current_pre_sleep_recapture_recommended"] is False
+    assert empty_sequence_readiness["current_pre_sleep_age_warning"] == ""
+    assert empty_sequence_readiness["current_pre_sleep_age_guidance_threshold_seconds"] == 3600
     assert empty_sequence_readiness["latest_receipt_id"] == ""
     assert empty_sequence_readiness["receipt_backed_sequence_ready"] is False
     assert empty_sequence_readiness["receipt_backed_sequence_blockers"] == ["sleep_resume_confirmation_receipt_missing"]
@@ -2370,6 +2382,10 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     assert readback["current_pre_sleep_evidence_path"] == str(pre_sleep_path.resolve())
     assert readback["current_pre_sleep_age_seconds"] == 360
     assert readback["current_pre_sleep_freshness_state"] == "fresh"
+    assert readback["current_pre_sleep_age_guidance"] == "fresh"
+    assert readback["current_pre_sleep_recapture_recommended"] is False
+    assert readback["current_pre_sleep_age_warning"] == ""
+    assert readback["current_pre_sleep_age_guidance_threshold_seconds"] == 3600
     assert readback["latest_receipt_is_operator_confirmed"] is True
     assert readback["latest_receipt_matches_current_pre_sleep"] is True
     assert readback["latest_receipt_usable_for_receipt_backed_sequence"] is True
@@ -2434,6 +2450,10 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     assert sequence_readiness["latest_receipt_id"] == body["receipt_id"]
     assert sequence_readiness["current_pre_sleep_age_seconds"] == 360
     assert sequence_readiness["current_pre_sleep_freshness_state"] == "fresh"
+    assert sequence_readiness["current_pre_sleep_age_guidance"] == "fresh"
+    assert sequence_readiness["current_pre_sleep_recapture_recommended"] is False
+    assert sequence_readiness["current_pre_sleep_age_warning"] == ""
+    assert sequence_readiness["current_pre_sleep_age_guidance_threshold_seconds"] == 3600
     assert sequence_readiness["latest_decision"] == "operator_confirmed_sleep_resume"
     assert sequence_readiness["latest_receipt_is_operator_confirmed"] is True
     assert sequence_readiness["latest_receipt_matches_current_pre_sleep"] is True
@@ -2518,6 +2538,10 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     assert receipt_ready_checklist["current_pre_sleep_evidence_path"] == str(pre_sleep_path.resolve())
     assert receipt_ready_checklist["current_pre_sleep_age_seconds"] == 360
     assert receipt_ready_checklist["current_pre_sleep_freshness_state"] == "fresh"
+    assert receipt_ready_checklist["current_pre_sleep_age_guidance"] == "fresh"
+    assert receipt_ready_checklist["current_pre_sleep_recapture_recommended"] is False
+    assert receipt_ready_checklist["current_pre_sleep_age_warning"] == ""
+    assert receipt_ready_checklist["current_pre_sleep_age_guidance_threshold_seconds"] == 3600
     assert receipt_ready_checklist["ready_to_record_after_operator_confirmation"] is False
     assert receipt_ready_checklist["operator_physical_confirmation_required"] is True
     assert receipt_ready_checklist["operator_physical_confirmation_recorded"] is True
@@ -2555,6 +2579,7 @@ def test_federation_stage16_sleep_resume_confirmation_readback_blocks_stale_rece
     request.addfinalizer(lambda: shutil.rmtree(temp_root, ignore_errors=True))
     data_root = temp_root / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setattr("francis.api.routes.federation._now_s", lambda: 1_800_034_500)
     _write_stage15_closure_receipt(data_root, receipt_id="swarm_stage15_closure_for_stale_sleep_resume_confirmation")
     original_pre_sleep_path = _write_stage16_pre_sleep_evidence(data_root, continuity_record_id="stage16-sleep-old")
     receipt_id = "fedsleepconfirm_stale_pre_sleep"
@@ -2581,6 +2606,15 @@ def test_federation_stage16_sleep_resume_confirmation_readback_blocks_stale_rece
     assert readback["latest_pre_sleep_evidence_path"] == str(original_pre_sleep_path.resolve())
     assert readback["current_pre_sleep_evidence_present"] is True
     assert readback["current_pre_sleep_evidence_path"] == str(current_pre_sleep_path.resolve())
+    assert readback["current_pre_sleep_age_seconds"] == 4500
+    assert readback["current_pre_sleep_freshness_state"] == "fresh"
+    assert readback["current_pre_sleep_age_guidance"] == "recapture_recommended"
+    assert readback["current_pre_sleep_recapture_recommended"] is True
+    assert (
+        readback["current_pre_sleep_age_warning"]
+        == "current_pre_sleep_marker_is_old_recapture_recommended_before_physical_sleep_resume"
+    )
+    assert readback["current_pre_sleep_age_guidance_threshold_seconds"] == 3600
     assert readback["latest_receipt_is_operator_confirmed"] is True
     assert readback["latest_receipt_matches_current_pre_sleep"] is False
     assert readback["latest_receipt_usable_for_receipt_backed_sequence"] is False
@@ -2600,6 +2634,8 @@ def test_federation_stage16_sleep_resume_confirmation_readback_blocks_stale_rece
     assert readback["marks_stage16_closed"] is False
     assert readback["governance"]["checks_current_pre_sleep_evidence_path"] is True
     assert readback["governance"]["receipt_backed_sequence_requires_current_matching_confirmation"] is True
+    assert readback["governance"]["dynamic_pre_sleep_age_guidance_only"] is True
+    assert readback["governance"]["does_not_block_on_pre_sleep_age_guidance"] is True
     assert readback["next_smallest_truthful_gap"] == "stage16_sleep_resume_confirmation_receipt"
 
 

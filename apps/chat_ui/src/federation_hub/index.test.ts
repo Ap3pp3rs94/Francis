@@ -420,6 +420,10 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
         current_pre_sleep_recorded_ts: 1_800_030_000,
         current_pre_sleep_age_seconds: 300,
         current_pre_sleep_freshness_state: "fresh",
+        current_pre_sleep_age_guidance: "fresh",
+        current_pre_sleep_recapture_recommended: false,
+        current_pre_sleep_age_warning: "",
+        current_pre_sleep_age_guidance_threshold_seconds: 3600,
         confirmation_receipt_requested_actor: parsed.searchParams.get("actor") ?? "",
         confirmation_receipt_requested_actor_ready: parsed.searchParams.get("actor") === "test.federation.sleep",
         latest_receipt_is_operator_confirmed: true,
@@ -679,6 +683,10 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
     assert.equal(confirmations.current_pre_sleep_evidence_path, "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json");
     assert.equal(confirmations.current_pre_sleep_age_seconds, 300);
     assert.equal(confirmations.current_pre_sleep_freshness_state, "fresh");
+    assert.equal(confirmations.current_pre_sleep_age_guidance, "fresh");
+    assert.equal(confirmations.current_pre_sleep_recapture_recommended, false);
+    assert.equal(confirmations.current_pre_sleep_age_warning, undefined);
+    assert.equal(confirmations.current_pre_sleep_age_guidance_threshold_seconds, 3600);
     assert.equal(confirmations.confirmation_receipt_requested_actor, "test.federation.sleep");
     assert.equal(confirmations.confirmation_receipt_requested_actor_ready, true);
     assert.equal(confirmations.latest_receipt_is_operator_confirmed, true);
@@ -747,6 +755,10 @@ test("parseFederationSleepResumeConfirmations preserves missing-receipt remedy c
     current_pre_sleep_recorded_ts: 1_800_030_000,
     current_pre_sleep_age_seconds: 300,
     current_pre_sleep_freshness_state: "fresh",
+    current_pre_sleep_age_guidance: "fresh",
+    current_pre_sleep_recapture_recommended: false,
+    current_pre_sleep_age_warning: "",
+    current_pre_sleep_age_guidance_threshold_seconds: 3600,
     confirmation_receipt_requested_actor: "test.federation.sleep",
     confirmation_receipt_requested_actor_ready: true,
     latest_receipt_is_operator_confirmed: false,
@@ -855,6 +867,10 @@ test("parseFederationSleepResumeConfirmations preserves missing-receipt remedy c
   assert.equal(confirmations.status, "empty");
   assert.equal(confirmations.current_pre_sleep_age_seconds, 300);
   assert.equal(confirmations.current_pre_sleep_freshness_state, "fresh");
+  assert.equal(confirmations.current_pre_sleep_age_guidance, "fresh");
+  assert.equal(confirmations.current_pre_sleep_recapture_recommended, false);
+  assert.equal(confirmations.current_pre_sleep_age_warning, undefined);
+  assert.equal(confirmations.current_pre_sleep_age_guidance_threshold_seconds, 3600);
   assert.deepEqual(confirmations.receipt_backed_sequence_blockers, ["sleep_resume_confirmation_receipt_missing"]);
   assert.equal(confirmations.receipt_backed_sequence_ready, false);
   assert.equal(confirmations.receipt_backed_sequence_copyable_command?.includes("stale_or_missing"), true);
@@ -1338,6 +1354,10 @@ test("FederationClient reads sleep-resume operator checklist as a read-only phys
       current_pre_sleep_recorded_ts: 1_800_030_000,
       current_pre_sleep_age_seconds: 300,
       current_pre_sleep_freshness_state: "fresh",
+      current_pre_sleep_age_guidance: "fresh",
+      current_pre_sleep_recapture_recommended: false,
+      current_pre_sleep_age_warning: "",
+      current_pre_sleep_age_guidance_threshold_seconds: 3600,
       preconditions_ready: true,
       ready_to_record_after_operator_confirmation: true,
       operator_physical_confirmation_required: true,
@@ -1412,6 +1432,10 @@ test("FederationClient reads sleep-resume operator checklist as a read-only phys
     assert.equal(checklist.preconditions_ready, true);
     assert.equal(checklist.current_pre_sleep_age_seconds, 300);
     assert.equal(checklist.current_pre_sleep_freshness_state, "fresh");
+    assert.equal(checklist.current_pre_sleep_age_guidance, "fresh");
+    assert.equal(checklist.current_pre_sleep_recapture_recommended, false);
+    assert.equal(checklist.current_pre_sleep_age_warning, undefined);
+    assert.equal(checklist.current_pre_sleep_age_guidance_threshold_seconds, 3600);
     assert.equal(checklist.ready_to_record_after_operator_confirmation, true);
     assert.equal(checklist.operator_physical_confirmation_required, true);
     assert.equal(checklist.operator_physical_confirmation_recorded, false);
@@ -1470,6 +1494,10 @@ test("FederationClient reads receipt-backed sequence readiness as read-only proj
       current_pre_sleep_recorded_ts: 1_800_030_000,
       current_pre_sleep_age_seconds: 300,
       current_pre_sleep_freshness_state: "fresh",
+      current_pre_sleep_age_guidance: "fresh",
+      current_pre_sleep_recapture_recommended: false,
+      current_pre_sleep_age_warning: "",
+      current_pre_sleep_age_guidance_threshold_seconds: 3600,
       latest_receipt_id: "fedsleepconfirm_ui_ready",
       latest_decision: "operator_confirmed_sleep_resume",
       latest_actor: "test.federation.sleep",
@@ -1549,6 +1577,10 @@ test("FederationClient reads receipt-backed sequence readiness as read-only proj
     assert.equal(readiness.latest_receipt_id, "fedsleepconfirm_ui_ready");
     assert.equal(readiness.current_pre_sleep_age_seconds, 300);
     assert.equal(readiness.current_pre_sleep_freshness_state, "fresh");
+    assert.equal(readiness.current_pre_sleep_age_guidance, "fresh");
+    assert.equal(readiness.current_pre_sleep_recapture_recommended, false);
+    assert.equal(readiness.current_pre_sleep_age_warning, undefined);
+    assert.equal(readiness.current_pre_sleep_age_guidance_threshold_seconds, 3600);
     assert.equal(readiness.receipt_backed_sequence_ready, true);
     assert.deepEqual(readiness.receipt_backed_sequence_blockers, []);
     assert.equal(readiness.receipt_backed_sequence_command_visible, true);

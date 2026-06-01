@@ -50,6 +50,8 @@ _STAGE16_SLEEP_CONTINUITY_PRE_SLEEP_EVIDENCE_GAP = "stage16_sleep_continuity_pre
 _STAGE16_SLEEP_RESUME_CONFIRMATION_ACTOR_GAP = "stage16_sleep_resume_confirmation_actor_readiness"
 _STAGE16_SLEEP_RESUME_CONFIRMATION_RECEIPT_GAP = "stage16_sleep_resume_confirmation_receipt"
 _STAGE16_SLEEP_CONTINUITY_RUNTIME_READBACK_GAP = "stage16_sleep_continuity_runtime_readback"
+_STAGE16_PRE_SLEEP_MARKER_AGING_SECONDS = 900
+_STAGE16_PRE_SLEEP_MARKER_RECAPTURE_RECOMMENDED_SECONDS = 3600
 
 _STAGE16_LIVE_READBACK_IDS = (
     "live_pairing_flow_observed",
@@ -1087,6 +1089,43 @@ def _stage16_sleep_resume_confirmation_actor_ready(actor: str) -> bool:
     return bool(permission.allowed)
 
 
+def _stage16_current_pre_sleep_age_guidance(
+    *,
+    evidence_present: bool,
+    recorded_ts: int,
+    age_seconds: int,
+) -> dict[str, Any]:
+    if not evidence_present or recorded_ts <= 0:
+        return {
+            "current_pre_sleep_age_guidance": "missing",
+            "current_pre_sleep_recapture_recommended": False,
+            "current_pre_sleep_age_warning": "",
+            "current_pre_sleep_age_guidance_threshold_seconds": _STAGE16_PRE_SLEEP_MARKER_RECAPTURE_RECOMMENDED_SECONDS,
+        }
+    if age_seconds > _STAGE16_PRE_SLEEP_MARKER_RECAPTURE_RECOMMENDED_SECONDS:
+        return {
+            "current_pre_sleep_age_guidance": "recapture_recommended",
+            "current_pre_sleep_recapture_recommended": True,
+            "current_pre_sleep_age_warning": (
+                "current_pre_sleep_marker_is_old_recapture_recommended_before_physical_sleep_resume"
+            ),
+            "current_pre_sleep_age_guidance_threshold_seconds": _STAGE16_PRE_SLEEP_MARKER_RECAPTURE_RECOMMENDED_SECONDS,
+        }
+    if age_seconds > _STAGE16_PRE_SLEEP_MARKER_AGING_SECONDS:
+        return {
+            "current_pre_sleep_age_guidance": "aging",
+            "current_pre_sleep_recapture_recommended": False,
+            "current_pre_sleep_age_warning": "",
+            "current_pre_sleep_age_guidance_threshold_seconds": _STAGE16_PRE_SLEEP_MARKER_RECAPTURE_RECOMMENDED_SECONDS,
+        }
+    return {
+        "current_pre_sleep_age_guidance": "fresh",
+        "current_pre_sleep_recapture_recommended": False,
+        "current_pre_sleep_age_warning": "",
+        "current_pre_sleep_age_guidance_threshold_seconds": _STAGE16_PRE_SLEEP_MARKER_RECAPTURE_RECOMMENDED_SECONDS,
+    }
+
+
 def stage16_sleep_resume_confirmation_readback(*, limit: int = 20, actor: str = "") -> dict[str, Any]:
     safe_limit = max(1, min(int(limit), 100))
     items = read_stage16_sleep_resume_confirmations(limit=safe_limit)
@@ -1098,6 +1137,11 @@ def stage16_sleep_resume_confirmation_readback(*, limit: int = 20, actor: str = 
         max(0, _now_s() - current_pre_sleep_recorded_ts) if current_pre_sleep_recorded_ts > 0 else 0
     )
     current_pre_sleep_freshness_state = _safe_str(current_pre_sleep.get("freshness_state")).strip()
+    current_pre_sleep_age_guidance = _stage16_current_pre_sleep_age_guidance(
+        evidence_present=bool(current_pre_sleep.get("present")),
+        recorded_ts=current_pre_sleep_recorded_ts,
+        age_seconds=current_pre_sleep_age_seconds,
+    )
     requested_actor = _safe_str(actor).strip()
     requested_actor_ready = _stage16_sleep_resume_confirmation_actor_ready(requested_actor)
     latest_pre_sleep_path = _safe_str(latest_receipt.get("pre_sleep_evidence_path")).strip()
@@ -1164,6 +1208,7 @@ def stage16_sleep_resume_confirmation_readback(*, limit: int = 20, actor: str = 
         "current_pre_sleep_recorded_ts": current_pre_sleep_recorded_ts,
         "current_pre_sleep_age_seconds": current_pre_sleep_age_seconds,
         "current_pre_sleep_freshness_state": current_pre_sleep_freshness_state,
+        **current_pre_sleep_age_guidance,
         "confirmation_receipt_requested_actor": _redacted_text(requested_actor)[:240],
         "confirmation_receipt_requested_actor_ready": requested_actor_ready,
         "latest_receipt_is_operator_confirmed": latest_operator_confirmed
@@ -1208,6 +1253,8 @@ def stage16_sleep_resume_confirmation_readback(*, limit: int = 20, actor: str = 
             "receipt_backed_sequence_next_gap_projected": True,
             "actor_bound_confirmation_command_projection": requested_actor_ready,
             "does_not_infer_sleep_from_delay": True,
+            "dynamic_pre_sleep_age_guidance_only": True,
+            "does_not_block_on_pre_sleep_age_guidance": True,
             "does_not_write_receipts": True,
             "does_not_write_evidence": True,
             "does_not_write_runtime_readback": True,
@@ -1391,6 +1438,12 @@ def stage16_sleep_resume_confirmation_operator_checklist(actor: str = "") -> dic
         "current_pre_sleep_recorded_ts": int(readback.get("current_pre_sleep_recorded_ts") or 0),
         "current_pre_sleep_age_seconds": int(readback.get("current_pre_sleep_age_seconds") or 0),
         "current_pre_sleep_freshness_state": _safe_str(readback.get("current_pre_sleep_freshness_state")).strip(),
+        "current_pre_sleep_age_guidance": _safe_str(readback.get("current_pre_sleep_age_guidance")).strip(),
+        "current_pre_sleep_recapture_recommended": bool(readback.get("current_pre_sleep_recapture_recommended")),
+        "current_pre_sleep_age_warning": _safe_str(readback.get("current_pre_sleep_age_warning")).strip(),
+        "current_pre_sleep_age_guidance_threshold_seconds": int(
+            readback.get("current_pre_sleep_age_guidance_threshold_seconds") or 0
+        ),
         "preconditions_ready": preconditions_ready,
         "ready_to_record_after_operator_confirmation": ready_after_physical_confirmation,
         "operator_physical_confirmation_required": True,
@@ -1430,6 +1483,8 @@ def stage16_sleep_resume_confirmation_operator_checklist(actor: str = "") -> dic
             "operator_checklist_only": True,
             "operator_physical_confirmation_record_readback": True,
             "does_not_infer_sleep_from_delay": True,
+            "dynamic_pre_sleep_age_guidance_only": True,
+            "does_not_block_on_pre_sleep_age_guidance": True,
             "requires_explicit_physical_operator_confirmation": True,
             "does_not_write_receipts": True,
             "does_not_write_evidence": True,
@@ -1486,6 +1541,12 @@ def stage16_sleep_resume_receipt_backed_sequence_readiness(actor: str = "") -> d
         "current_pre_sleep_recorded_ts": int(readback.get("current_pre_sleep_recorded_ts") or 0),
         "current_pre_sleep_age_seconds": int(readback.get("current_pre_sleep_age_seconds") or 0),
         "current_pre_sleep_freshness_state": _safe_str(readback.get("current_pre_sleep_freshness_state")).strip(),
+        "current_pre_sleep_age_guidance": _safe_str(readback.get("current_pre_sleep_age_guidance")).strip(),
+        "current_pre_sleep_recapture_recommended": bool(readback.get("current_pre_sleep_recapture_recommended")),
+        "current_pre_sleep_age_warning": _safe_str(readback.get("current_pre_sleep_age_warning")).strip(),
+        "current_pre_sleep_age_guidance_threshold_seconds": int(
+            readback.get("current_pre_sleep_age_guidance_threshold_seconds") or 0
+        ),
         "latest_receipt_id": latest_receipt_id,
         "latest_decision": _safe_str(readback.get("latest_decision")).strip(),
         "latest_actor": _safe_str(readback.get("latest_actor")).strip(),
@@ -1532,6 +1593,8 @@ def stage16_sleep_resume_receipt_backed_sequence_readiness(actor: str = "") -> d
             "receipt_backed_sequence_readiness_projection": True,
             "requires_current_matching_confirmation_receipt": True,
             "does_not_infer_sleep_from_delay": True,
+            "dynamic_pre_sleep_age_guidance_only": True,
+            "does_not_block_on_pre_sleep_age_guidance": True,
             "does_not_execute_sequence": True,
             "does_not_write_receipts": True,
             "does_not_write_evidence": True,

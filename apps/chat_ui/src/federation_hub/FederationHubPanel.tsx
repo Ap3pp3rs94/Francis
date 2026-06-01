@@ -421,6 +421,8 @@ export function FederationHubPanel(props: { baseUrl: string }) {
               <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
                 sequence pre age <code>{sequenceReadiness.current_pre_sleep_age_seconds}s</code>
                 {" / "}freshness <code>{codeValue(sequenceReadiness.current_pre_sleep_freshness_state)}</code>
+                {" / "}guidance <code>{codeValue(sequenceReadiness.current_pre_sleep_age_guidance)}</code>
+                {" / "}recapture <code>{yesNo(sequenceReadiness.current_pre_sleep_recapture_recommended)}</code>
               </div>
             </>
           ) : null}
@@ -557,6 +559,8 @@ export function FederationHubPanel(props: { baseUrl: string }) {
                 <div style={{ fontSize: 11, color: MUTED, marginBottom: 6, overflowWrap: "anywhere" }}>
                   checklist pre age <code>{operatorChecklist.current_pre_sleep_age_seconds}s</code>
                   {" / "}freshness <code>{codeValue(operatorChecklist.current_pre_sleep_freshness_state)}</code>
+                  {" / "}guidance <code>{codeValue(operatorChecklist.current_pre_sleep_age_guidance)}</code>
+                  {" / "}recapture <code>{yesNo(operatorChecklist.current_pre_sleep_recapture_recommended)}</code>
                 </div>
                 {operatorChecklist.checklist.length ? (
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
