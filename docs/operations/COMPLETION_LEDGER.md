@@ -51473,6 +51473,68 @@ Latest validation for Stage 16 sleep-continuity evidence capture:
   tests/test_federation_stage16_live_runtime_readback_proof_script.py`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 operator closure decision is receipt-gated
+
+Roadmap area: Stage 16 / Federation, final operator stage closure decision.
+
+Material change:
+
+- Added Stage 16 federation closure decision routes:
+  `/federation/stage-closure-decisions` and
+  `/federation/stage-closure-decision`.
+- The closure POST requires `federation.stage16.closure.write`; ordinary
+  `federation.write` cannot close Stage 16.
+- The closure route refuses to write a receipt while
+  `/federation/completion-review` is not ready.
+- When completion review is ready, the route writes a redacted operator
+  closure receipt with decision, actor, reason, notes, live-readback receipt
+  ids, Stage 15 closure backstop, readiness counts, and governance flags.
+- The closure receipt readback is inspectable through
+  `/federation/stage-closure-decisions`.
+- The route does not write memory, write registry state, run tools, run shell,
+  run git, launch browsers, capture screens, grant authority, or mutate runtime
+  stage state.
+
+Current project-data readback:
+
+- No Stage 16 closure receipt was recorded in project data during this work
+  session because sleep continuity is still missing.
+- `GET /federation/live-runtime-readbacks`,
+  `GET /federation/completion-review`,
+  `GET /federation/stage-closure-decisions`, and
+  `GET /federation/status`
+  Result:
+  `ready_count=4; required_count=5;
+  missing_readbacks=[workstation_sleep_continuity_validated];
+  ready_to_close=false; closure_status=empty;
+  stage16_closed_by_receipt=false;
+  next_smallest_truthful_gap=stage16_sleep_continuity_runtime_readback`.
+
+Latest validation for Stage 16 closure decision routing:
+
+- `python -m pytest tests/test_api_federation.py
+  tests/test_federation_stage16_sleep_continuity_evidence_script.py
+  tests/test_federation_stage16_sleep_continuity_runtime_proof_script.py
+  tests/test_federation_stage16_revocation_runtime_proof_script.py
+  tests/test_federation_stage16_remote_approval_runtime_proof_script.py
+  tests/test_federation_stage16_local_loopback_runtime_proof_script.py
+  tests/test_federation_stage16_live_runtime_readback_proof_script.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  --tb=short --maxfail=1`
+  Result: `passed; 32 passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py
+  tests/test_federation_stage16_sleep_continuity_evidence_script.py
+  tests/test_federation_stage16_sleep_continuity_runtime_proof_script.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py
+  tests/test_federation_stage16_sleep_continuity_evidence_script.py
+  tests/test_federation_stage16_sleep_continuity_runtime_proof_script.py`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

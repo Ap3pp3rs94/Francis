@@ -12,11 +12,13 @@ from typing import Any
 from fastapi import APIRouter, Request
 
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
+from francis.governance.redaction import redact_secret_text
 from francis.kernel.paths import data_dir
 from francis.swarm import swarm_stage15_operator_stage_closure_decision_readback
 
 router = APIRouter()
 _FEDERATION_WRITE_SCOPE = "federation.write"
+_FEDERATION_STAGE16_CLOSURE_SCOPE = "federation.stage16.closure.write"
 _STAGE16_FEDERATION_STAGE = "Stage 16 / Federation"
 _FEDERATION_PAIRING_SCOPED_TRUST_CONTRACT_KIND = "francis.stage16.federation.pairing_scoped_trust_contract"
 _FEDERATION_SYNC_MODEL_CONTRACT_KIND = "francis.stage16.federation.sync_model_contract"
@@ -26,6 +28,10 @@ _FEDERATION_NODE_CONTINUITY_CONTRACT_KIND = "francis.stage16.federation.node_att
 _FEDERATION_COMPLETION_REVIEW_KIND = "francis.stage16.federation.completion_review"
 _FEDERATION_LIVE_RUNTIME_READBACK_KIND = "francis.stage16.federation.live_runtime_readback_receipt"
 _FEDERATION_LIVE_RUNTIME_READBACKS_KIND = "francis.stage16.federation.live_runtime_readback_receipts"
+_FEDERATION_STAGE16_CLOSURE_DECISION_KIND = "francis.stage16.federation.stage16_operator_stage_closure_decision_receipt"
+_FEDERATION_STAGE16_CLOSURE_DECISIONS_KIND = (
+    "francis.stage16.federation.stage16_operator_stage_closure_decision_receipts"
+)
 
 _STAGE16_LIVE_READBACK_IDS = (
     "live_pairing_flow_observed",
@@ -47,6 +53,10 @@ def _safe_str(value: Any) -> str:
         return ""
 
 
+def _redacted_text(value: Any) -> str:
+    return redact_secret_text(_safe_str(value))
+
+
 def _federation_write_actor(payload: dict[str, Any]) -> str:
     return (
         _safe_str(payload.get("request_actor")).strip()
@@ -56,10 +66,16 @@ def _federation_write_actor(payload: dict[str, Any]) -> str:
     )
 
 
-def _federation_write_permission(actor: Any, *, route: str, method: str) -> ApiPermissionDecision:
+def _federation_write_permission(
+    actor: Any,
+    *,
+    route: str,
+    method: str,
+    required_scope: str = _FEDERATION_WRITE_SCOPE,
+) -> ApiPermissionDecision:
     return ApiPermissionGate.from_env().check(
         actor_id=actor,
-        required_scopes=[_FEDERATION_WRITE_SCOPE],
+        required_scopes=[required_scope],
         route=route,
         method=method,
     )
@@ -74,6 +90,26 @@ def _permission_denied(decision: ApiPermissionDecision) -> dict[str, object]:
             "gate": "permission_gate",
             "reason": decision.reason,
             "next_step": "configure_actor_scope_before_writing_federation",
+            "evidence": decision.evidence,
+        },
+    }
+
+
+def _permission_denied_for_scope(
+    decision: ApiPermissionDecision,
+    *,
+    required_scope: str,
+    next_step: str,
+) -> dict[str, object]:
+    return {
+        "ok": False,
+        "status": "denied",
+        "error": "api_permission_denied",
+        "required_scope": required_scope,
+        "governance": {
+            "gate": "permission_gate",
+            "reason": decision.reason,
+            "next_step": next_step,
             "evidence": decision.evidence,
         },
     }
@@ -424,6 +460,8 @@ def _federation_routes() -> dict[str, str]:
         "revocation_contract": "/federation/revocation-contract",
         "node_attributed_continuity_contract": "/federation/node-attributed-continuity-contract",
         "completion_review": "/federation/completion-review",
+        "stage_closure_decisions": "/federation/stage-closure-decisions",
+        "stage_closure_decision": "/federation/stage-closure-decision",
         "live_runtime_readbacks": "/federation/live-runtime-readbacks",
         "live_runtime_readback": "/federation/live-runtime-readback",
         "instances_list": "/federation/instances/list",
@@ -467,6 +505,10 @@ def _federation_governance(*, read_only: bool = True) -> dict[str, Any]:
 
 def _runtime_readback_path() -> Path:
     return data_dir() / "logs" / "federation" / "stage16_live_runtime_readbacks.jsonl"
+
+
+def _stage16_operator_stage_closure_decision_path() -> Path:
+    return data_dir() / "logs" / "federation" / "stage16_operator_stage_closure_decisions.jsonl"
 
 
 def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:
@@ -675,6 +717,143 @@ def record_live_runtime_readback(payload: dict[str, Any], request: Request) -> d
     item["readback_ready"] = _runtime_readback_ready(item)
     _append_jsonl(_runtime_readback_path(), item)
     return item
+
+
+def _safe_stage16_closure_decision(value: Any) -> str:
+    text = _safe_str(value).strip()
+    if text in {"close_stage16", "do_not_close_stage16", "needs_more_evidence"}:
+        return text
+    return "needs_more_evidence"
+
+
+def read_stage16_operator_stage_closure_decisions(*, limit: int = 20) -> list[dict[str, Any]]:
+    return _read_jsonl_tail(_stage16_operator_stage_closure_decision_path(), limit=limit)
+
+
+def stage16_operator_stage_closure_decision_count() -> int:
+    path = _stage16_operator_stage_closure_decision_path()
+    if not path.exists() or not path.is_file():
+        return 0
+    return sum(1 for line in path.read_text(encoding="utf-8", errors="replace").splitlines() if line.strip())
+
+
+def record_stage16_operator_stage_closure_decision(payload: dict[str, Any], review: dict[str, Any]) -> dict[str, Any]:
+    safe_decision = _safe_stage16_closure_decision(payload.get("decision"))
+    stage16_closed_by_receipt = bool(review.get("stage16_completion_review_ready")) and safe_decision == "close_stage16"
+    review_live_checks = review.get("live_checks") if isinstance(review.get("live_checks"), list) else []
+    latest_live_runtime_readback_receipt_ids = [
+        _safe_str(item.get("receipt_id")).strip()
+        for item in review_live_checks
+        if isinstance(item, dict) and _safe_str(item.get("receipt_id")).strip()
+    ]
+    receipt = {
+        "ok": True,
+        "kind": _FEDERATION_STAGE16_CLOSURE_DECISION_KIND,
+        "receipt_id": f"fedstage16close_{uuid.uuid4().hex[:12]}",
+        "stage": _STAGE16_FEDERATION_STAGE,
+        "source_id": "federation",
+        "target": "stage16_federation",
+        "actor": _redacted_text(payload.get("actor") or payload.get("request_actor") or payload.get("api_actor"))[:240],
+        "reason": _redacted_text(payload.get("reason"))[:500],
+        "decision": safe_decision,
+        "notes": _redacted_text(payload.get("notes"))[:500],
+        "completion_review_ready": bool(review.get("stage16_completion_review_ready")),
+        "stage16_completion_review_ready": bool(review.get("stage16_completion_review_ready")),
+        "contract_readiness_ready": bool(review.get("contract_readiness_ready")),
+        "live_runtime_readback_ready": bool(review.get("live_runtime_readback_ready")),
+        "ready_to_close": bool(review.get("ready_to_close")),
+        "stage16_closed_by_receipt": stage16_closed_by_receipt,
+        "stage15_closed_by_receipt": bool(review.get("stage15_closed_by_receipt")),
+        "stage15_latest_closure_receipt_id": _safe_str(review.get("stage15_latest_closure_receipt_id")).strip(),
+        "ready_count": int(review.get("ready_count") or 0),
+        "required_count": int(review.get("required_count") or 0),
+        "live_ready_count": int(review.get("live_ready_count") or 0),
+        "live_required_count": int(review.get("live_required_count") or 0),
+        "blockers": _parse_list(review.get("blockers")),
+        "latest_live_runtime_readback_receipt_ids": latest_live_runtime_readback_receipt_ids,
+        "marks_runtime_stage_state": False,
+        "recorded_ts": _now_s(),
+        "governance": {
+            **_federation_governance(read_only=False),
+            "permission_scope": _FEDERATION_STAGE16_CLOSURE_SCOPE,
+            "explicit_operator_decision": True,
+            "stage_closure_decision": True,
+            "requires_completion_review_ready": True,
+            "requires_live_runtime_readback": True,
+            "does_not_mutate_runtime_stage_state": True,
+            "does_not_write_tasks": True,
+            "does_not_write_memory": True,
+            "does_not_run_tools": True,
+            "does_not_run_shell": True,
+            "does_not_run_git": True,
+            "writes_receipt": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+    }
+    _append_jsonl(_stage16_operator_stage_closure_decision_path(), receipt)
+    return receipt
+
+
+def stage16_operator_stage_closure_decision_readback(*, limit: int = 20) -> dict[str, Any]:
+    safe_limit = max(1, min(int(limit), 100))
+    items = read_stage16_operator_stage_closure_decisions(limit=safe_limit)
+    latest_receipt = items[-1] if items else {}
+    decision_counts = {"close_stage16": 0, "do_not_close_stage16": 0, "needs_more_evidence": 0}
+    for item in items:
+        decision = _safe_str(item.get("decision")).strip()
+        if decision in decision_counts:
+            decision_counts[decision] += 1
+    stage16_closed_by_receipt = bool(latest_receipt.get("stage16_closed_by_receipt"))
+    return {
+        "ok": True,
+        "kind": _FEDERATION_STAGE16_CLOSURE_DECISIONS_KIND,
+        "stage": _STAGE16_FEDERATION_STAGE,
+        "source_id": "federation",
+        "status": "stage_closure_decision_readback_ready" if items else "empty",
+        "target": "stage16_federation",
+        "items": items,
+        "count": len(items),
+        "total": stage16_operator_stage_closure_decision_count(),
+        "limit": safe_limit,
+        "latest_receipt": latest_receipt,
+        "latest_receipt_id": _safe_str(latest_receipt.get("receipt_id")).strip(),
+        "latest_decision": _safe_str(latest_receipt.get("decision")).strip(),
+        "latest_recorded_ts": int(latest_receipt.get("recorded_ts") or 0),
+        "decision_counts": decision_counts,
+        "receipt_readback_ready": bool(latest_receipt),
+        "stage16_closed_by_receipt": stage16_closed_by_receipt,
+        "marks_runtime_stage_state": False,
+        "reads_receipts": True,
+        "writes_receipts": False,
+        "writes_registry": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            **_federation_governance(),
+            "read_only": True,
+            "stage_closure_decision_receipt_readback": True,
+            "receipt_readback_ready": bool(latest_receipt),
+            "does_not_mutate_runtime_stage_state": True,
+            "does_not_write_receipts": True,
+            "does_not_write_tasks": True,
+            "does_not_write_memory": True,
+            "does_not_run_tools": True,
+            "does_not_run_shell": True,
+            "does_not_run_git": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": "stage16_ledger_closure"
+        if stage16_closed_by_receipt
+        else "stage16_operator_stage_closure_decision",
+    }
 
 
 def _federation_deliverable(
@@ -1494,6 +1673,8 @@ def status() -> dict[str, Any]:
         completion_next_gap = (
             _safe_str(review.get("next_smallest_truthful_gap")).strip() or "stage16_live_federation_runtime_readback"
         )
+        closure_readback = stage16_operator_stage_closure_decision_readback(limit=1)
+        stage16_closed_by_receipt = bool(closure_readback.get("stage16_closed_by_receipt"))
         stage15_closed = bool(pairing_contract.get("stage15_closed_by_receipt"))
         deliverables = _stage16_deliverables(
             pairing_contract_ready=pairing_ready,
@@ -1508,7 +1689,9 @@ def status() -> dict[str, Any]:
             "route": "federation",
             "status": "ready",
             "stage": _STAGE16_FEDERATION_STAGE,
-            "stage16_status": "stage16_completion_review_ready"
+            "stage16_status": "stage16_closed_by_receipt"
+            if stage16_closed_by_receipt
+            else "stage16_completion_review_ready"
             if completion_ready
             else "stage16_contracts_ready_completion_blocked"
             if node_continuity_ready
@@ -1533,6 +1716,8 @@ def status() -> dict[str, Any]:
             "revocation_contract_ready": revocation_ready,
             "node_attributed_continuity_contract_ready": node_continuity_ready,
             "stage16_completion_review_ready": completion_ready,
+            "stage16_closed_by_receipt": stage16_closed_by_receipt,
+            "latest_stage_closure_decision_receipt": closure_readback.get("latest_receipt", {}),
             "live_runtime_readback_ready": bool(review.get("live_runtime_readback_ready")),
             "completion_review_blockers": _parse_list(review.get("blockers")),
             "ready_count": sum(1 for item in deliverables if bool(item.get("ready"))),
@@ -1540,7 +1725,9 @@ def status() -> dict[str, Any]:
             "deliverables": deliverables,
             "routes": _federation_routes(),
             "governance": _federation_governance(),
-            "next_smallest_truthful_gap": "stage16_operator_stage_closure_decision"
+            "next_smallest_truthful_gap": "stage16_ledger_closure"
+            if stage16_closed_by_receipt
+            else "stage16_operator_stage_closure_decision"
             if completion_ready
             else completion_next_gap
             if node_continuity_ready
@@ -1604,6 +1791,106 @@ def get_node_attributed_continuity_contract() -> dict[str, Any]:
 @router.get("/completion-review")
 def get_completion_review() -> dict[str, Any]:
     return completion_review()
+
+
+@router.get("/stage-closure-decisions")
+def get_stage_closure_decisions(limit: int = 20) -> dict[str, Any]:
+    return stage16_operator_stage_closure_decision_readback(limit=limit)
+
+
+@router.post("/stage-closure-decision")
+def post_stage_closure_decision(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    route = "/federation/stage-closure-decision"
+    actor = _federation_write_actor(payload)
+    permission = _federation_write_permission(
+        actor,
+        route=route,
+        method=request.method,
+        required_scope=_FEDERATION_STAGE16_CLOSURE_SCOPE,
+    )
+    if not permission.allowed:
+        return _permission_denied_for_scope(
+            permission,
+            required_scope=_FEDERATION_STAGE16_CLOSURE_SCOPE,
+            next_step="configure_stage16_closure_write_scope_before_operator_stage_closure_decision",
+        )
+
+    review = completion_review()
+    if not bool(review.get("stage16_completion_review_ready")):
+        return {
+            "ok": True,
+            "kind": "francis.stage16.federation.stage16_operator_stage_closure_decision.record",
+            "status": "awaiting_stage16_closure_readiness",
+            "source_id": "federation",
+            "target": "stage16_federation",
+            "review": review,
+            "receipt": None,
+            "receipt_id": "",
+            "writes_receipt": False,
+            "writes_registry": False,
+            "writes_memory": False,
+            "runs_tools": False,
+            "runs_shell": False,
+            "runs_git": False,
+            "launches_browser": False,
+            "captures_screen": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+            "marks_runtime_stage_state": False,
+            "governance": {
+                **_federation_governance(read_only=False),
+                "required_scope": _FEDERATION_STAGE16_CLOSURE_SCOPE,
+                "route": str(request.url.path),
+                "explicit_operator_decision": True,
+                "does_not_record_when_review_not_ready": True,
+                "does_not_mutate_runtime_stage_state": True,
+                "grants_execution_authority": False,
+                "grants_mutation_authority": False,
+            },
+            "next_smallest_truthful_gap": _safe_str(review.get("next_smallest_truthful_gap")).strip()
+            or "stage16_completion_review",
+        }
+
+    receipt = record_stage16_operator_stage_closure_decision(payload, review)
+    return {
+        "ok": True,
+        "kind": "francis.stage16.federation.stage16_operator_stage_closure_decision.record",
+        "status": "recorded",
+        "source_id": "federation",
+        "target": "stage16_federation",
+        "review": review,
+        "receipt": receipt,
+        "receipt_id": receipt.get("receipt_id", ""),
+        "decision": receipt.get("decision", ""),
+        "stage16_closed_by_receipt": bool(receipt.get("stage16_closed_by_receipt")),
+        "writes_receipt": True,
+        "writes_registry": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "marks_runtime_stage_state": False,
+        "governance": {
+            **_federation_governance(read_only=False),
+            "required_scope": _FEDERATION_STAGE16_CLOSURE_SCOPE,
+            "route": str(request.url.path),
+            "explicit_operator_decision": True,
+            "does_not_mutate_runtime_stage_state": True,
+            "does_not_write_memory": True,
+            "does_not_run_tools": True,
+            "does_not_run_shell": True,
+            "does_not_run_git": True,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "next_smallest_truthful_gap": "stage16_ledger_closure"
+        if receipt.get("stage16_closed_by_receipt")
+        else "stage16_operator_stage_closure_decision",
+    }
 
 
 @router.get("/live-runtime-readbacks")

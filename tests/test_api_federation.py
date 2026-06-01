@@ -224,6 +224,41 @@ def test_federation_write_denies_unscoped_actor_before_persisting(monkeypatch, t
     assert not (data_root / "federation" / "_registry.json").exists()
 
 
+def test_federation_stage16_closure_decision_denies_without_closure_scope(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({"test.federation.write": ["federation.write"]}),
+    )
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    response = client.post(
+        "/federation/stage-closure-decision",
+        json={
+            "actor": "test.federation.write",
+            "reason": "attempt stage16 closure without closure scope",
+            "decision": "close_stage16",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["status"] == "denied"
+    assert body["required_scope"] == "federation.stage16.closure.write"
+    assert body["governance"]["reason"] == "missing_scopes"
+    assert (
+        body["governance"]["next_step"]
+        == "configure_stage16_closure_write_scope_before_operator_stage_closure_decision"
+    )
+    assert not (data_root / "logs" / "federation" / "stage16_operator_stage_closure_decisions.jsonl").exists()
+
+
 def test_federation_pagination_time_filters_and_persistence(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
@@ -961,3 +996,177 @@ def test_federation_stage16_completion_review_accepts_live_or_manual_runtime_rea
     assert review["live_ready_count"] == 5
     assert review["blockers"] == []
     assert review["next_smallest_truthful_gap"] == "stage16_operator_stage_closure_decision"
+
+
+def test_federation_stage16_closure_decision_waits_for_completion_review(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({"test.federation.closure": ["federation.stage16.closure.write"]}),
+    )
+    _write_stage15_closure_receipt(data_root, receipt_id="swarm_stage15_closure_for_blocked_stage16_closure")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    response = client.post(
+        "/federation/stage-closure-decision",
+        json={
+            "actor": "test.federation.closure",
+            "reason": "attempt stage16 closure before live runtime readbacks",
+            "decision": "close_stage16",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["status"] == "awaiting_stage16_closure_readiness"
+    assert body["receipt"] is None
+    assert body["receipt_id"] == ""
+    assert body["writes_receipt"] is False
+    assert body["marks_runtime_stage_state"] is False
+    assert body["review"]["stage16_completion_review_ready"] is False
+    assert body["next_smallest_truthful_gap"] == "stage16_live_federation_runtime_readback"
+    assert not (data_root / "logs" / "federation" / "stage16_operator_stage_closure_decisions.jsonl").exists()
+
+
+def test_federation_stage16_closure_decision_records_after_live_readbacks(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps(
+            {
+                "test.federation.write": ["federation.write"],
+                "test.federation.closure": ["federation.stage16.closure.write"],
+            }
+        ),
+    )
+    _write_stage15_closure_receipt(data_root, receipt_id="swarm_stage15_closure_for_stage16_closure_decision")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    readback_ids = [
+        "live_pairing_flow_observed",
+        "live_selective_sync_observed",
+        "live_remote_approval_roundtrip_observed",
+        "live_revocation_roundtrip_observed",
+        "workstation_sleep_continuity_validated",
+    ]
+    for index, readback_id in enumerate(readback_ids, start=1):
+        response = client.post(
+            "/federation/live-runtime-readback",
+            json={
+                "request_actor": "test.federation.write",
+                "reason": f"record completion-eligible {readback_id}",
+                "readback_id": readback_id,
+                "observed": True,
+                "proof_kind": "live_runtime_probe" if index < 5 else "manual_operator_runtime_readback",
+                "source_node_id": "workstation-a",
+                "paired_node_id": "phone-a",
+                "trace_id": f"trace-fed-stage16-closure-{index}",
+                "parent_receipt_id": "swarm_stage15_closure_for_stage16_closure_decision",
+                "evidence_summary": f"live federation runtime readback for {readback_id}",
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["readback_ready"] is True
+
+    empty_readback = client.get("/federation/stage-closure-decisions?limit=10").json()
+    assert empty_readback["status"] == "empty"
+    assert empty_readback["stage16_closed_by_receipt"] is False
+
+    closure = client.post(
+        "/federation/stage-closure-decision",
+        json={
+            "actor": "test.federation.closure",
+            "reason": "close stage16 token=stage16closuresecret123",
+            "decision": "close_stage16",
+            "notes": "operator stage closure notes token=stage16closurenotesecret123",
+        },
+    )
+
+    assert closure.status_code == 200
+    body = closure.json()
+    assert body["ok"] is True
+    assert body["status"] == "recorded"
+    assert body["writes_receipt"] is True
+    assert body["writes_registry"] is False
+    assert body["writes_memory"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["launches_browser"] is False
+    assert body["captures_screen"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["marks_runtime_stage_state"] is False
+    assert body["decision"] == "close_stage16"
+    assert body["stage16_closed_by_receipt"] is True
+    assert body["next_smallest_truthful_gap"] == "stage16_ledger_closure"
+
+    receipt = body["receipt"]
+    assert receipt["kind"] == "francis.stage16.federation.stage16_operator_stage_closure_decision_receipt"
+    assert receipt["receipt_id"] == body["receipt_id"]
+    assert receipt["actor"] == "test.federation.closure"
+    assert receipt["decision"] == "close_stage16"
+    assert receipt["completion_review_ready"] is True
+    assert receipt["stage16_completion_review_ready"] is True
+    assert receipt["contract_readiness_ready"] is True
+    assert receipt["live_runtime_readback_ready"] is True
+    assert receipt["stage16_closed_by_receipt"] is True
+    assert receipt["live_ready_count"] == 5
+    assert receipt["live_required_count"] == 5
+    assert receipt["blockers"] == []
+    assert len(receipt["latest_live_runtime_readback_receipt_ids"]) == 5
+    assert receipt["marks_runtime_stage_state"] is False
+    assert receipt["governance"]["permission_scope"] == "federation.stage16.closure.write"
+    assert receipt["governance"]["explicit_operator_decision"] is True
+    assert receipt["governance"]["stage_closure_decision"] is True
+    assert receipt["governance"]["requires_completion_review_ready"] is True
+    assert receipt["governance"]["requires_live_runtime_readback"] is True
+    assert receipt["governance"]["does_not_mutate_runtime_stage_state"] is True
+    assert receipt["governance"]["grants_execution_authority"] is False
+    assert receipt["governance"]["grants_mutation_authority"] is False
+    receipt_text = json.dumps(receipt, sort_keys=True)
+    assert "stage16closuresecret123" not in receipt_text
+    assert "stage16closurenotesecret123" not in receipt_text
+
+    readback = client.get("/federation/stage-closure-decisions?limit=10").json()
+    assert readback["status"] == "stage_closure_decision_readback_ready"
+    assert readback["count"] == 1
+    assert readback["latest_receipt_id"] == body["receipt_id"]
+    assert readback["latest_decision"] == "close_stage16"
+    assert readback["decision_counts"] == {
+        "close_stage16": 1,
+        "do_not_close_stage16": 0,
+        "needs_more_evidence": 0,
+    }
+    assert readback["receipt_readback_ready"] is True
+    assert readback["stage16_closed_by_receipt"] is True
+    assert readback["marks_runtime_stage_state"] is False
+    assert readback["writes_receipts"] is False
+    assert readback["writes_registry"] is False
+    assert readback["writes_memory"] is False
+    assert readback["runs_tools"] is False
+    assert readback["runs_shell"] is False
+    assert readback["runs_git"] is False
+    assert readback["launches_browser"] is False
+    assert readback["captures_screen"] is False
+    assert readback["grants_execution_authority"] is False
+    assert readback["governance"]["stage_closure_decision_receipt_readback"] is True
+    assert readback["governance"]["does_not_mutate_runtime_stage_state"] is True
+    assert readback["next_smallest_truthful_gap"] == "stage16_ledger_closure"
+
+    status = client.get("/federation/status").json()
+    assert status["stage16_status"] == "stage16_closed_by_receipt"
+    assert status["stage16_closed_by_receipt"] is True
+    assert status["latest_stage_closure_decision_receipt"]["receipt_id"] == body["receipt_id"]
+    assert status["next_smallest_truthful_gap"] == "stage16_ledger_closure"
