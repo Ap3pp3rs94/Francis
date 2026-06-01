@@ -56011,6 +56011,63 @@ Validation risk:
 - Full local pytest was not rerun because focused pytest commands were already
   stalling in this workspace; GitHub CI remains the full-suite evidence gate.
 
+### 2026-06-01 - Stage 17 capability pack migration plan is read-only
+
+Roadmap area: Stage 17 / Capability Economy, internal library discipline and
+metadata-receipt operator review for migration packs.
+
+Material change:
+
+- Added a read-only capability pack migration-plan analyzer for Stage 17.
+- Added `GET /plugins/capabilities/packs/migration/plan`, which projects
+  metadata-receipt review candidates from the current capability catalog.
+- Candidate payloads are bounded: they include pack identity, blocker list,
+  capability count, a capped capability sample, suggested promotion rules, and
+  suggested governance, while requiring explicit capability ID selection before
+  any write.
+- The route does not write receipts, mutate registry state, promote
+  capabilities, execute capabilities, or grant approval authority.
+- The chat UI API contract endpoint list now includes the migration-plan route.
+
+Latest validation for Stage 17 capability pack migration plan:
+
+- Direct FastAPI `TestClient` validation of `/plugins/build` followed by
+  `GET /plugins/capabilities/packs/migration/plan`
+  Result: `passed`; migration plan returned `candidate_total=17`,
+  `read_only=True`, and
+  `next_smallest_truthful_gap=stage17_capability_pack_metadata_receipt_operator_review`.
+- Direct invocation of the new unit test functions in
+  `tests/unit/test_capability_pack_migration_plan.py`
+  Result: `passed`.
+- `python -m mypy
+  src/francis/economy/markets/capability_pack_migration_plan.py
+  src/francis/economy/markets/capability_pack_readiness.py
+  src/francis/api/routes/plugins.py`
+  Result: `passed`.
+- `python -m ruff check
+  src/francis/economy/markets/capability_pack_migration_plan.py
+  src/francis/economy/markets/capability_pack_readiness.py
+  src/francis/economy/markets/capability_catalog_projection.py
+  src/francis/economy/markets/__init__.py src/francis/economy/__init__.py
+  src/francis/api/routes/plugins.py
+  tests/unit/test_capability_pack_migration_plan.py
+  tests/test_api_plugins.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`.
+- `python -m ruff format --check
+  src/francis/economy/markets/capability_pack_migration_plan.py
+  src/francis/economy/markets/capability_pack_readiness.py
+  src/francis/economy/markets/capability_catalog_projection.py
+  src/francis/economy/markets/__init__.py src/francis/economy/__init__.py
+  src/francis/api/routes/plugins.py
+  tests/unit/test_capability_pack_migration_plan.py
+  tests/test_api_plugins.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`.
+
+Validation risk:
+
+- Full local pytest was not rerun because focused pytest commands were already
+  stalling in this workspace; GitHub CI remains the full-suite evidence gate.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

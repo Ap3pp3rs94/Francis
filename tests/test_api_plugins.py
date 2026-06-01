@@ -638,6 +638,58 @@ def test_plugins_capability_pack_metadata_receipt_is_written_and_projected(
     assert any(item["receipt_id"] == recorded_body["receipt_id"] for item in readback_body["items"])
 
 
+def test_plugins_capability_pack_migration_plan_projects_review_candidates(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Capability Migration Plan Plugin",
+            "description": "Stage 17 migration plan coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": _forge_promotion_meta("capability_migration_plan"),
+        },
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    plugin_id = str(built_body["plugin_id"])
+
+    response = client.get("/plugins/capabilities/packs/migration/plan")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "plugin.capability_pack.migration_plan"
+    assert body["stage"] == "Stage 17 / Capability Economy"
+    assert body["status"] == "ready_for_metadata_receipt_review"
+    assert body["candidate_total"] >= 1
+    assert body["write_route"] == "/plugins/capabilities/packs/metadata/receipts"
+    assert body["read_route"] == "/plugins/capabilities/packs/metadata/receipts"
+    assert body["governance"]["read_only"] is True
+    assert body["governance"]["does_not_write_receipts"] is True
+    assert body["governance"]["does_not_mutate_registry"] is True
+    assert body["next_smallest_truthful_gap"] == "stage17_capability_pack_metadata_receipt_operator_review"
+
+    candidate = next(
+        item
+        for item in body["candidates"]
+        if plugin_id in item["capability_ids_sample"]
+        or (item["capability_ids_truncated"] and item["pack_id"].startswith("legacy.generated."))
+    )
+    assert "pack_metadata_receipt_missing" in candidate["blockers"]
+    assert candidate["write_route"] == "/plugins/capabilities/packs/metadata/receipts"
+    assert candidate["requires_explicit_capability_id_selection"] is True
+    assert candidate["suggested_pack_governance"]["promotion_authority"] is False
+    assert candidate["suggested_pack_governance"]["execution_authority"] is False
+
+
 def test_plugins_run_risk_tier_enforces_trust_and_approval(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
