@@ -51031,6 +51031,34 @@ Latest validation for Stage 16 live readback receipt proof:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-31 - Stage 16 Federation readback gap reaches UI client contract
+
+Roadmap area: Stage 16 / Federation, operator-visible governance/readback
+surfaces.
+
+Material change:
+
+- The chat UI federation client now has typed read-only accessors for
+  `/federation/status`, `/federation/live-runtime-readbacks`, and
+  `/federation/completion-review`.
+- The client preserves Stage 16 status, completion-review readiness, live
+  runtime readback readiness, blocker IDs, receipt IDs, node IDs, trace IDs,
+  and next-gap markers without enabling mutation paths.
+- The UI package test command now includes the federation hub contract tests.
+- This exposes the current missing-evidence posture to UI consumers, but does
+  not write live readback receipts, run federation runtime probes, or mark Stage
+  16 closed.
+
+Latest validation for Stage 16 federation UI readback contract:
+
+- `node --test --experimental-strip-types src/federation_hub/index.test.ts`
+  from `apps/chat_ui`
+  Result: `passed; 2 passed`
+- `npm run test` from `apps/chat_ui`
+  Result: `passed; 183 passed`
+- `npm run build` from `apps/chat_ui`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

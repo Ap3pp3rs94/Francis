@@ -130,6 +130,62 @@ export type SharedKnowledgeItem = {
   meta?: Record<string, unknown>;
 };
 
+export type FederationStage16Status = {
+  ok: boolean;
+  status?: string;
+  stage?: string;
+  stage16_status?: string;
+  stage16_completion_review_ready: boolean;
+  live_runtime_readback_ready: boolean;
+  completion_review_blockers: string[];
+  ready_count: number;
+  required_count: number;
+  next_smallest_truthful_gap?: string;
+};
+
+export type FederationLiveRuntimeReadbackCheck = {
+  id: string;
+  passed: boolean;
+  status?: string;
+  receipt_id?: string;
+  source_node_id?: string;
+  paired_node_id?: string;
+  trace_id?: string;
+  evidence?: string;
+};
+
+export type FederationLiveRuntimeReadbacks = {
+  ok: boolean;
+  kind?: string;
+  stage?: string;
+  status?: string;
+  count: number;
+  ready_count: number;
+  required_count: number;
+  live_runtime_readback_ready: boolean;
+  missing_readbacks: string[];
+  checks: FederationLiveRuntimeReadbackCheck[];
+  next_smallest_truthful_gap?: string;
+};
+
+export type FederationCompletionReview = {
+  ok: boolean;
+  kind?: string;
+  stage?: string;
+  status?: string;
+  contract_readiness_ready: boolean;
+  live_runtime_readback_ready: boolean;
+  stage16_completion_review_ready: boolean;
+  ready_to_close: boolean;
+  stage_closure_decision_required: boolean;
+  blockers: string[];
+  ready_count: number;
+  required_count: number;
+  live_ready_count: number;
+  live_required_count: number;
+  next_smallest_truthful_gap?: string;
+};
+
 export type FederationListResponse<T> = { items: T[] };
 
 export class FederationApiError extends Error {
@@ -159,6 +215,11 @@ function safeString(v: unknown, fallback = ""): string {
   return typeof v === "string" ? v : fallback;
 }
 
+function optionalString(v: unknown): string | undefined {
+  const text = safeString(v);
+  return text || undefined;
+}
+
 function safeNumber(v: unknown, fallback = 0): number {
   return typeof v === "number" && Number.isFinite(v) ? v : fallback;
 }
@@ -169,6 +230,15 @@ function normalizeBaseUrl(url: string): string {
 
 function normalizeTs(ts: number): number {
   return ts > 10_000_000_000 ? Math.floor(ts / 1000) : ts;
+}
+
+function safeBoolean(v: unknown, fallback = false): boolean {
+  return typeof v === "boolean" ? v : fallback;
+}
+
+function stringList(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return v.map((x) => safeString(x)).filter((x) => x.length > 0);
 }
 
 function buildQuery(params: Record<string, unknown>): string {
@@ -420,7 +490,84 @@ function parseSharedKnowledge(raw: unknown): SharedKnowledgeItem | null {
   return item;
 }
 
+export function parseFederationStage16Status(raw: unknown): FederationStage16Status {
+  const body = isRecord(raw) ? raw : {};
+  return {
+    ok: safeBoolean(body.ok),
+    status: optionalString(body.status),
+    stage: optionalString(body.stage),
+    stage16_status: optionalString(body.stage16_status),
+    stage16_completion_review_ready: safeBoolean(body.stage16_completion_review_ready),
+    live_runtime_readback_ready: safeBoolean(body.live_runtime_readback_ready),
+    completion_review_blockers: stringList(body.completion_review_blockers),
+    ready_count: safeNumber(body.ready_count, 0),
+    required_count: safeNumber(body.required_count, 0),
+    next_smallest_truthful_gap: optionalString(body.next_smallest_truthful_gap),
+  };
+}
+
+function parseLiveRuntimeReadbackCheck(raw: unknown): FederationLiveRuntimeReadbackCheck | null {
+  if (!isRecord(raw)) return null;
+  const id = safeString(raw.id);
+  if (!id) return null;
+  return {
+    id,
+    passed: safeBoolean(raw.passed),
+    status: optionalString(raw.status),
+    receipt_id: optionalString(raw.receipt_id),
+    source_node_id: optionalString(raw.source_node_id),
+    paired_node_id: optionalString(raw.paired_node_id),
+    trace_id: optionalString(raw.trace_id),
+    evidence: optionalString(raw.evidence),
+  };
+}
+
+export function parseFederationLiveRuntimeReadbacks(raw: unknown): FederationLiveRuntimeReadbacks {
+  const body = isRecord(raw) ? raw : {};
+  const checks = Array.isArray(body.checks)
+    ? body.checks.map(parseLiveRuntimeReadbackCheck).filter((x): x is FederationLiveRuntimeReadbackCheck => x !== null)
+    : [];
+  return {
+    ok: safeBoolean(body.ok),
+    kind: optionalString(body.kind),
+    stage: optionalString(body.stage),
+    status: optionalString(body.status),
+    count: safeNumber(body.count, 0),
+    ready_count: safeNumber(body.ready_count, 0),
+    required_count: safeNumber(body.required_count, 0),
+    live_runtime_readback_ready: safeBoolean(body.live_runtime_readback_ready),
+    missing_readbacks: stringList(body.missing_readbacks),
+    checks,
+    next_smallest_truthful_gap: optionalString(body.next_smallest_truthful_gap),
+  };
+}
+
+export function parseFederationCompletionReview(raw: unknown): FederationCompletionReview {
+  const body = isRecord(raw) ? raw : {};
+  return {
+    ok: safeBoolean(body.ok),
+    kind: optionalString(body.kind),
+    stage: optionalString(body.stage),
+    status: optionalString(body.status),
+    contract_readiness_ready: safeBoolean(body.contract_readiness_ready),
+    live_runtime_readback_ready: safeBoolean(body.live_runtime_readback_ready),
+    stage16_completion_review_ready: safeBoolean(body.stage16_completion_review_ready),
+    ready_to_close: safeBoolean(body.ready_to_close),
+    stage_closure_decision_required: safeBoolean(body.stage_closure_decision_required),
+    blockers: stringList(body.blockers),
+    ready_count: safeNumber(body.ready_count, 0),
+    required_count: safeNumber(body.required_count, 0),
+    live_ready_count: safeNumber(body.live_ready_count, 0),
+    live_required_count: safeNumber(body.live_required_count, 0),
+    next_smallest_truthful_gap: optionalString(body.next_smallest_truthful_gap),
+  };
+}
+
 export type FederationEndpoints = {
+  status: () => string;
+  completionReview: () => string;
+  liveRuntimeReadbacks: (q?: { limit?: number }) => string;
+
   instancesList: (q?: { status?: string; limit?: number; offset?: number; tags?: string[] }) => string;
   instanceGet: (id: string) => string;
 
@@ -440,6 +587,10 @@ export type FederationEndpoints = {
 
 export function defaultFederationEndpoints(): FederationEndpoints {
   return {
+    status: () => "/federation/status",
+    completionReview: () => "/federation/completion-review",
+    liveRuntimeReadbacks: (q) => `/federation/live-runtime-readbacks${buildQuery({ limit: q?.limit })}`,
+
     instancesList: (q) =>
       `/federation/instances/list${buildQuery({
         status: q?.status,
@@ -498,6 +649,37 @@ export class FederationClient {
   private url(path: string): string {
     if (!path.startsWith("/")) path = `/${path}`;
     return `${this.baseUrl}${path}`;
+  }
+
+  async getStatus(opts?: { signal?: AbortSignal; timeoutMs?: number }): Promise<FederationStage16Status> {
+    const json = await fetchJson(this.url(this.endpoints.status()), {
+      method: "GET",
+      signal: opts?.signal,
+      timeoutMs: opts?.timeoutMs ?? this.defaultTimeoutMs,
+    });
+    return parseFederationStage16Status(json);
+  }
+
+  async getLiveRuntimeReadbacks(opts?: {
+    limit?: number;
+    signal?: AbortSignal;
+    timeoutMs?: number;
+  }): Promise<FederationLiveRuntimeReadbacks> {
+    const json = await fetchJson(this.url(this.endpoints.liveRuntimeReadbacks({ limit: opts?.limit })), {
+      method: "GET",
+      signal: opts?.signal,
+      timeoutMs: opts?.timeoutMs ?? this.defaultTimeoutMs,
+    });
+    return parseFederationLiveRuntimeReadbacks(json);
+  }
+
+  async getCompletionReview(opts?: { signal?: AbortSignal; timeoutMs?: number }): Promise<FederationCompletionReview> {
+    const json = await fetchJson(this.url(this.endpoints.completionReview()), {
+      method: "GET",
+      signal: opts?.signal,
+      timeoutMs: opts?.timeoutMs ?? this.defaultTimeoutMs,
+    });
+    return parseFederationCompletionReview(json);
   }
 
   async listInstances(opts?: {
