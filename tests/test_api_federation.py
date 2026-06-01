@@ -715,3 +715,117 @@ def test_federation_stage16_completion_review_blocks_closure_until_live_runtime_
     assert body["grants_execution_authority"] is False
     assert body["grants_mutation_authority"] is False
     assert body["next_smallest_truthful_gap"] == "stage16_live_federation_runtime_readback"
+
+
+def test_federation_stage16_live_runtime_readback_is_permissioned_and_completion_consumes_receipts(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage15_closure_receipt(data_root, receipt_id="swarm_stage15_closure_for_live_readbacks")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    denied = client.post(
+        "/federation/live-runtime-readback",
+        json={
+            "request_actor": "unscoped.federation.writer",
+            "readback_id": "live_pairing_flow_observed",
+            "observed": True,
+            "source_node_id": "workstation-a",
+            "paired_node_id": "phone-a",
+            "trace_id": "trace-fed-denied",
+            "evidence_summary": "denied receipt should not persist",
+        },
+    )
+    assert denied.status_code == 200
+    denied_body = denied.json()
+    assert denied_body["ok"] is False
+    assert denied_body["status"] == "denied"
+    assert denied_body["error"] == "api_permission_denied"
+    assert not (data_root / "logs" / "federation" / "stage16_live_runtime_readbacks.jsonl").exists()
+
+    readback_ids = [
+        "live_pairing_flow_observed",
+        "live_selective_sync_observed",
+        "live_remote_approval_roundtrip_observed",
+        "live_revocation_roundtrip_observed",
+        "workstation_sleep_continuity_validated",
+    ]
+    receipt_ids: list[str] = []
+    for index, readback_id in enumerate(readback_ids, start=1):
+        response = client.post(
+            "/federation/live-runtime-readback",
+            json={
+                "request_actor": "test.federation.write",
+                "reason": f"record {readback_id}",
+                "readback_id": readback_id,
+                "observed": True,
+                "proof_kind": "scripted_local_runtime_probe",
+                "source_node_id": "workstation-a",
+                "paired_node_id": "phone-a",
+                "trace_id": f"trace-fed-live-{index}",
+                "parent_receipt_id": "swarm_stage15_closure_for_live_readbacks",
+                "evidence_summary": f"bounded live runtime proof for {readback_id}",
+            },
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["ok"] is True
+        assert body["kind"] == "francis.stage16.federation.live_runtime_readback_receipt"
+        assert body["readback_id"] == readback_id
+        assert body["status"] == "observed"
+        assert body["observed"] is True
+        assert body["readback_ready"] is True
+        assert body["actor"] == "test.federation.write"
+        assert body["governance"]["permission_scope"] == "federation.write"
+        assert body["governance"]["readback_receipt"] is True
+        assert body["governance"]["node_attributed"] is True
+        assert body["governance"]["trace_linked"] is True
+        assert body["governance"]["redacted"] is True
+        assert body["governance"]["contains_raw_private_data"] is False
+        assert body["writes_registry"] is False
+        assert body["writes_memory"] is False
+        assert body["runs_tools"] is False
+        assert body["grants_execution_authority"] is False
+        assert body["grants_mutation_authority"] is False
+        receipt_ids.append(body["receipt_id"])
+
+    readbacks = client.get("/federation/live-runtime-readbacks").json()
+    assert readbacks["kind"] == "francis.stage16.federation.live_runtime_readback_receipts"
+    assert readbacks["status"] == "ready"
+    assert readbacks["count"] == 5
+    assert readbacks["ready_count"] == 5
+    assert readbacks["required_count"] == 5
+    assert readbacks["live_runtime_readback_ready"] is True
+    assert readbacks["missing_readbacks"] == []
+    assert {item["receipt_id"] for item in readbacks["checks"]} == set(receipt_ids)
+    assert readbacks["writes_registry"] is False
+    assert readbacks["writes_memory"] is False
+
+    review = client.get("/federation/completion-review").json()
+    assert review["status"] == "ready"
+    assert review["contract_readiness_ready"] is True
+    assert review["live_runtime_readback_ready"] is True
+    assert review["stage16_completion_review_ready"] is True
+    assert review["ready_to_close"] is True
+    assert review["stage_closure_decision_required"] is True
+    assert review["live_ready_count"] == 5
+    assert review["live_required_count"] == 5
+    assert review["blockers"] == []
+    assert review["done_criteria"]["workstation_sleep_does_not_destroy_continuity"] is True
+    assert review["done_criteria"]["remote_approval_is_safe_and_traceable"] is True
+    assert review["done_criteria"]["multi_device_francis_feels_like_one_governed_system"] is True
+    assert review["next_smallest_truthful_gap"] == "stage16_operator_stage_closure_decision"
+
+    status = client.get("/federation/status").json()
+    assert status["stage16_status"] == "stage16_completion_review_ready"
+    assert status["stage16_completion_review_ready"] is True
+    assert status["live_runtime_readback_ready"] is True
+    assert status["completion_review_blockers"] == []
+    assert status["next_smallest_truthful_gap"] == "stage16_operator_stage_closure_decision"

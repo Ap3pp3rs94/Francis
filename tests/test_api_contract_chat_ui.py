@@ -62,6 +62,8 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("GET", "/federation/revocation-contract"),
         ("GET", "/federation/node-attributed-continuity-contract"),
         ("GET", "/federation/completion-review"),
+        ("GET", "/federation/live-runtime-readbacks"),
+        ("POST", "/federation/live-runtime-readback"),
         ("GET", "/federation/instances/list"),
         ("GET", "/federation/instances/get"),
         ("GET", "/federation/delegations/list"),

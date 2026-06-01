@@ -50916,6 +50916,69 @@ Latest validation for Stage 16 completion review:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-31 - Stage 16 Federation live runtime readbacks are receipt-gated
+
+Roadmap area: Stage 16 / Federation, live runtime evidence before any closure
+decision.
+
+Material change:
+
+- Added read-only `GET /federation/live-runtime-readbacks`.
+- Added permission-gated `POST /federation/live-runtime-readback`.
+- Runtime readback writes require the existing `federation.write` scope before
+  any receipt is persisted.
+- Live readbacks are bounded to the five completion-review blockers:
+  `live_pairing_flow_observed`, `live_selective_sync_observed`,
+  `live_remote_approval_roundtrip_observed`,
+  `live_revocation_roundtrip_observed`, and
+  `workstation_sleep_continuity_validated`.
+- Each accepted readback receipt records actor, reason, readback id, proof
+  kind, source node, paired node, trace id, parent receipt, evidence summary,
+  timestamp, and governance flags.
+- Completion review now consumes the latest valid readback receipt for each
+  blocker. A readback counts only when it is observed, node-attributed,
+  trace-linked, redacted, evidence-backed, and does not grant execution or
+  mutation authority.
+- The path writes readback receipts only. It does not mutate the federation
+  registry, write memory, run tools, run shell, run git, launch browsers,
+  capture the screen, execute remote approvals, execute sync, execute
+  revocation, or grant execution/mutation authority.
+- Current real-data readback reports `readbacks_status=empty`,
+  `readbacks_count=0`, `readbacks_ready_count=0`,
+  `readbacks_required_count=5`,
+  `completion_status=blocked`, `completion_ready=false`,
+  `ready_to_close=false`, and
+  `next_smallest_truthful_gap=stage16_live_federation_runtime_readback`.
+
+Latest validation for Stage 16 live runtime readback receipts:
+
+- Direct local `TestClient` readback of GET `/federation/status`, GET
+  `/federation/live-runtime-readbacks`, and GET `/federation/completion-review`
+  against current repo data.
+  Result:
+  `status_stage16=stage16_contracts_ready_completion_blocked;
+  status_next_gap=stage16_live_federation_runtime_readback;
+  readbacks_status=empty; readbacks_count=0; readbacks_ready_count=0;
+  readbacks_required_count=5; missing_readbacks=live_pairing_flow_observed,
+  live_selective_sync_observed, live_remote_approval_roundtrip_observed,
+  live_revocation_roundtrip_observed, workstation_sleep_continuity_validated;
+  completion_status=blocked; completion_ready=false; ready_to_close=false;
+  completion_next_gap=stage16_live_federation_runtime_readback`.
+- `python -m pytest tests/test_api_federation.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 11 passed`
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

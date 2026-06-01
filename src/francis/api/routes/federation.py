@@ -24,6 +24,16 @@ _FEDERATION_REMOTE_APPROVAL_CONTRACT_KIND = "francis.stage16.federation.remote_a
 _FEDERATION_REVOCATION_CONTRACT_KIND = "francis.stage16.federation.revocation_contract"
 _FEDERATION_NODE_CONTINUITY_CONTRACT_KIND = "francis.stage16.federation.node_attributed_continuity_contract"
 _FEDERATION_COMPLETION_REVIEW_KIND = "francis.stage16.federation.completion_review"
+_FEDERATION_LIVE_RUNTIME_READBACK_KIND = "francis.stage16.federation.live_runtime_readback_receipt"
+_FEDERATION_LIVE_RUNTIME_READBACKS_KIND = "francis.stage16.federation.live_runtime_readback_receipts"
+
+_STAGE16_LIVE_READBACK_IDS = (
+    "live_pairing_flow_observed",
+    "live_selective_sync_observed",
+    "live_remote_approval_roundtrip_observed",
+    "live_revocation_roundtrip_observed",
+    "workstation_sleep_continuity_validated",
+)
 
 _ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._:-]{1,127}$")
 
@@ -414,6 +424,8 @@ def _federation_routes() -> dict[str, str]:
         "revocation_contract": "/federation/revocation-contract",
         "node_attributed_continuity_contract": "/federation/node-attributed-continuity-contract",
         "completion_review": "/federation/completion-review",
+        "live_runtime_readbacks": "/federation/live-runtime-readbacks",
+        "live_runtime_readback": "/federation/live-runtime-readback",
         "instances_list": "/federation/instances/list",
         "instances_get": "/federation/instances/get",
         "delegations_list": "/federation/delegations/list",
@@ -451,6 +463,189 @@ def _federation_governance(*, read_only: bool = True) -> dict[str, Any]:
         "grants_execution_authority": False,
         "grants_mutation_authority": False,
     }
+
+
+def _runtime_readback_path() -> Path:
+    return data_dir() / "logs" / "federation" / "stage16_live_runtime_readbacks.jsonl"
+
+
+def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8", newline="\n") as handle:
+        handle.write(json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str))
+        handle.write("\n")
+
+
+def _read_jsonl_tail(path: Path, *, limit: int) -> list[dict[str, Any]]:
+    safe_limit = max(1, min(int(limit), 500))
+    if not path.exists():
+        return []
+    rows: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines()[-safe_limit:]:
+        try:
+            item = json.loads(line)
+        except Exception:
+            continue
+        if isinstance(item, dict):
+            rows.append(item)
+    return rows
+
+
+def _safe_runtime_readback_id(value: Any) -> str:
+    text = _safe_str(value).strip()
+    if text in _STAGE16_LIVE_READBACK_IDS:
+        return text
+    return ""
+
+
+def _runtime_readback_ready(item: dict[str, Any]) -> bool:
+    governance = item.get("governance") if isinstance(item.get("governance"), dict) else {}
+    return (
+        _safe_runtime_readback_id(item.get("readback_id")) != ""
+        and bool(item.get("observed"))
+        and _safe_str(item.get("status")).strip() == "observed"
+        and _safe_str(item.get("source_node_id")).strip() != ""
+        and _safe_str(item.get("paired_node_id")).strip() != ""
+        and _safe_str(item.get("trace_id")).strip() != ""
+        and _safe_str(item.get("evidence_summary")).strip() != ""
+        and _safe_str(item.get("proof_kind")).strip()
+        in {"live_runtime_probe", "manual_operator_runtime_readback", "scripted_local_runtime_probe"}
+        and bool(governance.get("readback_receipt"))
+        and bool(governance.get("node_attributed"))
+        and bool(governance.get("trace_linked"))
+        and bool(governance.get("redacted"))
+        and not bool(governance.get("contains_raw_private_data"))
+        and not bool(governance.get("grants_execution_authority"))
+        and not bool(governance.get("grants_mutation_authority"))
+    )
+
+
+def _latest_live_readback_by_id(items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    latest: dict[str, dict[str, Any]] = {}
+    for item in items:
+        readback_id = _safe_runtime_readback_id(item.get("readback_id"))
+        if readback_id:
+            latest[readback_id] = item
+    return latest
+
+
+def read_live_runtime_readbacks(*, limit: int = 100) -> list[dict[str, Any]]:
+    return _read_jsonl_tail(_runtime_readback_path(), limit=limit)
+
+
+def live_runtime_readback_summary(*, limit: int = 100) -> dict[str, Any]:
+    items = read_live_runtime_readbacks(limit=limit)
+    latest_by_id = _latest_live_readback_by_id(items)
+    checks: list[dict[str, Any]] = []
+    for readback_id in _STAGE16_LIVE_READBACK_IDS:
+        item = latest_by_id.get(readback_id, {})
+        passed = _runtime_readback_ready(item)
+        checks.append(
+            {
+                "id": readback_id,
+                "passed": passed,
+                "status": "observed" if passed else "not_observed",
+                "receipt_id": _safe_str(item.get("receipt_id")).strip(),
+                "source_node_id": _safe_str(item.get("source_node_id")).strip(),
+                "paired_node_id": _safe_str(item.get("paired_node_id")).strip(),
+                "trace_id": _safe_str(item.get("trace_id")).strip(),
+                "evidence": _safe_str(item.get("evidence_summary")).strip()
+                or f"no {readback_id} receipt has been recorded",
+            }
+        )
+    return {
+        "ok": True,
+        "kind": _FEDERATION_LIVE_RUNTIME_READBACKS_KIND,
+        "stage": _STAGE16_FEDERATION_STAGE,
+        "source_id": "federation",
+        "status": "ready" if all(bool(item["passed"]) for item in checks) else "partial" if items else "empty",
+        "items": items,
+        "checks": checks,
+        "count": len(items),
+        "ready_count": sum(1 for item in checks if bool(item["passed"])),
+        "required_count": len(checks),
+        "live_runtime_readback_ready": all(bool(item["passed"]) for item in checks),
+        "missing_readbacks": [item["id"] for item in checks if not bool(item["passed"])],
+        "routes": _federation_routes(),
+        "governance": {
+            **_federation_governance(),
+            "readback_receipt_readback": True,
+            "read_only": True,
+        },
+        "writes_registry": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "next_smallest_truthful_gap": "stage16_completion_review"
+        if all(bool(item["passed"]) for item in checks)
+        else "stage16_live_federation_runtime_readback",
+    }
+
+
+def record_live_runtime_readback(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    if denial := _write_permission_denial(payload, request):
+        return denial
+
+    readback_id = _safe_runtime_readback_id(payload.get("readback_id") or payload.get("id"))
+    if not readback_id:
+        return {
+            "ok": False,
+            "status": "denied",
+            "error": "invalid_live_runtime_readback_id",
+            "allowed_readback_ids": list(_STAGE16_LIVE_READBACK_IDS),
+        }
+
+    proof_kind = _safe_str(payload.get("proof_kind")).strip() or "manual_operator_runtime_readback"
+    item = {
+        "ok": True,
+        "kind": _FEDERATION_LIVE_RUNTIME_READBACK_KIND,
+        "receipt_id": f"fedlive_{readback_id}_{uuid.uuid4().hex[:12]}",
+        "stage": _STAGE16_FEDERATION_STAGE,
+        "source_id": "federation",
+        "readback_id": readback_id,
+        "status": "observed" if _to_bool(payload.get("observed"), default=False) else "not_observed",
+        "observed": _to_bool(payload.get("observed"), default=False),
+        "actor": _safe_str(payload.get("request_actor") or payload.get("api_actor") or payload.get("actor")).strip()
+        or "api.federation",
+        "reason": _safe_str(payload.get("reason")).strip()[:500],
+        "proof_kind": proof_kind,
+        "source_node_id": _safe_str(payload.get("source_node_id")).strip()[:160],
+        "paired_node_id": _safe_str(payload.get("paired_node_id")).strip()[:160],
+        "trace_id": _safe_str(payload.get("trace_id")).strip()[:240],
+        "parent_receipt_id": _safe_str(payload.get("parent_receipt_id")).strip()[:240],
+        "evidence_summary": _safe_str(payload.get("evidence_summary")).strip()[:800],
+        "recorded_ts": int(payload.get("recorded_ts") or _now_s()),
+        "writes_registry": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": {
+            **_federation_governance(read_only=False),
+            "readback_receipt": True,
+            "read_only": False,
+            "permission_scope": _FEDERATION_WRITE_SCOPE,
+            "node_attributed": True,
+            "trace_linked": True,
+            "redacted": True,
+            "contains_raw_private_data": False,
+            "contains_raw_prompt_body": False,
+            "contains_raw_model_response": False,
+            "writes_receipt": True,
+        },
+    }
+    item["readback_ready"] = _runtime_readback_ready(item)
+    _append_jsonl(_runtime_readback_path(), item)
+    return item
 
 
 def _federation_deliverable(
@@ -1129,6 +1324,10 @@ def completion_review() -> dict[str, Any]:
     remote = remote_approval_contract()
     revocation = revocation_contract()
     node_continuity = node_attributed_continuity_contract()
+    live_readbacks = live_runtime_readback_summary(limit=200)
+    latest_live_checks = {
+        _safe_str(item.get("id")).strip(): item for item in live_readbacks.get("checks", []) if isinstance(item, dict)
+    }
     contract_checks = [
         {
             "id": "stage15_ledger_closure_backstop",
@@ -1168,36 +1367,11 @@ def completion_review() -> dict[str, Any]:
         },
     ]
     live_checks = [
-        {
-            "id": "live_pairing_flow_observed",
-            "passed": False,
-            "status": "not_observed",
-            "evidence": "no live paired-node handshake receipt has been recorded",
-        },
-        {
-            "id": "live_selective_sync_observed",
-            "passed": False,
-            "status": "not_observed",
-            "evidence": "no live selective sync receipt has been recorded",
-        },
-        {
-            "id": "live_remote_approval_roundtrip_observed",
-            "passed": False,
-            "status": "not_observed",
-            "evidence": "no remote approval request/decision roundtrip receipt has been recorded",
-        },
-        {
-            "id": "live_revocation_roundtrip_observed",
-            "passed": False,
-            "status": "not_observed",
-            "evidence": "no live revocation propagation receipt has been recorded",
-        },
-        {
-            "id": "workstation_sleep_continuity_validated",
-            "passed": False,
-            "status": "not_observed",
-            "evidence": "no sleep/resume node-attributed continuity readback has been recorded",
-        },
+        latest_live_checks.get("live_pairing_flow_observed", {}),
+        latest_live_checks.get("live_selective_sync_observed", {}),
+        latest_live_checks.get("live_remote_approval_roundtrip_observed", {}),
+        latest_live_checks.get("live_revocation_roundtrip_observed", {}),
+        latest_live_checks.get("workstation_sleep_continuity_validated", {}),
     ]
     contract_ready = all(bool(item.get("passed")) for item in contract_checks)
     live_ready = all(bool(item.get("passed")) for item in live_checks)
@@ -1218,16 +1392,27 @@ def completion_review() -> dict[str, Any]:
         "stage_closure_decision_required": ready_to_close,
         "contract_checks": contract_checks,
         "live_checks": live_checks,
+        "live_runtime_readbacks": {
+            "status": _safe_str(live_readbacks.get("status")).strip(),
+            "count": int(live_readbacks.get("count") or 0),
+            "ready_count": int(live_readbacks.get("ready_count") or 0),
+            "required_count": int(live_readbacks.get("required_count") or 0),
+            "missing_readbacks": _parse_list(live_readbacks.get("missing_readbacks")),
+        },
         "blockers": blockers,
         "ready_count": sum(1 for item in contract_checks if bool(item.get("passed"))),
         "required_count": len(contract_checks),
         "live_ready_count": sum(1 for item in live_checks if bool(item.get("passed"))),
         "live_required_count": len(live_checks),
         "done_criteria": {
-            "workstation_sleep_does_not_destroy_continuity": False,
-            "remote_approval_is_safe_and_traceable": False,
+            "workstation_sleep_does_not_destroy_continuity": bool(
+                latest_live_checks.get("workstation_sleep_continuity_validated", {}).get("passed")
+            ),
+            "remote_approval_is_safe_and_traceable": bool(
+                latest_live_checks.get("live_remote_approval_roundtrip_observed", {}).get("passed")
+            ),
             "raw_private_data_does_not_leak_across_nodes": contract_ready,
-            "multi_device_francis_feels_like_one_governed_system": False,
+            "multi_device_francis_feels_like_one_governed_system": live_ready,
         },
         "routes": _federation_routes(),
         "governance": {
@@ -1386,6 +1571,16 @@ def get_node_attributed_continuity_contract() -> dict[str, Any]:
 @router.get("/completion-review")
 def get_completion_review() -> dict[str, Any]:
     return completion_review()
+
+
+@router.get("/live-runtime-readbacks")
+def get_live_runtime_readbacks(limit: int = 100) -> dict[str, Any]:
+    return live_runtime_readback_summary(limit=limit)
+
+
+@router.post("/live-runtime-readback")
+def post_live_runtime_readback(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    return record_live_runtime_readback(payload, request)
 
 
 @router.get("/instances/list")
