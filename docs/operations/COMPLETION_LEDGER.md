@@ -51121,6 +51121,78 @@ Latest validation for Stage 16 live evidence hardening:
 - `git diff --check`
   Result: `passed`
 
+### 2026-06-01 - Stage 16 Federation local-loopback runtime readbacks are partial evidence
+
+Roadmap area: Stage 16 / Federation, live runtime evidence before closure.
+
+Material change:
+
+- Added `scripts/federation-stage16-local-loopback-runtime-proof.ps1`.
+- The proof exercises existing permissioned federation API write/readback
+  routes for a local-loopback pairing flow:
+  `POST /federation/instances/upsert`,
+  `POST /federation/delegations/record`,
+  `POST /federation/shared_knowledge/publish`,
+  `POST /federation/consensus_logs/append`, and
+  `POST /federation/live-runtime-readback`.
+- The proof records only the two readbacks it can truthfully prove through the
+  local-loopback API path:
+  `live_pairing_flow_observed` and `live_selective_sync_observed`.
+- The proof deliberately leaves
+  `live_remote_approval_roundtrip_observed`,
+  `live_revocation_roundtrip_observed`, and
+  `workstation_sleep_continuity_validated` missing.
+- Commit mode writes project runtime evidence only in non-production,
+  non-regulated profiles and still does not mark Stage 16 closed.
+
+Current project-data readback after running commit mode:
+
+- `GET /federation/live-runtime-readbacks`,
+  `GET /federation/completion-review`, and `GET /federation/status`
+  Result:
+  `readbacks_status=partial; receipt_ready_count=2; ready_count=2;
+  completion_eligible_readback_count=2; required_count=5;
+  missing_readbacks=[live_remote_approval_roundtrip_observed,
+  live_revocation_roundtrip_observed, workstation_sleep_continuity_validated];
+  live_runtime_readback_ready=false; completion_status=blocked;
+  completion_ready=false; ready_to_close=false;
+  next_gap=stage16_live_federation_runtime_readback`.
+
+Latest validation for Stage 16 local-loopback runtime proof:
+
+- `scripts/federation-stage16-local-loopback-runtime-proof.ps1 -Mode Status`
+  Result:
+  `proof_passed; commit_receipts=false; completion_eligible_readback_count=2;
+  live_runtime_readback_ready=false; completion_review_ready=false;
+  ready_to_close=false; next_smallest_truthful_gap=stage16_remote_approval_runtime_readback`.
+- `scripts/federation-stage16-local-loopback-runtime-proof.ps1 -Mode Status
+  -CommitReceipts`
+  Result:
+  `proof_passed; commit_receipts=true; actor=codex.builder;
+  writes_real_project_data=true; completion_eligible_readback_count=2;
+  live_runtime_readback_ready=false; completion_review_ready=false;
+  ready_to_close=false`.
+- PowerShell parser check for
+  `scripts/federation-stage16-local-loopback-runtime-proof.ps1`
+  Result: `passed; parser_ok`.
+- `python -m pytest tests/test_api_federation.py
+  tests/test_federation_stage16_live_runtime_readback_proof_script.py
+  tests/test_federation_stage16_local_loopback_runtime_proof_script.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  --tb=short --maxfail=1`
+  with `FRANCIS_PYTEST_SESSION_RETENTION_ROOT=data/test_runs/pytest/s16v`
+  Result: `passed; 16 passed`.
+- `python -m ruff check
+  tests/test_federation_stage16_local_loopback_runtime_proof_script.py
+  tests/test_federation_stage16_live_runtime_readback_proof_script.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check
+  tests/test_federation_stage16_local_loopback_runtime_proof_script.py
+  tests/test_federation_stage16_live_runtime_readback_proof_script.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
