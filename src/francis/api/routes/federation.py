@@ -534,6 +534,21 @@ def _latest_live_readback_by_id(items: list[dict[str, Any]]) -> dict[str, dict[s
     return latest
 
 
+def _next_stage16_live_readback_gap(*, missing_readbacks: list[str], ready_count: int) -> str:
+    if not missing_readbacks:
+        return "stage16_completion_review"
+    if ready_count <= 0:
+        return "stage16_live_federation_runtime_readback"
+    first_missing = _safe_str(missing_readbacks[0]).strip()
+    return {
+        "live_pairing_flow_observed": "stage16_pairing_runtime_readback",
+        "live_selective_sync_observed": "stage16_selective_sync_runtime_readback",
+        "live_remote_approval_roundtrip_observed": "stage16_remote_approval_runtime_readback",
+        "live_revocation_roundtrip_observed": "stage16_revocation_runtime_readback",
+        "workstation_sleep_continuity_validated": "stage16_sleep_continuity_runtime_readback",
+    }.get(first_missing, "stage16_live_federation_runtime_readback")
+
+
 def read_live_runtime_readbacks(*, limit: int = 100) -> list[dict[str, Any]]:
     return _read_jsonl_tail(_runtime_readback_path(), limit=limit)
 
@@ -562,6 +577,8 @@ def live_runtime_readback_summary(*, limit: int = 100) -> dict[str, Any]:
                 or f"no {readback_id} receipt has been recorded",
             }
         )
+    ready_count = sum(1 for item in checks if bool(item["completion_evidence"]))
+    missing_readbacks = [item["id"] for item in checks if not bool(item["completion_evidence"])]
     return {
         "ok": True,
         "kind": _FEDERATION_LIVE_RUNTIME_READBACKS_KIND,
@@ -572,12 +589,12 @@ def live_runtime_readback_summary(*, limit: int = 100) -> dict[str, Any]:
         "checks": checks,
         "count": len(items),
         "receipt_ready_count": sum(1 for item in checks if bool(item["receipt_ready"])),
-        "ready_count": sum(1 for item in checks if bool(item["completion_evidence"])),
-        "completion_eligible_readback_count": sum(1 for item in checks if bool(item["completion_evidence"])),
+        "ready_count": ready_count,
+        "completion_eligible_readback_count": ready_count,
         "required_count": len(checks),
         "readback_receipts_ready": all(bool(item["receipt_ready"]) for item in checks),
         "live_runtime_readback_ready": all(bool(item["completion_evidence"]) for item in checks),
-        "missing_readbacks": [item["id"] for item in checks if not bool(item["completion_evidence"])],
+        "missing_readbacks": missing_readbacks,
         "routes": _federation_routes(),
         "governance": {
             **_federation_governance(),
@@ -595,7 +612,7 @@ def live_runtime_readback_summary(*, limit: int = 100) -> dict[str, Any]:
         "grants_mutation_authority": False,
         "next_smallest_truthful_gap": "stage16_completion_review"
         if all(bool(item["passed"]) for item in checks)
-        else "stage16_live_federation_runtime_readback",
+        else _next_stage16_live_readback_gap(missing_readbacks=missing_readbacks, ready_count=ready_count),
     }
 
 
@@ -1445,7 +1462,8 @@ def completion_review() -> dict[str, Any]:
         "grants_mutation_authority": False,
         "next_smallest_truthful_gap": "stage16_operator_stage_closure_decision"
         if ready_to_close
-        else "stage16_live_federation_runtime_readback",
+        else _safe_str(live_readbacks.get("next_smallest_truthful_gap")).strip()
+        or "stage16_live_federation_runtime_readback",
     }
 
 
@@ -1473,6 +1491,9 @@ def status() -> dict[str, Any]:
         node_continuity_ready = bool(node_continuity.get("node_attributed_continuity_contract_ready"))
         review = completion_review()
         completion_ready = bool(review.get("stage16_completion_review_ready"))
+        completion_next_gap = (
+            _safe_str(review.get("next_smallest_truthful_gap")).strip() or "stage16_live_federation_runtime_readback"
+        )
         stage15_closed = bool(pairing_contract.get("stage15_closed_by_receipt"))
         deliverables = _stage16_deliverables(
             pairing_contract_ready=pairing_ready,
@@ -1521,7 +1542,7 @@ def status() -> dict[str, Any]:
             "governance": _federation_governance(),
             "next_smallest_truthful_gap": "stage16_operator_stage_closure_decision"
             if completion_ready
-            else "stage16_live_federation_runtime_readback"
+            else completion_next_gap
             if node_continuity_ready
             else "stage16_node_attributed_continuity"
             if revocation_ready

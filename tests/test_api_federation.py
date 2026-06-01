@@ -837,6 +837,71 @@ def test_federation_stage16_live_runtime_readback_is_permissioned_and_completion
     assert status["next_smallest_truthful_gap"] == "stage16_live_federation_runtime_readback"
 
 
+def test_federation_stage16_partial_live_runtime_readbacks_surface_next_missing_gap(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage15_closure_receipt(data_root, receipt_id="swarm_stage15_closure_for_partial_live_readbacks")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    for index, readback_id in enumerate(
+        [
+            "live_pairing_flow_observed",
+            "live_selective_sync_observed",
+            "live_remote_approval_roundtrip_observed",
+        ],
+        start=1,
+    ):
+        response = client.post(
+            "/federation/live-runtime-readback",
+            json={
+                "request_actor": "test.federation.write",
+                "reason": f"record partial live runtime evidence for {readback_id}",
+                "readback_id": readback_id,
+                "observed": True,
+                "proof_kind": "live_runtime_probe",
+                "source_node_id": "workstation-a",
+                "paired_node_id": "phone-a",
+                "trace_id": f"trace-fed-partial-{index}",
+                "parent_receipt_id": "swarm_stage15_closure_for_partial_live_readbacks",
+                "evidence_summary": f"partial live federation runtime readback for {readback_id}",
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["readback_ready"] is True
+
+    readbacks = client.get("/federation/live-runtime-readbacks").json()
+    assert readbacks["status"] == "partial"
+    assert readbacks["ready_count"] == 3
+    assert readbacks["completion_eligible_readback_count"] == 3
+    assert readbacks["missing_readbacks"] == [
+        "live_revocation_roundtrip_observed",
+        "workstation_sleep_continuity_validated",
+    ]
+    assert readbacks["next_smallest_truthful_gap"] == "stage16_revocation_runtime_readback"
+
+    review = client.get("/federation/completion-review").json()
+    assert review["status"] == "blocked"
+    assert review["live_ready_count"] == 3
+    assert review["ready_to_close"] is False
+    assert review["next_smallest_truthful_gap"] == "stage16_revocation_runtime_readback"
+
+    status = client.get("/federation/status").json()
+    assert status["stage16_status"] == "stage16_contracts_ready_completion_blocked"
+    assert status["stage16_completion_review_ready"] is False
+    assert status["completion_review_blockers"] == [
+        "live_revocation_roundtrip_observed",
+        "workstation_sleep_continuity_validated",
+    ]
+    assert status["next_smallest_truthful_gap"] == "stage16_revocation_runtime_readback"
+
+
 def test_federation_stage16_completion_review_accepts_live_or_manual_runtime_readback_evidence(
     monkeypatch,
     tmp_path: Path,

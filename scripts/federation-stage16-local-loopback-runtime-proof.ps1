@@ -411,7 +411,7 @@ def _run() -> tuple[int, dict[str, Any]]:
             str(after_review.get("status")),
             after_review.get("stage16_completion_review_ready") is False
             and after_review.get("ready_to_close") is False
-            and after_review.get("next_smallest_truthful_gap") == "stage16_live_federation_runtime_readback",
+            and after_review.get("next_smallest_truthful_gap") == "stage16_remote_approval_runtime_readback",
             "/federation/completion-review",
             "Stage 16 must remain blocked until remote approval, revocation, and sleep continuity are proven",
         ),
@@ -420,7 +420,7 @@ def _run() -> tuple[int, dict[str, Any]]:
             str(status.get("stage16_status")),
             status.get("stage16_completion_review_ready") is False
             and status.get("live_runtime_readback_ready") is False
-            and status.get("next_smallest_truthful_gap") == "stage16_live_federation_runtime_readback",
+            and status.get("next_smallest_truthful_gap") == "stage16_remote_approval_runtime_readback",
             "/federation/status",
             "the public Stage 16 status must not claim closure from local-loopback evidence",
         ),
