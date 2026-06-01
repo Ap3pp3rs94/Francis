@@ -43,8 +43,10 @@ def _run_proof(*args: str, env: dict[str, str] | None = None) -> subprocess.Comp
     )
 
 
-def _write_sleep_evidence(root: Path) -> tuple[Path, Path]:
+def _write_sleep_evidence(root: Path, *, post_pre_sleep_path: str | None = None) -> tuple[Path, Path]:
     root.mkdir(parents=True, exist_ok=True)
+    pre_path = root / "pre_sleep.json"
+    post_path = root / "post_resume.json"
     pre = {
         "evidence_kind": "stage16_sleep_continuity_pre_sleep",
         "continuity_record_id": "stage16-sleep-continuity-record",
@@ -75,14 +77,13 @@ def _write_sleep_evidence(root: Path) -> tuple[Path, Path]:
         "continuity_available_after_resume": True,
         "revoked_links_present_current_state": False,
         "stale_state_implies_current_authority": False,
+        "pre_sleep_evidence_path": post_pre_sleep_path or str(pre_path.resolve()),
         "governance": {
             "contains_raw_private_data": False,
             "contains_raw_prompt_body": False,
             "contains_raw_model_response": False,
         },
     }
-    pre_path = root / "pre_sleep.json"
-    post_path = root / "post_resume.json"
     pre_path.write_text(json.dumps(pre), encoding="utf-8")
     post_path.write_text(json.dumps(post), encoding="utf-8")
     return pre_path, post_path
@@ -177,6 +178,7 @@ def test_federation_stage16_sleep_continuity_runtime_proof_records_manual_readba
     governance = payload["governance"]
     assert governance["requires_explicit_pre_sleep_evidence"] is True
     assert governance["requires_explicit_post_resume_evidence"] is True
+    assert governance["post_resume_pre_sleep_path_link_required"] is True
     assert governance["committed_evidence_paths_must_stay_under_project_evidence_root"] is True
     assert governance["committed_evidence_path_traversal_blocked"] is True
     assert governance["does_not_infer_sleep_from_delay"] is True
@@ -194,6 +196,46 @@ def test_federation_stage16_sleep_continuity_runtime_proof_records_manual_readba
     assert checks["sleep_continuity_trace_written"]["status"] == "observed"
     assert checks["sleep_continuity_runtime_receipt_written"]["status"] == "observed"
     assert all(item["passed"] for item in payload["checks"])
+
+
+def test_federation_stage16_sleep_continuity_runtime_proof_rejects_mismatched_post_resume_pre_sleep_path(
+    tmp_path: Path,
+) -> None:
+    data_dir = tmp_path / "data"
+    wrong_pre_path = tmp_path / "wrong" / "pre_sleep.json"
+    wrong_pre_path.parent.mkdir(parents=True, exist_ok=True)
+    wrong_pre_path.write_text("{}", encoding="utf-8")
+    pre_path, post_path = _write_sleep_evidence(
+        tmp_path / "evidence",
+        post_pre_sleep_path=str(wrong_pre_path),
+    )
+
+    proc = _run_proof(
+        "-Mode",
+        "Status",
+        "-DataDir",
+        str(data_dir),
+        "-PreSleepEvidencePath",
+        str(pre_path),
+        "-PostResumeEvidencePath",
+        str(post_path),
+    )
+
+    assert proc.returncode == 1
+    payload = json.loads(proc.stdout)
+    assert payload["kind"] == "francis.stage16.federation.sleep_continuity_runtime_proof"
+    assert payload["status"] == "proof_failed"
+    assert payload["ok"] is False
+    assert payload["evidence_failures"] == ["post_pre_sleep_evidence_path_mismatch"]
+    assert payload["blockers"] == [
+        "explicit_sleep_evidence_valid",
+        "continuity_summary_readback",
+        "sleep_continuity_trace_written",
+        "sleep_continuity_runtime_receipt_written",
+    ]
+    assert payload["receipt_id"] == ""
+    assert payload["ready_to_close"] is False
+    assert payload["next_smallest_truthful_gap"] == "stage16_sleep_continuity_runtime_readback"
 
 
 def test_federation_stage16_sleep_continuity_runtime_proof_commit_rejects_external_evidence_paths(

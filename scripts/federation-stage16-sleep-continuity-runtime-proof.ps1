@@ -207,7 +207,7 @@ def _write_stage15_closure_receipt(data_root: Path) -> None:
     path.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def _evidence_valid(pre: dict[str, Any], post: dict[str, Any]) -> tuple[bool, list[str]]:
+def _evidence_valid(pre: dict[str, Any], post: dict[str, Any], *, pre_path: Path) -> tuple[bool, list[str]]:
     failures: list[str] = []
     pre_meta = _as_dict(pre.get("governance"))
     post_meta = _as_dict(post.get("governance"))
@@ -224,6 +224,15 @@ def _evidence_valid(pre: dict[str, Any], post: dict[str, Any]) -> tuple[bool, li
         failures.append("freshness_state")
     if not _safe_text(post.get("redaction_summary")):
         failures.append("redaction_summary")
+    post_pre_sleep_path = _safe_text(post.get("pre_sleep_evidence_path"))
+    if not post_pre_sleep_path:
+        failures.append("post_pre_sleep_evidence_path")
+    else:
+        try:
+            if Path(post_pre_sleep_path).resolve() != pre_path:
+                failures.append("post_pre_sleep_evidence_path_mismatch")
+        except Exception:
+            failures.append("post_pre_sleep_evidence_path_mismatch")
     pre_ts = int(pre.get("source_recorded_ts") or pre.get("recorded_ts") or 0)
     post_ts = int(post.get("received_ts") or post.get("recorded_ts") or 0)
     if pre_ts <= 0 or post_ts <= pre_ts:
@@ -260,7 +269,7 @@ def _run() -> tuple[int, dict[str, Any]]:
 
     pre = _load_json_file(pre_path)
     post = _load_json_file(post_path)
-    evidence_valid, evidence_failures = _evidence_valid(pre, post)
+    evidence_valid, evidence_failures = _evidence_valid(pre, post, pre_path=pre_path)
     client = TestClient(create_app())
     before_readbacks = _get(client, "/federation/live-runtime-readbacks")
     before_review = _get(client, "/federation/completion-review")
@@ -435,6 +444,7 @@ def _run() -> tuple[int, dict[str, Any]]:
             "governance": {
                 "requires_explicit_pre_sleep_evidence": True,
                 "requires_explicit_post_resume_evidence": True,
+                "post_resume_pre_sleep_path_link_required": True,
                 "committed_evidence_paths_must_stay_under_project_evidence_root": True,
                 "committed_evidence_path_traversal_blocked": True,
                 "does_not_infer_sleep_from_delay": True,

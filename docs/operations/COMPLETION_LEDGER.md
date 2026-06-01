@@ -52811,6 +52811,46 @@ Latest validation for Stage 16 committed sleep runtime proof path guard:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 sleep runtime proof requires post-resume pre-sleep path link
+
+Roadmap area: Stage 16 / Federation, workstation sleep-continuity runtime
+proof stale-state safety.
+
+Material change:
+
+- `scripts/federation-stage16-sleep-continuity-runtime-proof.ps1` now requires
+  the post-resume evidence file's embedded `pre_sleep_evidence_path` to resolve
+  to the exact pre-sleep evidence path supplied to the proof command.
+- The runtime proof governance payload now declares
+  `post_resume_pre_sleep_path_link_required=true`.
+- This prevents a post-resume artifact with matching IDs but a mismatched
+  pre-sleep artifact link from being accepted as a sleep-continuity runtime
+  readback.
+- This does not write memory, mark Stage 16 closed, infer workstation
+  sleep/resume, grant authority, or change the UI command surface.
+- Stage 16 remains open until live post-resume evidence and the receipt-backed
+  completion/closure gates are satisfied.
+
+Latest validation for Stage 16 sleep runtime proof pre/post evidence linkage:
+
+- PowerShell parser check for
+  `scripts/federation-stage16-sleep-continuity-runtime-proof.ps1`
+  Result: `passed; parser_ok`.
+- `python -m pytest
+  tests/test_federation_stage16_sleep_continuity_runtime_proof_script.py
+  -q --tb=short`
+  Result: `passed; 5 passed`.
+- `python -m pytest tests/test_api_federation.py -q --tb=short`
+  Result: `passed; 19 passed`.
+- `python -m ruff check
+  tests/test_federation_stage16_sleep_continuity_runtime_proof_script.py`
+  Result: `passed`.
+- `python -m ruff format --check
+  tests/test_federation_stage16_sleep_continuity_runtime_proof_script.py`
+  Result: `passed`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
