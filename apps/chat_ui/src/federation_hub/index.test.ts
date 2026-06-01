@@ -536,6 +536,10 @@ test("federation sleep-continuity action parser preserves selected read-only ste
       "pre_sleep_evidence_path_matches_latest_pre_sleep_artifact",
       "post_resume_capture_uses_operator_confirmed_sleep_resume_flag",
     ],
+    current_ready_to_run: false,
+    operator_confirmation_pending: true,
+    post_confirmation_ready_to_capture: true,
+    sleep_resume_confirmation_is_current_blocker: true,
     selected_action_readiness: {
       status: "waiting_for_operator_confirmation",
       ready_to_run: false,
@@ -611,6 +615,8 @@ test("federation sleep-continuity action parser preserves selected read-only ste
       ],
       confirmation_blocker: "operator_confirmed_sleep_resume_missing",
       operator_confirmation_blocker_present: true,
+      operator_confirmation_pending: true,
+      current_ready_to_run: false,
       pre_sleep_evidence_present: true,
       pre_sleep_evidence_path:
         "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json",
@@ -625,6 +631,8 @@ test("federation sleep-continuity action parser preserves selected read-only ste
       must_sleep_after_pre_sleep_recorded_ts: true,
       must_resume_before_post_resume_capture: true,
       post_resume_capture_allowed_after_operator_confirmation: true,
+      post_confirmation_ready_to_capture: true,
+      sleep_resume_confirmation_is_current_blocker: true,
       operator_terminal_command_ready: true,
       ready_after_operator_confirmation: true,
       elapsed_time_is_not_confirmation: true,
@@ -716,6 +724,10 @@ test("federation sleep-continuity action parser preserves selected read-only ste
     "pre_sleep_evidence_path_matches_latest_pre_sleep_artifact",
     "post_resume_capture_uses_operator_confirmed_sleep_resume_flag",
   ]);
+  assert.equal(action.current_ready_to_run, false);
+  assert.equal(action.operator_confirmation_pending, true);
+  assert.equal(action.post_confirmation_ready_to_capture, true);
+  assert.equal(action.sleep_resume_confirmation_is_current_blocker, true);
   assert.equal(action.selected_action_readiness?.status, "waiting_for_operator_confirmation");
   assert.equal(action.selected_action_readiness?.ready_to_run, false);
   assert.deepEqual(action.selected_action_readiness?.run_blockers, ["operator_confirmed_sleep_resume_missing"]);
@@ -760,6 +772,8 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   );
   assert.equal(action.operator_sleep_resume_gate?.confirmation_blocker, "operator_confirmed_sleep_resume_missing");
   assert.equal(action.operator_sleep_resume_gate?.operator_confirmation_blocker_present, true);
+  assert.equal(action.operator_sleep_resume_gate?.operator_confirmation_pending, true);
+  assert.equal(action.operator_sleep_resume_gate?.current_ready_to_run, false);
   assert.equal(action.operator_sleep_resume_gate?.pre_sleep_evidence_present, true);
   assert.equal(action.operator_sleep_resume_gate?.pre_sleep_file_name, "pre_sleep_stage16.json");
   assert.equal(action.operator_sleep_resume_gate?.pre_sleep_recorded_ts, 1_800_030_000);
@@ -770,6 +784,8 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   assert.equal(action.operator_sleep_resume_gate?.must_sleep_after_pre_sleep_recorded_ts, true);
   assert.equal(action.operator_sleep_resume_gate?.must_resume_before_post_resume_capture, true);
   assert.equal(action.operator_sleep_resume_gate?.post_resume_capture_allowed_after_operator_confirmation, true);
+  assert.equal(action.operator_sleep_resume_gate?.post_confirmation_ready_to_capture, true);
+  assert.equal(action.operator_sleep_resume_gate?.sleep_resume_confirmation_is_current_blocker, true);
   assert.equal(action.operator_sleep_resume_gate?.ready_after_operator_confirmation, true);
   assert.equal(action.operator_sleep_resume_gate?.elapsed_time_is_not_confirmation, true);
   assert.equal(action.operator_sleep_resume_gate?.does_not_infer_sleep_from_delay, true);
@@ -862,6 +878,10 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   assert.equal(presentation.operator_action_required, true);
   assert.equal(presentation.operator_confirmation_required, true);
   assert.deepEqual(presentation.operator_confirmation_requirements, action.operator_confirmation_requirements);
+  assert.equal(presentation.current_ready_to_run, false);
+  assert.equal(presentation.operator_confirmation_pending, true);
+  assert.equal(presentation.post_confirmation_ready_to_capture, true);
+  assert.equal(presentation.sleep_resume_confirmation_is_current_blocker, true);
   assert.equal(presentation.selected_action_readiness?.status, "waiting_for_operator_confirmation");
   assert.deepEqual(presentation.selected_action_readiness?.run_blockers, ["operator_confirmed_sleep_resume_missing"]);
   assert.deepEqual(presentation.selected_action_readiness?.met_conditions, [
@@ -882,6 +902,9 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   assert.equal(presentation.operator_terminal_invocation?.projection_only, true);
   assert.equal(presentation.operator_sleep_resume_gate?.status, "waiting_for_operator_sleep_resume_confirmation");
   assert.equal(presentation.operator_sleep_resume_gate?.pre_sleep_age_seconds, 300);
+  assert.equal(presentation.operator_sleep_resume_gate?.current_ready_to_run, false);
+  assert.equal(presentation.operator_sleep_resume_gate?.operator_confirmation_pending, true);
+  assert.equal(presentation.operator_sleep_resume_gate?.post_confirmation_ready_to_capture, true);
   assert.equal(presentation.operator_sleep_resume_gate?.ready_after_operator_confirmation, true);
   assert.equal(presentation.operator_sleep_resume_gate?.does_not_infer_sleep_from_delay, true);
   assert.equal(

@@ -218,6 +218,8 @@ export function FederationHubPanel(props: { baseUrl: string }) {
         <div style={{ fontSize: 11, color: MUTED, marginTop: 6 }}>
           scope <code>{codeValue(presentation?.required_scope)}</code>
           {" / "}route <code>{codeValue(presentation?.primary_route)}</code>
+          {" / "}current ready <code>{yesNo(Boolean(presentation?.current_ready_to_run))}</code>
+          {" / "}confirmation pending <code>{yesNo(Boolean(presentation?.operator_confirmation_pending))}</code>
         </div>
         <div style={{ fontSize: 11, color: MUTED, marginTop: 6 }}>
           readback <code>{codeValue(presentation?.readback_route)}</code>
@@ -318,6 +320,8 @@ export function FederationHubPanel(props: { baseUrl: string }) {
           <div style={{ marginTop: 8 }}>
             <div style={{ fontSize: 11, color: MUTED }}>
               sleep/resume gate <code>{codeValue(operatorSleepResumeGate.status)}</code>
+              {" / "}current ready <code>{yesNo(operatorSleepResumeGate.current_ready_to_run)}</code>
+              {" / "}confirmation pending <code>{yesNo(operatorSleepResumeGate.operator_confirmation_pending)}</code>
               {" / "}after confirmation <code>{yesNo(operatorSleepResumeGate.ready_after_operator_confirmation)}</code>
               {" / "}no inference <code>{yesNo(operatorSleepResumeGate.does_not_infer_sleep_from_delay)}</code>
             </div>

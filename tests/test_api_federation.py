@@ -1294,6 +1294,10 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
         "pre_sleep_evidence_path_matches_latest_pre_sleep_artifact",
         "post_resume_capture_uses_operator_confirmed_sleep_resume_flag",
     ]
+    assert action["current_ready_to_run"] is False
+    assert action["operator_confirmation_pending"] is True
+    assert action["post_confirmation_ready_to_capture"] is True
+    assert action["sleep_resume_confirmation_is_current_blocker"] is True
     assert action["selected_action_readiness"]["status"] == "waiting_for_operator_confirmation"
     assert action["selected_action_readiness"]["ready_to_run"] is False
     assert action["selected_action_readiness"]["run_blockers"] == ["operator_confirmed_sleep_resume_missing"]
@@ -1345,6 +1349,8 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert sleep_gate["required_confirmation_requirements"] == action["operator_confirmation_requirements"]
     assert sleep_gate["confirmation_blocker"] == "operator_confirmed_sleep_resume_missing"
     assert sleep_gate["operator_confirmation_blocker_present"] is True
+    assert sleep_gate["operator_confirmation_pending"] is True
+    assert sleep_gate["current_ready_to_run"] is False
     assert sleep_gate["pre_sleep_evidence_present"] is True
     assert sleep_gate["pre_sleep_evidence_path"] == str(pre_sleep_path.resolve())
     assert sleep_gate["pre_sleep_file_name"] == pre_sleep_path.name
@@ -1358,6 +1364,8 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert sleep_gate["must_sleep_after_pre_sleep_recorded_ts"] is True
     assert sleep_gate["must_resume_before_post_resume_capture"] is True
     assert sleep_gate["post_resume_capture_allowed_after_operator_confirmation"] is True
+    assert sleep_gate["post_confirmation_ready_to_capture"] is True
+    assert sleep_gate["sleep_resume_confirmation_is_current_blocker"] is True
     assert sleep_gate["operator_terminal_command_ready"] is True
     assert sleep_gate["ready_after_operator_confirmation"] is True
     assert sleep_gate["elapsed_time_is_not_confirmation"] is True
@@ -1464,6 +1472,10 @@ def test_federation_stage16_sleep_continuity_runbook_uses_linked_post_resume_mar
     assert "federation-stage16-sleep-continuity-runtime-proof.ps1" in action["primary_command"]
     assert action["expected_output"] == "workstation_sleep_continuity_validated live runtime readback receipt"
     assert action["operator_confirmation_requirements"] == []
+    assert action["current_ready_to_run"] is True
+    assert action["operator_confirmation_pending"] is False
+    assert action["post_confirmation_ready_to_capture"] is False
+    assert action["sleep_resume_confirmation_is_current_blocker"] is False
     assert action["selected_action_readiness"]["status"] == "ready_to_commit_sleep_continuity_readback"
     assert action["selected_action_readiness"]["ready_to_run"] is True
     assert action["selected_action_readiness"]["run_blockers"] == []
@@ -1500,6 +1512,8 @@ def test_federation_stage16_sleep_continuity_runbook_uses_linked_post_resume_mar
     assert sleep_gate["selected_step_id"] == "commit_sleep_continuity_readback"
     assert sleep_gate["confirmation_required"] is False
     assert sleep_gate["operator_confirmation_blocker_present"] is False
+    assert sleep_gate["operator_confirmation_pending"] is False
+    assert sleep_gate["current_ready_to_run"] is True
     assert sleep_gate["pre_sleep_evidence_present"] is True
     assert sleep_gate["pre_sleep_recorded_ts"] == 1_800_030_000
     assert sleep_gate["pre_sleep_age_seconds"] == 300
@@ -1508,6 +1522,8 @@ def test_federation_stage16_sleep_continuity_runbook_uses_linked_post_resume_mar
     assert sleep_gate["post_resume_evidence_status"] == "post_resume_evidence_available"
     assert sleep_gate["must_sleep_after_pre_sleep_recorded_ts"] is False
     assert sleep_gate["must_resume_before_post_resume_capture"] is False
+    assert sleep_gate["post_confirmation_ready_to_capture"] is False
+    assert sleep_gate["sleep_resume_confirmation_is_current_blocker"] is False
     assert sleep_gate["ready_after_operator_confirmation"] is False
     assert sleep_gate["elapsed_time_is_not_confirmation"] is True
     assert sleep_gate["does_not_infer_sleep_from_delay"] is True

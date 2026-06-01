@@ -53041,6 +53041,52 @@ Latest validation for Stage 16 sleep after-run confirmation status:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 sleep action current readiness is explicit
+
+Roadmap area: Stage 16 / Federation, workstation sleep-continuity manual
+handoff truthfulness.
+
+Material change:
+
+- `/federation/sleep-continuity-action` now exposes top-level
+  `current_ready_to_run`, `operator_confirmation_pending`,
+  `post_confirmation_ready_to_capture`, and
+  `sleep_resume_confirmation_is_current_blocker` fields.
+- `operator_sleep_resume_gate` now exposes the same current-vs-after-confirmation
+  split so consumers do not confuse command readiness after Austin confirms real
+  workstation sleep/resume with current runnable state.
+- Federation Hub parser, presentation, and panel now preserve and display current
+  readiness and confirmation-pending status beside the existing
+  `ready_after_operator_confirmation` field.
+- This does not run shell, write evidence, write receipts, infer sleep/resume,
+  grant authority, write memory, or mark Stage 16 closed.
+- Stage 16 remains open until operator-confirmed live workstation sleep/resume
+  evidence and receipt-backed completion/closure gates are satisfied.
+
+Latest validation for Stage 16 sleep action current readiness:
+
+- `python -m pytest tests/test_api_federation.py -q --tb=short`
+  Result: `passed; 20 passed`.
+- `npm run test -- federation_hub`
+  Result: `passed; 188 passed`.
+- `npm run build`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- Live readback via `TestClient` for `/federation/sleep-continuity-action`
+  Result: `passed;
+  current_ready_to_run=false,
+  operator_confirmation_pending=true,
+  post_confirmation_ready_to_capture=true`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

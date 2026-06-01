@@ -1454,11 +1454,19 @@ def _stage16_sleep_continuity_operator_sleep_resume_gate(
     post_resume_present = bool(latest_post_resume_evidence.get("present"))
     post_resume_conflict = bool(latest_post_resume_evidence.get("conflict_detected"))
     operator_terminal_command_ready = bool(selected_action_readiness.get("operator_terminal_command_ready"))
+    current_ready_to_run = bool(selected_action_readiness.get("ready_to_run"))
+    operator_confirmation_blocker_present = "operator_confirmed_sleep_resume_missing" in run_blockers
     ready_after_operator_confirmation = (
         confirmation_required
         and pre_sleep_present
         and operator_terminal_command_ready
         and not non_confirmation_blockers
+    )
+    operator_confirmation_pending = (
+        confirmation_required
+        and operator_confirmation_blocker_present
+        and ready_after_operator_confirmation
+        and not current_ready_to_run
     )
     if not confirmation_required:
         status = "sleep_resume_confirmation_not_required_for_selected_step"
@@ -1473,7 +1481,9 @@ def _stage16_sleep_continuity_operator_sleep_resume_gate(
         "confirmation_required": confirmation_required,
         "required_confirmation_requirements": confirmation_requirements,
         "confirmation_blocker": "operator_confirmed_sleep_resume_missing" if confirmation_required else "",
-        "operator_confirmation_blocker_present": "operator_confirmed_sleep_resume_missing" in run_blockers,
+        "operator_confirmation_blocker_present": operator_confirmation_blocker_present,
+        "operator_confirmation_pending": operator_confirmation_pending,
+        "current_ready_to_run": current_ready_to_run,
         "pre_sleep_evidence_present": pre_sleep_present,
         "pre_sleep_evidence_path": _safe_str(latest_pre_sleep_evidence.get("evidence_path")).strip(),
         "pre_sleep_file_name": _safe_str(latest_pre_sleep_evidence.get("file_name")).strip(),
@@ -1497,6 +1507,8 @@ def _stage16_sleep_continuity_operator_sleep_resume_gate(
         "must_sleep_after_pre_sleep_recorded_ts": confirmation_required,
         "must_resume_before_post_resume_capture": confirmation_required,
         "post_resume_capture_allowed_after_operator_confirmation": ready_after_operator_confirmation,
+        "post_confirmation_ready_to_capture": ready_after_operator_confirmation,
+        "sleep_resume_confirmation_is_current_blocker": operator_confirmation_pending,
         "operator_terminal_command_ready": operator_terminal_command_ready,
         "ready_after_operator_confirmation": ready_after_operator_confirmation,
         "elapsed_time_is_not_confirmation": True,
@@ -1650,6 +1662,16 @@ def stage16_sleep_continuity_action() -> dict[str, Any]:
         selected_step=selected_step,
         selected_action_readiness=selected_action_readiness,
     )
+    current_ready_to_run = bool(selected_action_readiness.get("ready_to_run"))
+    operator_confirmation_pending = any(
+        bool(readback.get("operator_confirmation_pending"))
+        for readback in (
+            operator_terminal_invocation,
+            operator_sleep_resume_gate,
+            after_manual_execution_readback,
+        )
+    )
+    post_confirmation_ready_to_capture = bool(operator_sleep_resume_gate.get("post_confirmation_ready_to_capture"))
 
     return {
         "ok": True,
@@ -1680,6 +1702,12 @@ def stage16_sleep_continuity_action() -> dict[str, Any]:
         "operator_action_required": bool(selected_step.get("operator_action_required")),
         "operator_confirmation_required": bool(selected_step.get("operator_confirmation_required")),
         "operator_confirmation_requirements": confirmation_requirements,
+        "current_ready_to_run": current_ready_to_run,
+        "operator_confirmation_pending": operator_confirmation_pending,
+        "post_confirmation_ready_to_capture": post_confirmation_ready_to_capture,
+        "sleep_resume_confirmation_is_current_blocker": bool(
+            operator_sleep_resume_gate.get("sleep_resume_confirmation_is_current_blocker")
+        ),
         "selected_action_readiness": selected_action_readiness,
         "operator_terminal_invocation": operator_terminal_invocation,
         "operator_sleep_resume_gate": operator_sleep_resume_gate,

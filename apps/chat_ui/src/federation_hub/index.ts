@@ -365,6 +365,8 @@ export type FederationSleepContinuityOperatorSleepResumeGate = {
   required_confirmation_requirements: string[];
   confirmation_blocker?: string;
   operator_confirmation_blocker_present: boolean;
+  operator_confirmation_pending: boolean;
+  current_ready_to_run: boolean;
   pre_sleep_evidence_present: boolean;
   pre_sleep_evidence_path?: string;
   pre_sleep_file_name?: string;
@@ -382,6 +384,8 @@ export type FederationSleepContinuityOperatorSleepResumeGate = {
   must_sleep_after_pre_sleep_recorded_ts: boolean;
   must_resume_before_post_resume_capture: boolean;
   post_resume_capture_allowed_after_operator_confirmation: boolean;
+  post_confirmation_ready_to_capture: boolean;
+  sleep_resume_confirmation_is_current_blocker: boolean;
   operator_terminal_command_ready: boolean;
   ready_after_operator_confirmation: boolean;
   elapsed_time_is_not_confirmation: boolean;
@@ -445,6 +449,10 @@ export type FederationSleepContinuityPresentation = {
   operator_action_required: boolean;
   operator_confirmation_required: boolean;
   operator_confirmation_requirements: string[];
+  current_ready_to_run: boolean;
+  operator_confirmation_pending: boolean;
+  post_confirmation_ready_to_capture: boolean;
+  sleep_resume_confirmation_is_current_blocker: boolean;
   selected_action_readiness?: FederationSleepContinuitySelectedActionReadiness;
   operator_terminal_invocation?: FederationSleepContinuityOperatorTerminalInvocation;
   operator_sleep_resume_gate?: FederationSleepContinuityOperatorSleepResumeGate;
@@ -484,6 +492,10 @@ export type FederationSleepContinuityActionReadback = {
   operator_action_required: boolean;
   operator_confirmation_required: boolean;
   operator_confirmation_requirements: string[];
+  current_ready_to_run: boolean;
+  operator_confirmation_pending: boolean;
+  post_confirmation_ready_to_capture: boolean;
+  sleep_resume_confirmation_is_current_blocker: boolean;
   selected_action_readiness?: FederationSleepContinuitySelectedActionReadiness;
   operator_terminal_invocation?: FederationSleepContinuityOperatorTerminalInvocation;
   operator_sleep_resume_gate?: FederationSleepContinuityOperatorSleepResumeGate;
@@ -641,6 +653,8 @@ function parseFederationSleepContinuityOperatorSleepResumeGate(
     required_confirmation_requirements: stringList(raw.required_confirmation_requirements),
     confirmation_blocker: optionalString(raw.confirmation_blocker),
     operator_confirmation_blocker_present: safeBoolean(raw.operator_confirmation_blocker_present),
+    operator_confirmation_pending: safeBoolean(raw.operator_confirmation_pending),
+    current_ready_to_run: safeBoolean(raw.current_ready_to_run),
     pre_sleep_evidence_present: safeBoolean(raw.pre_sleep_evidence_present),
     pre_sleep_evidence_path: optionalString(raw.pre_sleep_evidence_path),
     pre_sleep_file_name: optionalString(raw.pre_sleep_file_name),
@@ -660,6 +674,8 @@ function parseFederationSleepContinuityOperatorSleepResumeGate(
     post_resume_capture_allowed_after_operator_confirmation: safeBoolean(
       raw.post_resume_capture_allowed_after_operator_confirmation,
     ),
+    post_confirmation_ready_to_capture: safeBoolean(raw.post_confirmation_ready_to_capture),
+    sleep_resume_confirmation_is_current_blocker: safeBoolean(raw.sleep_resume_confirmation_is_current_blocker),
     operator_terminal_command_ready: safeBoolean(raw.operator_terminal_command_ready),
     ready_after_operator_confirmation: safeBoolean(raw.ready_after_operator_confirmation),
     elapsed_time_is_not_confirmation: safeBoolean(raw.elapsed_time_is_not_confirmation),
@@ -1205,6 +1221,10 @@ export function parseFederationSleepContinuityAction(raw: unknown): FederationSl
     operator_action_required: safeBoolean(body.operator_action_required),
     operator_confirmation_required: safeBoolean(body.operator_confirmation_required),
     operator_confirmation_requirements: stringList(body.operator_confirmation_requirements),
+    current_ready_to_run: safeBoolean(body.current_ready_to_run),
+    operator_confirmation_pending: safeBoolean(body.operator_confirmation_pending),
+    post_confirmation_ready_to_capture: safeBoolean(body.post_confirmation_ready_to_capture),
+    sleep_resume_confirmation_is_current_blocker: safeBoolean(body.sleep_resume_confirmation_is_current_blocker),
     selected_action_readiness: parseFederationSleepContinuitySelectedActionReadiness(body.selected_action_readiness),
     operator_terminal_invocation: parseFederationSleepContinuityOperatorTerminalInvocation(
       body.operator_terminal_invocation,
@@ -1412,6 +1432,10 @@ export function presentFederationSleepContinuityAction(
     operator_confirmation_required:
       action.operator_confirmation_required || selectedStep?.operator_confirmation_required === true,
     operator_confirmation_requirements: action.operator_confirmation_requirements,
+    current_ready_to_run: action.current_ready_to_run,
+    operator_confirmation_pending: action.operator_confirmation_pending,
+    post_confirmation_ready_to_capture: action.post_confirmation_ready_to_capture,
+    sleep_resume_confirmation_is_current_blocker: action.sleep_resume_confirmation_is_current_blocker,
     selected_action_readiness: action.selected_action_readiness,
     operator_terminal_invocation: action.operator_terminal_invocation,
     operator_sleep_resume_gate: action.operator_sleep_resume_gate,
