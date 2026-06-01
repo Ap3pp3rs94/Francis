@@ -53580,6 +53580,41 @@ Latest validation for Stage 16 missing-confirmation remedy readback:
   command_projection_only=true,
   next_smallest_truthful_gap=stage16_sleep_continuity_runtime_readback`.
 
+### 2026-06-01 - Stage 16 confirmation remedy is visible in Federation Hub
+
+Roadmap area: Stage 16 / Federation, workstation sleep-continuity operator
+confirmation UI visibility.
+
+Material change:
+
+- Federation Hub now loads the sleep-continuity runbook and
+  `/federation/sleep-resume-confirmations` on refresh alongside status and the
+  selected action readback.
+- The panel now renders the sleep/resume confirmation receipt readback,
+  including current pre-sleep evidence, receipt-backed sequence readiness,
+  missing/stale receipt blockers, and the copyable confirmation receipt remedy
+  command when available.
+- The panel also preserves the receipt-backed post-resume sequence command
+  when the matching confirmation receipt exists.
+- The change fixes the prior panel reference to a runbook value that was not
+  loaded by the component.
+- The UI remains read-only: it does not post the confirmation route, run shell,
+  write evidence, write receipts, grant authority, or mark Stage 16 closed.
+
+Latest validation for Stage 16 confirmation remedy UI visibility:
+
+- `npm run test -- federation_hub`
+  Result: `passed; 189 passed`.
+- `npm run build`
+  Result: `passed`.
+- `npx tsc --noEmit --pretty false 2>&1 | Select-String
+  "src/federation_hub/FederationHubPanel.tsx"`
+  Result: `passed; no_federation_panel_tsc_diagnostics`. Full repository
+  `tsc --noEmit` remains blocked by pre-existing unrelated strictness errors
+  outside this slice.
+- `python -m pytest tests/test_api_federation.py -q --tb=short --maxfail=1`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

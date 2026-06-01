@@ -6,6 +6,8 @@ import {
   presentFederationSleepContinuityAction,
   type FederationSleepContinuityActionReadback,
   type FederationSleepContinuityPresentation,
+  type FederationSleepContinuityRunbook,
+  type FederationSleepResumeConfirmations,
   type FederationStage16Status,
 } from "./index";
 
@@ -75,7 +77,9 @@ function recordString(value: Record<string, unknown> | undefined, key: string): 
 export function FederationHubPanel(props: { baseUrl: string }) {
   const client = useMemo(() => new FederationClient(props.baseUrl), [props.baseUrl]);
   const [status, setStatus] = useState<FederationStage16Status | null>(null);
+  const [runbook, setRunbook] = useState<FederationSleepContinuityRunbook | null>(null);
   const [action, setAction] = useState<FederationSleepContinuityActionReadback | null>(null);
+  const [confirmations, setConfirmations] = useState<FederationSleepResumeConfirmations | null>(null);
   const [presentation, setPresentation] = useState<FederationSleepContinuityPresentation | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -85,12 +89,16 @@ export function FederationHubPanel(props: { baseUrl: string }) {
     setLoading(true);
     setError(null);
     try {
-      const [nextStatus, nextAction] = await Promise.all([
+      const [nextStatus, nextRunbook, nextAction, nextConfirmations] = await Promise.all([
         client.getStatus({ timeoutMs: 10_000 }),
+        client.getSleepContinuityRunbook({ timeoutMs: 10_000 }),
         client.getSleepContinuityAction({ timeoutMs: 10_000 }),
+        client.getSleepResumeConfirmations({ limit: 5, timeoutMs: 10_000 }),
       ]);
       setStatus(nextStatus);
+      setRunbook(nextRunbook);
       setAction(nextAction);
+      setConfirmations(nextConfirmations);
       setPresentation(presentFederationSleepContinuityAction(nextAction));
       setLoadedAt(Date.now());
     } catch (err) {
@@ -118,6 +126,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
   const operatorConfirmationHandoff = presentation?.operator_confirmation_handoff;
   const afterManualExecutionReadback = presentation?.after_manual_execution_readback;
   const runbookSelectedActionSummary = runbook?.selected_action_summary;
+  const confirmationReceiptBlockers = confirmations?.receipt_backed_sequence_blockers ?? [];
 
   return (
     <section style={panelStyle}>
@@ -228,6 +237,77 @@ export function FederationHubPanel(props: { baseUrl: string }) {
         </div>
       </div>
 
+      {confirmations ? (
+        <div style={{ border: `1px solid ${PANEL_BORDER}`, borderRadius: 10, padding: 10, background: "#121212", marginTop: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 600 }}>Sleep confirmation receipts</div>
+          <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
+            status <code>{codeValue(confirmations.status)}</code>
+            {" / "}readback <code>{yesNo(confirmations.receipt_readback_ready)}</code>
+            {" / "}current pre <code>{yesNo(confirmations.current_pre_sleep_evidence_present)}</code>
+            {" / "}sequence ready <code>{yesNo(confirmations.receipt_backed_sequence_ready)}</code>
+          </div>
+          <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
+            latest receipt <code>{codeValue(confirmations.latest_receipt_id)}</code>
+            {" / "}decision <code>{codeValue(confirmations.latest_decision)}</code>
+            {" / "}matches current pre <code>{yesNo(confirmations.latest_receipt_matches_current_pre_sleep)}</code>
+          </div>
+          <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
+            remedy command <code>{yesNo(confirmations.confirmation_receipt_command_ready)}</code>
+            {" / "}records receipt <code>{yesNo(confirmations.confirmation_receipt_command_records_receipt)}</code>
+            {" / "}writes evidence <code>{yesNo(confirmations.confirmation_receipt_command_writes_evidence)}</code>
+            {" / "}marks closed <code>{yesNo(confirmations.confirmation_receipt_command_marks_stage16_closed)}</code>
+          </div>
+          {confirmations.current_pre_sleep_evidence_path ? (
+            <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
+              current pre path <code>{confirmations.current_pre_sleep_evidence_path}</code>
+            </div>
+          ) : null}
+          {confirmationReceiptBlockers.length ? (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+              {confirmationReceiptBlockers.map((blocker) => (
+                <span key={`federation-confirmation-readback-blocker-${blocker}`} style={badgeStyle("blocked")}>
+                  {blocker}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          {confirmations.confirmation_receipt_copyable_command ? (
+            <pre
+              style={{
+                margin: "8px 0 0",
+                padding: 10,
+                borderRadius: 10,
+                border: `1px solid ${PANEL_BORDER}`,
+                background: "#101010",
+                color: TEXT,
+                whiteSpace: "pre-wrap",
+                overflowWrap: "anywhere",
+                fontSize: 11,
+              }}
+            >
+              {confirmations.confirmation_receipt_copyable_command}
+            </pre>
+          ) : null}
+          {confirmations.receipt_backed_sequence_copyable_command ? (
+            <pre
+              style={{
+                margin: "8px 0 0",
+                padding: 10,
+                borderRadius: 10,
+                border: `1px solid ${PANEL_BORDER}`,
+                background: "#101010",
+                color: TEXT,
+                whiteSpace: "pre-wrap",
+                overflowWrap: "anywhere",
+                fontSize: 11,
+              }}
+            >
+              {confirmations.receipt_backed_sequence_copyable_command}
+            </pre>
+          ) : null}
+        </div>
+      ) : null}
+
       <div style={{ border: `1px solid ${PANEL_BORDER}`, borderRadius: 10, padding: 10, background: "#121212", marginTop: 12 }}>
         <div style={{ fontSize: 12, fontWeight: 600 }}>Selected readback</div>
         <div style={{ fontSize: 11, color: MUTED, marginTop: 6 }}>
@@ -307,7 +387,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
               {" / "}after confirmation{" "}
               <code>{yesNo(operatorConfirmationHandoff.post_resume_capture_command_ready_after_confirmation)}</code>
               {" / "}no shell{" "}
-              <code>{yesNo(Boolean(operatorConfirmationHandoff.proof_boundary.does_not_run_shell))}</code>
+              <code>{yesNo(recordBoolean(operatorConfirmationHandoff.proof_boundary, "does_not_run_shell"))}</code>
             </div>
             <div style={{ fontSize: 11, color: MUTED, marginTop: 6 }}>
               sequence <code>{yesNo(operatorConfirmationHandoff.post_resume_sequence_available_after_confirmation)}</code>
