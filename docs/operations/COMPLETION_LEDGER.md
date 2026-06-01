@@ -55954,6 +55954,63 @@ Validation risk:
 - The focused local pytest command again stalled without output and was stopped;
   no pytest pass is claimed for this entry.
 
+### 2026-06-01 - Stage 17 capability pack metadata receipts are writable
+
+Roadmap area: Stage 17 / Capability Economy, durable metadata receipts for
+capability pack grouping.
+
+Material change:
+
+- Added governed plugin API routes for capability pack metadata receipts:
+  `GET /plugins/capabilities/packs/metadata/receipts` and
+  `POST /plugins/capabilities/packs/metadata/receipts`.
+- The write route is gated by the existing `plugins.write` API permission
+  scope, writes a `plugin.capability_pack.metadata_receipt`, and updates only
+  selected plugin registry metadata.
+- Receipt-backed metadata records `pack_id`, `pack_version`, `pack_name`,
+  `pack_metadata_source=metadata_receipt`, `pack_metadata_receipt_id`,
+  `pack_metadata_receipt_path`, promotion rules, and pack governance.
+- The route does not promote, install, execute, approve, write memory, or
+  mutate generated plugin artifact directories.
+- The chat UI API contract endpoint list now includes the metadata receipt
+  read/write routes.
+
+Latest validation for Stage 17 capability pack metadata receipts:
+
+- Direct FastAPI `TestClient` validation of `/plugins/build`, catalog readback,
+  `POST /plugins/capabilities/packs/metadata/receipts`, catalog readback, and
+  `GET /plugins/capabilities/packs/metadata/receipts`
+  Result: `passed`; receipt
+  `capability_pack_metadata_1780353913_ops-metadata-receipt-direct` was written,
+  the receipt file existed, catalog metadata read back
+  `pack_metadata_source=metadata_receipt`, and the targeted pack read back
+  `ready=True`.
+- Direct route-table validation
+  Result: `passed`; both metadata receipt routes are mounted.
+- `python -m mypy src/francis/api/routes/plugins.py
+  src/francis/economy/markets/capability_catalog_projection.py
+  src/francis/economy/markets/capability_pack_readiness.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/plugins.py
+  src/francis/economy/markets/capability_catalog_projection.py
+  src/francis/economy/markets/capability_pack_readiness.py
+  tests/test_api_plugins.py tests/test_api_contract_chat_ui.py
+  tests/unit/test_capability_pack_readiness.py
+  tests/unit/test_capability_catalog_projection.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/plugins.py
+  src/francis/economy/markets/capability_catalog_projection.py
+  src/francis/economy/markets/capability_pack_readiness.py
+  tests/test_api_plugins.py tests/test_api_contract_chat_ui.py
+  tests/unit/test_capability_pack_readiness.py
+  tests/unit/test_capability_catalog_projection.py`
+  Result: `passed`.
+
+Validation risk:
+
+- Full local pytest was not rerun because focused pytest commands were already
+  stalling in this workspace; GitHub CI remains the full-suite evidence gate.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

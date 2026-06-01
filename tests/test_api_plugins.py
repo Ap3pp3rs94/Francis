@@ -551,6 +551,93 @@ def test_plugins_capability_catalog_projects_stage17_pack_readiness(monkeypatch,
     assert pack["capabilities"][0]["capability"] == plugin_id
 
 
+def test_plugins_capability_pack_metadata_receipt_is_written_and_projected(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Capability Metadata Receipt Plugin",
+            "description": "Stage 17 pack metadata receipt coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": _forge_promotion_meta("capability_metadata_receipt"),
+        },
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    plugin_id = str(built_body["plugin_id"])
+
+    before = client.get("/plugins/capabilities/catalog?limit=5000").json()
+    before_entry = next(item for item in before["items"] if item["capability"] == plugin_id)
+    assert before_entry["metadata"]["pack_metadata_source"] == "legacy_generated_projection"
+
+    recorded = client.post(
+        "/plugins/capabilities/packs/metadata/receipts",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "record stage17 metadata receipt",
+            "pack_id": "ops.metadata_receipt_pack",
+            "pack_version": "1.0.0",
+            "pack_name": "Ops Metadata Receipt Pack",
+            "capability_ids": [plugin_id],
+            "promotion_rules": ["metadata_receipt_before_promotion"],
+            "pack_governance": {
+                "risk_tier": "normal",
+                "scope": "build_dev",
+                "requires_validation_receipt": True,
+            },
+        },
+    )
+
+    assert recorded.status_code == 200
+    recorded_body = recorded.json()
+    assert recorded_body["ok"] is True
+    assert recorded_body["status"] == "recorded"
+    assert recorded_body["capability_count"] == 1
+    assert recorded_body["governance"]["writes_registry_metadata"] is True
+    assert recorded_body["governance"]["promotion_authority"] is False
+    assert recorded_body["governance"]["execution_authority"] is False
+    receipt = recorded_body["receipt"]
+    assert receipt["kind"] == "plugin.capability_pack.metadata_receipt"
+    assert receipt["pack_id"] == "ops.metadata_receipt_pack"
+    assert receipt["capability_ids"] == [plugin_id]
+    assert Path(str(recorded_body["receipt_path"])).exists()
+
+    catalog = client.get("/plugins/capabilities/catalog?limit=5000")
+    assert catalog.status_code == 200
+    body = catalog.json()
+    entry = next(item for item in body["items"] if item["capability"] == plugin_id)
+    assert entry["metadata"]["pack_id"] == "ops.metadata_receipt_pack"
+    assert entry["metadata"]["pack_version"] == "1.0.0"
+    assert entry["metadata"]["pack_metadata_source"] == "metadata_receipt"
+    assert entry["metadata"]["pack_metadata_receipt_id"] == recorded_body["receipt_id"]
+    assert entry["metadata"]["pack_metadata_receipt_path"] == recorded_body["receipt_path"]
+    assert entry["metadata"]["promotion_rules"] == ["metadata_receipt_before_promotion"]
+    assert entry["metadata"]["pack_governance"]["requires_validation_receipt"] is True
+
+    pack = next(item for item in body["pack_readiness"]["packs"] if item["pack_id"] == "ops.metadata_receipt_pack")
+    assert pack["ready"] is True
+    assert pack["projected_metadata"] is False
+    assert pack["metadata_receipts_ready"] is True
+
+    readback = client.get("/plugins/capabilities/packs/metadata/receipts?limit=10")
+    assert readback.status_code == 200
+    readback_body = readback.json()
+    assert readback_body["ok"] is True
+    assert readback_body["governance"]["read_only"] is True
+    assert any(item["receipt_id"] == recorded_body["receipt_id"] for item in readback_body["items"])
+
+
 def test_plugins_run_risk_tier_enforces_trust_and_approval(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))

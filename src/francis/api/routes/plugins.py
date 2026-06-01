@@ -733,6 +733,31 @@ def _plugin_promotion_receipt_id(plugin_id: str, promoted_ts: int) -> str:
     return f"plugin_promotion_{promoted_ts}_{_slugify(plugin_id)}"
 
 
+def _capability_pack_metadata_receipt_id(pack_id: str, recorded_ts: int) -> str:
+    return f"capability_pack_metadata_{recorded_ts}_{_slugify(pack_id)}"
+
+
+def _capability_pack_metadata_receipt_path(receipt_id: str) -> Path:
+    return _art_dir() / "capability_packs" / "metadata_receipts" / f"{_safe_str(receipt_id).strip()}.json"
+
+
+def _read_capability_pack_metadata_receipts(*, limit: int = 20) -> list[dict[str, Any]]:
+    safe_limit = max(1, min(int(limit or 20), 200))
+    folder = _art_dir() / "capability_packs" / "metadata_receipts"
+    if not folder.exists() or not folder.is_dir():
+        return []
+
+    items: list[dict[str, Any]] = []
+    for path in sorted(folder.glob("*.json"), key=lambda item: item.stat().st_mtime):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+        except Exception:
+            continue
+        if isinstance(payload, dict):
+            items.append(payload)
+    return items[-safe_limit:]
+
+
 def _plugin_risk_tier(plugin: dict[str, Any]) -> str:
     highest = "normal"
     highest_order = _RISK_ORDER.get(highest, 1)
@@ -1045,6 +1070,65 @@ def _write_plugin_promotion_receipt(
             "scope": _PLUGIN_WRITE_SCOPE,
             "route": "/plugins/enable",
             "explicit": True,
+        },
+        "path": str(receipt_path),
+    }
+    redacted_receipt = _redact_plugin_receipt(receipt)
+    _atomic_write_display_json(receipt_path, redacted_receipt)
+    return redacted_receipt
+
+
+def _unique_texts(values: Any, *, limit: int = 500) -> list[str]:
+    out: list[str] = []
+    for value in values if isinstance(values, list) else [values]:
+        text = _safe_str(value).strip()
+        if text and text not in out:
+            out.append(text)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _write_capability_pack_metadata_receipt(
+    *,
+    receipt_id: str,
+    receipt_path: Path,
+    payload: "CapabilityPackMetadataReceiptIn",
+    pack_id: str,
+    pack_version: str,
+    pack_name: str,
+    capability_ids: list[str],
+    previous_metadata: dict[str, dict[str, Any]],
+    recorded_ts: int,
+) -> dict[str, Any]:
+    payload_meta = redact_governed_metadata(payload.meta)
+    receipt = {
+        "kind": "plugin.capability_pack.metadata_receipt",
+        "receipt_id": receipt_id,
+        "status": "recorded",
+        "pack_id": pack_id,
+        "pack_version": pack_version,
+        "pack_name": pack_name,
+        "capability_ids": capability_ids,
+        "capability_count": len(capability_ids),
+        "actor": redact_governed_value(_safe_str(payload.actor).strip()),
+        "reason": redact_governed_value(_safe_str(payload.reason).strip() or "requested"),
+        "recorded_ts": recorded_ts,
+        "promotion_rules": _unique_texts(payload.promotion_rules, limit=50),
+        "pack_governance": redact_governed_display_value(payload.pack_governance),
+        "previous_metadata": redact_governed_display_value(previous_metadata),
+        "metadata_context": payload_meta,
+        "governance": {
+            "gate": "permission_gate",
+            "scope": _PLUGIN_WRITE_SCOPE,
+            "route": "/plugins/capabilities/packs/metadata/receipts",
+            "writes_registry_metadata": True,
+            "writes_receipt": True,
+            "promotion_authority": False,
+            "execution_authority": False,
+            "approval_authority": False,
+            "memory_write": False,
+            "mutates_generated_artifacts": False,
         },
         "path": str(receipt_path),
     }
@@ -2041,6 +2125,18 @@ class PluginReloadIn(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
+class CapabilityPackMetadataReceiptIn(BaseModel):
+    actor: str = ""
+    reason: str = "requested"
+    pack_id: str
+    pack_version: str
+    pack_name: str = ""
+    capability_ids: list[str] = Field(default_factory=list)
+    promotion_rules: list[str] = Field(default_factory=list)
+    pack_governance: dict[str, Any] = Field(default_factory=dict)
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
 class PluginRunIn(BaseModel):
     id: str
     action: str
@@ -2333,6 +2429,137 @@ def list_plugin_capabilities(
             "limit": 0,
             "error": api_error_message(exc),
         }
+
+
+@router.get("/capabilities/packs/metadata/receipts")
+def capability_pack_metadata_receipts(limit: int = 20) -> dict[str, object]:
+    try:
+        items = _read_capability_pack_metadata_receipts(limit=limit)
+        return {
+            "ok": True,
+            "kind": "plugin.capability_pack.metadata_receipts",
+            "total": len(items),
+            "items": items,
+            "governance": {
+                "read_only": True,
+                "writes_registry_metadata": False,
+                "writes_receipts": False,
+                "promotion_authority": False,
+                "execution_authority": False,
+            },
+        }
+    except Exception as exc:
+        return {"ok": False, "kind": "plugin.capability_pack.metadata_receipts", "error": api_error_message(exc)}
+
+
+@router.post("/capabilities/packs/metadata/receipts")
+def record_capability_pack_metadata_receipt(
+    payload: CapabilityPackMetadataReceiptIn,
+    request: Request,
+) -> dict[str, object]:
+    try:
+        permission = _write_permission(payload.actor, route=request.url.path, method=request.method)
+        if not permission.allowed:
+            return _permission_denied(permission)
+
+        pack_id = _validate_plugin_id(_safe_str(payload.pack_id).strip())
+        pack_version = _safe_str(payload.pack_version).strip()
+        if not pack_version:
+            return {"ok": False, "applied": False, "status": "blocked", "error": "pack_version_required"}
+
+        capability_ids: list[str] = []
+        for raw_id in _unique_texts(payload.capability_ids, limit=500):
+            capability_ids.append(_validate_plugin_id(raw_id))
+        if not capability_ids:
+            return {"ok": False, "applied": False, "status": "blocked", "error": "capability_ids_required"}
+
+        registry = _load_registry()
+        _sync_generated_plugins(registry)
+        missing = [capability_id for capability_id in capability_ids if _read_plugin(registry, capability_id) is None]
+        if missing:
+            return {
+                "ok": False,
+                "applied": False,
+                "status": "blocked",
+                "error": "capability_not_found",
+                "missing_capability_ids": missing,
+            }
+
+        recorded_ts = _now_s()
+        receipt_id = _capability_pack_metadata_receipt_id(pack_id, recorded_ts)
+        receipt_path = _capability_pack_metadata_receipt_path(receipt_id)
+        pack_name = _safe_str(payload.pack_name).strip() or pack_id
+        promotion_rules = _unique_texts(payload.promotion_rules, limit=50)
+        pack_governance = dict(payload.pack_governance or {})
+        previous_metadata: dict[str, dict[str, Any]] = {}
+
+        for capability_id in capability_ids:
+            current = _read_plugin(registry, capability_id)
+            if current is None:
+                continue
+            meta = dict(current.get("meta") or {}) if isinstance(current.get("meta"), dict) else {}
+            previous_metadata[capability_id] = {
+                "pack_id": _safe_str(meta.get("pack_id")).strip(),
+                "pack_version": _safe_str(meta.get("pack_version")).strip(),
+                "pack_metadata_source": _safe_str(meta.get("pack_metadata_source")).strip(),
+                "pack_metadata_receipt_id": _safe_str(meta.get("pack_metadata_receipt_id")).strip(),
+            }
+            meta.update(
+                {
+                    "pack_id": pack_id,
+                    "pack_version": pack_version,
+                    "pack_name": pack_name,
+                    "pack_metadata_source": "metadata_receipt",
+                    "pack_metadata_receipt_id": receipt_id,
+                    "pack_metadata_receipt_path": str(receipt_path),
+                }
+            )
+            if promotion_rules:
+                meta["promotion_rules"] = promotion_rules
+            if pack_governance:
+                meta["pack_governance"] = pack_governance
+            current["meta"] = meta
+            current["updated_ts"] = recorded_ts
+            _write_plugin(registry, _normalize_plugin_record(capability_id, current))
+
+        catalog = _save_registry_and_catalog(registry)
+        receipt = _write_capability_pack_metadata_receipt(
+            receipt_id=receipt_id,
+            receipt_path=receipt_path,
+            payload=payload,
+            pack_id=pack_id,
+            pack_version=pack_version,
+            pack_name=pack_name,
+            capability_ids=capability_ids,
+            previous_metadata=previous_metadata,
+            recorded_ts=recorded_ts,
+        )
+        runtime_catalog = _read_runtime_catalog_payload(catalog)
+        marketplace = marketplace_from_plugin_catalog(runtime_catalog)
+
+        return {
+            "ok": True,
+            "applied": True,
+            "status": "recorded",
+            "receipt_id": receipt_id,
+            "receipt_path": str(receipt_path),
+            "receipt": receipt,
+            "capability_count": len(capability_ids),
+            "catalog": catalog,
+            "pack_readiness": analyze_capability_pack_readiness(marketplace.catalog()),
+            "governance": {
+                "scope": _PLUGIN_WRITE_SCOPE,
+                "writes_registry_metadata": True,
+                "writes_receipt": True,
+                "promotion_authority": False,
+                "execution_authority": False,
+                "approval_authority": False,
+                "memory_write": False,
+                "mutates_generated_artifacts": False,
+            },
+        }
+    except Exception as exc:
+        return {"ok": False, "applied": False, "status": "error", "error": api_error_message(exc)}
 
 
 @router.get("/get")

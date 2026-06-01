@@ -75,6 +75,7 @@ def _catalog_metadata(plugin: Mapping[str, Any], metadata: Mapping[str, Any]) ->
         "capability_pack_governance",
         "pack_metadata_source",
         "pack_metadata_receipt_id",
+        "pack_metadata_receipt_path",
         "pack_migration_reason",
     ):
         value = metadata.get(key)
