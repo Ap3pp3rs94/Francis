@@ -55215,6 +55215,32 @@ Latest validation for Stage 16 receipt-backed sequence readiness:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 Hub routes sequence command visibility through sequence readiness
+
+Roadmap area: Stage 16 / Federation, sleep-continuity confirmation receipt
+handoff.
+
+Material change:
+
+- Federation Hub now uses the dedicated receipt-backed sequence-readiness
+  readback to decide whether to show the post-resume sequence command in the
+  sleep confirmation receipts card.
+- The command is visible only when the sequence-readiness readback reports a
+  current usable confirmation receipt, no receipt-backed sequence blockers, and
+  explicit command visibility.
+- This remains UI/readback truth hardening only: it does not execute the
+  post-resume sequence, write receipts, write evidence, write runtime readback,
+  grant authority, infer workstation sleep/resume, or close Stage 16.
+
+Latest validation for Stage 16 Hub sequence readiness command visibility:
+
+- `npm run test -- federation_hub`
+  Result: `passed; 199 passed`.
+- `npm run build`
+  Result: `passed`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

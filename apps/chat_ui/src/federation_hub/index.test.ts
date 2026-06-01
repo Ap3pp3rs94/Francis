@@ -7,6 +7,7 @@ import {
   federationSleepContinuityVisibleOperatorCommands,
   federationSleepResumeConfirmationActorReadinessVisibleCommands,
   federationSleepResumeConfirmationVisibleCommands,
+  federationSleepResumeReceiptBackedSequenceVisibleCommands,
   federationSleepResumeReceiptRecordReadiness,
   isFederationSleepContinuityOperatorCommandBlockedByPendingConfirmation,
   isFederationSleepResumeConfirmationActorReadinessCurrent,
@@ -1547,6 +1548,13 @@ test("FederationClient reads receipt-backed sequence readiness as read-only proj
     assert.equal(readiness.grants_execution_authority, false);
     assert.equal(readiness.grants_mutation_authority, false);
     assert.equal(readiness.governance?.does_not_execute_sequence, true);
+    const visibleReadinessCommands = federationSleepResumeReceiptBackedSequenceVisibleCommands(readiness);
+    assert.equal(
+      visibleReadinessCommands.receipt_backed_sequence_copyable_command?.includes(
+        readiness.receipt_backed_sequence_command ?? "",
+      ),
+      true,
+    );
 
     const blocked = parseFederationSleepResumeReceiptBackedSequenceReadiness({
       ok: true,
@@ -1562,6 +1570,10 @@ test("FederationClient reads receipt-backed sequence readiness as read-only proj
     assert.deepEqual(blocked.receipt_backed_sequence_blockers, ["sleep_resume_confirmation_receipt_missing"]);
     assert.equal(blocked.receipt_backed_sequence_command_visible, false);
     assert.equal(blocked.writes_evidence_when_run, false);
+    assert.equal(
+      federationSleepResumeReceiptBackedSequenceVisibleCommands(blocked).receipt_backed_sequence_copyable_command,
+      undefined,
+    );
   } finally {
     restoreFetch();
   }

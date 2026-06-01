@@ -7,6 +7,7 @@ import {
   federationSleepContinuityVisibleOperatorCommands,
   federationSleepResumeConfirmationActorReadinessVisibleCommands,
   federationSleepResumeConfirmationVisibleCommands,
+  federationSleepResumeReceiptBackedSequenceVisibleCommands,
   federationSleepResumeReceiptRecordReadiness,
   isFederationSleepResumeConfirmationActorReadinessCurrent,
   presentFederationSleepContinuityAction,
@@ -212,6 +213,8 @@ export function FederationHubPanel(props: { baseUrl: string }) {
   const sequenceReadinessBlockers = sequenceReadiness?.receipt_backed_sequence_blockers ?? [];
   const confirmationReceiptOperatorSteps = confirmations?.confirmation_receipt_operator_steps ?? [];
   const visibleConfirmationCommands = federationSleepResumeConfirmationVisibleCommands(confirmations);
+  const visibleSequenceReadinessCommands =
+    federationSleepResumeReceiptBackedSequenceVisibleCommands(sequenceReadiness);
   const visibleActorReadiness = isFederationSleepResumeConfirmationActorReadinessCurrent(
     actorReadiness,
     actorPreflightActor,
@@ -227,6 +230,8 @@ export function FederationHubPanel(props: { baseUrl: string }) {
   const visiblePostResumeSequenceCommand = visibleOperatorCommands.post_resume_sequence_copyable_command;
   const visiblePostResumeReceiptBackedSequenceCommand =
     visibleOperatorCommands.post_resume_receipt_backed_sequence_copyable_command;
+  const visibleConfirmationReceiptBackedSequenceCommand =
+    visibleSequenceReadinessCommands.receipt_backed_sequence_copyable_command;
   const receiptRecordReadiness = federationSleepResumeReceiptRecordReadiness({
     status,
     confirmations,
@@ -652,7 +657,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
               {visibleConfirmationCommands.confirmation_receipt_copyable_command}
             </pre>
           ) : null}
-          {visibleConfirmationCommands.receipt_backed_sequence_copyable_command ? (
+          {visibleConfirmationReceiptBackedSequenceCommand ? (
             <pre
               style={{
                 margin: "8px 0 0",
@@ -666,7 +671,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
                 fontSize: 11,
               }}
             >
-              {visibleConfirmationCommands.receipt_backed_sequence_copyable_command}
+              {visibleConfirmationReceiptBackedSequenceCommand}
             </pre>
           ) : null}
         </div>
