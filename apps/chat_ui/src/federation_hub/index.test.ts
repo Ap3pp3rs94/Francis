@@ -115,6 +115,20 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
         sleep_continuity_confirmation_receipt_command_writes_evidence: false,
         sleep_continuity_confirmation_receipt_command_marks_stage16_closed: false,
         sleep_continuity_confirmation_receipt_command_projection_only: true,
+        sleep_continuity_confirmation_receipt_readback_status: "empty",
+        sleep_continuity_confirmation_receipt_readback_ready: false,
+        sleep_continuity_confirmation_receipt_latest_receipt_id: "",
+        sleep_continuity_confirmation_receipt_latest_decision: "",
+        sleep_continuity_confirmation_receipt_latest_matches_current_pre_sleep: false,
+        sleep_continuity_confirmation_receipt_usable_for_receipt_backed_sequence: false,
+        sleep_continuity_receipt_backed_sequence_ready: false,
+        sleep_continuity_receipt_backed_sequence_blockers: [
+          "current_pre_sleep_evidence_missing",
+          "sleep_resume_confirmation_receipt_missing",
+        ],
+        sleep_continuity_receipt_backed_sequence_requires_confirmation_receipt: true,
+        sleep_continuity_receipt_backed_sequence_writes_evidence_when_run: false,
+        sleep_continuity_receipt_backed_sequence_writes_receipts_when_run: false,
         sleep_continuity_next_step: "stage16_live_federation_runtime_readback",
         ready_count: 6,
         required_count: 6,
@@ -524,6 +538,20 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
     assert.equal(status.sleep_continuity_confirmation_receipt_command_writes_evidence, false);
     assert.equal(status.sleep_continuity_confirmation_receipt_command_marks_stage16_closed, false);
     assert.equal(status.sleep_continuity_confirmation_receipt_command_projection_only, true);
+    assert.equal(status.sleep_continuity_confirmation_receipt_readback_status, "empty");
+    assert.equal(status.sleep_continuity_confirmation_receipt_readback_ready, false);
+    assert.equal(status.sleep_continuity_confirmation_receipt_latest_receipt_id, undefined);
+    assert.equal(status.sleep_continuity_confirmation_receipt_latest_decision, undefined);
+    assert.equal(status.sleep_continuity_confirmation_receipt_latest_matches_current_pre_sleep, false);
+    assert.equal(status.sleep_continuity_confirmation_receipt_usable_for_receipt_backed_sequence, false);
+    assert.equal(status.sleep_continuity_receipt_backed_sequence_ready, false);
+    assert.deepEqual(status.sleep_continuity_receipt_backed_sequence_blockers, [
+      "current_pre_sleep_evidence_missing",
+      "sleep_resume_confirmation_receipt_missing",
+    ]);
+    assert.equal(status.sleep_continuity_receipt_backed_sequence_requires_confirmation_receipt, true);
+    assert.equal(status.sleep_continuity_receipt_backed_sequence_writes_evidence_when_run, false);
+    assert.equal(status.sleep_continuity_receipt_backed_sequence_writes_receipts_when_run, false);
     assert.equal(status.sleep_continuity_next_step, "stage16_live_federation_runtime_readback");
     assert.equal(status.next_smallest_truthful_gap, "stage16_live_federation_runtime_readback");
 

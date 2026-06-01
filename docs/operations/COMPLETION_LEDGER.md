@@ -54936,6 +54936,58 @@ Latest validation for Stage 16 Hub status receipt actor display:
 - `npm run build`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 status summarizes confirmation receipt sequence readiness
+
+Roadmap area: Stage 16 / Federation, sleep-continuity confirmation receipt
+operator surface.
+
+Material change:
+
+- `/federation/status` now includes a compact sleep/resume confirmation
+  receipt readback summary: receipt status, latest receipt id/decision,
+  whether the latest receipt matches the current pre-sleep evidence, whether
+  the receipt-backed post-resume sequence is ready, and its blockers.
+- `/federation/status` stops projecting another receipt-writing confirmation
+  command once a matching confirmation receipt makes the receipt-backed
+  sequence ready; status then points at the runtime-readback gap instead.
+- Federation Hub parses and displays the status-level receipt/sequence
+  readiness, including blockers, alongside the full confirmations readback.
+- This is readback-only until an operator runs the projected command: it does
+  not write receipts, capture evidence, run shell from the API or UI, grant
+  authority, infer workstation sleep/resume, or close Stage 16.
+
+Latest validation for Stage 16 status receipt sequence readiness:
+
+- `python -m pytest tests/test_api_federation.py -q --tb=short --maxfail=1`
+  Result: `passed; 26 passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `npm run test -- federation_hub`
+  Result: `passed; 193 passed`.
+- `npm run build`
+  Result: `passed`.
+- `git diff --check`
+  Result: `passed`.
+- Fresh local readback:
+  `GET /federation/status?actor=codex.builder`
+  Result: `stage16_status=stage16_contracts_ready_completion_blocked;
+  next_smallest_truthful_gap=stage16_sleep_resume_confirmation_receipt;
+  sleep_continuity_next_step=write_sleep_resume_confirmation_receipt;
+  receipt_readback_status=empty; receipt_ready=false;
+  latest_receipt_id=""; latest_receipt_matches_current_pre_sleep=false;
+  receipt_backed_sequence_ready=false;
+  receipt_backed_sequence_blockers=["sleep_resume_confirmation_receipt_missing"];
+  receipt_backed_sequence_writes_evidence_when_run=false;
+  receipt_backed_sequence_writes_receipts_when_run=false;
+  confirmation_receipt_command_ready=true;
+  confirmation_receipt_command_records_receipt=true`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

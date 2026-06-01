@@ -338,6 +338,14 @@ export function FederationHubPanel(props: { baseUrl: string }) {
             <code>{yesNo(Boolean(status?.sleep_continuity_confirmation_receipt_command_requires_actor_substitution))}</code>
           </div>
           <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
+            status receipt <code>{yesNo(Boolean(status?.sleep_continuity_confirmation_receipt_readback_ready))}</code>
+            {" / "}status sequence{" "}
+            <code>{yesNo(Boolean(status?.sleep_continuity_receipt_backed_sequence_ready))}</code>
+            {" / "}matches current pre{" "}
+            <code>{yesNo(Boolean(status?.sleep_continuity_confirmation_receipt_latest_matches_current_pre_sleep))}</code>
+            {" / "}latest <code>{codeValue(status?.sleep_continuity_confirmation_receipt_latest_receipt_id)}</code>
+          </div>
+          <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
             requested actor <code>{codeValue(confirmations.confirmation_receipt_requested_actor)}</code>
             {" / "}accepted{" "}
             <code>{yesNo(confirmations.confirmation_receipt_requested_actor_ready)}</code>
@@ -458,6 +466,15 @@ export function FederationHubPanel(props: { baseUrl: string }) {
               {confirmationReceiptBlockers.map((blocker) => (
                 <span key={`federation-confirmation-readback-blocker-${blocker}`} style={badgeStyle("blocked")}>
                   {blocker}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          {status?.sleep_continuity_receipt_backed_sequence_blockers.length ? (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+              {status.sleep_continuity_receipt_backed_sequence_blockers.map((blocker) => (
+                <span key={`federation-status-receipt-sequence-blocker-${blocker}`} style={badgeStyle("blocked")}>
+                  status {blocker}
                 </span>
               ))}
             </div>

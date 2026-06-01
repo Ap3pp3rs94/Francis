@@ -2123,6 +2123,27 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     assert actor_bound_readback["governance"]["actor_bound_confirmation_command_projection"] is True
     assert not (data_root / "logs" / "federation" / "stage16_sleep_resume_operator_confirmations.jsonl").exists()
 
+    pending_status = client.get("/federation/status?actor=test.federation.sleep").json()
+    assert pending_status["sleep_continuity_confirmation_receipt_readback_status"] == "empty"
+    assert pending_status["sleep_continuity_confirmation_receipt_readback_ready"] is False
+    assert pending_status["sleep_continuity_confirmation_receipt_latest_receipt_id"] == ""
+    assert pending_status["sleep_continuity_confirmation_receipt_latest_decision"] == ""
+    assert pending_status["sleep_continuity_confirmation_receipt_latest_matches_current_pre_sleep"] is False
+    assert pending_status["sleep_continuity_confirmation_receipt_usable_for_receipt_backed_sequence"] is False
+    assert pending_status["sleep_continuity_receipt_backed_sequence_ready"] is False
+    assert pending_status["sleep_continuity_receipt_backed_sequence_blockers"] == [
+        "sleep_resume_confirmation_receipt_missing"
+    ]
+    assert pending_status["sleep_continuity_receipt_backed_sequence_requires_confirmation_receipt"] is True
+    assert pending_status["sleep_continuity_receipt_backed_sequence_writes_evidence_when_run"] is False
+    assert pending_status["sleep_continuity_receipt_backed_sequence_writes_receipts_when_run"] is False
+    assert pending_status["sleep_continuity_confirmation_receipt_command_ready"] is True
+    assert pending_status["sleep_continuity_confirmation_receipt_command_records_receipt"] is True
+    assert pending_status["sleep_continuity_confirmation_receipt_command_writes_evidence"] is False
+    assert pending_status["sleep_continuity_confirmation_receipt_command_marks_stage16_closed"] is False
+    assert pending_status["sleep_continuity_next_step"] == "write_sleep_resume_confirmation_receipt"
+    assert pending_status["next_smallest_truthful_gap"] == "stage16_sleep_resume_confirmation_receipt"
+
     unscoped_actor_readback = client.get(
         "/federation/sleep-resume-confirmations?limit=5&actor=test.federation.write"
     ).json()
@@ -2274,6 +2295,29 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     assert not list(
         (data_root / "test_runs" / "federation-stage16-sleep-continuity-evidence").glob("post_resume_*.json")
     )
+
+    receipt_ready_status = client.get("/federation/status?actor=test.federation.sleep").json()
+    assert receipt_ready_status["sleep_continuity_confirmation_receipt_readback_status"] == (
+        "sleep_resume_confirmation_readback_ready"
+    )
+    assert receipt_ready_status["sleep_continuity_confirmation_receipt_readback_ready"] is True
+    assert receipt_ready_status["sleep_continuity_confirmation_receipt_latest_receipt_id"] == body["receipt_id"]
+    assert receipt_ready_status["sleep_continuity_confirmation_receipt_latest_decision"] == (
+        "operator_confirmed_sleep_resume"
+    )
+    assert receipt_ready_status["sleep_continuity_confirmation_receipt_latest_matches_current_pre_sleep"] is True
+    assert receipt_ready_status["sleep_continuity_confirmation_receipt_usable_for_receipt_backed_sequence"] is True
+    assert receipt_ready_status["sleep_continuity_receipt_backed_sequence_ready"] is True
+    assert receipt_ready_status["sleep_continuity_receipt_backed_sequence_blockers"] == []
+    assert receipt_ready_status["sleep_continuity_receipt_backed_sequence_requires_confirmation_receipt"] is True
+    assert receipt_ready_status["sleep_continuity_receipt_backed_sequence_writes_evidence_when_run"] is True
+    assert receipt_ready_status["sleep_continuity_receipt_backed_sequence_writes_receipts_when_run"] is True
+    assert receipt_ready_status["sleep_continuity_confirmation_receipt_command_ready"] is False
+    assert receipt_ready_status["sleep_continuity_confirmation_receipt_command_records_receipt"] is False
+    assert receipt_ready_status["sleep_continuity_confirmation_receipt_command_writes_evidence"] is False
+    assert receipt_ready_status["sleep_continuity_confirmation_receipt_command_marks_stage16_closed"] is False
+    assert receipt_ready_status["sleep_continuity_next_step"] == "run_receipt_backed_post_resume_sequence"
+    assert receipt_ready_status["next_smallest_truthful_gap"] == "stage16_sleep_continuity_runtime_readback"
 
 
 def test_federation_stage16_sleep_resume_confirmation_readback_blocks_stale_receipt(
