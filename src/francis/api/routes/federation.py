@@ -1506,6 +1506,10 @@ def _stage16_sleep_resume_confirmation_command_projection(
     }
 
 
+def _stage16_sleep_resume_confirmation_actor_is_placeholder(actor: str) -> bool:
+    return _safe_str(actor).strip() == f"<actor_with_{_FEDERATION_SLEEP_RESUME_CONFIRMATION_SCOPE}>"
+
+
 def _stage16_sleep_resume_confirmation_operator_steps(
     *,
     confirmation_command_ready: bool,
@@ -3293,6 +3297,39 @@ def get_sleep_resume_confirmations(limit: int = 20) -> dict[str, Any]:
 def post_sleep_resume_confirmation(payload: dict[str, Any], request: Request) -> dict[str, Any]:
     route = "/federation/sleep-resume-confirmation"
     actor = _federation_write_actor(payload)
+    if _stage16_sleep_resume_confirmation_actor_is_placeholder(actor):
+        return {
+            "ok": False,
+            "kind": "francis.stage16.federation.sleep_resume_operator_confirmation.record",
+            "status": "denied",
+            "error": "confirmation_receipt_actor_placeholder_must_be_replaced",
+            "source_id": "federation",
+            "target": "stage16_sleep_continuity",
+            "actor": actor,
+            "actor_placeholder": actor,
+            "required_scope": _FEDERATION_SLEEP_RESUME_CONFIRMATION_SCOPE,
+            "next_step": "replace_actor_placeholder_with_scoped_operator_or_delegated_builder_actor",
+            "receipt": None,
+            "receipt_id": "",
+            "writes_receipt": False,
+            "writes_evidence": False,
+            "writes_runtime_readback": False,
+            "marks_stage16_closed": False,
+            "governance": {
+                **_federation_governance(read_only=False),
+                "required_scope": _FEDERATION_SLEEP_RESUME_CONFIRMATION_SCOPE,
+                "route": str(request.url.path),
+                "placeholder_actor_rejected": True,
+                "requires_real_scoped_actor": True,
+                "does_not_write_receipt_on_denial": True,
+                "does_not_write_evidence": True,
+                "does_not_write_runtime_readback": True,
+                "does_not_mark_stage16_closed": True,
+                "grants_execution_authority": False,
+                "grants_mutation_authority": False,
+            },
+            "next_smallest_truthful_gap": "stage16_sleep_continuity_runtime_readback",
+        }
     permission = _federation_write_permission(
         actor,
         route=route,

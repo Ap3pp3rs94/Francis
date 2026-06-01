@@ -53676,6 +53676,53 @@ Latest validation for Stage 16 sleep confirmation ordered handoff:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 sleep confirmation placeholder actor is rejected
+
+Roadmap area: Stage 16 / Federation, workstation sleep-continuity operator
+confirmation receipt safety.
+
+Material change:
+
+- `POST /federation/sleep-resume-confirmation` now rejects the projected
+  placeholder actor
+  `<actor_with_federation.stage16.sleep_resume.confirmation.write>` before any
+  receipt can be written.
+- The denial is explicit and governed:
+  `confirmation_receipt_actor_placeholder_must_be_replaced`, with
+  `replace_actor_placeholder_with_scoped_operator_or_delegated_builder_actor`
+  as the next step.
+- The placeholder is rejected even if a malformed local actor-scope
+  configuration grants the placeholder string the confirmation write scope.
+- The denial does not write receipts, evidence, runtime readbacks, registry
+  state, memory, or Stage 16 closure state.
+
+Latest validation for Stage 16 sleep confirmation placeholder rejection:
+
+- `python -m pytest tests/test_api_federation.py -q --tb=short --maxfail=1`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- Live readback via `TestClient` for `POST
+  /federation/sleep-resume-confirmation` with the placeholder actor
+  intentionally granted the required scope:
+  Result: `passed;
+  ok=false,
+  status=denied,
+  error=confirmation_receipt_actor_placeholder_must_be_replaced,
+  required_scope=federation.stage16.sleep_resume.confirmation.write,
+  next_step=replace_actor_placeholder_with_scoped_operator_or_delegated_builder_actor,
+  writes_receipt=false,
+  writes_evidence=false,
+  marks_stage16_closed=false,
+  placeholder_actor_rejected=true,
+  requires_real_scoped_actor=true`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -1664,6 +1664,49 @@ def test_federation_stage16_sleep_resume_confirmation_denies_without_scope(monke
     assert not (data_root / "logs" / "federation" / "stage16_sleep_resume_operator_confirmations.jsonl").exists()
 
 
+def test_federation_stage16_sleep_resume_confirmation_denies_placeholder_actor(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    placeholder_actor = "<actor_with_federation.stage16.sleep_resume.confirmation.write>"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({placeholder_actor: ["federation.stage16.sleep_resume.confirmation.write"]}),
+    )
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    response = client.post(
+        "/federation/sleep-resume-confirmation",
+        json={
+            "actor": placeholder_actor,
+            "reason": "placeholder actor should not be accepted",
+            "operator_confirmed_sleep_resume": True,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["status"] == "denied"
+    assert body["error"] == "confirmation_receipt_actor_placeholder_must_be_replaced"
+    assert body["actor_placeholder"] == placeholder_actor
+    assert body["required_scope"] == "federation.stage16.sleep_resume.confirmation.write"
+    assert body["next_step"] == "replace_actor_placeholder_with_scoped_operator_or_delegated_builder_actor"
+    assert body["writes_receipt"] is False
+    assert body["writes_evidence"] is False
+    assert body["marks_stage16_closed"] is False
+    assert body["governance"]["placeholder_actor_rejected"] is True
+    assert body["governance"]["requires_real_scoped_actor"] is True
+    assert body["governance"]["does_not_write_receipt_on_denial"] is True
+    assert not (data_root / "logs" / "federation" / "stage16_sleep_resume_operator_confirmations.jsonl").exists()
+
+
 def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     monkeypatch,
     tmp_path: Path,
