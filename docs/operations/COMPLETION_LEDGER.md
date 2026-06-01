@@ -50856,6 +50856,66 @@ Latest validation for Stage 16 revocation and node continuity:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-31 - Stage 16 Federation completion review blocks closure on live readbacks
+
+Roadmap area: Stage 16 / Federation, completion review after all contract
+surfaces are present.
+
+Material change:
+
+- Added read-only `GET /federation/completion-review`.
+- `/federation/status` now reports
+  `stage16_status=stage16_contracts_ready_completion_blocked` when all Stage 16
+  contracts are ready but live runtime evidence is missing.
+- The completion review confirms contract readiness for Stage 15 closure
+  backstop, pairing/scoped trust, selective sync model, remote approval
+  support, revocation, and node-attributed continuity.
+- The completion review deliberately blocks Stage 16 closure until live
+  federation runtime readbacks exist for pairing flow, selective sync, remote
+  approval roundtrip, revocation roundtrip, and workstation sleep/resume
+  continuity.
+- The review does not mark Stage 16 closed and does not require an operator
+  stage closure decision while live runtime readbacks are missing.
+- This is review-only: it does not execute pairing, sync, remote approvals,
+  revocation, sleep/resume probes, registry mutation, memory writes, tools,
+  shell, git, browser launch, screen capture, or execution/mutation authority.
+- Current readback reports
+  `stage16_status=stage16_contracts_ready_completion_blocked`,
+  `ready_count=6`, `required_count=6`,
+  `stage16_completion_review_ready=false`,
+  `live_runtime_readback_ready=false`, `contract_readiness_ready=true`,
+  `ready_to_close=false`, `live_ready_count=0`, `live_required_count=5`, and
+  `next_smallest_truthful_gap=stage16_live_federation_runtime_readback`.
+
+Latest validation for Stage 16 completion review:
+
+- Direct local `TestClient` readback of GET `/federation/status` and GET
+  `/federation/completion-review`.
+  Result:
+  `stage16_status=stage16_contracts_ready_completion_blocked; ready_count=6;
+  required_count=6; completion_ready=false; live_ready=false;
+  status_next_gap=stage16_live_federation_runtime_readback;
+  review_status=blocked; contract_ready=true; review_ready_to_close=false;
+  review_live_ready=false; live_ready_count=0; live_required_count=5;
+  blockers=live_pairing_flow_observed, live_selective_sync_observed,
+  live_remote_approval_roundtrip_observed, live_revocation_roundtrip_observed,
+  workstation_sleep_continuity_validated;
+  review_next_gap=stage16_live_federation_runtime_readback`.
+- `python -m pytest tests/test_api_federation.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 10 passed`
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

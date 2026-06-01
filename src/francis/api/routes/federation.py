@@ -23,6 +23,7 @@ _FEDERATION_SYNC_MODEL_CONTRACT_KIND = "francis.stage16.federation.sync_model_co
 _FEDERATION_REMOTE_APPROVAL_CONTRACT_KIND = "francis.stage16.federation.remote_approval_contract"
 _FEDERATION_REVOCATION_CONTRACT_KIND = "francis.stage16.federation.revocation_contract"
 _FEDERATION_NODE_CONTINUITY_CONTRACT_KIND = "francis.stage16.federation.node_attributed_continuity_contract"
+_FEDERATION_COMPLETION_REVIEW_KIND = "francis.stage16.federation.completion_review"
 
 _ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._:-]{1,127}$")
 
@@ -412,6 +413,7 @@ def _federation_routes() -> dict[str, str]:
         "remote_approval_contract": "/federation/remote-approval-contract",
         "revocation_contract": "/federation/revocation-contract",
         "node_attributed_continuity_contract": "/federation/node-attributed-continuity-contract",
+        "completion_review": "/federation/completion-review",
         "instances_list": "/federation/instances/list",
         "instances_get": "/federation/instances/get",
         "delegations_list": "/federation/delegations/list",
@@ -1121,6 +1123,135 @@ def node_attributed_continuity_contract() -> dict[str, Any]:
     }
 
 
+def completion_review() -> dict[str, Any]:
+    pairing = pairing_scoped_trust_contract()
+    sync = sync_model_contract()
+    remote = remote_approval_contract()
+    revocation = revocation_contract()
+    node_continuity = node_attributed_continuity_contract()
+    contract_checks = [
+        {
+            "id": "stage15_ledger_closure_backstop",
+            "passed": bool(pairing.get("stage15_closed_by_receipt")),
+            "status": "passed" if bool(pairing.get("stage15_closed_by_receipt")) else "blocked",
+            "evidence": _safe_str(pairing.get("stage15_latest_closure_receipt_id")).strip(),
+        },
+        {
+            "id": "pairing_scoped_trust_contract_ready",
+            "passed": bool(pairing.get("pairing_scoped_trust_contract_ready")),
+            "status": "passed" if bool(pairing.get("pairing_scoped_trust_contract_ready")) else "blocked",
+            "evidence": "/federation/pairing-scoped-trust-contract",
+        },
+        {
+            "id": "sync_model_contract_ready",
+            "passed": bool(sync.get("sync_model_contract_ready")),
+            "status": "passed" if bool(sync.get("sync_model_contract_ready")) else "blocked",
+            "evidence": "/federation/sync-model-contract",
+        },
+        {
+            "id": "remote_approval_contract_ready",
+            "passed": bool(remote.get("remote_approval_contract_ready")),
+            "status": "passed" if bool(remote.get("remote_approval_contract_ready")) else "blocked",
+            "evidence": "/federation/remote-approval-contract",
+        },
+        {
+            "id": "revocation_contract_ready",
+            "passed": bool(revocation.get("revocation_contract_ready")),
+            "status": "passed" if bool(revocation.get("revocation_contract_ready")) else "blocked",
+            "evidence": "/federation/revocation-contract",
+        },
+        {
+            "id": "node_attributed_continuity_contract_ready",
+            "passed": bool(node_continuity.get("node_attributed_continuity_contract_ready")),
+            "status": "passed" if bool(node_continuity.get("node_attributed_continuity_contract_ready")) else "blocked",
+            "evidence": "/federation/node-attributed-continuity-contract",
+        },
+    ]
+    live_checks = [
+        {
+            "id": "live_pairing_flow_observed",
+            "passed": False,
+            "status": "not_observed",
+            "evidence": "no live paired-node handshake receipt has been recorded",
+        },
+        {
+            "id": "live_selective_sync_observed",
+            "passed": False,
+            "status": "not_observed",
+            "evidence": "no live selective sync receipt has been recorded",
+        },
+        {
+            "id": "live_remote_approval_roundtrip_observed",
+            "passed": False,
+            "status": "not_observed",
+            "evidence": "no remote approval request/decision roundtrip receipt has been recorded",
+        },
+        {
+            "id": "live_revocation_roundtrip_observed",
+            "passed": False,
+            "status": "not_observed",
+            "evidence": "no live revocation propagation receipt has been recorded",
+        },
+        {
+            "id": "workstation_sleep_continuity_validated",
+            "passed": False,
+            "status": "not_observed",
+            "evidence": "no sleep/resume node-attributed continuity readback has been recorded",
+        },
+    ]
+    contract_ready = all(bool(item.get("passed")) for item in contract_checks)
+    live_ready = all(bool(item.get("passed")) for item in live_checks)
+    ready_to_close = contract_ready and live_ready
+    blockers = [item["id"] for item in live_checks if not bool(item.get("passed"))]
+    return {
+        "ok": True,
+        "kind": _FEDERATION_COMPLETION_REVIEW_KIND,
+        "stage": _STAGE16_FEDERATION_STAGE,
+        "source_id": "federation",
+        "status": "ready" if ready_to_close else "blocked",
+        "stage15_closed_by_receipt": bool(pairing.get("stage15_closed_by_receipt")),
+        "stage15_latest_closure_receipt_id": _safe_str(pairing.get("stage15_latest_closure_receipt_id")).strip(),
+        "contract_readiness_ready": contract_ready,
+        "live_runtime_readback_ready": live_ready,
+        "stage16_completion_review_ready": ready_to_close,
+        "ready_to_close": ready_to_close,
+        "stage_closure_decision_required": ready_to_close,
+        "contract_checks": contract_checks,
+        "live_checks": live_checks,
+        "blockers": blockers,
+        "ready_count": sum(1 for item in contract_checks if bool(item.get("passed"))),
+        "required_count": len(contract_checks),
+        "live_ready_count": sum(1 for item in live_checks if bool(item.get("passed"))),
+        "live_required_count": len(live_checks),
+        "done_criteria": {
+            "workstation_sleep_does_not_destroy_continuity": False,
+            "remote_approval_is_safe_and_traceable": False,
+            "raw_private_data_does_not_leak_across_nodes": contract_ready,
+            "multi_device_francis_feels_like_one_governed_system": False,
+        },
+        "routes": _federation_routes(),
+        "governance": {
+            **_federation_governance(),
+            "completion_review_only": True,
+            "does_not_mark_stage_closed": True,
+            "requires_live_runtime_readback": True,
+            "stage_closure_decision_required": ready_to_close,
+        },
+        "writes_registry": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "next_smallest_truthful_gap": "stage16_operator_stage_closure_decision"
+        if ready_to_close
+        else "stage16_live_federation_runtime_readback",
+    }
+
+
 @router.get("/status")
 def status() -> dict[str, Any]:
     try:
@@ -1143,6 +1274,8 @@ def status() -> dict[str, Any]:
         revocation_ready = bool(revocation.get("revocation_contract_ready"))
         node_continuity = node_attributed_continuity_contract()
         node_continuity_ready = bool(node_continuity.get("node_attributed_continuity_contract_ready"))
+        review = completion_review()
+        completion_ready = bool(review.get("stage16_completion_review_ready"))
         stage15_closed = bool(pairing_contract.get("stage15_closed_by_receipt"))
         deliverables = _stage16_deliverables(
             pairing_contract_ready=pairing_ready,
@@ -1157,7 +1290,9 @@ def status() -> dict[str, Any]:
             "route": "federation",
             "status": "ready",
             "stage": _STAGE16_FEDERATION_STAGE,
-            "stage16_status": "stage16_node_attributed_continuity_contract_ready"
+            "stage16_status": "stage16_completion_review_ready"
+            if completion_ready
+            else "stage16_contracts_ready_completion_blocked"
             if node_continuity_ready
             else "stage16_revocation_contract_ready"
             if revocation_ready
@@ -1179,12 +1314,17 @@ def status() -> dict[str, Any]:
             "remote_approval_contract_ready": remote_approval_ready,
             "revocation_contract_ready": revocation_ready,
             "node_attributed_continuity_contract_ready": node_continuity_ready,
+            "stage16_completion_review_ready": completion_ready,
+            "live_runtime_readback_ready": bool(review.get("live_runtime_readback_ready")),
+            "completion_review_blockers": _parse_list(review.get("blockers")),
             "ready_count": sum(1 for item in deliverables if bool(item.get("ready"))),
             "required_count": len(deliverables),
             "deliverables": deliverables,
             "routes": _federation_routes(),
             "governance": _federation_governance(),
-            "next_smallest_truthful_gap": "stage16_completion_review"
+            "next_smallest_truthful_gap": "stage16_operator_stage_closure_decision"
+            if completion_ready
+            else "stage16_live_federation_runtime_readback"
             if node_continuity_ready
             else "stage16_node_attributed_continuity"
             if revocation_ready
@@ -1241,6 +1381,11 @@ def get_revocation_contract() -> dict[str, Any]:
 @router.get("/node-attributed-continuity-contract")
 def get_node_attributed_continuity_contract() -> dict[str, Any]:
     return node_attributed_continuity_contract()
+
+
+@router.get("/completion-review")
+def get_completion_review() -> dict[str, Any]:
+    return completion_review()
 
 
 @router.get("/instances/list")

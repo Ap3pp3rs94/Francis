@@ -354,7 +354,7 @@ def test_federation_stage16_pairing_scoped_trust_contract_is_read_only_after_sta
 
     status = client.get("/federation/status").json()
     assert status["stage"] == "Stage 16 / Federation"
-    assert status["stage16_status"] == "stage16_node_attributed_continuity_contract_ready"
+    assert status["stage16_status"] == "stage16_contracts_ready_completion_blocked"
     assert status["pairing_scoped_trust_contract_ready"] is True
     assert status["sync_model_contract_ready"] is True
     assert status["remote_approval_contract_ready"] is True
@@ -367,7 +367,10 @@ def test_federation_stage16_pairing_scoped_trust_contract_is_read_only_after_sta
     assert status["routes"]["remote_approval_contract"] == "/federation/remote-approval-contract"
     assert status["routes"]["revocation_contract"] == "/federation/revocation-contract"
     assert status["routes"]["node_attributed_continuity_contract"] == "/federation/node-attributed-continuity-contract"
-    assert status["next_smallest_truthful_gap"] == "stage16_completion_review"
+    assert status["stage16_completion_review_ready"] is False
+    assert status["live_runtime_readback_ready"] is False
+    assert "live_pairing_flow_observed" in status["completion_review_blockers"]
+    assert status["next_smallest_truthful_gap"] == "stage16_live_federation_runtime_readback"
 
 
 def test_federation_stage16_sync_model_contract_blocks_over_replication_and_stale_authority(
@@ -507,13 +510,15 @@ def test_federation_stage16_remote_approval_contract_is_receipt_referenced_and_n
     assert body["next_smallest_truthful_gap"] == "stage16_revocation_surfaces"
 
     status = client.get("/federation/status").json()
-    assert status["stage16_status"] == "stage16_node_attributed_continuity_contract_ready"
+    assert status["stage16_status"] == "stage16_contracts_ready_completion_blocked"
     assert status["remote_approval_contract_ready"] is True
     assert status["revocation_contract_ready"] is True
     assert status["node_attributed_continuity_contract_ready"] is True
     assert status["ready_count"] == 6
     assert status["required_count"] == 6
-    assert status["next_smallest_truthful_gap"] == "stage16_completion_review"
+    assert status["stage16_completion_review_ready"] is False
+    assert status["live_runtime_readback_ready"] is False
+    assert status["next_smallest_truthful_gap"] == "stage16_live_federation_runtime_readback"
 
 
 def test_federation_stage16_revocation_contract_is_scoped_and_propagation_bounded(
@@ -643,7 +648,70 @@ def test_federation_stage16_node_attributed_continuity_contract_preserves_trace_
     assert body["next_smallest_truthful_gap"] == "stage16_completion_review"
 
     status = client.get("/federation/status").json()
-    assert status["stage16_status"] == "stage16_node_attributed_continuity_contract_ready"
+    assert status["stage16_status"] == "stage16_contracts_ready_completion_blocked"
     assert status["ready_count"] == 6
     assert status["required_count"] == 6
-    assert status["next_smallest_truthful_gap"] == "stage16_completion_review"
+    assert status["stage16_completion_review_ready"] is False
+    assert status["live_runtime_readback_ready"] is False
+    assert status["next_smallest_truthful_gap"] == "stage16_live_federation_runtime_readback"
+
+
+def test_federation_stage16_completion_review_blocks_closure_until_live_runtime_readbacks(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    _write_stage15_closure_receipt(data_root, receipt_id="swarm_stage15_closure_for_completion_review")
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+
+    response = client.get("/federation/completion-review")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "francis.stage16.federation.completion_review"
+    assert body["stage"] == "Stage 16 / Federation"
+    assert body["status"] == "blocked"
+    assert body["stage15_closed_by_receipt"] is True
+    assert body["stage15_latest_closure_receipt_id"] == "swarm_stage15_closure_for_completion_review"
+    assert body["contract_readiness_ready"] is True
+    assert body["live_runtime_readback_ready"] is False
+    assert body["stage16_completion_review_ready"] is False
+    assert body["ready_to_close"] is False
+    assert body["stage_closure_decision_required"] is False
+    assert body["ready_count"] == 6
+    assert body["required_count"] == 6
+    assert body["live_ready_count"] == 0
+    assert body["live_required_count"] == 5
+    assert {item["id"] for item in body["contract_checks"] if item["passed"]} == {
+        "stage15_ledger_closure_backstop",
+        "pairing_scoped_trust_contract_ready",
+        "sync_model_contract_ready",
+        "remote_approval_contract_ready",
+        "revocation_contract_ready",
+        "node_attributed_continuity_contract_ready",
+    }
+    assert body["blockers"] == [
+        "live_pairing_flow_observed",
+        "live_selective_sync_observed",
+        "live_remote_approval_roundtrip_observed",
+        "live_revocation_roundtrip_observed",
+        "workstation_sleep_continuity_validated",
+    ]
+    assert body["done_criteria"]["workstation_sleep_does_not_destroy_continuity"] is False
+    assert body["done_criteria"]["remote_approval_is_safe_and_traceable"] is False
+    assert body["done_criteria"]["raw_private_data_does_not_leak_across_nodes"] is True
+    assert body["done_criteria"]["multi_device_francis_feels_like_one_governed_system"] is False
+    assert body["governance"]["completion_review_only"] is True
+    assert body["governance"]["requires_live_runtime_readback"] is True
+    assert body["writes_registry"] is False
+    assert body["writes_memory"] is False
+    assert body["runs_tools"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["next_smallest_truthful_gap"] == "stage16_live_federation_runtime_readback"
