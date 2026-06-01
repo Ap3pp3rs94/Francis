@@ -55741,6 +55741,76 @@ Latest validation for Stage 16 action post-receipt handoff:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 closed by physical sleep/resume receipt and live readback
+
+Roadmap area: Stage 16 / Federation, sleep-continuity closure gate.
+
+Material change:
+
+- Austin explicitly confirmed the workstation physically entered sleep/suspend
+  and resumed after the current pre-sleep marker.
+- The confirmation was recorded as sleep/resume operator receipt
+  `fedsleepconfirm_facb05dc79d6` for continuity record
+  `stage16-sleep-continuity-fdb32d13c0214943ae8e22a95f333a54`.
+- The receipt-backed post-resume sequence passed and wrote live runtime
+  readback receipt
+  `fedlive_workstation_sleep_continuity_validated_78ee4a816317`.
+- The governed Stage 16 closure decision was recorded as receipt
+  `fedstage16close_f6c91d005446`; direct readbacks now report
+  `stage16_closed_by_receipt=true` and
+  `next_smallest_truthful_gap=stage16_ledger_closure`.
+- The actor-scope helper now preserves existing scopes when appending a new
+  scope to `FRANCIS_API_ACTOR_SCOPES`; this fixed the local closure-scope
+  append that had concatenated two scope strings.
+- `/federation/completion-review` now remains read-only while surfacing the
+  closure receipt readback, so it no longer asks for
+  `stage16_operator_stage_closure_decision` after that receipt already exists.
+
+Latest validation for Stage 16 sleep-continuity closure:
+
+- `.\scripts\federation-stage16-sleep-continuity-evidence.ps1 -Mode PreSleep
+  -CommitEvidence`
+  Result: `passed`; wrote
+  `data/test_runs/federation-stage16-sleep-continuity-evidence/pre_sleep_stage16-sleep-continuity-fdb32d13c0214943ae8e22a95f333a54.json`.
+- `POST /federation/sleep-resume-confirmation`
+  Result: `recorded`; receipt `fedsleepconfirm_facb05dc79d6`;
+  `marks_stage16_closed=false`.
+- `.\scripts\federation-stage16-sleep-continuity-post-resume-sequence.ps1
+  -Mode Run -CommitEvidence -CommitReceipts -OperatorConfirmedSleepResume
+  -RequireConfirmationReceipt -ConfirmationReceiptId fedsleepconfirm_facb05dc79d6`
+  Result: `sequence_passed`; `ready_to_close=true`;
+  `next_smallest_truthful_gap=stage16_operator_stage_closure_decision`.
+- `POST /federation/stage-closure-decision`
+  Result: `recorded`; receipt `fedstage16close_f6c91d005446`;
+  `stage16_closed_by_receipt=true`;
+  `next_smallest_truthful_gap=stage16_ledger_closure`.
+- Direct FastAPI `TestClient` readbacks of `/federation/status?actor=codex.builder`,
+  `/federation/completion-review`,
+  `/federation/stage-closure-decisions?limit=1`, and
+  `/federation/sleep-continuity-runbook?actor=codex.builder`
+  Result: `passed`; all closure-bearing surfaces reported receipt-backed
+  closure and `stage16_ledger_closure`.
+- Direct helper validation of `scripts/francis-api-actor-scope-env.ps1`
+  Result: `passed`; appending
+  `federation.stage16.closure.write` preserved
+  `federation.stage16.sleep_resume.confirmation.write`.
+- PowerShell parser check for `scripts/francis-api-actor-scope-env.ps1`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_francis_api_actor_scope_env_script.py`
+  Result: `passed`; Ruff reported a cache-write warning only.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_francis_api_actor_scope_env_script.py`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+
+Validation risk:
+
+- Targeted pytest attempts for the actor-scope helper and Stage 16 closure
+  test stalled in local subprocess execution and were stopped; no pytest pass
+  is claimed for those tests in this closure entry.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

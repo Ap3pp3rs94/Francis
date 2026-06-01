@@ -3532,3 +3532,12 @@ def test_federation_stage16_closure_decision_records_after_live_readbacks(monkey
     assert status["stage16_closed_by_receipt"] is True
     assert status["latest_stage_closure_decision_receipt"]["receipt_id"] == body["receipt_id"]
     assert status["next_smallest_truthful_gap"] == "stage16_ledger_closure"
+
+    review = client.get("/federation/completion-review").json()
+    assert review["status"] == "ready"
+    assert review["stage16_completion_review_ready"] is True
+    assert review["stage16_closed_by_receipt"] is True
+    assert review["stage_closure_decision_required"] is False
+    assert review["latest_stage_closure_decision_receipt_id"] == body["receipt_id"]
+    assert review["governance"]["stage_closure_decision_readback"] is True
+    assert review["next_smallest_truthful_gap"] == "stage16_ledger_closure"

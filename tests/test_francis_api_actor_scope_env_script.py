@@ -109,6 +109,52 @@ def test_francis_api_actor_scope_env_applies_scope_and_writes_receipt(tmp_path: 
     assert receipt["governance"]["preserves_existing_actor_scopes"] is True
 
 
+def test_francis_api_actor_scope_env_appends_scope_for_existing_actor(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    root.mkdir()
+    env_path = root / ".env"
+    env_path.write_text(
+        'FRANCIS_API_ACTOR_SCOPES={"codex.builder":["federation.stage16.sleep_resume.confirmation.write"]}\n',
+        encoding="utf-8",
+    )
+
+    proc = _run_script(
+        "-Mode",
+        "Apply",
+        "-Root",
+        str(root),
+        "-Actor",
+        "codex.builder",
+        "-Scope",
+        "federation.stage16.closure.write",
+        "-Reason",
+        "test_stage16_closure_actor_scope_env",
+        env={"FRANCIS_ENV_PROFILE": "dev"},
+    )
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = _json_stdout(proc)
+    assert payload["ok"] is True
+    assert payload["status"] == "applied"
+    assert payload["changed"] is True
+
+    line = next(
+        line
+        for line in env_path.read_text(encoding="utf-8").splitlines()
+        if line.startswith("FRANCIS_API_ACTOR_SCOPES=")
+    )
+    policy = json.loads(line.split("=", 1)[1])
+    assert policy["codex.builder"] == [
+        "federation.stage16.sleep_resume.confirmation.write",
+        "federation.stage16.closure.write",
+    ]
+
+    receipt = json.loads(Path(payload["receipt_path"]).read_text(encoding="utf-8-sig"))
+    assert receipt["scope"] == "federation.stage16.closure.write"
+    assert receipt["decision"] == "scope_added_to_repo_env"
+    assert receipt["governance"]["preserves_existing_actor_scopes"] is True
+
+
 def test_francis_api_actor_scope_env_blocks_production_profile(tmp_path: Path) -> None:
     root = tmp_path / "repo"
     root.mkdir()

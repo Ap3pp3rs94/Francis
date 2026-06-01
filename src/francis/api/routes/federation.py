@@ -3952,6 +3952,9 @@ def completion_review() -> dict[str, Any]:
         fallback=_safe_str(live_readbacks.get("next_smallest_truthful_gap")).strip()
         or "stage16_live_federation_runtime_readback",
     )
+    closure_readback = stage16_operator_stage_closure_decision_readback(limit=1)
+    stage16_closed_by_receipt = bool(closure_readback.get("stage16_closed_by_receipt"))
+    next_gap = "stage16_ledger_closure" if stage16_closed_by_receipt else sleep_continuity_next_gap
     return {
         "ok": True,
         "kind": _FEDERATION_COMPLETION_REVIEW_KIND,
@@ -3964,7 +3967,9 @@ def completion_review() -> dict[str, Any]:
         "live_runtime_readback_ready": live_ready,
         "stage16_completion_review_ready": ready_to_close,
         "ready_to_close": ready_to_close,
-        "stage_closure_decision_required": ready_to_close,
+        "stage_closure_decision_required": ready_to_close and not stage16_closed_by_receipt,
+        "stage16_closed_by_receipt": stage16_closed_by_receipt,
+        "latest_stage_closure_decision_receipt_id": _safe_str(closure_readback.get("latest_receipt_id")).strip(),
         "contract_checks": contract_checks,
         "live_checks": live_checks,
         "live_runtime_readbacks": {
@@ -3995,7 +4000,8 @@ def completion_review() -> dict[str, Any]:
             "completion_review_only": True,
             "does_not_mark_stage_closed": True,
             "requires_live_runtime_readback": True,
-            "stage_closure_decision_required": ready_to_close,
+            "stage_closure_decision_required": ready_to_close and not stage16_closed_by_receipt,
+            "stage_closure_decision_readback": True,
         },
         "writes_registry": False,
         "writes_memory": False,
@@ -4006,7 +4012,7 @@ def completion_review() -> dict[str, Any]:
         "captures_screen": False,
         "grants_execution_authority": False,
         "grants_mutation_authority": False,
-        "next_smallest_truthful_gap": sleep_continuity_next_gap,
+        "next_smallest_truthful_gap": next_gap,
     }
 
 

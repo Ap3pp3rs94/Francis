@@ -173,7 +173,7 @@ $existingScopes = if ($policy.ContainsKey($safeActor)) { @($policy[$safeActor]) 
 $scopeAlreadyPresent = $existingScopes -contains $safeScope
 $changed = $false
 if ($ok -and -not $scopeAlreadyPresent) {
-  $policy[$safeActor] = @($existingScopes + $safeScope | Select-Object -Unique)
+  $policy[$safeActor] = @((@($existingScopes) + @($safeScope)) | Select-Object -Unique)
   $changed = $true
 }
 
