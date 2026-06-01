@@ -54455,6 +54455,52 @@ Latest validation for Stage 16 status confirmation receipt command readback:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 actor readiness projects scope remediation
+
+Roadmap area: Stage 16 / Federation, sleep-continuity confirmation receipt
+actor readiness.
+
+Material change:
+
+- The sleep-resume confirmation actor-readiness readback now projects the
+  exact `FRANCIS_API_ACTOR_SCOPES` policy fragment required when an actor is
+  present but lacks `federation.stage16.sleep_resume.confirmation.write`.
+- The projection is explicit about the required actor, required scope, env var,
+  copyable PowerShell command, and the fact that the command would only mutate
+  the local process environment if the operator runs it.
+- The route still does not grant scope, write a receipt, write evidence, grant
+  authority, or mark Stage 16 closed.
+- Federation Hub parsing preserves the remediation projection so the UI can
+  distinguish "actor unscoped" from "operator has not confirmed sleep/resume."
+
+Latest validation for Stage 16 actor-readiness scope remediation:
+
+- `python -m pytest tests/test_api_federation.py -q --tb=short --maxfail=1`
+  Result: `passed`.
+- `npm run test -- federation_hub`
+  Result: `passed; 193 passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `npm run build`
+  Result: `passed`.
+- `git diff --check`
+  Result: `passed`.
+- Live local readback:
+  `GET /federation/sleep-resume-confirmation/actor-readiness?actor=codex.builder`
+  Result: `status=actor_scope_missing;
+  scope_remediation_required=true;
+  scope_remediation_env_var=FRANCIS_API_ACTOR_SCOPES;
+  scope_remediation_required_scope=federation.stage16.sleep_resume.confirmation.write;
+  scope_remediation_writes_receipts=false;
+  scope_remediation_writes_evidence=false;
+  scope_remediation_marks_stage16_closed=false`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -883,6 +883,16 @@ test("parseFederationSleepResumeConfirmationActorReadiness preserves actor-bound
     confirmation_receipt_command_writes_evidence: false,
     confirmation_receipt_command_marks_stage16_closed: false,
     confirmation_receipt_command_projection_only: true,
+    scope_remediation_required: false,
+    scope_remediation_command_ready: false,
+    scope_remediation_command_visible: false,
+    scope_remediation_command: "",
+    scope_remediation_projection_only: true,
+    scope_remediation_writes_receipts: false,
+    scope_remediation_writes_evidence: false,
+    scope_remediation_marks_stage16_closed: false,
+    scope_remediation_grants_authority: false,
+    scope_remediation_would_mutate_process_environment_if_run: false,
     reads_permission_gate: true,
     writes_receipt: false,
     writes_evidence: false,
@@ -901,8 +911,88 @@ test("parseFederationSleepResumeConfirmationActorReadiness preserves actor-bound
   assert.equal(readiness.confirmation_receipt_actor_bound, true);
   assert.equal(readiness.confirmation_receipt_command_requires_actor_substitution, false);
   assert.equal(readiness.confirmation_receipt_command?.includes("actor = 'test.federation.sleep'"), true);
+  assert.equal(readiness.scope_remediation_required, false);
+  assert.equal(readiness.scope_remediation_command, undefined);
   assert.equal(readiness.writes_receipt, false);
   assert.equal(readiness.writes_evidence, false);
+  assert.equal(readiness.marks_stage16_closed, false);
+});
+
+test("parseFederationSleepResumeConfirmationActorReadiness preserves scope remediation projection", () => {
+  const readiness = parseFederationSleepResumeConfirmationActorReadiness({
+    ok: true,
+    kind: "francis.stage16.federation.sleep_resume_operator_confirmation_actor_readiness",
+    status: "actor_scope_missing",
+    actor: "codex.builder",
+    actor_present: true,
+    actor_placeholder_rejected: false,
+    required_scope: "federation.stage16.sleep_resume.confirmation.write",
+    target_method: "POST",
+    target_route: "/federation/sleep-resume-confirmation",
+    readiness_route: "/federation/sleep-resume-confirmation/actor-readiness",
+    current_pre_sleep_evidence_present: true,
+    permission_allowed: false,
+    permission_reason: "actor_missing_required_scope",
+    confirmation_receipt_actor_ready: false,
+    safe_to_use_in_confirmation_command: false,
+    next_step: "grant_federation_stage16_sleep_resume_confirmation_write_scope_before_receipt",
+    confirmation_receipt_command_ready: false,
+    confirmation_receipt_command_requires_actor_substitution: false,
+    confirmation_receipt_command_records_receipt: false,
+    confirmation_receipt_command_writes_evidence: false,
+    confirmation_receipt_command_marks_stage16_closed: false,
+    confirmation_receipt_command_projection_only: true,
+    scope_remediation_required: true,
+    scope_remediation_command_ready: true,
+    scope_remediation_command_visible: true,
+    scope_remediation_env_var: "FRANCIS_API_ACTOR_SCOPES",
+    scope_remediation_actor: "codex.builder",
+    scope_remediation_required_scope: "federation.stage16.sleep_resume.confirmation.write",
+    scope_remediation_policy_fragment: {
+      "codex.builder": ["federation.stage16.sleep_resume.confirmation.write"],
+    },
+    scope_remediation_command:
+      "$env:FRANCIS_API_ACTOR_SCOPES = '{\"codex.builder\":[\"federation.stage16.sleep_resume.confirmation.write\"]}'",
+    scope_remediation_copyable_command:
+      "$env:FRANCIS_API_ACTOR_SCOPES = '{\"codex.builder\":[\"federation.stage16.sleep_resume.confirmation.write\"]}'",
+    scope_remediation_projection_only: true,
+    scope_remediation_writes_receipts: false,
+    scope_remediation_writes_evidence: false,
+    scope_remediation_marks_stage16_closed: false,
+    scope_remediation_grants_authority: false,
+    scope_remediation_would_mutate_process_environment_if_run: true,
+    reads_permission_gate: true,
+    writes_receipt: false,
+    writes_evidence: false,
+    writes_runtime_readback: false,
+    marks_stage16_closed: false,
+    grants_execution_authority: false,
+    grants_mutation_authority: false,
+    next_smallest_truthful_gap: "stage16_sleep_resume_confirmation_actor_readiness",
+  });
+
+  assert.equal(readiness.status, "actor_scope_missing");
+  assert.equal(readiness.confirmation_receipt_actor_ready, false);
+  assert.equal(readiness.scope_remediation_required, true);
+  assert.equal(readiness.scope_remediation_command_ready, true);
+  assert.equal(readiness.scope_remediation_command_visible, true);
+  assert.equal(readiness.scope_remediation_env_var, "FRANCIS_API_ACTOR_SCOPES");
+  assert.equal(readiness.scope_remediation_actor, "codex.builder");
+  assert.deepEqual(readiness.scope_remediation_policy_fragment, {
+    "codex.builder": ["federation.stage16.sleep_resume.confirmation.write"],
+  });
+  assert.equal(
+    readiness.scope_remediation_command?.includes("federation.stage16.sleep_resume.confirmation.write"),
+    true,
+  );
+  assert.equal(readiness.scope_remediation_copyable_command, readiness.scope_remediation_command);
+  assert.equal(readiness.scope_remediation_projection_only, true);
+  assert.equal(readiness.scope_remediation_writes_receipts, false);
+  assert.equal(readiness.scope_remediation_writes_evidence, false);
+  assert.equal(readiness.scope_remediation_marks_stage16_closed, false);
+  assert.equal(readiness.scope_remediation_grants_authority, false);
+  assert.equal(readiness.scope_remediation_would_mutate_process_environment_if_run, true);
+  assert.equal(readiness.writes_receipt, false);
   assert.equal(readiness.marks_stage16_closed, false);
 });
 

@@ -394,6 +394,21 @@ export type FederationSleepResumeConfirmationActorReadiness = {
   confirmation_receipt_command_writes_evidence: boolean;
   confirmation_receipt_command_marks_stage16_closed: boolean;
   confirmation_receipt_command_projection_only: boolean;
+  scope_remediation_required: boolean;
+  scope_remediation_command_ready: boolean;
+  scope_remediation_command_visible: boolean;
+  scope_remediation_env_var?: string;
+  scope_remediation_actor?: string;
+  scope_remediation_required_scope?: string;
+  scope_remediation_policy_fragment?: Record<string, unknown>;
+  scope_remediation_command?: string;
+  scope_remediation_copyable_command?: string;
+  scope_remediation_projection_only: boolean;
+  scope_remediation_writes_receipts: boolean;
+  scope_remediation_writes_evidence: boolean;
+  scope_remediation_marks_stage16_closed: boolean;
+  scope_remediation_grants_authority: boolean;
+  scope_remediation_would_mutate_process_environment_if_run: boolean;
   reads_permission_gate: boolean;
   writes_receipt: boolean;
   writes_evidence: boolean;
@@ -1736,6 +1751,25 @@ export function parseFederationSleepResumeConfirmationActorReadiness(
     confirmation_receipt_command_writes_evidence: safeBoolean(body.confirmation_receipt_command_writes_evidence),
     confirmation_receipt_command_marks_stage16_closed: safeBoolean(body.confirmation_receipt_command_marks_stage16_closed),
     confirmation_receipt_command_projection_only: safeBoolean(body.confirmation_receipt_command_projection_only),
+    scope_remediation_required: safeBoolean(body.scope_remediation_required),
+    scope_remediation_command_ready: safeBoolean(body.scope_remediation_command_ready),
+    scope_remediation_command_visible: safeBoolean(body.scope_remediation_command_visible),
+    scope_remediation_env_var: optionalString(body.scope_remediation_env_var),
+    scope_remediation_actor: optionalString(body.scope_remediation_actor),
+    scope_remediation_required_scope: optionalString(body.scope_remediation_required_scope),
+    scope_remediation_policy_fragment: isRecord(body.scope_remediation_policy_fragment)
+      ? body.scope_remediation_policy_fragment
+      : undefined,
+    scope_remediation_command: optionalString(body.scope_remediation_command),
+    scope_remediation_copyable_command: optionalString(body.scope_remediation_copyable_command),
+    scope_remediation_projection_only: safeBoolean(body.scope_remediation_projection_only),
+    scope_remediation_writes_receipts: safeBoolean(body.scope_remediation_writes_receipts),
+    scope_remediation_writes_evidence: safeBoolean(body.scope_remediation_writes_evidence),
+    scope_remediation_marks_stage16_closed: safeBoolean(body.scope_remediation_marks_stage16_closed),
+    scope_remediation_grants_authority: safeBoolean(body.scope_remediation_grants_authority),
+    scope_remediation_would_mutate_process_environment_if_run: safeBoolean(
+      body.scope_remediation_would_mutate_process_environment_if_run,
+    ),
     reads_permission_gate: safeBoolean(body.reads_permission_gate),
     writes_receipt: safeBoolean(body.writes_receipt),
     writes_evidence: safeBoolean(body.writes_evidence),

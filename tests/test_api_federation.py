@@ -1709,6 +1709,8 @@ def test_federation_stage16_sleep_resume_confirmation_actor_readiness_is_read_on
     assert missing["confirmation_receipt_actor_ready"] is False
     assert missing["safe_to_use_in_confirmation_command"] is False
     assert missing["confirmation_receipt_command_ready"] is False
+    assert missing["scope_remediation_required"] is False
+    assert missing["scope_remediation_command"] == ""
     assert missing["writes_receipt"] is False
     assert missing["writes_evidence"] is False
     assert missing["marks_stage16_closed"] is False
@@ -1724,6 +1726,8 @@ def test_federation_stage16_sleep_resume_confirmation_actor_readiness_is_read_on
     assert placeholder["confirmation_receipt_actor_ready"] is False
     assert placeholder["safe_to_use_in_confirmation_command"] is False
     assert placeholder["confirmation_receipt_command_ready"] is False
+    assert placeholder["scope_remediation_required"] is False
+    assert placeholder["scope_remediation_command"] == ""
     assert placeholder["next_step"] == "replace_actor_placeholder_with_scoped_operator_or_delegated_builder_actor"
     assert placeholder["next_smallest_truthful_gap"] == "stage16_sleep_resume_confirmation_actor_readiness"
     assert placeholder["governance"]["rejects_placeholder_actor"] is True
@@ -1737,7 +1741,28 @@ def test_federation_stage16_sleep_resume_confirmation_actor_readiness_is_read_on
     assert unscoped["required_scope"] == "federation.stage16.sleep_resume.confirmation.write"
     assert unscoped["confirmation_receipt_actor_ready"] is False
     assert unscoped["confirmation_receipt_command_ready"] is False
+    assert unscoped["scope_remediation_required"] is True
+    assert unscoped["scope_remediation_command_ready"] is True
+    assert unscoped["scope_remediation_command_visible"] is True
+    assert unscoped["scope_remediation_env_var"] == "FRANCIS_API_ACTOR_SCOPES"
+    assert unscoped["scope_remediation_actor"] == "test.federation.write"
+    assert unscoped["scope_remediation_required_scope"] == "federation.stage16.sleep_resume.confirmation.write"
+    assert unscoped["scope_remediation_policy_fragment"] == {
+        "test.federation.write": ["federation.stage16.sleep_resume.confirmation.write"]
+    }
+    assert "FRANCIS_API_ACTOR_SCOPES" in unscoped["scope_remediation_command"]
+    assert "test.federation.write" in unscoped["scope_remediation_command"]
+    assert "federation.stage16.sleep_resume.confirmation.write" in unscoped["scope_remediation_command"]
+    assert unscoped["scope_remediation_command"] == unscoped["scope_remediation_copyable_command"]
+    assert unscoped["scope_remediation_projection_only"] is True
+    assert unscoped["scope_remediation_writes_receipts"] is False
+    assert unscoped["scope_remediation_writes_evidence"] is False
+    assert unscoped["scope_remediation_marks_stage16_closed"] is False
+    assert unscoped["scope_remediation_grants_authority"] is False
+    assert unscoped["scope_remediation_would_mutate_process_environment_if_run"] is True
     assert unscoped["next_smallest_truthful_gap"] == "stage16_sleep_resume_confirmation_actor_readiness"
+    assert unscoped["governance"]["scope_remediation_projection_only"] is True
+    assert unscoped["governance"]["scope_remediation_does_not_apply_scope"] is True
 
     scoped = client.get(
         "/federation/sleep-resume-confirmation/actor-readiness",
@@ -1755,6 +1780,8 @@ def test_federation_stage16_sleep_resume_confirmation_actor_readiness_is_read_on
     assert scoped["confirmation_receipt_actor_bound"] is True
     assert scoped["confirmation_receipt_actor_placeholder"] == ""
     assert scoped["confirmation_receipt_command_requires_actor_substitution"] is False
+    assert scoped["scope_remediation_required"] is False
+    assert scoped["scope_remediation_command"] == ""
     assert "actor = 'test.federation.sleep'" in scoped["confirmation_receipt_command"]
     assert str(pre_sleep_path.resolve()) in scoped["confirmation_receipt_command"]
     assert scoped["confirmation_receipt_command"] in scoped["confirmation_receipt_copyable_command"]

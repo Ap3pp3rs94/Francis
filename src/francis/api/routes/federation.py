@@ -994,6 +994,10 @@ def stage16_sleep_resume_confirmation_actor_readiness(actor: str) -> dict[str, A
         ready=actor_ready and bool(current_pre_sleep.get("present")),
         actor=actor if actor_ready else "",
     )
+    scope_remediation = _stage16_sleep_resume_confirmation_scope_remediation(
+        actor=actor,
+        ready=actor_present and not placeholder_actor and not actor_ready,
+    )
     if not bool(current_pre_sleep.get("present")):
         next_gap = _STAGE16_SLEEP_CONTINUITY_PRE_SLEEP_EVIDENCE_GAP
     elif actor_ready:
@@ -1024,6 +1028,7 @@ def stage16_sleep_resume_confirmation_actor_readiness(actor: str) -> dict[str, A
         "safe_to_use_in_confirmation_command": actor_ready,
         "next_step": next_step,
         **command_projection,
+        **scope_remediation,
         "reads_permission_gate": True,
         "writes_receipt": False,
         "writes_evidence": False,
@@ -1046,6 +1051,8 @@ def stage16_sleep_resume_confirmation_actor_readiness(actor: str) -> dict[str, A
             "target_method": "POST",
             "required_scope": _FEDERATION_SLEEP_RESUME_CONFIRMATION_SCOPE,
             "rejects_placeholder_actor": True,
+            "scope_remediation_projection_only": True,
+            "scope_remediation_does_not_apply_scope": True,
             "does_not_write_receipts": True,
             "does_not_write_evidence": True,
             "does_not_write_runtime_readback": True,
@@ -1665,6 +1672,35 @@ def _stage16_sleep_resume_confirmation_command_projection(
 
 def _stage16_sleep_resume_confirmation_actor_is_placeholder(actor: str) -> bool:
     return _safe_str(actor).strip() == f"<actor_with_{_FEDERATION_SLEEP_RESUME_CONFIRMATION_SCOPE}>"
+
+
+def _stage16_sleep_resume_confirmation_scope_remediation(
+    *,
+    actor: str,
+    ready: bool,
+) -> dict[str, Any]:
+    safe_actor = _redacted_text(actor).strip()[:240]
+    remediation_ready = bool(ready and safe_actor)
+    policy_fragment = {safe_actor: [_FEDERATION_SLEEP_RESUME_CONFIRMATION_SCOPE]} if remediation_ready else {}
+    policy_json = json.dumps(policy_fragment, separators=(",", ":"))
+    command = f"$env:FRANCIS_API_ACTOR_SCOPES = {_powershell_single_quote(policy_json)}" if remediation_ready else ""
+    return {
+        "scope_remediation_required": remediation_ready,
+        "scope_remediation_command_ready": remediation_ready,
+        "scope_remediation_command_visible": remediation_ready,
+        "scope_remediation_env_var": "FRANCIS_API_ACTOR_SCOPES",
+        "scope_remediation_actor": safe_actor if remediation_ready else "",
+        "scope_remediation_required_scope": _FEDERATION_SLEEP_RESUME_CONFIRMATION_SCOPE if remediation_ready else "",
+        "scope_remediation_policy_fragment": policy_fragment,
+        "scope_remediation_command": command,
+        "scope_remediation_copyable_command": command,
+        "scope_remediation_projection_only": True,
+        "scope_remediation_writes_receipts": False,
+        "scope_remediation_writes_evidence": False,
+        "scope_remediation_marks_stage16_closed": False,
+        "scope_remediation_grants_authority": False,
+        "scope_remediation_would_mutate_process_environment_if_run": remediation_ready,
+    }
 
 
 def _stage16_sleep_resume_confirmation_operator_steps(
