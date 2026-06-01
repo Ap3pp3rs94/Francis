@@ -56229,6 +56229,47 @@ Validation risk:
   output locally and were stopped; direct function/API validations passed.
   GitHub CI remains the full-suite evidence gate.
 
+### 2026-06-01 - Stage 17 plugin registry atomic writes tolerate concurrent readbacks
+
+Roadmap area: Stage 17 / Capability Economy, live catalog readback reliability.
+
+Material change:
+
+- Plugin registry JSON writes now use a unique temporary sibling per write
+  instead of the shared `_registry.json.tmp` path.
+- This prevents concurrent Stage 17 readbacks that both trigger generated-plugin
+  sync from deleting or replacing each other's temp file before `os.replace`.
+- The change is scoped to the existing registry write helper; it does not change
+  plugin promotion behavior, capability metadata, execution authority, or
+  approval policy.
+
+Latest validation for Stage 17 plugin registry atomic writes:
+
+- Direct invocation of
+  `tests/test_api_plugins.py::test_plugins_atomic_write_json_uses_unique_temp_siblings`
+  Result: `passed`; two writes used distinct temp sibling names, left no
+  `_registry.json.*.tmp` files, and persisted the final payload.
+- Direct FastAPI `TestClient` validation of
+  `GET /plugins/capabilities/packs/migration/plan` followed by
+  `GET /plugins/capabilities/packs/promotion/rules`
+  Result: `passed`; migration plan returned `ok=True`,
+  `status=ready_for_metadata_receipt_review`, `candidate_total=20`, and
+  promotion rules returned `ok=True`,
+  `next_smallest_truthful_gap=stage17_capability_pack_metadata_receipts`.
+- `python -m mypy src/francis/api/routes/plugins.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/plugins.py
+  tests/test_api_plugins.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/plugins.py
+  tests/test_api_plugins.py`
+  Result: `passed`.
+
+Validation risk:
+
+- Full local pytest was not rerun because focused pytest commands are still
+  stalling in this workspace; GitHub CI remains the full-suite evidence gate.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

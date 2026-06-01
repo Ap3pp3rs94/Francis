@@ -33,6 +33,31 @@ def _approve_forge_proposal(client, proposal_id: str) -> dict[str, object]:
     return approved_body
 
 
+def test_plugins_atomic_write_json_uses_unique_temp_siblings(monkeypatch, tmp_path: Path) -> None:
+    from francis.api.routes import plugins
+
+    replace_calls: list[Path] = []
+    real_replace = plugins.os.replace
+
+    def spy_replace(src: str | Path, dst: str | Path) -> None:
+        replace_calls.append(Path(src))
+        real_replace(src, dst)
+
+    monkeypatch.setattr(plugins.os, "replace", spy_replace)
+    path = tmp_path / "plugins" / "_registry.json"
+
+    plugins._atomic_write_json(path, {"write": 1})
+    plugins._atomic_write_json(path, {"write": 2})
+
+    assert path.exists()
+    assert json.loads(path.read_text(encoding="utf-8")) == {"write": 2}
+    assert len(replace_calls) == 2
+    assert len({item.name for item in replace_calls}) == 2
+    assert all(item.parent == path.parent for item in replace_calls)
+    assert all(item.name.startswith("_registry.json.") for item in replace_calls)
+    assert not any(path.parent.glob("_registry.json.*.tmp"))
+
+
 def test_plugins_build_lifecycle_and_run(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
