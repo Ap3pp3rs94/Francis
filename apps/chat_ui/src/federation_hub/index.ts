@@ -20,6 +20,8 @@
  *  - Defaults are conventional and can be overridden via options to match backend contracts.
  */
 
+export const DEFAULT_FEDERATION_SLEEP_RESUME_CONFIRMATION_ACTOR = "codex.builder";
+
 export type FederationInstanceStatus =
   | "online"
   | "offline"

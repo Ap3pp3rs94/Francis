@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
+  DEFAULT_FEDERATION_SLEEP_RESUME_CONFIRMATION_ACTOR,
   FederationApiError,
   FederationClient,
   federationSleepContinuityVisibleOperatorCommands,
@@ -86,7 +87,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
   const [action, setAction] = useState<FederationSleepContinuityActionReadback | null>(null);
   const [confirmations, setConfirmations] = useState<FederationSleepResumeConfirmations | null>(null);
   const [actorReadiness, setActorReadiness] = useState<FederationSleepResumeConfirmationActorReadiness | null>(null);
-  const [actorPreflightActor, setActorPreflightActor] = useState("");
+  const [actorPreflightActor, setActorPreflightActor] = useState(DEFAULT_FEDERATION_SLEEP_RESUME_CONFIRMATION_ACTOR);
   const [actorReadinessLoading, setActorReadinessLoading] = useState(false);
   const [presentation, setPresentation] = useState<FederationSleepContinuityPresentation | null>(null);
   const [error, setError] = useState<string | null>(null);

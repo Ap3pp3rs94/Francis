@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  DEFAULT_FEDERATION_SLEEP_RESUME_CONFIRMATION_ACTOR,
   FederationClient,
   federationSleepContinuityVisibleOperatorCommands,
   federationSleepResumeConfirmationActorReadinessVisibleCommands,
@@ -977,6 +978,14 @@ test("parseFederationSleepResumeConfirmationActorReadiness preserves scope remed
   });
 
   assert.equal(readiness.status, "actor_scope_missing");
+  assert.equal(DEFAULT_FEDERATION_SLEEP_RESUME_CONFIRMATION_ACTOR, "codex.builder");
+  assert.equal(
+    isFederationSleepResumeConfirmationActorReadinessCurrent(
+      readiness,
+      DEFAULT_FEDERATION_SLEEP_RESUME_CONFIRMATION_ACTOR,
+    ),
+    true,
+  );
   assert.equal(readiness.confirmation_receipt_actor_ready, false);
   assert.equal(readiness.scope_remediation_required, true);
   assert.equal(readiness.scope_remediation_command_ready, true);

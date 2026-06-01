@@ -54539,6 +54539,31 @@ Latest validation for Stage 16 Hub actor scope remediation display:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 Hub defaults actor preflight to delegated builder
+
+Roadmap area: Stage 16 / Federation, sleep-continuity confirmation receipt
+operator surface.
+
+Material change:
+
+- Federation Hub now defaults the sleep-resume confirmation actor preflight to
+  `codex.builder`, matching the current delegated-builder actor being checked
+  by the Stage 16 confirmation receipt readiness route.
+- The default is exported through the Federation Hub contract layer and covered
+  by the actor-readiness remediation test so the UI default remains tied to the
+  readback that currently reports the missing
+  `federation.stage16.sleep_resume.confirmation.write` scope.
+- This is UI default/readback truthfulness only: it does not grant actor scope,
+  write a confirmation receipt, capture sleep/resume evidence, grant authority,
+  run shell commands, or close Stage 16.
+
+Latest validation for Stage 16 Hub actor preflight default:
+
+- `npm run test -- federation_hub`
+  Result: `passed; 193 passed`.
+- `npm run build`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
