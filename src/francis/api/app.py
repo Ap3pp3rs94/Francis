@@ -44,11 +44,13 @@ from francis.api.routes import (
     trust_calibration,
     web_learning,
 )
+from francis.kernel.bootstrap import bootstrap
 from francis.kernel.paths import repo_root
 
 
 def create_app() -> FastAPI:
     """Create the Francis API application."""
+    bootstrap()
     app = FastAPI(title="Francis API")
     app.add_exception_handler(Exception, sanitized_exception_handler)
     _configure_cors(app)

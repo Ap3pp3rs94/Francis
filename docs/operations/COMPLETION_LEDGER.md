@@ -54564,6 +54564,50 @@ Latest validation for Stage 16 Hub actor preflight default:
 - `npm run build`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 API loads repo env for actor-scope gates
+
+Roadmap area: Stage 16 / Federation, sleep-continuity confirmation receipt
+operator surface.
+
+Material change:
+
+- `create_app()` now invokes the existing Francis bootstrap helper before
+  route mounting, so API processes load the repo-local `.env` file.
+- The bootstrap helper now resolves `.env` through `FRANCIS_ROOT`/repo root and
+  uses `override=False`, preserving explicitly supplied process environment
+  values over local file defaults.
+- A targeted federation test proves an isolated repo `.env` containing
+  `FRANCIS_API_ACTOR_SCOPES` for `codex.builder` makes the sleep-resume
+  confirmation actor-readiness route report an actor-bound confirmation command
+  as ready, while still writing no receipt, no evidence, and no Stage 16
+  closure state.
+- This does not grant scope by itself and does not write the missing physical
+  sleep/resume confirmation receipt; it makes the existing governed
+  actor-scope remediation durable for API startup instead of requiring an
+  already-populated shell environment.
+
+Latest validation for Stage 16 API actor-scope env bootstrapping:
+
+- `python -m pytest
+  tests/test_api_federation.py::test_federation_stage16_actor_readiness_loads_confirmation_scope_from_repo_env
+  tests/test_api_federation.py::test_federation_stage16_sleep_resume_confirmation_actor_readiness_is_read_only
+  -q --tb=short --maxfail=1`
+  Result: `passed; 2 passed`.
+- `python -m pytest tests/test_api_federation.py -q --tb=short --maxfail=1`
+  Result: `passed; 26 passed`.
+- `python -m pytest tests/unit/test_api_permission_gate.py -q --tb=short
+  --maxfail=1`
+  Result: `passed; 5 passed`.
+- `python -m mypy src/francis/kernel/bootstrap.py src/francis/api/app.py
+  src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/kernel/bootstrap.py src/francis/api/app.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/kernel/bootstrap.py
+  src/francis/api/app.py tests/test_api_federation.py`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -1794,6 +1794,55 @@ def test_federation_stage16_sleep_resume_confirmation_actor_readiness_is_read_on
     assert not (data_root / "logs" / "federation" / "stage16_sleep_resume_operator_confirmations.jsonl").exists()
 
 
+def test_federation_stage16_actor_readiness_loads_confirmation_scope_from_repo_env(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    data_root = tmp_path / "francis_data"
+    actor = "codex.builder"
+    scope = "federation.stage16.sleep_resume.confirmation.write"
+    (repo / ".env").write_text(f"FRANCIS_API_ACTOR_SCOPES={json.dumps({actor: [scope]})}\n", encoding="utf-8")
+    monkeypatch.setenv("FRANCIS_ROOT", str(repo))
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.delenv("FRANCIS_API_ACTOR_SCOPES", raising=False)
+    pre_sleep_path = _write_stage16_pre_sleep_evidence(data_root)
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    readiness = client.get(
+        "/federation/sleep-resume-confirmation/actor-readiness",
+        params={"actor": actor},
+    ).json()
+
+    assert readiness["status"] == "actor_ready_for_sleep_resume_confirmation"
+    assert readiness["actor"] == actor
+    assert readiness["required_scope"] == scope
+    assert readiness["permission_allowed"] is True
+    assert readiness["confirmation_receipt_actor_ready"] is True
+    assert readiness["safe_to_use_in_confirmation_command"] is True
+    assert readiness["confirmation_receipt_command_ready"] is True
+    assert readiness["confirmation_receipt_actor"] == actor
+    assert readiness["confirmation_receipt_actor_bound"] is True
+    assert readiness["confirmation_receipt_command_requires_actor_substitution"] is False
+    assert readiness["scope_remediation_required"] is False
+    assert readiness["scope_remediation_command"] == ""
+    assert readiness["current_pre_sleep_evidence_path"] == str(pre_sleep_path.resolve())
+    assert actor in readiness["confirmation_receipt_copyable_command"]
+    assert readiness["writes_receipt"] is False
+    assert readiness["writes_evidence"] is False
+    assert readiness["marks_stage16_closed"] is False
+    assert readiness["governance"]["actor_scope_preflight"] is True
+    assert readiness["governance"]["does_not_write_receipts"] is True
+    assert readiness["governance"]["does_not_mark_stage16_closed"] is True
+    assert readiness["next_smallest_truthful_gap"] == "stage16_sleep_resume_confirmation_receipt"
+    assert not (data_root / "logs" / "federation" / "stage16_sleep_resume_operator_confirmations.jsonl").exists()
+
+
 def test_federation_stage16_sleep_resume_confirmation_denies_without_scope(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
