@@ -513,6 +513,10 @@ def _stage16_operator_stage_closure_decision_path() -> Path:
     return data_dir() / "logs" / "federation" / "stage16_operator_stage_closure_decisions.jsonl"
 
 
+def _stage16_sleep_continuity_evidence_root() -> Path:
+    return data_dir() / "test_runs" / "federation-stage16-sleep-continuity-evidence"
+
+
 def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8", newline="\n") as handle:
@@ -858,12 +862,70 @@ def stage16_operator_stage_closure_decision_readback(*, limit: int = 20) -> dict
     }
 
 
-def _stage16_sleep_continuity_runbook_steps() -> list[dict[str, Any]]:
+def _latest_stage16_pre_sleep_evidence() -> dict[str, Any]:
+    evidence_root = _stage16_sleep_continuity_evidence_root()
+    if not evidence_root.exists() or not evidence_root.is_dir():
+        return {
+            "present": False,
+            "evidence_root": str(evidence_root),
+            "evidence_path": "",
+            "status": "missing",
+        }
+
+    root_real = evidence_root.resolve()
+    candidates = sorted(
+        (path for path in evidence_root.glob("pre_sleep_*.json") if path.is_file()),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve()
+            resolved.relative_to(root_real)
+            raw = json.loads(resolved.read_text(encoding="utf-8", errors="replace"))
+        except Exception:
+            continue
+        if not isinstance(raw, dict):
+            continue
+        governance = raw.get("governance") if isinstance(raw.get("governance"), dict) else {}
+        if _safe_str(raw.get("evidence_kind")).strip() != "stage16_sleep_continuity_pre_sleep":
+            continue
+        return {
+            "present": True,
+            "status": "pre_sleep_evidence_available",
+            "evidence_root": str(root_real),
+            "evidence_path": str(resolved),
+            "file_name": resolved.name,
+            "recorded_ts": int(raw.get("source_recorded_ts") or raw.get("recorded_ts") or 0),
+            "continuity_record_id": _safe_str(raw.get("continuity_record_id")).strip(),
+            "source_node_id": _safe_str(raw.get("source_node_id")).strip(),
+            "paired_node_id": _safe_str(raw.get("paired_node_id")).strip(),
+            "trace_id": _safe_str(raw.get("trace_id")).strip(),
+            "authority_snapshot_id": _safe_str(raw.get("authority_snapshot_id")).strip(),
+            "freshness_state": _safe_str(raw.get("freshness_state")).strip(),
+            "metadata_only": bool(governance.get("metadata_only")),
+            "contains_raw_private_data": bool(governance.get("contains_raw_private_data")),
+            "writes_runtime_readback": bool(governance.get("writes_runtime_readback")),
+            "marks_stage16_closed": bool(governance.get("marks_stage16_closed")),
+        }
+
+    return {
+        "present": False,
+        "evidence_root": str(root_real),
+        "evidence_path": "",
+        "status": "missing",
+    }
+
+
+def _stage16_sleep_continuity_runbook_steps(*, latest_pre_sleep_evidence: dict[str, Any]) -> list[dict[str, Any]]:
+    pre_sleep_path = _safe_str(latest_pre_sleep_evidence.get("evidence_path")).strip()
+    pre_sleep_arg = f'"{pre_sleep_path}"' if pre_sleep_path else "<pre_sleep.json>"
     return [
         {
             "id": "capture_pre_sleep_evidence",
             "title": "Capture pre-sleep evidence",
             "command": "scripts/federation-stage16-sleep-continuity-evidence.ps1 -Mode PreSleep -CommitEvidence",
+            "latest_evidence_path": pre_sleep_path,
             "expected_output": "pre-sleep evidence JSON path",
             "operator_action_required": True,
             "writes_evidence_when_run": True,
@@ -875,8 +937,10 @@ def _stage16_sleep_continuity_runbook_steps() -> list[dict[str, Any]]:
             "title": "Capture post-resume evidence",
             "command": (
                 "scripts/federation-stage16-sleep-continuity-evidence.ps1 -Mode PostResume -CommitEvidence "
-                "-PreSleepEvidencePath <pre_sleep.json> -OperatorConfirmedSleepResume"
+                f"-PreSleepEvidencePath {pre_sleep_arg} -OperatorConfirmedSleepResume"
             ),
+            "pre_sleep_evidence_required": True,
+            "pre_sleep_evidence_available": bool(latest_pre_sleep_evidence.get("present")),
             "expected_output": "post-resume evidence JSON path",
             "operator_action_required": True,
             "writes_evidence_when_run": True,
@@ -888,8 +952,10 @@ def _stage16_sleep_continuity_runbook_steps() -> list[dict[str, Any]]:
             "title": "Commit sleep continuity runtime proof receipt",
             "command": (
                 "scripts/federation-stage16-sleep-continuity-runtime-proof.ps1 -Mode Status -CommitReceipts "
-                "-PreSleepEvidencePath <pre_sleep.json> -PostResumeEvidencePath <post_resume.json>"
+                f"-PreSleepEvidencePath {pre_sleep_arg} -PostResumeEvidencePath <post_resume.json>"
             ),
+            "pre_sleep_evidence_required": True,
+            "pre_sleep_evidence_available": bool(latest_pre_sleep_evidence.get("present")),
             "expected_output": "workstation_sleep_continuity_validated live runtime readback receipt",
             "operator_action_required": False,
             "writes_evidence_when_run": False,
@@ -919,6 +985,7 @@ def stage16_sleep_continuity_runbook() -> dict[str, Any]:
     live_readbacks = live_runtime_readback_summary(limit=200)
     review = completion_review()
     closure = stage16_operator_stage_closure_decision_readback(limit=1)
+    latest_pre_sleep_evidence = _latest_stage16_pre_sleep_evidence()
     checks_by_id = {
         _safe_str(item.get("id")).strip(): item for item in live_readbacks.get("checks", []) if isinstance(item, dict)
     }
@@ -965,6 +1032,8 @@ def stage16_sleep_continuity_runbook() -> dict[str, Any]:
         "sleep_continuity_readback_id": "workstation_sleep_continuity_validated",
         "sleep_continuity_ready": sleep_continuity_ready,
         "sleep_continuity_check": sleep_check,
+        "pre_sleep_evidence": latest_pre_sleep_evidence,
+        "pre_sleep_evidence_ready": bool(latest_pre_sleep_evidence.get("present")),
         "ready_to_close": ready_to_close,
         "stage16_closed_by_receipt": stage16_closed_by_receipt,
         "missing_readbacks": missing_readbacks,
@@ -989,12 +1058,13 @@ def stage16_sleep_continuity_runbook() -> dict[str, Any]:
             "stage16_closed_by_receipt": stage16_closed_by_receipt,
             "latest_receipt_id": _safe_str(closure.get("latest_receipt_id")).strip(),
         },
-        "steps": _stage16_sleep_continuity_runbook_steps(),
+        "steps": _stage16_sleep_continuity_runbook_steps(latest_pre_sleep_evidence=latest_pre_sleep_evidence),
         "routes": _federation_routes(),
         "governance": {
             **_federation_governance(),
             "read_only": True,
             "runbook_only": True,
+            "reads_pre_sleep_evidence_metadata": True,
             "does_not_infer_sleep_from_delay": True,
             "operator_confirmation_required": True,
             "requires_explicit_sleep_resume_confirmation": True,

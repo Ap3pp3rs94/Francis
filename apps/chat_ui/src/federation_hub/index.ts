@@ -235,10 +235,13 @@ export type FederationSleepContinuityRunbookStep = {
   id: string;
   title?: string;
   command?: string;
+  latest_evidence_path?: string;
   method?: string;
   route?: string;
   required_scope?: string;
   expected_output?: string;
+  pre_sleep_evidence_required: boolean;
+  pre_sleep_evidence_available: boolean;
   operator_action_required: boolean;
   operator_confirmation_required: boolean;
   writes_evidence_when_run: boolean;
@@ -256,6 +259,8 @@ export type FederationSleepContinuityRunbook = {
   prerequisite_readbacks_ready: boolean;
   sleep_continuity_readback_id?: string;
   sleep_continuity_ready: boolean;
+  pre_sleep_evidence?: Record<string, unknown>;
+  pre_sleep_evidence_ready: boolean;
   ready_to_close: boolean;
   stage16_closed_by_receipt: boolean;
   missing_readbacks: string[];
@@ -723,10 +728,13 @@ function parseFederationSleepContinuityRunbookStep(raw: unknown): FederationSlee
     id,
     title: optionalString(raw.title),
     command: optionalString(raw.command),
+    latest_evidence_path: optionalString(raw.latest_evidence_path),
     method: optionalString(raw.method),
     route: optionalString(raw.route),
     required_scope: optionalString(raw.required_scope),
     expected_output: optionalString(raw.expected_output),
+    pre_sleep_evidence_required: safeBoolean(raw.pre_sleep_evidence_required),
+    pre_sleep_evidence_available: safeBoolean(raw.pre_sleep_evidence_available),
     operator_action_required: safeBoolean(raw.operator_action_required),
     operator_confirmation_required: safeBoolean(raw.operator_confirmation_required),
     writes_evidence_when_run: safeBoolean(raw.writes_evidence_when_run),
@@ -752,6 +760,8 @@ export function parseFederationSleepContinuityRunbook(raw: unknown): FederationS
     prerequisite_readbacks_ready: safeBoolean(body.prerequisite_readbacks_ready),
     sleep_continuity_readback_id: optionalString(body.sleep_continuity_readback_id),
     sleep_continuity_ready: safeBoolean(body.sleep_continuity_ready),
+    pre_sleep_evidence: isRecord(body.pre_sleep_evidence) ? body.pre_sleep_evidence : undefined,
+    pre_sleep_evidence_ready: safeBoolean(body.pre_sleep_evidence_ready),
     ready_to_close: safeBoolean(body.ready_to_close),
     stage16_closed_by_receipt: safeBoolean(body.stage16_closed_by_receipt),
     missing_readbacks: stringList(body.missing_readbacks),

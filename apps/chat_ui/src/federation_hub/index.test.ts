@@ -140,6 +140,16 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
         prerequisite_readbacks_ready: true,
         sleep_continuity_readback_id: "workstation_sleep_continuity_validated",
         sleep_continuity_ready: false,
+        pre_sleep_evidence_ready: true,
+        pre_sleep_evidence: {
+          present: true,
+          evidence_path: "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json",
+          continuity_record_id: "stage16-sleep-continuity-test",
+          metadata_only: true,
+          contains_raw_private_data: false,
+          writes_runtime_readback: false,
+          marks_stage16_closed: false,
+        },
         ready_to_close: false,
         stage16_closed_by_receipt: false,
         missing_readbacks: ["workstation_sleep_continuity_validated"],
@@ -161,6 +171,8 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
             id: "capture_pre_sleep_evidence",
             title: "Capture pre-sleep evidence",
             command: "scripts/federation-stage16-sleep-continuity-evidence.ps1 -Mode PreSleep -CommitEvidence",
+            latest_evidence_path:
+              "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json",
             operator_action_required: true,
             operator_confirmation_required: false,
             writes_evidence_when_run: true,
@@ -169,7 +181,9 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
           {
             id: "capture_post_resume_evidence",
             command:
-              "scripts/federation-stage16-sleep-continuity-evidence.ps1 -Mode PostResume -CommitEvidence -PreSleepEvidencePath <pre_sleep.json> -OperatorConfirmedSleepResume",
+              'scripts/federation-stage16-sleep-continuity-evidence.ps1 -Mode PostResume -CommitEvidence -PreSleepEvidencePath "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json" -OperatorConfirmedSleepResume',
+            pre_sleep_evidence_required: true,
+            pre_sleep_evidence_available: true,
             operator_action_required: true,
             operator_confirmation_required: true,
             writes_evidence_when_run: true,
@@ -178,7 +192,9 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
           {
             id: "commit_sleep_continuity_readback",
             command:
-              "scripts/federation-stage16-sleep-continuity-runtime-proof.ps1 -Mode Status -CommitReceipts -PreSleepEvidencePath <pre_sleep.json> -PostResumeEvidencePath <post_resume.json>",
+              'scripts/federation-stage16-sleep-continuity-runtime-proof.ps1 -Mode Status -CommitReceipts -PreSleepEvidencePath "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json" -PostResumeEvidencePath <post_resume.json>',
+            pre_sleep_evidence_required: true,
+            pre_sleep_evidence_available: true,
             operator_action_required: false,
             operator_confirmation_required: false,
             writes_evidence_when_run: false,
@@ -297,6 +313,8 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
     assert.equal(runbook.prerequisite_readbacks_ready, true);
     assert.equal(runbook.sleep_continuity_readback_id, "workstation_sleep_continuity_validated");
     assert.equal(runbook.sleep_continuity_ready, false);
+    assert.equal(runbook.pre_sleep_evidence_ready, true);
+    assert.equal(runbook.pre_sleep_evidence?.continuity_record_id, "stage16-sleep-continuity-test");
     assert.equal(runbook.ready_to_close, false);
     assert.equal(runbook.stage16_closed_by_receipt, false);
     assert.deepEqual(runbook.missing_readbacks, ["workstation_sleep_continuity_validated"]);
@@ -310,7 +328,9 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
       ],
     );
     assert.equal(runbook.steps[1]?.operator_confirmation_required, true);
+    assert.equal(runbook.steps[1]?.pre_sleep_evidence_available, true);
     assert.equal(runbook.steps[2]?.writes_receipts_when_run, true);
+    assert.equal(runbook.steps[2]?.pre_sleep_evidence_required, true);
     assert.equal(runbook.steps[3]?.route, "/federation/stage-closure-decision");
     assert.equal(runbook.writes_evidence, false);
     assert.equal(runbook.writes_receipts, false);
@@ -453,6 +473,13 @@ test("federation Stage 16 parsers preserve ready receipt-backed posture", () => 
     prerequisite_readbacks_ready: true,
     sleep_continuity_readback_id: "workstation_sleep_continuity_validated",
     sleep_continuity_ready: false,
+    pre_sleep_evidence_ready: true,
+    pre_sleep_evidence: {
+      present: true,
+      evidence_path: "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json",
+      continuity_record_id: "stage16-sleep-continuity-test",
+      metadata_only: true,
+    },
     ready_to_close: false,
     stage16_closed_by_receipt: false,
     missing_readbacks: ["workstation_sleep_continuity_validated"],
@@ -471,6 +498,8 @@ test("federation Stage 16 parsers preserve ready receipt-backed posture", () => 
       {
         id: "capture_pre_sleep_evidence",
         command: "scripts/federation-stage16-sleep-continuity-evidence.ps1 -Mode PreSleep -CommitEvidence",
+        latest_evidence_path:
+          "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json",
         operator_action_required: true,
         operator_confirmation_required: false,
         writes_evidence_when_run: true,
@@ -481,6 +510,8 @@ test("federation Stage 16 parsers preserve ready receipt-backed posture", () => 
         method: "POST",
         route: "/federation/stage-closure-decision",
         required_scope: "federation.stage16.closure.write",
+        pre_sleep_evidence_required: false,
+        pre_sleep_evidence_available: false,
         payload_contract: {
           decision: "close_stage16",
         },
@@ -543,11 +574,17 @@ test("federation Stage 16 parsers preserve ready receipt-backed posture", () => 
   assert.equal(runbook.runbook_only, true);
   assert.equal(runbook.prerequisite_readbacks_ready, true);
   assert.equal(runbook.sleep_continuity_ready, false);
+  assert.equal(runbook.pre_sleep_evidence_ready, true);
+  assert.equal(runbook.pre_sleep_evidence?.continuity_record_id, "stage16-sleep-continuity-test");
   assert.deepEqual(runbook.missing_readbacks, ["workstation_sleep_continuity_validated"]);
   assert.equal(runbook.current_readback?.ready_count, 4);
   assert.equal(runbook.completion_review?.ready_to_close, false);
   assert.equal(runbook.stage_closure_decision?.status, "empty");
   assert.equal(runbook.steps[0]?.id, "capture_pre_sleep_evidence");
+  assert.equal(
+    runbook.steps[0]?.latest_evidence_path,
+    "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_test.json",
+  );
   assert.equal(runbook.steps[1]?.route, "/federation/stage-closure-decision");
   assert.equal(runbook.steps[1]?.payload_contract?.decision, "close_stage16");
   assert.equal(runbook.writes_evidence, false);
