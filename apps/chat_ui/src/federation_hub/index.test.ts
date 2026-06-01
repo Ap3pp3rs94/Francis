@@ -479,6 +479,7 @@ test("FederationClient reads Stage 16 live readback gap without enabling mutatio
 
     assert.equal(presentation.state, "blocked_on_prior_live_readbacks");
     assert.deepEqual(presentation.blockers, ["live_pairing_flow_observed", "workstation_sleep_continuity_validated"]);
+    assert.deepEqual(presentation.prior_live_readback_blockers, ["live_pairing_flow_observed"]);
     assert.equal(presentation.selected_step_id, undefined);
     assert.equal(presentation.post_resume_evidence_ready, true);
     assert.equal(presentation.writes_evidence_when_run, false);
@@ -578,6 +579,7 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   assert.equal(presentation.runbook_route, "/federation/sleep-continuity-runbook");
   assert.equal(presentation.closure_decision_route, "/federation/stage-closure-decision");
   assert.deepEqual(presentation.blockers, ["workstation_sleep_continuity_validated"]);
+  assert.deepEqual(presentation.prior_live_readback_blockers, []);
   assert.equal(presentation.pre_sleep_evidence_ready, true);
   assert.equal(presentation.post_resume_evidence_ready, false);
   assert.equal(presentation.operator_action_required, true);

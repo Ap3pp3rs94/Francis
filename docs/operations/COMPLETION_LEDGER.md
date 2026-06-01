@@ -52096,6 +52096,36 @@ Latest validation for Stage 16 federation route-source display:
 - `cd apps/chat_ui; npm run build`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 federation panel separates prior live blockers
+
+Roadmap area: Stage 16 / Federation, operator-visible live-readback blocker
+truthfulness.
+
+Material change:
+
+- `FederationSleepContinuityPresentation` now preserves
+  `prior_live_readback_blockers` from the backend
+  `/federation/sleep-continuity-action` projection.
+- `FederationHubPanel` now renders those prior-live-readback blockers
+  separately from the current blocker chips, so missing prerequisite live
+  evidence does not get flattened into the workstation sleep-continuity blocker.
+- The UI contract proves the blocked-on-prior-live-readbacks presentation keeps
+  `live_pairing_flow_observed` separate while the current post-resume action
+  posture keeps an empty prior-live blocker list.
+- This remains read-only. It does not execute routes, post decisions, write
+  evidence, write receipts, write registry state, write memory, grant execution
+  authority, grant mutation authority, infer workstation sleep/resume, or mark
+  Stage 16 closed.
+- Stage 16 remains open until live post-resume evidence and the receipt-backed
+  completion/closure gates are satisfied.
+
+Latest validation for Stage 16 prior-live blocker display:
+
+- `cd apps/chat_ui; npm run test -- federation_hub`
+  Result: `passed; 187 passed`.
+- `cd apps/chat_ui; npm run build`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

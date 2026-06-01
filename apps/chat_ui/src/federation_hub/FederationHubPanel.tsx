@@ -96,6 +96,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
   }, [refresh]);
 
   const blockers = presentation?.blockers.length ? presentation.blockers : status?.completion_review_blockers ?? [];
+  const priorLiveReadbackBlockers = presentation?.prior_live_readback_blockers ?? [];
   const selectedAction = action?.selected_action;
 
   return (
@@ -206,6 +207,18 @@ export function FederationHubPanel(props: { baseUrl: string }) {
               <span style={badgeStyle("ready")}>none</span>
             )}
           </div>
+          {priorLiveReadbackBlockers.length ? (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ fontSize: 11, color: MUTED }}>Prior live readbacks</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                {priorLiveReadbackBlockers.map((blocker) => (
+                  <span key={`federation-prior-live-blocker-${blocker}`} style={badgeStyle("blocked")}>
+                    {blocker}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div>
