@@ -54217,6 +54217,34 @@ Latest validation for Stage 16 actor preflight receipt-write wording:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 Hub mirrors receipt operator-step sequence
+
+Roadmap area: Stage 16 / Federation, Federation Hub sleep/resume confirmation
+contract truthfulness.
+
+Material change:
+
+- Federation Hub's missing-receipt confirmation fixture now mirrors the backend
+  four-step operator workflow:
+  `replace_actor_placeholder`,
+  `write_sleep_resume_confirmation_receipt`,
+  `refresh_sleep_resume_confirmation_readback`, and
+  `run_receipt_backed_post_resume_sequence`.
+- The same fixture now reports
+  `stage16_sleep_resume_confirmation_receipt` as the next smallest truthful gap
+  while the receipt is missing.
+- This is UI contract alignment only: it writes no receipt, runs no shell,
+  captures no evidence, grants no authority, and does not mark Stage 16 closed.
+
+Latest validation for Stage 16 Hub receipt operator-step sequence:
+
+- `npm run test -- federation_hub`
+  Result: `passed; 192 passed`.
+- `npm run build`
+  Result: `passed`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

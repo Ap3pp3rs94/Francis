@@ -697,6 +697,37 @@ test("parseFederationSleepResumeConfirmations preserves missing-receipt remedy c
         read_only_projection: true,
       },
       {
+        id: "write_sleep_resume_confirmation_receipt",
+        order: 2,
+        status: "ready",
+        method: "POST",
+        route: "/federation/sleep-resume-confirmation",
+        command_field: "confirmation_receipt_copyable_command",
+        required_scope: "federation.stage16.sleep_resume.confirmation.write",
+        requires_actor_substitution: true,
+        requires_current_receipt: false,
+        writes_receipts_when_run: true,
+        writes_evidence_when_run: false,
+        marks_stage16_closed_when_run: false,
+        operator_action_required: true,
+        read_only_projection: true,
+      },
+      {
+        id: "refresh_sleep_resume_confirmation_readback",
+        order: 3,
+        status: "ready",
+        method: "GET",
+        route: "/federation/sleep-resume-confirmations",
+        readback_field: "latest_receipt_id",
+        requires_actor_substitution: false,
+        requires_current_receipt: false,
+        writes_receipts_when_run: false,
+        writes_evidence_when_run: false,
+        marks_stage16_closed_when_run: false,
+        operator_action_required: true,
+        read_only_projection: true,
+      },
+      {
         id: "run_receipt_backed_post_resume_sequence",
         order: 4,
         status: "blocked_until_current_confirmation_receipt",
@@ -724,7 +755,7 @@ test("parseFederationSleepResumeConfirmations preserves missing-receipt remedy c
     grants_mutation_authority: false,
     items: [],
     routes: { sleep_resume_confirmation: "/federation/sleep-resume-confirmation" },
-    next_smallest_truthful_gap: "stage16_sleep_continuity_runtime_readback",
+    next_smallest_truthful_gap: "stage16_sleep_resume_confirmation_receipt",
   });
 
   assert.equal(confirmations.status, "empty");
@@ -773,13 +804,21 @@ test("parseFederationSleepResumeConfirmations preserves missing-receipt remedy c
   assert.equal(confirmations.confirmation_receipt_command_receipt_id_readback_field, "latest_receipt_id");
   assert.deepEqual(
     confirmations.confirmation_receipt_operator_steps.map((step) => step.id),
-    ["replace_actor_placeholder", "run_receipt_backed_post_resume_sequence"],
+    [
+      "replace_actor_placeholder",
+      "write_sleep_resume_confirmation_receipt",
+      "refresh_sleep_resume_confirmation_readback",
+      "run_receipt_backed_post_resume_sequence",
+    ],
   );
   assert.equal(confirmations.confirmation_receipt_operator_steps[0]?.requires_actor_substitution, true);
   assert.equal(confirmations.confirmation_receipt_operator_steps[0]?.required_scope, "federation.stage16.sleep_resume.confirmation.write");
-  assert.equal(confirmations.confirmation_receipt_operator_steps[1]?.requires_current_receipt, true);
-  assert.equal(confirmations.confirmation_receipt_operator_steps[1]?.writes_evidence_when_run, false);
-  assert.equal(confirmations.confirmation_receipt_operator_steps[1]?.marks_stage16_closed_when_run, false);
+  assert.equal(confirmations.confirmation_receipt_operator_steps[1]?.route, "/federation/sleep-resume-confirmation");
+  assert.equal(confirmations.confirmation_receipt_operator_steps[1]?.writes_receipts_when_run, true);
+  assert.equal(confirmations.confirmation_receipt_operator_steps[2]?.readback_field, "latest_receipt_id");
+  assert.equal(confirmations.confirmation_receipt_operator_steps[3]?.requires_current_receipt, true);
+  assert.equal(confirmations.confirmation_receipt_operator_steps[3]?.writes_evidence_when_run, false);
+  assert.equal(confirmations.confirmation_receipt_operator_steps[3]?.marks_stage16_closed_when_run, false);
 });
 
 test("parseFederationSleepResumeConfirmationActorReadiness preserves actor-bound command guards", () => {
