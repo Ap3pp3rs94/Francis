@@ -1194,6 +1194,27 @@ def _stage16_sleep_resume_confirmation_next_gap(
     return _STAGE16_SLEEP_CONTINUITY_RUNTIME_READBACK_GAP
 
 
+def _stage16_sleep_continuity_next_gap_for_status(
+    *,
+    completion_review_blockers: list[str],
+    pre_sleep_evidence_ready: bool,
+    post_resume_evidence_ready: bool,
+    post_resume_evidence_conflict: bool,
+    sleep_continuity_ready: bool,
+    completion_ready: bool,
+    fallback: str,
+) -> str:
+    if sleep_continuity_ready and completion_ready:
+        return "stage16_operator_stage_closure_decision"
+    if post_resume_evidence_ready and not sleep_continuity_ready:
+        return _STAGE16_SLEEP_CONTINUITY_RUNTIME_READBACK_GAP
+    if (pre_sleep_evidence_ready or post_resume_evidence_conflict) and not sleep_continuity_ready:
+        return _STAGE16_SLEEP_RESUME_CONFIRMATION_RECEIPT_GAP
+    if completion_review_blockers == ["workstation_sleep_continuity_validated"]:
+        return _STAGE16_SLEEP_CONTINUITY_PRE_SLEEP_EVIDENCE_GAP
+    return fallback or "stage16_live_federation_runtime_readback"
+
+
 def _latest_stage16_pre_sleep_evidence() -> dict[str, Any]:
     evidence_root = _stage16_sleep_continuity_evidence_root()
     if not evidence_root.exists() or not evidence_root.is_dir():
@@ -3131,10 +3152,25 @@ def completion_review() -> dict[str, Any]:
         latest_live_checks.get("live_revocation_roundtrip_observed", {}),
         latest_live_checks.get("workstation_sleep_continuity_validated", {}),
     ]
+    sleep_check = latest_live_checks.get("workstation_sleep_continuity_validated", {})
     contract_ready = all(bool(item.get("passed")) for item in contract_checks)
     live_ready = all(bool(item.get("passed")) for item in live_checks)
     ready_to_close = contract_ready and live_ready
     blockers = [item["id"] for item in live_checks if not bool(item.get("passed"))]
+    latest_pre_sleep_evidence = _latest_stage16_pre_sleep_evidence()
+    latest_post_resume_evidence = _latest_stage16_post_resume_evidence(
+        latest_pre_sleep_evidence=latest_pre_sleep_evidence
+    )
+    sleep_continuity_next_gap = _stage16_sleep_continuity_next_gap_for_status(
+        completion_review_blockers=blockers,
+        pre_sleep_evidence_ready=bool(latest_pre_sleep_evidence.get("present")),
+        post_resume_evidence_ready=bool(latest_post_resume_evidence.get("present")),
+        post_resume_evidence_conflict=bool(latest_post_resume_evidence.get("conflict_detected")),
+        sleep_continuity_ready=bool(sleep_check.get("completion_evidence")),
+        completion_ready=ready_to_close,
+        fallback=_safe_str(live_readbacks.get("next_smallest_truthful_gap")).strip()
+        or "stage16_live_federation_runtime_readback",
+    )
     return {
         "ok": True,
         "kind": _FEDERATION_COMPLETION_REVIEW_KIND,
@@ -3189,10 +3225,7 @@ def completion_review() -> dict[str, Any]:
         "captures_screen": False,
         "grants_execution_authority": False,
         "grants_mutation_authority": False,
-        "next_smallest_truthful_gap": "stage16_operator_stage_closure_decision"
-        if ready_to_close
-        else _safe_str(live_readbacks.get("next_smallest_truthful_gap")).strip()
-        or "stage16_live_federation_runtime_readback",
+        "next_smallest_truthful_gap": sleep_continuity_next_gap,
     }
 
 
@@ -3258,6 +3291,15 @@ def status() -> dict[str, Any]:
             post_resume_evidence_conflict=post_resume_evidence_conflict,
             sleep_continuity_ready=sleep_continuity_ready,
             completion_ready=completion_ready,
+        )
+        sleep_continuity_next_gap = _stage16_sleep_continuity_next_gap_for_status(
+            completion_review_blockers=completion_review_blockers,
+            pre_sleep_evidence_ready=pre_sleep_evidence_ready,
+            post_resume_evidence_ready=post_resume_evidence_ready,
+            post_resume_evidence_conflict=post_resume_evidence_conflict,
+            sleep_continuity_ready=sleep_continuity_ready,
+            completion_ready=completion_ready,
+            fallback=completion_next_gap,
         )
         stage15_closed = bool(pairing_contract.get("stage15_closed_by_receipt"))
         deliverables = _stage16_deliverables(
@@ -3350,7 +3392,7 @@ def status() -> dict[str, Any]:
             if stage16_closed_by_receipt
             else "stage16_operator_stage_closure_decision"
             if completion_ready
-            else completion_next_gap
+            else sleep_continuity_next_gap
             if node_continuity_ready
             else "stage16_node_attributed_continuity"
             if revocation_ready

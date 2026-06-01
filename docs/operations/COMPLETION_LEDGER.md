@@ -53890,6 +53890,49 @@ Latest validation for Stage 16 actor readiness Federation Hub visibility:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 status aggregation follows confirmation receipt gap
+
+Roadmap area: Stage 16 / Federation, workstation sleep-continuity top-level
+status truthfulness.
+
+Material change:
+
+- `/federation/status` and `/federation/completion-review` now use the same
+  sleep-continuity next-gap resolver as the runbook/action/confirmation
+  readbacks.
+- When pre-sleep evidence is present but no current operator sleep/resume
+  confirmation receipt exists, every Stage 16 read surface points at
+  `stage16_sleep_resume_confirmation_receipt`.
+- Pre-sleep-missing posture points at
+  `stage16_sleep_continuity_pre_sleep_evidence`; current post-resume evidence
+  points at `stage16_sleep_continuity_runtime_readback`.
+- This is a read-only projection correction. It does not write a confirmation
+  receipt, capture evidence, run shell, grant authority, or mark Stage 16
+  closed.
+
+Latest validation for Stage 16 status aggregation next-gap alignment:
+
+- `python -m pytest tests/test_api_federation.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`.
+- Live `TestClient` readback:
+  Result: `passed; /federation/status,
+  /federation/completion-review, /federation/sleep-continuity-runbook,
+  /federation/sleep-continuity-action, and
+  /federation/sleep-resume-confirmations all reported
+  next_smallest_truthful_gap=stage16_sleep_resume_confirmation_receipt`.
+- `git diff --check`
+  Result: `passed`.
+
 ### 2026-06-01 - Stage 16 next-gap readbacks point to confirmation receipt
 
 Roadmap area: Stage 16 / Federation, workstation sleep-continuity operator
