@@ -320,5 +320,6 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("GET", "/swarm/status"),
         ("GET", "/swarm/unit-roles-contract"),
         ("GET", "/swarm/messaging-model-contract"),
+        ("GET", "/swarm/delegation-etiquette-contract"),
     ]
     _assert_has_endpoints(routes, endpoints)

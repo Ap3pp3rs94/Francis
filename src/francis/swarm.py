@@ -9,6 +9,7 @@ STAGE15_SWARM_STAGE = "Stage 15 / Swarm"
 SWARM_STATUS_KIND = "francis.stage15.swarm.status"
 SWARM_UNIT_ROLES_CONTRACT_KIND = "francis.stage15.swarm.unit_roles_contract"
 SWARM_MESSAGING_MODEL_CONTRACT_KIND = "francis.stage15.swarm.messaging_model_contract"
+SWARM_DELEGATION_ETIQUETTE_CONTRACT_KIND = "francis.stage15.swarm.delegation_etiquette_contract"
 
 
 def swarm_status_snapshot() -> dict[str, Any]:
@@ -18,6 +19,8 @@ def swarm_status_snapshot() -> dict[str, Any]:
     unit_roles_ready = bool(unit_roles.get("unit_roles_contract_ready"))
     messaging_model = swarm_messaging_model_contract()
     messaging_model_ready = bool(messaging_model.get("messaging_model_contract_ready"))
+    delegation_etiquette = swarm_delegation_etiquette_contract()
+    delegation_etiquette_ready = bool(delegation_etiquette.get("delegation_etiquette_contract_ready"))
     deliverables = [
         _deliverable(
             "stage14_ledger_closure_backstop",
@@ -43,8 +46,8 @@ def swarm_status_snapshot() -> dict[str, Any]:
         _deliverable(
             "delegation_etiquette",
             "Unit handoffs preserve operator authority boundaries and do not create agent-zoo dynamics",
-            False,
-            "pending",
+            delegation_etiquette_ready,
+            "ready" if delegation_etiquette_ready else "pending",
             "stage15_delegation_etiquette_contract",
         ),
         _deliverable(
@@ -68,7 +71,9 @@ def swarm_status_snapshot() -> dict[str, Any]:
         "kind": SWARM_STATUS_KIND,
         "stage": STAGE15_SWARM_STAGE,
         "source_id": "swarm",
-        "status": "stage15_messaging_model_contract_ready"
+        "status": "stage15_delegation_etiquette_contract_ready"
+        if stage14_closed and unit_roles_ready and messaging_model_ready and delegation_etiquette_ready
+        else "stage15_messaging_model_contract_ready"
         if stage14_closed and unit_roles_ready and messaging_model_ready
         else "stage15_unit_roles_contract_ready"
         if stage14_closed and unit_roles_ready
@@ -79,7 +84,7 @@ def swarm_status_snapshot() -> dict[str, Any]:
         "stage14_latest_closure_receipt_id": _safe_text(stage14.get("latest_receipt_id")),
         "unit_roles_contract_ready": unit_roles_ready,
         "messaging_model_contract_ready": messaging_model_ready,
-        "delegation_etiquette_contract_ready": False,
+        "delegation_etiquette_contract_ready": delegation_etiquette_ready,
         "trace_continuity_contract_ready": False,
         "failure_semantics_contract_ready": False,
         "deliverables": deliverables,
@@ -89,10 +94,13 @@ def swarm_status_snapshot() -> dict[str, Any]:
             "status": "/swarm/status",
             "unit_roles_contract": "/swarm/unit-roles-contract",
             "messaging_model_contract": "/swarm/messaging-model-contract",
+            "delegation_etiquette_contract": "/swarm/delegation-etiquette-contract",
             "stage14_closure_readback": "/adversarial-hardening/stage-closure-decisions",
         },
         "governance": _governance(),
-        "next_smallest_truthful_gap": "stage15_delegation_etiquette_contract"
+        "next_smallest_truthful_gap": "stage15_trace_continuity_contract"
+        if stage14_closed and unit_roles_ready and messaging_model_ready and delegation_etiquette_ready
+        else "stage15_delegation_etiquette_contract"
         if stage14_closed and unit_roles_ready and messaging_model_ready
         else "stage15_messaging_model_contract"
         if stage14_closed and unit_roles_ready
@@ -273,6 +281,92 @@ def swarm_messaging_model_contract() -> dict[str, Any]:
     }
 
 
+def swarm_delegation_etiquette_contract() -> dict[str, Any]:
+    messaging = swarm_messaging_model_contract()
+    messaging_ready = bool(messaging.get("messaging_model_contract_ready"))
+    etiquette_rules = [
+        _etiquette_rule(
+            "handoff_requires_message_envelope",
+            "Every unit handoff must use the Stage 15 message envelope.",
+        ),
+        _etiquette_rule(
+            "handoff_requires_known_roles",
+            "Sender and receiver must be known bounded roles from the unit-roles contract.",
+        ),
+        _etiquette_rule(
+            "handoff_cannot_claim_operator_identity",
+            "Units do not present as separate operator-facing agents.",
+        ),
+        _etiquette_rule(
+            "handoff_cannot_grant_authority",
+            "Delegation etiquette cannot approve execution or mutate governance state.",
+        ),
+        _etiquette_rule(
+            "handoff_requires_evidence_refs",
+            "Units pass evidence references rather than raw private payloads.",
+        ),
+        _etiquette_rule(
+            "handoff_conflicts_route_to_reviewer",
+            "Role conflicts go to reviewer or deadletter instead of ad hoc subdelegation.",
+        ),
+    ]
+    forbidden_patterns = [
+        "agent_zoo_dynamics",
+        "authority_multiplication",
+        "personality_fragmentation",
+        "unbounded_subdelegation",
+        "operator_identity_splitting",
+        "silent_handoff_without_trace",
+    ]
+    etiquette_ready = (
+        messaging_ready
+        and len(etiquette_rules) >= 6
+        and all(bool(rule.get("enforced_by_contract")) for rule in etiquette_rules)
+        and len(forbidden_patterns) >= 6
+    )
+    return {
+        "ok": True,
+        "kind": SWARM_DELEGATION_ETIQUETTE_CONTRACT_KIND,
+        "stage": STAGE15_SWARM_STAGE,
+        "source_id": "swarm",
+        "status": "ready" if etiquette_ready else "blocked",
+        "messaging_model_contract_ready": messaging_ready,
+        "delegation_etiquette_contract_ready": etiquette_ready,
+        "etiquette_rules": etiquette_rules,
+        "rule_count": len(etiquette_rules),
+        "forbidden_patterns": forbidden_patterns,
+        "authority_boundaries": {
+            "units_can_recommend": True,
+            "units_can_approve": False,
+            "units_can_execute": False,
+            "units_can_mutate_runtime": False,
+            "units_can_subdelegate": False,
+            "operator_facing_presence": "Francis",
+        },
+        "delivery_semantics": {
+            "contract_only": True,
+            "sends_messages": False,
+            "starts_workers": False,
+            "requires_message_envelope": True,
+            "requires_trace_context": True,
+        },
+        "reads_receipts": True,
+        "writes_receipts": False,
+        "writes_memory": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "governance": _governance(),
+        "next_smallest_truthful_gap": "stage15_trace_continuity_contract"
+        if etiquette_ready
+        else "stage15_messaging_model_contract",
+    }
+
+
 def _unit_role(role_id: str, summary: str, *, allowed_actions: list[str]) -> dict[str, Any]:
     return {
         "id": role_id,
@@ -297,6 +391,18 @@ def _message_field(field: str, description: str, *, required: bool) -> dict[str,
         "required": required,
         "redacted_before_operator_display": field == "objective",
         "authority_bearing": False,
+    }
+
+
+def _etiquette_rule(rule_id: str, summary: str) -> dict[str, Any]:
+    return {
+        "id": rule_id,
+        "summary": summary,
+        "enforced_by_contract": True,
+        "authority_granted": False,
+        "operator_identity_split": False,
+        "subdelegation_allowed": False,
+        "requires_trace_context": True,
     }
 
 

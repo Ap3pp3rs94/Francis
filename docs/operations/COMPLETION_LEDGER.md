@@ -50399,6 +50399,57 @@ Latest validation for Stage 15 messaging model:
 - `git diff --check`
   Result: `passed`
 
+### 2026-05-31 - Stage 15 Swarm delegation etiquette blocks agent-zoo dynamics
+
+Roadmap area: Stage 15 / Swarm, delegation etiquette before trace continuity
+and failure semantics.
+
+Material change:
+
+- Added read-only `GET /swarm/delegation-etiquette-contract`.
+- Stage 15 status now advances from `stage15_messaging_model_contract_ready`
+  to `stage15_delegation_etiquette_contract_ready`.
+- The contract defines six handoff etiquette rules: handoff requires the
+  message envelope, handoff requires known roles, handoff cannot claim operator
+  identity, handoff cannot grant authority, handoff requires evidence refs, and
+  handoff conflicts route to reviewer or deadletter.
+- The contract explicitly forbids agent-zoo dynamics, authority multiplication,
+  personality fragmentation, unbounded subdelegation, operator identity
+  splitting, and silent handoffs without trace.
+- The route is contract-only: it does not send messages, start workers, write
+  receipts, write memory, run tools, run shell, run git, launch browsers,
+  capture the screen, or grant execution/mutation authority.
+- Current readback reports
+  `status=stage15_delegation_etiquette_contract_ready`, `ready_count=4`,
+  `required_count=6`, `delegation_etiquette_contract_ready=true`,
+  `rule_count=6`, and
+  `next_smallest_truthful_gap=stage15_trace_continuity_contract`.
+
+Latest validation for Stage 15 delegation etiquette:
+
+- Direct local `TestClient` readback of GET `/swarm/status` and GET
+  `/swarm/delegation-etiquette-contract`.
+  Result: `status=stage15_delegation_etiquette_contract_ready;
+  ready_count=4; required_count=6; etiquette_ready=true; rule_count=6;
+  status_next_gap=stage15_trace_continuity_contract`.
+- `python -m pytest tests/test_api_swarm.py
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 5 passed`
+- `python -m mypy src/francis/swarm.py src/francis/api/routes/swarm.py
+  src/francis/api/app.py`
+  Result: `passed`
+- `python -m ruff check src/francis/swarm.py src/francis/api/routes/swarm.py
+  src/francis/api/app.py tests/test_api_swarm.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/swarm.py
+  src/francis/api/routes/swarm.py src/francis/api/app.py
+  tests/test_api_swarm.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
