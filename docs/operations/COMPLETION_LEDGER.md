@@ -54269,6 +54269,32 @@ Latest validation for Stage 16 Hub pending-confirmation action gap:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 Hub hides post-resume handoff commands before receipt
+
+Roadmap area: Stage 16 / Federation, Federation Hub sleep/resume confirmation
+contract truthfulness.
+
+Material change:
+
+- Federation Hub now routes all operator-visible sleep-continuity command
+  display through a shared visibility contract.
+- When operator sleep/resume confirmation is pending, the Hub hides the primary
+  post-resume capture command, terminal command, post-resume sequence command,
+  and receipt-backed post-resume sequence command.
+- The confirmation-receipt command remains visible because it is the current
+  operator step and writes only the governed confirmation receipt.
+- This is UI command-surface gating only: it writes no receipt, runs no shell,
+  captures no evidence, grants no authority, and does not mark Stage 16 closed.
+
+Latest validation for Stage 16 Hub post-resume handoff command gating:
+
+- `npm run test -- federation_hub`
+  Result: `passed; 192 passed`.
+- `npm run build`
+  Result: `passed`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

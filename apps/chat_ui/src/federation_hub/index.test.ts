@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   FederationClient,
+  federationSleepContinuityVisibleOperatorCommands,
   isFederationSleepContinuityOperatorCommandBlockedByPendingConfirmation,
   isFederationSleepResumeConfirmationActorReadinessCurrent,
   parseFederationCompletionReview,
@@ -1623,6 +1624,19 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   assert.equal(presentation.operator_terminal_invocation?.must_run_after_sleep_resume, true);
   assert.equal(presentation.operator_terminal_invocation?.projection_only, true);
   assert.equal(isFederationSleepContinuityOperatorCommandBlockedByPendingConfirmation(presentation), true);
+  const visibleCommands = federationSleepContinuityVisibleOperatorCommands(presentation);
+  assert.equal(visibleCommands.blocked_by_pending_confirmation, true);
+  assert.equal(visibleCommands.primary_command, undefined);
+  assert.equal(visibleCommands.operator_terminal_copyable_command, undefined);
+  assert.equal(visibleCommands.post_resume_capture_copyable_command, undefined);
+  assert.equal(visibleCommands.post_resume_sequence_copyable_command, undefined);
+  assert.equal(visibleCommands.post_resume_receipt_backed_sequence_copyable_command, undefined);
+  assert.equal(
+    visibleCommands.confirmation_receipt_copyable_command?.includes(
+      "http://127.0.0.1:8000/federation/sleep-resume-confirmation",
+    ),
+    true,
+  );
   assert.equal(presentation.operator_sleep_resume_gate?.status, "waiting_for_operator_sleep_resume_confirmation");
   assert.equal(presentation.operator_sleep_resume_gate?.pre_sleep_age_seconds, 300);
   assert.equal(presentation.operator_sleep_resume_gate?.current_ready_to_run, false);

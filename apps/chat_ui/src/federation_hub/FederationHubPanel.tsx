@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FederationApiError,
   FederationClient,
-  isFederationSleepContinuityOperatorCommandBlockedByPendingConfirmation,
+  federationSleepContinuityVisibleOperatorCommands,
   isFederationSleepResumeConfirmationActorReadinessCurrent,
   presentFederationSleepContinuityAction,
   type FederationSleepContinuityActionReadback,
@@ -156,18 +156,13 @@ export function FederationHubPanel(props: { baseUrl: string }) {
   )
     ? actorReadiness
     : null;
-  const operatorCommandBlockedByPendingConfirmation =
-    isFederationSleepContinuityOperatorCommandBlockedByPendingConfirmation(presentation);
-  const visiblePrimaryCommand = operatorCommandBlockedByPendingConfirmation ? "" : presentation?.primary_command;
-  const visibleOperatorTerminalCommand = operatorCommandBlockedByPendingConfirmation
-    ? ""
-    : operatorTerminalInvocation?.copyable_command;
-  const visiblePostResumeCaptureCommand = operatorCommandBlockedByPendingConfirmation
-    ? ""
-    : operatorConfirmationHandoff?.post_resume_capture_copyable_command;
-  const visiblePostResumeSequenceCommand = operatorCommandBlockedByPendingConfirmation
-    ? ""
-    : operatorConfirmationHandoff?.post_resume_sequence_copyable_command;
+  const visibleOperatorCommands = federationSleepContinuityVisibleOperatorCommands(presentation);
+  const visiblePrimaryCommand = visibleOperatorCommands.primary_command;
+  const visibleOperatorTerminalCommand = visibleOperatorCommands.operator_terminal_copyable_command;
+  const visiblePostResumeCaptureCommand = visibleOperatorCommands.post_resume_capture_copyable_command;
+  const visiblePostResumeSequenceCommand = visibleOperatorCommands.post_resume_sequence_copyable_command;
+  const visiblePostResumeReceiptBackedSequenceCommand =
+    visibleOperatorCommands.post_resume_receipt_backed_sequence_copyable_command;
 
   return (
     <section style={panelStyle}>
@@ -607,7 +602,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
                 {visiblePostResumeSequenceCommand}
               </pre>
             ) : null}
-            {operatorConfirmationHandoff.post_resume_receipt_backed_sequence_copyable_command ? (
+            {visiblePostResumeReceiptBackedSequenceCommand ? (
               <pre
                 style={{
                   margin: "8px 0 0",
@@ -621,7 +616,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
                   fontSize: 11,
                 }}
               >
-                {operatorConfirmationHandoff.post_resume_receipt_backed_sequence_copyable_command}
+                {visiblePostResumeReceiptBackedSequenceCommand}
               </pre>
             ) : null}
             {operatorConfirmationHandoff.required_confirmation_requirements.length ? (

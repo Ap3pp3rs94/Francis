@@ -677,6 +677,16 @@ export type FederationSleepContinuityPresentation = {
   next_smallest_truthful_gap?: string;
 };
 
+export type FederationSleepContinuityVisibleOperatorCommands = {
+  blocked_by_pending_confirmation: boolean;
+  primary_command?: string;
+  operator_terminal_copyable_command?: string;
+  post_resume_capture_copyable_command?: string;
+  post_resume_sequence_copyable_command?: string;
+  post_resume_receipt_backed_sequence_copyable_command?: string;
+  confirmation_receipt_copyable_command?: string;
+};
+
 export type FederationSleepContinuityActionReadback = {
   ok: boolean;
   kind?: string;
@@ -1668,6 +1678,31 @@ export function isFederationSleepContinuityOperatorCommandBlockedByPendingConfir
     presentation.operator_sleep_resume_gate?.operator_confirmation_pending === true ||
     presentation.operator_confirmation_handoff?.operator_confirmation_pending === true
   );
+}
+
+export function federationSleepContinuityVisibleOperatorCommands(
+  presentation: FederationSleepContinuityPresentation | null | undefined,
+): FederationSleepContinuityVisibleOperatorCommands {
+  const blockedByPendingConfirmation =
+    isFederationSleepContinuityOperatorCommandBlockedByPendingConfirmation(presentation);
+  const handoff = presentation?.operator_confirmation_handoff;
+  return {
+    blocked_by_pending_confirmation: blockedByPendingConfirmation,
+    primary_command: blockedByPendingConfirmation ? undefined : presentation?.primary_command,
+    operator_terminal_copyable_command: blockedByPendingConfirmation
+      ? undefined
+      : presentation?.operator_terminal_invocation?.copyable_command,
+    post_resume_capture_copyable_command: blockedByPendingConfirmation
+      ? undefined
+      : handoff?.post_resume_capture_copyable_command,
+    post_resume_sequence_copyable_command: blockedByPendingConfirmation
+      ? undefined
+      : handoff?.post_resume_sequence_copyable_command,
+    post_resume_receipt_backed_sequence_copyable_command: blockedByPendingConfirmation
+      ? undefined
+      : handoff?.post_resume_receipt_backed_sequence_copyable_command,
+    confirmation_receipt_copyable_command: handoff?.confirmation_receipt_copyable_command,
+  };
 }
 
 function parseFederationSleepContinuityRunbookStep(raw: unknown): FederationSleepContinuityRunbookStep | null {
