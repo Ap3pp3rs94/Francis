@@ -66,6 +66,7 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("GET", "/federation/sleep-continuity-action"),
         ("GET", "/federation/sleep-resume-confirmations"),
         ("GET", "/federation/sleep-resume-confirmation/actor-readiness"),
+        ("GET", "/federation/sleep-resume-confirmation/operator-checklist"),
         ("GET", "/federation/stage-closure-decisions"),
         ("GET", "/federation/live-runtime-readbacks"),
         ("POST", "/federation/sleep-resume-confirmation"),
