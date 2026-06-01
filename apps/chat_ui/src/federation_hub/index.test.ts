@@ -2033,6 +2033,21 @@ test("federation sleep-continuity presentation gates post-resume capture on oper
     sleep_continuity_confirmation_blocker: "operator_confirmed_sleep_resume_missing",
     sleep_continuity_blocked_reason: "operator_confirmed_sleep_resume_missing",
     sleep_continuity_sleep_resume_confirmation_is_current_blocker: true,
+    sleep_continuity_confirmation_receipt_command_ready: true,
+    sleep_continuity_confirmation_receipt_command_visible: true,
+    sleep_continuity_confirmation_receipt_command:
+      "$body = @{ actor = '<actor_with_federation.stage16.sleep_resume.confirmation.write>'; operator_confirmed_sleep_resume = $true } | ConvertTo-Json -Depth 6; Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/federation/sleep-resume-confirmation' -ContentType 'application/json' -Body $body",
+    sleep_continuity_confirmation_receipt_copyable_command:
+      "Set-Location -LiteralPath 'D:\\Francis'; $body = @{ actor = '<actor_with_federation.stage16.sleep_resume.confirmation.write>'; operator_confirmed_sleep_resume = $true } | ConvertTo-Json -Depth 6; Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/federation/sleep-resume-confirmation' -ContentType 'application/json' -Body $body",
+    sleep_continuity_confirmation_receipt_command_requires_scope:
+      "federation.stage16.sleep_resume.confirmation.write",
+    sleep_continuity_confirmation_receipt_command_requires_actor_substitution: true,
+    sleep_continuity_confirmation_receipt_command_next_readback_route: "/federation/sleep-resume-confirmations",
+    sleep_continuity_confirmation_receipt_command_receipt_id_readback_field: "latest_receipt_id",
+    sleep_continuity_confirmation_receipt_command_records_receipt: true,
+    sleep_continuity_confirmation_receipt_command_writes_evidence: false,
+    sleep_continuity_confirmation_receipt_command_marks_stage16_closed: false,
+    sleep_continuity_confirmation_receipt_command_projection_only: true,
     sleep_continuity_next_step: "write_sleep_resume_confirmation_receipt",
     ready_count: 6,
     required_count: 6,
@@ -2109,6 +2124,40 @@ test("federation sleep-continuity presentation gates post-resume capture on oper
   assert.equal(status.sleep_continuity_confirmation_blocker, "operator_confirmed_sleep_resume_missing");
   assert.equal(status.sleep_continuity_blocked_reason, "operator_confirmed_sleep_resume_missing");
   assert.equal(status.sleep_continuity_sleep_resume_confirmation_is_current_blocker, true);
+  assert.equal(status.sleep_continuity_confirmation_receipt_command_ready, true);
+  assert.equal(status.sleep_continuity_confirmation_receipt_command_visible, true);
+  assert.equal(
+    status.sleep_continuity_confirmation_receipt_command?.includes("Invoke-RestMethod -Method Post"),
+    true,
+  );
+  assert.equal(
+    status.sleep_continuity_confirmation_receipt_command?.includes("/federation/sleep-resume-confirmation"),
+    true,
+  );
+  assert.equal(
+    status.sleep_continuity_confirmation_receipt_command?.includes("operator_confirmed_sleep_resume = $true"),
+    true,
+  );
+  assert.equal(
+    status.sleep_continuity_confirmation_receipt_copyable_command?.includes(
+      status.sleep_continuity_confirmation_receipt_command ?? "",
+    ),
+    true,
+  );
+  assert.equal(
+    status.sleep_continuity_confirmation_receipt_command_requires_scope,
+    "federation.stage16.sleep_resume.confirmation.write",
+  );
+  assert.equal(status.sleep_continuity_confirmation_receipt_command_requires_actor_substitution, true);
+  assert.equal(
+    status.sleep_continuity_confirmation_receipt_command_next_readback_route,
+    "/federation/sleep-resume-confirmations",
+  );
+  assert.equal(status.sleep_continuity_confirmation_receipt_command_receipt_id_readback_field, "latest_receipt_id");
+  assert.equal(status.sleep_continuity_confirmation_receipt_command_records_receipt, true);
+  assert.equal(status.sleep_continuity_confirmation_receipt_command_writes_evidence, false);
+  assert.equal(status.sleep_continuity_confirmation_receipt_command_marks_stage16_closed, false);
+  assert.equal(status.sleep_continuity_confirmation_receipt_command_projection_only, true);
   assert.equal(status.sleep_continuity_next_step, "write_sleep_resume_confirmation_receipt");
   assert.equal(presentation.ready_to_close, false);
   assert.equal(presentation.operator_action_required, true);

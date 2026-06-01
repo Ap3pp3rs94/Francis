@@ -152,6 +152,18 @@ export type FederationStage16Status = {
   sleep_continuity_confirmation_blocker?: string;
   sleep_continuity_blocked_reason?: string;
   sleep_continuity_sleep_resume_confirmation_is_current_blocker: boolean;
+  sleep_continuity_confirmation_receipt_command_ready: boolean;
+  sleep_continuity_confirmation_receipt_command_visible: boolean;
+  sleep_continuity_confirmation_receipt_command?: string;
+  sleep_continuity_confirmation_receipt_copyable_command?: string;
+  sleep_continuity_confirmation_receipt_command_requires_scope?: string;
+  sleep_continuity_confirmation_receipt_command_requires_actor_substitution: boolean;
+  sleep_continuity_confirmation_receipt_command_next_readback_route?: string;
+  sleep_continuity_confirmation_receipt_command_receipt_id_readback_field?: string;
+  sleep_continuity_confirmation_receipt_command_records_receipt: boolean;
+  sleep_continuity_confirmation_receipt_command_writes_evidence: boolean;
+  sleep_continuity_confirmation_receipt_command_marks_stage16_closed: boolean;
+  sleep_continuity_confirmation_receipt_command_projection_only: boolean;
   sleep_continuity_next_step?: string;
   ready_count: number;
   required_count: number;
@@ -1350,6 +1362,42 @@ export function parseFederationStage16Status(raw: unknown): FederationStage16Sta
     sleep_continuity_blocked_reason: optionalString(body.sleep_continuity_blocked_reason),
     sleep_continuity_sleep_resume_confirmation_is_current_blocker: safeBoolean(
       body.sleep_continuity_sleep_resume_confirmation_is_current_blocker,
+    ),
+    sleep_continuity_confirmation_receipt_command_ready: safeBoolean(
+      body.sleep_continuity_confirmation_receipt_command_ready,
+    ),
+    sleep_continuity_confirmation_receipt_command_visible: safeBoolean(
+      body.sleep_continuity_confirmation_receipt_command_visible,
+    ),
+    sleep_continuity_confirmation_receipt_command: optionalString(
+      body.sleep_continuity_confirmation_receipt_command,
+    ),
+    sleep_continuity_confirmation_receipt_copyable_command: optionalString(
+      body.sleep_continuity_confirmation_receipt_copyable_command,
+    ),
+    sleep_continuity_confirmation_receipt_command_requires_scope: optionalString(
+      body.sleep_continuity_confirmation_receipt_command_requires_scope,
+    ),
+    sleep_continuity_confirmation_receipt_command_requires_actor_substitution: safeBoolean(
+      body.sleep_continuity_confirmation_receipt_command_requires_actor_substitution,
+    ),
+    sleep_continuity_confirmation_receipt_command_next_readback_route: optionalString(
+      body.sleep_continuity_confirmation_receipt_command_next_readback_route,
+    ),
+    sleep_continuity_confirmation_receipt_command_receipt_id_readback_field: optionalString(
+      body.sleep_continuity_confirmation_receipt_command_receipt_id_readback_field,
+    ),
+    sleep_continuity_confirmation_receipt_command_records_receipt: safeBoolean(
+      body.sleep_continuity_confirmation_receipt_command_records_receipt,
+    ),
+    sleep_continuity_confirmation_receipt_command_writes_evidence: safeBoolean(
+      body.sleep_continuity_confirmation_receipt_command_writes_evidence,
+    ),
+    sleep_continuity_confirmation_receipt_command_marks_stage16_closed: safeBoolean(
+      body.sleep_continuity_confirmation_receipt_command_marks_stage16_closed,
+    ),
+    sleep_continuity_confirmation_receipt_command_projection_only: safeBoolean(
+      body.sleep_continuity_confirmation_receipt_command_projection_only,
     ),
     sleep_continuity_next_step: optionalString(body.sleep_continuity_next_step),
     ready_count: safeNumber(body.ready_count, 0),

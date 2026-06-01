@@ -3315,6 +3315,14 @@ def status() -> dict[str, Any]:
             sleep_continuity_ready=sleep_continuity_ready,
             completion_ready=completion_ready,
         )
+        sleep_continuity_confirmation_receipt_command = _stage16_sleep_resume_confirmation_command_projection(
+            pre_sleep_evidence_path=_safe_str(latest_pre_sleep_evidence.get("evidence_path")).strip(),
+            ready=(
+                _safe_str(sleep_continuity_action_summary.get("selected_action_id")).strip()
+                == "capture_post_resume_evidence"
+                and bool(sleep_continuity_action_summary.get("post_confirmation_ready_to_capture"))
+            ),
+        )
         sleep_continuity_next_gap = _stage16_sleep_continuity_next_gap_for_status(
             completion_review_blockers=completion_review_blockers,
             pre_sleep_evidence_ready=pre_sleep_evidence_ready,
@@ -3394,6 +3402,46 @@ def status() -> dict[str, Any]:
             "sleep_continuity_blocked_reason": _safe_str(sleep_continuity_action_summary.get("blocked_reason")).strip(),
             "sleep_continuity_sleep_resume_confirmation_is_current_blocker": bool(
                 sleep_continuity_action_summary.get("sleep_resume_confirmation_is_current_blocker")
+            ),
+            "sleep_continuity_confirmation_receipt_command_ready": bool(
+                sleep_continuity_confirmation_receipt_command.get("confirmation_receipt_command_ready")
+            ),
+            "sleep_continuity_confirmation_receipt_command_visible": bool(
+                sleep_continuity_confirmation_receipt_command.get("confirmation_receipt_command_ready")
+            ),
+            "sleep_continuity_confirmation_receipt_command": _safe_str(
+                sleep_continuity_confirmation_receipt_command.get("confirmation_receipt_command")
+            ).strip(),
+            "sleep_continuity_confirmation_receipt_copyable_command": _safe_str(
+                sleep_continuity_confirmation_receipt_command.get("confirmation_receipt_copyable_command")
+            ).strip(),
+            "sleep_continuity_confirmation_receipt_command_requires_scope": _safe_str(
+                sleep_continuity_confirmation_receipt_command.get("confirmation_receipt_command_requires_scope")
+            ).strip(),
+            "sleep_continuity_confirmation_receipt_command_requires_actor_substitution": bool(
+                sleep_continuity_confirmation_receipt_command.get(
+                    "confirmation_receipt_command_requires_actor_substitution"
+                )
+            ),
+            "sleep_continuity_confirmation_receipt_command_next_readback_route": _safe_str(
+                sleep_continuity_confirmation_receipt_command.get("confirmation_receipt_command_next_readback_route")
+            ).strip(),
+            "sleep_continuity_confirmation_receipt_command_receipt_id_readback_field": _safe_str(
+                sleep_continuity_confirmation_receipt_command.get(
+                    "confirmation_receipt_command_receipt_id_readback_field"
+                )
+            ).strip(),
+            "sleep_continuity_confirmation_receipt_command_records_receipt": bool(
+                sleep_continuity_confirmation_receipt_command.get("confirmation_receipt_command_records_receipt")
+            ),
+            "sleep_continuity_confirmation_receipt_command_writes_evidence": bool(
+                sleep_continuity_confirmation_receipt_command.get("confirmation_receipt_command_writes_evidence")
+            ),
+            "sleep_continuity_confirmation_receipt_command_marks_stage16_closed": bool(
+                sleep_continuity_confirmation_receipt_command.get("confirmation_receipt_command_marks_stage16_closed")
+            ),
+            "sleep_continuity_confirmation_receipt_command_projection_only": bool(
+                sleep_continuity_confirmation_receipt_command.get("confirmation_receipt_command_projection_only")
             ),
             "sleep_continuity_next_step": "record_stage16_operator_stage_closure_decision"
             if sleep_continuity_ready and completion_ready

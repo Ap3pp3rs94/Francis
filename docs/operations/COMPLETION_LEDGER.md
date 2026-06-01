@@ -54414,6 +54414,47 @@ Latest validation for Stage 16 command visibility readbacks:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 status surfaces visible confirmation receipt command
+
+Roadmap area: Stage 16 / Federation, sleep-continuity operator handoff
+truthfulness.
+
+Material change:
+
+- `/federation/status` now carries a compact sleep-continuity confirmation
+  receipt command summary when the current Stage 16 gap is the operator
+  sleep/resume confirmation receipt.
+- The status readback now exposes whether the confirmation-receipt command is
+  ready, visible, copyable, scope-gated, receipt-writing, evidence-free, and
+  non-closing.
+- Once post-resume evidence is already present, the same status fields
+  truthfully report that the confirmation receipt command is not ready or
+  visible.
+- Federation Hub status parsing preserves those command-readiness fields for
+  top-level command surfaces.
+- This is readback and UI contract truthfulness only: it writes no receipt,
+  runs no shell, captures no evidence, grants no authority, and does not mark
+  Stage 16 closed.
+
+Latest validation for Stage 16 status confirmation receipt command readback:
+
+- `python -m pytest tests/test_api_federation.py -q --tb=short --maxfail=1`
+  Result: `passed`.
+- `npm run test -- federation_hub`
+  Result: `passed; 192 passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `npm run build`
+  Result: `passed`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

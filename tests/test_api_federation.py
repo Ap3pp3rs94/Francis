@@ -1348,6 +1348,33 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert status["sleep_continuity_blocked_reason"] == "operator_confirmed_sleep_resume_missing"
     assert status["sleep_continuity_sleep_resume_confirmation_is_current_blocker"] is True
     assert status["sleep_continuity_next_step"] == "write_sleep_resume_confirmation_receipt"
+    assert status["sleep_continuity_confirmation_receipt_command_ready"] is True
+    assert status["sleep_continuity_confirmation_receipt_command_visible"] is True
+    assert "Invoke-RestMethod -Method Post" in status["sleep_continuity_confirmation_receipt_command"]
+    assert (
+        "http://127.0.0.1:8000/federation/sleep-resume-confirmation"
+        in status["sleep_continuity_confirmation_receipt_command"]
+    )
+    assert "operator_confirmed_sleep_resume = $true" in status["sleep_continuity_confirmation_receipt_command"]
+    assert str(pre_sleep_path.resolve()) in status["sleep_continuity_confirmation_receipt_command"]
+    assert (
+        status["sleep_continuity_confirmation_receipt_command"]
+        in status["sleep_continuity_confirmation_receipt_copyable_command"]
+    )
+    assert (
+        status["sleep_continuity_confirmation_receipt_command_requires_scope"]
+        == "federation.stage16.sleep_resume.confirmation.write"
+    )
+    assert status["sleep_continuity_confirmation_receipt_command_requires_actor_substitution"] is True
+    assert (
+        status["sleep_continuity_confirmation_receipt_command_next_readback_route"]
+        == "/federation/sleep-resume-confirmations"
+    )
+    assert status["sleep_continuity_confirmation_receipt_command_receipt_id_readback_field"] == "latest_receipt_id"
+    assert status["sleep_continuity_confirmation_receipt_command_records_receipt"] is True
+    assert status["sleep_continuity_confirmation_receipt_command_writes_evidence"] is False
+    assert status["sleep_continuity_confirmation_receipt_command_marks_stage16_closed"] is False
+    assert status["sleep_continuity_confirmation_receipt_command_projection_only"] is True
     assert status["next_smallest_truthful_gap"] == "stage16_sleep_resume_confirmation_receipt"
 
     action = client.get("/federation/sleep-continuity-action").json()
@@ -2182,6 +2209,21 @@ def test_federation_stage16_sleep_continuity_runbook_uses_linked_post_resume_mar
     assert status["sleep_continuity_blocked_reason"] == ""
     assert status["sleep_continuity_sleep_resume_confirmation_is_current_blocker"] is False
     assert status["sleep_continuity_next_step"] == "run_sleep_continuity_runtime_proof_with_committed_evidence"
+    assert status["sleep_continuity_confirmation_receipt_command_ready"] is False
+    assert status["sleep_continuity_confirmation_receipt_command_visible"] is False
+    assert status["sleep_continuity_confirmation_receipt_command"] == ""
+    assert status["sleep_continuity_confirmation_receipt_copyable_command"] == ""
+    assert (
+        status["sleep_continuity_confirmation_receipt_command_requires_scope"]
+        == "federation.stage16.sleep_resume.confirmation.write"
+    )
+    assert status["sleep_continuity_confirmation_receipt_command_requires_actor_substitution"] is False
+    assert status["sleep_continuity_confirmation_receipt_command_next_readback_route"] == ""
+    assert status["sleep_continuity_confirmation_receipt_command_receipt_id_readback_field"] == ""
+    assert status["sleep_continuity_confirmation_receipt_command_records_receipt"] is False
+    assert status["sleep_continuity_confirmation_receipt_command_writes_evidence"] is False
+    assert status["sleep_continuity_confirmation_receipt_command_marks_stage16_closed"] is False
+    assert status["sleep_continuity_confirmation_receipt_command_projection_only"] is True
     assert status["next_smallest_truthful_gap"] == "stage16_sleep_continuity_runtime_readback"
 
     action = client.get("/federation/sleep-continuity-action").json()
