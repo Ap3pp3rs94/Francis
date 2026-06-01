@@ -1441,6 +1441,8 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert checklist["required_scope"] == "federation.stage16.sleep_resume.confirmation.write"
     assert checklist["current_pre_sleep_evidence_present"] is True
     assert checklist["current_pre_sleep_evidence_path"] == str(pre_sleep_path.resolve())
+    assert checklist["current_pre_sleep_age_seconds"] == 300
+    assert checklist["current_pre_sleep_freshness_state"] == "fresh"
     assert checklist["preconditions_ready"] is True
     assert checklist["ready_to_record_after_operator_confirmation"] is True
     assert checklist["operator_physical_confirmation_required"] is True
@@ -2098,6 +2100,8 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     assert empty_readback["receipt_readback_ready"] is False
     assert empty_readback["current_pre_sleep_evidence_present"] is True
     assert empty_readback["current_pre_sleep_evidence_path"] == str(pre_sleep_path.resolve())
+    assert empty_readback["current_pre_sleep_age_seconds"] == 360
+    assert empty_readback["current_pre_sleep_freshness_state"] == "fresh"
     assert empty_readback["latest_receipt_matches_current_pre_sleep"] is False
     assert empty_readback["latest_receipt_usable_for_receipt_backed_sequence"] is False
     assert empty_readback["receipt_backed_sequence_ready"] is False
@@ -2173,6 +2177,8 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     assert empty_sequence_readiness["status"] == "blocked_until_current_confirmation_receipt"
     assert empty_sequence_readiness["actor"] == "test.federation.sleep"
     assert empty_sequence_readiness["current_pre_sleep_evidence_path"] == str(pre_sleep_path.resolve())
+    assert empty_sequence_readiness["current_pre_sleep_age_seconds"] == 360
+    assert empty_sequence_readiness["current_pre_sleep_freshness_state"] == "fresh"
     assert empty_sequence_readiness["latest_receipt_id"] == ""
     assert empty_sequence_readiness["receipt_backed_sequence_ready"] is False
     assert empty_sequence_readiness["receipt_backed_sequence_blockers"] == ["sleep_resume_confirmation_receipt_missing"]
@@ -2362,6 +2368,8 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     assert readback["receipt_readback_ready"] is True
     assert readback["current_pre_sleep_evidence_present"] is True
     assert readback["current_pre_sleep_evidence_path"] == str(pre_sleep_path.resolve())
+    assert readback["current_pre_sleep_age_seconds"] == 360
+    assert readback["current_pre_sleep_freshness_state"] == "fresh"
     assert readback["latest_receipt_is_operator_confirmed"] is True
     assert readback["latest_receipt_matches_current_pre_sleep"] is True
     assert readback["latest_receipt_usable_for_receipt_backed_sequence"] is True
@@ -2424,6 +2432,8 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     assert sequence_readiness["status"] == "ready_for_receipt_backed_post_resume_sequence"
     assert sequence_readiness["actor"] == "test.federation.sleep"
     assert sequence_readiness["latest_receipt_id"] == body["receipt_id"]
+    assert sequence_readiness["current_pre_sleep_age_seconds"] == 360
+    assert sequence_readiness["current_pre_sleep_freshness_state"] == "fresh"
     assert sequence_readiness["latest_decision"] == "operator_confirmed_sleep_resume"
     assert sequence_readiness["latest_receipt_is_operator_confirmed"] is True
     assert sequence_readiness["latest_receipt_matches_current_pre_sleep"] is True
@@ -2506,6 +2516,8 @@ def test_federation_stage16_sleep_resume_confirmation_records_operator_receipt(
     assert receipt_ready_checklist["actor"] == "test.federation.sleep"
     assert receipt_ready_checklist["requested_actor_ready"] is True
     assert receipt_ready_checklist["current_pre_sleep_evidence_path"] == str(pre_sleep_path.resolve())
+    assert receipt_ready_checklist["current_pre_sleep_age_seconds"] == 360
+    assert receipt_ready_checklist["current_pre_sleep_freshness_state"] == "fresh"
     assert receipt_ready_checklist["ready_to_record_after_operator_confirmation"] is False
     assert receipt_ready_checklist["operator_physical_confirmation_required"] is True
     assert receipt_ready_checklist["operator_physical_confirmation_recorded"] is True

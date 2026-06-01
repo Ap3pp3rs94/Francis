@@ -339,6 +339,8 @@ export type FederationSleepResumeConfirmations = {
   current_pre_sleep_evidence_present: boolean;
   current_pre_sleep_evidence_path?: string;
   current_pre_sleep_recorded_ts?: number;
+  current_pre_sleep_age_seconds: number;
+  current_pre_sleep_freshness_state?: string;
   confirmation_receipt_requested_actor?: string;
   confirmation_receipt_requested_actor_ready: boolean;
   latest_receipt_is_operator_confirmed: boolean;
@@ -460,6 +462,8 @@ export type FederationSleepResumeOperatorChecklist = {
   current_pre_sleep_evidence_present: boolean;
   current_pre_sleep_evidence_path?: string;
   current_pre_sleep_recorded_ts?: number;
+  current_pre_sleep_age_seconds: number;
+  current_pre_sleep_freshness_state?: string;
   preconditions_ready: boolean;
   ready_to_record_after_operator_confirmation: boolean;
   operator_physical_confirmation_required: boolean;
@@ -495,6 +499,8 @@ export type FederationSleepResumeReceiptBackedSequenceReadiness = {
   current_pre_sleep_evidence_present: boolean;
   current_pre_sleep_evidence_path?: string;
   current_pre_sleep_recorded_ts?: number;
+  current_pre_sleep_age_seconds: number;
+  current_pre_sleep_freshness_state?: string;
   latest_receipt_id?: string;
   latest_decision?: string;
   latest_actor?: string;
@@ -1906,6 +1912,8 @@ export function parseFederationSleepResumeOperatorChecklist(
     current_pre_sleep_evidence_path: optionalString(body.current_pre_sleep_evidence_path),
     current_pre_sleep_recorded_ts:
       currentPreSleepRecordedTs > 0 ? normalizeTs(currentPreSleepRecordedTs) : undefined,
+    current_pre_sleep_age_seconds: safeNumber(body.current_pre_sleep_age_seconds, 0),
+    current_pre_sleep_freshness_state: optionalString(body.current_pre_sleep_freshness_state),
     preconditions_ready: safeBoolean(body.preconditions_ready),
     ready_to_record_after_operator_confirmation: safeBoolean(
       body.ready_to_record_after_operator_confirmation,
@@ -1957,6 +1965,8 @@ export function parseFederationSleepResumeReceiptBackedSequenceReadiness(
     current_pre_sleep_evidence_path: optionalString(body.current_pre_sleep_evidence_path),
     current_pre_sleep_recorded_ts:
       currentPreSleepRecordedTs > 0 ? normalizeTs(currentPreSleepRecordedTs) : undefined,
+    current_pre_sleep_age_seconds: safeNumber(body.current_pre_sleep_age_seconds, 0),
+    current_pre_sleep_freshness_state: optionalString(body.current_pre_sleep_freshness_state),
     latest_receipt_id: optionalString(body.latest_receipt_id),
     latest_decision: optionalString(body.latest_decision),
     latest_actor: optionalString(body.latest_actor),
@@ -2052,6 +2062,8 @@ export function parseFederationSleepResumeConfirmations(raw: unknown): Federatio
     current_pre_sleep_evidence_path: optionalString(body.current_pre_sleep_evidence_path),
     current_pre_sleep_recorded_ts:
       currentPreSleepRecordedTs > 0 ? normalizeTs(currentPreSleepRecordedTs) : undefined,
+    current_pre_sleep_age_seconds: safeNumber(body.current_pre_sleep_age_seconds, 0),
+    current_pre_sleep_freshness_state: optionalString(body.current_pre_sleep_freshness_state),
     confirmation_receipt_requested_actor: optionalString(body.confirmation_receipt_requested_actor),
     confirmation_receipt_requested_actor_ready: safeBoolean(body.confirmation_receipt_requested_actor_ready),
     latest_receipt_is_operator_confirmed: safeBoolean(body.latest_receipt_is_operator_confirmed),

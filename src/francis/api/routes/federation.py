@@ -1093,6 +1093,11 @@ def stage16_sleep_resume_confirmation_readback(*, limit: int = 20, actor: str = 
     latest_receipt = items[-1] if items else {}
     current_pre_sleep = _latest_stage16_pre_sleep_evidence()
     current_pre_sleep_path = _safe_str(current_pre_sleep.get("evidence_path")).strip()
+    current_pre_sleep_recorded_ts = int(current_pre_sleep.get("recorded_ts") or 0)
+    current_pre_sleep_age_seconds = (
+        max(0, _now_s() - current_pre_sleep_recorded_ts) if current_pre_sleep_recorded_ts > 0 else 0
+    )
+    current_pre_sleep_freshness_state = _safe_str(current_pre_sleep.get("freshness_state")).strip()
     requested_actor = _safe_str(actor).strip()
     requested_actor_ready = _stage16_sleep_resume_confirmation_actor_ready(requested_actor)
     latest_pre_sleep_path = _safe_str(latest_receipt.get("pre_sleep_evidence_path")).strip()
@@ -1156,7 +1161,9 @@ def stage16_sleep_resume_confirmation_readback(*, limit: int = 20, actor: str = 
         "receipt_readback_ready": bool(latest_receipt),
         "current_pre_sleep_evidence_present": bool(current_pre_sleep.get("present")),
         "current_pre_sleep_evidence_path": current_pre_sleep_path,
-        "current_pre_sleep_recorded_ts": int(current_pre_sleep.get("recorded_ts") or 0),
+        "current_pre_sleep_recorded_ts": current_pre_sleep_recorded_ts,
+        "current_pre_sleep_age_seconds": current_pre_sleep_age_seconds,
+        "current_pre_sleep_freshness_state": current_pre_sleep_freshness_state,
         "confirmation_receipt_requested_actor": _redacted_text(requested_actor)[:240],
         "confirmation_receipt_requested_actor_ready": requested_actor_ready,
         "latest_receipt_is_operator_confirmed": latest_operator_confirmed
@@ -1382,6 +1389,8 @@ def stage16_sleep_resume_confirmation_operator_checklist(actor: str = "") -> dic
         "current_pre_sleep_evidence_present": bool(readback.get("current_pre_sleep_evidence_present")),
         "current_pre_sleep_evidence_path": current_pre_sleep_path,
         "current_pre_sleep_recorded_ts": int(readback.get("current_pre_sleep_recorded_ts") or 0),
+        "current_pre_sleep_age_seconds": int(readback.get("current_pre_sleep_age_seconds") or 0),
+        "current_pre_sleep_freshness_state": _safe_str(readback.get("current_pre_sleep_freshness_state")).strip(),
         "preconditions_ready": preconditions_ready,
         "ready_to_record_after_operator_confirmation": ready_after_physical_confirmation,
         "operator_physical_confirmation_required": True,
@@ -1475,6 +1484,8 @@ def stage16_sleep_resume_receipt_backed_sequence_readiness(actor: str = "") -> d
         "current_pre_sleep_evidence_present": bool(readback.get("current_pre_sleep_evidence_present")),
         "current_pre_sleep_evidence_path": _safe_str(readback.get("current_pre_sleep_evidence_path")).strip(),
         "current_pre_sleep_recorded_ts": int(readback.get("current_pre_sleep_recorded_ts") or 0),
+        "current_pre_sleep_age_seconds": int(readback.get("current_pre_sleep_age_seconds") or 0),
+        "current_pre_sleep_freshness_state": _safe_str(readback.get("current_pre_sleep_freshness_state")).strip(),
         "latest_receipt_id": latest_receipt_id,
         "latest_decision": _safe_str(readback.get("latest_decision")).strip(),
         "latest_actor": _safe_str(readback.get("latest_actor")).strip(),

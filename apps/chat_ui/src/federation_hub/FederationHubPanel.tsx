@@ -409,14 +409,20 @@ export function FederationHubPanel(props: { baseUrl: string }) {
             {" / "}latest <code>{codeValue(status?.sleep_continuity_confirmation_receipt_latest_receipt_id)}</code>
           </div>
           {sequenceReadiness ? (
-            <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
-              sequence readback <code>{codeValue(sequenceReadiness.status)}</code>
-              {" / "}ready <code>{yesNo(sequenceReadiness.receipt_backed_sequence_ready)}</code>
-              {" / "}visible <code>{yesNo(sequenceReadiness.receipt_backed_sequence_command_visible)}</code>
-              {" / "}writes evidence <code>{yesNo(sequenceReadiness.writes_evidence_when_run)}</code>
-              {" / "}writes receipts <code>{yesNo(sequenceReadiness.writes_receipts_when_run)}</code>
-              {" / "}marks closed <code>{yesNo(sequenceReadiness.marks_stage16_closed_when_run)}</code>
-            </div>
+            <>
+              <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
+                sequence readback <code>{codeValue(sequenceReadiness.status)}</code>
+                {" / "}ready <code>{yesNo(sequenceReadiness.receipt_backed_sequence_ready)}</code>
+                {" / "}visible <code>{yesNo(sequenceReadiness.receipt_backed_sequence_command_visible)}</code>
+                {" / "}writes evidence <code>{yesNo(sequenceReadiness.writes_evidence_when_run)}</code>
+                {" / "}writes receipts <code>{yesNo(sequenceReadiness.writes_receipts_when_run)}</code>
+                {" / "}marks closed <code>{yesNo(sequenceReadiness.marks_stage16_closed_when_run)}</code>
+              </div>
+              <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
+                sequence pre age <code>{sequenceReadiness.current_pre_sleep_age_seconds}s</code>
+                {" / "}freshness <code>{codeValue(sequenceReadiness.current_pre_sleep_freshness_state)}</code>
+              </div>
+            </>
           ) : null}
           <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
             requested actor <code>{codeValue(confirmations.confirmation_receipt_requested_actor)}</code>
@@ -547,6 +553,10 @@ export function FederationHubPanel(props: { baseUrl: string }) {
                   <code>{yesNo(operatorChecklist.ready_to_record_after_operator_confirmation)}</code>
                   {" / "}physical recorded <code>{yesNo(operatorChecklist.operator_physical_confirmation_recorded)}</code>
                   {" / "}receipt <code>{codeValue(operatorChecklist.latest_confirmation_receipt_id)}</code>
+                </div>
+                <div style={{ fontSize: 11, color: MUTED, marginBottom: 6, overflowWrap: "anywhere" }}>
+                  checklist pre age <code>{operatorChecklist.current_pre_sleep_age_seconds}s</code>
+                  {" / "}freshness <code>{codeValue(operatorChecklist.current_pre_sleep_freshness_state)}</code>
                 </div>
                 {operatorChecklist.checklist.length ? (
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>

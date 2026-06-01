@@ -55241,6 +55241,53 @@ Latest validation for Stage 16 Hub sequence readiness command visibility:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 sleep confirmation surfaces show pre-sleep age
+
+Roadmap area: Stage 16 / Federation, sleep-continuity confirmation receipt
+truthfulness.
+
+Material change:
+
+- Sleep/resume confirmation readbacks now expose the current pre-sleep marker's
+  age in seconds and freshness label alongside the marker path and timestamp.
+- `/federation/sleep-resume-confirmation/operator-checklist` and
+  `/federation/sleep-resume-confirmation/receipt-backed-sequence-readiness`
+  surface the same pre-sleep age/freshness fields for the physical confirmation
+  and post-receipt sequence gates.
+- Federation Hub parses and displays those fields on the operator checklist and
+  sequence-readiness readbacks.
+- This remains read-only state projection: it does not infer physical
+  sleep/resume from elapsed time, execute the post-resume sequence, write
+  receipts, write evidence, write runtime readback, grant authority, or close
+  Stage 16.
+- Fresh local readback for `actor=codex.builder` reports the checklist and
+  sequence-readiness pre-sleep age/freshness while keeping
+  `status=blocked_until_current_confirmation_receipt`,
+  `next_smallest_truthful_gap=stage16_sleep_resume_confirmation_receipt`,
+  `writes_evidence=false`, and `marks_stage16_closed=false`.
+
+Latest validation for Stage 16 pre-sleep age/freshness readbacks:
+
+- `python -m pytest
+  tests/test_api_federation.py::test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marker
+  tests/test_api_federation.py::test_federation_stage16_sleep_resume_confirmation_records_operator_receipt
+  -q --tb=short --maxfail=1`
+  Result: `passed; 2 passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `npm run test -- federation_hub`
+  Result: `passed; 199 passed`.
+- `npm run build`
+  Result: `passed`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
