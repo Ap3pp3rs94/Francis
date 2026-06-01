@@ -52656,6 +52656,68 @@ Latest validation for Stage 16 sleep action after-run readback:
 - `git diff --check`
   Result: `passed`.
 
+### 2026-06-01 - Stage 16 sleep action exposes operator sleep/resume gate
+
+Roadmap area: Stage 16 / Federation, workstation sleep-continuity gate
+truthfulness.
+
+Material change:
+
+- `/federation/sleep-continuity-action` now exposes a read-only
+  `operator_sleep_resume_gate` projection for the selected sleep-continuity
+  action.
+- In the current post-resume capture posture, the gate shows the latest
+  pre-sleep evidence file name, recorded timestamp, age in seconds, freshness
+  state, confirmation blocker, post-resume evidence status, and whether the
+  command becomes runnable after explicit operator sleep/resume confirmation.
+- The gate explicitly reports that elapsed time is not confirmation and that
+  Francis does not infer workstation sleep/resume from delay.
+- The federation UI parser, presenter, and panel preserve and render this gate
+  so the operator can verify the sleep/resume boundary before running the
+  post-resume command.
+- This is read-only inspectability. It does not execute routes, run shell
+  commands, write evidence, write receipts, mutate registry state, write memory,
+  grant execution authority, grant mutation authority, infer workstation
+  sleep/resume, or mark Stage 16 closed.
+- Stage 16 remains open until live post-resume evidence and the receipt-backed
+  completion/closure gates are satisfied.
+
+Latest validation for Stage 16 operator sleep/resume gate:
+
+- Live FastAPI readback of `/federation/sleep-continuity-action`
+  Result: `status=capture_post_resume_evidence`,
+  `operator_sleep_resume_gate.status=waiting_for_operator_sleep_resume_confirmation`,
+  `selected_step_id=capture_post_resume_evidence`,
+  `confirmation_required=true`,
+  `confirmation_blocker=operator_confirmed_sleep_resume_missing`,
+  `pre_sleep_evidence_present=true`,
+  `pre_sleep_file_name=pre_sleep_stage16-sleep-continuity-4cdbc34b0a12434ba09a06069e023fce.json`,
+  `pre_sleep_recorded_ts=1780284268`, `pre_sleep_age_seconds=8045`,
+  `pre_sleep_freshness_state=fresh`, `post_resume_evidence_present=false`,
+  `post_resume_evidence_status=missing`,
+  `ready_after_operator_confirmation=true`,
+  `elapsed_time_is_not_confirmation=true`,
+  `does_not_infer_sleep_from_delay=true`, `projection_runs_shell=false`,
+  `projection_writes_evidence=false`, `projection_writes_receipts=false`,
+  `projection_marks_stage16_closed=false`, and
+  `next_smallest_truthful_gap=stage16_sleep_continuity_runtime_readback`.
+- `python -m pytest tests/test_api_federation.py -q --tb=short`
+  Result: `passed; 19 passed`.
+- `cd apps/chat_ui; npm run test -- federation_hub`
+  Result: `passed; 187 passed`.
+- `cd apps/chat_ui; npm run build`
+  Result: `passed`.
+- `python -m mypy src/francis/api/routes/federation.py`
+  Result: `passed`.
+- `python -m ruff check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `python -m ruff format --check src/francis/api/routes/federation.py
+  tests/test_api_federation.py`
+  Result: `passed`.
+- `git diff --check`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

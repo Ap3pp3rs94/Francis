@@ -111,6 +111,7 @@ export function FederationHubPanel(props: { baseUrl: string }) {
   const latestPostResumeEvidence = status?.latest_post_resume_evidence;
   const selectedActionReadiness = presentation?.selected_action_readiness;
   const operatorTerminalInvocation = presentation?.operator_terminal_invocation;
+  const operatorSleepResumeGate = presentation?.operator_sleep_resume_gate;
   const afterManualExecutionReadback = presentation?.after_manual_execution_readback;
 
   return (
@@ -282,6 +283,38 @@ export function FederationHubPanel(props: { baseUrl: string }) {
             {afterManualExecutionReadback.expected_next_step_after_success ? (
               <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
                 expected next step <code>{afterManualExecutionReadback.expected_next_step_after_success}</code>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {operatorSleepResumeGate ? (
+          <div style={{ marginTop: 8 }}>
+            <div style={{ fontSize: 11, color: MUTED }}>
+              sleep/resume gate <code>{codeValue(operatorSleepResumeGate.status)}</code>
+              {" / "}after confirmation <code>{yesNo(operatorSleepResumeGate.ready_after_operator_confirmation)}</code>
+              {" / "}no inference <code>{yesNo(operatorSleepResumeGate.does_not_infer_sleep_from_delay)}</code>
+            </div>
+            <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
+              pre marker <code>{codeValue(operatorSleepResumeGate.pre_sleep_file_name)}</code>
+              {" / "}age <code>{operatorSleepResumeGate.pre_sleep_age_seconds}s</code>
+              {" / "}freshness <code>{codeValue(operatorSleepResumeGate.pre_sleep_freshness_state)}</code>
+            </div>
+            {operatorSleepResumeGate.pre_sleep_evidence_path ? (
+              <div style={{ fontSize: 11, color: MUTED, marginTop: 6, overflowWrap: "anywhere" }}>
+                pre path <code>{operatorSleepResumeGate.pre_sleep_evidence_path}</code>
+              </div>
+            ) : null}
+            <div style={{ fontSize: 11, color: MUTED, marginTop: 6 }}>
+              post evidence <code>{yesNo(operatorSleepResumeGate.post_resume_evidence_present)}</code>
+              {" / "}status <code>{codeValue(operatorSleepResumeGate.post_resume_evidence_status)}</code>
+            </div>
+            {operatorSleepResumeGate.required_confirmation_requirements.length ? (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                {operatorSleepResumeGate.required_confirmation_requirements.map((requirement) => (
+                  <span key={`federation-sleep-gate-requirement-${requirement}`} style={badgeStyle("blocked")}>
+                    {requirement}
+                  </span>
+                ))}
               </div>
             ) : null}
           </div>

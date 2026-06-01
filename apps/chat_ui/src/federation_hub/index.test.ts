@@ -596,6 +596,42 @@ test("federation sleep-continuity action parser preserves selected read-only ste
       projection_writes_receipts: false,
       projection_grants_authority: false,
     },
+    operator_sleep_resume_gate: {
+      status: "waiting_for_operator_sleep_resume_confirmation",
+      selected_step_id: "capture_post_resume_evidence",
+      confirmation_required: true,
+      required_confirmation_requirements: [
+        "operator_confirms_workstation_entered_sleep_or_suspend_after_pre_sleep_evidence",
+        "operator_confirms_workstation_resumed_before_post_resume_capture",
+        "pre_sleep_evidence_path_matches_latest_pre_sleep_artifact",
+        "post_resume_capture_uses_operator_confirmed_sleep_resume_flag",
+      ],
+      confirmation_blocker: "operator_confirmed_sleep_resume_missing",
+      operator_confirmation_blocker_present: true,
+      pre_sleep_evidence_present: true,
+      pre_sleep_evidence_path:
+        "D:\\Francis\\data\\test_runs\\federation-stage16-sleep-continuity-evidence\\pre_sleep_stage16.json",
+      pre_sleep_file_name: "pre_sleep_stage16.json",
+      pre_sleep_recorded_ts: 1_800_030_000,
+      pre_sleep_age_seconds: 300,
+      pre_sleep_freshness_state: "fresh",
+      continuity_record_id: "stage16-sleep-continuity-test",
+      trace_id: "trace-stage16-sleep-continuity-test",
+      post_resume_evidence_present: false,
+      post_resume_evidence_status: "missing",
+      must_sleep_after_pre_sleep_recorded_ts: true,
+      must_resume_before_post_resume_capture: true,
+      post_resume_capture_allowed_after_operator_confirmation: true,
+      operator_terminal_command_ready: true,
+      ready_after_operator_confirmation: true,
+      elapsed_time_is_not_confirmation: true,
+      does_not_infer_sleep_from_delay: true,
+      projection_only: true,
+      projection_runs_shell: false,
+      projection_writes_evidence: false,
+      projection_writes_receipts: false,
+      projection_marks_stage16_closed: false,
+    },
     after_manual_execution_readback: {
       status: "manual_execution_projection_ready",
       selected_step_id: "capture_post_resume_evidence",
@@ -706,6 +742,30 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   assert.equal(action.operator_terminal_invocation?.projection_runs_shell, false);
   assert.equal(action.operator_terminal_invocation?.projection_writes_evidence, false);
   assert.equal(action.operator_terminal_invocation?.projection_grants_authority, false);
+  assert.equal(action.operator_sleep_resume_gate?.status, "waiting_for_operator_sleep_resume_confirmation");
+  assert.equal(action.operator_sleep_resume_gate?.selected_step_id, "capture_post_resume_evidence");
+  assert.equal(action.operator_sleep_resume_gate?.confirmation_required, true);
+  assert.deepEqual(
+    action.operator_sleep_resume_gate?.required_confirmation_requirements,
+    action.operator_confirmation_requirements,
+  );
+  assert.equal(action.operator_sleep_resume_gate?.confirmation_blocker, "operator_confirmed_sleep_resume_missing");
+  assert.equal(action.operator_sleep_resume_gate?.operator_confirmation_blocker_present, true);
+  assert.equal(action.operator_sleep_resume_gate?.pre_sleep_evidence_present, true);
+  assert.equal(action.operator_sleep_resume_gate?.pre_sleep_file_name, "pre_sleep_stage16.json");
+  assert.equal(action.operator_sleep_resume_gate?.pre_sleep_recorded_ts, 1_800_030_000);
+  assert.equal(action.operator_sleep_resume_gate?.pre_sleep_age_seconds, 300);
+  assert.equal(action.operator_sleep_resume_gate?.pre_sleep_freshness_state, "fresh");
+  assert.equal(action.operator_sleep_resume_gate?.post_resume_evidence_present, false);
+  assert.equal(action.operator_sleep_resume_gate?.post_resume_evidence_status, "missing");
+  assert.equal(action.operator_sleep_resume_gate?.must_sleep_after_pre_sleep_recorded_ts, true);
+  assert.equal(action.operator_sleep_resume_gate?.must_resume_before_post_resume_capture, true);
+  assert.equal(action.operator_sleep_resume_gate?.post_resume_capture_allowed_after_operator_confirmation, true);
+  assert.equal(action.operator_sleep_resume_gate?.ready_after_operator_confirmation, true);
+  assert.equal(action.operator_sleep_resume_gate?.elapsed_time_is_not_confirmation, true);
+  assert.equal(action.operator_sleep_resume_gate?.does_not_infer_sleep_from_delay, true);
+  assert.equal(action.operator_sleep_resume_gate?.projection_runs_shell, false);
+  assert.equal(action.operator_sleep_resume_gate?.projection_marks_stage16_closed, false);
   assert.equal(action.after_manual_execution_readback?.status, "manual_execution_projection_ready");
   assert.equal(action.after_manual_execution_readback?.selected_step_id, "capture_post_resume_evidence");
   assert.equal(
@@ -804,6 +864,10 @@ test("federation sleep-continuity action parser preserves selected read-only ste
   assert.equal(presentation.operator_terminal_invocation?.copyable_command?.includes(action.primary_command ?? ""), true);
   assert.equal(presentation.operator_terminal_invocation?.must_run_after_sleep_resume, true);
   assert.equal(presentation.operator_terminal_invocation?.projection_only, true);
+  assert.equal(presentation.operator_sleep_resume_gate?.status, "waiting_for_operator_sleep_resume_confirmation");
+  assert.equal(presentation.operator_sleep_resume_gate?.pre_sleep_age_seconds, 300);
+  assert.equal(presentation.operator_sleep_resume_gate?.ready_after_operator_confirmation, true);
+  assert.equal(presentation.operator_sleep_resume_gate?.does_not_infer_sleep_from_delay, true);
   assert.equal(presentation.after_manual_execution_readback?.status, "manual_execution_projection_ready");
   assert.equal(
     presentation.after_manual_execution_readback?.expected_next_step_after_success,

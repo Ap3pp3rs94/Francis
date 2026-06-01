@@ -1384,6 +1384,70 @@ def _stage16_sleep_continuity_operator_terminal_invocation(
     }
 
 
+def _stage16_sleep_continuity_operator_sleep_resume_gate(
+    *,
+    selected_step: dict[str, Any],
+    selected_action_readiness: dict[str, Any],
+    latest_pre_sleep_evidence: dict[str, Any],
+    latest_post_resume_evidence: dict[str, Any],
+    confirmation_requirements: list[str],
+) -> dict[str, Any]:
+    step_id = _safe_str(selected_step.get("id")).strip()
+    pre_sleep_recorded_ts = int(latest_pre_sleep_evidence.get("recorded_ts") or 0)
+    pre_sleep_age_seconds = max(0, _now_s() - pre_sleep_recorded_ts) if pre_sleep_recorded_ts > 0 else 0
+    run_blockers = _parse_list(selected_action_readiness.get("run_blockers"))
+    non_confirmation_blockers = [
+        blocker for blocker in run_blockers if blocker != "operator_confirmed_sleep_resume_missing"
+    ]
+    confirmation_required = step_id == "capture_post_resume_evidence"
+    pre_sleep_present = bool(latest_pre_sleep_evidence.get("present"))
+    post_resume_present = bool(latest_post_resume_evidence.get("present"))
+    operator_terminal_command_ready = bool(selected_action_readiness.get("operator_terminal_command_ready"))
+    ready_after_operator_confirmation = (
+        confirmation_required
+        and pre_sleep_present
+        and operator_terminal_command_ready
+        and not non_confirmation_blockers
+    )
+    if not confirmation_required:
+        status = "sleep_resume_confirmation_not_required_for_selected_step"
+    elif ready_after_operator_confirmation:
+        status = "waiting_for_operator_sleep_resume_confirmation"
+    else:
+        status = "blocked_before_operator_sleep_resume_confirmation"
+
+    return {
+        "status": status,
+        "selected_step_id": step_id,
+        "confirmation_required": confirmation_required,
+        "required_confirmation_requirements": confirmation_requirements,
+        "confirmation_blocker": "operator_confirmed_sleep_resume_missing" if confirmation_required else "",
+        "operator_confirmation_blocker_present": "operator_confirmed_sleep_resume_missing" in run_blockers,
+        "pre_sleep_evidence_present": pre_sleep_present,
+        "pre_sleep_evidence_path": _safe_str(latest_pre_sleep_evidence.get("evidence_path")).strip(),
+        "pre_sleep_file_name": _safe_str(latest_pre_sleep_evidence.get("file_name")).strip(),
+        "pre_sleep_recorded_ts": pre_sleep_recorded_ts,
+        "pre_sleep_age_seconds": pre_sleep_age_seconds,
+        "pre_sleep_freshness_state": _safe_str(latest_pre_sleep_evidence.get("freshness_state")).strip(),
+        "continuity_record_id": _safe_str(latest_pre_sleep_evidence.get("continuity_record_id")).strip(),
+        "trace_id": _safe_str(latest_pre_sleep_evidence.get("trace_id")).strip(),
+        "post_resume_evidence_present": post_resume_present,
+        "post_resume_evidence_status": _safe_str(latest_post_resume_evidence.get("status")).strip(),
+        "must_sleep_after_pre_sleep_recorded_ts": confirmation_required,
+        "must_resume_before_post_resume_capture": confirmation_required,
+        "post_resume_capture_allowed_after_operator_confirmation": ready_after_operator_confirmation,
+        "operator_terminal_command_ready": operator_terminal_command_ready,
+        "ready_after_operator_confirmation": ready_after_operator_confirmation,
+        "elapsed_time_is_not_confirmation": True,
+        "does_not_infer_sleep_from_delay": True,
+        "projection_only": True,
+        "projection_runs_shell": False,
+        "projection_writes_evidence": False,
+        "projection_writes_receipts": False,
+        "projection_marks_stage16_closed": False,
+    }
+
+
 def _stage16_sleep_continuity_after_manual_execution_readback(
     *,
     selected_step: dict[str, Any],
@@ -1490,6 +1554,17 @@ def stage16_sleep_continuity_action() -> dict[str, Any]:
         selected_action_readiness=selected_action_readiness,
         confirmation_requirements=confirmation_requirements,
     )
+    operator_sleep_resume_gate = _stage16_sleep_continuity_operator_sleep_resume_gate(
+        selected_step=selected_step,
+        selected_action_readiness=selected_action_readiness,
+        latest_pre_sleep_evidence=runbook.get("pre_sleep_evidence")
+        if isinstance(runbook.get("pre_sleep_evidence"), dict)
+        else {},
+        latest_post_resume_evidence=runbook.get("post_resume_evidence")
+        if isinstance(runbook.get("post_resume_evidence"), dict)
+        else {},
+        confirmation_requirements=confirmation_requirements,
+    )
     after_manual_execution_readback = _stage16_sleep_continuity_after_manual_execution_readback(
         selected_step=selected_step,
         selected_action_readiness=selected_action_readiness,
@@ -1525,6 +1600,7 @@ def stage16_sleep_continuity_action() -> dict[str, Any]:
         "operator_confirmation_requirements": confirmation_requirements,
         "selected_action_readiness": selected_action_readiness,
         "operator_terminal_invocation": operator_terminal_invocation,
+        "operator_sleep_resume_gate": operator_sleep_resume_gate,
         "after_manual_execution_readback": after_manual_execution_readback,
         "writes_evidence_when_run": bool(selected_step.get("writes_evidence_when_run")),
         "writes_receipts_when_run": bool(selected_step.get("writes_receipts_when_run")),
@@ -1540,6 +1616,7 @@ def stage16_sleep_continuity_action() -> dict[str, Any]:
             "confirmation_requirements_projected": bool(confirmation_requirements),
             "selected_action_readiness_projected": True,
             "operator_terminal_invocation_projected": True,
+            "operator_sleep_resume_gate_projected": True,
             "after_manual_execution_readback_projected": True,
             "does_not_run_selected_command": True,
             "does_not_post_selected_route": True,

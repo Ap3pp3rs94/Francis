@@ -1215,6 +1215,7 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
 ) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setattr("francis.api.routes.federation._now_s", lambda: 1_800_030_300)
     _write_stage15_closure_receipt(data_root, receipt_id="swarm_stage15_closure_for_presleep_runbook")
     pre_sleep_path = _write_stage16_pre_sleep_evidence(data_root)
 
@@ -1331,6 +1332,35 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert invocation["projection_writes_evidence"] is False
     assert invocation["projection_writes_receipts"] is False
     assert invocation["projection_grants_authority"] is False
+    sleep_gate = action["operator_sleep_resume_gate"]
+    assert sleep_gate["status"] == "waiting_for_operator_sleep_resume_confirmation"
+    assert sleep_gate["selected_step_id"] == "capture_post_resume_evidence"
+    assert sleep_gate["confirmation_required"] is True
+    assert sleep_gate["required_confirmation_requirements"] == action["operator_confirmation_requirements"]
+    assert sleep_gate["confirmation_blocker"] == "operator_confirmed_sleep_resume_missing"
+    assert sleep_gate["operator_confirmation_blocker_present"] is True
+    assert sleep_gate["pre_sleep_evidence_present"] is True
+    assert sleep_gate["pre_sleep_evidence_path"] == str(pre_sleep_path.resolve())
+    assert sleep_gate["pre_sleep_file_name"] == pre_sleep_path.name
+    assert sleep_gate["pre_sleep_recorded_ts"] == 1_800_030_000
+    assert sleep_gate["pre_sleep_age_seconds"] == 300
+    assert sleep_gate["pre_sleep_freshness_state"] == "fresh"
+    assert sleep_gate["continuity_record_id"] == "stage16-sleep-pre"
+    assert sleep_gate["trace_id"] == "trace-stage16-sleep-continuity-pre-test"
+    assert sleep_gate["post_resume_evidence_present"] is False
+    assert sleep_gate["post_resume_evidence_status"] == "missing"
+    assert sleep_gate["must_sleep_after_pre_sleep_recorded_ts"] is True
+    assert sleep_gate["must_resume_before_post_resume_capture"] is True
+    assert sleep_gate["post_resume_capture_allowed_after_operator_confirmation"] is True
+    assert sleep_gate["operator_terminal_command_ready"] is True
+    assert sleep_gate["ready_after_operator_confirmation"] is True
+    assert sleep_gate["elapsed_time_is_not_confirmation"] is True
+    assert sleep_gate["does_not_infer_sleep_from_delay"] is True
+    assert sleep_gate["projection_only"] is True
+    assert sleep_gate["projection_runs_shell"] is False
+    assert sleep_gate["projection_writes_evidence"] is False
+    assert sleep_gate["projection_writes_receipts"] is False
+    assert sleep_gate["projection_marks_stage16_closed"] is False
     after_run = action["after_manual_execution_readback"]
     assert after_run["status"] == "manual_execution_projection_ready"
     assert after_run["selected_step_id"] == "capture_post_resume_evidence"
@@ -1358,6 +1388,7 @@ def test_federation_stage16_sleep_continuity_runbook_uses_latest_pre_sleep_marke
     assert action["operator_action_required"] is True
     assert action["operator_confirmation_required"] is True
     assert action["governance"]["confirmation_requirements_projected"] is True
+    assert action["governance"]["operator_sleep_resume_gate_projected"] is True
     assert action["writes_evidence_when_run"] is True
     assert action["writes_receipts_when_run"] is False
     assert action["mutation_available_from_ui"] is False
@@ -1370,6 +1401,7 @@ def test_federation_stage16_sleep_continuity_runbook_uses_linked_post_resume_mar
 ) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setattr("francis.api.routes.federation._now_s", lambda: 1_800_030_300)
     _write_stage15_closure_receipt(data_root, receipt_id="swarm_stage15_closure_for_postresume_runbook")
     pre_sleep_path = _write_stage16_pre_sleep_evidence(data_root)
     post_resume_path = _write_stage16_post_resume_evidence(data_root, pre_sleep_path)
@@ -1450,6 +1482,24 @@ def test_federation_stage16_sleep_continuity_runbook_uses_linked_post_resume_mar
     assert invocation["manual_execution_writes_receipts"] is True
     assert invocation["projection_only"] is True
     assert invocation["projection_runs_shell"] is False
+    sleep_gate = action["operator_sleep_resume_gate"]
+    assert sleep_gate["status"] == "sleep_resume_confirmation_not_required_for_selected_step"
+    assert sleep_gate["selected_step_id"] == "commit_sleep_continuity_readback"
+    assert sleep_gate["confirmation_required"] is False
+    assert sleep_gate["operator_confirmation_blocker_present"] is False
+    assert sleep_gate["pre_sleep_evidence_present"] is True
+    assert sleep_gate["pre_sleep_recorded_ts"] == 1_800_030_000
+    assert sleep_gate["pre_sleep_age_seconds"] == 300
+    assert sleep_gate["pre_sleep_freshness_state"] == "fresh"
+    assert sleep_gate["post_resume_evidence_present"] is True
+    assert sleep_gate["post_resume_evidence_status"] == "post_resume_evidence_available"
+    assert sleep_gate["must_sleep_after_pre_sleep_recorded_ts"] is False
+    assert sleep_gate["must_resume_before_post_resume_capture"] is False
+    assert sleep_gate["ready_after_operator_confirmation"] is False
+    assert sleep_gate["elapsed_time_is_not_confirmation"] is True
+    assert sleep_gate["does_not_infer_sleep_from_delay"] is True
+    assert sleep_gate["projection_only"] is True
+    assert sleep_gate["projection_runs_shell"] is False
     after_run = action["after_manual_execution_readback"]
     assert after_run["status"] == "manual_execution_projection_ready"
     assert after_run["selected_step_id"] == "commit_sleep_continuity_readback"
