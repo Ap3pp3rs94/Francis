@@ -54747,6 +54747,29 @@ Latest validation for Stage 16 actor-bound confirmations readback:
   writes_evidence=false; marks_stage16_closed=false;
   next_smallest_truthful_gap=stage16_sleep_resume_confirmation_receipt`.
 
+### 2026-06-01 - Stage 16 Hub shows requested receipt actor acceptance
+
+Roadmap area: Stage 16 / Federation, sleep-continuity confirmation receipt
+operator surface.
+
+Material change:
+
+- Federation Hub now shows the actor requested for the sleep-resume
+  confirmation command projection and whether the backend accepted that actor
+  through the permission gate.
+- This keeps the command surface truthful when `codex.builder` is scoped, and
+  makes unscoped actor fallbacks visible instead of hiding them behind the
+  bound/placeholder command fields.
+- This is display-only: it does not write receipts, capture evidence, run
+  shell from the UI, grant authority, or close Stage 16.
+
+Latest validation for Stage 16 Hub requested-actor display:
+
+- `npm run test -- federation_hub`
+  Result: `passed; 193 passed`.
+- `npm run build`
+  Result: `passed`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
