@@ -42,16 +42,15 @@ Francis should be read from current repo truth, not from a hard-coded phase labe
 This block is intentionally overwritten as the build moves. The append-only
 history stays in [docs/operations/COMPLETION_LEDGER.md](docs/operations/COMPLETION_LEDGER.md).
 
-- Last updated: 2026-06-01, 22:23 America/Chicago.
-- Latest confirmed GitHub gate: `main` commit `40aa6a46` passed CI on Ubuntu
+- Last updated: 2026-06-01, 23:18 America/Chicago.
+- Latest confirmed GitHub gate: `main` commit `3cedd778` passed CI on Ubuntu
   3.12, Ubuntu 3.13, Windows 3.12, and Windows 3.13; CodeQL passed for Actions,
   JavaScript/TypeScript, and Python.
-- Current slice: Stage 17 capability pack validation-receipts readback, adding a
-  read-only API surface that checks generated/staged pack capabilities against
-  bounded plugin validation receipt IDs and validation receipt paths without
-  reading receipt bodies, writing receipts, promoting capabilities, or granting
-  authority.
-- Next truthful gap: capability-library maturity still needs proposal lineage,
+- Current slice: Stage 17 capability pack proposal-lineage readback, adding a
+  read-only API surface that checks staged pack capabilities against bounded
+  plugin proposal IDs and proposal artifact paths without reading proposal
+  bodies, approving proposals, promoting capabilities, or granting authority.
+- Next truthful gap: capability-library maturity still needs promotion receipts,
   operator-facing review, and promotion discipline before Stage 17 can be called
   complete.
 

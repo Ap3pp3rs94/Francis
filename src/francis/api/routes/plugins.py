@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 
 from francis.economy.markets.capability_catalog_coherence import analyze_capability_catalog_coherence
 from francis.economy.markets.capability_catalog_projection import marketplace_from_plugin_catalog
+from francis.economy.markets.capability_pack_lineage import analyze_capability_pack_lineage
 from francis.economy.markets.capability_pack_migration_plan import analyze_capability_pack_migration_plan
 from francis.economy.markets.capability_pack_promotion_rules import analyze_capability_pack_promotion_rules
 from francis.economy.markets.capability_pack_quality_docs import analyze_capability_pack_quality_docs
@@ -797,6 +798,32 @@ def _available_capability_pack_validation_receipts() -> dict[str, set[str]]:
             paths.add(f"validations/{entry.name}")
             paths.add(f"artifacts/plugins/validations/{entry.name}")
             paths.add(f"data/artifacts/plugins/validations/{entry.name}")
+    except OSError:
+        return {"ids": set(), "paths": set()}
+    return {"ids": ids, "paths": paths}
+
+
+def _available_capability_pack_proposals() -> dict[str, set[str]]:
+    folder = _art_dir() / "proposals"
+    folder_fs_path = _filesystem_path(folder)
+    if not os.path.isdir(folder_fs_path):
+        return {"ids": set(), "paths": set()}
+
+    ids: set[str] = set()
+    paths: set[str] = set()
+    try:
+        for entry in os.scandir(folder_fs_path):
+            if not entry.name.endswith(".json") or not entry.is_file():
+                continue
+            proposal_id = entry.name[:-5].strip()
+            if not proposal_id:
+                continue
+            ids.add(proposal_id)
+            paths.add(entry.path)
+            paths.add(str(folder / entry.name))
+            paths.add(f"proposals/{entry.name}")
+            paths.add(f"artifacts/plugins/proposals/{entry.name}")
+            paths.add(f"data/artifacts/plugins/proposals/{entry.name}")
     except OSError:
         return {"ids": set(), "paths": set()}
     return {"ids": ids, "paths": paths}
@@ -2742,6 +2769,34 @@ def capability_pack_validation_receipts() -> dict[str, object]:
         }
     except Exception as exc:
         return {"ok": False, "kind": "plugin.capability_pack.validation_receipts", "error": api_error_message(exc)}
+
+
+@router.get("/capabilities/packs/lineage/proposals")
+def capability_pack_lineage_proposals() -> dict[str, object]:
+    try:
+        registry = _load_registry()
+        synced = _sync_generated_plugins(registry)
+        catalog = _save_registry_and_catalog(registry) if synced else _compile_runtime_catalog(registry)
+        runtime_catalog = _read_runtime_catalog_payload(catalog)
+        marketplace = marketplace_from_plugin_catalog(runtime_catalog)
+        available_proposals = _available_capability_pack_proposals()
+        analysis = analyze_capability_pack_lineage(
+            marketplace.catalog(),
+            available_proposal_ids=available_proposals["ids"],
+            available_proposal_paths=available_proposals["paths"],
+        )
+        return {
+            "ok": True,
+            "kind": "plugin.capability_pack.lineage.proposals",
+            **analysis,
+            "catalog": {
+                "path": _safe_str(catalog.get("path")).strip(),
+                "total_plugins": int(runtime_catalog.get("total_plugins") or catalog.get("total_plugins") or 0),
+                "total_tools": int(runtime_catalog.get("total_tools") or catalog.get("total_tools") or 0),
+            },
+        }
+    except Exception as exc:
+        return {"ok": False, "kind": "plugin.capability_pack.lineage.proposals", "error": api_error_message(exc)}
 
 
 @router.get("/capabilities/packs/promotion/rules")

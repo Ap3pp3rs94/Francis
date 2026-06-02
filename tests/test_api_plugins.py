@@ -1040,6 +1040,71 @@ def test_plugins_capability_pack_validation_receipts_projects_read_only_receipt_
     assert all(item["capability"] != plugin_id for item in pack["failing_capabilities_sample"])
 
 
+def test_plugins_capability_pack_lineage_projects_read_only_proposal_evidence(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    meta = {
+        **_forge_promotion_meta("capability_lineage"),
+        "pack_id": "ops.lineage",
+        "pack_version": "1.0.0",
+        "pack_name": "Ops Lineage Pack",
+    }
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Capability Lineage Plugin",
+            "description": "Stage 17 proposal lineage coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": meta,
+        },
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    plugin_id = str(built_body["plugin_id"])
+
+    response = client.get("/plugins/capabilities/packs/lineage/proposals")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "plugin.capability_pack.lineage.proposals"
+    assert body["stage"] == "Stage 17 / Capability Economy"
+    assert body["requirements"]["proposal_lineage_required_for_staged"] is True
+    assert body["requirements"]["proposal_paths_must_stay_within_plugin_proposals"] is True
+    assert body["requirements"]["proposal_bodies_not_read"] is True
+    assert body["requirements"]["operator_review_remains_separate_gate"] is True
+    assert body["governance"]["read_only"] is True
+    assert body["governance"]["does_not_read_proposal_bodies"] is True
+    assert body["governance"]["does_not_write_proposals"] is True
+    assert body["governance"]["does_not_write_receipts"] is True
+    assert body["governance"]["does_not_mutate_registry"] is True
+    assert body["governance"]["does_not_approve_proposals"] is True
+    assert body["governance"]["does_not_promote_capabilities"] is True
+    assert body["governance"]["proposal_approval_authority"] is False
+    assert body["available_proposal_count"] >= 1
+
+    pack = next(item for item in body["packs"] if item["pack_id"] == "ops.lineage")
+    assert pack["ready"] is True
+    assert pack["blockers"] == []
+    assert pack["requires_proposal_lineage_count"] == 1
+    assert pack["proposal_lineage_present_count"] == 1
+    assert pack["proposal_id_missing_count"] == 0
+    assert pack["proposal_not_found_count"] == 0
+    assert pack["proposal_invalid_count"] == 0
+    assert pack["proposal_ids"] == [built_body["proposal_id"]]
+    assert all(item["capability"] != plugin_id for item in pack["failing_capabilities_sample"])
+
+
 def test_plugins_capability_pack_promotion_rules_project_governed_rule_readiness(
     monkeypatch,
     tmp_path: Path,

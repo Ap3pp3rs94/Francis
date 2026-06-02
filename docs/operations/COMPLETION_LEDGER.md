@@ -56556,6 +56556,67 @@ Validation risk:
   `scripts/check.ps1` was not rerun for this slice; the next pushed GitHub CI
   matrix remains the full-suite evidence gate.
 
+### 2026-06-01 - Stage 17 capability pack proposal lineage is readable
+
+Roadmap area: Stage 17 / Capability Economy, proposal lineage evidence for
+versioned staged capability packs.
+
+Material change:
+
+- Added a read-only capability pack proposal-lineage analyzer for Stage 17.
+- Added `GET /plugins/capabilities/packs/lineage/proposals`.
+- The route checks staged pack capabilities against bounded plugin proposal IDs
+  and proposal artifact paths under the plugin proposals artifact surface.
+- The route reads proposal filenames/paths only; it does not read proposal
+  bodies, write proposals, write receipts, mutate the plugin registry, approve
+  proposals, promote/enable capabilities, execute capabilities, or grant
+  authority.
+- The analyzer surfaces pack-level blockers for missing proposal lineage,
+  invalid proposal IDs, invalid proposal paths, and declared proposals that do
+  not resolve to known proposal artifacts.
+- The chat UI API contract endpoint list now includes the proposal-lineage
+  route.
+- `README.md` `Latest Progress Snapshot` was intentionally overwritten to show
+  the now-confirmed `3cedd778` GitHub gate and this proposal-lineage slice.
+
+Confirmed GitHub baseline before this slice:
+
+- GitHub CI run `26796417406` for commit `3cedd778` completed successfully on
+  Ubuntu 3.12, Ubuntu 3.13, Windows 3.12, and Windows 3.13.
+- CodeQL Advanced run `26796417411` for commit `3cedd778` completed
+  successfully for Actions, JavaScript/TypeScript, and Python.
+
+Latest validation for Stage 17 capability pack proposal lineage:
+
+- `FRANCIS_PYTEST_SESSION_RETENTION_ROOT=data/test_runs/pytest/codex_validation_stage17_lineage_final
+  python -m pytest tests/unit/test_capability_pack_lineage.py
+  tests/test_api_plugins.py::test_plugins_capability_pack_lineage_projects_read_only_proposal_evidence
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 4 passed`
+- `python -m mypy src/francis/economy/markets/capability_pack_lineage.py
+  src/francis/economy/markets/__init__.py src/francis/economy/__init__.py
+  src/francis/api/routes/plugins.py`
+  Result: `passed`
+- `python -m ruff check src/francis/economy/markets/capability_pack_lineage.py
+  src/francis/economy/markets/__init__.py src/francis/economy/__init__.py
+  src/francis/api/routes/plugins.py tests/unit/test_capability_pack_lineage.py
+  tests/test_api_plugins.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check
+  src/francis/economy/markets/capability_pack_lineage.py
+  src/francis/economy/markets/__init__.py src/francis/economy/__init__.py
+  src/francis/api/routes/plugins.py tests/unit/test_capability_pack_lineage.py
+  tests/test_api_plugins.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+
+Validation risk:
+
+- Targeted local pytest used a bounded retention root because the workstation's
+  repository-local pytest retention tree remains large. Full local
+  `scripts/check.ps1` was not rerun for this slice; the next pushed GitHub CI
+  matrix remains the full-suite evidence gate.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

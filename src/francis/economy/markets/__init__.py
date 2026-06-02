@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .capability_catalog_projection import capability_listings_from_plugin_catalog, marketplace_from_plugin_catalog
 from .capability_marketplace import CapabilityListing, CapabilityMarketplace
+from .capability_pack_lineage import analyze_capability_pack_lineage
 from .capability_pack_migration_plan import analyze_capability_pack_migration_plan
 from .capability_pack_promotion_rules import analyze_capability_pack_promotion_rules
 from .capability_pack_quality_docs import analyze_capability_pack_quality_docs
@@ -16,6 +17,7 @@ from .pricing_engine import PricingEngine, PricingResult
 __all__ = [
     "capability_listings_from_plugin_catalog",
     "marketplace_from_plugin_catalog",
+    "analyze_capability_pack_lineage",
     "analyze_capability_pack_migration_plan",
     "analyze_capability_pack_promotion_rules",
     "analyze_capability_pack_quality_docs",
