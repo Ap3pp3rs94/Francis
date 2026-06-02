@@ -57316,6 +57316,54 @@ Remaining truthful gap:
   residual quality, validation, lineage, and promotion-receipt remediation
   before it can be called complete.
 
+### 2026-06-02 - Stage 17 promotion rule remediation batch apply passes GitHub CI
+
+Roadmap area: Stage 17 / Capability Economy, GitHub-visible validation for the
+bounded remediation-apply batch execution path.
+
+Material change:
+
+- GitHub CI and CodeQL now confirm the pushed promotion-rule remediation batch
+  apply slice on `main` commit `e3dc0afb`.
+- The live local remediation backlog was exercised after the GitHub push using
+  the governed apply route with actor `codex.builder` and `plugins.write` scope.
+- The live run wrote 13 capability-pack metadata receipts covering 493
+  capabilities with no failed writes. The source tree remained clean because
+  those receipts are ignored runtime state under `data/`.
+- The live readback still reports 34 blocked packs because the remaining blockers
+  are now quality, validation, and lineage evidence: `tests_missing` and
+  `docs_missing` for 34 packs; `validation_receipt_missing` and
+  `proposal_id_missing` for 31 packs.
+- `README.md` `Latest Progress Snapshot` was intentionally overwritten to show
+  `e3dc0afb` as the latest confirmed GitHub gate and to point the next truthful
+  gap at quality-evidence and lineage remediation.
+
+Latest validation for Stage 17 promotion rule remediation batch apply:
+
+- GitHub CI run `26846201177` for commit `e3dc0afb`.
+  Result: `passed` on Ubuntu 3.12, Ubuntu 3.13, Windows 3.12, and Windows 3.13.
+- CodeQL Advanced run `26846201331` for commit `e3dc0afb`.
+  Result: `passed` for Actions, JavaScript/TypeScript, and Python.
+- Live local dry run of
+  `POST /plugins/capabilities/packs/promotion/rules/remediation/apply`.
+  Result: `planned_pack_count=13`, `planned_capability_count=493`,
+  `skipped_count=21`.
+- Live local apply of
+  `POST /plugins/capabilities/packs/promotion/rules/remediation/apply`.
+  Result: `recorded_pack_count=13`, `recorded_capability_count=493`,
+  `failed_count=0`, `skipped_count=21`.
+- Live local post-apply readback of
+  `GET /plugins/capabilities/packs/promotion/rules/remediation`.
+  Result: `status=blocked`, `remediation_queue_count=34`,
+  blocker counts `tests_missing=34`, `docs_missing=34`,
+  `validation_receipt_missing=31`, `proposal_id_missing=31`.
+
+Remaining truthful gap:
+
+- Stage 17 still needs a governed, truthful quality-evidence and lineage
+  remediation path for the remaining test, doc, validation-receipt, and forge
+  proposal blockers before it can be called complete.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
