@@ -1257,6 +1257,90 @@ def test_plugins_capability_pack_promotion_rules_project_governed_rule_readiness
     assert all(item["capability"] != plugin_id for item in pack["failing_capabilities_sample"])
 
 
+def test_plugins_capability_pack_operator_review_projects_read_only_review_queue(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    meta = {
+        **_forge_promotion_meta("capability_operator_review"),
+        "pack_id": "ops.operator_review",
+        "pack_version": "1.0.0",
+        "pack_name": "Ops Operator Review Pack",
+        "promotion_rules": [
+            "metadata_receipt_before_promotion",
+            "quality_standards_before_promotion",
+            "operator_review_before_promotion",
+        ],
+        "pack_governance": {
+            "risk_tier": "normal",
+            "scope": "build_dev",
+            "operator_review_required": True,
+        },
+    }
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Capability Operator Review Plugin",
+            "description": "Stage 17 operator review coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": meta,
+        },
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    plugin_id = str(built_body["plugin_id"])
+
+    response = client.get("/plugins/capabilities/packs/operator/review")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "plugin.capability_pack.operator_review"
+    assert body["stage"] == "Stage 17 / Capability Economy"
+    assert body["requirements"]["operator_review_before_promotion_required"] is True
+    assert body["requirements"]["review_decision_remains_separate_governed_action"] is True
+    assert body["decision_routes"]["proposal_review_route"] == "/forge/proposals/decision"
+    assert body["decision_routes"]["promotion_route_after_review"] == "/plugins/enable"
+    assert body["governance"]["read_only"] is True
+    assert body["governance"]["operator_facing"] is True
+    assert body["governance"]["does_not_read_proposal_bodies"] is True
+    assert body["governance"]["does_not_read_receipt_bodies"] is True
+    assert body["governance"]["does_not_write_receipts"] is True
+    assert body["governance"]["does_not_mutate_registry"] is True
+    assert body["governance"]["does_not_approve_proposals"] is True
+    assert body["governance"]["does_not_promote_capabilities"] is True
+    assert body["governance"]["promotion_authority"] is False
+    assert body["governance"]["execution_authority"] is False
+    assert body["review_queue_count"] >= 1
+
+    pack = next(item for item in body["packs"] if item["pack_id"] == "ops.operator_review")
+    assert pack["status"] == "ready_for_operator_review"
+    assert pack["operator_review_ready"] is True
+    assert pack["decision_required"] is True
+    assert pack["decision_kind"] == "staged_pack_promotion_review"
+    assert pack["blockers"] == []
+    assert pack["staged_capability_count"] == 1
+    assert pack["promoted_capability_count"] == 0
+    assert pack["operator_review_rule_declared"] is True
+    assert pack["operator_review_governance_declared"] is True
+    assert pack["quality_evidence_ready"] is True
+    assert pack["proposal_lineage_ready"] is True
+    assert pack["validation_receipts_ready"] is True
+    assert pack["review_items_sample"][0]["capability"] == plugin_id
+    assert pack["review_items_sample"][0]["proposal_id"] == built_body["proposal_id"]
+    assert pack["review_items_sample"][0]["validation_receipt_id"] == built_body["validation_receipt_id"]
+    assert all(item["capability"] != plugin_id for item in pack["failing_capabilities_sample"])
+
+
 def test_plugins_capability_pack_metadata_receipt_expands_reviewed_migration_plan_candidate(
     monkeypatch,
     tmp_path: Path,

@@ -22,6 +22,7 @@ from francis.economy.markets.capability_catalog_coherence import analyze_capabil
 from francis.economy.markets.capability_catalog_projection import marketplace_from_plugin_catalog
 from francis.economy.markets.capability_pack_lineage import analyze_capability_pack_lineage
 from francis.economy.markets.capability_pack_migration_plan import analyze_capability_pack_migration_plan
+from francis.economy.markets.capability_pack_operator_review import analyze_capability_pack_operator_review
 from francis.economy.markets.capability_pack_promotion_receipts import analyze_capability_pack_promotion_receipts
 from francis.economy.markets.capability_pack_promotion_rules import analyze_capability_pack_promotion_rules
 from francis.economy.markets.capability_pack_quality_docs import analyze_capability_pack_quality_docs
@@ -2852,6 +2853,29 @@ def capability_pack_promotion_receipts() -> dict[str, object]:
         }
     except Exception as exc:
         return {"ok": False, "kind": "plugin.capability_pack.promotion_receipts", "error": api_error_message(exc)}
+
+
+@router.get("/capabilities/packs/operator/review")
+def capability_pack_operator_review() -> dict[str, object]:
+    try:
+        registry = _load_registry()
+        synced = _sync_generated_plugins(registry)
+        catalog = _save_registry_and_catalog(registry) if synced else _compile_runtime_catalog(registry)
+        runtime_catalog = _read_runtime_catalog_payload(catalog)
+        marketplace = marketplace_from_plugin_catalog(runtime_catalog)
+        review = analyze_capability_pack_operator_review(marketplace.catalog())
+        return {
+            "ok": True,
+            "kind": "plugin.capability_pack.operator_review",
+            **review,
+            "catalog": {
+                "path": _safe_str(catalog.get("path")).strip(),
+                "total_plugins": int(runtime_catalog.get("total_plugins") or catalog.get("total_plugins") or 0),
+                "total_tools": int(runtime_catalog.get("total_tools") or catalog.get("total_tools") or 0),
+            },
+        }
+    except Exception as exc:
+        return {"ok": False, "kind": "plugin.capability_pack.operator_review", "error": api_error_message(exc)}
 
 
 @router.get("/capabilities/packs/promotion/rules")

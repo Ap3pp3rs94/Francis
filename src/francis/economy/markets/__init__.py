@@ -4,6 +4,7 @@ from .capability_catalog_projection import capability_listings_from_plugin_catal
 from .capability_marketplace import CapabilityListing, CapabilityMarketplace
 from .capability_pack_lineage import analyze_capability_pack_lineage
 from .capability_pack_migration_plan import analyze_capability_pack_migration_plan
+from .capability_pack_operator_review import analyze_capability_pack_operator_review
 from .capability_pack_promotion_receipts import analyze_capability_pack_promotion_receipts
 from .capability_pack_promotion_rules import analyze_capability_pack_promotion_rules
 from .capability_pack_quality_docs import analyze_capability_pack_quality_docs
@@ -20,6 +21,7 @@ __all__ = [
     "marketplace_from_plugin_catalog",
     "analyze_capability_pack_lineage",
     "analyze_capability_pack_migration_plan",
+    "analyze_capability_pack_operator_review",
     "analyze_capability_pack_promotion_receipts",
     "analyze_capability_pack_promotion_rules",
     "analyze_capability_pack_quality_docs",

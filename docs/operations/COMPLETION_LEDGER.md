@@ -56706,6 +56706,71 @@ Remaining truthful gap:
 - Stage 17 still needs operator-facing capability-pack review and stronger
   promotion discipline before it can be called complete.
 
+### 2026-06-02 - Stage 17 capability pack operator review is readable
+
+Roadmap area: Stage 17 / Capability Economy, operator-facing review for
+versioned capability pack promotion discipline.
+
+Material change:
+
+- Added a read-only capability pack operator-review analyzer for Stage 17.
+- Added `GET /plugins/capabilities/packs/operator/review`.
+- The route turns staged and promoted pack evidence into a bounded
+  operator-facing review queue with pack-level blockers, decision-required
+  readback, quality evidence, proposal lineage, validation receipt, and
+  promotion receipt status.
+- The route does not read proposal bodies, read receipt bodies, write reviews,
+  write receipts, mutate the plugin registry, approve proposals,
+  promote/enable capabilities, execute capabilities, or grant authority.
+- The analyzer advances ready staged packs to
+  `stage17_capability_pack_review_decisions` rather than claiming Stage 17
+  complete.
+- The chat UI API contract endpoint list now includes the operator-review
+  route.
+- `README.md` `Latest Progress Snapshot` was intentionally overwritten to show
+  this operator-review slice while keeping the last confirmed material GitHub
+  gate at `3c511dc6` until this slice passes CI.
+
+Confirmed GitHub baseline before this slice:
+
+- GitHub CI run `26802138052` for commit `75224b92` completed successfully on
+  Ubuntu 3.12, Ubuntu 3.13, Windows 3.12, and Windows 3.13.
+- CodeQL Advanced run `26802137939` for commit `75224b92` completed
+  successfully for Actions, JavaScript/TypeScript, and Python.
+
+Latest validation for Stage 17 capability pack operator review:
+
+- `FRANCIS_PYTEST_SESSION_RETENTION_ROOT=data/test_runs/pytest/codex_validation_stage17_operator_review_report
+  python -m pytest tests/unit/test_capability_pack_operator_review.py
+  tests/test_api_plugins.py::test_plugins_capability_pack_operator_review_projects_read_only_review_queue
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  --tb=short --maxfail=1`
+  Result: `passed; 4 passed`
+- `python -m mypy
+  src/francis/economy/markets/capability_pack_operator_review.py
+  src/francis/economy/markets/__init__.py src/francis/economy/__init__.py
+  src/francis/api/routes/plugins.py`
+  Result: `passed`
+- `python -m ruff check
+  src/francis/economy/markets/capability_pack_operator_review.py
+  src/francis/economy/markets/__init__.py src/francis/economy/__init__.py
+  src/francis/api/routes/plugins.py tests/unit/test_capability_pack_operator_review.py
+  tests/test_api_plugins.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check
+  src/francis/economy/markets/capability_pack_operator_review.py
+  src/francis/economy/markets/__init__.py src/francis/economy/__init__.py
+  src/francis/api/routes/plugins.py tests/unit/test_capability_pack_operator_review.py
+  tests/test_api_plugins.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+
+Validation risk:
+
+- Targeted local pytest used a bounded retention root because the workstation's
+  repository-local pytest retention tree remains large. Full local
+  `scripts/check.ps1` was not rerun for this slice; the next pushed GitHub CI
+  matrix remains the full-suite evidence gate.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
