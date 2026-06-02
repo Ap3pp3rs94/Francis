@@ -6,6 +6,7 @@ from typing import Any
 __all__ = [
     "analyze_capability_pack_promotion_rule_remediation",
     "analyze_capability_pack_promotion_rules",
+    "canonical_capability_pack_promotion_rules",
 ]
 
 _STAGE17_CAPABILITY_ECONOMY_STAGE = "Stage 17 / Capability Economy"
@@ -27,6 +28,10 @@ _REMEDIATION_ACTION_BY_BLOCKER = {
     "proposal_id_missing": "link_forge_proposal",
     "promotion_receipt_id_missing": "link_promotion_receipt",
 }
+
+
+def canonical_capability_pack_promotion_rules() -> list[str]:
+    return list(_CANONICAL_PROMOTION_RULES)
 
 
 def analyze_capability_pack_promotion_rules(entries: Iterable[Mapping[str, Any]]) -> dict[str, Any]:

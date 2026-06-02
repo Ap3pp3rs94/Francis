@@ -57179,6 +57179,62 @@ Remaining truthful gap:
 - Stage 17 still needs capability-pack remediation backlog execution before it
   can be called complete.
 
+### 2026-06-02 - Stage 17 promotion rule remediation gets governed apply route
+
+Roadmap area: Stage 17 / Capability Economy, bounded execution of
+promotion-rule remediation backlog items.
+
+Material change:
+
+- Added `POST /plugins/capabilities/packs/promotion/rules/remediation/apply`.
+- The route is gated by `plugins.write` and applies only metadata,
+  promotion-rule, and pack-governance remediation for selected capability packs.
+- The route writes auditable capability-pack metadata receipts through the
+  existing receipt path and immediately returns the remaining remediation queue.
+- The route does not promote capabilities, enable capabilities, execute
+  capabilities, approve proposals, write quality evidence, write validation
+  receipts, write memory, mutate generated artifacts, or grant
+  promotion/execution/approval authority.
+- `README.md` `Latest Progress Snapshot` was intentionally overwritten to show
+  this locally validated remediation-apply slice while keeping GitHub
+  confirmation pending until the pushed CI and CodeQL runs complete.
+
+Latest validation for Stage 17 promotion rule remediation apply:
+
+- `FRANCIS_PYTEST_SESSION_RETENTION_ROOT=data/test_runs/pytest/codex-stage17-validation
+  python -m pytest tests/unit/test_capability_pack_promotion_rules.py
+  tests/test_api_plugins.py::test_plugins_capability_pack_promotion_rule_remediation_apply_writes_metadata_receipt
+  tests/test_api_plugins.py::test_plugins_capability_pack_promotion_rule_remediation_projects_read_only_backlog
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 7 selected tests passed`
+- `python -m mypy src/francis/economy/markets/capability_pack_promotion_rules.py
+  src/francis/api/routes/plugins.py`
+  Result: `passed`
+- `python -m ruff check
+  src/francis/economy/markets/capability_pack_promotion_rules.py
+  src/francis/api/routes/plugins.py
+  tests/unit/test_capability_pack_promotion_rules.py tests/test_api_plugins.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check
+  src/francis/economy/markets/capability_pack_promotion_rules.py
+  src/francis/api/routes/plugins.py
+  tests/unit/test_capability_pack_promotion_rules.py tests/test_api_plugins.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+
+Validation risk:
+
+- This slice is locally validated but not yet GitHub-confirmed. The next pushed
+  GitHub CI and CodeQL runs remain the public evidence gate.
+
+Remaining truthful gap:
+
+- Stage 17 still needs GitHub confirmation for this apply route and residual
+  quality, validation, lineage, and promotion-receipt remediation before it can
+  be called complete.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

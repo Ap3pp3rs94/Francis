@@ -42,18 +42,23 @@ Francis should be read from current repo truth, not from a hard-coded phase labe
 This block is intentionally overwritten as the build moves. The append-only
 history stays in [docs/operations/COMPLETION_LEDGER.md](docs/operations/COMPLETION_LEDGER.md).
 
-- Last updated: 2026-06-02, 12:21 America/Chicago.
-- Latest confirmed GitHub gate: `main` commit `182f03ac` passed CI on Ubuntu
+- Last updated: 2026-06-02, 13:33 America/Chicago.
+- Latest confirmed GitHub tip: `main` commit `e5154569` passed CI on Ubuntu
   3.12, Ubuntu 3.13, Windows 3.12, and Windows 3.13; CodeQL passed for Actions,
-  JavaScript/TypeScript, and Python.
-- Current slice: the chat UI Plugins surface now has GitHub-confirmed read-only
-  visibility into Stage 17 promotion-rule remediation. It shows remediation
-  queue counts, selected-pack first action, missing canonical rules, missing
-  governance fields, missing quality evidence, missing receipt evidence, and the
-  next truthful gap without promoting, enabling, executing, writing receipts,
-  writing memory, or granting authority.
-- Next truthful gap: execute the capability-pack remediation backlog before
-  Stage 17 can be called complete.
+  JavaScript/TypeScript, and Python. The latest confirmed material Stage 17
+  feature gate remains `182f03ac`.
+- Current slice: Stage 17 promotion-rule remediation now has a locally validated
+  governed apply route. It can write metadata receipts that declare canonical
+  pack promotion rules and attach bounded pack governance for selected
+  remediation queue items, then returns the remaining remediation queue.
+- Guardrails: the apply route does not promote capabilities, enable
+  capabilities, execute capabilities, approve proposals, write quality evidence,
+  write validation receipts, write memory, mutate generated artifacts, or grant
+  promotion/execution/approval authority.
+- Next truthful gap: push this remediation-apply slice and wait for GitHub CI
+  and CodeQL confirmation, then continue remediating residual quality,
+  validation, lineage, and promotion-receipt blockers before Stage 17 can be
+  called complete.
 
 Use [docs/operations/COMPLETION_LEDGER.md](docs/operations/COMPLETION_LEDGER.md) for shipped truth. Use [docs/canonical/ROADMAP.md](docs/canonical/ROADMAP.md) and [docs/canonical/BUILD_MANIFEST.md](docs/canonical/BUILD_MANIFEST.md) for target state and build order. Phase and stage names are orientation markers only; each build pass should derive the active priority from the ledger and canonical roadmap instead of locking Francis into one fixed phase.
 

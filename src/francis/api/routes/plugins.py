@@ -28,6 +28,7 @@ from francis.economy.markets.capability_pack_promotion_receipts import analyze_c
 from francis.economy.markets.capability_pack_promotion_rules import (
     analyze_capability_pack_promotion_rule_remediation,
     analyze_capability_pack_promotion_rules,
+    canonical_capability_pack_promotion_rules,
 )
 from francis.economy.markets.capability_pack_quality_docs import analyze_capability_pack_quality_docs
 from francis.economy.markets.capability_pack_quality_standards import analyze_capability_pack_quality_standards
@@ -108,6 +109,12 @@ _CAPABILITY_PACK_OPERATOR_REVIEW_DECISIONS = {
     "denied": "rejected",
     "defer": "deferred",
     "deferred": "deferred",
+}
+_CAPABILITY_PACK_REMEDIATION_METADATA_BLOCKERS = {
+    "pack_metadata_receipt_missing",
+    "promotion_rules_missing",
+    "canonical_promotion_rules_missing",
+    "pack_governance_missing",
 }
 
 
@@ -1413,6 +1420,70 @@ def _capability_ids_for_pack(
     return sorted(out)
 
 
+def _entries_for_capability_pack(
+    entries: list[dict[str, Any]],
+    *,
+    pack_id: str,
+    pack_version: str,
+) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for entry in entries:
+        metadata = entry.get("metadata") if isinstance(entry.get("metadata"), dict) else {}
+        if _safe_str(metadata.get("pack_id")).strip() != pack_id:
+            continue
+        if _safe_str(metadata.get("pack_version")).strip() != pack_version:
+            continue
+        out.append(entry)
+    return out
+
+
+def _promotion_rules_for_remediation(
+    item: dict[str, Any],
+    pack_entries: list[dict[str, Any]],
+) -> list[str]:
+    rules: list[str] = []
+    for entry in pack_entries:
+        metadata = entry.get("metadata") if isinstance(entry.get("metadata"), dict) else {}
+        rules.extend(_unique_texts(metadata.get("promotion_rules") or metadata.get("promotion_rule_ids"), limit=50))
+    rules.extend(_unique_texts(item.get("promotion_rules"), limit=50))
+    rules.extend(canonical_capability_pack_promotion_rules())
+    return _unique_texts(rules, limit=50)
+
+
+def _pack_governance_for_remediation(
+    item: dict[str, Any],
+    pack_entries: list[dict[str, Any]],
+) -> dict[str, Any]:
+    governance: dict[str, Any] = {}
+    for entry in pack_entries:
+        metadata = entry.get("metadata") if isinstance(entry.get("metadata"), dict) else {}
+        raw_governance = metadata.get("pack_governance") or metadata.get("capability_pack_governance")
+        if isinstance(raw_governance, dict):
+            governance.update(raw_governance)
+    governance.setdefault("scope", "build_dev")
+    governance.setdefault("operator_review_required", True)
+    governance.setdefault("metadata_receipt_required", True)
+    governance.setdefault("quality_standards_required", True)
+    governance["promotion_authority"] = False
+    governance["execution_authority"] = False
+    governance["approval_authority"] = False
+    governance["memory_write"] = False
+    governance["remediation_source"] = "stage17_capability_pack_promotion_rule_backlog_execution"
+    governance["remediated_missing_governance_fields"] = _unique_texts(
+        item.get("missing_governance_fields"),
+        limit=50,
+    )
+    return governance
+
+
+def _supported_metadata_remediation_blockers(item: dict[str, Any]) -> list[str]:
+    return [
+        blocker
+        for blocker in _unique_texts(item.get("blockers"), limit=50)
+        if blocker in _CAPABILITY_PACK_REMEDIATION_METADATA_BLOCKERS
+    ]
+
+
 def _request_plugin_approval(
     *,
     plugin_id: str,
@@ -2523,6 +2594,17 @@ class CapabilityPackMetadataReceiptBulkFromPlanIn(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
+class CapabilityPackPromotionRuleRemediationApplyIn(BaseModel):
+    actor: str = ""
+    reason: str = "stage17_promotion_rule_remediation"
+    pack_ids: list[str] = Field(default_factory=list)
+    max_pack_count: int = 10
+    max_total_capability_count: int = 1000
+    max_capability_count_per_pack: int = 500
+    dry_run: bool = False
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
 class PluginRunIn(BaseModel):
     id: str
     action: str
@@ -3342,6 +3424,297 @@ def capability_pack_promotion_rule_remediation() -> dict[str, object]:
             "kind": "plugin.capability_pack.promotion_rules.remediation",
             "error": api_error_message(exc),
         }
+
+
+@router.post("/capabilities/packs/promotion/rules/remediation/apply")
+def apply_capability_pack_promotion_rule_remediation(
+    payload: CapabilityPackPromotionRuleRemediationApplyIn,
+    request: Request,
+) -> dict[str, object]:
+    try:
+        permission = _write_permission(payload.actor, route=request.url.path, method=request.method)
+        if not permission.allowed:
+            return _permission_denied(permission)
+
+        safe_max_pack_count = max(1, min(int(payload.max_pack_count or 10), 50))
+        safe_max_total_capability_count = max(1, min(int(payload.max_total_capability_count or 1000), 10000))
+        safe_max_capability_count_per_pack = max(1, min(int(payload.max_capability_count_per_pack or 500), 500))
+        try:
+            selected_pack_ids = {_validate_plugin_id(raw_id) for raw_id in _unique_texts(payload.pack_ids, limit=100)}
+        except Exception:
+            return {"ok": False, "applied": False, "status": "blocked", "error": "invalid_pack_id"}
+
+        registry = _load_registry()
+        _sync_generated_plugins(registry)
+        catalog = _save_registry_and_catalog(registry)
+        runtime_catalog = _read_runtime_catalog_payload(catalog)
+        marketplace = marketplace_from_plugin_catalog(runtime_catalog)
+        entries = marketplace.catalog()
+        before = analyze_capability_pack_promotion_rule_remediation(entries)
+        raw_queue = before.get("remediation_queue")
+        queue = [item for item in raw_queue if isinstance(item, dict)] if isinstance(raw_queue, list) else []
+        if selected_pack_ids:
+            queue = [item for item in queue if _safe_str(item.get("pack_id")).strip() in selected_pack_ids]
+        if not queue:
+            return {
+                "ok": True,
+                "applied": False,
+                "status": "no_candidates",
+                "planned_pack_count": 0,
+                "recorded_pack_count": 0,
+                "recorded_capability_count": 0,
+                "before": before,
+                "governance": {
+                    "scope": _PLUGIN_WRITE_SCOPE,
+                    "route": request.url.path,
+                    "writes_registry_metadata": False,
+                    "writes_receipts": False,
+                    "promotion_authority": False,
+                    "execution_authority": False,
+                    "approval_authority": False,
+                    "memory_write": False,
+                    "mutates_generated_artifacts": False,
+                },
+            }
+        if len(queue) > safe_max_pack_count:
+            return {
+                "ok": False,
+                "applied": False,
+                "status": "blocked",
+                "error": "remediation_pack_limit_exceeded",
+                "candidate_total": len(queue),
+                "limit": safe_max_pack_count,
+            }
+
+        prepared: list[dict[str, Any]] = []
+        skipped: list[dict[str, Any]] = []
+        total_capability_count = 0
+        for item in queue:
+            pack_id = _safe_str(item.get("pack_id")).strip()
+            pack_version = _safe_str(item.get("pack_version")).strip()
+            if not pack_id or not pack_version:
+                skipped.append(
+                    {"pack_id": pack_id, "pack_version": pack_version, "error": "pack_id_or_version_missing"}
+                )
+                continue
+            try:
+                pack_id = _validate_plugin_id(pack_id)
+            except Exception:
+                skipped.append({"pack_id": pack_id, "pack_version": pack_version, "error": "invalid_pack_id"})
+                continue
+            metadata_blockers = _supported_metadata_remediation_blockers(item)
+            if not metadata_blockers:
+                skipped.append(
+                    {
+                        "pack_id": pack_id,
+                        "pack_version": pack_version,
+                        "error": "no_supported_metadata_remediation",
+                        "blockers": _unique_texts(item.get("blockers"), limit=50),
+                    }
+                )
+                continue
+            capability_ids = _capability_ids_for_pack(entries, pack_id=pack_id, pack_version=pack_version)
+            capability_count = len(capability_ids)
+            total_capability_count += capability_count
+            if capability_count <= 0:
+                skipped.append({"pack_id": pack_id, "pack_version": pack_version, "error": "capability_ids_required"})
+                continue
+            if capability_count > safe_max_capability_count_per_pack:
+                skipped.append(
+                    {
+                        "pack_id": pack_id,
+                        "pack_version": pack_version,
+                        "error": "candidate_capability_limit_exceeded",
+                        "capability_count": capability_count,
+                        "limit": safe_max_capability_count_per_pack,
+                    }
+                )
+                continue
+            pack_entries = _entries_for_capability_pack(entries, pack_id=pack_id, pack_version=pack_version)
+            prepared.append(
+                {
+                    "item": item,
+                    "pack_id": pack_id,
+                    "pack_version": pack_version,
+                    "pack_name": _safe_str(item.get("pack_name")).strip() or pack_id,
+                    "capability_ids": capability_ids,
+                    "metadata_blockers": metadata_blockers,
+                    "promotion_rules": _promotion_rules_for_remediation(item, pack_entries),
+                    "pack_governance": _pack_governance_for_remediation(item, pack_entries),
+                }
+            )
+        if total_capability_count > safe_max_total_capability_count:
+            return {
+                "ok": False,
+                "applied": False,
+                "status": "blocked",
+                "error": "total_capability_limit_exceeded",
+                "capability_count": total_capability_count,
+                "limit": safe_max_total_capability_count,
+            }
+        if not prepared:
+            return {
+                "ok": True,
+                "applied": False,
+                "status": "no_supported_metadata_remediation",
+                "planned_pack_count": 0,
+                "recorded_pack_count": 0,
+                "recorded_capability_count": 0,
+                "skipped": skipped,
+                "before": before,
+                "governance": {
+                    "scope": _PLUGIN_WRITE_SCOPE,
+                    "route": request.url.path,
+                    "writes_registry_metadata": False,
+                    "writes_receipts": False,
+                    "promotion_authority": False,
+                    "execution_authority": False,
+                    "approval_authority": False,
+                    "memory_write": False,
+                    "mutates_generated_artifacts": False,
+                },
+            }
+        planned = [
+            {
+                "pack_id": item["pack_id"],
+                "pack_version": item["pack_version"],
+                "pack_name": item["pack_name"],
+                "capability_count": len(item["capability_ids"]),
+                "metadata_blockers": item["metadata_blockers"],
+                "promotion_rules": item["promotion_rules"],
+                "pack_governance": redact_governed_display_value(item["pack_governance"]),
+            }
+            for item in prepared
+        ]
+        if payload.dry_run:
+            return {
+                "ok": True,
+                "applied": False,
+                "status": "dry_run",
+                "planned_pack_count": len(planned),
+                "planned_capability_count": sum(int(item.get("capability_count") or 0) for item in planned),
+                "planned": planned,
+                "skipped": skipped,
+                "before": before,
+                "governance": {
+                    "scope": _PLUGIN_WRITE_SCOPE,
+                    "route": request.url.path,
+                    "writes_registry_metadata": False,
+                    "writes_receipts": False,
+                    "promotion_authority": False,
+                    "execution_authority": False,
+                    "approval_authority": False,
+                    "memory_write": False,
+                    "mutates_generated_artifacts": False,
+                },
+            }
+
+        recorded: list[dict[str, Any]] = []
+        failed: list[dict[str, Any]] = []
+        for item in prepared:
+            receipt_payload = CapabilityPackMetadataReceiptIn(
+                actor=payload.actor,
+                reason=f"{_safe_str(payload.reason).strip() or 'stage17_promotion_rule_remediation'}:{item['pack_id']}",
+                pack_id=str(item["pack_id"]),
+                pack_version=str(item["pack_version"]),
+                pack_name=str(item["pack_name"]),
+                capability_ids=list(item["capability_ids"]),
+                source_pack_id=str(item["pack_id"]),
+                source_pack_version=str(item["pack_version"]),
+                promotion_rules=list(item["promotion_rules"]),
+                pack_governance=dict(item["pack_governance"]),
+                meta={
+                    **redact_governed_metadata(payload.meta),
+                    "promotion_rule_remediation_apply": True,
+                    "source_remediation_blockers": _unique_texts(item["item"].get("blockers"), limit=50),
+                    "applied_metadata_blockers": list(item["metadata_blockers"]),
+                    "missing_promotion_rules": _unique_texts(item["item"].get("missing_promotion_rules"), limit=50),
+                    "missing_governance_fields": _unique_texts(
+                        item["item"].get("missing_governance_fields"),
+                        limit=50,
+                    ),
+                    "missing_quality_evidence": _unique_texts(
+                        item["item"].get("missing_quality_evidence"),
+                        limit=50,
+                    ),
+                    "missing_receipt_evidence": _unique_texts(
+                        item["item"].get("missing_receipt_evidence"),
+                        limit=50,
+                    ),
+                },
+            )
+            result = _record_capability_pack_metadata_receipt_unchecked(receipt_payload, route_path=request.url.path)
+            if bool(result.get("ok")) and bool(result.get("applied")):
+                recorded.append(
+                    {
+                        "pack_id": item["pack_id"],
+                        "pack_version": item["pack_version"],
+                        "receipt_id": result.get("receipt_id"),
+                        "receipt_path": result.get("receipt_path"),
+                        "capability_count": result.get("capability_count"),
+                        "metadata_blockers": item["metadata_blockers"],
+                    }
+                )
+            else:
+                failed.append(
+                    {
+                        "pack_id": item["pack_id"],
+                        "pack_version": item["pack_version"],
+                        "status": result.get("status"),
+                        "error": result.get("error"),
+                    }
+                )
+
+        refreshed_registry = _load_registry()
+        refreshed_catalog = _compile_runtime_catalog(refreshed_registry)
+        refreshed_runtime_catalog = _read_runtime_catalog_payload(refreshed_catalog)
+        refreshed_marketplace = marketplace_from_plugin_catalog(refreshed_runtime_catalog)
+        after = analyze_capability_pack_promotion_rule_remediation(refreshed_marketplace.catalog())
+        selected_after_queue = [
+            item
+            for item in after.get("remediation_queue", [])
+            if isinstance(item, dict)
+            and (
+                not selected_pack_ids
+                or _safe_str(item.get("pack_id")).strip() in selected_pack_ids
+                or _safe_str(item.get("pack_id")).strip() in {str(record.get("pack_id")) for record in recorded}
+            )
+        ]
+        applied = bool(recorded)
+        return {
+            "ok": not failed,
+            "applied": applied,
+            "status": "recorded" if not failed else ("partial" if applied else "blocked"),
+            "planned_pack_count": len(prepared),
+            "recorded_pack_count": len(recorded),
+            "recorded_capability_count": sum(int(item.get("capability_count") or 0) for item in recorded),
+            "recorded": recorded,
+            "failed": failed,
+            "skipped": skipped,
+            "remaining_remediation_queue": selected_after_queue,
+            "remaining_remediation_queue_count": int(after.get("remediation_queue_count") or 0),
+            "next_smallest_truthful_gap": _safe_str(after.get("next_smallest_truthful_gap")).strip(),
+            "governance": {
+                "scope": _PLUGIN_WRITE_SCOPE,
+                "route": request.url.path,
+                "writes_registry_metadata": applied,
+                "writes_receipts": applied,
+                "metadata_rule_governance_remediation_only": True,
+                "does_not_write_quality_evidence": True,
+                "does_not_write_validation_receipts": True,
+                "does_not_approve_proposals": True,
+                "does_not_promote_capabilities": True,
+                "does_not_enable_capabilities": True,
+                "does_not_execute_capabilities": True,
+                "promotion_authority": False,
+                "execution_authority": False,
+                "approval_authority": False,
+                "memory_write": False,
+                "mutates_generated_artifacts": False,
+            },
+        }
+    except Exception as exc:
+        return {"ok": False, "applied": False, "status": "error", "error": api_error_message(exc)}
 
 
 def _record_capability_pack_metadata_receipt_unchecked(
