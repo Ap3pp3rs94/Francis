@@ -57235,6 +57235,30 @@ Remaining truthful gap:
   quality, validation, lineage, and promotion-receipt remediation before it can
   be called complete.
 
+### 2026-06-02 - Stage 17 promotion rule remediation apply passes GitHub CI
+
+Roadmap area: Stage 17 / Capability Economy, GitHub-visible validation for the
+bounded remediation-apply route.
+
+Material change:
+
+- GitHub CI and CodeQL now confirm the pushed promotion-rule remediation apply
+  slice on `main` commit `91d5c063`.
+- `README.md` `Latest Progress Snapshot` was intentionally overwritten to show
+  `91d5c063` as the latest confirmed GitHub gate.
+
+Latest validation for Stage 17 promotion rule remediation apply:
+
+- GitHub CI run `26840235281` for commit `91d5c063`.
+  Result: `passed` on Ubuntu 3.12, Ubuntu 3.13, Windows 3.12, and Windows 3.13.
+- CodeQL Advanced run `26840234860` for commit `91d5c063`.
+  Result: `passed` for Actions, JavaScript/TypeScript, and Python.
+
+Remaining truthful gap:
+
+- Stage 17 still needs residual quality, validation, lineage, and
+  promotion-receipt remediation before it can be called complete.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
