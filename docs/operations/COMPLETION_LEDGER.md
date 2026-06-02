@@ -56851,6 +56851,30 @@ Validation risk:
   for generated plugin artifact existence checks, so the targeted pytest command
   uses a short retention root.
 
+### 2026-06-02 - Stage 17 capability pack operator-review decisions pass GitHub CI
+
+Roadmap area: Stage 17 / Capability Economy, GitHub-visible validation for
+receipt-backed capability-pack operator-review decisions.
+
+Material change:
+
+- GitHub CI and CodeQL now confirm the pushed operator-review decision receipt
+  slice on `main` commit `426ec1e9`.
+- `README.md` `Latest Progress Snapshot` was intentionally overwritten to show
+  `426ec1e9` as the latest confirmed material GitHub gate.
+
+Latest validation for Stage 17 capability pack operator-review decisions:
+
+- GitHub CI run `26808707521` for commit `426ec1e9`.
+  Result: `passed` on Ubuntu 3.12, Ubuntu 3.13, Windows 3.12, and Windows 3.13.
+- CodeQL Advanced run `26808708101` for commit `426ec1e9`.
+  Result: `passed` for Actions, JavaScript/TypeScript, and Python.
+
+Remaining truthful gap:
+
+- Stage 17 still needs broader promotion discipline and operator-facing
+  decision UI before it can be called complete.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
