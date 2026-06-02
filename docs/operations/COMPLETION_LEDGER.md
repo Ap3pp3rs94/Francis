@@ -57000,6 +57000,30 @@ Remaining truthful gap:
 - Stage 17 still needs GitHub confirmation for this slice and broader
   capability-library maturity before it can be called complete.
 
+### 2026-06-02 - Stage 17 capability pack promotion discipline passes GitHub CI
+
+Roadmap area: Stage 17 / Capability Economy, GitHub-visible validation for the
+read-only capability-pack promotion-discipline gate.
+
+Material change:
+
+- GitHub CI and CodeQL now confirm the pushed promotion-discipline slice on
+  `main` commit `105626d3`.
+- `README.md` `Latest Progress Snapshot` was intentionally overwritten to show
+  `105626d3` as the latest confirmed GitHub gate.
+
+Latest validation for Stage 17 capability pack promotion discipline:
+
+- GitHub CI run `26819479370` for commit `105626d3`.
+  Result: `passed` on Ubuntu 3.12, Ubuntu 3.13, Windows 3.12, and Windows 3.13.
+- CodeQL Advanced run `26819479368` for commit `105626d3`.
+  Result: `passed` for Actions, JavaScript/TypeScript, and Python.
+
+Remaining truthful gap:
+
+- Stage 17 still needs broader capability-library maturity before it can be
+  called complete.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
