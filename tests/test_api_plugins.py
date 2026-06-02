@@ -1129,6 +1129,135 @@ def test_plugins_capability_pack_lineage_projects_read_only_proposal_evidence(
     assert all(item["capability"] != plugin_id for item in pack["failing_capabilities_sample"])
 
 
+def test_plugins_capability_pack_quality_evidence_remediation_projects_truthful_read_only_plan(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    client = TestClient(create_app())
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Capability Quality Evidence Remediation Plugin",
+            "description": "Stage 17 quality evidence remediation coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": _forge_promotion_meta("capability_quality_evidence_remediation"),
+        },
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    plugin_id = str(built_body["plugin_id"])
+
+    plan = client.get("/plugins/capabilities/packs/migration/plan").json()
+    candidate = next(item for item in plan["candidates"] if plugin_id in item["capability_ids_sample"])
+    recorded = client.post(
+        "/plugins/capabilities/packs/metadata/receipts/bulk-from-plan",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "record reviewed migration plan candidate before quality remediation readback",
+            "pack_ids": [candidate["pack_id"]],
+        },
+    )
+    assert recorded.status_code == 200
+    recorded_body = recorded.json()
+    assert recorded_body["ok"] is True
+    pack_id = str(recorded_body["recorded"][0]["pack_id"])
+    pack_version = str(recorded_body["recorded"][0]["pack_version"])
+
+    registry = plugins._load_registry()
+    plugin = plugins._read_plugin(registry, plugin_id)
+    assert plugin is not None
+    meta = dict(plugin.get("meta") or {})
+    for key in (
+        "tests",
+        "test_refs",
+        "docs",
+        "documentation",
+        "proposal_id",
+        "forge_proposal_id",
+        "proposal_path",
+        "validation_receipt_id",
+        "validation_receipt_path",
+    ):
+        meta.pop(key, None)
+    plugin["meta"] = meta
+    plugins._write_plugin(registry, plugins._normalize_plugin_record(plugin_id, plugin))
+    plugins._save_registry_and_catalog(registry)
+
+    response = client.get("/plugins/capabilities/packs/quality/evidence/remediation")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "plugin.capability_pack.quality_evidence.remediation"
+    assert body["stage"] == "Stage 17 / Capability Economy"
+    assert body["status"] == "blocked"
+    assert body["requirements"]["read_only_remediation_plan"] is True
+    assert body["requirements"]["candidate_references_do_not_claim_pack_specific_coverage"] is True
+    assert body["requirements"]["validation_receipts_require_pack_specific_writer"] is True
+    assert body["requirements"]["proposal_lineage_requires_explicit_reconstruction_or_link"] is True
+    assert body["governance"]["read_only"] is True
+    assert body["governance"]["does_not_read_test_contents"] is True
+    assert body["governance"]["does_not_read_doc_contents"] is True
+    assert body["governance"]["does_not_write_receipts"] is True
+    assert body["governance"]["does_not_write_validation_receipts"] is True
+    assert body["governance"]["does_not_write_proposals"] is True
+    assert body["governance"]["does_not_mutate_registry"] is True
+    assert body["governance"]["does_not_promote_capabilities"] is True
+    assert body["governance"]["promotion_authority"] is False
+    assert body["governance"]["execution_authority"] is False
+    assert body["governance"]["memory_write"] is False
+    assert body["reference_candidates"]["pack_specific_coverage_claimed"] is False
+    assert body["reference_candidates"]["candidate_test_reference_count"] >= 1
+    assert body["reference_candidates"]["candidate_doc_reference_count"] >= 1
+    assert body["blocker_counts"]["tests_missing"] >= 1
+    assert body["blocker_counts"]["docs_missing"] >= 1
+    assert body["blocker_counts"]["validation_receipt_missing"] >= 1
+    assert body["blocker_counts"]["proposal_id_missing"] >= 1
+    assert body["quality_reference_backfill_candidate_count"] >= 1
+    assert body["validation_receipt_backfill_required_count"] >= 1
+    assert body["proposal_lineage_backfill_required_count"] >= 1
+    assert body["next_smallest_truthful_gap"] == "stage17_capability_pack_quality_evidence_remediation_apply"
+
+    item = next(entry for entry in body["remediation_queue"] if entry["pack_id"] == pack_id)
+    assert item["pack_version"] == pack_version
+    assert item["blockers"] == [
+        "tests_missing",
+        "docs_missing",
+        "validation_receipt_missing",
+        "proposal_id_missing",
+    ]
+    assert item["eligible_generated_or_legacy_pack"] is True
+    assert item["pack_metadata_receipts_present"] is True
+    assert item["quality_reference_backfill_candidate"] is True
+    assert item["evidence_backfill"]["tests"]["candidate_apply_supported"] is True
+    assert item["evidence_backfill"]["docs"]["candidate_apply_supported"] is True
+    assert item["evidence_backfill"]["tests"]["claim_scope"] == "candidate_reference_only_not_pack_specific_proof"
+    assert item["evidence_backfill"]["docs"]["claim_scope"] == "candidate_reference_only_not_pack_specific_proof"
+    assert item["evidence_backfill"]["validation_receipt"]["candidate_apply_supported"] is False
+    assert item["evidence_backfill"]["forge_proposal"]["candidate_apply_supported"] is False
+    assert item["recommended_next_action"] == "review_quality_reference_backfill_candidates"
+    assert item["would_mutate"] is False
+    assert item["writes_registry_metadata"] is False
+    assert item["writes_receipts"] is False
+
+    post_readback = plugins._read_plugin(plugins._load_registry(), plugin_id)
+    assert post_readback is not None
+    post_meta = dict(post_readback.get("meta") or {})
+    assert "tests" not in post_meta
+    assert "docs" not in post_meta
+    assert "proposal_id" not in post_meta
+    assert "validation_receipt_id" not in post_meta
+
+
 def test_plugins_capability_pack_promotion_receipts_projects_read_only_receipt_evidence(
     monkeypatch,
     tmp_path: Path,

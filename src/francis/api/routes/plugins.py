@@ -116,6 +116,18 @@ _CAPABILITY_PACK_REMEDIATION_METADATA_BLOCKERS = {
     "canonical_promotion_rules_missing",
     "pack_governance_missing",
 }
+_CAPABILITY_PACK_QUALITY_EVIDENCE_BLOCKERS = {
+    "tests_missing",
+    "docs_missing",
+    "validation_receipt_missing",
+    "proposal_id_missing",
+}
+_CAPABILITY_PACK_QUALITY_EVIDENCE_QUEUE_LIMIT = 50
+_CAPABILITY_PACK_QUALITY_TEST_REFERENCE_CANDIDATES = ("tests/test_api_plugins.py",)
+_CAPABILITY_PACK_QUALITY_DOC_REFERENCE_CANDIDATES = (
+    "README.md",
+    "docs/operations/COMPLETION_LEDGER.md",
+)
 
 
 def _safe_str(value: Any) -> str:
@@ -1482,6 +1494,241 @@ def _supported_metadata_remediation_blockers(item: dict[str, Any]) -> list[str]:
         for blocker in _unique_texts(item.get("blockers"), limit=50)
         if blocker in _CAPABILITY_PACK_REMEDIATION_METADATA_BLOCKERS
     ]
+
+
+def _count_label(bucket: dict[str, int], value: str) -> None:
+    label = _safe_str(value).strip()
+    if label:
+        bucket[label] = bucket.get(label, 0) + 1
+
+
+def _candidate_quality_reference_items(
+    paths: set[str], candidates: tuple[str, ...], *, kind: str
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "kind": kind,
+            "path": path,
+            "exists": True,
+            "claim_scope": "capability_economy_contract_surface_only",
+            "pack_specific_coverage_claimed": False,
+        }
+        for path in candidates
+        if path in paths
+    ]
+
+
+def _capability_pack_quality_reference_candidates() -> dict[str, Any]:
+    available_test_paths = _available_capability_pack_test_paths()
+    available_doc_paths = _available_capability_pack_doc_paths()
+    tests = _candidate_quality_reference_items(
+        available_test_paths,
+        _CAPABILITY_PACK_QUALITY_TEST_REFERENCE_CANDIDATES,
+        kind="test",
+    )
+    docs = _candidate_quality_reference_items(
+        available_doc_paths,
+        _CAPABILITY_PACK_QUALITY_DOC_REFERENCE_CANDIDATES,
+        kind="doc",
+    )
+    return {
+        "tests": tests,
+        "docs": docs,
+        "available_test_path_count": len(available_test_paths),
+        "available_doc_path_count": len(available_doc_paths),
+        "candidate_test_reference_count": len(tests),
+        "candidate_doc_reference_count": len(docs),
+        "selection_policy": "existing_repo_surface_candidates_only",
+        "does_not_read_test_contents": True,
+        "does_not_read_doc_contents": True,
+        "pack_specific_coverage_claimed": False,
+    }
+
+
+def _capability_pack_quality_remediation_next_action(
+    *,
+    blockers: list[str],
+    quality_reference_candidate: bool,
+) -> str:
+    if quality_reference_candidate and any(blocker in blockers for blocker in ("tests_missing", "docs_missing")):
+        return "review_quality_reference_backfill_candidates"
+    if "validation_receipt_missing" in blockers:
+        return "write_pack_specific_validation_receipt"
+    if "proposal_id_missing" in blockers:
+        return "link_or_reconstruct_forge_proposal_lineage"
+    return "review_capability_pack_evidence"
+
+
+def _capability_pack_quality_evidence_remediation_item(
+    item: dict[str, Any],
+    *,
+    entries: list[dict[str, Any]],
+    reference_candidates: dict[str, Any],
+) -> dict[str, Any] | None:
+    blockers = [
+        blocker
+        for blocker in _unique_texts(item.get("blockers"), limit=50)
+        if blocker in _CAPABILITY_PACK_QUALITY_EVIDENCE_BLOCKERS
+    ]
+    if not blockers:
+        return None
+
+    pack_id = _safe_str(item.get("pack_id")).strip()
+    pack_version = _safe_str(item.get("pack_version")).strip()
+    pack_entries = _entries_for_capability_pack(entries, pack_id=pack_id, pack_version=pack_version)
+    metadata_items = [
+        entry.get("metadata") if isinstance(entry.get("metadata"), dict) else {} for entry in pack_entries
+    ]
+    sources = sorted(
+        {_safe_str(entry.get("source")).strip() for entry in pack_entries if _safe_str(entry.get("source")).strip()}
+    )
+    statuses = sorted(
+        {_safe_str(entry.get("status")).strip() for entry in pack_entries if _safe_str(entry.get("status")).strip()}
+    )
+    has_metadata_receipts = bool(metadata_items) and all(
+        bool(_safe_str(metadata.get("pack_metadata_receipt_id")).strip()) for metadata in metadata_items
+    )
+    generated_or_legacy = pack_id.startswith("legacy.generated.") or any(source == "generated" for source in sources)
+    registry_snapshot_count = sum(
+        1 for metadata in metadata_items if _safe_str(metadata.get("registry_snapshot_path")).strip()
+    )
+    candidate_test_count = int(reference_candidates.get("candidate_test_reference_count") or 0)
+    candidate_doc_count = int(reference_candidates.get("candidate_doc_reference_count") or 0)
+    test_backfill_candidate = (
+        "tests_missing" in blockers and generated_or_legacy and has_metadata_receipts and candidate_test_count > 0
+    )
+    doc_backfill_candidate = (
+        "docs_missing" in blockers and generated_or_legacy and has_metadata_receipts and candidate_doc_count > 0
+    )
+    quality_reference_candidate = test_backfill_candidate or doc_backfill_candidate
+    return {
+        "pack_id": pack_id,
+        "pack_version": pack_version,
+        "pack_name": _safe_str(item.get("pack_name")).strip() or pack_id,
+        "status": "blocked",
+        "capability_count": int(item.get("capability_count") or len(pack_entries)),
+        "capability_ids": _capability_ids_for_pack(entries, pack_id=pack_id, pack_version=pack_version)[:50],
+        "capability_ids_truncated": len(pack_entries) > 50,
+        "sources": sources,
+        "statuses": statuses,
+        "blockers": blockers,
+        "eligible_generated_or_legacy_pack": generated_or_legacy,
+        "pack_metadata_receipts_present": has_metadata_receipts,
+        "registry_snapshot_count": registry_snapshot_count,
+        "quality_reference_backfill_candidate": quality_reference_candidate,
+        "evidence_backfill": {
+            "tests": {
+                "required": "tests_missing" in blockers,
+                "candidate_reference_count": candidate_test_count,
+                "candidate_apply_supported": test_backfill_candidate,
+                "claim_scope": "candidate_reference_only_not_pack_specific_proof",
+            },
+            "docs": {
+                "required": "docs_missing" in blockers,
+                "candidate_reference_count": candidate_doc_count,
+                "candidate_apply_supported": doc_backfill_candidate,
+                "claim_scope": "candidate_reference_only_not_pack_specific_proof",
+            },
+            "validation_receipt": {
+                "required": "validation_receipt_missing" in blockers,
+                "candidate_apply_supported": False,
+                "reason": "requires_pack_specific_validation_receipt_writer",
+            },
+            "forge_proposal": {
+                "required": "proposal_id_missing" in blockers,
+                "candidate_apply_supported": False,
+                "reason": "requires_explicit_lineage_reconstruction_or_proposal_link",
+            },
+        },
+        "recommended_next_action": _capability_pack_quality_remediation_next_action(
+            blockers=blockers,
+            quality_reference_candidate=quality_reference_candidate,
+        ),
+        "would_mutate": False,
+        "writes_registry_metadata": False,
+        "writes_receipts": False,
+        "failing_capabilities_sample": list(item.get("failing_capabilities_sample") or [])[:25],
+    }
+
+
+def _capability_pack_quality_evidence_remediation_projection(
+    entries: list[dict[str, Any]],
+    promotion_remediation: dict[str, Any],
+) -> dict[str, Any]:
+    reference_candidates = _capability_pack_quality_reference_candidates()
+    raw_queue = promotion_remediation.get("remediation_queue")
+    source_queue = [item for item in raw_queue if isinstance(item, dict)] if isinstance(raw_queue, list) else []
+    items: list[dict[str, Any]] = []
+    blocker_counts: dict[str, int] = {}
+    for item in source_queue:
+        projected = _capability_pack_quality_evidence_remediation_item(
+            item,
+            entries=entries,
+            reference_candidates=reference_candidates,
+        )
+        if projected is None:
+            continue
+        for blocker in projected["blockers"]:
+            _count_label(blocker_counts, _safe_str(blocker))
+        items.append(projected)
+
+    quality_backfill_candidate_count = sum(1 for item in items if bool(item["quality_reference_backfill_candidate"]))
+    return {
+        "stage": "Stage 17 / Capability Economy",
+        "status": "blocked" if items else "ready",
+        "pack_total": int(promotion_remediation.get("pack_total") or 0),
+        "source_remediation_queue_count": int(
+            promotion_remediation.get("remediation_queue_count") or len(source_queue)
+        ),
+        "source_remediation_queue_truncated": bool(promotion_remediation.get("remediation_queue_truncated")),
+        "remediation_queue_count": len(items),
+        "remediation_queue_truncated": len(items) > _CAPABILITY_PACK_QUALITY_EVIDENCE_QUEUE_LIMIT,
+        "blocker_counts": dict(sorted(blocker_counts.items())),
+        "quality_reference_backfill_candidate_count": quality_backfill_candidate_count,
+        "validation_receipt_backfill_required_count": sum(
+            1 for item in items if "validation_receipt_missing" in item["blockers"]
+        ),
+        "proposal_lineage_backfill_required_count": sum(
+            1 for item in items if "proposal_id_missing" in item["blockers"]
+        ),
+        "reference_candidates": reference_candidates,
+        "remediation_queue": items[:_CAPABILITY_PACK_QUALITY_EVIDENCE_QUEUE_LIMIT],
+        "requirements": {
+            "read_only_remediation_plan": True,
+            "quality_references_must_be_existing_repo_paths": True,
+            "candidate_references_do_not_claim_pack_specific_coverage": True,
+            "validation_receipts_require_pack_specific_writer": True,
+            "proposal_lineage_requires_explicit_reconstruction_or_link": True,
+            "generated_or_legacy_pack_only_for_quality_backfill_candidates": True,
+        },
+        "governance": {
+            "read_only": True,
+            "operator_facing": True,
+            "does_not_read_test_contents": True,
+            "does_not_read_doc_contents": True,
+            "does_not_read_receipt_bodies": True,
+            "does_not_read_proposal_bodies": True,
+            "does_not_write_receipts": True,
+            "does_not_write_validation_receipts": True,
+            "does_not_write_proposals": True,
+            "does_not_mutate_registry": True,
+            "does_not_mutate_generated_artifacts": True,
+            "does_not_approve_proposals": True,
+            "does_not_promote_capabilities": True,
+            "does_not_enable_capabilities": True,
+            "does_not_execute_capabilities": True,
+            "promotion_authority": False,
+            "execution_authority": False,
+            "approval_authority": False,
+            "memory_write": False,
+        },
+        "next_smallest_truthful_gap": (
+            "stage17_capability_pack_quality_evidence_remediation_apply"
+            if quality_backfill_candidate_count
+            else _safe_str(promotion_remediation.get("next_smallest_truthful_gap")).strip()
+            or "stage17_capability_pack_quality_evidence_review"
+        ),
+    }
 
 
 def _record_capability_pack_promotion_rule_remediation_batch(
@@ -3203,6 +3450,35 @@ def capability_pack_lineage_proposals() -> dict[str, object]:
         }
     except Exception as exc:
         return {"ok": False, "kind": "plugin.capability_pack.lineage.proposals", "error": api_error_message(exc)}
+
+
+@router.get("/capabilities/packs/quality/evidence/remediation")
+def capability_pack_quality_evidence_remediation() -> dict[str, object]:
+    try:
+        registry = _load_registry()
+        synced = _sync_generated_plugins(registry)
+        catalog = _save_registry_and_catalog(registry) if synced else _compile_runtime_catalog(registry)
+        runtime_catalog = _read_runtime_catalog_payload(catalog)
+        marketplace = marketplace_from_plugin_catalog(runtime_catalog)
+        entries = marketplace.catalog()
+        promotion_remediation = analyze_capability_pack_promotion_rule_remediation(entries)
+        projection = _capability_pack_quality_evidence_remediation_projection(entries, promotion_remediation)
+        return {
+            "ok": True,
+            "kind": "plugin.capability_pack.quality_evidence.remediation",
+            **projection,
+            "catalog": {
+                "path": _safe_str(catalog.get("path")).strip(),
+                "total_plugins": int(runtime_catalog.get("total_plugins") or catalog.get("total_plugins") or 0),
+                "total_tools": int(runtime_catalog.get("total_tools") or catalog.get("total_tools") or 0),
+            },
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "kind": "plugin.capability_pack.quality_evidence.remediation",
+            "error": api_error_message(exc),
+        }
 
 
 @router.get("/capabilities/packs/promotion/receipts")

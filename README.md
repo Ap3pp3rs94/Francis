@@ -42,23 +42,26 @@ Francis should be read from current repo truth, not from a hard-coded phase labe
 This block is intentionally overwritten as the build moves. The append-only
 history stays in [docs/operations/COMPLETION_LEDGER.md](docs/operations/COMPLETION_LEDGER.md).
 
-- Last updated: 2026-06-02, 16:17 America/Chicago.
+- Last updated: 2026-06-02, 17:22 America/Chicago.
 - Latest confirmed GitHub gate: `main` commit `e3dc0afb` passed CI on Ubuntu
   3.12, Ubuntu 3.13, Windows 3.12, and Windows 3.13; CodeQL passed for Actions,
-  JavaScript/TypeScript, and Python.
-- Current slice: Stage 17 promotion-rule remediation apply is GitHub-confirmed
-  for batch execution. A single governed request can remediate multiple selected
-  packs in one registry pass while still writing one auditable metadata receipt
-  per pack. The live local backlog run recorded 13 pack receipts for 493
-  capabilities and left the remaining quality, validation, and lineage blockers
-  visible.
-- Guardrails: the apply route does not promote capabilities, enable
-  capabilities, execute capabilities, approve proposals, write quality evidence,
-  write validation receipts, write memory, mutate generated artifacts, or grant
+  JavaScript/TypeScript, and Python. GitHub confirmation for the current
+  quality-evidence readback slice is pending until the next pushed CI and
+  CodeQL runs complete.
+- Current slice: Stage 17 now has a locally validated read-only quality-evidence
+  remediation plan at
+  `/plugins/capabilities/packs/quality/evidence/remediation`. The live readback
+  reports 35 blocked packs: 35 missing tests, 35 missing docs, 32 missing
+  validation receipts, and 32 missing forge proposal lineage links. It names 29
+  quality-reference backfill candidates without claiming pack-specific coverage.
+- Guardrails: the readback route does not read test/doc/proposal/receipt bodies,
+  write registry metadata, write receipts, write validation receipts, write
+  proposals, approve proposals, promote capabilities, enable capabilities,
+  execute capabilities, write memory, mutate generated artifacts, or grant
   promotion/execution/approval authority.
-- Next truthful gap: implement a truthful quality-evidence and lineage
-  remediation path for the remaining test, doc, validation-receipt, and forge
-  proposal blockers before Stage 17 can be called complete.
+- Next truthful gap: implement the governed quality-evidence remediation apply
+  path, then follow with pack-specific validation-receipt and proposal-lineage
+  remediation before Stage 17 can be called complete.
 
 Use [docs/operations/COMPLETION_LEDGER.md](docs/operations/COMPLETION_LEDGER.md) for shipped truth. Use [docs/canonical/ROADMAP.md](docs/canonical/ROADMAP.md) and [docs/canonical/BUILD_MANIFEST.md](docs/canonical/BUILD_MANIFEST.md) for target state and build order. Phase and stage names are orientation markers only; each build pass should derive the active priority from the ledger and canonical roadmap instead of locking Francis into one fixed phase.
 

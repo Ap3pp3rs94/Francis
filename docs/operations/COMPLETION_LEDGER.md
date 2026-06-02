@@ -57364,6 +57364,78 @@ Remaining truthful gap:
   remediation path for the remaining test, doc, validation-receipt, and forge
   proposal blockers before it can be called complete.
 
+### 2026-06-02 - Stage 17 quality evidence remediation readback is operator-visible
+
+Roadmap area: Stage 17 / Capability Economy, truthful quality, validation, and
+lineage remediation planning for generated capability packs.
+
+Material change:
+
+- Added a read-only quality-evidence remediation projection at
+  `/plugins/capabilities/packs/quality/evidence/remediation`.
+- The projection consumes the existing promotion-rule remediation queue and
+  separates candidate quality-reference backfill from evidence that still
+  requires pack-specific validation receipts or explicit forge proposal lineage.
+- Candidate test/doc references are limited to existing repository paths and are
+  labeled as capability-economy contract-surface candidates only. The route does
+  not claim pack-specific coverage from generic files.
+- The route does not read test bodies, doc bodies, proposal bodies, or validation
+  receipt bodies; does not mutate registry metadata; does not write receipts,
+  validation receipts, or proposals; does not approve, promote, enable, or
+  execute capabilities; does not write memory; and does not grant authority.
+- `README.md` `Latest Progress Snapshot` was intentionally overwritten to show
+  this locally validated readback slice while keeping GitHub confirmation
+  pending until the pushed CI and CodeQL runs complete.
+
+Latest validation for Stage 17 quality-evidence remediation readback:
+
+- `FRANCIS_PYTEST_SESSION_RETENTION_ROOT=data/test_runs/pytest/codex-stage17-validation
+  python -m pytest
+  tests/test_api_plugins.py::test_plugins_capability_pack_quality_evidence_remediation_projects_truthful_read_only_plan
+  -q --tb=short --maxfail=1`
+  Result: `passed`
+- `FRANCIS_PYTEST_SESSION_RETENTION_ROOT=data/test_runs/pytest/codex-stage17-validation
+  python -m pytest
+  tests/test_api_plugins.py::test_plugins_capability_pack_quality_tests_projects_read_only_test_evidence
+  tests/test_api_plugins.py::test_plugins_capability_pack_quality_docs_projects_read_only_doc_evidence
+  tests/test_api_plugins.py::test_plugins_capability_pack_validation_receipts_projects_read_only_receipt_evidence
+  tests/test_api_plugins.py::test_plugins_capability_pack_lineage_projects_read_only_proposal_evidence
+  tests/test_api_plugins.py::test_plugins_capability_pack_quality_evidence_remediation_projects_truthful_read_only_plan
+  tests/test_api_plugins.py::test_plugins_capability_pack_promotion_rule_remediation_projects_read_only_backlog
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 7 selected tests passed`
+- `python -m mypy src/francis/api/routes/plugins.py`
+  Result: `passed`
+- `python -m ruff check src/francis/api/routes/plugins.py
+  tests/test_api_plugins.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/plugins.py
+  tests/test_api_plugins.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed; line-ending warnings only`
+- Live local readback of
+  `GET /plugins/capabilities/packs/quality/evidence/remediation`.
+  Result: `status=blocked`, `pack_total=35`, `remediation_queue_count=35`,
+  `quality_reference_backfill_candidate_count=29`,
+  `validation_receipt_backfill_required_count=32`,
+  `proposal_lineage_backfill_required_count=32`, blocker counts
+  `tests_missing=35`, `docs_missing=35`, `validation_receipt_missing=32`,
+  `proposal_id_missing=32`, and
+  `next_smallest_truthful_gap=stage17_capability_pack_quality_evidence_remediation_apply`.
+
+Validation risk:
+
+- This slice is locally validated but not yet GitHub-confirmed. The next pushed
+  GitHub CI and CodeQL runs remain the public evidence gate.
+
+Remaining truthful gap:
+
+- Stage 17 still needs a governed apply path for candidate quality-reference
+  backfill plus pack-specific validation-receipt and proposal-lineage
+  remediation before it can be called complete.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
