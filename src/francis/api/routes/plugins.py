@@ -95,6 +95,16 @@ _RISK_DEFAULT_MIN_TRUST: dict[str, int] = {
     "critical": 5,
     "safety_critical": 8,
 }
+_CAPABILITY_PACK_OPERATOR_REVIEW_DECISIONS = {
+    "approve": "approved",
+    "approved": "approved",
+    "reject": "rejected",
+    "rejected": "rejected",
+    "deny": "rejected",
+    "denied": "rejected",
+    "defer": "deferred",
+    "deferred": "deferred",
+}
 
 
 def _safe_str(value: Any) -> str:
@@ -735,6 +745,88 @@ def _plugin_proposal_review_state(proposal_id: str) -> dict[str, Any]:
     }
 
 
+def _capability_pack_operator_review_required(meta: dict[str, Any]) -> bool:
+    rules = _unique_texts(meta.get("promotion_rules") or meta.get("promotion_rule_ids"), limit=50)
+    governance = meta.get("pack_governance") or meta.get("capability_pack_governance")
+    governance_obj = governance if isinstance(governance, dict) else {}
+    return (
+        "operator_review_before_promotion" in rules
+        or "explicit_operator_review_before_promotion" in rules
+        or "operator_review_required_before_promotion" in rules
+        or _to_bool(governance_obj.get("operator_review_required"), default=False)
+        or _to_bool(governance_obj.get("requires_operator_review"), default=False)
+        or _to_bool(governance_obj.get("approval_required"), default=False)
+    )
+
+
+def _capability_pack_operator_review_state(plugin_id: str, meta: dict[str, Any]) -> dict[str, Any]:
+    required = _capability_pack_operator_review_required(meta)
+    pack_id = _safe_str(meta.get("pack_id") or meta.get("capability_pack_id")).strip()
+    pack_version = _safe_str(meta.get("pack_version") or meta.get("capability_pack_version")).strip()
+    if not required:
+        return {
+            "required": False,
+            "status": "not_required",
+            "review_status": "not_required",
+            "receipt_id": "",
+            "approved": True,
+            "pack_id": pack_id,
+            "pack_version": pack_version,
+        }
+    if not pack_id:
+        return {
+            "required": True,
+            "status": "pack_id_missing",
+            "review_status": "pack_id_missing",
+            "receipt_id": "",
+            "approved": False,
+            "pack_id": "",
+            "pack_version": pack_version,
+        }
+    if not pack_version:
+        return {
+            "required": True,
+            "status": "pack_version_missing",
+            "review_status": "pack_version_missing",
+            "receipt_id": "",
+            "approved": False,
+            "pack_id": pack_id,
+            "pack_version": "",
+        }
+
+    capability_id = _safe_str(plugin_id).strip()
+    for receipt in _read_capability_pack_operator_review_decisions(limit=500):
+        if _safe_str(receipt.get("pack_id")).strip() != pack_id:
+            continue
+        if _safe_str(receipt.get("pack_version")).strip() != pack_version:
+            continue
+        capability_ids = _unique_texts(receipt.get("capability_ids"), limit=500)
+        if capability_id and capability_id not in capability_ids:
+            continue
+        status = _safe_str(receipt.get("status")).strip().lower() or "unknown"
+        receipt_id = _safe_str(receipt.get("receipt_id")).strip()
+        approved = status == "approved" and bool(receipt_id)
+        return {
+            "required": True,
+            "status": status,
+            "review_status": status,
+            "receipt_id": receipt_id,
+            "approved": approved,
+            "pack_id": pack_id,
+            "pack_version": pack_version,
+            "decided_ts": int(receipt.get("decided_ts") or 0),
+        }
+    return {
+        "required": True,
+        "status": "missing",
+        "review_status": "missing",
+        "receipt_id": "",
+        "approved": False,
+        "pack_id": pack_id,
+        "pack_version": pack_version,
+    }
+
+
 def _plugin_promotion_receipt_path(receipt_id: str) -> Path:
     return _art_dir() / "promotions" / f"{_safe_str(receipt_id).strip()}.json"
 
@@ -749,6 +841,43 @@ def _capability_pack_metadata_receipt_id(pack_id: str, recorded_ts: int) -> str:
 
 def _capability_pack_metadata_receipt_path(receipt_id: str) -> Path:
     return _art_dir() / "capability_packs" / "metadata_receipts" / f"{_safe_str(receipt_id).strip()}.json"
+
+
+def _capability_pack_operator_review_receipt_id(pack_id: str, decided_ts: int) -> str:
+    nonce = time.time_ns() % 1_000_000
+    return f"capability_pack_operator_review_{decided_ts}_{_slugify(pack_id)}_{nonce:06d}"
+
+
+def _capability_pack_operator_review_receipt_path(receipt_id: str) -> Path:
+    return _art_dir() / "capability_packs" / "operator_review_decisions" / f"{_safe_str(receipt_id).strip()}.json"
+
+
+def _read_capability_pack_operator_review_decisions(*, limit: int = 50) -> list[dict[str, Any]]:
+    safe_limit = max(1, min(int(limit or 50), 500))
+    folder = _art_dir() / "capability_packs" / "operator_review_decisions"
+    folder_fs_path = _filesystem_path(folder)
+    if not os.path.isdir(folder_fs_path):
+        return []
+
+    items: list[dict[str, Any]] = []
+    receipt_files: list[tuple[float, str]] = []
+    try:
+        for entry in os.scandir(folder_fs_path):
+            if not entry.name.endswith(".json") or not entry.is_file():
+                continue
+            receipt_files.append((entry.stat().st_mtime, entry.path))
+    except OSError:
+        return []
+
+    for _, path in sorted(receipt_files, key=lambda item: item[0], reverse=True)[:safe_limit]:
+        try:
+            with open(path, encoding="utf-8", errors="replace") as handle:
+                payload = json.load(handle)
+        except Exception:
+            continue
+        if isinstance(payload, dict):
+            items.append(payload)
+    return items
 
 
 def _read_capability_pack_metadata_receipts(*, limit: int = 20) -> list[dict[str, Any]]:
@@ -940,6 +1069,7 @@ def _plugin_promotion_readiness(
     tests = payload_meta.get("tests") or payload_meta.get("test_refs") or []
     proposal_id = _safe_str(payload_meta.get("proposal_id") or payload_meta.get("forge_proposal_id")).strip()
     proposal_review = _plugin_proposal_review_state(proposal_id)
+    pack_operator_review = _capability_pack_operator_review_state(plugin_id, payload_meta)
     requirements = {
         "proposal_id": bool(proposal_id),
         "proposal_review": bool(proposal_review["approved"]),
@@ -948,6 +1078,8 @@ def _plugin_promotion_readiness(
         "docs": _has_readiness_value(docs),
         "risk_tier": risk_tier in _RISK_ORDER,
     }
+    if bool(pack_operator_review["required"]):
+        requirements["pack_operator_review"] = bool(pack_operator_review["approved"])
     missing = [key for key, present in requirements.items() if not present]
     return {
         "ready": not missing,
@@ -963,6 +1095,11 @@ def _plugin_promotion_readiness(
             "risk_tier": risk_tier,
             "validation_receipt_id": _safe_str(payload_meta.get("validation_receipt_id")).strip(),
             "validation_receipt_path": _safe_str(payload_meta.get("validation_receipt_path")).strip(),
+            "pack_operator_review_required": bool(pack_operator_review["required"]),
+            "pack_operator_review_status": pack_operator_review["review_status"],
+            "pack_operator_review_receipt_id": pack_operator_review["receipt_id"],
+            "pack_id": pack_operator_review["pack_id"],
+            "pack_version": pack_operator_review["pack_version"],
         },
     }
 
@@ -992,8 +1129,13 @@ def _promotion_readiness_blocked(
             "gate": "forge_promotion_readiness",
             "scope": _PLUGIN_WRITE_SCOPE,
             "route": "/plugins/enable",
-            "next_step": "approve_proposal_and_attach_friction_evidence_tests_docs_and_risk_before_promotion",
-            "operator_hint": "Promotion requires an approved proposal review, proposal evidence, tests, docs, and a bounded risk tier.",
+            "next_step": (
+                "approve_proposal_and_any_required_pack_operator_review_then_attach_friction_evidence_tests_docs_and_risk"
+            ),
+            "operator_hint": (
+                "Promotion requires an approved proposal review, any required capability-pack operator review, "
+                "proposal evidence, tests, docs, and a bounded risk tier."
+            ),
         },
     }
 
@@ -1143,6 +1285,7 @@ def _write_plugin_promotion_receipt(
     payload_meta = {**previous_meta, **redact_governed_metadata(payload.meta)}
     proposal_id = _safe_str(payload_meta.get("proposal_id") or payload_meta.get("forge_proposal_id") or "").strip()
     proposal_review = _plugin_proposal_review_state(proposal_id)
+    pack_operator_review = _capability_pack_operator_review_state(plugin_id, payload_meta)
     receipt = {
         "kind": "plugin.promotion.receipt",
         "receipt_id": receipt_id,
@@ -1160,6 +1303,13 @@ def _write_plugin_promotion_receipt(
         "proposal_review": {
             "status": proposal_review["review_status"],
             "receipt_id": proposal_review["receipt_id"],
+        },
+        "pack_operator_review": {
+            "required": bool(pack_operator_review["required"]),
+            "status": pack_operator_review["review_status"],
+            "receipt_id": pack_operator_review["receipt_id"],
+            "pack_id": pack_operator_review["pack_id"],
+            "pack_version": pack_operator_review["pack_version"],
         },
         "proposal_evidence": payload_meta.get("proposal_evidence") or payload_meta.get("evidence") or [],
         "quality": _plugin_promotion_quality(plugin_id, promoted, payload_meta, catalog),
@@ -2305,6 +2455,17 @@ class PluginToggleIn(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
+class CapabilityPackOperatorReviewDecisionIn(BaseModel):
+    pack_id: str
+    pack_version: str
+    action: str
+    actor: str = ""
+    reason: str = "requested"
+    notes: str = ""
+    capability_ids: list[str] = Field(default_factory=list)
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
 class PluginInstallIn(BaseModel):
     source_kind: str
     source_ref: str
@@ -2876,6 +3037,225 @@ def capability_pack_operator_review() -> dict[str, object]:
         }
     except Exception as exc:
         return {"ok": False, "kind": "plugin.capability_pack.operator_review", "error": api_error_message(exc)}
+
+
+@router.get("/capabilities/packs/operator/review/decisions")
+def capability_pack_operator_review_decisions(
+    limit: int = 50,
+    pack_id: str = "",
+    pack_version: str = "",
+) -> dict[str, object]:
+    try:
+        safe_pack_id = _safe_str(pack_id).strip()
+        safe_pack_version = _safe_str(pack_version).strip()
+        items = [
+            item
+            for item in _read_capability_pack_operator_review_decisions(limit=limit)
+            if (not safe_pack_id or _safe_str(item.get("pack_id")).strip() == safe_pack_id)
+            and (not safe_pack_version or _safe_str(item.get("pack_version")).strip() == safe_pack_version)
+        ]
+        return {
+            "ok": True,
+            "kind": "plugin.capability_pack.operator_review.decisions",
+            "stage": "Stage 17 / Capability Economy",
+            "items": items,
+            "total": len(items),
+            "limit": max(1, min(int(limit or 50), 500)),
+            "governance": {
+                "read_only": True,
+                "operator_facing": True,
+                "does_not_write_receipts": True,
+                "does_not_mutate_registry": True,
+                "does_not_approve_proposals": True,
+                "does_not_promote_capabilities": True,
+                "does_not_enable_capabilities": True,
+                "does_not_execute_capabilities": True,
+                "promotion_authority": False,
+                "execution_authority": False,
+            },
+            "write_route": "/plugins/capabilities/packs/operator/review/decisions",
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "kind": "plugin.capability_pack.operator_review.decisions",
+            "error": api_error_message(exc),
+        }
+
+
+@router.post("/capabilities/packs/operator/review/decisions")
+def decide_capability_pack_operator_review(
+    payload: CapabilityPackOperatorReviewDecisionIn,
+    request: Request,
+) -> dict[str, object]:
+    try:
+        permission = _write_permission(payload.actor, route=request.url.path, method=request.method)
+        if not permission.allowed:
+            return _permission_denied(permission)
+
+        try:
+            pack_id = _validate_plugin_id(_safe_str(payload.pack_id).strip())
+        except Exception:
+            return {"ok": False, "applied": False, "status": "blocked", "error": "invalid_pack_id"}
+        pack_version = _safe_str(payload.pack_version).strip()
+        if not pack_version or any(ch in pack_version for ch in ("\x00", "\n", "\r")):
+            return {"ok": False, "applied": False, "status": "blocked", "error": "pack_version_required"}
+
+        action = _safe_str(payload.action).strip().lower()
+        decided_status = _CAPABILITY_PACK_OPERATOR_REVIEW_DECISIONS.get(action)
+        if decided_status is None:
+            return {
+                "ok": False,
+                "applied": False,
+                "status": "blocked",
+                "error": "invalid_decision",
+                "allowed_actions": sorted(_CAPABILITY_PACK_OPERATOR_REVIEW_DECISIONS),
+            }
+
+        registry = _load_registry()
+        synced = _sync_generated_plugins(registry)
+        catalog = _save_registry_and_catalog(registry) if synced else _compile_runtime_catalog(registry)
+        runtime_catalog = _read_runtime_catalog_payload(catalog)
+        marketplace = marketplace_from_plugin_catalog(runtime_catalog)
+        entries = marketplace.catalog()
+        review = analyze_capability_pack_operator_review(entries)
+        pack = next(
+            (
+                item
+                for item in review["packs"]
+                if _safe_str(item.get("pack_id")).strip() == pack_id
+                and _safe_str(item.get("pack_version")).strip() == pack_version
+            ),
+            None,
+        )
+        if not isinstance(pack, dict):
+            return {"ok": False, "applied": False, "status": "blocked", "error": "pack_not_found"}
+        if not bool(pack.get("operator_review_ready")):
+            return {
+                "ok": False,
+                "applied": False,
+                "status": "blocked",
+                "error": "pack_operator_review_not_ready",
+                "blockers": list(pack.get("blockers") or []),
+                "pack": pack,
+            }
+        if not bool(pack.get("decision_required")):
+            return {
+                "ok": False,
+                "applied": False,
+                "status": "blocked",
+                "error": "pack_operator_review_decision_not_required",
+                "pack": pack,
+            }
+
+        staged_capability_ids: list[str] = []
+        for entry in entries:
+            capability_id = _safe_str(entry.get("capability")).strip()
+            if not capability_id or _safe_str(entry.get("status")).strip().lower() != "staged":
+                continue
+            metadata = entry.get("metadata") if isinstance(entry.get("metadata"), dict) else {}
+            if _safe_str(metadata.get("pack_id")).strip() != pack_id:
+                continue
+            if _safe_str(metadata.get("pack_version")).strip() != pack_version:
+                continue
+            staged_capability_ids.append(capability_id)
+        staged_capability_ids = sorted(set(staged_capability_ids))
+        if not staged_capability_ids:
+            return {
+                "ok": False,
+                "applied": False,
+                "status": "blocked",
+                "error": "staged_capabilities_required",
+                "pack": pack,
+            }
+
+        try:
+            requested_ids = [_validate_plugin_id(raw_id) for raw_id in _unique_texts(payload.capability_ids, limit=500)]
+        except Exception:
+            return {"ok": False, "applied": False, "status": "blocked", "error": "invalid_capability_id"}
+        capability_ids = requested_ids or staged_capability_ids
+        outside_pack = [capability_id for capability_id in capability_ids if capability_id not in staged_capability_ids]
+        if outside_pack:
+            return {
+                "ok": False,
+                "applied": False,
+                "status": "blocked",
+                "error": "capability_not_in_review_pack",
+                "capability_ids": outside_pack,
+            }
+
+        decided_ts = _now_s()
+        receipt_id = _capability_pack_operator_review_receipt_id(pack_id, decided_ts)
+        receipt_path = _capability_pack_operator_review_receipt_path(receipt_id)
+        receipt = {
+            "kind": "plugin.capability_pack.operator_review.decision_receipt",
+            "receipt_id": receipt_id,
+            "status": decided_status,
+            "decision": action,
+            "pack_id": pack_id,
+            "pack_version": pack_version,
+            "pack_name": _safe_str(pack.get("pack_name")).strip(),
+            "capability_ids": capability_ids,
+            "capability_count": len(capability_ids),
+            "staged_capability_count": int(pack.get("staged_capability_count") or 0),
+            "actor": redact_governed_value(_safe_str(payload.actor).strip()),
+            "reason": redact_governed_value(_safe_str(payload.reason).strip() or "requested"),
+            "notes": redact_governed_value(_safe_str(payload.notes).strip()),
+            "decided_ts": decided_ts,
+            "meta": redact_governed_metadata(payload.meta),
+            "review_snapshot": {
+                "status": _safe_str(pack.get("status")).strip(),
+                "decision_kind": _safe_str(pack.get("decision_kind")).strip(),
+                "blockers": list(pack.get("blockers") or []),
+                "quality_evidence_ready": bool(pack.get("quality_evidence_ready")),
+                "proposal_lineage_ready": bool(pack.get("proposal_lineage_ready")),
+                "validation_receipts_ready": bool(pack.get("validation_receipts_ready")),
+                "operator_review_rule_declared": bool(pack.get("operator_review_rule_declared")),
+                "operator_review_governance_declared": bool(pack.get("operator_review_governance_declared")),
+            },
+            "governance": {
+                "gate": "capability_pack_operator_review",
+                "scope": _PLUGIN_WRITE_SCOPE,
+                "route": "/plugins/capabilities/packs/operator/review/decisions",
+                "writes_receipt": True,
+                "does_not_mutate_registry": True,
+                "does_not_approve_proposals": True,
+                "does_not_promote_capabilities": True,
+                "does_not_enable_capabilities": True,
+                "does_not_execute_capabilities": True,
+                "promotion_authority": False,
+                "execution_authority": False,
+                "approval_authority": False,
+                "memory_write": False,
+            },
+            "path": str(receipt_path),
+        }
+        redacted_receipt = _redact_plugin_receipt(receipt)
+        _atomic_write_display_json(receipt_path, redacted_receipt)
+        return {
+            "ok": True,
+            "applied": True,
+            "status": decided_status,
+            "pack_id": pack_id,
+            "pack_version": pack_version,
+            "receipt_id": receipt_id,
+            "receipt_path": str(receipt_path),
+            "receipt": redacted_receipt,
+            "pack": pack,
+            "governance": {
+                "gate": "capability_pack_operator_review",
+                "promotion_authority": False,
+                "execution_authority": False,
+                "next_step": "explicit_promotion_can_reference_pack_operator_review_receipt",
+            },
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "applied": False,
+            "status": "error",
+            "error": api_error_message(exc),
+        }
 
 
 @router.get("/capabilities/packs/promotion/rules")

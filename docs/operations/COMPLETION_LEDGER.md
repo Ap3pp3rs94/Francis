@@ -56795,6 +56795,62 @@ Remaining truthful gap:
 - Stage 17 still needs explicit review decisions and stronger promotion
   discipline before it can be called complete.
 
+### 2026-06-02 - Stage 17 capability pack operator-review decisions are receipt-backed
+
+Roadmap area: Stage 17 / Capability Economy, explicit operator decisions and
+promotion discipline for versioned capability packs.
+
+Material change:
+
+- Added governed capability-pack operator-review decision routes:
+  `POST /plugins/capabilities/packs/operator/review/decisions` and
+  `GET /plugins/capabilities/packs/operator/review/decisions`.
+- The decision route writes
+  `plugin.capability_pack.operator_review.decision_receipt` records under the
+  plugin capability-pack artifact tree.
+- Plugin promotion readiness now requires an approved pack operator-review
+  receipt only when the pack declares operator review before promotion through
+  promotion rules or pack governance.
+- Promotion receipts now reference the pack operator-review status and receipt
+  when that gate is required.
+- The decision route does not approve proposals, promote capabilities, enable
+  capabilities, execute capabilities, mutate the registry, write memory, or
+  grant authority.
+- `README.md` `Latest Progress Snapshot` was intentionally overwritten to show
+  this locally validated slice while keeping the latest confirmed material
+  GitHub gate at `08a529d5` until this slice passes CI.
+
+Latest validation for Stage 17 capability pack operator-review decisions:
+
+- `FRANCIS_PYTEST_SESSION_RETENTION_ROOT=data/test_runs/pytest/cv17
+  python -m pytest tests/unit/test_capability_pack_operator_review.py
+  tests/test_api_plugins.py::test_plugins_capability_pack_operator_review_projects_read_only_review_queue
+  tests/test_api_plugins.py::test_plugins_capability_pack_operator_review_decision_receipt_gates_pack_promotion
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  --tb=short --maxfail=1`
+  Result: `passed; 5 passed`
+- `python -m mypy src/francis/api/routes/plugins.py
+  src/francis/economy/markets/capability_pack_operator_review.py`
+  Result: `passed`
+- `python -m ruff check src/francis/api/routes/plugins.py
+  src/francis/economy/markets/capability_pack_operator_review.py
+  tests/test_api_plugins.py tests/unit/test_capability_pack_operator_review.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/plugins.py
+  src/francis/economy/markets/capability_pack_operator_review.py
+  tests/test_api_plugins.py tests/unit/test_capability_pack_operator_review.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+
+Validation risk:
+
+- Full local `scripts/check.ps1` was not rerun for this slice. The next pushed
+  GitHub CI matrix remains the full-suite evidence gate.
+- Long local pytest retention-root paths can exceed Windows path-length behavior
+  for generated plugin artifact existence checks, so the targeted pytest command
+  uses a short retention root.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

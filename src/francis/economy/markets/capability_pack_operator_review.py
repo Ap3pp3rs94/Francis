@@ -40,6 +40,8 @@ def analyze_capability_pack_operator_review(entries: Iterable[Mapping[str, Any]]
         "packs": packs,
         "decision_routes": {
             "proposal_review_route": "/forge/proposals/decision",
+            "pack_review_decision_route": "/plugins/capabilities/packs/operator/review/decisions",
+            "pack_review_decision_readback_route": "/plugins/capabilities/packs/operator/review/decisions",
             "promotion_route_after_review": "/plugins/enable",
             "review_readback_route": "/plugins/capabilities/packs/operator/review",
         },
@@ -52,6 +54,7 @@ def analyze_capability_pack_operator_review(entries: Iterable[Mapping[str, Any]]
             "proposal_lineage_required_for_staged": True,
             "promotion_receipts_required_for_promoted": True,
             "review_decision_remains_separate_governed_action": True,
+            "pack_review_receipt_required_before_pack_promotion": True,
         },
         "governance": {
             "read_only": True,

@@ -35,25 +35,27 @@ Francis should be read from current repo truth, not from a hard-coded phase labe
 - `P1_INTERFACE`, `P7_EXECUTION`, and `P8_MEMORY` are partial and actively being connected into a truthful loop.
 - Stage 3 / Missions and Stage 5 / Reactor are closed for the current repo posture by ledger-backed audits.
 - Stage 6 / Lens has backend and chat-UI readback for Lens primitives, host readiness contracts, activation-denial receipts, preflight diagnostics, and bounded proof scripts. Do not read later roadmap work as proof of finished OS-wide summon, always-on resident presence, tray/hotkey/overlay runtime, or live Pilot takeover.
-- Stage 17 / Capability Economy now has read-only pack readiness, migration-plan, metadata-receipt, quality-standards, promotion-rules, quality-test, quality-doc, validation-receipt, proposal-lineage, promotion-receipt, and operator-review evidence surfaces. The current gap is still capability-library maturity: legacy packs need explicit review decisions and stronger promotion discipline before Stage 17 can be called complete.
+- Stage 17 / Capability Economy now has read-only pack readiness, migration-plan, metadata-receipt, quality-standards, promotion-rules, quality-test, quality-doc, validation-receipt, proposal-lineage, promotion-receipt, operator-review evidence surfaces, and local operator-review decision receipts. The current gap is still capability-library maturity: legacy packs need GitHub-confirmed decision receipts, broader promotion discipline, and operator-facing decision UI before Stage 17 can be called complete.
 
 ## Latest Progress Snapshot
 
 This block is intentionally overwritten as the build moves. The append-only
 history stays in [docs/operations/COMPLETION_LEDGER.md](docs/operations/COMPLETION_LEDGER.md).
 
-- Last updated: 2026-06-02, 02:54 America/Chicago.
+- Last updated: 2026-06-02, 03:31 America/Chicago.
 - Latest confirmed material GitHub gate: `main` commit `08a529d5` passed CI on Ubuntu
   3.12, Ubuntu 3.13, Windows 3.12, and Windows 3.13; CodeQL passed for Actions,
   JavaScript/TypeScript, and Python.
-- Current slice: Stage 17 capability pack operator-review readback is now
-  GitHub-confirmed. It adds a read-only API surface that turns staged and
-  promoted pack evidence into an operator-facing review queue without reading
-  proposal/receipt bodies, approving proposals, promoting capabilities, enabling
-  capabilities, executing capabilities, or granting authority.
-- Next truthful gap: capability-library maturity still needs explicit review
-  decisions and stronger promotion discipline before Stage 17 can be called
-  complete.
+- Current slice: Stage 17 capability pack operator-review decisions are locally
+  validated and pending the next GitHub gate. It adds receipt-backed `GET`/`POST`
+  review-decision routes and blocks promotion for packs that require
+  operator-review-before-promotion until an approved pack review receipt exists.
+  The decision route writes receipts only; it does not approve proposals,
+  promote capabilities, enable capabilities, execute capabilities, mutate the
+  registry, or grant authority.
+- Next truthful gap: GitHub validation for the review-decision slice, then
+  broader promotion discipline and operator-facing decision UI before Stage 17
+  can be called complete.
 
 Use [docs/operations/COMPLETION_LEDGER.md](docs/operations/COMPLETION_LEDGER.md) for shipped truth. Use [docs/canonical/ROADMAP.md](docs/canonical/ROADMAP.md) and [docs/canonical/BUILD_MANIFEST.md](docs/canonical/BUILD_MANIFEST.md) for target state and build order. Phase and stage names are orientation markers only; each build pass should derive the active priority from the ledger and canonical roadmap instead of locking Francis into one fixed phase.
 

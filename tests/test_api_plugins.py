@@ -34,6 +34,29 @@ def _approve_forge_proposal(client, proposal_id: str) -> dict[str, object]:
     return approved_body
 
 
+def _approve_capability_pack_operator_review(
+    client,
+    *,
+    pack_id: str,
+    pack_version: str,
+) -> dict[str, object]:
+    approved = client.post(
+        "/plugins/capabilities/packs/operator/review/decisions",
+        json={
+            "pack_id": pack_id,
+            "pack_version": pack_version,
+            "action": "approve",
+            "actor": _PLUGIN_ACTOR,
+            "reason": "test pack operator review approval",
+        },
+    )
+    assert approved.status_code == 200
+    approved_body = approved.json()
+    assert approved_body["ok"] is True, approved_body
+    assert approved_body["status"] == "approved"
+    return approved_body
+
+
 def test_plugins_atomic_write_json_uses_unique_temp_siblings(monkeypatch, tmp_path: Path) -> None:
     from francis.api.routes import plugins
 
@@ -1309,6 +1332,13 @@ def test_plugins_capability_pack_operator_review_projects_read_only_review_queue
     assert body["requirements"]["operator_review_before_promotion_required"] is True
     assert body["requirements"]["review_decision_remains_separate_governed_action"] is True
     assert body["decision_routes"]["proposal_review_route"] == "/forge/proposals/decision"
+    assert (
+        body["decision_routes"]["pack_review_decision_route"] == "/plugins/capabilities/packs/operator/review/decisions"
+    )
+    assert (
+        body["decision_routes"]["pack_review_decision_readback_route"]
+        == "/plugins/capabilities/packs/operator/review/decisions"
+    )
     assert body["decision_routes"]["promotion_route_after_review"] == "/plugins/enable"
     assert body["governance"]["read_only"] is True
     assert body["governance"]["operator_facing"] is True
@@ -1339,6 +1369,119 @@ def test_plugins_capability_pack_operator_review_projects_read_only_review_queue
     assert pack["review_items_sample"][0]["proposal_id"] == built_body["proposal_id"]
     assert pack["review_items_sample"][0]["validation_receipt_id"] == built_body["validation_receipt_id"]
     assert all(item["capability"] != plugin_id for item in pack["failing_capabilities_sample"])
+
+
+def test_plugins_capability_pack_operator_review_decision_receipt_gates_pack_promotion(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    client = TestClient(create_app())
+    pack_id = "ops.operator_review_decision"
+    pack_version = "1.0.0"
+    meta = {
+        **_forge_promotion_meta("capability_operator_review_decision"),
+        "pack_id": pack_id,
+        "pack_version": pack_version,
+        "pack_name": "Ops Operator Review Decision Pack",
+        "promotion_rules": [
+            "metadata_receipt_before_promotion",
+            "quality_standards_before_promotion",
+            "operator_review_before_promotion",
+        ],
+        "pack_governance": {
+            "risk_tier": "normal",
+            "scope": "build_dev",
+            "operator_review_required": True,
+        },
+    }
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Capability Operator Review Decision Plugin",
+            "description": "Stage 17 operator review decision receipt coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": meta,
+        },
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    plugin_id = str(built_body["plugin_id"])
+    _approve_forge_proposal(client, str(built_body["proposal_id"]))
+
+    blocked = client.post(
+        "/plugins/enable",
+        json={
+            "id": plugin_id,
+            "reason": "pack promotion before pack operator review",
+            "actor": _PLUGIN_ACTOR,
+        },
+    )
+    assert blocked.status_code == 200
+    blocked_body = blocked.json()
+    assert blocked_body["ok"] is False
+    assert blocked_body["error"] == "promotion_readiness_blocked"
+    assert "pack_operator_review" in blocked_body["readiness"]["missing_requirements"]
+    assert blocked_body["readiness"]["requirements"]["pack_operator_review"] is False
+    assert blocked_body["readiness"]["evidence"]["pack_operator_review_status"] == "missing"
+
+    approved = _approve_capability_pack_operator_review(
+        client,
+        pack_id=pack_id,
+        pack_version=pack_version,
+    )
+    receipt = approved["receipt"]
+    assert receipt["kind"] == "plugin.capability_pack.operator_review.decision_receipt"
+    assert receipt["status"] == "approved"
+    assert receipt["pack_id"] == pack_id
+    assert receipt["pack_version"] == pack_version
+    assert receipt["capability_ids"] == [plugin_id]
+    assert receipt["governance"]["writes_receipt"] is True
+    assert receipt["governance"]["does_not_mutate_registry"] is True
+    assert receipt["governance"]["does_not_promote_capabilities"] is True
+    assert receipt["governance"]["does_not_enable_capabilities"] is True
+    assert receipt["governance"]["promotion_authority"] is False
+    assert plugins.os.path.exists(plugins._filesystem_path(Path(str(receipt["path"]))))
+
+    decisions = client.get(
+        "/plugins/capabilities/packs/operator/review/decisions",
+        params={"pack_id": pack_id, "pack_version": pack_version},
+    )
+    assert decisions.status_code == 200
+    decisions_body = decisions.json()
+    assert decisions_body["ok"] is True
+    assert decisions_body["kind"] == "plugin.capability_pack.operator_review.decisions"
+    assert decisions_body["governance"]["read_only"] is True
+    assert decisions_body["governance"]["does_not_promote_capabilities"] is True
+    assert decisions_body["items"][0]["receipt_id"] == approved["receipt_id"]
+
+    enabled = client.post(
+        "/plugins/enable",
+        json={
+            "id": plugin_id,
+            "reason": "pack promotion after pack operator review",
+            "actor": _PLUGIN_ACTOR,
+        },
+    )
+    assert enabled.status_code == 200
+    enabled_body = enabled.json()
+    assert enabled_body["ok"] is True
+    assert enabled_body["promotion_status"] == "promoted"
+    promotion_receipt = enabled_body["promotion_receipt"]
+    assert promotion_receipt["proposal_review"]["status"] == "approved"
+    assert promotion_receipt["pack_operator_review"]["required"] is True
+    assert promotion_receipt["pack_operator_review"]["status"] == "approved"
+    assert promotion_receipt["pack_operator_review"]["receipt_id"] == approved["receipt_id"]
+    assert promotion_receipt["pack_operator_review"]["pack_id"] == pack_id
+    assert promotion_receipt["governance"]["explicit"] is True
 
 
 def test_plugins_capability_pack_metadata_receipt_expands_reviewed_migration_plan_candidate(

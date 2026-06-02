@@ -41,9 +41,14 @@ def test_capability_pack_operator_review_projects_ready_staged_pack_for_review()
     assert analysis["decision_required_pack_count"] == 1
     assert analysis["review_queue_count"] == 1
     assert analysis["decision_routes"]["proposal_review_route"] == "/forge/proposals/decision"
+    assert (
+        analysis["decision_routes"]["pack_review_decision_route"]
+        == "/plugins/capabilities/packs/operator/review/decisions"
+    )
     assert analysis["decision_routes"]["promotion_route_after_review"] == "/plugins/enable"
     assert analysis["requirements"]["operator_review_before_promotion_required"] is True
     assert analysis["requirements"]["review_decision_remains_separate_governed_action"] is True
+    assert analysis["requirements"]["pack_review_receipt_required_before_pack_promotion"] is True
     assert analysis["governance"]["read_only"] is True
     assert analysis["governance"]["operator_facing"] is True
     assert analysis["governance"]["does_not_approve_proposals"] is True
