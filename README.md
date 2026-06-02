@@ -42,15 +42,15 @@ Francis should be read from current repo truth, not from a hard-coded phase labe
 This block is intentionally overwritten as the build moves. The append-only
 history stays in [docs/operations/COMPLETION_LEDGER.md](docs/operations/COMPLETION_LEDGER.md).
 
-- Last updated: 2026-06-02, 02:13 America/Chicago.
-- Latest confirmed material GitHub gate: `main` commit `3c511dc6` passed CI on Ubuntu
+- Last updated: 2026-06-02, 02:54 America/Chicago.
+- Latest confirmed material GitHub gate: `main` commit `08a529d5` passed CI on Ubuntu
   3.12, Ubuntu 3.13, Windows 3.12, and Windows 3.13; CodeQL passed for Actions,
   JavaScript/TypeScript, and Python.
-- Current slice: Stage 17 capability pack operator-review readback, adding a
-  read-only API surface that turns staged and promoted pack evidence into an
-  operator-facing review queue without reading proposal/receipt bodies,
-  approving proposals, promoting capabilities, enabling capabilities, executing
-  capabilities, or granting authority.
+- Current slice: Stage 17 capability pack operator-review readback is now
+  GitHub-confirmed. It adds a read-only API surface that turns staged and
+  promoted pack evidence into an operator-facing review queue without reading
+  proposal/receipt bodies, approving proposals, promoting capabilities, enabling
+  capabilities, executing capabilities, or granting authority.
 - Next truthful gap: capability-library maturity still needs explicit review
   decisions and stronger promotion discipline before Stage 17 can be called
   complete.

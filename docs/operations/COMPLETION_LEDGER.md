@@ -56771,6 +56771,30 @@ Validation risk:
   `scripts/check.ps1` was not rerun for this slice; the next pushed GitHub CI
   matrix remains the full-suite evidence gate.
 
+### 2026-06-02 - Stage 17 capability pack operator review passes GitHub CI
+
+Roadmap area: Stage 17 / Capability Economy, GitHub-visible validation for the
+operator-facing capability pack review surface.
+
+Material change:
+
+- GitHub CI and CodeQL now confirm the pushed operator-review slice on `main`
+  commit `08a529d5`.
+- `README.md` `Latest Progress Snapshot` was intentionally overwritten to show
+  `08a529d5` as the latest confirmed material GitHub gate.
+
+Latest validation for Stage 17 capability pack operator review:
+
+- GitHub CI run `26804555979` for commit `08a529d5`.
+  Result: `passed` on Ubuntu 3.12, Ubuntu 3.13, Windows 3.12, and Windows 3.13.
+- CodeQL Advanced run `26804556055` for commit `08a529d5`.
+  Result: `passed` for Actions, JavaScript/TypeScript, and Python.
+
+Remaining truthful gap:
+
+- Stage 17 still needs explicit review decisions and stronger promotion
+  discipline before it can be called complete.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
