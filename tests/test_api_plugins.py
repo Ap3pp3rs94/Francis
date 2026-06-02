@@ -850,6 +850,71 @@ def test_plugins_capability_pack_quality_standards_projects_pack_evidence(monkey
     assert all(item["capability"] != plugin_id for item in pack["failing_capabilities_sample"])
 
 
+def test_plugins_capability_pack_quality_tests_projects_read_only_test_evidence(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    meta = {
+        **_forge_promotion_meta("capability_quality_tests"),
+        "tests": [
+            "tests/test_api_plugins.py::test_plugins_capability_pack_quality_tests_projects_read_only_test_evidence"
+        ],
+        "pack_id": "ops.quality_tests",
+        "pack_version": "1.0.0",
+        "pack_name": "Ops Quality Tests Pack",
+    }
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Capability Quality Tests Plugin",
+            "description": "Stage 17 quality tests coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": meta,
+        },
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    plugin_id = str(built_body["plugin_id"])
+
+    response = client.get("/plugins/capabilities/packs/quality/tests")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "plugin.capability_pack.quality_tests"
+    assert body["stage"] == "Stage 17 / Capability Economy"
+    assert body["requirements"]["declared_tests_required"] is True
+    assert body["requirements"]["test_paths_must_exist"] is True
+    assert body["requirements"]["test_contents_not_read"] is True
+    assert body["governance"]["read_only"] is True
+    assert body["governance"]["does_not_read_test_contents"] is True
+    assert body["governance"]["does_not_write_receipts"] is True
+    assert body["governance"]["does_not_mutate_registry"] is True
+    assert body["governance"]["does_not_promote_capabilities"] is True
+    assert body["governance"]["promotion_authority"] is False
+    assert body["available_test_path_count"] > 0
+
+    pack = next(item for item in body["packs"] if item["pack_id"] == "ops.quality_tests")
+    assert pack["ready"] is True
+    assert pack["blockers"] == []
+    assert pack["tested_count"] == 1
+    assert pack["declared_test_reference_count"] == 1
+    assert pack["existing_test_reference_count"] == 1
+    assert pack["missing_test_reference_count"] == 0
+    assert pack["invalid_test_reference_count"] == 0
+    assert pack["test_files"] == ["tests/test_api_plugins.py"]
+    assert all(item["capability"] != plugin_id for item in pack["failing_capabilities_sample"])
+
+
 def test_plugins_capability_pack_promotion_rules_project_governed_rule_readiness(
     monkeypatch,
     tmp_path: Path,

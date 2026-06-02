@@ -28,14 +28,29 @@ If you are interested in trustworthy local AI systems, governed automation, audi
 
 ## Current Build Posture
 
-Francis should be read from current repo truth, not from a hard-coded phase label. The strongest shipped posture is a governed runtime spine, not a finished operator product. The active roadmap work is currently Stage 6 / Lens MVP: making Francis visible as an OS-layer presence without claiming resident capability before it exists.
+Francis should be read from current repo truth, not from a hard-coded phase label. The strongest shipped posture is a governed runtime spine, not a finished operator product. The active roadmap work is currently Stage 17 / Capability Economy: turning generated and promoted capabilities into versioned, tested, documented, governed internal assets rather than a pile of scripts.
 
 - `P9_OBSERVABILITY` is the strongest plane today.
 - `P3_GOVERNANCE` is materially real.
 - `P1_INTERFACE`, `P7_EXECUTION`, and `P8_MEMORY` are partial and actively being connected into a truthful loop.
 - Stage 3 / Missions and Stage 5 / Reactor are closed for the current repo posture by ledger-backed audits.
-- Stage 6 / Lens has backend and chat-UI readback for Lens primitives, host readiness contracts, activation-denial receipts, preflight diagnostics, and a bounded foreground host proof.
-- Stage 6 is not closed: there is still no OS-wide summon, resident host process, installed/started service, tray presence, global hotkey binding, resident overlay/HUD runtime, OS-level command palette, or live Pilot takeover surface.
+- Stage 6 / Lens has backend and chat-UI readback for Lens primitives, host readiness contracts, activation-denial receipts, preflight diagnostics, and bounded proof scripts. Do not read later roadmap work as proof of finished OS-wide summon, always-on resident presence, tray/hotkey/overlay runtime, or live Pilot takeover.
+- Stage 17 / Capability Economy now has read-only pack readiness, migration-plan, metadata-receipt, quality-standards, promotion-rules, and quality-test evidence surfaces. The current gap is still capability-library maturity: legacy packs need stronger test/doc evidence, operator-facing review, and promotion discipline before Stage 17 can be called complete.
+
+## Latest Progress Snapshot
+
+This block is intentionally overwritten as the build moves. The append-only
+history stays in [docs/operations/COMPLETION_LEDGER.md](docs/operations/COMPLETION_LEDGER.md).
+
+- Last updated: 2026-06-01, 20:10 America/Chicago.
+- Latest confirmed GitHub gate: `main` commit `2c4aef00` passed CI on Ubuntu
+  3.12, Ubuntu 3.13, Windows 3.12, and Windows 3.13; CodeQL passed for Actions,
+  JavaScript/TypeScript, and Python.
+- Current slice: Stage 17 capability pack quality-tests readback, adding a
+  read-only API surface that audits declared pack tests against repository test
+  paths without reading test contents or granting authority.
+- Next truthful gap: capability-library maturity still needs stronger test/doc
+  evidence across legacy packs, operator-facing review, and promotion discipline.
 
 Use [docs/operations/COMPLETION_LEDGER.md](docs/operations/COMPLETION_LEDGER.md) for shipped truth. Use [docs/canonical/ROADMAP.md](docs/canonical/ROADMAP.md) and [docs/canonical/BUILD_MANIFEST.md](docs/canonical/BUILD_MANIFEST.md) for target state and build order. Phase and stage names are orientation markers only; each build pass should derive the active priority from the ledger and canonical roadmap instead of locking Francis into one fixed phase.
 

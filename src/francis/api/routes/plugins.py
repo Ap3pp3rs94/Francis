@@ -23,6 +23,7 @@ from francis.economy.markets.capability_catalog_projection import marketplace_fr
 from francis.economy.markets.capability_pack_migration_plan import analyze_capability_pack_migration_plan
 from francis.economy.markets.capability_pack_promotion_rules import analyze_capability_pack_promotion_rules
 from francis.economy.markets.capability_pack_quality_standards import analyze_capability_pack_quality_standards
+from francis.economy.markets.capability_pack_quality_tests import analyze_capability_pack_quality_tests
 from francis.economy.markets.capability_pack_readiness import analyze_capability_pack_readiness
 from francis.governance import approvals as approval_store
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
@@ -1433,6 +1434,38 @@ def _read_runtime_catalog_payload(catalog: dict[str, Any]) -> dict[str, Any]:
     return raw if isinstance(raw, dict) else {}
 
 
+def _available_capability_pack_test_paths() -> set[str]:
+    root = repo_root()
+    out: set[str] = set()
+    for relative_root, patterns in (
+        ("tests", ("test_*.py", "*_test.py")),
+        ("apps/chat_ui/src", ("*.test.ts", "*.test.tsx")),
+        ("apps/chat_ui/tests", ("*.test.ts", "*.test.tsx")),
+    ):
+        scan_root = _resolve_under(root, relative_root)
+        if scan_root is None or not scan_root.exists() or not scan_root.is_dir():
+            continue
+        for pattern in patterns:
+            try:
+                candidates = scan_root.rglob(pattern)
+            except OSError:
+                continue
+            for path in candidates:
+                if len(out) >= 10000:
+                    return out
+                try:
+                    resolved = _real_path(path)
+                except OSError:
+                    continue
+                if not _is_under(_real_path(root), resolved) or not resolved.is_file():
+                    continue
+                try:
+                    out.add(resolved.relative_to(root).as_posix())
+                except ValueError:
+                    continue
+    return out
+
+
 def _save_registry_and_catalog(registry: dict[str, Any]) -> dict[str, Any]:
     _save_registry(registry)
     return _compile_runtime_catalog(registry)
@@ -2568,6 +2601,32 @@ def capability_pack_quality_standards() -> dict[str, object]:
         }
     except Exception as exc:
         return {"ok": False, "kind": "plugin.capability_pack.quality_standards", "error": api_error_message(exc)}
+
+
+@router.get("/capabilities/packs/quality/tests")
+def capability_pack_quality_tests() -> dict[str, object]:
+    try:
+        registry = _load_registry()
+        synced = _sync_generated_plugins(registry)
+        catalog = _save_registry_and_catalog(registry) if synced else _compile_runtime_catalog(registry)
+        runtime_catalog = _read_runtime_catalog_payload(catalog)
+        marketplace = marketplace_from_plugin_catalog(runtime_catalog)
+        analysis = analyze_capability_pack_quality_tests(
+            marketplace.catalog(),
+            available_test_paths=_available_capability_pack_test_paths(),
+        )
+        return {
+            "ok": True,
+            "kind": "plugin.capability_pack.quality_tests",
+            **analysis,
+            "catalog": {
+                "path": _safe_str(catalog.get("path")).strip(),
+                "total_plugins": int(runtime_catalog.get("total_plugins") or catalog.get("total_plugins") or 0),
+                "total_tools": int(runtime_catalog.get("total_tools") or catalog.get("total_tools") or 0),
+            },
+        }
+    except Exception as exc:
+        return {"ok": False, "kind": "plugin.capability_pack.quality_tests", "error": api_error_message(exc)}
 
 
 @router.get("/capabilities/packs/promotion/rules")

@@ -56372,6 +56372,61 @@ Validation risk:
   failure was fixed; the next pushed commit remains the full matrix evidence
   gate.
 
+### 2026-06-01 - Stage 17 capability pack quality tests are readable
+
+Roadmap area: Stage 17 / Capability Economy, quality standards and internal
+library discipline for versioned capability packs.
+
+Material change:
+
+- Added a read-only capability pack quality-tests analyzer for Stage 17.
+- Added `GET /plugins/capabilities/packs/quality/tests`.
+- The route checks declared pack test references against repository test paths
+  only; it does not read test file contents, write receipts, mutate the plugin
+  registry, promote/enable capabilities, execute capabilities, or grant
+  authority.
+- The analyzer surfaces pack-level blockers for missing tests, invalid test
+  paths, and declared test references that do not resolve to known repo test
+  files.
+- The chat UI API contract endpoint list now includes the quality-tests route.
+- `README.md` now reflects the current Stage 17 build posture and includes an
+  intentionally overwritten `Latest Progress Snapshot` for GitHub-visible
+  progress, instead of stale Stage 6-only posture text.
+
+Confirmed GitHub baseline before this slice:
+
+- GitHub CI run `26790065384` for commit `2c4aef00` completed successfully on
+  Ubuntu 3.12, Ubuntu 3.13, Windows 3.12, and Windows 3.13.
+- CodeQL Advanced run `26790065386` for commit `2c4aef00` completed
+  successfully for Actions, JavaScript/TypeScript, and Python.
+
+Latest validation for Stage 17 capability pack quality tests:
+
+- `python -m pytest tests/unit/test_capability_pack_quality_tests.py
+  tests/test_api_plugins.py::test_plugins_capability_pack_quality_tests_projects_read_only_test_evidence
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 4 passed`
+- `python -m mypy src/francis/economy/markets/capability_pack_quality_tests.py
+  src/francis/economy/markets/__init__.py src/francis/economy/__init__.py
+  src/francis/api/routes/plugins.py`
+  Result: `passed`
+- `python -m ruff check src/francis/economy/markets/capability_pack_quality_tests.py
+  src/francis/economy/markets/__init__.py src/francis/economy/__init__.py
+  src/francis/api/routes/plugins.py tests/unit/test_capability_pack_quality_tests.py
+  tests/test_api_plugins.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/economy/markets/capability_pack_quality_tests.py
+  src/francis/economy/markets/__init__.py src/francis/economy/__init__.py
+  src/francis/api/routes/plugins.py tests/unit/test_capability_pack_quality_tests.py
+  tests/test_api_plugins.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+
+Validation risk:
+
+- Full local `scripts/check.ps1` was not rerun for this slice; the next pushed
+  GitHub CI matrix remains the full-suite evidence gate.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
