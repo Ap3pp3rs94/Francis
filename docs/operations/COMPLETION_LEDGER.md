@@ -57067,6 +57067,30 @@ Remaining truthful gap:
 - Stage 17 still needs GitHub confirmation for this UI slice and broader
   capability-library maturity before it can be called complete.
 
+### 2026-06-02 - Stage 17 promotion discipline chat UI passes GitHub CI
+
+Roadmap area: Stage 17 / Capability Economy, GitHub-visible validation for the
+operator-facing capability-library discipline readback.
+
+Material change:
+
+- GitHub CI and CodeQL now confirm the pushed chat UI
+  promotion-discipline-readback slice on `main` commit `a9dc39a7`.
+- `README.md` `Latest Progress Snapshot` was intentionally overwritten to show
+  `a9dc39a7` as the latest confirmed GitHub gate.
+
+Latest validation for Stage 17 promotion discipline chat UI:
+
+- GitHub CI run `26826217638` for commit `a9dc39a7`.
+  Result: `passed` on Ubuntu 3.12, Ubuntu 3.13, Windows 3.12, and Windows 3.13.
+- CodeQL Advanced run `26826217735` for commit `a9dc39a7`.
+  Result: `passed` for Actions, JavaScript/TypeScript, and Python.
+
+Remaining truthful gap:
+
+- Stage 17 still needs broader capability-library maturity before it can be
+  called complete.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
