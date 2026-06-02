@@ -39,8 +39,16 @@ def test_plugins_atomic_write_json_uses_unique_temp_siblings(monkeypatch, tmp_pa
     replace_calls: list[Path] = []
     real_replace = plugins.os.replace
 
+    def normalize_spy_path(value: str | Path) -> Path:
+        text = str(value)
+        if text.startswith("\\\\?\\UNC\\"):
+            text = "\\\\" + text.removeprefix("\\\\?\\UNC\\")
+        elif text.startswith("\\\\?\\"):
+            text = text.removeprefix("\\\\?\\")
+        return Path(text)
+
     def spy_replace(src: str | Path, dst: str | Path) -> None:
-        replace_calls.append(Path(src))
+        replace_calls.append(normalize_spy_path(src))
         real_replace(src, dst)
 
     monkeypatch.setattr(plugins.os, "replace", spy_replace)
@@ -54,8 +62,9 @@ def test_plugins_atomic_write_json_uses_unique_temp_siblings(monkeypatch, tmp_pa
     assert len(replace_calls) == 2
     assert len({item.name for item in replace_calls}) == 2
     assert all(item.parent == path.parent for item in replace_calls)
-    assert all(item.name.startswith("_registry.json.") for item in replace_calls)
-    assert not any(path.parent.glob("_registry.json.*.tmp"))
+    assert all(item.name.startswith(".atomic-json-") for item in replace_calls)
+    assert all("_registry.json" not in item.name for item in replace_calls)
+    assert not any(path.parent.glob(".atomic-json-*.tmp"))
 
 
 def test_plugins_build_lifecycle_and_run(monkeypatch, tmp_path: Path) -> None:
@@ -758,7 +767,7 @@ def test_plugins_capability_pack_metadata_receipts_bulk_from_migration_plan(
     assert recorded_body["ok"] is True
     assert recorded_body["status"] == "recorded"
     assert recorded_body["recorded_pack_count"] == 1
-    assert recorded_body["recorded_capability_count"] == 1
+    assert recorded_body["recorded_capability_count"] == candidate["capability_count"]
     assert recorded_body["remaining_candidate_total"] < plan["candidate_total"]
     assert recorded_body["governance"]["writes_registry_metadata"] is True
     assert recorded_body["governance"]["writes_receipts"] is True
@@ -766,7 +775,9 @@ def test_plugins_capability_pack_metadata_receipts_bulk_from_migration_plan(
     assert recorded_body["governance"]["execution_authority"] is False
     receipt_ref = recorded_body["recorded"][0]
     assert receipt_ref["pack_id"] == candidate["pack_id"]
-    assert Path(str(receipt_ref["receipt_path"])).exists()
+    from francis.api.routes import plugins
+
+    assert plugins.os.path.exists(plugins._filesystem_path(Path(str(receipt_ref["receipt_path"]))))
 
     catalog = client.get("/plugins/capabilities/catalog?limit=5000").json()
     entry = next(item for item in catalog["items"] if item["capability"] == plugin_id)

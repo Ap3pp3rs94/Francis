@@ -4,7 +4,7 @@ import json
 import os
 from pathlib import Path
 
-from conftest import _pytest_session_retention_root, run_pytest_session_retention
+from conftest import _pytest_session_retention_root, _slug, run_pytest_session_retention
 from francis.kernel.paths import repo_root
 
 
@@ -90,3 +90,12 @@ def test_pytest_session_retention_root_rejects_path_outside_allowlist(monkeypatc
     except RuntimeError:
         return
     raise AssertionError("Expected retention root override outside policy to be rejected")
+
+
+def test_pytest_tmp_slug_is_bounded_for_windows_receipt_paths() -> None:
+    slug = _slug(
+        "test_plugins_capability_pack_metadata_receipts_bulk_from_migration_plan_with_nested_governed_receipts",
+    )
+
+    assert len(slug) <= 40
+    assert slug == "test_plugins_capability_pack_metadata_re"

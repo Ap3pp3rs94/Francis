@@ -56328,6 +56328,50 @@ Validation risk:
 - Full local pytest was not rerun because focused pytest commands are still
   stalling in this workspace; GitHub CI remains the full-suite evidence gate.
 
+### 2026-06-01 - Stage 17 plugin receipt writes tolerate Windows long paths
+
+Roadmap area: Stage 17 / Capability Economy, CI reliability for governed
+capability pack receipt write/readback paths.
+
+Material change:
+
+- Plugin JSON atomic writes now use short unique sibling temp names instead of
+  appending PID/UUID to long destination filenames.
+- On Windows, plugin receipt writes, replaces, cleanup, and capability-pack
+  metadata receipt readbacks use extended-length filesystem paths while keeping
+  normal readable receipt paths in API payloads.
+- The pytest repo-local temp path slug is capped to 40 characters so governed
+  nested receipt paths remain below brittle Windows path limits during tests.
+- The existing bulk metadata receipt route behavior is unchanged: it still
+  requires `plugins.write`, writes receipt-backed pack metadata, and does not
+  promote, execute, grant approval authority, or write memory.
+
+Latest validation for Stage 17 Windows long-path receipt handling:
+
+- `python -m pytest
+  tests/test_api_plugins.py::test_plugins_atomic_write_json_uses_unique_temp_siblings
+  tests/test_api_plugins.py::test_plugins_capability_pack_metadata_receipts_bulk_from_migration_plan
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  tests/test_pytest_session_retention.py::test_pytest_tmp_slug_is_bounded_for_windows_receipt_paths
+  -q --tb=short --maxfail=1`
+  Result: `passed; 4 passed`
+- `python -m mypy src/francis/api/routes/plugins.py`
+  Result: `passed`
+- `python -m ruff check src/francis/api/routes/plugins.py
+  tests/test_api_plugins.py tests/test_api_contract_chat_ui.py tests/conftest.py
+  tests/test_pytest_session_retention.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/plugins.py
+  tests/test_api_plugins.py tests/test_api_contract_chat_ui.py tests/conftest.py
+  tests/test_pytest_session_retention.py`
+  Result: `passed`
+
+Validation risk:
+
+- GitHub CI for the previous Stage 17 commit was still running when this local
+  failure was fixed; the next pushed commit remains the full matrix evidence
+  gate.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

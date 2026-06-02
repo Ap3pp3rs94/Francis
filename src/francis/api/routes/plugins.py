@@ -748,13 +748,24 @@ def _capability_pack_metadata_receipt_path(receipt_id: str) -> Path:
 def _read_capability_pack_metadata_receipts(*, limit: int = 20) -> list[dict[str, Any]]:
     safe_limit = max(1, min(int(limit or 20), 200))
     folder = _art_dir() / "capability_packs" / "metadata_receipts"
-    if not folder.exists() or not folder.is_dir():
+    folder_fs_path = _filesystem_path(folder)
+    if not os.path.isdir(folder_fs_path):
         return []
 
     items: list[dict[str, Any]] = []
-    for path in sorted(folder.glob("*.json"), key=lambda item: item.stat().st_mtime):
+    receipt_files: list[tuple[float, str]] = []
+    try:
+        for entry in os.scandir(folder_fs_path):
+            if not entry.name.endswith(".json") or not entry.is_file():
+                continue
+            receipt_files.append((entry.stat().st_mtime, entry.path))
+    except OSError:
+        return []
+
+    for _, path in sorted(receipt_files, key=lambda item: item[0]):
         try:
-            payload = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+            with open(path, encoding="utf-8", errors="replace") as handle:
+                payload = json.load(handle)
         except Exception:
             continue
         if isinstance(payload, dict):
@@ -1312,16 +1323,30 @@ def _default_registry() -> dict[str, Any]:
     return {"version": 1, "updated_at": _now_s(), "plugins": {}}
 
 
+def _filesystem_path(path: Path) -> str:
+    if os.name != "nt":
+        return str(path)
+    resolved = str(path.resolve())
+    if resolved.startswith("\\\\?\\"):
+        return resolved
+    if resolved.startswith("\\\\"):
+        return "\\\\?\\UNC\\" + resolved[2:]
+    return "\\\\?\\" + resolved
+
+
 def _atomic_write_json(path: Path, obj: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f"{path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
+    os.makedirs(_filesystem_path(path.parent), exist_ok=True)
+    tmp = path.with_name(f".atomic-json-{os.getpid()}-{uuid.uuid4().hex}.tmp")
+    tmp_fs_path = _filesystem_path(tmp)
+    target_fs_path = _filesystem_path(path)
     try:
-        tmp.write_text(json.dumps(obj, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
-        os.replace(tmp, path)
+        with open(tmp_fs_path, "w", encoding="utf-8") as handle:
+            handle.write(json.dumps(obj, indent=2, ensure_ascii=False, default=str))
+        os.replace(tmp_fs_path, target_fs_path)
     finally:
-        if tmp.exists():
+        if os.path.exists(tmp_fs_path):
             try:
-                tmp.unlink()
+                os.unlink(tmp_fs_path)
             except OSError:
                 pass
 

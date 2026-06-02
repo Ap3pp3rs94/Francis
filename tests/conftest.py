@@ -319,7 +319,7 @@ def _test_actor_scope_policy() -> dict[str, list[str]]:
 
 def _slug(value: str, *, default: str = "case") -> str:
     text = _SAFE_SEGMENT_RE.sub("-", value.strip()).strip("-._")
-    return text[:80] or default
+    return text[:40] or default
 
 
 @pytest.fixture(scope="session")
