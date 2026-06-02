@@ -23,6 +23,7 @@ from francis.economy.markets.capability_catalog_projection import marketplace_fr
 from francis.economy.markets.capability_pack_lineage import analyze_capability_pack_lineage
 from francis.economy.markets.capability_pack_migration_plan import analyze_capability_pack_migration_plan
 from francis.economy.markets.capability_pack_operator_review import analyze_capability_pack_operator_review
+from francis.economy.markets.capability_pack_promotion_discipline import analyze_capability_pack_promotion_discipline
 from francis.economy.markets.capability_pack_promotion_receipts import analyze_capability_pack_promotion_receipts
 from francis.economy.markets.capability_pack_promotion_rules import analyze_capability_pack_promotion_rules
 from francis.economy.markets.capability_pack_quality_docs import analyze_capability_pack_quality_docs
@@ -3014,6 +3015,38 @@ def capability_pack_promotion_receipts() -> dict[str, object]:
         }
     except Exception as exc:
         return {"ok": False, "kind": "plugin.capability_pack.promotion_receipts", "error": api_error_message(exc)}
+
+
+@router.get("/capabilities/packs/promotion/discipline")
+def capability_pack_promotion_discipline() -> dict[str, object]:
+    try:
+        registry = _load_registry()
+        synced = _sync_generated_plugins(registry)
+        catalog = _save_registry_and_catalog(registry) if synced else _compile_runtime_catalog(registry)
+        runtime_catalog = _read_runtime_catalog_payload(catalog)
+        marketplace = marketplace_from_plugin_catalog(runtime_catalog)
+        available_proposals = _available_capability_pack_proposals()
+        available_validation_receipts = _available_capability_pack_validation_receipts()
+        available_promotion_receipts = _available_capability_pack_promotion_receipts()
+        analysis = analyze_capability_pack_promotion_discipline(
+            marketplace.catalog(),
+            available_proposal_ids=available_proposals["ids"],
+            available_validation_receipt_ids=available_validation_receipts["ids"],
+            available_promotion_receipt_ids=available_promotion_receipts["ids"],
+            operator_review_decisions=_read_capability_pack_operator_review_decisions(limit=500),
+        )
+        return {
+            "ok": True,
+            "kind": "plugin.capability_pack.promotion_discipline",
+            **analysis,
+            "catalog": {
+                "path": _safe_str(catalog.get("path")).strip(),
+                "total_plugins": int(runtime_catalog.get("total_plugins") or catalog.get("total_plugins") or 0),
+                "total_tools": int(runtime_catalog.get("total_tools") or catalog.get("total_tools") or 0),
+            },
+        }
+    except Exception as exc:
+        return {"ok": False, "kind": "plugin.capability_pack.promotion_discipline", "error": api_error_message(exc)}
 
 
 @router.get("/capabilities/packs/operator/review")

@@ -1484,6 +1484,100 @@ def test_plugins_capability_pack_operator_review_decision_receipt_gates_pack_pro
     assert promotion_receipt["governance"]["explicit"] is True
 
 
+def test_plugins_capability_pack_promotion_discipline_projects_pack_gate(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    pack_id = "ops.promotion_discipline"
+    pack_version = "1.0.0"
+    meta = {
+        **_forge_promotion_meta("capability_promotion_discipline"),
+        "pack_id": pack_id,
+        "pack_version": pack_version,
+        "pack_name": "Ops Promotion Discipline Pack",
+        "promotion_rules": [
+            "metadata_receipt_before_promotion",
+            "quality_standards_before_promotion",
+            "operator_review_before_promotion",
+        ],
+        "pack_governance": {
+            "risk_tier": "normal",
+            "scope": "build_dev",
+            "operator_review_required": True,
+        },
+    }
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Capability Promotion Discipline Plugin",
+            "description": "Stage 17 promotion discipline coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": meta,
+        },
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    plugin_id = str(built_body["plugin_id"])
+
+    blocked = client.get("/plugins/capabilities/packs/promotion/discipline")
+    assert blocked.status_code == 200
+    blocked_body = blocked.json()
+    blocked_pack = next(item for item in blocked_body["packs"] if item["pack_id"] == pack_id)
+    assert blocked_pack["ready"] is False
+    assert "operator_review_decision_missing" in blocked_pack["blockers"]
+
+    _approve_capability_pack_operator_review(
+        client,
+        pack_id=pack_id,
+        pack_version=pack_version,
+    )
+
+    response = client.get("/plugins/capabilities/packs/promotion/discipline")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "plugin.capability_pack.promotion_discipline"
+    assert body["stage"] == "Stage 17 / Capability Economy"
+    assert body["requirements"]["explicit_promotion_rules_required"] is True
+    assert body["requirements"]["mixed_pack_lifecycle_requires_explicit_discipline_readback"] is True
+    assert body["governance"]["read_only"] is True
+    assert body["governance"]["operator_facing"] is True
+    assert body["governance"]["does_not_read_proposal_bodies"] is True
+    assert body["governance"]["does_not_read_receipt_bodies"] is True
+    assert body["governance"]["does_not_write_receipts"] is True
+    assert body["governance"]["does_not_mutate_registry"] is True
+    assert body["governance"]["does_not_promote_capabilities"] is True
+    assert body["governance"]["promotion_authority"] is False
+    assert body["available_proposal_count"] >= 1
+    assert body["available_validation_receipt_count"] >= 1
+    assert body["approved_pack_operator_review_count"] >= 1
+
+    pack = next(item for item in body["packs"] if item["pack_id"] == pack_id)
+    assert pack["ready"] is True
+    assert pack["blockers"] == []
+    assert pack["staged_capability_count"] == 1
+    assert pack["promoted_capability_count"] == 0
+    assert pack["operator_review_approved"] is True
+    assert pack["promotion_rules_ready"] is True
+    assert pack["pack_governance_ready"] is True
+    assert pack["quality_evidence_ready"] is True
+    assert pack["validation_receipts_ready"] is True
+    assert pack["proposal_lineage_ready"] is True
+    assert pack["promotion_receipts_ready"] is True
+    assert pack["lifecycle_mixed"] is False
+    assert all(item["capability"] != plugin_id for item in pack["failing_capabilities_sample"])
+
+
 def test_plugins_capability_pack_metadata_receipt_expands_reviewed_migration_plan_candidate(
     monkeypatch,
     tmp_path: Path,

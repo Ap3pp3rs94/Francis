@@ -56946,6 +56946,60 @@ Remaining truthful gap:
 - Stage 17 still needs broader promotion discipline before it can be called
   complete.
 
+### 2026-06-02 - Stage 17 capability pack promotion discipline is readable
+
+Roadmap area: Stage 17 / Capability Economy, broader promotion discipline and
+capability-library coherence for versioned capability packs.
+
+Material change:
+
+- Added a read-only capability-pack promotion-discipline analyzer for Stage 17.
+- Added `GET /plugins/capabilities/packs/promotion/discipline`.
+- The new route summarizes pack-level readiness across promotion rules,
+  pack governance, tests, docs, proposal lineage, validation receipts, promotion
+  receipts, operator-review decisions, and mixed staged/promoted lifecycle
+  posture.
+- The route does not read proposal bodies, read receipt bodies, approve
+  proposals, promote capabilities, enable capabilities, execute capabilities,
+  mutate the registry, write receipts, or write memory.
+- `README.md` `Latest Progress Snapshot` was intentionally overwritten to show
+  this locally validated promotion-discipline slice while keeping GitHub
+  confirmation pending until the pushed CI and CodeQL runs complete.
+
+Latest validation for Stage 17 capability pack promotion discipline:
+
+- `python -m pytest tests/unit/test_capability_pack_promotion_discipline.py
+  tests/test_api_plugins.py::test_plugins_capability_pack_promotion_discipline_projects_pack_gate
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 4 passed`
+- `python -m mypy
+  src/francis/economy/markets/capability_pack_promotion_discipline.py
+  src/francis/api/routes/plugins.py`
+  Result: `passed`
+- `python -m ruff check
+  src/francis/economy/markets/capability_pack_promotion_discipline.py
+  src/francis/api/routes/plugins.py
+  tests/unit/test_capability_pack_promotion_discipline.py
+  tests/test_api_plugins.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check
+  src/francis/economy/markets/capability_pack_promotion_discipline.py
+  src/francis/api/routes/plugins.py
+  tests/unit/test_capability_pack_promotion_discipline.py
+  tests/test_api_plugins.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+
+Validation risk:
+
+- This slice is locally validated but not yet GitHub-confirmed. The next pushed
+  GitHub CI and CodeQL runs remain the public evidence gate.
+
+Remaining truthful gap:
+
+- Stage 17 still needs GitHub confirmation for this slice and broader
+  capability-library maturity before it can be called complete.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
