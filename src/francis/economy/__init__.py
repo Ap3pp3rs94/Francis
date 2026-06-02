@@ -15,6 +15,7 @@ from .markets.capability_catalog_projection import (
 from .markets.capability_marketplace import CapabilityListing, CapabilityMarketplace
 from .markets.capability_pack_lineage import analyze_capability_pack_lineage
 from .markets.capability_pack_migration_plan import analyze_capability_pack_migration_plan
+from .markets.capability_pack_promotion_receipts import analyze_capability_pack_promotion_receipts
 from .markets.capability_pack_promotion_rules import analyze_capability_pack_promotion_rules
 from .markets.capability_pack_quality_docs import analyze_capability_pack_quality_docs
 from .markets.capability_pack_quality_standards import analyze_capability_pack_quality_standards
@@ -50,6 +51,7 @@ __all__ = [
     "marketplace_from_plugin_catalog",
     "analyze_capability_pack_lineage",
     "analyze_capability_pack_migration_plan",
+    "analyze_capability_pack_promotion_receipts",
     "analyze_capability_pack_promotion_rules",
     "analyze_capability_pack_quality_docs",
     "analyze_capability_pack_quality_standards",

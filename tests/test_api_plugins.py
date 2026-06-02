@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 _PLUGIN_ACTOR = "test.plugins.write"
@@ -28,7 +29,7 @@ def _approve_forge_proposal(client, proposal_id: str) -> dict[str, object]:
     )
     assert approved.status_code == 200
     approved_body = approved.json()
-    assert approved_body["ok"] is True
+    assert approved_body["ok"] is True, approved_body
     assert approved_body["status"] == "approved"
     return approved_body
 
@@ -1102,6 +1103,86 @@ def test_plugins_capability_pack_lineage_projects_read_only_proposal_evidence(
     assert pack["proposal_not_found_count"] == 0
     assert pack["proposal_invalid_count"] == 0
     assert pack["proposal_ids"] == [built_body["proposal_id"]]
+    assert all(item["capability"] != plugin_id for item in pack["failing_capabilities_sample"])
+
+
+def test_plugins_capability_pack_promotion_receipts_projects_read_only_receipt_evidence(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path.parent / "promotion_receipts_data"
+    shutil.rmtree(data_root, ignore_errors=True)
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    meta = {
+        **_forge_promotion_meta("capability_promotion_receipts"),
+        "pack_id": "ops.promotion_receipts",
+        "pack_version": "1.0.0",
+        "pack_name": "Ops Promotion Receipts Pack",
+    }
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Capability Promotion Receipts Plugin",
+            "description": "Stage 17 promotion receipt coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": meta,
+        },
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    plugin_id = str(built_body["plugin_id"])
+    proposal = built_body["proposal"]
+    assert Path(str(proposal["path"])).exists()
+    _approve_forge_proposal(client, str(proposal["proposal_id"]))
+
+    enabled = client.post(
+        "/plugins/enable",
+        json={
+            "id": plugin_id,
+            "reason": "test promotion receipt readback",
+            "actor": _PLUGIN_ACTOR,
+        },
+    )
+    assert enabled.status_code == 200
+    enabled_body = enabled.json()
+    assert enabled_body["ok"] is True
+    assert enabled_body["promotion_status"] == "promoted"
+
+    response = client.get("/plugins/capabilities/packs/promotion/receipts")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "plugin.capability_pack.promotion_receipts"
+    assert body["stage"] == "Stage 17 / Capability Economy"
+    assert body["requirements"]["promotion_receipts_required_for_promoted"] is True
+    assert body["requirements"]["promotion_receipt_paths_must_stay_within_plugin_promotions"] is True
+    assert body["requirements"]["promotion_receipt_bodies_not_read"] is True
+    assert body["requirements"]["promotion_decisions_remain_separate_governed_actions"] is True
+    assert body["governance"]["read_only"] is True
+    assert body["governance"]["does_not_read_receipt_bodies"] is True
+    assert body["governance"]["does_not_write_receipts"] is True
+    assert body["governance"]["does_not_mutate_registry"] is True
+    assert body["governance"]["does_not_promote_capabilities"] is True
+    assert body["governance"]["promotion_authority"] is False
+    assert body["available_promotion_receipt_count"] >= 1
+
+    pack = next(item for item in body["packs"] if item["pack_id"] == "ops.promotion_receipts")
+    assert pack["ready"] is True
+    assert pack["blockers"] == []
+    assert pack["requires_promotion_receipt_count"] == 1
+    assert pack["promotion_receipt_present_count"] == 1
+    assert pack["promotion_receipt_missing_count"] == 0
+    assert pack["promotion_receipt_not_found_count"] == 0
+    assert pack["promotion_receipt_invalid_count"] == 0
+    assert pack["promotion_receipt_ids"] == [enabled_body["promotion_receipt_id"]]
     assert all(item["capability"] != plugin_id for item in pack["failing_capabilities_sample"])
 
 
