@@ -680,6 +680,111 @@ test("PluginBrowserClient lists capability pack promotion discipline", async () 
   }
 });
 
+test("PluginBrowserClient lists capability pack promotion rule remediation", async () => {
+  const requests: string[] = [];
+  const restoreFetch = installFetch(async (url) => {
+    const parsed = new URL(url);
+    requests.push(`${parsed.pathname}${parsed.search}`);
+    return jsonResponse({
+      ok: true,
+      kind: "plugin.capability_pack.promotion_rules.remediation",
+      stage: "Stage 17 / Capability Economy",
+      status: "blocked",
+      pack_total: 1,
+      ready_pack_count: 0,
+      blocked_pack_count: 1,
+      unpacked_entry_count: 0,
+      remediation_pack_count: 1,
+      remediation_queue_count: 1,
+      remediation_queue_truncated: false,
+      missing_rule_pack_count: 1,
+      missing_governance_pack_count: 1,
+      missing_quality_pack_count: 1,
+      missing_receipt_pack_count: 1,
+      canonical_promotion_rules: [
+        "metadata_receipt_before_promotion",
+        "quality_standards_before_promotion",
+        "operator_review_before_promotion",
+      ],
+      first_action: "declare_canonical_promotion_rules",
+      remediation_queue: [
+        {
+          pack_id: "ops.rules",
+          pack_version: "1.0.0",
+          pack_name: "Ops Rules",
+          status: "blocked",
+          ready: false,
+          capability_count: 2,
+          blockers: ["canonical_promotion_rules_missing"],
+          missing_promotion_rules: ["quality_standards_before_promotion", "operator_review_before_promotion"],
+          missing_governance_fields: ["operator_review_required"],
+          missing_quality_evidence: ["docs"],
+          missing_receipt_evidence: ["validation_receipt"],
+          first_action: "declare_canonical_promotion_rules",
+          promotion_rules: ["metadata_receipt_before_promotion"],
+          failing_capabilities_sample: [
+            {
+              capability: "generated.rules",
+              version: "0.1.0",
+              source: "generated",
+              status: "staged",
+              risk_tier: "normal",
+              gaps: ["promotion_rules_missing"],
+            },
+          ],
+        },
+      ],
+      requirements: {
+        read_only_remediation_queue: true,
+        remediation_does_not_write_registry: true,
+      },
+      governance: {
+        read_only: true,
+        operator_facing: true,
+        promotion_authority: false,
+        execution_authority: false,
+        memory_write: false,
+      },
+      next_smallest_truthful_gap: "stage17_capability_pack_promotion_rule_backlog_execution",
+    });
+  });
+
+  try {
+    const client = new PluginBrowserClient("http://127.0.0.1:8000", { retry: { retries: 0 } });
+
+    const remediation = await client.listCapabilityPackPromotionRuleRemediation();
+
+    assert.deepEqual(requests, ["/plugins/capabilities/packs/promotion/rules/remediation"]);
+    assert.equal(remediation.status, "blocked");
+    assert.equal(remediation.remediation_queue_count, 1);
+    assert.equal(remediation.missing_rule_pack_count, 1);
+    assert.equal(remediation.governance?.promotion_authority, false);
+    assert.equal(remediation.governance?.memory_write, false);
+    assert.equal(remediation.requirements?.read_only_remediation_queue, true);
+    assert.equal(remediation.first_action, "declare_canonical_promotion_rules");
+    assert.deepEqual(remediation.canonical_promotion_rules, [
+      "metadata_receipt_before_promotion",
+      "quality_standards_before_promotion",
+      "operator_review_before_promotion",
+    ]);
+    assert.equal(remediation.remediation_queue[0]?.pack_id, "ops.rules");
+    assert.deepEqual(remediation.remediation_queue[0]?.missing_promotion_rules, [
+      "quality_standards_before_promotion",
+      "operator_review_before_promotion",
+    ]);
+    assert.equal(
+      remediation.remediation_queue[0]?.failing_capabilities_sample?.[0]?.capability,
+      "generated.rules",
+    );
+    assert.equal(
+      remediation.next_smallest_truthful_gap,
+      "stage17_capability_pack_promotion_rule_backlog_execution",
+    );
+  } finally {
+    restoreFetch();
+  }
+});
+
 test("PluginBrowserClient writes capability pack operator review decision receipts", async () => {
   let captured: Record<string, unknown> = {};
   const restoreFetch = installFetch(async (url, init) => {

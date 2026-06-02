@@ -3,9 +3,30 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-__all__ = ["analyze_capability_pack_promotion_rules"]
+__all__ = [
+    "analyze_capability_pack_promotion_rule_remediation",
+    "analyze_capability_pack_promotion_rules",
+]
 
 _STAGE17_CAPABILITY_ECONOMY_STAGE = "Stage 17 / Capability Economy"
+_CANONICAL_PROMOTION_RULES = [
+    "metadata_receipt_before_promotion",
+    "quality_standards_before_promotion",
+    "operator_review_before_promotion",
+]
+_REMEDIATION_QUEUE_LIMIT = 50
+_REMEDIATION_ACTION_BY_BLOCKER = {
+    "pack_version_missing": "record_versioned_pack_metadata",
+    "pack_metadata_receipt_missing": "write_pack_metadata_receipt",
+    "promotion_rules_missing": "declare_canonical_promotion_rules",
+    "canonical_promotion_rules_missing": "declare_canonical_promotion_rules",
+    "pack_governance_missing": "attach_pack_governance",
+    "tests_missing": "add_quality_tests",
+    "docs_missing": "add_quality_docs",
+    "validation_receipt_missing": "write_validation_receipt",
+    "proposal_id_missing": "link_forge_proposal",
+    "promotion_receipt_id_missing": "link_promotion_receipt",
+}
 
 
 def analyze_capability_pack_promotion_rules(entries: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
@@ -48,6 +69,63 @@ def analyze_capability_pack_promotion_rules(entries: Iterable[Mapping[str, Any]]
     }
 
 
+def analyze_capability_pack_promotion_rule_remediation(entries: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
+    normalized = [_normalize_entry(entry) for entry in entries]
+    normalized = [entry for entry in normalized if entry["capability"]]
+    unpacked = [entry for entry in normalized if not entry["pack_id"]]
+    packed = [entry for entry in normalized if entry["pack_id"]]
+    packs = _pack_rules(packed)
+    ready_pack_count = sum(1 for pack in packs if pack["ready"] and not _missing_canonical_promotion_rules(pack))
+    remediation_queue = [item for pack in packs if (item := _promotion_rule_remediation_item(pack)) is not None]
+    remediation_queue = sorted(remediation_queue, key=_remediation_sort_key)
+    visible_queue = remediation_queue[:_REMEDIATION_QUEUE_LIMIT]
+    missing_rule_pack_count = sum(1 for item in remediation_queue if item["missing_promotion_rules"])
+    return {
+        "stage": _STAGE17_CAPABILITY_ECONOMY_STAGE,
+        "status": "blocked" if unpacked or remediation_queue else ("ready" if packs else "empty"),
+        "total_entries": len(normalized),
+        "pack_total": len(packs),
+        "ready_pack_count": ready_pack_count,
+        "blocked_pack_count": len(packs) - ready_pack_count,
+        "unpacked_entry_count": len(unpacked),
+        "remediation_pack_count": len(remediation_queue),
+        "remediation_queue_count": len(remediation_queue),
+        "remediation_queue_truncated": len(remediation_queue) > len(visible_queue),
+        "missing_rule_pack_count": missing_rule_pack_count,
+        "missing_governance_pack_count": sum(1 for item in remediation_queue if item["missing_governance_fields"]),
+        "missing_quality_pack_count": sum(1 for item in remediation_queue if item["missing_quality_evidence"]),
+        "missing_receipt_pack_count": sum(1 for item in remediation_queue if item["missing_receipt_evidence"]),
+        "canonical_promotion_rules": list(_CANONICAL_PROMOTION_RULES),
+        "first_action": visible_queue[0]["first_action"] if visible_queue else "",
+        "remediation_queue": visible_queue,
+        "requirements": {
+            "read_only_remediation_queue": True,
+            "canonical_rules_declared_before_promotion": True,
+            "metadata_receipt_rule_required": True,
+            "quality_rule_required": True,
+            "operator_review_rule_required": True,
+            "remediation_does_not_write_registry": True,
+        },
+        "governance": {
+            "read_only": True,
+            "operator_facing": True,
+            "does_not_write_receipts": True,
+            "does_not_mutate_registry": True,
+            "does_not_promote_capabilities": True,
+            "does_not_enable_capabilities": True,
+            "does_not_execute_capabilities": True,
+            "promotion_authority": False,
+            "execution_authority": False,
+            "memory_write": False,
+        },
+        "next_smallest_truthful_gap": _remediation_next_gap(
+            remediation_queue=remediation_queue,
+            unpacked=unpacked,
+            packs=packs,
+        ),
+    }
+
+
 def _pack_rules(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     grouped: dict[tuple[str, str], list[dict[str, Any]]] = {}
     for entry in entries:
@@ -85,6 +163,82 @@ def _pack_rules(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
             }
         )
     return packs
+
+
+def _promotion_rule_remediation_item(pack: Mapping[str, Any]) -> dict[str, Any] | None:
+    missing_rules = _missing_canonical_promotion_rules(pack)
+    blockers = _remediation_blockers(pack, missing_rules=missing_rules)
+    if not blockers:
+        return None
+    missing_quality = [
+        label
+        for blocker, label in (
+            ("tests_missing", "tests"),
+            ("docs_missing", "docs"),
+            ("validation_receipt_missing", "validation_receipt"),
+            ("proposal_id_missing", "forge_proposal"),
+            ("promotion_receipt_id_missing", "promotion_receipt"),
+        )
+        if blocker in blockers
+    ]
+    missing_receipts = [
+        label
+        for blocker, label in (
+            ("pack_metadata_receipt_missing", "pack_metadata_receipt"),
+            ("validation_receipt_missing", "validation_receipt"),
+            ("promotion_receipt_id_missing", "promotion_receipt"),
+        )
+        if blocker in blockers
+    ]
+    missing_governance = []
+    if not bool(pack.get("governance_travels")):
+        missing_governance.append("pack_governance")
+    if not bool(pack.get("operator_review_declared")):
+        missing_governance.append("operator_review_required")
+    return {
+        "pack_id": str(pack.get("pack_id") or ""),
+        "pack_version": str(pack.get("pack_version") or ""),
+        "pack_name": str(pack.get("pack_name") or ""),
+        "status": str(pack.get("status") or "blocked"),
+        "ready": False,
+        "capability_count": int(pack.get("capability_count") or 0),
+        "blockers": blockers,
+        "missing_promotion_rules": missing_rules,
+        "missing_governance_fields": missing_governance,
+        "missing_quality_evidence": missing_quality,
+        "missing_receipt_evidence": missing_receipts,
+        "first_action": _first_remediation_action(blockers),
+        "promotion_rules": list(pack.get("promotion_rules") or []),
+        "failing_capabilities_sample": list(pack.get("failing_capabilities_sample") or [])[:25],
+    }
+
+
+def _missing_canonical_promotion_rules(pack: Mapping[str, Any]) -> list[str]:
+    observed = {str(rule).strip() for rule in list(pack.get("promotion_rules") or []) if str(rule).strip()}
+    return [rule for rule in _CANONICAL_PROMOTION_RULES if rule not in observed]
+
+
+def _remediation_blockers(pack: Mapping[str, Any], *, missing_rules: list[str]) -> list[str]:
+    blockers = list(pack.get("blockers") or [])
+    if missing_rules and "promotion_rules_missing" not in blockers:
+        blockers.append("canonical_promotion_rules_missing")
+    return blockers
+
+
+def _first_remediation_action(blockers: list[str]) -> str:
+    for blocker in _REMEDIATION_ACTION_BY_BLOCKER:
+        if blocker in blockers:
+            return _REMEDIATION_ACTION_BY_BLOCKER[blocker]
+    return "review_capability_pack"
+
+
+def _remediation_sort_key(item: Mapping[str, Any]) -> tuple[int, str, str]:
+    blockers = list(item.get("blockers") or [])
+    priority = min(
+        (index for index, blocker in enumerate(_REMEDIATION_ACTION_BY_BLOCKER) if blocker in blockers),
+        default=len(_REMEDIATION_ACTION_BY_BLOCKER),
+    )
+    return (priority, str(item.get("pack_id") or ""), str(item.get("pack_version") or ""))
 
 
 def _promotion_rule_blockers(entries: list[dict[str, Any]]) -> list[str]:
@@ -230,6 +384,21 @@ def _next_gap(*, packs: list[dict[str, Any]], unpacked: list[dict[str, Any]]) ->
     ):
         if any(blocker in pack["blockers"] for pack in packs):
             return gap
+    if packs:
+        return "stage17_capability_pack_operator_surface"
+    return "stage17_capability_pack_promotion_rules"
+
+
+def _remediation_next_gap(
+    *,
+    remediation_queue: list[dict[str, Any]],
+    unpacked: list[dict[str, Any]],
+    packs: list[dict[str, Any]],
+) -> str:
+    if unpacked:
+        return "stage17_versioned_capability_pack_metadata"
+    if remediation_queue:
+        return "stage17_capability_pack_promotion_rule_backlog_execution"
     if packs:
         return "stage17_capability_pack_operator_surface"
     return "stage17_capability_pack_promotion_rules"

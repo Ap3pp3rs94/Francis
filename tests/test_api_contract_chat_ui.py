@@ -152,6 +152,7 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("GET", "/plugins/capabilities/packs/operator/review/decisions"),
         ("POST", "/plugins/capabilities/packs/operator/review/decisions"),
         ("GET", "/plugins/capabilities/packs/promotion/rules"),
+        ("GET", "/plugins/capabilities/packs/promotion/rules/remediation"),
         ("GET", "/plugins/capabilities/packs/metadata/receipts"),
         ("POST", "/plugins/capabilities/packs/metadata/receipts"),
         ("POST", "/plugins/capabilities/packs/metadata/receipts/bulk-from-plan"),

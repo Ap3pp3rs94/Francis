@@ -64,6 +64,8 @@ import type {
   PluginCapabilityCatalogSummary,
   PluginCapabilityPackPromotionDisciplinePack,
   PluginCapabilityPackPromotionDisciplineResponse,
+  PluginCapabilityPackPromotionRuleRemediationItem,
+  PluginCapabilityPackPromotionRuleRemediationResponse,
   PluginCapabilityPackOperatorReviewDecision,
   PluginCapabilityPackOperatorReviewDecisionAction,
   PluginCapabilityPackOperatorReviewDecisionResponse,
@@ -18189,6 +18191,8 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
   );
   const [capabilityPackPromotionDiscipline, setCapabilityPackPromotionDiscipline] =
     useState<PluginCapabilityPackPromotionDisciplineResponse | null>(null);
+  const [capabilityPackPromotionRuleRemediation, setCapabilityPackPromotionRuleRemediation] =
+    useState<PluginCapabilityPackPromotionRuleRemediationResponse | null>(null);
   const [capabilityPackOperatorReview, setCapabilityPackOperatorReview] =
     useState<PluginCapabilityPackOperatorReviewResponse | null>(null);
   const [capabilityPackOperatorReviewDecisions, setCapabilityPackOperatorReviewDecisions] = useState<
@@ -18257,6 +18261,30 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
     }
     return packs.find((pack) => !pack.ready) ?? packs[0] ?? null;
   }, [capabilityPackPromotionDiscipline?.packs, selectedCapabilityCatalogEntry?.metadata, selectedPluginId]);
+  const selectedCapabilityPackRuleRemediation =
+    useMemo((): PluginCapabilityPackPromotionRuleRemediationItem | null => {
+      const packs = capabilityPackPromotionRuleRemediation?.remediation_queue ?? [];
+      if (!packs.length) return null;
+      const selectedPackId = safeString(selectedCapabilityCatalogEntry?.metadata?.pack_id).trim();
+      const selectedPackVersion = safeString(selectedCapabilityCatalogEntry?.metadata?.pack_version).trim();
+      if (selectedPackId && selectedPackVersion) {
+        const linked = packs.find(
+          (pack) => pack.pack_id === selectedPackId && pack.pack_version === selectedPackVersion,
+        );
+        if (linked) return linked;
+      }
+      if (selectedPluginId) {
+        const linked = packs.find((pack) =>
+          (pack.failing_capabilities_sample ?? []).some((item) => item.capability === selectedPluginId),
+        );
+        if (linked) return linked;
+      }
+      return packs[0] ?? null;
+    }, [
+      capabilityPackPromotionRuleRemediation?.remediation_queue,
+      selectedCapabilityCatalogEntry?.metadata,
+      selectedPluginId,
+    ]);
   const selectedCapabilityPackReview = useMemo((): PluginCapabilityPackOperatorReviewPack | null => {
     const packs = capabilityPackOperatorReview?.packs ?? [];
     if (!packs.length) return null;
@@ -18319,6 +18347,19 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
       reviews: capabilityPackPromotionDiscipline?.approved_pack_operator_review_count ?? 0,
     }),
     [capabilityPackPromotionDiscipline],
+  );
+  const capabilityPackRuleRemediationCounts = useMemo(
+    () => ({
+      total:
+        capabilityPackPromotionRuleRemediation?.remediation_queue_count ??
+        capabilityPackPromotionRuleRemediation?.remediation_queue.length ??
+        0,
+      rules: capabilityPackPromotionRuleRemediation?.missing_rule_pack_count ?? 0,
+      governance: capabilityPackPromotionRuleRemediation?.missing_governance_pack_count ?? 0,
+      quality: capabilityPackPromotionRuleRemediation?.missing_quality_pack_count ?? 0,
+      receipts: capabilityPackPromotionRuleRemediation?.missing_receipt_pack_count ?? 0,
+    }),
+    [capabilityPackPromotionRuleRemediation],
   );
   const promotionReadinessCounts = useMemo(() => {
     const ready = promotionReadiness.filter((item) => item.ready || item.status === "ready").length;
@@ -18399,6 +18440,7 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
         res,
         capabilityCatalogRes,
         capabilityPackPromotionDisciplineRes,
+        capabilityPackPromotionRuleRemediationRes,
         capabilityPackReviewRes,
         capabilityPackDecisionRes,
         readiness,
@@ -18409,6 +18451,7 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
         client.list({ limit: 200 }),
         client.listCapabilityCatalog({ limit: 5000 }),
         client.listCapabilityPackPromotionDiscipline(),
+        client.listCapabilityPackPromotionRuleRemediation(),
         client.listCapabilityPackOperatorReview(),
         client.listCapabilityPackOperatorReviewDecisions({ limit: 200 }),
         client.listPromotionReadiness({ limit: 200 }),
@@ -18422,6 +18465,7 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
       setCapabilityCatalogSummary(capabilityCatalogRes.summary ?? null);
       setCapabilityCatalogCoherence(capabilityCatalogRes.coherence ?? null);
       setCapabilityPackPromotionDiscipline(capabilityPackPromotionDisciplineRes);
+      setCapabilityPackPromotionRuleRemediation(capabilityPackPromotionRuleRemediationRes);
       setCapabilityPackOperatorReview(capabilityPackReviewRes);
       setCapabilityPackOperatorReviewDecisions(capabilityPackDecisionRes.items ?? []);
       setPromotionReadiness(readiness.items ?? []);
@@ -18950,6 +18994,112 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
         ) : (
           <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
             Selected plugin has no capability catalog entry returned by the backend.
+          </div>
+        )}
+      </div>
+
+      <div
+        style={{
+          marginTop: 10,
+          border: `1px solid ${THEME.panelBorder}`,
+          borderRadius: 8,
+          padding: 10,
+          background: "#101818",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>Promotion Rule Remediation</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <span style={badgeStyle("queue")}>queue {capabilityPackRuleRemediationCounts.total}</span>
+            <span style={badgeStyle(capabilityPackRuleRemediationCounts.rules > 0 ? "blocked" : "clear")}>
+              rules {capabilityPackRuleRemediationCounts.rules}
+            </span>
+            <span style={badgeStyle(capabilityPackRuleRemediationCounts.governance > 0 ? "blocked" : "clear")}>
+              governance {capabilityPackRuleRemediationCounts.governance}
+            </span>
+            <span style={badgeStyle(capabilityPackRuleRemediationCounts.quality > 0 ? "blocked" : "clear")}>
+              quality {capabilityPackRuleRemediationCounts.quality}
+            </span>
+            <span style={badgeStyle(capabilityPackRuleRemediationCounts.receipts > 0 ? "blocked" : "clear")}>
+              receipts {capabilityPackRuleRemediationCounts.receipts}
+            </span>
+          </div>
+        </div>
+
+        {selectedCapabilityPackRuleRemediation ? (
+          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <span style={badgeStyle(selectedCapabilityPackRuleRemediation.status || "blocked")}>
+                {selectedCapabilityPackRuleRemediation.status || "blocked"}
+              </span>
+              {selectedCapabilityPackRuleRemediation.first_action ? (
+                <span style={badgeStyle(selectedCapabilityPackRuleRemediation.first_action)}>
+                  {selectedCapabilityPackRuleRemediation.first_action}
+                </span>
+              ) : null}
+              {capabilityPackPromotionRuleRemediation?.next_smallest_truthful_gap ? (
+                <span style={badgeStyle("gap")}>
+                  {capabilityPackPromotionRuleRemediation.next_smallest_truthful_gap}
+                </span>
+              ) : null}
+            </div>
+            <div style={{ marginTop: 6 }}>
+              pack <code>{selectedCapabilityPackRuleRemediation.pack_id}</code> / version{" "}
+              <code>{selectedCapabilityPackRuleRemediation.pack_version}</code>
+              {selectedCapabilityPackRuleRemediation.pack_name ? (
+                <>
+                  {" "}
+                  / name <code>{selectedCapabilityPackRuleRemediation.pack_name}</code>
+                </>
+              ) : null}
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+              <span style={badgeStyle("capabilities")}>
+                capabilities {selectedCapabilityPackRuleRemediation.capability_count ?? 0}
+              </span>
+              {(selectedCapabilityPackRuleRemediation.missing_promotion_rules ?? []).slice(0, 4).map((rule) => (
+                <span key={`missing-rule-${rule}`} style={badgeStyle("blocked")}>
+                  rule {rule}
+                </span>
+              ))}
+              {(selectedCapabilityPackRuleRemediation.missing_governance_fields ?? []).slice(0, 3).map((field) => (
+                <span key={`missing-governance-${field}`} style={badgeStyle("governance")}>
+                  governance {field}
+                </span>
+              ))}
+            </div>
+            {(selectedCapabilityPackRuleRemediation.missing_quality_evidence?.length ??
+              selectedCapabilityPackRuleRemediation.missing_receipt_evidence?.length) ? (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+                {(selectedCapabilityPackRuleRemediation.missing_quality_evidence ?? []).slice(0, 4).map((item) => (
+                  <span key={`missing-quality-${item}`} style={badgeStyle("quality")}>
+                    quality {item}
+                  </span>
+                ))}
+                {(selectedCapabilityPackRuleRemediation.missing_receipt_evidence ?? []).slice(0, 4).map((item) => (
+                  <span key={`missing-receipt-${item}`} style={badgeStyle("receipt")}>
+                    receipt {item}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            {selectedCapabilityPackRuleRemediation.blockers?.length ? (
+              <div style={{ marginTop: 6 }}>
+                blockers <code>{selectedCapabilityPackRuleRemediation.blockers.join(", ")}</code>
+              </div>
+            ) : (
+              <div style={{ marginTop: 6 }}>No promotion-rule remediation blockers reported.</div>
+            )}
+            {capabilityPackPromotionRuleRemediation?.canonical_promotion_rules?.length ? (
+              <div style={{ marginTop: 6 }}>
+                canonical rules{" "}
+                <code>{capabilityPackPromotionRuleRemediation.canonical_promotion_rules.join(", ")}</code>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+            No promotion-rule remediation queue returned by the backend.
           </div>
         )}
       </div>

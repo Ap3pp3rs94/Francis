@@ -686,6 +686,48 @@ export type PluginCapabilityPackPromotionDisciplineResponse = {
   catalog?: Record<string, unknown>;
 };
 
+export type PluginCapabilityPackPromotionRuleRemediationItem = {
+  pack_id: string;
+  pack_version: string;
+  pack_name?: string;
+  status?: string;
+  ready?: boolean;
+  capability_count?: number;
+  blockers?: string[];
+  missing_promotion_rules?: string[];
+  missing_governance_fields?: string[];
+  missing_quality_evidence?: string[];
+  missing_receipt_evidence?: string[];
+  first_action?: string;
+  promotion_rules?: string[];
+  failing_capabilities_sample?: PluginCapabilityPackReviewItem[];
+};
+
+export type PluginCapabilityPackPromotionRuleRemediationResponse = {
+  ok: boolean;
+  kind?: string;
+  stage?: string;
+  status?: string;
+  pack_total?: number;
+  ready_pack_count?: number;
+  blocked_pack_count?: number;
+  unpacked_entry_count?: number;
+  remediation_pack_count?: number;
+  remediation_queue_count?: number;
+  remediation_queue_truncated?: boolean;
+  missing_rule_pack_count?: number;
+  missing_governance_pack_count?: number;
+  missing_quality_pack_count?: number;
+  missing_receipt_pack_count?: number;
+  canonical_promotion_rules?: string[];
+  first_action?: string;
+  remediation_queue: PluginCapabilityPackPromotionRuleRemediationItem[];
+  requirements?: Record<string, boolean>;
+  governance?: Record<string, unknown>;
+  next_smallest_truthful_gap?: string;
+  catalog?: Record<string, unknown>;
+};
+
 export type PluginCapabilityPackOperatorReviewDecision = {
   id: string;
   receipt_id: string;
@@ -1573,6 +1615,46 @@ function parseCapabilityPackPromotionDisciplinePack(raw: unknown): PluginCapabil
   return pack;
 }
 
+function parseCapabilityPackPromotionRuleRemediationItem(
+  raw: unknown,
+): PluginCapabilityPackPromotionRuleRemediationItem | null {
+  if (!isRecord(raw)) return null;
+
+  const packId = safeString(raw.pack_id, safeString(raw.packId, "")).trim();
+  const packVersion = safeString(raw.pack_version, safeString(raw.packVersion, "")).trim();
+  if (!packId || !packVersion) return null;
+
+  const item: PluginCapabilityPackPromotionRuleRemediationItem = {
+    pack_id: packId,
+    pack_version: packVersion,
+  };
+  const packName = safeString(raw.pack_name, safeString(raw.packName, ""));
+  const status = safeString(raw.status, "");
+  const blockers = safeStringArray(raw.blockers);
+  const missingPromotionRules = safeStringArray(raw.missing_promotion_rules);
+  const missingGovernanceFields = safeStringArray(raw.missing_governance_fields);
+  const missingQualityEvidence = safeStringArray(raw.missing_quality_evidence);
+  const missingReceiptEvidence = safeStringArray(raw.missing_receipt_evidence);
+  const firstAction = safeString(raw.first_action, safeString(raw.firstAction, ""));
+  const promotionRules = safeStringArray(raw.promotion_rules);
+  const failingItems = safeUnknownArray(raw.failing_capabilities_sample)
+    ?.map(parseCapabilityPackReviewItem)
+    .filter((entry): entry is PluginCapabilityPackReviewItem => entry !== null);
+  if (packName) item.pack_name = packName;
+  if (status) item.status = status;
+  if (typeof raw.ready === "boolean") item.ready = raw.ready;
+  if (Number.isFinite(safeNumber(raw.capability_count, NaN))) item.capability_count = safeNumber(raw.capability_count);
+  if (blockers) item.blockers = blockers;
+  if (missingPromotionRules) item.missing_promotion_rules = missingPromotionRules;
+  if (missingGovernanceFields) item.missing_governance_fields = missingGovernanceFields;
+  if (missingQualityEvidence) item.missing_quality_evidence = missingQualityEvidence;
+  if (missingReceiptEvidence) item.missing_receipt_evidence = missingReceiptEvidence;
+  if (firstAction) item.first_action = firstAction;
+  if (promotionRules) item.promotion_rules = promotionRules;
+  if (failingItems) item.failing_capabilities_sample = failingItems;
+  return item;
+}
+
 function parseCapabilityPackOperatorReviewDecision(raw: unknown): PluginCapabilityPackOperatorReviewDecision | null {
   if (!isRecord(raw)) return null;
 
@@ -1699,6 +1781,7 @@ export type PluginBrowserEndpoints = {
   get: (id: string) => string;
   capabilityCatalog: (q?: PluginCapabilityCatalogParams) => string;
   capabilityPackPromotionDiscipline: () => string;
+  capabilityPackPromotionRuleRemediation: () => string;
   capabilityPackOperatorReview: () => string;
   capabilityPackOperatorReviewDecisions: (q?: PluginCapabilityPackOperatorReviewDecisionListParams) => string;
   capabilityPackOperatorReviewDecision: () => string;
@@ -1753,6 +1836,7 @@ export function defaultPluginBrowserEndpoints(): PluginBrowserEndpoints {
         source: q?.source,
       })}`,
     capabilityPackPromotionDiscipline: () => "/plugins/capabilities/packs/promotion/discipline",
+    capabilityPackPromotionRuleRemediation: () => "/plugins/capabilities/packs/promotion/rules/remediation",
     capabilityPackOperatorReview: () => "/plugins/capabilities/packs/operator/review",
     capabilityPackOperatorReviewDecisions: (q) =>
       `/plugins/capabilities/packs/operator/review/decisions${encodeQuery({
@@ -2227,6 +2311,62 @@ export class PluginBrowserClient {
         0,
       ),
       packs,
+      requirements: isRecord((json as Record<string, unknown>).requirements)
+        ? Object.fromEntries(
+            Object.entries((json as Record<string, unknown>).requirements as Record<string, unknown>)
+              .filter(([, value]) => typeof value === "boolean")
+              .map(([key, value]) => [key, Boolean(value)]),
+          )
+        : undefined,
+      governance: isRecord((json as Record<string, unknown>).governance)
+        ? ((json as Record<string, unknown>).governance as Record<string, unknown>)
+        : undefined,
+      next_smallest_truthful_gap:
+        safeString((json as Record<string, unknown>).next_smallest_truthful_gap, "") || undefined,
+      catalog: isRecord((json as Record<string, unknown>).catalog)
+        ? ((json as Record<string, unknown>).catalog as Record<string, unknown>)
+        : undefined,
+    };
+  }
+
+  /**
+   * List read-only capability-pack promotion rule remediation backlog.
+   */
+  async listCapabilityPackPromotionRuleRemediation(
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<PluginCapabilityPackPromotionRuleRemediationResponse> {
+    const url = this.url(this.endpoints.capabilityPackPromotionRuleRemediation());
+    const json = await this.fetchJson(url, { method: "GET", signal: opts?.signal, timeoutMs: opts?.timeoutMs });
+    if (!isRecord(json)) return { ok: false, remediation_queue: [] };
+
+    const raw = Array.isArray((json as Record<string, unknown>).remediation_queue)
+      ? ((json as Record<string, unknown>).remediation_queue as unknown[])
+      : [];
+    const remediationQueue = raw
+      .map(parseCapabilityPackPromotionRuleRemediationItem)
+      .filter((item): item is PluginCapabilityPackPromotionRuleRemediationItem => item !== null);
+    return {
+      ok: Boolean((json as Record<string, unknown>).ok ?? false),
+      kind: safeString((json as Record<string, unknown>).kind, "") || undefined,
+      stage: safeString((json as Record<string, unknown>).stage, "") || undefined,
+      status: safeString((json as Record<string, unknown>).status, "") || undefined,
+      pack_total: safeNumber((json as Record<string, unknown>).pack_total, 0),
+      ready_pack_count: safeNumber((json as Record<string, unknown>).ready_pack_count, 0),
+      blocked_pack_count: safeNumber((json as Record<string, unknown>).blocked_pack_count, 0),
+      unpacked_entry_count: safeNumber((json as Record<string, unknown>).unpacked_entry_count, 0),
+      remediation_pack_count: safeNumber((json as Record<string, unknown>).remediation_pack_count, remediationQueue.length),
+      remediation_queue_count: safeNumber(
+        (json as Record<string, unknown>).remediation_queue_count,
+        remediationQueue.length,
+      ),
+      remediation_queue_truncated: Boolean((json as Record<string, unknown>).remediation_queue_truncated ?? false),
+      missing_rule_pack_count: safeNumber((json as Record<string, unknown>).missing_rule_pack_count, 0),
+      missing_governance_pack_count: safeNumber((json as Record<string, unknown>).missing_governance_pack_count, 0),
+      missing_quality_pack_count: safeNumber((json as Record<string, unknown>).missing_quality_pack_count, 0),
+      missing_receipt_pack_count: safeNumber((json as Record<string, unknown>).missing_receipt_pack_count, 0),
+      canonical_promotion_rules: safeStringArray((json as Record<string, unknown>).canonical_promotion_rules),
+      first_action: safeString((json as Record<string, unknown>).first_action, "") || undefined,
+      remediation_queue: remediationQueue,
       requirements: isRecord((json as Record<string, unknown>).requirements)
         ? Object.fromEntries(
             Object.entries((json as Record<string, unknown>).requirements as Record<string, unknown>)

@@ -1280,6 +1280,70 @@ def test_plugins_capability_pack_promotion_rules_project_governed_rule_readiness
     assert all(item["capability"] != plugin_id for item in pack["failing_capabilities_sample"])
 
 
+def test_plugins_capability_pack_promotion_rule_remediation_projects_read_only_backlog(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    meta = {
+        **_forge_promotion_meta("capability_promotion_rule_remediation"),
+        "pack_id": "ops.rule_remediation",
+        "pack_version": "1.0.0",
+        "pack_name": "Ops Rule Remediation Pack",
+        "promotion_rules": ["metadata_receipt_before_promotion"],
+    }
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Capability Rule Remediation Plugin",
+            "description": "Stage 17 promotion rule remediation coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": meta,
+        },
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+
+    response = client.get("/plugins/capabilities/packs/promotion/rules/remediation")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "plugin.capability_pack.promotion_rules.remediation"
+    assert body["stage"] == "Stage 17 / Capability Economy"
+    assert body["status"] == "blocked"
+    assert body["requirements"]["read_only_remediation_queue"] is True
+    assert body["requirements"]["canonical_rules_declared_before_promotion"] is True
+    assert body["requirements"]["remediation_does_not_write_registry"] is True
+    assert body["governance"]["read_only"] is True
+    assert body["governance"]["operator_facing"] is True
+    assert body["governance"]["does_not_write_receipts"] is True
+    assert body["governance"]["does_not_mutate_registry"] is True
+    assert body["governance"]["does_not_promote_capabilities"] is True
+    assert body["governance"]["promotion_authority"] is False
+    assert body["governance"]["execution_authority"] is False
+    assert body["governance"]["memory_write"] is False
+
+    item = next(entry for entry in body["remediation_queue"] if entry["pack_id"] == "ops.rule_remediation")
+    assert item["first_action"] == "declare_canonical_promotion_rules"
+    assert item["missing_promotion_rules"] == [
+        "quality_standards_before_promotion",
+        "operator_review_before_promotion",
+    ]
+    assert "operator_review_required" in item["missing_governance_fields"]
+    assert "canonical_promotion_rules_missing" in item["blockers"]
+    assert item["failing_capabilities_sample"][0]["gaps"] == ["pack_governance_missing"]
+    assert body["next_smallest_truthful_gap"] == "stage17_capability_pack_promotion_rule_backlog_execution"
+
+
 def test_plugins_capability_pack_operator_review_projects_read_only_review_queue(
     monkeypatch,
     tmp_path: Path,

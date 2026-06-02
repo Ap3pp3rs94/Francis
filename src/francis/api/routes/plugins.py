@@ -25,7 +25,10 @@ from francis.economy.markets.capability_pack_migration_plan import analyze_capab
 from francis.economy.markets.capability_pack_operator_review import analyze_capability_pack_operator_review
 from francis.economy.markets.capability_pack_promotion_discipline import analyze_capability_pack_promotion_discipline
 from francis.economy.markets.capability_pack_promotion_receipts import analyze_capability_pack_promotion_receipts
-from francis.economy.markets.capability_pack_promotion_rules import analyze_capability_pack_promotion_rules
+from francis.economy.markets.capability_pack_promotion_rules import (
+    analyze_capability_pack_promotion_rule_remediation,
+    analyze_capability_pack_promotion_rules,
+)
 from francis.economy.markets.capability_pack_quality_docs import analyze_capability_pack_quality_docs
 from francis.economy.markets.capability_pack_quality_standards import analyze_capability_pack_quality_standards
 from francis.economy.markets.capability_pack_quality_tests import analyze_capability_pack_quality_tests
@@ -3312,6 +3315,33 @@ def capability_pack_promotion_rules() -> dict[str, object]:
         }
     except Exception as exc:
         return {"ok": False, "kind": "plugin.capability_pack.promotion_rules", "error": api_error_message(exc)}
+
+
+@router.get("/capabilities/packs/promotion/rules/remediation")
+def capability_pack_promotion_rule_remediation() -> dict[str, object]:
+    try:
+        registry = _load_registry()
+        synced = _sync_generated_plugins(registry)
+        catalog = _save_registry_and_catalog(registry) if synced else _compile_runtime_catalog(registry)
+        runtime_catalog = _read_runtime_catalog_payload(catalog)
+        marketplace = marketplace_from_plugin_catalog(runtime_catalog)
+        remediation = analyze_capability_pack_promotion_rule_remediation(marketplace.catalog())
+        return {
+            "ok": True,
+            "kind": "plugin.capability_pack.promotion_rules.remediation",
+            **remediation,
+            "catalog": {
+                "path": _safe_str(catalog.get("path")).strip(),
+                "total_plugins": int(runtime_catalog.get("total_plugins") or catalog.get("total_plugins") or 0),
+                "total_tools": int(runtime_catalog.get("total_tools") or catalog.get("total_tools") or 0),
+            },
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "kind": "plugin.capability_pack.promotion_rules.remediation",
+            "error": api_error_message(exc),
+        }
 
 
 def _record_capability_pack_metadata_receipt_unchecked(
