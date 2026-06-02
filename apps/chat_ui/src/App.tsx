@@ -62,6 +62,11 @@ import type {
   PluginCapabilityCatalogCoherence,
   PluginCapabilityCatalogEntry,
   PluginCapabilityCatalogSummary,
+  PluginCapabilityPackOperatorReviewDecision,
+  PluginCapabilityPackOperatorReviewDecisionAction,
+  PluginCapabilityPackOperatorReviewDecisionResponse,
+  PluginCapabilityPackOperatorReviewPack,
+  PluginCapabilityPackOperatorReviewResponse,
   PluginForgePromotion,
   PluginForgeProposal,
   PluginForgeProposalDecisionAction,
@@ -18180,10 +18185,21 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
   const [capabilityCatalogCoherence, setCapabilityCatalogCoherence] = useState<PluginCapabilityCatalogCoherence | null>(
     null,
   );
+  const [capabilityPackOperatorReview, setCapabilityPackOperatorReview] =
+    useState<PluginCapabilityPackOperatorReviewResponse | null>(null);
+  const [capabilityPackOperatorReviewDecisions, setCapabilityPackOperatorReviewDecisions] = useState<
+    PluginCapabilityPackOperatorReviewDecision[]
+  >([]);
   const [promotionReadiness, setPromotionReadiness] = useState<PluginPromotionReadinessItem[]>([]);
   const [forgeProposals, setForgeProposals] = useState<PluginForgeProposal[]>([]);
   const [forgeProposalReviews, setForgeProposalReviews] = useState<PluginForgeProposalReview[]>([]);
   const [forgePromotions, setForgePromotions] = useState<PluginForgePromotion[]>([]);
+  const [capabilityPackDecisionReason, setCapabilityPackDecisionReason] = useState(
+    "operator reviewed capability pack",
+  );
+  const [capabilityPackDecisionNotes, setCapabilityPackDecisionNotes] = useState("");
+  const [capabilityPackDecisionResponse, setCapabilityPackDecisionResponse] =
+    useState<PluginCapabilityPackOperatorReviewDecisionResponse | null>(null);
   const [proposalDecisionReason, setProposalDecisionReason] = useState("operator reviewed Forge proposal");
   const [promotionReason, setPromotionReason] = useState("operator promoted Forge candidate");
   const [selectedPluginId, setSelectedPluginId] = useState("");
@@ -18218,6 +18234,33 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
     () => capabilityCatalog.find((item) => item.capability === selectedPluginId) ?? null,
     [capabilityCatalog, selectedPluginId],
   );
+  const selectedCapabilityPackReview = useMemo((): PluginCapabilityPackOperatorReviewPack | null => {
+    const packs = capabilityPackOperatorReview?.packs ?? [];
+    if (!packs.length) return null;
+    const selectedPackId = safeString(selectedCapabilityCatalogEntry?.metadata?.pack_id).trim();
+    const selectedPackVersion = safeString(selectedCapabilityCatalogEntry?.metadata?.pack_version).trim();
+    if (selectedPackId && selectedPackVersion) {
+      const linked = packs.find(
+        (pack) => pack.pack_id === selectedPackId && pack.pack_version === selectedPackVersion,
+      );
+      if (linked) return linked;
+    }
+    if (selectedPluginId) {
+      const linked = packs.find((pack) =>
+        (pack.review_items_sample ?? []).some((item) => item.capability === selectedPluginId),
+      );
+      if (linked) return linked;
+    }
+    return packs.find((pack) => pack.decision_required) ?? packs[0] ?? null;
+  }, [capabilityPackOperatorReview?.packs, selectedCapabilityCatalogEntry?.metadata, selectedPluginId]);
+  const selectedCapabilityPackReviewDecisions = useMemo(() => {
+    const pack = selectedCapabilityPackReview;
+    if (!pack) return [];
+    return capabilityPackOperatorReviewDecisions
+      .filter((decision) => decision.pack_id === pack.pack_id && decision.pack_version === pack.pack_version)
+      .sort((a, b) => (b.decided_ts ?? 0) - (a.decided_ts ?? 0));
+  }, [capabilityPackOperatorReviewDecisions, selectedCapabilityPackReview]);
+  const latestCapabilityPackDecision = selectedCapabilityPackReviewDecisions[0] ?? null;
   const capabilityCatalogCounts = useMemo(() => {
     const statusCounts = capabilityCatalogSummary?.status_counts ?? {};
     const coherenceGapCount =
@@ -18235,6 +18278,16 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
       coherenceGapCount,
     };
   }, [capabilityCatalog, capabilityCatalogCoherence, capabilityCatalogSummary]);
+  const capabilityPackReviewCounts = useMemo(
+    () => ({
+      total: capabilityPackOperatorReview?.pack_total ?? capabilityPackOperatorReview?.packs.length ?? 0,
+      ready: capabilityPackOperatorReview?.ready_pack_count ?? 0,
+      blocked: capabilityPackOperatorReview?.blocked_pack_count ?? 0,
+      decisions: capabilityPackOperatorReview?.decision_required_pack_count ?? 0,
+      receipts: capabilityPackOperatorReviewDecisions.length,
+    }),
+    [capabilityPackOperatorReview, capabilityPackOperatorReviewDecisions.length],
+  );
   const promotionReadinessCounts = useMemo(() => {
     const ready = promotionReadiness.filter((item) => item.ready || item.status === "ready").length;
     const blocked = promotionReadiness.filter((item) => !item.ready && item.status !== "ready").length;
@@ -18310,9 +18363,20 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
   const refreshPlugins = useCallback(async () => {
     setLoading(true);
     try {
-      const [res, capabilityCatalogRes, readiness, proposals, proposalReviews, promotions] = await Promise.all([
+      const [
+        res,
+        capabilityCatalogRes,
+        capabilityPackReviewRes,
+        capabilityPackDecisionRes,
+        readiness,
+        proposals,
+        proposalReviews,
+        promotions,
+      ] = await Promise.all([
         client.list({ limit: 200 }),
         client.listCapabilityCatalog({ limit: 5000 }),
+        client.listCapabilityPackOperatorReview(),
+        client.listCapabilityPackOperatorReviewDecisions({ limit: 200 }),
         client.listPromotionReadiness({ limit: 200 }),
         client.listForgeProposals({ limit: 200 }),
         client.listForgeProposalReviews({ limit: 200 }),
@@ -18323,6 +18387,8 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
       setCapabilityCatalog(capabilityCatalogRes.items ?? []);
       setCapabilityCatalogSummary(capabilityCatalogRes.summary ?? null);
       setCapabilityCatalogCoherence(capabilityCatalogRes.coherence ?? null);
+      setCapabilityPackOperatorReview(capabilityPackReviewRes);
+      setCapabilityPackOperatorReviewDecisions(capabilityPackDecisionRes.items ?? []);
       setPromotionReadiness(readiness.items ?? []);
       setForgeProposals(proposals.items ?? []);
       setForgeProposalReviews(proposalReviews.items ?? []);
@@ -18409,6 +18475,7 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
 
   useEffect(() => {
     setPromotionActionResponse(null);
+    setCapabilityPackDecisionResponse(null);
   }, [selectedPluginId]);
 
   const governanceTone = useMemo(() => {
@@ -18583,6 +18650,40 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
         action,
         reason: proposalDecisionReason.trim() || "operator reviewed Forge proposal",
       });
+      setResult(JSON.stringify(res, null, 2));
+      await refreshPlugins();
+    } catch (err) {
+      setError(pluginErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function decideSelectedCapabilityPackOperatorReview(action: PluginCapabilityPackOperatorReviewDecisionAction) {
+    const pack = selectedCapabilityPackReview;
+    if (!pack) {
+      setError("Select a capability pack review.");
+      return;
+    }
+    if (!pack.decision_required) {
+      setError("Selected capability pack is not waiting on an operator decision.");
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    setRunResponse(null);
+    setCapabilityPackDecisionResponse(null);
+    try {
+      const res = await client.decideCapabilityPackOperatorReview({
+        pack_id: pack.pack_id,
+        pack_version: pack.pack_version,
+        action,
+        reason: capabilityPackDecisionReason.trim() || "operator reviewed capability pack",
+        notes: capabilityPackDecisionNotes.trim(),
+        capability_ids: (pack.review_items_sample ?? []).map((item) => item.capability).filter(Boolean),
+      });
+      setCapabilityPackDecisionResponse(res);
       setResult(JSON.stringify(res, null, 2));
       await refreshPlugins();
     } catch (err) {
@@ -18814,6 +18915,165 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
         ) : (
           <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
             Selected plugin has no capability catalog entry returned by the backend.
+          </div>
+        )}
+      </div>
+
+      <div
+        style={{
+          marginTop: 10,
+          border: `1px solid ${THEME.panelBorder}`,
+          borderRadius: 8,
+          padding: 10,
+          background: "#101719",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>Capability Pack Review</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <span style={badgeStyle("packs")}>packs {capabilityPackReviewCounts.total}</span>
+            <span style={badgeStyle(capabilityPackReviewCounts.decisions > 0 ? "ready" : "none")}>
+              decisions {capabilityPackReviewCounts.decisions}
+            </span>
+            <span style={badgeStyle(capabilityPackReviewCounts.blocked > 0 ? "blocked" : "clear")}>
+              blocked {capabilityPackReviewCounts.blocked}
+            </span>
+            <span style={badgeStyle("receipt")}>receipts {capabilityPackReviewCounts.receipts}</span>
+          </div>
+        </div>
+
+        {selectedCapabilityPackReview ? (
+          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <span style={badgeStyle(selectedCapabilityPackReview.status || "pack")}>
+                {selectedCapabilityPackReview.status || "pack"}
+              </span>
+              {selectedCapabilityPackReview.decision_kind ? (
+                <span style={badgeStyle(selectedCapabilityPackReview.decision_kind)}>
+                  {selectedCapabilityPackReview.decision_kind}
+                </span>
+              ) : null}
+              {latestCapabilityPackDecision?.status ? (
+                <span style={badgeStyle(latestCapabilityPackDecision.status)}>
+                  latest {latestCapabilityPackDecision.status}
+                </span>
+              ) : null}
+            </div>
+            <div style={{ marginTop: 6 }}>
+              pack <code>{selectedCapabilityPackReview.pack_id}</code> / version{" "}
+              <code>{selectedCapabilityPackReview.pack_version}</code>
+              {selectedCapabilityPackReview.pack_name ? (
+                <>
+                  {" "}
+                  / name <code>{selectedCapabilityPackReview.pack_name}</code>
+                </>
+              ) : null}
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+              <span style={badgeStyle("capabilities")}>
+                capabilities {selectedCapabilityPackReview.capability_count ?? 0}
+              </span>
+              <span style={badgeStyle("staged")}>staged {selectedCapabilityPackReview.staged_capability_count ?? 0}</span>
+              <span style={badgeStyle("promoted")}>
+                promoted {selectedCapabilityPackReview.promoted_capability_count ?? 0}
+              </span>
+              <span style={badgeStyle(selectedCapabilityPackReview.quality_evidence_ready ? "ready" : "blocked")}>
+                quality {selectedCapabilityPackReview.quality_evidence_ready ? "ready" : "blocked"}
+              </span>
+              <span style={badgeStyle(selectedCapabilityPackReview.validation_receipts_ready ? "ready" : "blocked")}>
+                validation {selectedCapabilityPackReview.validation_receipts_ready ? "ready" : "blocked"}
+              </span>
+            </div>
+            {selectedCapabilityPackReview.blockers?.length ? (
+              <div style={{ marginTop: 6 }}>
+                blockers <code>{selectedCapabilityPackReview.blockers.join(", ")}</code>
+              </div>
+            ) : (
+              <div style={{ marginTop: 6 }}>No pack review blockers reported.</div>
+            )}
+            {selectedCapabilityPackReview.review_items_sample?.length ? (
+              <div style={{ marginTop: 6 }}>
+                sample{" "}
+                {selectedCapabilityPackReview.review_items_sample.slice(0, 4).map((item) => (
+                  <span key={item.capability} style={badgeStyle(item.status || "capability")}>
+                    {item.capability}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            {latestCapabilityPackDecision ? (
+              <div style={{ marginTop: 6 }}>
+                latest receipt <code>{latestCapabilityPackDecision.receipt_id}</code>
+                {latestCapabilityPackDecision.decision ? (
+                  <>
+                    {" "}
+                    / decision <code>{latestCapabilityPackDecision.decision}</code>
+                  </>
+                ) : null}
+                {latestCapabilityPackDecision.path || latestCapabilityPackDecision.relative_path ? (
+                  <>
+                    {" "}
+                    / artifact <code>{latestCapabilityPackDecision.path || latestCapabilityPackDecision.relative_path}</code>
+                  </>
+                ) : null}
+              </div>
+            ) : (
+              <div style={{ marginTop: 6 }}>No pack review decision receipt returned for this pack.</div>
+            )}
+            {capabilityPackDecisionResponse ? (
+              <div style={{ marginTop: 6 }}>
+                decision response <code>{capabilityPackDecisionResponse.status || (capabilityPackDecisionResponse.ok ? "ok" : "unknown")}</code>
+                {capabilityPackDecisionResponse.receipt_id ? (
+                  <>
+                    {" "}
+                    / receipt <code>{capabilityPackDecisionResponse.receipt_id}</code>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+            {selectedCapabilityPackReview.decision_required ? (
+              <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+                <input
+                  value={capabilityPackDecisionReason}
+                  onChange={(e) => setCapabilityPackDecisionReason(e.target.value)}
+                  placeholder="Pack decision reason"
+                  style={inputStyle}
+                />
+                <input
+                  value={capabilityPackDecisionNotes}
+                  onChange={(e) => setCapabilityPackDecisionNotes(e.target.value)}
+                  placeholder="Pack decision notes"
+                  style={inputStyle}
+                />
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button
+                    style={buttonStyle}
+                    disabled={busy || latestCapabilityPackDecision?.status === "approved"}
+                    onClick={() => void decideSelectedCapabilityPackOperatorReview("approve")}
+                  >
+                    Approve pack
+                  </button>
+                  <button
+                    style={buttonStyle}
+                    disabled={busy || latestCapabilityPackDecision?.status === "needs_revision"}
+                    onClick={() => void decideSelectedCapabilityPackOperatorReview("request_changes")}
+                  >
+                    Request changes
+                  </button>
+                  <button
+                    style={buttonStyle}
+                    disabled={busy || latestCapabilityPackDecision?.status === "rejected"}
+                    onClick={() => void decideSelectedCapabilityPackOperatorReview("reject")}
+                  >
+                    Reject pack
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+            No capability pack review queue returned by the backend.
           </div>
         )}
       </div>

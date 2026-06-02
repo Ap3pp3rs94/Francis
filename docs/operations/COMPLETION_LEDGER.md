@@ -56875,6 +56875,53 @@ Remaining truthful gap:
 - Stage 17 still needs broader promotion discipline and operator-facing
   decision UI before it can be called complete.
 
+### 2026-06-02 - Stage 17 capability pack operator-review decisions reach chat UI
+
+Roadmap area: Stage 17 / Capability Economy, operator-facing promotion
+discipline for capability-pack review decisions.
+
+Material change:
+
+- The chat UI plugin browser client now reads
+  `/plugins/capabilities/packs/operator/review` and
+  `/plugins/capabilities/packs/operator/review/decisions`.
+- The chat UI plugin browser client now posts governed pack review decisions to
+  `/plugins/capabilities/packs/operator/review/decisions` with the explicit
+  `chat_ui.plugins` actor.
+- The Plugins panel now shows capability-pack review queue counts, selected pack
+  readiness evidence, blockers, review-item samples, latest decision receipts,
+  and approve/request-changes/reject controls before Forge promotion readiness.
+- The UI decision controls write decision receipts only. They do not approve
+  proposals, promote capabilities, enable capabilities, execute capabilities,
+  mutate the registry, write memory, or grant authority.
+- `README.md` `Latest Progress Snapshot` was intentionally overwritten to show
+  this locally validated operator-facing slice while keeping the latest
+  confirmed material GitHub gate at `426ec1e9` until this slice passes CI.
+
+Latest validation for Stage 17 capability pack operator-review chat UI:
+
+- `node --test --experimental-strip-types src/plugin_browser/index.test.ts`
+  from `apps/chat_ui`
+  Result: `passed; 10 passed`
+- `npm run test` from `apps/chat_ui`
+  Result: `passed; 201 passed`
+- `npm run build` from `apps/chat_ui`
+  Result: `passed`
+- `python -m pytest
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short`
+  Result: `passed; 1 passed`
+
+Validation risk:
+
+- This slice is locally validated but not yet GitHub-confirmed. The next pushed
+  GitHub CI and CodeQL runs remain the full public evidence gate.
+
+Remaining truthful gap:
+
+- Stage 17 still needs broader promotion discipline before it can be called
+  complete.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

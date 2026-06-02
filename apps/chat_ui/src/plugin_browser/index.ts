@@ -31,6 +31,9 @@
  *  - POST   /plugins/uninstall
  *  - POST   /plugins/run
  *  - POST   /plugins/reload
+ *  - GET    /plugins/capabilities/packs/operator/review
+ *  - GET    /plugins/capabilities/packs/operator/review/decisions
+ *  - POST   /plugins/capabilities/packs/operator/review/decisions
  *
  * Notes
  * -----
@@ -586,6 +589,124 @@ export type PluginForgePromotionListResponse = {
   total?: number;
   offset?: number;
   limit?: number;
+};
+
+export type PluginCapabilityPackReviewItem = {
+  capability: string;
+  version?: string;
+  source?: string;
+  status?: string;
+  risk_tier?: string;
+  proposal_id?: string;
+  validation_receipt_id?: string;
+  promotion_receipt_id?: string;
+  gaps?: string[];
+};
+
+export type PluginCapabilityPackOperatorReviewPack = {
+  pack_id: string;
+  pack_version: string;
+  pack_name?: string;
+  status?: string;
+  operator_review_ready?: boolean;
+  decision_required?: boolean;
+  decision_kind?: string;
+  capability_count?: number;
+  staged_capability_count?: number;
+  promoted_capability_count?: number;
+  blockers?: string[];
+  operator_review_rule_declared?: boolean;
+  operator_review_governance_declared?: boolean;
+  quality_evidence_ready?: boolean;
+  proposal_lineage_ready?: boolean;
+  validation_receipts_ready?: boolean;
+  promotion_receipts_ready?: boolean;
+  review_items_sample?: PluginCapabilityPackReviewItem[];
+  failing_capabilities_sample?: PluginCapabilityPackReviewItem[];
+};
+
+export type PluginCapabilityPackOperatorReviewResponse = {
+  ok: boolean;
+  kind?: string;
+  stage?: string;
+  status?: string;
+  pack_total?: number;
+  ready_pack_count?: number;
+  blocked_pack_count?: number;
+  decision_required_pack_count?: number;
+  review_queue_count?: number;
+  packs: PluginCapabilityPackOperatorReviewPack[];
+  decision_routes?: Record<string, string>;
+  requirements?: Record<string, boolean>;
+  governance?: Record<string, unknown>;
+  next_smallest_truthful_gap?: string;
+  catalog?: Record<string, unknown>;
+};
+
+export type PluginCapabilityPackOperatorReviewDecision = {
+  id: string;
+  receipt_id: string;
+  status?: string;
+  decision?: string;
+  pack_id?: string;
+  pack_version?: string;
+  pack_name?: string;
+  capability_ids?: string[];
+  capability_count?: number;
+  staged_capability_count?: number;
+  actor?: string;
+  reason?: string;
+  notes?: string;
+  decided_ts?: number;
+  path?: string;
+  relative_path?: string;
+  review_snapshot?: Record<string, unknown>;
+  governance?: Record<string, unknown>;
+};
+
+export type PluginCapabilityPackOperatorReviewDecisionListParams = {
+  limit?: number;
+  pack_id?: string;
+  pack_version?: string;
+};
+
+export type PluginCapabilityPackOperatorReviewDecisionListResponse = {
+  ok: boolean;
+  kind?: string;
+  stage?: string;
+  items: PluginCapabilityPackOperatorReviewDecision[];
+  total?: number;
+  limit?: number;
+  governance?: Record<string, unknown>;
+  write_route?: string;
+};
+
+export type PluginCapabilityPackOperatorReviewDecisionAction = "approve" | "reject" | "request_changes" | string;
+
+export type PluginCapabilityPackOperatorReviewDecisionRequest = {
+  pack_id: string;
+  pack_version: string;
+  action: PluginCapabilityPackOperatorReviewDecisionAction;
+  actor?: string;
+  reason?: string;
+  notes?: string;
+  capability_ids?: string[];
+  meta?: Record<string, unknown>;
+};
+
+export type PluginCapabilityPackOperatorReviewDecisionResponse = {
+  ok: boolean;
+  applied?: boolean;
+  status?: string;
+  error?: string;
+  allowed_actions?: string[];
+  pack_id?: string;
+  pack_version?: string;
+  receipt_id?: string;
+  receipt_path?: string;
+  receipt?: PluginCapabilityPackOperatorReviewDecision;
+  pack?: PluginCapabilityPackOperatorReviewPack;
+  governance?: Record<string, unknown>;
 };
 
 export type PluginCapabilityCatalogParams = {
@@ -1288,6 +1409,124 @@ function parseForgePromotion(raw: unknown): PluginForgePromotion | null {
   return item;
 }
 
+function parseCapabilityPackReviewItem(raw: unknown): PluginCapabilityPackReviewItem | null {
+  if (!isRecord(raw)) return null;
+
+  const capability = safeString(raw.capability, safeString(raw.id, "")).trim();
+  if (!capability) return null;
+
+  const item: PluginCapabilityPackReviewItem = { capability };
+  const version = safeString(raw.version, "");
+  const source = safeString(raw.source, "");
+  const status = safeString(raw.status, "");
+  const riskTier = safeString(raw.risk_tier, safeString(raw.riskTier, ""));
+  const proposalId = safeString(raw.proposal_id, safeString(raw.proposalId, ""));
+  const validationReceiptId = safeString(raw.validation_receipt_id, safeString(raw.validationReceiptId, ""));
+  const promotionReceiptId = safeString(raw.promotion_receipt_id, safeString(raw.promotionReceiptId, ""));
+  const gaps = safeStringArray(raw.gaps);
+  if (version) item.version = version;
+  if (source) item.source = source;
+  if (status) item.status = status;
+  if (riskTier) item.risk_tier = riskTier;
+  if (proposalId) item.proposal_id = proposalId;
+  if (validationReceiptId) item.validation_receipt_id = validationReceiptId;
+  if (promotionReceiptId) item.promotion_receipt_id = promotionReceiptId;
+  if (gaps) item.gaps = gaps;
+  return item;
+}
+
+function parseCapabilityPackOperatorReviewPack(raw: unknown): PluginCapabilityPackOperatorReviewPack | null {
+  if (!isRecord(raw)) return null;
+
+  const packId = safeString(raw.pack_id, safeString(raw.packId, "")).trim();
+  const packVersion = safeString(raw.pack_version, safeString(raw.packVersion, "")).trim();
+  if (!packId || !packVersion) return null;
+
+  const pack: PluginCapabilityPackOperatorReviewPack = {
+    pack_id: packId,
+    pack_version: packVersion,
+  };
+  const packName = safeString(raw.pack_name, safeString(raw.packName, ""));
+  const status = safeString(raw.status, "");
+  const decisionKind = safeString(raw.decision_kind, safeString(raw.decisionKind, ""));
+  const blockers = safeStringArray(raw.blockers);
+  const reviewItems = safeUnknownArray(raw.review_items_sample)
+    ?.map(parseCapabilityPackReviewItem)
+    .filter((item): item is PluginCapabilityPackReviewItem => item !== null);
+  const failingItems = safeUnknownArray(raw.failing_capabilities_sample)
+    ?.map(parseCapabilityPackReviewItem)
+    .filter((item): item is PluginCapabilityPackReviewItem => item !== null);
+  if (packName) pack.pack_name = packName;
+  if (status) pack.status = status;
+  if (typeof raw.operator_review_ready === "boolean") pack.operator_review_ready = raw.operator_review_ready;
+  if (typeof raw.decision_required === "boolean") pack.decision_required = raw.decision_required;
+  if (decisionKind) pack.decision_kind = decisionKind;
+  if (Number.isFinite(safeNumber(raw.capability_count, NaN))) pack.capability_count = safeNumber(raw.capability_count);
+  if (Number.isFinite(safeNumber(raw.staged_capability_count, NaN))) {
+    pack.staged_capability_count = safeNumber(raw.staged_capability_count);
+  }
+  if (Number.isFinite(safeNumber(raw.promoted_capability_count, NaN))) {
+    pack.promoted_capability_count = safeNumber(raw.promoted_capability_count);
+  }
+  if (blockers) pack.blockers = blockers;
+  if (typeof raw.operator_review_rule_declared === "boolean") {
+    pack.operator_review_rule_declared = raw.operator_review_rule_declared;
+  }
+  if (typeof raw.operator_review_governance_declared === "boolean") {
+    pack.operator_review_governance_declared = raw.operator_review_governance_declared;
+  }
+  if (typeof raw.quality_evidence_ready === "boolean") pack.quality_evidence_ready = raw.quality_evidence_ready;
+  if (typeof raw.proposal_lineage_ready === "boolean") pack.proposal_lineage_ready = raw.proposal_lineage_ready;
+  if (typeof raw.validation_receipts_ready === "boolean") pack.validation_receipts_ready = raw.validation_receipts_ready;
+  if (typeof raw.promotion_receipts_ready === "boolean") pack.promotion_receipts_ready = raw.promotion_receipts_ready;
+  if (reviewItems) pack.review_items_sample = reviewItems;
+  if (failingItems) pack.failing_capabilities_sample = failingItems;
+  return pack;
+}
+
+function parseCapabilityPackOperatorReviewDecision(raw: unknown): PluginCapabilityPackOperatorReviewDecision | null {
+  if (!isRecord(raw)) return null;
+
+  const receiptId = safeString(raw.receipt_id, safeString(raw.receiptId, safeString(raw.id, ""))).trim();
+  if (!receiptId) return null;
+
+  const item: PluginCapabilityPackOperatorReviewDecision = {
+    id: safeString(raw.id, receiptId) || receiptId,
+    receipt_id: receiptId,
+  };
+  const status = safeString(raw.status, "");
+  const decision = safeString(raw.decision, "");
+  const packId = safeString(raw.pack_id, safeString(raw.packId, ""));
+  const packVersion = safeString(raw.pack_version, safeString(raw.packVersion, ""));
+  const packName = safeString(raw.pack_name, safeString(raw.packName, ""));
+  const actor = safeString(raw.actor, "");
+  const reason = safeString(raw.reason, "");
+  const notes = safeString(raw.notes, "");
+  const path = safeString(raw.path, "");
+  const relativePath = safeString(raw.relative_path, safeString(raw.relativePath, ""));
+  const capabilityIds = safeStringArray(raw.capability_ids);
+  const decidedTs = normalizeUnixSeconds(raw.decided_ts) ?? normalizeUnixSeconds(raw.decidedAt);
+  if (status) item.status = status;
+  if (decision) item.decision = decision;
+  if (packId) item.pack_id = packId;
+  if (packVersion) item.pack_version = packVersion;
+  if (packName) item.pack_name = packName;
+  if (capabilityIds) item.capability_ids = capabilityIds;
+  if (Number.isFinite(safeNumber(raw.capability_count, NaN))) item.capability_count = safeNumber(raw.capability_count);
+  if (Number.isFinite(safeNumber(raw.staged_capability_count, NaN))) {
+    item.staged_capability_count = safeNumber(raw.staged_capability_count);
+  }
+  if (actor) item.actor = actor;
+  if (reason) item.reason = reason;
+  if (notes) item.notes = notes;
+  if (decidedTs !== undefined) item.decided_ts = decidedTs;
+  if (path) item.path = path;
+  if (relativePath) item.relative_path = relativePath;
+  if (isRecord(raw.review_snapshot)) item.review_snapshot = raw.review_snapshot;
+  if (isRecord(raw.governance)) item.governance = raw.governance;
+  return item;
+}
+
 function parseCapabilityCatalogEntry(raw: unknown): PluginCapabilityCatalogEntry | null {
   if (!isRecord(raw)) return null;
 
@@ -1370,6 +1609,9 @@ export type PluginBrowserEndpoints = {
   list: (q?: PluginListParams) => string;
   get: (id: string) => string;
   capabilityCatalog: (q?: PluginCapabilityCatalogParams) => string;
+  capabilityPackOperatorReview: () => string;
+  capabilityPackOperatorReviewDecisions: (q?: PluginCapabilityPackOperatorReviewDecisionListParams) => string;
+  capabilityPackOperatorReviewDecision: () => string;
   promotionReadinessList: (q?: PluginPromotionReadinessListParams) => string;
   proposalsList: (q?: PluginForgeArtifactListParams) => string;
   proposalReviewsList: (q?: PluginForgeArtifactListParams) => string;
@@ -1420,6 +1662,14 @@ export function defaultPluginBrowserEndpoints(): PluginBrowserEndpoints {
         risk_tier: q?.risk_tier,
         source: q?.source,
       })}`,
+    capabilityPackOperatorReview: () => "/plugins/capabilities/packs/operator/review",
+    capabilityPackOperatorReviewDecisions: (q) =>
+      `/plugins/capabilities/packs/operator/review/decisions${encodeQuery({
+        limit: q?.limit,
+        pack_id: q?.pack_id,
+        pack_version: q?.pack_version,
+      })}`,
+    capabilityPackOperatorReviewDecision: () => "/plugins/capabilities/packs/operator/review/decisions",
     promotionReadinessList: (q) =>
       `/forge/promotion_readiness/list${encodeQuery({
         limit: q?.limit,
@@ -1792,6 +2042,141 @@ export class PluginBrowserClient {
       total: total > 0 ? total : undefined,
       offset: offset >= 0 ? offset : undefined,
       limit: limit > 0 ? limit : undefined,
+    };
+  }
+
+  /**
+   * List read-only capability-pack operator review readiness.
+   */
+  async listCapabilityPackOperatorReview(
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<PluginCapabilityPackOperatorReviewResponse> {
+    const url = this.url(this.endpoints.capabilityPackOperatorReview());
+    const json = await this.fetchJson(url, { method: "GET", signal: opts?.signal, timeoutMs: opts?.timeoutMs });
+    if (!isRecord(json)) return { ok: false, packs: [] };
+
+    const raw = Array.isArray((json as Record<string, unknown>).packs)
+      ? ((json as Record<string, unknown>).packs as unknown[])
+      : [];
+    const packs = raw
+      .map(parseCapabilityPackOperatorReviewPack)
+      .filter((item): item is PluginCapabilityPackOperatorReviewPack => item !== null);
+    return {
+      ok: Boolean((json as Record<string, unknown>).ok ?? false),
+      kind: safeString((json as Record<string, unknown>).kind, "") || undefined,
+      stage: safeString((json as Record<string, unknown>).stage, "") || undefined,
+      status: safeString((json as Record<string, unknown>).status, "") || undefined,
+      pack_total: safeNumber((json as Record<string, unknown>).pack_total, packs.length),
+      ready_pack_count: safeNumber((json as Record<string, unknown>).ready_pack_count, 0),
+      blocked_pack_count: safeNumber((json as Record<string, unknown>).blocked_pack_count, 0),
+      decision_required_pack_count: safeNumber((json as Record<string, unknown>).decision_required_pack_count, 0),
+      review_queue_count: safeNumber((json as Record<string, unknown>).review_queue_count, 0),
+      packs,
+      decision_routes: isRecord((json as Record<string, unknown>).decision_routes)
+        ? Object.fromEntries(
+            Object.entries((json as Record<string, unknown>).decision_routes as Record<string, unknown>).map(
+              ([key, value]) => [key, safeString(value, "")],
+            ),
+          )
+        : undefined,
+      requirements: isRecord((json as Record<string, unknown>).requirements)
+        ? Object.fromEntries(
+            Object.entries((json as Record<string, unknown>).requirements as Record<string, unknown>)
+              .filter(([, value]) => typeof value === "boolean")
+              .map(([key, value]) => [key, Boolean(value)]),
+          )
+        : undefined,
+      governance: isRecord((json as Record<string, unknown>).governance)
+        ? ((json as Record<string, unknown>).governance as Record<string, unknown>)
+        : undefined,
+      next_smallest_truthful_gap:
+        safeString((json as Record<string, unknown>).next_smallest_truthful_gap, "") || undefined,
+      catalog: isRecord((json as Record<string, unknown>).catalog)
+        ? ((json as Record<string, unknown>).catalog as Record<string, unknown>)
+        : undefined,
+    };
+  }
+
+  /**
+   * List read-only capability-pack operator review decision receipts.
+   */
+  async listCapabilityPackOperatorReviewDecisions(
+    params?: PluginCapabilityPackOperatorReviewDecisionListParams,
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<PluginCapabilityPackOperatorReviewDecisionListResponse> {
+    const url = this.url(this.endpoints.capabilityPackOperatorReviewDecisions(params));
+    const json = await this.fetchJson(url, { method: "GET", signal: opts?.signal, timeoutMs: opts?.timeoutMs });
+    if (!isRecord(json)) return { ok: false, items: [] };
+
+    const raw = Array.isArray((json as Record<string, unknown>).items)
+      ? ((json as Record<string, unknown>).items as unknown[])
+      : [];
+    const items = raw
+      .map(parseCapabilityPackOperatorReviewDecision)
+      .filter((item): item is PluginCapabilityPackOperatorReviewDecision => item !== null);
+    return {
+      ok: Boolean((json as Record<string, unknown>).ok ?? false),
+      kind: safeString((json as Record<string, unknown>).kind, "") || undefined,
+      stage: safeString((json as Record<string, unknown>).stage, "") || undefined,
+      items,
+      total: safeNumber((json as Record<string, unknown>).total, items.length),
+      limit: safeNumber((json as Record<string, unknown>).limit, 0) || undefined,
+      governance: isRecord((json as Record<string, unknown>).governance)
+        ? ((json as Record<string, unknown>).governance as Record<string, unknown>)
+        : undefined,
+      write_route: safeString((json as Record<string, unknown>).write_route, "") || undefined,
+    };
+  }
+
+  /**
+   * Write a governed capability-pack operator review decision receipt.
+   */
+  async decideCapabilityPackOperatorReview(
+    req: PluginCapabilityPackOperatorReviewDecisionRequest,
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<PluginCapabilityPackOperatorReviewDecisionResponse> {
+    const packId = (req?.pack_id || "").trim();
+    const packVersion = (req?.pack_version || "").trim();
+    const action = (req?.action || "").trim();
+    if (!packId || !packVersion || !action) {
+      throw new Error(
+        "PluginBrowserClient.decideCapabilityPackOperatorReview requires req.pack_id, req.pack_version, and req.action",
+      );
+    }
+
+    const url = this.url(this.endpoints.capabilityPackOperatorReviewDecision());
+    const body = { ...req, pack_id: packId, pack_version: packVersion, action, actor: pluginMutationActor(req.actor) };
+    const json = await this.fetchJson(url, {
+      method: "POST",
+      body: JSON.stringify(body),
+      signal: opts?.signal,
+      timeoutMs: opts?.timeoutMs,
+    });
+
+    assertPluginMutationAllowed(json, "Capability pack operator review decision denied.", url);
+    if (!isRecord(json)) return { ok: true, applied: true, pack_id: packId, pack_version: packVersion };
+
+    const receipt = parseCapabilityPackOperatorReviewDecision((json as Record<string, unknown>).receipt);
+    const pack = parseCapabilityPackOperatorReviewPack((json as Record<string, unknown>).pack);
+    const allowedActions = safeStringArray((json as Record<string, unknown>).allowed_actions);
+    return {
+      ok: Boolean((json as Record<string, unknown>).ok ?? false),
+      applied:
+        typeof (json as Record<string, unknown>).applied === "boolean"
+          ? Boolean((json as Record<string, unknown>).applied)
+          : undefined,
+      status: safeString((json as Record<string, unknown>).status, "") || undefined,
+      error: safeString((json as Record<string, unknown>).error, "") || undefined,
+      allowed_actions: allowedActions,
+      pack_id: safeString((json as Record<string, unknown>).pack_id, packId) || packId,
+      pack_version: safeString((json as Record<string, unknown>).pack_version, packVersion) || packVersion,
+      receipt_id: safeString((json as Record<string, unknown>).receipt_id, "") || undefined,
+      receipt_path: safeString((json as Record<string, unknown>).receipt_path, "") || undefined,
+      receipt: receipt ?? undefined,
+      pack: pack ?? undefined,
+      governance: isRecord((json as Record<string, unknown>).governance)
+        ? ((json as Record<string, unknown>).governance as Record<string, unknown>)
+        : undefined,
     };
   }
 
