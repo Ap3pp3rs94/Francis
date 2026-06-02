@@ -1357,42 +1357,59 @@ def test_plugins_capability_pack_promotion_rule_remediation_apply_writes_metadat
     from francis.api.routes import plugins
 
     client = TestClient(create_app())
-    meta = {
-        **_forge_promotion_meta("capability_promotion_rule_remediation_apply"),
-        "pack_id": "ops.rule_remediation_apply",
-        "pack_version": "1.0.0",
-        "pack_name": "Ops Rule Remediation Apply Pack",
-        "promotion_rules": ["metadata_receipt_before_promotion"],
-    }
-    built = client.post(
-        "/plugins/build",
-        json={
+    packs = [
+        {
+            "pack_id": "ops.rule_remediation_apply",
+            "plugin_suffix": "capability_promotion_rule_remediation_apply",
             "name": "Capability Rule Remediation Apply Plugin",
-            "description": "Stage 17 promotion rule remediation apply coverage",
-            "actor": _PLUGIN_ACTOR,
-            "meta": meta,
+            "pack_name": "Ops Rule Remediation Apply Pack",
         },
-    )
-    assert built.status_code == 200
-    built_body = built.json()
-    assert built_body["ok"] is True
-    plugin_id = str(built_body["plugin_id"])
+        {
+            "pack_id": "ops.rule_remediation_apply_two",
+            "plugin_suffix": "capability_promotion_rule_remediation_apply_two",
+            "name": "Capability Rule Remediation Apply Two Plugin",
+            "pack_name": "Ops Rule Remediation Apply Two Pack",
+        },
+    ]
+    plugin_ids: dict[str, str] = {}
+    for pack in packs:
+        meta = {
+            **_forge_promotion_meta(str(pack["plugin_suffix"])),
+            "pack_id": pack["pack_id"],
+            "pack_version": "1.0.0",
+            "pack_name": pack["pack_name"],
+            "promotion_rules": ["metadata_receipt_before_promotion"],
+        }
+        built = client.post(
+            "/plugins/build",
+            json={
+                "name": pack["name"],
+                "description": "Stage 17 promotion rule remediation apply coverage",
+                "actor": _PLUGIN_ACTOR,
+                "meta": meta,
+            },
+        )
+        assert built.status_code == 200
+        built_body = built.json()
+        assert built_body["ok"] is True
+        plugin_ids[str(pack["pack_id"])] = str(built_body["plugin_id"])
 
     before = client.get("/plugins/capabilities/packs/promotion/rules/remediation").json()
-    before_item = next(item for item in before["remediation_queue"] if item["pack_id"] == "ops.rule_remediation_apply")
-    assert before_item["missing_promotion_rules"] == [
-        "quality_standards_before_promotion",
-        "operator_review_before_promotion",
-    ]
-    assert before_item["missing_governance_fields"] == ["pack_governance", "operator_review_required"]
+    for pack in packs:
+        before_item = next(item for item in before["remediation_queue"] if item["pack_id"] == pack["pack_id"])
+        assert before_item["missing_promotion_rules"] == [
+            "quality_standards_before_promotion",
+            "operator_review_before_promotion",
+        ]
+        assert before_item["missing_governance_fields"] == ["pack_governance", "operator_review_required"]
 
     applied = client.post(
         "/plugins/capabilities/packs/promotion/rules/remediation/apply",
         json={
             "actor": _PLUGIN_ACTOR,
             "reason": "apply reviewed promotion rule remediation",
-            "pack_ids": ["ops.rule_remediation_apply"],
-            "max_pack_count": 1,
+            "pack_ids": [pack["pack_id"] for pack in packs],
+            "max_pack_count": 2,
         },
     )
 
@@ -1401,9 +1418,9 @@ def test_plugins_capability_pack_promotion_rule_remediation_apply_writes_metadat
     assert applied_body["ok"] is True
     assert applied_body["applied"] is True
     assert applied_body["status"] == "recorded"
-    assert applied_body["planned_pack_count"] == 1
-    assert applied_body["recorded_pack_count"] == 1
-    assert applied_body["recorded_capability_count"] == 1
+    assert applied_body["planned_pack_count"] == 2
+    assert applied_body["recorded_pack_count"] == 2
+    assert applied_body["recorded_capability_count"] == 2
     assert applied_body["remaining_remediation_queue"] == []
     assert applied_body["governance"]["writes_registry_metadata"] is True
     assert applied_body["governance"]["writes_receipts"] is True
@@ -1413,41 +1430,51 @@ def test_plugins_capability_pack_promotion_rule_remediation_apply_writes_metadat
     assert applied_body["governance"]["does_not_execute_capabilities"] is True
     assert applied_body["governance"]["promotion_authority"] is False
     assert applied_body["governance"]["execution_authority"] is False
-    receipt_ref = applied_body["recorded"][0]
-    assert receipt_ref["pack_id"] == "ops.rule_remediation_apply"
-    assert receipt_ref["metadata_blockers"] == ["pack_governance_missing", "canonical_promotion_rules_missing"]
-    assert plugins.os.path.exists(plugins._filesystem_path(Path(str(receipt_ref["receipt_path"]))))
+    recorded_by_pack = {item["pack_id"]: item for item in applied_body["recorded"]}
+    assert sorted(recorded_by_pack) == sorted(pack["pack_id"] for pack in packs)
+    for receipt_ref in recorded_by_pack.values():
+        assert receipt_ref["metadata_blockers"] == ["pack_governance_missing", "canonical_promotion_rules_missing"]
+        assert receipt_ref["receipt_status"] == "recorded"
+        assert plugins.os.path.exists(plugins._filesystem_path(Path(str(receipt_ref["receipt_path"]))))
 
     catalog = client.get("/plugins/capabilities/catalog?limit=5000").json()
-    entry = next(item for item in catalog["items"] if item["capability"] == plugin_id)
-    metadata = entry["metadata"]
-    assert metadata["pack_id"] == "ops.rule_remediation_apply"
-    assert metadata["pack_version"] == "1.0.0"
-    assert metadata["pack_metadata_source"] == "metadata_receipt"
-    assert metadata["pack_metadata_receipt_id"] == receipt_ref["receipt_id"]
-    assert metadata["promotion_rules"] == [
-        "metadata_receipt_before_promotion",
-        "quality_standards_before_promotion",
-        "operator_review_before_promotion",
-    ]
-    assert metadata["pack_governance"]["operator_review_required"] is True
-    assert metadata["pack_governance"]["promotion_authority"] is False
-    assert metadata["pack_governance"]["execution_authority"] is False
-    assert metadata["pack_governance"]["memory_write"] is False
+    metadata_by_pack = {}
+    for pack in packs:
+        entry = next(item for item in catalog["items"] if item["capability"] == plugin_ids[str(pack["pack_id"])])
+        metadata = entry["metadata"]
+        metadata_by_pack[str(pack["pack_id"])] = metadata
+        assert metadata["pack_id"] == pack["pack_id"]
+        assert metadata["pack_version"] == "1.0.0"
+        assert metadata["pack_metadata_source"] == "metadata_receipt"
+        assert metadata["pack_metadata_receipt_id"] == recorded_by_pack[str(pack["pack_id"])]["receipt_id"]
+        assert metadata["promotion_rules"] == [
+            "metadata_receipt_before_promotion",
+            "quality_standards_before_promotion",
+            "operator_review_before_promotion",
+        ]
+        assert metadata["pack_governance"]["operator_review_required"] is True
+        assert metadata["pack_governance"]["promotion_authority"] is False
+        assert metadata["pack_governance"]["execution_authority"] is False
+        assert metadata["pack_governance"]["memory_write"] is False
 
     receipts = client.get("/plugins/capabilities/packs/metadata/receipts?limit=10").json()
-    receipt = next(item for item in receipts["items"] if item["receipt_id"] == receipt_ref["receipt_id"])
-    assert receipt["governance"]["route"] == "/plugins/capabilities/packs/promotion/rules/remediation/apply"
-    assert receipt["promotion_rules"] == metadata["promotion_rules"]
-    assert receipt["pack_governance"]["operator_review_required"] is True
-    assert receipt["metadata_context"]["promotion_rule_remediation_apply"] is True
-    assert receipt["metadata_context"]["applied_metadata_blockers"] == [
-        "pack_governance_missing",
-        "canonical_promotion_rules_missing",
-    ]
+    receipts_by_id = {item["receipt_id"]: item for item in receipts["items"]}
+    for pack in packs:
+        receipt_ref = recorded_by_pack[str(pack["pack_id"])]
+        receipt = receipts_by_id[receipt_ref["receipt_id"]]
+        metadata = metadata_by_pack[str(pack["pack_id"])]
+        assert receipt["governance"]["route"] == "/plugins/capabilities/packs/promotion/rules/remediation/apply"
+        assert receipt["promotion_rules"] == metadata["promotion_rules"]
+        assert receipt["pack_governance"]["operator_review_required"] is True
+        assert receipt["metadata_context"]["promotion_rule_remediation_apply"] is True
+        assert receipt["metadata_context"]["bulk_registry_write"] is True
+        assert receipt["metadata_context"]["applied_metadata_blockers"] == [
+            "pack_governance_missing",
+            "canonical_promotion_rules_missing",
+        ]
 
     after = client.get("/plugins/capabilities/packs/promotion/rules/remediation").json()
-    assert all(item["pack_id"] != "ops.rule_remediation_apply" for item in after["remediation_queue"])
+    assert all(item["pack_id"] not in recorded_by_pack for item in after["remediation_queue"])
 
 
 def test_plugins_capability_pack_operator_review_projects_read_only_review_queue(

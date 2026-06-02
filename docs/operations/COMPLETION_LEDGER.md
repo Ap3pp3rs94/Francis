@@ -57259,6 +57259,63 @@ Remaining truthful gap:
 - Stage 17 still needs residual quality, validation, lineage, and
   promotion-receipt remediation before it can be called complete.
 
+### 2026-06-02 - Stage 17 promotion rule remediation apply gets batch execution
+
+Roadmap area: Stage 17 / Capability Economy, bounded execution of
+promotion-rule remediation backlog items.
+
+Material change:
+
+- The governed remediation apply route now processes selected packs in one
+  registry pass instead of calling the single-pack metadata receipt writer once
+  per pack.
+- The route still writes one auditable capability-pack metadata receipt per
+  remediated pack and still returns the remaining remediation queue after the
+  write.
+- The targeted API coverage now proves a single apply request can remediate two
+  packs, write two metadata receipts, attach canonical promotion rules and pack
+  governance to both packs, and remove both from the remediation queue.
+- `README.md` `Latest Progress Snapshot` was intentionally overwritten to show
+  this locally validated batch-apply slice while keeping GitHub confirmation
+  pending until the pushed CI and CodeQL runs complete.
+
+Latest validation for Stage 17 promotion rule remediation batch apply:
+
+- `FRANCIS_PYTEST_SESSION_RETENTION_ROOT=data/test_runs/pytest/codex-stage17-validation
+  python -m pytest
+  tests/test_api_plugins.py::test_plugins_capability_pack_promotion_rule_remediation_apply_writes_metadata_receipt
+  -q --tb=short --maxfail=1`
+  Result: `passed`
+- `FRANCIS_PYTEST_SESSION_RETENTION_ROOT=data/test_runs/pytest/codex-stage17-validation
+  python -m pytest tests/unit/test_capability_pack_promotion_rules.py
+  tests/test_api_plugins.py::test_plugins_capability_pack_promotion_rule_remediation_apply_writes_metadata_receipt
+  tests/test_api_plugins.py::test_plugins_capability_pack_promotion_rule_remediation_projects_read_only_backlog
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 7 selected tests passed`
+- `python -m mypy src/francis/economy/markets/capability_pack_promotion_rules.py
+  src/francis/api/routes/plugins.py`
+  Result: `passed`
+- `python -m ruff check src/francis/api/routes/plugins.py
+  tests/test_api_plugins.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/plugins.py
+  tests/test_api_plugins.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed; line-ending warnings only`
+
+Validation risk:
+
+- This slice is locally validated but not yet GitHub-confirmed. The next pushed
+  GitHub CI and CodeQL runs remain the public evidence gate.
+
+Remaining truthful gap:
+
+- Stage 17 still needs GitHub confirmation for this batch-apply slice and
+  residual quality, validation, lineage, and promotion-receipt remediation
+  before it can be called complete.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

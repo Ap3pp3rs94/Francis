@@ -1484,6 +1484,137 @@ def _supported_metadata_remediation_blockers(item: dict[str, Any]) -> list[str]:
     ]
 
 
+def _record_capability_pack_promotion_rule_remediation_batch(
+    *,
+    registry: dict[str, Any],
+    prepared: list[dict[str, Any]],
+    payload: "CapabilityPackPromotionRuleRemediationApplyIn",
+    route_path: str,
+) -> dict[str, list[dict[str, Any]]]:
+    recorded_ts = _now_s()
+    failed: list[dict[str, Any]] = []
+    pending_receipts: list[dict[str, Any]] = []
+    for item in prepared:
+        pack_id = _safe_str(item.get("pack_id")).strip()
+        pack_version = _safe_str(item.get("pack_version")).strip()
+        pack_name = _safe_str(item.get("pack_name")).strip() or pack_id
+        capability_ids = _unique_texts(item.get("capability_ids"), limit=500)
+        missing = [capability_id for capability_id in capability_ids if _read_plugin(registry, capability_id) is None]
+        if missing:
+            failed.append(
+                {
+                    "pack_id": pack_id,
+                    "pack_version": pack_version,
+                    "status": "blocked",
+                    "error": "capability_not_found",
+                    "missing_capability_ids": missing,
+                }
+            )
+            continue
+
+        receipt_id = _capability_pack_metadata_receipt_id(pack_id, recorded_ts)
+        receipt_path = _capability_pack_metadata_receipt_path(receipt_id)
+        promotion_rules = _unique_texts(item.get("promotion_rules"), limit=50)
+        pack_governance = dict(item.get("pack_governance") or {})
+        source_item = item.get("item") if isinstance(item.get("item"), dict) else {}
+        previous_metadata: dict[str, dict[str, Any]] = {}
+        for capability_id in capability_ids:
+            current = _read_plugin(registry, capability_id)
+            if current is None:
+                continue
+            meta = dict(current.get("meta") or {}) if isinstance(current.get("meta"), dict) else {}
+            previous_metadata[capability_id] = {
+                "pack_id": _safe_str(meta.get("pack_id")).strip(),
+                "pack_version": _safe_str(meta.get("pack_version")).strip(),
+                "pack_metadata_source": _safe_str(meta.get("pack_metadata_source")).strip(),
+                "pack_metadata_receipt_id": _safe_str(meta.get("pack_metadata_receipt_id")).strip(),
+            }
+            meta.update(
+                {
+                    "pack_id": pack_id,
+                    "pack_version": pack_version,
+                    "pack_name": pack_name,
+                    "pack_metadata_source": "metadata_receipt",
+                    "pack_metadata_receipt_id": receipt_id,
+                    "pack_metadata_receipt_path": str(receipt_path),
+                }
+            )
+            if promotion_rules:
+                meta["promotion_rules"] = promotion_rules
+            if pack_governance:
+                meta["pack_governance"] = pack_governance
+            current["meta"] = meta
+            current["updated_ts"] = recorded_ts
+            _write_plugin(registry, _normalize_plugin_record(capability_id, current))
+
+        receipt_payload = CapabilityPackMetadataReceiptIn(
+            actor=payload.actor,
+            reason=f"{_safe_str(payload.reason).strip() or 'stage17_promotion_rule_remediation'}:{pack_id}",
+            pack_id=pack_id,
+            pack_version=pack_version,
+            pack_name=pack_name,
+            capability_ids=capability_ids,
+            source_pack_id=pack_id,
+            source_pack_version=pack_version,
+            promotion_rules=promotion_rules,
+            pack_governance=pack_governance,
+            meta={
+                **redact_governed_metadata(payload.meta),
+                "promotion_rule_remediation_apply": True,
+                "bulk_registry_write": True,
+                "source_remediation_blockers": _unique_texts(source_item.get("blockers"), limit=50),
+                "applied_metadata_blockers": _unique_texts(item.get("metadata_blockers"), limit=50),
+                "missing_promotion_rules": _unique_texts(source_item.get("missing_promotion_rules"), limit=50),
+                "missing_governance_fields": _unique_texts(source_item.get("missing_governance_fields"), limit=50),
+                "missing_quality_evidence": _unique_texts(source_item.get("missing_quality_evidence"), limit=50),
+                "missing_receipt_evidence": _unique_texts(source_item.get("missing_receipt_evidence"), limit=50),
+            },
+        )
+        pending_receipts.append(
+            {
+                "pack_id": pack_id,
+                "pack_version": pack_version,
+                "receipt_id": receipt_id,
+                "receipt_path": receipt_path,
+                "payload": receipt_payload,
+                "pack_name": pack_name,
+                "capability_ids": capability_ids,
+                "metadata_blockers": _unique_texts(item.get("metadata_blockers"), limit=50),
+                "previous_metadata": previous_metadata,
+            }
+        )
+
+    if pending_receipts:
+        _save_registry_and_catalog(registry)
+
+    recorded: list[dict[str, Any]] = []
+    for item in pending_receipts:
+        receipt = _write_capability_pack_metadata_receipt(
+            receipt_id=str(item["receipt_id"]),
+            receipt_path=item["receipt_path"],
+            payload=item["payload"],
+            pack_id=str(item["pack_id"]),
+            pack_version=str(item["pack_version"]),
+            pack_name=str(item["pack_name"]),
+            capability_ids=list(item["capability_ids"]),
+            previous_metadata=item["previous_metadata"],
+            recorded_ts=recorded_ts,
+            route_path=route_path,
+        )
+        recorded.append(
+            {
+                "pack_id": item["pack_id"],
+                "pack_version": item["pack_version"],
+                "receipt_id": item["receipt_id"],
+                "receipt_path": str(item["receipt_path"]),
+                "capability_count": len(item["capability_ids"]),
+                "metadata_blockers": item["metadata_blockers"],
+                "receipt_status": receipt.get("status"),
+            }
+        )
+    return {"recorded": recorded, "failed": failed}
+
+
 def _request_plugin_approval(
     *,
     plugin_id: str,
@@ -3609,61 +3740,14 @@ def apply_capability_pack_promotion_rule_remediation(
                 },
             }
 
-        recorded: list[dict[str, Any]] = []
-        failed: list[dict[str, Any]] = []
-        for item in prepared:
-            receipt_payload = CapabilityPackMetadataReceiptIn(
-                actor=payload.actor,
-                reason=f"{_safe_str(payload.reason).strip() or 'stage17_promotion_rule_remediation'}:{item['pack_id']}",
-                pack_id=str(item["pack_id"]),
-                pack_version=str(item["pack_version"]),
-                pack_name=str(item["pack_name"]),
-                capability_ids=list(item["capability_ids"]),
-                source_pack_id=str(item["pack_id"]),
-                source_pack_version=str(item["pack_version"]),
-                promotion_rules=list(item["promotion_rules"]),
-                pack_governance=dict(item["pack_governance"]),
-                meta={
-                    **redact_governed_metadata(payload.meta),
-                    "promotion_rule_remediation_apply": True,
-                    "source_remediation_blockers": _unique_texts(item["item"].get("blockers"), limit=50),
-                    "applied_metadata_blockers": list(item["metadata_blockers"]),
-                    "missing_promotion_rules": _unique_texts(item["item"].get("missing_promotion_rules"), limit=50),
-                    "missing_governance_fields": _unique_texts(
-                        item["item"].get("missing_governance_fields"),
-                        limit=50,
-                    ),
-                    "missing_quality_evidence": _unique_texts(
-                        item["item"].get("missing_quality_evidence"),
-                        limit=50,
-                    ),
-                    "missing_receipt_evidence": _unique_texts(
-                        item["item"].get("missing_receipt_evidence"),
-                        limit=50,
-                    ),
-                },
-            )
-            result = _record_capability_pack_metadata_receipt_unchecked(receipt_payload, route_path=request.url.path)
-            if bool(result.get("ok")) and bool(result.get("applied")):
-                recorded.append(
-                    {
-                        "pack_id": item["pack_id"],
-                        "pack_version": item["pack_version"],
-                        "receipt_id": result.get("receipt_id"),
-                        "receipt_path": result.get("receipt_path"),
-                        "capability_count": result.get("capability_count"),
-                        "metadata_blockers": item["metadata_blockers"],
-                    }
-                )
-            else:
-                failed.append(
-                    {
-                        "pack_id": item["pack_id"],
-                        "pack_version": item["pack_version"],
-                        "status": result.get("status"),
-                        "error": result.get("error"),
-                    }
-                )
+        batch = _record_capability_pack_promotion_rule_remediation_batch(
+            registry=registry,
+            prepared=prepared,
+            payload=payload,
+            route_path=request.url.path,
+        )
+        recorded = batch["recorded"]
+        failed = batch["failed"]
 
         refreshed_registry = _load_registry()
         refreshed_catalog = _compile_runtime_catalog(refreshed_registry)
