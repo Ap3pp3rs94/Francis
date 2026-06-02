@@ -26,6 +26,7 @@ from francis.economy.markets.capability_pack_quality_docs import analyze_capabil
 from francis.economy.markets.capability_pack_quality_standards import analyze_capability_pack_quality_standards
 from francis.economy.markets.capability_pack_quality_tests import analyze_capability_pack_quality_tests
 from francis.economy.markets.capability_pack_readiness import analyze_capability_pack_readiness
+from francis.economy.markets.capability_pack_validation_receipts import analyze_capability_pack_validation_receipts
 from francis.governance import approvals as approval_store
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 from francis.governance.redaction import (
@@ -773,6 +774,32 @@ def _read_capability_pack_metadata_receipts(*, limit: int = 20) -> list[dict[str
         if isinstance(payload, dict):
             items.append(payload)
     return items[-safe_limit:]
+
+
+def _available_capability_pack_validation_receipts() -> dict[str, set[str]]:
+    folder = _art_dir() / "validations"
+    folder_fs_path = _filesystem_path(folder)
+    if not os.path.isdir(folder_fs_path):
+        return {"ids": set(), "paths": set()}
+
+    ids: set[str] = set()
+    paths: set[str] = set()
+    try:
+        for entry in os.scandir(folder_fs_path):
+            if not entry.name.endswith(".json") or not entry.is_file():
+                continue
+            receipt_id = entry.name[:-5].strip()
+            if not receipt_id:
+                continue
+            ids.add(receipt_id)
+            paths.add(entry.path)
+            paths.add(str(folder / entry.name))
+            paths.add(f"validations/{entry.name}")
+            paths.add(f"artifacts/plugins/validations/{entry.name}")
+            paths.add(f"data/artifacts/plugins/validations/{entry.name}")
+    except OSError:
+        return {"ids": set(), "paths": set()}
+    return {"ids": ids, "paths": paths}
 
 
 def _plugin_risk_tier(plugin: dict[str, Any]) -> str:
@@ -2687,6 +2714,34 @@ def capability_pack_quality_docs() -> dict[str, object]:
         }
     except Exception as exc:
         return {"ok": False, "kind": "plugin.capability_pack.quality_docs", "error": api_error_message(exc)}
+
+
+@router.get("/capabilities/packs/validation/receipts")
+def capability_pack_validation_receipts() -> dict[str, object]:
+    try:
+        registry = _load_registry()
+        synced = _sync_generated_plugins(registry)
+        catalog = _save_registry_and_catalog(registry) if synced else _compile_runtime_catalog(registry)
+        runtime_catalog = _read_runtime_catalog_payload(catalog)
+        marketplace = marketplace_from_plugin_catalog(runtime_catalog)
+        available_receipts = _available_capability_pack_validation_receipts()
+        analysis = analyze_capability_pack_validation_receipts(
+            marketplace.catalog(),
+            available_receipt_ids=available_receipts["ids"],
+            available_receipt_paths=available_receipts["paths"],
+        )
+        return {
+            "ok": True,
+            "kind": "plugin.capability_pack.validation_receipts",
+            **analysis,
+            "catalog": {
+                "path": _safe_str(catalog.get("path")).strip(),
+                "total_plugins": int(runtime_catalog.get("total_plugins") or catalog.get("total_plugins") or 0),
+                "total_tools": int(runtime_catalog.get("total_tools") or catalog.get("total_tools") or 0),
+            },
+        }
+    except Exception as exc:
+        return {"ok": False, "kind": "plugin.capability_pack.validation_receipts", "error": api_error_message(exc)}
 
 
 @router.get("/capabilities/packs/promotion/rules")

@@ -19,6 +19,7 @@ from .markets.capability_pack_quality_docs import analyze_capability_pack_qualit
 from .markets.capability_pack_quality_standards import analyze_capability_pack_quality_standards
 from .markets.capability_pack_quality_tests import analyze_capability_pack_quality_tests
 from .markets.capability_pack_readiness import analyze_capability_pack_readiness
+from .markets.capability_pack_validation_receipts import analyze_capability_pack_validation_receipts
 from .markets.compute_futures import ComputeFuture, ComputeFuturesMarket
 from .markets.data_exchange import DataExchange, DataOffer
 from .markets.pricing_engine import PricingEngine, PricingResult
@@ -52,6 +53,7 @@ __all__ = [
     "analyze_capability_pack_quality_standards",
     "analyze_capability_pack_quality_tests",
     "analyze_capability_pack_readiness",
+    "analyze_capability_pack_validation_receipts",
     "CapabilityListing",
     "CapabilityMarketplace",
     "ComputeFuture",

@@ -42,17 +42,18 @@ Francis should be read from current repo truth, not from a hard-coded phase labe
 This block is intentionally overwritten as the build moves. The append-only
 history stays in [docs/operations/COMPLETION_LEDGER.md](docs/operations/COMPLETION_LEDGER.md).
 
-- Last updated: 2026-06-01, 21:17 America/Chicago.
-- Latest confirmed GitHub gate: `main` commit `b7919c34` passed CI on Ubuntu
+- Last updated: 2026-06-01, 22:23 America/Chicago.
+- Latest confirmed GitHub gate: `main` commit `40aa6a46` passed CI on Ubuntu
   3.12, Ubuntu 3.13, Windows 3.12, and Windows 3.13; CodeQL passed for Actions,
   JavaScript/TypeScript, and Python.
-- Current slice: Stage 17 capability pack quality-docs readback, adding a
-  read-only API surface that audits declared pack documentation against
-  `README.md` and `docs/` paths without reading documentation contents or
-  granting authority.
-- Next truthful gap: capability-library maturity still needs validation
-  receipts, operator-facing review, and promotion discipline before Stage 17 can
-  be called complete.
+- Current slice: Stage 17 capability pack validation-receipts readback, adding a
+  read-only API surface that checks generated/staged pack capabilities against
+  bounded plugin validation receipt IDs and validation receipt paths without
+  reading receipt bodies, writing receipts, promoting capabilities, or granting
+  authority.
+- Next truthful gap: capability-library maturity still needs proposal lineage,
+  operator-facing review, and promotion discipline before Stage 17 can be called
+  complete.
 
 Use [docs/operations/COMPLETION_LEDGER.md](docs/operations/COMPLETION_LEDGER.md) for shipped truth. Use [docs/canonical/ROADMAP.md](docs/canonical/ROADMAP.md) and [docs/canonical/BUILD_MANIFEST.md](docs/canonical/BUILD_MANIFEST.md) for target state and build order. Phase and stage names are orientation markers only; each build pass should derive the active priority from the ledger and canonical roadmap instead of locking Francis into one fixed phase.
 

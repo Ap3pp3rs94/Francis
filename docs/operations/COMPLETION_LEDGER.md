@@ -56490,6 +56490,72 @@ Validation risk:
 - Full local `scripts/check.ps1` was not rerun for this slice; the next pushed
   GitHub CI matrix remains the full-suite evidence gate.
 
+### 2026-06-01 - Stage 17 capability pack validation receipts are readable
+
+Roadmap area: Stage 17 / Capability Economy, validation receipt evidence for
+versioned generated and staged capability packs.
+
+Material change:
+
+- Added a read-only capability pack validation-receipts analyzer for Stage 17.
+- Added `GET /plugins/capabilities/packs/validation/receipts`.
+- The route checks generated/forge staged or promoted pack capabilities against
+  bounded plugin validation receipt IDs and validation receipt paths under the
+  plugin validations artifact surface.
+- The route reads validation receipt filenames/paths only; it does not read
+  receipt bodies, write receipts, mutate the plugin registry, promote/enable
+  capabilities, execute capabilities, or grant authority.
+- The analyzer surfaces pack-level blockers for missing validation receipts,
+  invalid receipt IDs, invalid receipt paths, and declared receipts that do not
+  resolve to known validation artifacts.
+- The chat UI API contract endpoint list now includes the validation-receipts
+  route.
+- `README.md` `Latest Progress Snapshot` was intentionally overwritten rather
+  than appended, keeping GitHub-visible progress current while preserving
+  shipped history in this ledger.
+
+Confirmed GitHub baseline before this slice:
+
+- GitHub CI run `26794314268` for commit `40aa6a46` completed successfully on
+  Ubuntu 3.12, Ubuntu 3.13, Windows 3.12, and Windows 3.13.
+- CodeQL Advanced run `26794314270` for commit `40aa6a46` completed
+  successfully for Actions, JavaScript/TypeScript, and Python.
+
+Latest validation for Stage 17 capability pack validation receipts:
+
+- `FRANCIS_PYTEST_SESSION_RETENTION_ROOT=data/test_runs/pytest/codex_validation_stage17_final2
+  python -m pytest tests/unit/test_capability_pack_validation_receipts.py
+  tests/test_api_plugins.py::test_plugins_capability_pack_validation_receipts_projects_read_only_receipt_evidence
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 4 passed`
+- `python -m mypy src/francis/economy/markets/capability_pack_validation_receipts.py
+  src/francis/economy/markets/__init__.py src/francis/economy/__init__.py
+  src/francis/api/routes/plugins.py`
+  Result: `passed`
+- `python -m ruff check src/francis/economy/markets/capability_pack_validation_receipts.py
+  src/francis/economy/markets/__init__.py src/francis/economy/__init__.py
+  src/francis/api/routes/plugins.py
+  tests/unit/test_capability_pack_validation_receipts.py
+  tests/test_api_plugins.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check
+  src/francis/economy/markets/capability_pack_validation_receipts.py
+  src/francis/economy/markets/__init__.py src/francis/economy/__init__.py
+  src/francis/api/routes/plugins.py
+  tests/unit/test_capability_pack_validation_receipts.py
+  tests/test_api_plugins.py tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+
+Validation risk:
+
+- The first unbounded local pytest attempt was stopped because repository-local
+  pytest session retention was walking the large historical
+  `data/test_runs/pytest` tree. The successful targeted pytest run used a
+  bounded retention root under that same policy surface. Full local
+  `scripts/check.ps1` was not rerun for this slice; the next pushed GitHub CI
+  matrix remains the full-suite evidence gate.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
