@@ -62,6 +62,8 @@ import type {
   PluginCapabilityCatalogCoherence,
   PluginCapabilityCatalogEntry,
   PluginCapabilityCatalogSummary,
+  PluginCapabilityPackPromotionDisciplinePack,
+  PluginCapabilityPackPromotionDisciplineResponse,
   PluginCapabilityPackOperatorReviewDecision,
   PluginCapabilityPackOperatorReviewDecisionAction,
   PluginCapabilityPackOperatorReviewDecisionResponse,
@@ -18185,6 +18187,8 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
   const [capabilityCatalogCoherence, setCapabilityCatalogCoherence] = useState<PluginCapabilityCatalogCoherence | null>(
     null,
   );
+  const [capabilityPackPromotionDiscipline, setCapabilityPackPromotionDiscipline] =
+    useState<PluginCapabilityPackPromotionDisciplineResponse | null>(null);
   const [capabilityPackOperatorReview, setCapabilityPackOperatorReview] =
     useState<PluginCapabilityPackOperatorReviewResponse | null>(null);
   const [capabilityPackOperatorReviewDecisions, setCapabilityPackOperatorReviewDecisions] = useState<
@@ -18234,6 +18238,25 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
     () => capabilityCatalog.find((item) => item.capability === selectedPluginId) ?? null,
     [capabilityCatalog, selectedPluginId],
   );
+  const selectedCapabilityPackDiscipline = useMemo((): PluginCapabilityPackPromotionDisciplinePack | null => {
+    const packs = capabilityPackPromotionDiscipline?.packs ?? [];
+    if (!packs.length) return null;
+    const selectedPackId = safeString(selectedCapabilityCatalogEntry?.metadata?.pack_id).trim();
+    const selectedPackVersion = safeString(selectedCapabilityCatalogEntry?.metadata?.pack_version).trim();
+    if (selectedPackId && selectedPackVersion) {
+      const linked = packs.find(
+        (pack) => pack.pack_id === selectedPackId && pack.pack_version === selectedPackVersion,
+      );
+      if (linked) return linked;
+    }
+    if (selectedPluginId) {
+      const linked = packs.find((pack) =>
+        (pack.failing_capabilities_sample ?? []).some((item) => item.capability === selectedPluginId),
+      );
+      if (linked) return linked;
+    }
+    return packs.find((pack) => !pack.ready) ?? packs[0] ?? null;
+  }, [capabilityPackPromotionDiscipline?.packs, selectedCapabilityCatalogEntry?.metadata, selectedPluginId]);
   const selectedCapabilityPackReview = useMemo((): PluginCapabilityPackOperatorReviewPack | null => {
     const packs = capabilityPackOperatorReview?.packs ?? [];
     if (!packs.length) return null;
@@ -18287,6 +18310,15 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
       receipts: capabilityPackOperatorReviewDecisions.length,
     }),
     [capabilityPackOperatorReview, capabilityPackOperatorReviewDecisions.length],
+  );
+  const capabilityPackDisciplineCounts = useMemo(
+    () => ({
+      total: capabilityPackPromotionDiscipline?.pack_total ?? capabilityPackPromotionDiscipline?.packs.length ?? 0,
+      ready: capabilityPackPromotionDiscipline?.ready_pack_count ?? 0,
+      blocked: capabilityPackPromotionDiscipline?.blocked_pack_count ?? 0,
+      reviews: capabilityPackPromotionDiscipline?.approved_pack_operator_review_count ?? 0,
+    }),
+    [capabilityPackPromotionDiscipline],
   );
   const promotionReadinessCounts = useMemo(() => {
     const ready = promotionReadiness.filter((item) => item.ready || item.status === "ready").length;
@@ -18366,6 +18398,7 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
       const [
         res,
         capabilityCatalogRes,
+        capabilityPackPromotionDisciplineRes,
         capabilityPackReviewRes,
         capabilityPackDecisionRes,
         readiness,
@@ -18375,6 +18408,7 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
       ] = await Promise.all([
         client.list({ limit: 200 }),
         client.listCapabilityCatalog({ limit: 5000 }),
+        client.listCapabilityPackPromotionDiscipline(),
         client.listCapabilityPackOperatorReview(),
         client.listCapabilityPackOperatorReviewDecisions({ limit: 200 }),
         client.listPromotionReadiness({ limit: 200 }),
@@ -18387,6 +18421,7 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
       setCapabilityCatalog(capabilityCatalogRes.items ?? []);
       setCapabilityCatalogSummary(capabilityCatalogRes.summary ?? null);
       setCapabilityCatalogCoherence(capabilityCatalogRes.coherence ?? null);
+      setCapabilityPackPromotionDiscipline(capabilityPackPromotionDisciplineRes);
       setCapabilityPackOperatorReview(capabilityPackReviewRes);
       setCapabilityPackOperatorReviewDecisions(capabilityPackDecisionRes.items ?? []);
       setPromotionReadiness(readiness.items ?? []);
@@ -18915,6 +18950,115 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
         ) : (
           <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
             Selected plugin has no capability catalog entry returned by the backend.
+          </div>
+        )}
+      </div>
+
+      <div
+        style={{
+          marginTop: 10,
+          border: `1px solid ${THEME.panelBorder}`,
+          borderRadius: 8,
+          padding: 10,
+          background: "#0f1718",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>Capability Library Discipline</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <span style={badgeStyle("packs")}>packs {capabilityPackDisciplineCounts.total}</span>
+            <span style={badgeStyle(capabilityPackDisciplineCounts.ready > 0 ? "ready" : "none")}>
+              ready {capabilityPackDisciplineCounts.ready}
+            </span>
+            <span style={badgeStyle(capabilityPackDisciplineCounts.blocked > 0 ? "blocked" : "clear")}>
+              blocked {capabilityPackDisciplineCounts.blocked}
+            </span>
+            <span style={badgeStyle("review")}>reviews {capabilityPackDisciplineCounts.reviews}</span>
+          </div>
+        </div>
+
+        {selectedCapabilityPackDiscipline ? (
+          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <span style={badgeStyle(selectedCapabilityPackDiscipline.status || "pack")}>
+                {selectedCapabilityPackDiscipline.status || "pack"}
+              </span>
+              <span style={badgeStyle(selectedCapabilityPackDiscipline.ready ? "ready" : "blocked")}>
+                {selectedCapabilityPackDiscipline.ready ? "ready" : "blocked"}
+              </span>
+              {selectedCapabilityPackDiscipline.lifecycle_mixed ? (
+                <span style={badgeStyle("mixed")}>mixed lifecycle</span>
+              ) : null}
+              {capabilityPackPromotionDiscipline?.next_smallest_truthful_gap ? (
+                <span style={badgeStyle("gap")}>{capabilityPackPromotionDiscipline.next_smallest_truthful_gap}</span>
+              ) : null}
+            </div>
+            <div style={{ marginTop: 6 }}>
+              pack <code>{selectedCapabilityPackDiscipline.pack_id}</code> / version{" "}
+              <code>{selectedCapabilityPackDiscipline.pack_version}</code>
+              {selectedCapabilityPackDiscipline.pack_name ? (
+                <>
+                  {" "}
+                  / name <code>{selectedCapabilityPackDiscipline.pack_name}</code>
+                </>
+              ) : null}
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+              <span style={badgeStyle("capabilities")}>
+                capabilities {selectedCapabilityPackDiscipline.capability_count ?? 0}
+              </span>
+              <span style={badgeStyle("staged")}>
+                staged {selectedCapabilityPackDiscipline.staged_capability_count ?? 0}
+              </span>
+              <span style={badgeStyle("promoted")}>
+                promoted {selectedCapabilityPackDiscipline.promoted_capability_count ?? 0}
+              </span>
+              <span style={badgeStyle(selectedCapabilityPackDiscipline.promotion_rules_ready ? "ready" : "blocked")}>
+                rules {selectedCapabilityPackDiscipline.promotion_rules_ready ? "ready" : "blocked"}
+              </span>
+              <span style={badgeStyle(selectedCapabilityPackDiscipline.pack_governance_ready ? "ready" : "blocked")}>
+                governance {selectedCapabilityPackDiscipline.pack_governance_ready ? "ready" : "blocked"}
+              </span>
+              <span style={badgeStyle(selectedCapabilityPackDiscipline.quality_evidence_ready ? "ready" : "blocked")}>
+                quality {selectedCapabilityPackDiscipline.quality_evidence_ready ? "ready" : "blocked"}
+              </span>
+              <span style={badgeStyle(selectedCapabilityPackDiscipline.operator_review_approved ? "ready" : "blocked")}>
+                review {selectedCapabilityPackDiscipline.operator_review_approved ? "approved" : "missing"}
+              </span>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+              <span style={badgeStyle(selectedCapabilityPackDiscipline.proposal_lineage_ready ? "ready" : "blocked")}>
+                proposals {selectedCapabilityPackDiscipline.proposal_lineage_ready ? "ready" : "blocked"}
+              </span>
+              <span style={badgeStyle(selectedCapabilityPackDiscipline.validation_receipts_ready ? "ready" : "blocked")}>
+                validation {selectedCapabilityPackDiscipline.validation_receipts_ready ? "ready" : "blocked"}
+              </span>
+              <span style={badgeStyle(selectedCapabilityPackDiscipline.promotion_receipts_ready ? "ready" : "blocked")}>
+                promotions {selectedCapabilityPackDiscipline.promotion_receipts_ready ? "ready" : "blocked"}
+              </span>
+            </div>
+            {selectedCapabilityPackDiscipline.blockers?.length ? (
+              <div style={{ marginTop: 6 }}>
+                blockers <code>{selectedCapabilityPackDiscipline.blockers.join(", ")}</code>
+              </div>
+            ) : (
+              <div style={{ marginTop: 6 }}>No promotion-discipline blockers reported.</div>
+            )}
+            {selectedCapabilityPackDiscipline.failing_capabilities_sample?.length ? (
+              <div style={{ marginTop: 6 }}>
+                failing sample{" "}
+                {selectedCapabilityPackDiscipline.failing_capabilities_sample.slice(0, 4).map((item) => (
+                  <span key={`${item.capability}-${item.version || "unknown"}`} style={badgeStyle(item.status || "capability")}>
+                    {item.capability}
+                    {item.gaps?.length ? `:${item.gaps[0]}` : ""}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+            No capability pack promotion-discipline readback returned by the backend.
           </div>
         )}
       </div>

@@ -35,24 +35,29 @@ Francis should be read from current repo truth, not from a hard-coded phase labe
 - `P1_INTERFACE`, `P7_EXECUTION`, and `P8_MEMORY` are partial and actively being connected into a truthful loop.
 - Stage 3 / Missions and Stage 5 / Reactor are closed for the current repo posture by ledger-backed audits.
 - Stage 6 / Lens has backend and chat-UI readback for Lens primitives, host readiness contracts, activation-denial receipts, preflight diagnostics, and bounded proof scripts. Do not read later roadmap work as proof of finished OS-wide summon, always-on resident presence, tray/hotkey/overlay runtime, or live Pilot takeover.
-- Stage 17 / Capability Economy now has read-only pack readiness, migration-plan, metadata-receipt, quality-standards, promotion-rules, quality-test, quality-doc, validation-receipt, proposal-lineage, promotion-receipt, operator-review evidence surfaces, GitHub-confirmed operator-review decision receipts, a GitHub-confirmed chat-UI decision surface for capability-pack reviews, and a GitHub-confirmed promotion-discipline pack gate. The current gap is still capability-library maturity: legacy packs need broader promotion discipline before Stage 17 can be called complete.
+- Stage 17 / Capability Economy now has read-only pack readiness, migration-plan, metadata-receipt, quality-standards, promotion-rules, quality-test, quality-doc, validation-receipt, proposal-lineage, promotion-receipt, operator-review evidence surfaces, GitHub-confirmed operator-review decision receipts, a GitHub-confirmed chat-UI decision surface for capability-pack reviews, a GitHub-confirmed promotion-discipline pack gate, and a locally validated chat-UI promotion-discipline readback. The current gap is still capability-library maturity: legacy packs need broader promotion discipline before Stage 17 can be called complete.
 
 ## Latest Progress Snapshot
 
 This block is intentionally overwritten as the build moves. The append-only
 history stays in [docs/operations/COMPLETION_LEDGER.md](docs/operations/COMPLETION_LEDGER.md).
 
-- Last updated: 2026-06-02, 08:19 America/Chicago.
+- Last updated: 2026-06-02, 09:23 America/Chicago.
 - Latest confirmed GitHub gate: `main` commit `105626d3` passed CI on Ubuntu
   3.12, Ubuntu 3.13, Windows 3.12, and Windows 3.13; CodeQL passed for Actions,
   JavaScript/TypeScript, and Python.
-- Current slice: Stage 17 capability packs now have a GitHub-confirmed read-only
-  promotion-discipline gate. It checks promotion rules, governance, tests, docs,
-  proposal lineage, validation receipts, promotion receipts, operator-review
-  decisions, and mixed staged/promoted lifecycle posture without promoting or
-  enabling capabilities.
-- Next truthful gap: broader capability-library maturity before Stage 17 can be
-  called complete.
+- Current slice: the chat UI Plugins surface now reads the Stage 17
+  promotion-discipline gate and shows capability-library discipline counts,
+  selected-pack posture, blockers, next gap, and failing sample IDs before
+  capability-pack review actions. This is locally validated and remains
+  read-only: it does not promote, enable, execute, write receipts, write memory,
+  or grant authority.
+- Current slice validation: chat UI plugin-browser contract test, full chat UI
+  test suite, chat UI production build, and API chat-UI route contract all pass
+  locally.
+- Next truthful gap: push this UI surface to `main`, confirm GitHub CI and
+  CodeQL, then keep broadening capability-library maturity before Stage 17 can
+  be called complete.
 
 Use [docs/operations/COMPLETION_LEDGER.md](docs/operations/COMPLETION_LEDGER.md) for shipped truth. Use [docs/canonical/ROADMAP.md](docs/canonical/ROADMAP.md) and [docs/canonical/BUILD_MANIFEST.md](docs/canonical/BUILD_MANIFEST.md) for target state and build order. Phase and stage names are orientation markers only; each build pass should derive the active priority from the ledger and canonical roadmap instead of locking Francis into one fixed phase.
 

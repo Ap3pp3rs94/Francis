@@ -590,6 +590,96 @@ test("PluginBrowserClient lists capability pack operator review queue and decisi
   }
 });
 
+test("PluginBrowserClient lists capability pack promotion discipline", async () => {
+  const requests: string[] = [];
+  const restoreFetch = installFetch(async (url) => {
+    const parsed = new URL(url);
+    requests.push(`${parsed.pathname}${parsed.search}`);
+    return jsonResponse({
+      ok: true,
+      kind: "plugin.capability_pack.promotion_discipline",
+      stage: "Stage 17 / Capability Economy",
+      status: "blocked",
+      pack_total: 1,
+      ready_pack_count: 0,
+      blocked_pack_count: 1,
+      unpacked_entry_count: 0,
+      available_proposal_count: 1,
+      available_validation_receipt_count: 1,
+      available_promotion_receipt_count: 0,
+      approved_pack_operator_review_count: 1,
+      packs: [
+        {
+          pack_id: "ops.discipline",
+          pack_version: "1.0.0",
+          pack_name: "Ops Discipline",
+          status: "blocked",
+          ready: false,
+          capability_count: 2,
+          staged_capability_count: 1,
+          promoted_capability_count: 1,
+          blockers: ["mixed_staged_and_promoted_pack"],
+          promotion_rules_ready: true,
+          pack_governance_ready: true,
+          quality_evidence_ready: true,
+          validation_receipts_ready: true,
+          proposal_lineage_ready: true,
+          promotion_receipts_ready: false,
+          operator_review_rule_declared: true,
+          operator_review_governance_declared: true,
+          operator_review_approved: true,
+          lifecycle_mixed: true,
+          failing_capabilities_sample: [
+            {
+              capability: "generated.promoted",
+              version: "0.1.0",
+              source: "generated",
+              status: "promoted",
+              risk_tier: "normal",
+              promotion_receipt_id: "plugin_promotion_missing",
+              gaps: ["promotion_receipt_not_found"],
+            },
+          ],
+        },
+      ],
+      requirements: {
+        promotion_discipline_is_read_only: true,
+      },
+      governance: {
+        read_only: true,
+        operator_facing: true,
+        promotion_authority: false,
+        execution_authority: false,
+      },
+      next_smallest_truthful_gap: "stage17_capability_pack_promotion_coherence",
+    });
+  });
+
+  try {
+    const client = new PluginBrowserClient("http://127.0.0.1:8000", { retry: { retries: 0 } });
+
+    const discipline = await client.listCapabilityPackPromotionDiscipline();
+
+    assert.deepEqual(requests, ["/plugins/capabilities/packs/promotion/discipline"]);
+    assert.equal(discipline.status, "blocked");
+    assert.equal(discipline.blocked_pack_count, 1);
+    assert.equal(discipline.available_proposal_count, 1);
+    assert.equal(discipline.available_validation_receipt_count, 1);
+    assert.equal(discipline.approved_pack_operator_review_count, 1);
+    assert.equal(discipline.governance?.promotion_authority, false);
+    assert.equal(discipline.requirements?.promotion_discipline_is_read_only, true);
+    assert.equal(discipline.next_smallest_truthful_gap, "stage17_capability_pack_promotion_coherence");
+    assert.equal(discipline.packs[0]?.pack_id, "ops.discipline");
+    assert.equal(discipline.packs[0]?.ready, false);
+    assert.equal(discipline.packs[0]?.lifecycle_mixed, true);
+    assert.equal(discipline.packs[0]?.operator_review_approved, true);
+    assert.equal(discipline.packs[0]?.failing_capabilities_sample?.[0]?.capability, "generated.promoted");
+    assert.deepEqual(discipline.packs[0]?.failing_capabilities_sample?.[0]?.gaps, ["promotion_receipt_not_found"]);
+  } finally {
+    restoreFetch();
+  }
+});
+
 test("PluginBrowserClient writes capability pack operator review decision receipts", async () => {
   let captured: Record<string, unknown> = {};
   const restoreFetch = installFetch(async (url, init) => {

@@ -57024,6 +57024,49 @@ Remaining truthful gap:
 - Stage 17 still needs broader capability-library maturity before it can be
   called complete.
 
+### 2026-06-02 - Stage 17 promotion discipline reaches chat UI
+
+Roadmap area: Stage 17 / Capability Economy, operator-visible capability
+library discipline for versioned capability packs.
+
+Material change:
+
+- The chat UI plugin browser client now reads
+  `/plugins/capabilities/packs/promotion/discipline`.
+- The Plugins surface now shows a read-only Capability Library Discipline panel
+  with pack totals, ready/blocked counts, selected-pack lifecycle posture,
+  blockers, next truthful gap, and failing sample IDs before capability-pack
+  review actions.
+- The surface does not approve proposals, promote capabilities, enable
+  capabilities, execute capabilities, mutate the registry, write receipts, write
+  memory, or grant authority.
+- `README.md` `Latest Progress Snapshot` was intentionally overwritten to show
+  this locally validated UI slice while keeping GitHub confirmation pending
+  until the pushed CI and CodeQL runs complete.
+
+Latest validation for Stage 17 promotion discipline chat UI:
+
+- `node --test --experimental-strip-types src/plugin_browser/index.test.ts`
+  Result: `passed; 11 passed`
+- `npm run test`
+  Result: `passed; 202 passed`
+- `npm run build`
+  Result: `passed`
+- `python -m pytest
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short`
+  Result: `passed; 1 passed`
+
+Validation risk:
+
+- This slice is locally validated but not yet GitHub-confirmed. The next pushed
+  GitHub CI and CodeQL runs remain the public evidence gate.
+
+Remaining truthful gap:
+
+- Stage 17 still needs GitHub confirmation for this UI slice and broader
+  capability-library maturity before it can be called complete.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
