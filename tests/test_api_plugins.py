@@ -915,6 +915,69 @@ def test_plugins_capability_pack_quality_tests_projects_read_only_test_evidence(
     assert all(item["capability"] != plugin_id for item in pack["failing_capabilities_sample"])
 
 
+def test_plugins_capability_pack_quality_docs_projects_read_only_doc_evidence(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+
+    client = TestClient(create_app())
+    meta = {
+        **_forge_promotion_meta("capability_quality_docs"),
+        "docs": ["README.md#current-build-posture"],
+        "pack_id": "ops.quality_docs",
+        "pack_version": "1.0.0",
+        "pack_name": "Ops Quality Docs Pack",
+    }
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Capability Quality Docs Plugin",
+            "description": "Stage 17 quality docs coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": meta,
+        },
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    plugin_id = str(built_body["plugin_id"])
+
+    response = client.get("/plugins/capabilities/packs/quality/docs")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["kind"] == "plugin.capability_pack.quality_docs"
+    assert body["stage"] == "Stage 17 / Capability Economy"
+    assert body["requirements"]["declared_docs_required"] is True
+    assert body["requirements"]["doc_paths_must_exist"] is True
+    assert body["requirements"]["doc_contents_not_read"] is True
+    assert body["governance"]["read_only"] is True
+    assert body["governance"]["does_not_read_doc_contents"] is True
+    assert body["governance"]["does_not_write_receipts"] is True
+    assert body["governance"]["does_not_mutate_registry"] is True
+    assert body["governance"]["does_not_promote_capabilities"] is True
+    assert body["governance"]["promotion_authority"] is False
+    assert body["available_doc_path_count"] > 0
+
+    pack = next(item for item in body["packs"] if item["pack_id"] == "ops.quality_docs")
+    assert pack["ready"] is True
+    assert pack["blockers"] == []
+    assert pack["documented_count"] == 1
+    assert pack["declared_doc_reference_count"] == 1
+    assert pack["existing_doc_reference_count"] == 1
+    assert pack["missing_doc_reference_count"] == 0
+    assert pack["invalid_doc_reference_count"] == 0
+    assert pack["doc_files"] == ["README.md"]
+    assert all(item["capability"] != plugin_id for item in pack["failing_capabilities_sample"])
+
+
 def test_plugins_capability_pack_promotion_rules_project_governed_rule_readiness(
     monkeypatch,
     tmp_path: Path,

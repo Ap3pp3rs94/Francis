@@ -56427,6 +56427,69 @@ Validation risk:
 - Full local `scripts/check.ps1` was not rerun for this slice; the next pushed
   GitHub CI matrix remains the full-suite evidence gate.
 
+### 2026-06-01 - Stage 17 capability pack quality docs are readable
+
+Roadmap area: Stage 17 / Capability Economy, documentation evidence for
+versioned capability packs.
+
+Material change:
+
+- Added a read-only capability pack quality-docs analyzer for Stage 17.
+- Added `GET /plugins/capabilities/packs/quality/docs`.
+- The route checks declared pack documentation references against bounded public
+  repo documentation paths: root `README.md` and files under `docs/`.
+- The route does not scan generated plugin artifacts, dependency folders, or
+  arbitrary repo paths; it does not read documentation contents, write receipts,
+  mutate the plugin registry, promote/enable capabilities, execute
+  capabilities, or grant authority.
+- The analyzer surfaces pack-level blockers for missing docs, invalid doc paths,
+  and declared doc references that do not resolve to known repo documentation
+  files.
+- The chat UI API contract endpoint list now includes the quality-docs route.
+- `README.md` `Latest Progress Snapshot` now reflects the confirmed
+  `b7919c34` GitHub CI/CodeQL gate and the current quality-docs build slice.
+
+Confirmed GitHub baseline before this slice:
+
+- GitHub CI run `26792149041` for commit `b7919c34` completed successfully on
+  Ubuntu 3.12, Ubuntu 3.13, Windows 3.12, and Windows 3.13.
+- CodeQL Advanced run `26792149054` for commit `b7919c34` completed
+  successfully for Actions, JavaScript/TypeScript, and Python.
+
+Latest validation for Stage 17 capability pack quality docs:
+
+- `python -m pytest tests/unit/test_capability_pack_quality_docs.py
+  tests/test_api_plugins.py::test_plugins_capability_pack_quality_docs_projects_read_only_doc_evidence
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 4 passed`
+- `python -m mypy src/francis/economy/markets/capability_pack_quality_docs.py
+  src/francis/economy/markets/capability_pack_quality_tests.py
+  src/francis/economy/markets/__init__.py src/francis/economy/__init__.py
+  src/francis/api/routes/plugins.py`
+  Result: `passed`
+- `python -m ruff check src/francis/economy/markets/capability_pack_quality_docs.py
+  src/francis/economy/markets/capability_pack_quality_tests.py
+  src/francis/economy/markets/__init__.py src/francis/economy/__init__.py
+  src/francis/api/routes/plugins.py tests/unit/test_capability_pack_quality_docs.py
+  tests/unit/test_capability_pack_quality_tests.py tests/test_api_plugins.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/economy/markets/capability_pack_quality_docs.py
+  src/francis/economy/markets/capability_pack_quality_tests.py
+  src/francis/economy/markets/__init__.py src/francis/economy/__init__.py
+  src/francis/api/routes/plugins.py tests/unit/test_capability_pack_quality_docs.py
+  tests/unit/test_capability_pack_quality_tests.py tests/test_api_plugins.py
+  tests/test_api_contract_chat_ui.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed`
+
+Validation risk:
+
+- Full local `scripts/check.ps1` was not rerun for this slice; the next pushed
+  GitHub CI matrix remains the full-suite evidence gate.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
