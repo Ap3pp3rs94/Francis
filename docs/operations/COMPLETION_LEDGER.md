@@ -56922,6 +56922,30 @@ Remaining truthful gap:
 - Stage 17 still needs broader promotion discipline before it can be called
   complete.
 
+### 2026-06-02 - Stage 17 capability pack operator-review chat UI passes GitHub CI
+
+Roadmap area: Stage 17 / Capability Economy, GitHub-visible validation for the
+operator-facing capability-pack review decision surface.
+
+Material change:
+
+- GitHub CI and CodeQL now confirm the pushed capability-pack operator-review
+  chat UI slice on `main` commit `7eb26447`.
+- `README.md` `Latest Progress Snapshot` was intentionally overwritten to show
+  `7eb26447` as the latest confirmed material GitHub gate.
+
+Latest validation for Stage 17 capability pack operator-review chat UI:
+
+- GitHub CI run `26814345541` for commit `7eb26447`.
+  Result: `passed` on Ubuntu 3.12, Ubuntu 3.13, Windows 3.12, and Windows 3.13.
+- CodeQL Advanced run `26814345359` for commit `7eb26447`.
+  Result: `passed` for Actions, JavaScript/TypeScript, and Python.
+
+Remaining truthful gap:
+
+- Stage 17 still needs broader promotion discipline before it can be called
+  complete.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
