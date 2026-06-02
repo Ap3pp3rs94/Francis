@@ -57155,6 +57155,30 @@ Remaining truthful gap:
 - Stage 17 still needs GitHub confirmation for this UI slice and remediation
   backlog execution before it can be called complete.
 
+### 2026-06-02 - Stage 17 promotion rule remediation passes GitHub CI
+
+Roadmap area: Stage 17 / Capability Economy, GitHub-visible validation for the
+operator-facing promotion-rule remediation queue.
+
+Material change:
+
+- GitHub CI and CodeQL now confirm the pushed promotion-rule remediation slice on
+  `main` commit `182f03ac`.
+- `README.md` `Latest Progress Snapshot` was intentionally overwritten to show
+  `182f03ac` as the latest confirmed GitHub gate.
+
+Latest validation for Stage 17 promotion rule remediation:
+
+- GitHub CI run `26833427116` for commit `182f03ac`.
+  Result: `passed` on Ubuntu 3.12, Ubuntu 3.13, Windows 3.12, and Windows 3.13.
+- CodeQL Advanced run `26833427158` for commit `182f03ac`.
+  Result: `passed` for Actions, JavaScript/TypeScript, and Python.
+
+Remaining truthful gap:
+
+- Stage 17 still needs capability-pack remediation backlog execution before it
+  can be called complete.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

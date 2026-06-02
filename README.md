@@ -35,26 +35,25 @@ Francis should be read from current repo truth, not from a hard-coded phase labe
 - `P1_INTERFACE`, `P7_EXECUTION`, and `P8_MEMORY` are partial and actively being connected into a truthful loop.
 - Stage 3 / Missions and Stage 5 / Reactor are closed for the current repo posture by ledger-backed audits.
 - Stage 6 / Lens has backend and chat-UI readback for Lens primitives, host readiness contracts, activation-denial receipts, preflight diagnostics, and bounded proof scripts. Do not read later roadmap work as proof of finished OS-wide summon, always-on resident presence, tray/hotkey/overlay runtime, or live Pilot takeover.
-- Stage 17 / Capability Economy now has read-only pack readiness, migration-plan, metadata-receipt, quality-standards, promotion-rules, quality-test, quality-doc, validation-receipt, proposal-lineage, promotion-receipt, operator-review evidence surfaces, GitHub-confirmed operator-review decision receipts, a GitHub-confirmed chat-UI decision surface for capability-pack reviews, a GitHub-confirmed promotion-discipline pack gate, a GitHub-confirmed chat-UI promotion-discipline readback, and a locally validated promotion-rule remediation queue pending GitHub confirmation. The current gap is still capability-library maturity: legacy packs need remediation execution before Stage 17 can be called complete.
+- Stage 17 / Capability Economy now has read-only pack readiness, migration-plan, metadata-receipt, quality-standards, promotion-rules, quality-test, quality-doc, validation-receipt, proposal-lineage, promotion-receipt, operator-review evidence surfaces, GitHub-confirmed operator-review decision receipts, a GitHub-confirmed chat-UI decision surface for capability-pack reviews, a GitHub-confirmed promotion-discipline pack gate, a GitHub-confirmed chat-UI promotion-discipline readback, and a GitHub-confirmed promotion-rule remediation queue. The current gap is still capability-library maturity: legacy packs need remediation execution before Stage 17 can be called complete.
 
 ## Latest Progress Snapshot
 
 This block is intentionally overwritten as the build moves. The append-only
 history stays in [docs/operations/COMPLETION_LEDGER.md](docs/operations/COMPLETION_LEDGER.md).
 
-- Last updated: 2026-06-02, 11:26 America/Chicago.
-- Latest confirmed GitHub gate: `main` commit `9b921273` passed CI on Ubuntu
+- Last updated: 2026-06-02, 12:21 America/Chicago.
+- Latest confirmed GitHub gate: `main` commit `182f03ac` passed CI on Ubuntu
   3.12, Ubuntu 3.13, Windows 3.12, and Windows 3.13; CodeQL passed for Actions,
   JavaScript/TypeScript, and Python.
-- Current slice: the chat UI Plugins surface now has locally validated read-only
+- Current slice: the chat UI Plugins surface now has GitHub-confirmed read-only
   visibility into Stage 17 promotion-rule remediation. It shows remediation
   queue counts, selected-pack first action, missing canonical rules, missing
   governance fields, missing quality evidence, missing receipt evidence, and the
   next truthful gap without promoting, enabling, executing, writing receipts,
   writing memory, or granting authority.
-- Next truthful gap: push this remediation slice, confirm GitHub CI and CodeQL,
-  then execute the capability-pack remediation backlog before Stage 17 can be
-  called complete.
+- Next truthful gap: execute the capability-pack remediation backlog before
+  Stage 17 can be called complete.
 
 Use [docs/operations/COMPLETION_LEDGER.md](docs/operations/COMPLETION_LEDGER.md) for shipped truth. Use [docs/canonical/ROADMAP.md](docs/canonical/ROADMAP.md) and [docs/canonical/BUILD_MANIFEST.md](docs/canonical/BUILD_MANIFEST.md) for target state and build order. Phase and stage names are orientation markers only; each build pass should derive the active priority from the ledger and canonical roadmap instead of locking Francis into one fixed phase.
 
