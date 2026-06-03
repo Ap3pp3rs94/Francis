@@ -123,6 +123,7 @@ _CAPABILITY_PACK_QUALITY_EVIDENCE_BLOCKERS = {
     "proposal_id_missing",
 }
 _CAPABILITY_PACK_QUALITY_EVIDENCE_QUEUE_LIMIT = 50
+_PLUGIN_ARTIFACT_LINK_BODY_MAX_BYTES = 256 * 1024
 _CAPABILITY_PACK_QUALITY_TEST_REFERENCE_CANDIDATES = ("tests/test_api_plugins.py",)
 _CAPABILITY_PACK_QUALITY_DOC_REFERENCE_CANDIDATES = (
     "README.md",
@@ -1545,13 +1546,185 @@ def _capability_pack_quality_reference_candidates() -> dict[str, Any]:
     }
 
 
+def _plugin_artifact_payloads(folder_name: str) -> dict[str, Any]:
+    folder = _art_dir() / folder_name
+    folder_fs_path = _filesystem_path(folder)
+    if not os.path.isdir(folder_fs_path):
+        return {
+            "items": [],
+            "artifact_body_max_bytes": _PLUGIN_ARTIFACT_LINK_BODY_MAX_BYTES,
+            "oversized_artifact_count": 0,
+            "unreadable_artifact_count": 0,
+        }
+
+    items: list[dict[str, Any]] = []
+    oversized_artifact_count = 0
+    unreadable_artifact_count = 0
+    try:
+        entries = [entry for entry in os.scandir(folder_fs_path) if entry.name.endswith(".json") and entry.is_file()]
+    except OSError:
+        return {
+            "items": [],
+            "artifact_body_max_bytes": _PLUGIN_ARTIFACT_LINK_BODY_MAX_BYTES,
+            "oversized_artifact_count": 0,
+            "unreadable_artifact_count": 1,
+        }
+
+    for entry in sorted(entries, key=lambda item: item.name):
+        try:
+            if entry.stat().st_size > _PLUGIN_ARTIFACT_LINK_BODY_MAX_BYTES:
+                oversized_artifact_count += 1
+                continue
+            with open(entry.path, encoding="utf-8", errors="replace") as handle:
+                payload = json.load(handle)
+        except Exception:
+            unreadable_artifact_count += 1
+            continue
+        if not isinstance(payload, dict):
+            continue
+        artifact_id = entry.name[:-5].strip()
+        if not artifact_id or not _PLUGIN_ARTIFACT_ID_RE.match(artifact_id):
+            continue
+        items.append(
+            {
+                "artifact_id": artifact_id,
+                "artifact_path": f"data/artifacts/plugins/{folder_name}/{entry.name}",
+                "payload": payload,
+            }
+        )
+    return {
+        "items": items,
+        "artifact_body_max_bytes": _PLUGIN_ARTIFACT_LINK_BODY_MAX_BYTES,
+        "oversized_artifact_count": oversized_artifact_count,
+        "unreadable_artifact_count": unreadable_artifact_count,
+    }
+
+
+def _unique_plugin_artifact_candidates(
+    raw_items: list[dict[str, Any]],
+    *,
+    artifact_id_key: str,
+    path_key: str,
+    claim_scope: str,
+    require_passed_validation: bool = False,
+) -> dict[str, Any]:
+    by_plugin_id: dict[str, dict[str, Any]] = {}
+    ambiguous_plugin_ids: set[str] = set()
+    invalid_count = 0
+    for item in raw_items:
+        payload = item.get("payload") if isinstance(item.get("payload"), dict) else {}
+        plugin_id = _safe_str(payload.get("plugin_id")).strip()
+        artifact_id = _safe_str(
+            payload.get(artifact_id_key)
+            or payload.get("validation_id")
+            or payload.get("proposal_id")
+            or payload.get("id")
+        ).strip()
+        if not artifact_id:
+            artifact_id = _safe_str(item.get("artifact_id")).strip()
+        if not plugin_id or not artifact_id or not _PLUGIN_ARTIFACT_ID_RE.match(artifact_id):
+            invalid_count += 1
+            continue
+        if require_passed_validation:
+            status = _safe_str(payload.get("status")).strip().lower()
+            if status != "passed" or payload.get("valid") is not True:
+                invalid_count += 1
+                continue
+        candidate = {
+            "plugin_id": plugin_id,
+            artifact_id_key: artifact_id,
+            path_key: _safe_str(item.get("artifact_path")).strip(),
+            "claim_scope": claim_scope,
+            "pack_specific_plugin_match": True,
+            "writes_artifact": False,
+        }
+        existing = by_plugin_id.get(plugin_id)
+        if existing is not None and existing != candidate:
+            ambiguous_plugin_ids.add(plugin_id)
+            continue
+        by_plugin_id[plugin_id] = candidate
+
+    for plugin_id in ambiguous_plugin_ids:
+        by_plugin_id.pop(plugin_id, None)
+    return {
+        "by_plugin_id": by_plugin_id,
+        "candidate_count": len(by_plugin_id),
+        "ambiguous_plugin_id_count": len(ambiguous_plugin_ids),
+        "invalid_or_unusable_artifact_count": invalid_count,
+    }
+
+
+def _capability_pack_existing_artifact_link_candidates() -> dict[str, Any]:
+    validation_payloads = _plugin_artifact_payloads("validations")
+    validation = _unique_plugin_artifact_candidates(
+        validation_payloads["items"] if isinstance(validation_payloads.get("items"), list) else [],
+        artifact_id_key="validation_receipt_id",
+        path_key="validation_receipt_path",
+        claim_scope="existing_pack_specific_plugin_validation_receipt",
+        require_passed_validation=True,
+    )
+    validation["artifact_body_max_bytes"] = _PLUGIN_ARTIFACT_LINK_BODY_MAX_BYTES
+    validation["oversized_artifact_count"] = int(validation_payloads.get("oversized_artifact_count") or 0)
+    validation["unreadable_artifact_count"] = int(validation_payloads.get("unreadable_artifact_count") or 0)
+    proposal_payloads = _plugin_artifact_payloads("proposals")
+    proposals = _unique_plugin_artifact_candidates(
+        proposal_payloads["items"] if isinstance(proposal_payloads.get("items"), list) else [],
+        artifact_id_key="proposal_id",
+        path_key="proposal_path",
+        claim_scope="existing_plugin_proposal_lineage_only_not_approval",
+    )
+    proposals["artifact_body_max_bytes"] = _PLUGIN_ARTIFACT_LINK_BODY_MAX_BYTES
+    proposals["oversized_artifact_count"] = int(proposal_payloads.get("oversized_artifact_count") or 0)
+    proposals["unreadable_artifact_count"] = int(proposal_payloads.get("unreadable_artifact_count") or 0)
+    return {
+        "validation_receipts": validation,
+        "proposals": proposals,
+        "selection_policy": "unique_existing_artifact_with_matching_plugin_id_only",
+        "artifact_body_max_bytes": _PLUGIN_ARTIFACT_LINK_BODY_MAX_BYTES,
+        "skips_oversized_artifacts": True,
+        "reads_validation_receipt_bodies_for_plugin_id_match": True,
+        "reads_proposal_bodies_for_plugin_id_match": True,
+        "writes_validation_receipts": False,
+        "writes_proposals": False,
+        "proposal_lineage_does_not_claim_approval": True,
+    }
+
+
+def _artifact_links_for_capabilities(
+    capability_ids: list[str],
+    candidates: dict[str, Any],
+) -> dict[str, Any]:
+    raw_by_plugin_id = candidates.get("by_plugin_id")
+    by_plugin_id = raw_by_plugin_id if isinstance(raw_by_plugin_id, dict) else {}
+    links = {
+        capability_id: dict(by_plugin_id[capability_id])
+        for capability_id in capability_ids
+        if capability_id in by_plugin_id and isinstance(by_plugin_id[capability_id], dict)
+    }
+    missing = [capability_id for capability_id in capability_ids if capability_id not in links]
+    return {
+        "links": links,
+        "candidate_count": len(links),
+        "missing_candidate_count": len(missing),
+        "missing_candidate_capability_ids": missing[:25],
+        "missing_candidate_capability_ids_truncated": len(missing) > 25,
+        "candidate_apply_supported": bool(capability_ids) and not missing,
+    }
+
+
 def _capability_pack_quality_remediation_next_action(
     *,
     blockers: list[str],
     quality_reference_candidate: bool,
+    validation_receipt_link_candidate: bool = False,
+    proposal_lineage_link_candidate: bool = False,
 ) -> str:
     if quality_reference_candidate and any(blocker in blockers for blocker in ("tests_missing", "docs_missing")):
         return "review_quality_reference_backfill_candidates"
+    if validation_receipt_link_candidate and "validation_receipt_missing" in blockers:
+        return "review_existing_validation_receipt_links"
+    if proposal_lineage_link_candidate and "proposal_id_missing" in blockers:
+        return "review_existing_proposal_lineage_links"
     if "validation_receipt_missing" in blockers:
         return "write_pack_specific_validation_receipt"
     if "proposal_id_missing" in blockers:
@@ -1562,10 +1735,16 @@ def _capability_pack_quality_remediation_next_action(
 def _capability_pack_quality_remediation_next_gap(
     *,
     quality_backfill_candidate_count: int,
+    validation_receipt_link_candidate_count: int = 0,
+    proposal_lineage_link_candidate_count: int = 0,
     blocker_counts: dict[str, int],
     fallback: str,
 ) -> str:
-    if quality_backfill_candidate_count:
+    if (
+        quality_backfill_candidate_count
+        or validation_receipt_link_candidate_count
+        or proposal_lineage_link_candidate_count
+    ):
         return "stage17_capability_pack_quality_evidence_remediation_apply"
     for blocker, gap in (
         ("tests_missing", "stage17_capability_pack_quality_tests"),
@@ -1583,6 +1762,7 @@ def _capability_pack_quality_evidence_remediation_item(
     *,
     entries: list[dict[str, Any]],
     reference_candidates: dict[str, Any],
+    artifact_link_candidates: dict[str, Any],
 ) -> dict[str, Any] | None:
     blockers = [
         blocker
@@ -1620,14 +1800,36 @@ def _capability_pack_quality_evidence_remediation_item(
         "docs_missing" in blockers and generated_or_legacy and has_metadata_receipts and candidate_doc_count > 0
     )
     quality_reference_candidate = test_backfill_candidate or doc_backfill_candidate
+    capability_ids = _capability_ids_for_pack(entries, pack_id=pack_id, pack_version=pack_version)[:50]
+    validation_candidates = (
+        artifact_link_candidates.get("validation_receipts")
+        if isinstance(artifact_link_candidates.get("validation_receipts"), dict)
+        else {}
+    )
+    proposal_candidates = (
+        artifact_link_candidates.get("proposals") if isinstance(artifact_link_candidates.get("proposals"), dict) else {}
+    )
+    validation_links = _artifact_links_for_capabilities(capability_ids, validation_candidates)
+    proposal_links = _artifact_links_for_capabilities(capability_ids, proposal_candidates)
+    capability_ids_truncated = len(pack_entries) > 50
+    validation_receipt_link_candidate = (
+        "validation_receipt_missing" in blockers
+        and not capability_ids_truncated
+        and bool(validation_links["candidate_apply_supported"])
+    )
+    proposal_lineage_link_candidate = (
+        "proposal_id_missing" in blockers
+        and not capability_ids_truncated
+        and bool(proposal_links["candidate_apply_supported"])
+    )
     return {
         "pack_id": pack_id,
         "pack_version": pack_version,
         "pack_name": _safe_str(item.get("pack_name")).strip() or pack_id,
         "status": "blocked",
         "capability_count": int(item.get("capability_count") or len(pack_entries)),
-        "capability_ids": _capability_ids_for_pack(entries, pack_id=pack_id, pack_version=pack_version)[:50],
-        "capability_ids_truncated": len(pack_entries) > 50,
+        "capability_ids": capability_ids,
+        "capability_ids_truncated": capability_ids_truncated,
         "sources": sources,
         "statuses": statuses,
         "blockers": blockers,
@@ -1650,18 +1852,46 @@ def _capability_pack_quality_evidence_remediation_item(
             },
             "validation_receipt": {
                 "required": "validation_receipt_missing" in blockers,
-                "candidate_apply_supported": False,
-                "reason": "requires_pack_specific_validation_receipt_writer",
+                "candidate_reference_count": int(validation_links["candidate_count"]),
+                "candidate_apply_supported": validation_receipt_link_candidate,
+                "claim_scope": "existing_pack_specific_plugin_validation_receipt",
+                "missing_candidate_count": int(validation_links["missing_candidate_count"]),
+                "missing_candidate_capability_ids": validation_links["missing_candidate_capability_ids"],
+                "missing_candidate_capability_ids_truncated": bool(
+                    validation_links["missing_candidate_capability_ids_truncated"]
+                ),
+                "links": list(validation_links["links"].values())[:25],
+                "links_truncated": len(validation_links["links"]) > 25,
+                "reason": (
+                    "existing_pack_specific_validation_receipt_available"
+                    if validation_receipt_link_candidate
+                    else "requires_pack_specific_validation_receipt_writer"
+                ),
             },
             "forge_proposal": {
                 "required": "proposal_id_missing" in blockers,
-                "candidate_apply_supported": False,
-                "reason": "requires_explicit_lineage_reconstruction_or_proposal_link",
+                "candidate_reference_count": int(proposal_links["candidate_count"]),
+                "candidate_apply_supported": proposal_lineage_link_candidate,
+                "claim_scope": "existing_plugin_proposal_lineage_only_not_approval",
+                "missing_candidate_count": int(proposal_links["missing_candidate_count"]),
+                "missing_candidate_capability_ids": proposal_links["missing_candidate_capability_ids"],
+                "missing_candidate_capability_ids_truncated": bool(
+                    proposal_links["missing_candidate_capability_ids_truncated"]
+                ),
+                "links": list(proposal_links["links"].values())[:25],
+                "links_truncated": len(proposal_links["links"]) > 25,
+                "reason": (
+                    "existing_plugin_proposal_lineage_available"
+                    if proposal_lineage_link_candidate
+                    else "requires_explicit_lineage_reconstruction_or_proposal_link"
+                ),
             },
         },
         "recommended_next_action": _capability_pack_quality_remediation_next_action(
             blockers=blockers,
             quality_reference_candidate=quality_reference_candidate,
+            validation_receipt_link_candidate=validation_receipt_link_candidate,
+            proposal_lineage_link_candidate=proposal_lineage_link_candidate,
         ),
         "would_mutate": False,
         "writes_registry_metadata": False,
@@ -1675,6 +1905,7 @@ def _capability_pack_quality_evidence_remediation_projection(
     promotion_remediation: dict[str, Any],
 ) -> dict[str, Any]:
     reference_candidates = _capability_pack_quality_reference_candidates()
+    artifact_link_candidates = _capability_pack_existing_artifact_link_candidates()
     raw_queue = promotion_remediation.get("remediation_queue")
     source_queue = [item for item in raw_queue if isinstance(item, dict)] if isinstance(raw_queue, list) else []
     items: list[dict[str, Any]] = []
@@ -1684,6 +1915,7 @@ def _capability_pack_quality_evidence_remediation_projection(
             item,
             entries=entries,
             reference_candidates=reference_candidates,
+            artifact_link_candidates=artifact_link_candidates,
         )
         if projected is None:
             continue
@@ -1692,6 +1924,24 @@ def _capability_pack_quality_evidence_remediation_projection(
         items.append(projected)
 
     quality_backfill_candidate_count = sum(1 for item in items if bool(item["quality_reference_backfill_candidate"]))
+    validation_receipt_link_candidate_count = sum(
+        1
+        for item in items
+        if bool(
+            (item.get("evidence_backfill") if isinstance(item.get("evidence_backfill"), dict) else {})
+            .get("validation_receipt", {})
+            .get("candidate_apply_supported")
+        )
+    )
+    proposal_lineage_link_candidate_count = sum(
+        1
+        for item in items
+        if bool(
+            (item.get("evidence_backfill") if isinstance(item.get("evidence_backfill"), dict) else {})
+            .get("forge_proposal", {})
+            .get("candidate_apply_supported")
+        )
+    )
     return {
         "stage": "Stage 17 / Capability Economy",
         "status": "blocked" if items else "ready",
@@ -1704,6 +1954,8 @@ def _capability_pack_quality_evidence_remediation_projection(
         "remediation_queue_truncated": len(items) > _CAPABILITY_PACK_QUALITY_EVIDENCE_QUEUE_LIMIT,
         "blocker_counts": dict(sorted(blocker_counts.items())),
         "quality_reference_backfill_candidate_count": quality_backfill_candidate_count,
+        "validation_receipt_link_candidate_count": validation_receipt_link_candidate_count,
+        "proposal_lineage_link_candidate_count": proposal_lineage_link_candidate_count,
         "validation_receipt_backfill_required_count": sum(
             1 for item in items if "validation_receipt_missing" in item["blockers"]
         ),
@@ -1711,6 +1963,24 @@ def _capability_pack_quality_evidence_remediation_projection(
             1 for item in items if "proposal_id_missing" in item["blockers"]
         ),
         "reference_candidates": reference_candidates,
+        "artifact_link_candidates": {
+            "validation_receipts": {
+                key: value
+                for key, value in artifact_link_candidates["validation_receipts"].items()
+                if key != "by_plugin_id"
+            },
+            "proposals": {
+                key: value for key, value in artifact_link_candidates["proposals"].items() if key != "by_plugin_id"
+            },
+            "selection_policy": artifact_link_candidates["selection_policy"],
+            "artifact_body_max_bytes": artifact_link_candidates["artifact_body_max_bytes"],
+            "skips_oversized_artifacts": True,
+            "reads_validation_receipt_bodies_for_plugin_id_match": True,
+            "reads_proposal_bodies_for_plugin_id_match": True,
+            "writes_validation_receipts": False,
+            "writes_proposals": False,
+            "proposal_lineage_does_not_claim_approval": True,
+        },
         "remediation_queue": items[:_CAPABILITY_PACK_QUALITY_EVIDENCE_QUEUE_LIMIT],
         "requirements": {
             "read_only_remediation_plan": True,
@@ -1718,6 +1988,10 @@ def _capability_pack_quality_evidence_remediation_projection(
             "candidate_references_do_not_claim_pack_specific_coverage": True,
             "validation_receipts_require_pack_specific_writer": True,
             "proposal_lineage_requires_explicit_reconstruction_or_link": True,
+            "existing_validation_receipt_links_require_matching_plugin_id": True,
+            "existing_proposal_lineage_links_require_matching_plugin_id": True,
+            "proposal_lineage_links_do_not_approve_proposals": True,
+            "artifact_body_reads_are_bounded": True,
             "generated_or_legacy_pack_only_for_quality_backfill_candidates": True,
         },
         "governance": {
@@ -1725,8 +1999,12 @@ def _capability_pack_quality_evidence_remediation_projection(
             "operator_facing": True,
             "does_not_read_test_contents": True,
             "does_not_read_doc_contents": True,
-            "does_not_read_receipt_bodies": True,
-            "does_not_read_proposal_bodies": True,
+            "does_not_read_receipt_bodies": False,
+            "does_not_read_proposal_bodies": False,
+            "reads_validation_receipt_bodies_for_plugin_id_match": True,
+            "reads_proposal_bodies_for_plugin_id_match": True,
+            "artifact_body_max_bytes": _PLUGIN_ARTIFACT_LINK_BODY_MAX_BYTES,
+            "skips_oversized_artifacts": True,
             "does_not_write_receipts": True,
             "does_not_write_validation_receipts": True,
             "does_not_write_proposals": True,
@@ -1744,6 +2022,8 @@ def _capability_pack_quality_evidence_remediation_projection(
         "next_smallest_truthful_gap": (
             _capability_pack_quality_remediation_next_gap(
                 quality_backfill_candidate_count=quality_backfill_candidate_count,
+                validation_receipt_link_candidate_count=validation_receipt_link_candidate_count,
+                proposal_lineage_link_candidate_count=proposal_lineage_link_candidate_count,
                 blocker_counts=blocker_counts,
                 fallback=_safe_str(promotion_remediation.get("next_smallest_truthful_gap")).strip(),
             )
@@ -1777,6 +2057,22 @@ def _quality_reference_plan_for_remediation_item(
     }
 
 
+def _artifact_link_plan_for_remediation_item(item: dict[str, Any], key: str) -> dict[str, dict[str, Any]]:
+    evidence = item.get("evidence_backfill") if isinstance(item.get("evidence_backfill"), dict) else {}
+    raw = evidence.get(key) if isinstance(evidence.get(key), dict) else {}
+    if not bool(raw.get("candidate_apply_supported")):
+        return {}
+    links = raw.get("links") if isinstance(raw.get("links"), list) else []
+    planned: dict[str, dict[str, Any]] = {}
+    for link in links:
+        if not isinstance(link, dict):
+            continue
+        plugin_id = _safe_str(link.get("plugin_id")).strip()
+        if plugin_id:
+            planned[plugin_id] = dict(link)
+    return planned
+
+
 def _merge_quality_references(existing: Any, additions: list[str]) -> list[str]:
     return _unique_texts([*_unique_texts(existing, limit=50), *additions], limit=50)
 
@@ -1798,6 +2094,12 @@ def _record_capability_pack_quality_evidence_remediation_batch(
         references = item.get("quality_references") if isinstance(item.get("quality_references"), dict) else {}
         test_refs = _unique_texts(references.get("tests"), limit=50)
         doc_refs = _unique_texts(references.get("docs"), limit=50)
+        validation_links = (
+            item.get("validation_receipt_links") if isinstance(item.get("validation_receipt_links"), dict) else {}
+        )
+        proposal_links = (
+            item.get("proposal_lineage_links") if isinstance(item.get("proposal_lineage_links"), dict) else {}
+        )
         missing = [capability_id for capability_id in capability_ids if _read_plugin(registry, capability_id) is None]
         if missing:
             failed.append(
@@ -1819,19 +2121,44 @@ def _record_capability_pack_quality_evidence_remediation_batch(
             meta = dict(current.get("meta") or {}) if isinstance(current.get("meta"), dict) else {}
             quality = dict(meta.get("quality") or {}) if isinstance(meta.get("quality"), dict) else {}
             before_quality = dict(quality)
+            before_meta = dict(meta)
             if test_refs:
                 quality["tests"] = _merge_quality_references(quality.get("tests"), test_refs)
             if doc_refs:
                 quality["docs"] = _merge_quality_references(quality.get("docs"), doc_refs)
-            if quality == before_quality:
+            if quality != before_quality:
+                quality["reference_source"] = "stage17_quality_evidence_remediation_apply"
+                quality["claim_scope"] = "candidate_reference_only_not_pack_specific_proof"
+                quality["pack_specific_coverage_claimed"] = False
+                quality["validation_receipt_written"] = False
+                quality["proposal_lineage_written"] = False
+                meta["quality"] = quality
+                meta["quality_reference_remediation_source"] = (
+                    "stage17_capability_pack_quality_evidence_remediation_apply"
+                )
+            validation_link = validation_links.get(capability_id)
+            if isinstance(validation_link, dict):
+                validation_receipt_id = _safe_str(validation_link.get("validation_receipt_id")).strip()
+                validation_receipt_path = _safe_str(validation_link.get("validation_receipt_path")).strip()
+                if validation_receipt_id and validation_receipt_path:
+                    meta["validation_receipt_id"] = validation_receipt_id
+                    meta["validation_receipt_path"] = validation_receipt_path
+                    meta["validation_receipt_link_source"] = (
+                        "stage17_capability_pack_quality_evidence_remediation_apply"
+                    )
+                    meta["validation_receipt_link_claim_scope"] = "existing_pack_specific_plugin_validation_receipt"
+            proposal_link = proposal_links.get(capability_id)
+            if isinstance(proposal_link, dict):
+                proposal_id = _safe_str(proposal_link.get("proposal_id")).strip()
+                proposal_path = _safe_str(proposal_link.get("proposal_path")).strip()
+                if proposal_id and proposal_path:
+                    meta["proposal_id"] = proposal_id
+                    meta["proposal_path"] = proposal_path
+                    meta["proposal_lineage_link_source"] = "stage17_capability_pack_quality_evidence_remediation_apply"
+                    meta["proposal_lineage_claim_scope"] = "existing_plugin_proposal_lineage_only_not_approval"
+                    meta["proposal_lineage_approval_claimed"] = False
+            if meta == before_meta:
                 continue
-            quality["reference_source"] = "stage17_quality_evidence_remediation_apply"
-            quality["claim_scope"] = "candidate_reference_only_not_pack_specific_proof"
-            quality["pack_specific_coverage_claimed"] = False
-            quality["validation_receipt_written"] = False
-            quality["proposal_lineage_written"] = False
-            meta["quality"] = quality
-            meta["quality_reference_remediation_source"] = "stage17_capability_pack_quality_evidence_remediation_apply"
             current["meta"] = meta
             current["updated_ts"] = recorded_ts
             _write_plugin(registry, _normalize_plugin_record(capability_id, current))
@@ -1851,6 +2178,17 @@ def _record_capability_pack_quality_evidence_remediation_batch(
                     "docs": doc_refs,
                     "claim_scope": "candidate_reference_only_not_pack_specific_proof",
                     "pack_specific_coverage_claimed": False,
+                },
+                "validation_receipt_links": {
+                    "count": len(validation_links),
+                    "claim_scope": "existing_pack_specific_plugin_validation_receipt",
+                    "writes_validation_receipts": False,
+                },
+                "proposal_lineage_links": {
+                    "count": len(proposal_links),
+                    "claim_scope": "existing_plugin_proposal_lineage_only_not_approval",
+                    "proposal_approval_claimed": False,
+                    "writes_proposals": False,
                 },
                 "applied_evidence_blockers": _unique_texts(item.get("evidence_blockers"), limit=50),
                 "status": "recorded" if changed_capability_ids else "unchanged",
@@ -3704,17 +4042,23 @@ def apply_capability_pack_quality_evidence_remediation(
                 skipped.append({"pack_id": pack_id, "pack_version": pack_version, "error": "invalid_pack_id"})
                 continue
             references = _quality_reference_plan_for_remediation_item(item, reference_candidates)
-            evidence_blockers = [
-                blocker
-                for blocker, refs in (("tests_missing", references["tests"]), ("docs_missing", references["docs"]))
-                if refs and blocker in _unique_texts(item.get("blockers"), limit=50)
-            ]
+            validation_receipt_links = _artifact_link_plan_for_remediation_item(item, "validation_receipt")
+            proposal_lineage_links = _artifact_link_plan_for_remediation_item(item, "forge_proposal")
+            evidence_blockers = []
+            for blocker, supported in (
+                ("tests_missing", bool(references["tests"])),
+                ("docs_missing", bool(references["docs"])),
+                ("validation_receipt_missing", bool(validation_receipt_links)),
+                ("proposal_id_missing", bool(proposal_lineage_links)),
+            ):
+                if supported and blocker in _unique_texts(item.get("blockers"), limit=50):
+                    evidence_blockers.append(blocker)
             if not evidence_blockers:
                 skipped.append(
                     {
                         "pack_id": pack_id,
                         "pack_version": pack_version,
-                        "error": "no_supported_quality_reference_backfill",
+                        "error": "no_supported_quality_evidence_backfill",
                         "blockers": _unique_texts(item.get("blockers"), limit=50),
                     }
                 )
@@ -3744,6 +4088,8 @@ def apply_capability_pack_quality_evidence_remediation(
                     "pack_name": _safe_str(item.get("pack_name")).strip() or pack_id,
                     "capability_ids": capability_ids,
                     "quality_references": references,
+                    "validation_receipt_links": validation_receipt_links,
+                    "proposal_lineage_links": proposal_lineage_links,
                     "evidence_blockers": evidence_blockers,
                 }
             )
@@ -3760,7 +4106,7 @@ def apply_capability_pack_quality_evidence_remediation(
             return {
                 "ok": True,
                 "applied": False,
-                "status": "no_supported_quality_reference_backfill",
+                "status": "no_supported_quality_evidence_backfill",
                 "planned_pack_count": 0,
                 "recorded_pack_count": 0,
                 "recorded_capability_count": 0,
@@ -3786,8 +4132,19 @@ def apply_capability_pack_quality_evidence_remediation(
                 "pack_name": item["pack_name"],
                 "capability_count": len(item["capability_ids"]),
                 "quality_references": item["quality_references"],
+                "validation_receipt_links": {
+                    "count": len(item["validation_receipt_links"]),
+                    "claim_scope": "existing_pack_specific_plugin_validation_receipt",
+                    "writes_validation_receipts": False,
+                },
+                "proposal_lineage_links": {
+                    "count": len(item["proposal_lineage_links"]),
+                    "claim_scope": "existing_plugin_proposal_lineage_only_not_approval",
+                    "proposal_approval_claimed": False,
+                    "writes_proposals": False,
+                },
                 "applied_evidence_blockers": item["evidence_blockers"],
-                "claim_scope": "candidate_reference_only_not_pack_specific_proof",
+                "claim_scope": "bounded_quality_reference_and_existing_artifact_links_only",
             }
             for item in prepared
         ]
@@ -3863,10 +4220,17 @@ def apply_capability_pack_quality_evidence_remediation(
                 "route": request.url.path,
                 "writes_registry_metadata": applied,
                 "writes_receipts": False,
-                "quality_reference_backfill_only": True,
+                "quality_reference_backfill_only": all(
+                    not item.get("validation_receipt_links") and not item.get("proposal_lineage_links")
+                    for item in prepared
+                ),
+                "existing_artifact_link_backfill_supported": True,
                 "candidate_references_do_not_claim_pack_specific_coverage": True,
                 "does_not_write_validation_receipts": True,
                 "does_not_write_proposals": True,
+                "validation_receipt_links_require_existing_artifacts": True,
+                "proposal_lineage_links_require_existing_artifacts": True,
+                "proposal_lineage_links_do_not_approve_proposals": True,
                 "does_not_approve_proposals": True,
                 "does_not_promote_capabilities": True,
                 "does_not_enable_capabilities": True,

@@ -1207,6 +1207,10 @@ def test_plugins_capability_pack_quality_evidence_remediation_projects_truthful_
     assert body["governance"]["read_only"] is True
     assert body["governance"]["does_not_read_test_contents"] is True
     assert body["governance"]["does_not_read_doc_contents"] is True
+    assert body["governance"]["does_not_read_receipt_bodies"] is False
+    assert body["governance"]["does_not_read_proposal_bodies"] is False
+    assert body["governance"]["reads_validation_receipt_bodies_for_plugin_id_match"] is True
+    assert body["governance"]["reads_proposal_bodies_for_plugin_id_match"] is True
     assert body["governance"]["does_not_write_receipts"] is True
     assert body["governance"]["does_not_write_validation_receipts"] is True
     assert body["governance"]["does_not_write_proposals"] is True
@@ -1216,6 +1220,11 @@ def test_plugins_capability_pack_quality_evidence_remediation_projects_truthful_
     assert body["governance"]["execution_authority"] is False
     assert body["governance"]["memory_write"] is False
     assert body["reference_candidates"]["pack_specific_coverage_claimed"] is False
+    assert body["artifact_link_candidates"]["selection_policy"] == (
+        "unique_existing_artifact_with_matching_plugin_id_only"
+    )
+    assert body["artifact_link_candidates"]["writes_validation_receipts"] is False
+    assert body["artifact_link_candidates"]["writes_proposals"] is False
     assert body["reference_candidates"]["candidate_test_reference_count"] >= 1
     assert body["reference_candidates"]["candidate_doc_reference_count"] >= 1
     assert body["blocker_counts"]["tests_missing"] >= 1
@@ -1243,7 +1252,17 @@ def test_plugins_capability_pack_quality_evidence_remediation_projects_truthful_
     assert item["evidence_backfill"]["tests"]["claim_scope"] == "candidate_reference_only_not_pack_specific_proof"
     assert item["evidence_backfill"]["docs"]["claim_scope"] == "candidate_reference_only_not_pack_specific_proof"
     assert item["evidence_backfill"]["validation_receipt"]["candidate_apply_supported"] is False
+    assert item["evidence_backfill"]["validation_receipt"]["candidate_reference_count"] >= 1
+    assert item["evidence_backfill"]["validation_receipt"]["claim_scope"] == (
+        "existing_pack_specific_plugin_validation_receipt"
+    )
+    assert item["evidence_backfill"]["validation_receipt"]["missing_candidate_count"] >= 1
     assert item["evidence_backfill"]["forge_proposal"]["candidate_apply_supported"] is False
+    assert item["evidence_backfill"]["forge_proposal"]["candidate_reference_count"] >= 1
+    assert item["evidence_backfill"]["forge_proposal"]["claim_scope"] == (
+        "existing_plugin_proposal_lineage_only_not_approval"
+    )
+    assert item["evidence_backfill"]["forge_proposal"]["missing_candidate_count"] >= 1
     assert item["recommended_next_action"] == "review_quality_reference_backfill_candidates"
     assert item["would_mutate"] is False
     assert item["writes_registry_metadata"] is False
@@ -1256,6 +1275,37 @@ def test_plugins_capability_pack_quality_evidence_remediation_projects_truthful_
     assert "docs" not in post_meta
     assert "proposal_id" not in post_meta
     assert "validation_receipt_id" not in post_meta
+
+
+def test_plugins_capability_pack_quality_evidence_remediation_skips_oversized_artifact_payloads(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from francis.api.routes import plugins
+
+    proposals_dir = data_root / "artifacts" / "plugins" / "proposals"
+    proposals_dir.mkdir(parents=True)
+    oversized_body = (
+        '{"plugin_id":"'
+        + ("x" * plugins._PLUGIN_ARTIFACT_LINK_BODY_MAX_BYTES)
+        + '","proposal_id":"proposal_oversized"}'
+    )
+    (proposals_dir / "proposal_oversized.json").write_text(oversized_body, encoding="utf-8")
+
+    payload_scan = plugins._plugin_artifact_payloads("proposals")
+    assert payload_scan["items"] == []
+    assert payload_scan["artifact_body_max_bytes"] == plugins._PLUGIN_ARTIFACT_LINK_BODY_MAX_BYTES
+    assert payload_scan["oversized_artifact_count"] == 1
+    assert payload_scan["unreadable_artifact_count"] == 0
+
+    candidates = plugins._capability_pack_existing_artifact_link_candidates()
+    assert candidates["artifact_body_max_bytes"] == plugins._PLUGIN_ARTIFACT_LINK_BODY_MAX_BYTES
+    assert candidates["skips_oversized_artifacts"] is True
+    assert candidates["proposals"]["candidate_count"] == 0
+    assert candidates["proposals"]["oversized_artifact_count"] == 1
 
 
 def test_plugins_capability_pack_quality_evidence_remediation_apply_backfills_candidate_refs(
@@ -1361,6 +1411,8 @@ def test_plugins_capability_pack_quality_evidence_remediation_apply_backfills_ca
     assert dry_run_body["ok"] is True
     assert dry_run_body["status"] == "dry_run"
     assert dry_run_body["planned_pack_count"] == 1
+    assert dry_run_body["planned"][0]["validation_receipt_links"]["count"] == 1
+    assert dry_run_body["planned"][0]["proposal_lineage_links"]["count"] == 1
     assert dry_run_body["governance"]["writes_registry_metadata"] is False
     post_dry_run = plugins._read_plugin(plugins._load_registry(), plugin_id)
     assert post_dry_run is not None
@@ -1386,10 +1438,14 @@ def test_plugins_capability_pack_quality_evidence_remediation_apply_backfills_ca
     assert applied_body["recorded_capability_count"] == 1
     assert applied_body["governance"]["writes_registry_metadata"] is True
     assert applied_body["governance"]["writes_receipts"] is False
-    assert applied_body["governance"]["quality_reference_backfill_only"] is True
+    assert applied_body["governance"]["quality_reference_backfill_only"] is False
+    assert applied_body["governance"]["existing_artifact_link_backfill_supported"] is True
     assert applied_body["governance"]["candidate_references_do_not_claim_pack_specific_coverage"] is True
     assert applied_body["governance"]["does_not_write_validation_receipts"] is True
     assert applied_body["governance"]["does_not_write_proposals"] is True
+    assert applied_body["governance"]["validation_receipt_links_require_existing_artifacts"] is True
+    assert applied_body["governance"]["proposal_lineage_links_require_existing_artifacts"] is True
+    assert applied_body["governance"]["proposal_lineage_links_do_not_approve_proposals"] is True
     assert applied_body["governance"]["does_not_promote_capabilities"] is True
     assert applied_body["governance"]["does_not_execute_capabilities"] is True
     assert applied_body["governance"]["promotion_authority"] is False
@@ -1397,10 +1453,20 @@ def test_plugins_capability_pack_quality_evidence_remediation_apply_backfills_ca
 
     recorded_item = applied_body["recorded"][0]
     assert recorded_item["pack_id"] == pack_id
-    assert recorded_item["applied_evidence_blockers"] == ["tests_missing", "docs_missing"]
+    assert recorded_item["applied_evidence_blockers"] == [
+        "tests_missing",
+        "docs_missing",
+        "validation_receipt_missing",
+        "proposal_id_missing",
+    ]
     assert recorded_item["quality_references"]["tests"] == ["tests/test_api_plugins.py"]
     assert recorded_item["quality_references"]["docs"] == ["README.md", "docs/operations/COMPLETION_LEDGER.md"]
     assert recorded_item["quality_references"]["pack_specific_coverage_claimed"] is False
+    assert recorded_item["validation_receipt_links"]["count"] == 1
+    assert recorded_item["validation_receipt_links"]["writes_validation_receipts"] is False
+    assert recorded_item["proposal_lineage_links"]["count"] == 1
+    assert recorded_item["proposal_lineage_links"]["proposal_approval_claimed"] is False
+    assert recorded_item["proposal_lineage_links"]["writes_proposals"] is False
 
     catalog = client.get("/plugins/capabilities/catalog?limit=5000").json()
     entry = next(item for item in catalog["items"] if item["capability"] == plugin_id)
@@ -1408,6 +1474,8 @@ def test_plugins_capability_pack_quality_evidence_remediation_apply_backfills_ca
     catalog_quality = entry["quality"]
     assert catalog_quality["tests"] == ["tests/test_api_plugins.py"]
     assert catalog_quality["docs"] == ["README.md", "docs/operations/COMPLETION_LEDGER.md"]
+    assert entry["proposal_id"] == built_body["proposal_id"]
+    assert metadata["validation_receipt_id"] == built_body["validation_receipt_id"]
     post_apply_plugin = plugins._read_plugin(plugins._load_registry(), plugin_id)
     assert post_apply_plugin is not None
     stored_meta = dict(post_apply_plugin.get("meta") or {})
@@ -1421,23 +1489,25 @@ def test_plugins_capability_pack_quality_evidence_remediation_apply_backfills_ca
     assert stored_meta["quality_reference_remediation_source"] == (
         "stage17_capability_pack_quality_evidence_remediation_apply"
     )
-    assert "proposal_id" not in metadata
-    assert "validation_receipt_id" not in metadata
-    assert "proposal_id" not in stored_meta
-    assert "validation_receipt_id" not in stored_meta
+    assert stored_meta["proposal_id"] == built_body["proposal_id"]
+    assert stored_meta["proposal_path"] == f"data/artifacts/plugins/proposals/{built_body['proposal_id']}.json"
+    assert stored_meta["proposal_lineage_link_source"] == "stage17_capability_pack_quality_evidence_remediation_apply"
+    assert stored_meta["proposal_lineage_approval_claimed"] is False
+    assert stored_meta["validation_receipt_id"] == built_body["validation_receipt_id"]
+    assert stored_meta["validation_receipt_path"] == (
+        f"data/artifacts/plugins/validations/{built_body['validation_receipt_id']}.json"
+    )
+    assert stored_meta["validation_receipt_link_source"] == (
+        "stage17_capability_pack_quality_evidence_remediation_apply"
+    )
 
     receipts_after = client.get("/plugins/capabilities/packs/metadata/receipts?limit=20").json()["items"]
     assert [item["receipt_id"] for item in receipts_after] == [item["receipt_id"] for item in receipts_before]
 
-    remaining_item = next(item for item in applied_body["remaining_remediation_queue"] if item["pack_id"] == pack_id)
-    assert remaining_item["blockers"] == ["validation_receipt_missing", "proposal_id_missing"]
-    assert remaining_item["quality_reference_backfill_candidate"] is False
-    assert remaining_item["recommended_next_action"] == "write_pack_specific_validation_receipt"
+    assert all(item["pack_id"] != pack_id for item in applied_body["remaining_remediation_queue"])
 
     after = client.get("/plugins/capabilities/packs/quality/evidence/remediation").json()
-    after_item = next(item for item in after["remediation_queue"] if item["pack_id"] == pack_id)
-    assert after_item["blockers"] == ["validation_receipt_missing", "proposal_id_missing"]
-    assert after_item["quality_reference_backfill_candidate"] is False
+    assert all(item["pack_id"] != pack_id for item in after["remediation_queue"])
 
 
 def test_plugins_capability_pack_promotion_receipts_projects_read_only_receipt_evidence(

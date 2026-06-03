@@ -13,6 +13,7 @@ GIT_STATUS_KIND = "francis.stage7.telemetry.git_status"
 _INTERNAL_API_ERROR = "internal_api_error"
 _LOG = logging.getLogger("francis.telemetry.git")
 _GIT_TIMEOUT_SECONDS = 5
+_GIT_STATUS_ARGS = ["status", "--porcelain=v1", "-b", "--untracked-files=no"]
 _MAX_CHANGED_PATHS = 50
 
 
@@ -28,6 +29,8 @@ def git_status_snapshot(*, cwd: Any = None, limit: int = _MAX_CHANGED_PATHS) -> 
         "watch_mode": "on_request_snapshot",
         "hidden_sensing": False,
         "visible_indicator": True,
+        "untracked_files_included": False,
+        "status_scope": "tracked_changes_only",
         "redacted": True,
         "stores_raw_events": False,
         "grants_execution_authority": False,
@@ -37,7 +40,7 @@ def git_status_snapshot(*, cwd: Any = None, limit: int = _MAX_CHANGED_PATHS) -> 
         "limit": safe_limit,
     }
 
-    status = _git(["status", "--porcelain=v1", "-b"], cwd=root)
+    status = _git(_GIT_STATUS_ARGS, cwd=root)
     if not status["ok"]:
         return {
             **base,
@@ -98,7 +101,7 @@ def git_source_snapshot() -> dict[str, Any]:
         "scope": {
             "status": "repo_root_only" if active else "not_granted",
             "allowed_paths": [snapshot["root"]] if active else [],
-            "allowed_processes": ["git status", "git rev-parse"] if active else [],
+            "allowed_processes": ["git status --untracked-files=no", "git rev-parse"] if active else [],
             "denied_by_default": True,
         },
         "latest_snapshot": {
@@ -220,6 +223,7 @@ def _governance() -> dict[str, bool]:
         "git_fetch": False,
         "git_pull": False,
         "git_push": False,
+        "untracked_file_scan": False,
         "grants_execution_authority": False,
         "grants_mutation_authority": False,
         "telemetry_is_untrusted_input": True,

@@ -3757,6 +3757,8 @@ def test_git_telemetry_status_is_readonly_snapshot(monkeypatch, tmp_path: Path) 
     assert body["watch_mode"] == "on_request_snapshot"
     assert body["hidden_sensing"] is False
     assert body["visible_indicator"] is True
+    assert body["untracked_files_included"] is False
+    assert body["status_scope"] == "tracked_changes_only"
     assert body["stores_raw_events"] is False
     assert body["grants_execution_authority"] is False
     assert body["grants_mutation_authority"] is False
@@ -3764,6 +3766,7 @@ def test_git_telemetry_status_is_readonly_snapshot(monkeypatch, tmp_path: Path) 
     assert body["governance"]["git_fetch"] is False
     assert body["governance"]["git_pull"] is False
     assert body["governance"]["git_push"] is False
+    assert body["governance"]["untracked_file_scan"] is False
     assert isinstance(body["changed_paths"], list)
     assert len(body["changed_paths"]) <= 5
     assert body["changed_count"] >= len(body["changed_paths"])

@@ -57564,6 +57564,80 @@ Remaining truthful gap:
 - Stage 17 still needs pack-specific validation-receipt and proposal-lineage
   remediation before it can be called complete.
 
+### 2026-06-03 - Stage 17 quality evidence remediation can link existing validation and proposal artifacts
+
+Roadmap area: Stage 17 / Capability Economy, pack-specific validation receipt
+and proposal lineage remediation.
+
+Material change:
+
+- Extended the governed quality-evidence remediation projection and apply route
+  to detect unique existing validation/proposal artifacts that match capability
+  `plugin_id` values.
+- Applying a selected pack can now link existing validation/proposal artifact
+  ids and paths into registry metadata when every capability in that pack has a
+  unique matching artifact. Partial multi-capability packs remain unsupported.
+- The route reads local validation/proposal artifact bodies with a
+  262,144-byte per-file cap only to establish `plugin_id` matches, and skips
+  oversized artifacts instead of parsing them. It still creates no receipts,
+  creates no validation receipts, creates no proposals, approves no proposals,
+  promotes no capabilities, enables no capabilities, executes no capabilities,
+  writes no memory, and mutates no generated artifacts.
+- Proposal lineage links explicitly record that no proposal approval is claimed.
+- During full local validation, the Stage 7 git telemetry snapshot was hardened
+  to use tracked-change status only (`git status --untracked-files=no`) so
+  untracked test-run scratch trees do not time out the read-only operator review
+  path. The telemetry surface now reports `status_scope:
+  tracked_changes_only`, `untracked_files_included: false`, and governance
+  `untracked_file_scan: false`.
+
+Latest validation for Stage 17 existing-artifact evidence links:
+
+- `python -m pytest
+  tests/test_api_plugins.py::test_plugins_capability_pack_quality_evidence_remediation_projects_truthful_read_only_plan
+  tests/test_api_plugins.py::test_plugins_capability_pack_quality_evidence_remediation_skips_oversized_artifact_payloads
+  tests/test_api_plugins.py::test_plugins_capability_pack_quality_evidence_remediation_apply_backfills_candidate_refs
+  -q --tb=short --maxfail=1`
+  Result: `passed; 3 selected tests passed`
+- `python -m ruff check src/francis/api/routes/plugins.py
+  tests/test_api_plugins.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/plugins.py
+  tests/test_api_plugins.py`
+  Result: `passed`
+- `python -m mypy src/francis/api/routes/plugins.py`
+  Result: `passed`
+- `python -m pytest
+  tests/test_api_telemetry.py::test_git_telemetry_status_is_readonly_snapshot
+  tests/test_api_telemetry.py::test_telemetry_context_feedback_memory_assistance_live_sample_operator_decision_records_receipt
+  -q --tb=short --maxfail=1`
+  Result: `passed; 2 selected tests passed`
+- `python -m ruff check src/francis/telemetry/git.py
+  tests/test_api_telemetry.py src/francis/api/routes/plugins.py
+  tests/test_api_plugins.py`
+  Result: `passed`
+- `python -m mypy src/francis/telemetry/git.py
+  src/francis/api/routes/plugins.py`
+  Result: `passed`
+- `.\scripts\check.ps1`
+  Result: `passed`; included branch-state checks, Ruff lint, Ruff format check,
+  mypy over `src`, and full pytest. Pytest reached 100%; two skips were visible.
+- `git diff --check`
+  Result: `passed; line-ending warnings only`
+
+Validation risk:
+
+- This slice is locally validated but not yet GitHub-confirmed.
+- The live local artifact folders currently have no proposal or validation
+  artifact files, so this is an apply path for existing artifacts, not artifact
+  generation or reconstruction for legacy packs.
+
+Remaining truthful gap:
+
+- Stage 17 still needs GitHub confirmation for this link-only remediation slice,
+  then pack-specific validation/proposal artifact creation or reconstruction for
+  legacy packs that have no existing artifacts.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
