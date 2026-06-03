@@ -1254,9 +1254,7 @@ def test_plugins_capability_pack_quality_evidence_remediation_projects_truthful_
     validation_backfill = item["evidence_backfill"]["validation_receipt"]
     assert validation_backfill["candidate_reference_count"] >= 1
     assert validation_backfill["claim_scope"] == "existing_pack_specific_plugin_validation_receipt"
-    assert validation_backfill["candidate_apply_supported"] is (
-        validation_backfill["missing_candidate_count"] == 0
-    )
+    assert validation_backfill["candidate_apply_supported"] is (validation_backfill["missing_candidate_count"] == 0)
     assert validation_backfill["reason"] in (
         "existing_pack_specific_validation_receipt_available",
         "requires_pack_specific_validation_receipt_writer",
