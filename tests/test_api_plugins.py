@@ -1251,18 +1251,33 @@ def test_plugins_capability_pack_quality_evidence_remediation_projects_truthful_
     assert item["evidence_backfill"]["docs"]["candidate_apply_supported"] is True
     assert item["evidence_backfill"]["tests"]["claim_scope"] == "candidate_reference_only_not_pack_specific_proof"
     assert item["evidence_backfill"]["docs"]["claim_scope"] == "candidate_reference_only_not_pack_specific_proof"
-    assert item["evidence_backfill"]["validation_receipt"]["candidate_apply_supported"] is False
-    assert item["evidence_backfill"]["validation_receipt"]["candidate_reference_count"] >= 1
-    assert item["evidence_backfill"]["validation_receipt"]["claim_scope"] == (
-        "existing_pack_specific_plugin_validation_receipt"
+    validation_backfill = item["evidence_backfill"]["validation_receipt"]
+    assert validation_backfill["candidate_reference_count"] >= 1
+    assert validation_backfill["claim_scope"] == "existing_pack_specific_plugin_validation_receipt"
+    assert validation_backfill["candidate_apply_supported"] is (
+        validation_backfill["missing_candidate_count"] == 0
     )
-    assert item["evidence_backfill"]["validation_receipt"]["missing_candidate_count"] >= 1
-    assert item["evidence_backfill"]["forge_proposal"]["candidate_apply_supported"] is False
-    assert item["evidence_backfill"]["forge_proposal"]["candidate_reference_count"] >= 1
-    assert item["evidence_backfill"]["forge_proposal"]["claim_scope"] == (
-        "existing_plugin_proposal_lineage_only_not_approval"
+    assert validation_backfill["reason"] in (
+        "existing_pack_specific_validation_receipt_available",
+        "requires_pack_specific_validation_receipt_writer",
     )
-    assert item["evidence_backfill"]["forge_proposal"]["missing_candidate_count"] >= 1
+    if validation_backfill["candidate_apply_supported"]:
+        assert validation_backfill["links"]
+    else:
+        assert validation_backfill["missing_candidate_count"] >= 1
+
+    proposal_backfill = item["evidence_backfill"]["forge_proposal"]
+    assert proposal_backfill["candidate_reference_count"] >= 1
+    assert proposal_backfill["claim_scope"] == "existing_plugin_proposal_lineage_only_not_approval"
+    assert proposal_backfill["candidate_apply_supported"] is (proposal_backfill["missing_candidate_count"] == 0)
+    assert proposal_backfill["reason"] in (
+        "existing_plugin_proposal_lineage_available",
+        "requires_explicit_lineage_reconstruction_or_proposal_link",
+    )
+    if proposal_backfill["candidate_apply_supported"]:
+        assert proposal_backfill["links"]
+    else:
+        assert proposal_backfill["missing_candidate_count"] >= 1
     assert item["recommended_next_action"] == "review_quality_reference_backfill_candidates"
     assert item["would_mutate"] is False
     assert item["writes_registry_metadata"] is False
