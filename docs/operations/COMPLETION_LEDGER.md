@@ -57532,6 +57532,38 @@ Remaining truthful gap:
   route, then pack-specific validation-receipt and proposal-lineage remediation
   before it can be called complete.
 
+### 2026-06-02 - Stage 17 quality evidence remediation apply passes GitHub CI
+
+Roadmap area: Stage 17 / Capability Economy, GitHub-visible validation for the
+governed quality-reference remediation apply slice.
+
+Material change:
+
+- GitHub CI and CodeQL now confirm the pushed quality-evidence remediation
+  apply slice on `main` commit `2c05a353`.
+- The route remains bounded to registry quality-reference metadata and still
+  does not write receipts, validation receipts, proposals, approvals,
+  promotions, enables, executions, memory, or generated artifacts.
+- `README.md` `Latest Progress Snapshot` was intentionally overwritten to show
+  `2c05a353` as the latest confirmed capability-code GitHub gate and to keep the
+  next truthful gap on pack-specific validation-receipt and proposal-lineage
+  remediation.
+
+Latest validation for Stage 17 quality-evidence remediation apply:
+
+- `.\scripts\check.ps1`
+  Result: `passed`; included branch-state checks, Ruff lint, Ruff format check,
+  mypy, and pytest. Pytest reached 100%; two skips were visible.
+- GitHub CI run `26858316522` for commit `2c05a353`.
+  Result: `passed` on Ubuntu 3.12, Ubuntu 3.13, Windows 3.12, and Windows 3.13.
+- CodeQL Advanced run `26858316527` for commit `2c05a353`.
+  Result: `passed` for Actions, JavaScript/TypeScript, and Python.
+
+Remaining truthful gap:
+
+- Stage 17 still needs pack-specific validation-receipt and proposal-lineage
+  remediation before it can be called complete.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
