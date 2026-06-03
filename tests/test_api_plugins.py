@@ -1352,6 +1352,7 @@ def test_plugins_capability_pack_quality_evidence_remediation_projects_artifact_
     from francis.api.app import create_app
     from francis.api.routes import plugins
 
+    monkeypatch.setattr(plugins, "_gen_dir", lambda: tmp_path / "generated_plugins")
     client = TestClient(create_app())
     built = client.post(
         "/plugins/build",
@@ -1503,6 +1504,7 @@ def test_plugins_capability_pack_quality_evidence_remediation_reconstructs_missi
     from francis.api.app import create_app
     from francis.api.routes import plugins
 
+    monkeypatch.setattr(plugins, "_gen_dir", lambda: tmp_path / "generated_plugins")
     client = TestClient(create_app())
     built = client.post(
         "/plugins/build",
@@ -1705,6 +1707,179 @@ def test_plugins_capability_pack_quality_evidence_remediation_reconstructs_missi
 
     after = client.get("/plugins/capabilities/packs/quality/evidence/remediation").json()
     assert all(item["pack_id"] != pack_id for item in after["remediation_queue"])
+
+
+def test_plugins_capability_pack_quality_evidence_remediation_reconstructs_truncated_plan_chunk(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    monkeypatch.setattr(plugins, "_gen_dir", lambda: tmp_path / "generated_plugins")
+    client = TestClient(create_app())
+    capability_limit = plugins._CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_PLAN_LIMIT
+    plugin_ids: list[str] = []
+    built_bodies: list[dict[str, object]] = []
+    for index in range(capability_limit + 1):
+        built = client.post(
+            "/plugins/build",
+            json={
+                "name": f"Capability Artifact Reconstruction Chunk Plugin {index}",
+                "description": "Stage 17 bounded chunk reconstruction coverage",
+                "actor": _PLUGIN_ACTOR,
+                "meta": _forge_promotion_meta(f"capability_artifact_reconstruction_chunk_{index}"),
+            },
+        )
+        assert built.status_code == 200
+        built_body = built.json()
+        assert built_body["ok"] is True
+        plugin_ids.append(str(built_body["plugin_id"]))
+        built_bodies.append(built_body)
+
+    pack_id = "ops.artifact_reconstruction_chunk"
+    pack_version = "1.0.0"
+    recorded = client.post(
+        "/plugins/capabilities/packs/metadata/receipts",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "record reviewed large pack metadata before chunk reconstruction",
+            "pack_id": pack_id,
+            "pack_version": pack_version,
+            "pack_name": "Ops Artifact Reconstruction Chunk Pack",
+            "capability_ids": plugin_ids,
+            "promotion_rules": [
+                "metadata_receipt_before_promotion",
+                "quality_standards_before_promotion",
+                "operator_review_before_promotion",
+            ],
+            "pack_governance": {
+                "risk_tier": "normal",
+                "scope": "build_dev",
+                "operator_review_required": True,
+                "requires_validation_receipt": True,
+            },
+        },
+    )
+    assert recorded.status_code == 200
+    assert recorded.json()["ok"] is True
+
+    registry = plugins._load_registry()
+    for plugin_id, built_body in zip(plugin_ids, built_bodies, strict=True):
+        validation_id = str(built_body["validation_receipt_id"])
+        proposal_id = str(built_body["proposal_id"])
+        (data_root / "artifacts" / "plugins" / "validations" / f"{validation_id}.json").unlink(missing_ok=True)
+        (data_root / "artifacts" / "plugins" / "proposals" / f"{proposal_id}.json").unlink(missing_ok=True)
+
+        plugin = plugins._read_plugin(registry, plugin_id)
+        assert plugin is not None
+        meta = dict(plugin.get("meta") or {})
+        for key in (
+            "proposal_id",
+            "forge_proposal_id",
+            "proposal_path",
+            "validation_receipt_id",
+            "validation_receipt_path",
+        ):
+            meta.pop(key, None)
+        meta["quality"] = {
+            "tests": ["tests/test_api_plugins.py"],
+            "docs": ["README.md", "docs/operations/COMPLETION_LEDGER.md"],
+            "claim_scope": "explicit_reconstruction_chunk_fixture_quality_references",
+            "pack_specific_coverage_claimed": False,
+        }
+        plugin["meta"] = meta
+        plugins._write_plugin(registry, plugins._normalize_plugin_record(plugin_id, plugin))
+    plugins._save_registry_and_catalog(registry)
+
+    before = client.get("/plugins/capabilities/packs/quality/evidence/remediation").json()
+    before_item = next(item for item in before["remediation_queue"] if item["pack_id"] == pack_id)
+    reconstruction = before_item["artifact_reconstruction_plan"]
+    assert reconstruction["required"] is True
+    assert reconstruction["capability_count"] == capability_limit + 1
+    assert reconstruction["capabilities_truncated"] is True
+    assert len(reconstruction["capabilities"]) == capability_limit
+
+    request_body = {
+        "actor": _PLUGIN_ACTOR,
+        "reason": "operator approved bounded artifact reconstruction chunk",
+        "pack_ids": [pack_id],
+        "max_pack_count": 1,
+        "max_total_capability_count": capability_limit,
+        "max_capability_count_per_pack": capability_limit,
+    }
+    dry_run = client.post(
+        "/plugins/capabilities/packs/quality/evidence/remediation/reconstruct",
+        json={**request_body, "dry_run": True},
+    )
+    assert dry_run.status_code == 200
+    dry_run_body = dry_run.json()
+    assert dry_run_body["ok"] is True
+    assert dry_run_body["status"] == "dry_run"
+    assert dry_run_body["planned_capability_count"] == capability_limit
+    assert dry_run_body["partial_reconstruction_count"] == 1
+    planned_item = dry_run_body["planned"][0]
+    assert planned_item["capability_count"] == capability_limit
+    assert planned_item["required_capability_count"] == capability_limit + 1
+    assert planned_item["capabilities_truncated"] is True
+    assert planned_item["partial_reconstruction"] is True
+    assert planned_item["partial_reconstruction_does_not_claim_pack_complete"] is True
+    assert dry_run_body["governance"]["writes_validation_receipts"] is False
+    assert dry_run_body["governance"]["writes_proposals"] is False
+    assert dry_run_body["governance"]["partial_reconstruction_does_not_claim_pack_complete"] is True
+
+    applied = client.post(
+        "/plugins/capabilities/packs/quality/evidence/remediation/reconstruct",
+        json={
+            **request_body,
+            "meta": {"operator_reconstruction_decision": "approved_for_reconstruction"},
+        },
+    )
+    assert applied.status_code == 200
+    applied_body = applied.json()
+    assert applied_body["ok"] is True
+    assert applied_body["applied"] is True
+    assert applied_body["status"] == "recorded"
+    assert applied_body["planned_pack_count"] == 1
+    assert applied_body["recorded_capability_count"] == capability_limit
+    assert applied_body["partial_reconstruction_count"] == 1
+    assert applied_body["governance"]["partial_reconstruction_does_not_claim_pack_complete"] is True
+
+    recorded_item = applied_body["recorded"][0]
+    assert recorded_item["capability_count"] == capability_limit
+    assert recorded_item["required_capability_count"] == capability_limit + 1
+    assert recorded_item["capabilities_truncated"] is True
+    assert recorded_item["partial_reconstruction"] is True
+    assert recorded_item["partial_reconstruction_does_not_claim_pack_complete"] is True
+    assert recorded_item["reconstructed_capability_count"] == capability_limit
+
+    post_registry = plugins._load_registry()
+    reconstructed_ids: list[str] = []
+    unreconstructed_ids: list[str] = []
+    for plugin_id in plugin_ids:
+        plugin = plugins._read_plugin(post_registry, plugin_id)
+        assert plugin is not None
+        meta = dict(plugin.get("meta") or {})
+        if meta.get("validation_receipt_id") and meta.get("proposal_id"):
+            reconstructed_ids.append(plugin_id)
+            assert meta["artifact_reconstruction_partial_pack"] is True
+            assert meta["artifact_reconstruction_pack_required_capability_count"] == capability_limit + 1
+            assert meta["artifact_reconstruction_pack_chunk_capability_count"] == capability_limit
+        else:
+            unreconstructed_ids.append(plugin_id)
+    assert len(reconstructed_ids) == capability_limit
+    assert len(unreconstructed_ids) == 1
+
+    remaining_item = next(item for item in applied_body["remaining_remediation_queue"] if item["pack_id"] == pack_id)
+    remaining_plan = remaining_item["artifact_reconstruction_plan"]
+    assert remaining_plan["required"] is True
+    assert remaining_plan["capability_count"] == 1
+    assert remaining_plan["capabilities_truncated"] is False
 
 
 def test_plugins_capability_pack_quality_evidence_remediation_apply_backfills_candidate_refs(

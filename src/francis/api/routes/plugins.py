@@ -2571,6 +2571,9 @@ def _record_capability_pack_artifact_reconstruction_batch(
         pack_version = _safe_str(item.get("pack_version")).strip()
         pack_name = _safe_str(item.get("pack_name")).strip() or pack_id
         capabilities = item.get("capabilities") if isinstance(item.get("capabilities"), list) else []
+        required_capability_count = int(item.get("required_capability_count") or len(capabilities))
+        capabilities_truncated = bool(item.get("capabilities_truncated"))
+        partial_reconstruction = bool(item.get("partial_reconstruction"))
         reconstructed_capability_ids: list[str] = []
         validation_receipts: list[dict[str, str]] = []
         proposal_lineages: list[dict[str, str]] = []
@@ -2676,6 +2679,10 @@ def _record_capability_pack_artifact_reconstruction_batch(
                 meta["artifact_reconstruction_route"] = route_path
                 meta["artifact_reconstruction_ts"] = recorded_ts
                 meta["artifact_reconstruction_decision"] = "approved_for_reconstruction"
+                if partial_reconstruction:
+                    meta["artifact_reconstruction_partial_pack"] = True
+                    meta["artifact_reconstruction_pack_required_capability_count"] = required_capability_count
+                    meta["artifact_reconstruction_pack_chunk_capability_count"] = len(capabilities)
                 current["meta"] = meta
                 current["updated_ts"] = recorded_ts
                 _write_plugin(registry, _normalize_plugin_record(capability_id, current))
@@ -2687,6 +2694,10 @@ def _record_capability_pack_artifact_reconstruction_batch(
                 "pack_id": pack_id,
                 "pack_version": pack_version,
                 "capability_count": len(capabilities),
+                "required_capability_count": required_capability_count,
+                "capabilities_truncated": capabilities_truncated,
+                "partial_reconstruction": partial_reconstruction,
+                "partial_reconstruction_does_not_claim_pack_complete": partial_reconstruction,
                 "reconstructed_capability_count": len(reconstructed_capability_ids),
                 "reconstructed_capability_ids": reconstructed_capability_ids[:50],
                 "reconstructed_capability_ids_truncated": len(reconstructed_capability_ids) > 50,
@@ -4861,17 +4872,10 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
                 if isinstance(item.get("artifact_reconstruction_plan"), dict)
                 else {}
             )
-            if bool(plan.get("capabilities_truncated")):
-                skipped.append(
-                    {
-                        "pack_id": pack_id,
-                        "pack_version": pack_version,
-                        "error": "reconstruction_plan_truncated",
-                    }
-                )
-                continue
             raw_capabilities = plan.get("capabilities") if isinstance(plan.get("capabilities"), list) else []
             capabilities = [capability for capability in raw_capabilities if isinstance(capability, dict)]
+            capabilities_truncated = bool(plan.get("capabilities_truncated"))
+            required_capability_count = int(plan.get("capability_count") or len(capabilities))
             unsupported_inputs: list[dict[str, object]] = []
             for capability in capabilities:
                 missing_inputs = [
@@ -4919,6 +4923,9 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
                     "pack_version": pack_version,
                     "pack_name": _safe_str(item.get("pack_name")).strip() or pack_id,
                     "capabilities": capabilities,
+                    "required_capability_count": required_capability_count,
+                    "capabilities_truncated": capabilities_truncated,
+                    "partial_reconstruction": capabilities_truncated,
                 }
             )
         if total_capability_count > safe_max_total_capability_count:
@@ -4937,6 +4944,10 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
                 "pack_version": item["pack_version"],
                 "pack_name": item["pack_name"],
                 "capability_count": len(item["capabilities"]),
+                "required_capability_count": int(item.get("required_capability_count") or 0),
+                "capabilities_truncated": bool(item.get("capabilities_truncated")),
+                "partial_reconstruction": bool(item.get("partial_reconstruction")),
+                "partial_reconstruction_does_not_claim_pack_complete": bool(item.get("partial_reconstruction")),
                 "validation_receipts": {
                     "count": sum(
                         1 for capability in item["capabilities"] if bool(capability.get("needs_validation_receipt"))
@@ -4965,6 +4976,7 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
             }
             for item in prepared
         ]
+        partial_reconstruction_count = sum(1 for item in planned if bool(item.get("partial_reconstruction")))
         if not prepared:
             return {
                 "ok": True,
@@ -4984,6 +4996,8 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
                     "does_not_approve_proposals": True,
                     "does_not_promote_capabilities": True,
                     "does_not_execute_capabilities": True,
+                    "partial_reconstruction_count": 0,
+                    "partial_reconstruction_does_not_claim_pack_complete": False,
                     "promotion_authority": False,
                     "execution_authority": False,
                     "approval_authority": False,
@@ -4997,6 +5011,7 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
                 "status": "dry_run",
                 "planned_pack_count": len(planned),
                 "planned_capability_count": sum(int(item.get("capability_count") or 0) for item in planned),
+                "partial_reconstruction_count": partial_reconstruction_count,
                 "planned": planned,
                 "skipped": skipped,
                 "before": before,
@@ -5009,6 +5024,8 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
                     "does_not_approve_proposals": True,
                     "does_not_promote_capabilities": True,
                     "does_not_execute_capabilities": True,
+                    "partial_reconstruction_count": partial_reconstruction_count,
+                    "partial_reconstruction_does_not_claim_pack_complete": partial_reconstruction_count > 0,
                     "promotion_authority": False,
                     "execution_authority": False,
                     "approval_authority": False,
@@ -5023,6 +5040,7 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
                 "error": "operator_reconstruction_decision_required",
                 "planned_pack_count": len(planned),
                 "planned_capability_count": sum(int(item.get("capability_count") or 0) for item in planned),
+                "partial_reconstruction_count": partial_reconstruction_count,
                 "planned": planned,
                 "skipped": skipped,
                 "before": before,
@@ -5033,6 +5051,8 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
                     "writes_validation_receipts": False,
                     "writes_proposals": False,
                     "requires_operator_reconstruction_decision": True,
+                    "partial_reconstruction_count": partial_reconstruction_count,
+                    "partial_reconstruction_does_not_claim_pack_complete": partial_reconstruction_count > 0,
                     "does_not_approve_proposals": True,
                     "does_not_promote_capabilities": True,
                     "does_not_execute_capabilities": True,
@@ -5089,6 +5109,7 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
             "recorded_capability_count": sum(
                 int(item.get("reconstructed_capability_count") or 0) for item in changed_records
             ),
+            "partial_reconstruction_count": partial_reconstruction_count,
             "recorded": recorded,
             "failed": failed,
             "skipped": skipped,
@@ -5105,6 +5126,8 @@ def reconstruct_capability_pack_quality_evidence_artifacts(
                 "proposal_lineage_write_count": proposal_write_count,
                 "requires_operator_reconstruction_decision": True,
                 "operator_reconstruction_decision_captured": operator_decision_approved,
+                "partial_reconstruction_count": partial_reconstruction_count,
+                "partial_reconstruction_does_not_claim_pack_complete": partial_reconstruction_count > 0,
                 "validation_claim_scope": "pack_specific_validation_receipt_reconstructed_from_registry_evidence",
                 "proposal_lineage_claim_scope": "reconstructed_plugin_proposal_lineage_only_not_approval",
                 "proposal_lineage_does_not_approve_proposals": True,

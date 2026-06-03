@@ -57784,6 +57784,67 @@ Remaining truthful gap:
   legacy pack artifact backlog before capability-library maturity can be called
   complete.
 
+### 2026-06-03 - Stage 17 artifact reconstruction writer supports bounded truncated-plan chunks
+
+Roadmap area: Stage 17 / Capability Economy, governed pack-specific validation
+receipt and proposal lineage reconstruction for legacy capability packs.
+
+Material change:
+
+- The reconstruction writer no longer rejects a pack solely because the
+  read-only reconstruction plan is truncated.
+- For truncated plans, the writer applies only the bounded capabilities already
+  present in the readback chunk and marks the response as partial
+  reconstruction.
+- Dry-run, blocked, and applied responses now report
+  `partial_reconstruction_count`; planned and recorded pack entries expose
+  `required_capability_count`, `capabilities_truncated`,
+  `partial_reconstruction`, and
+  `partial_reconstruction_does_not_claim_pack_complete`.
+- Registry metadata written during partial reconstruction records that the
+  capability was reconstructed as part of a partial pack chunk and preserves the
+  required-vs-applied chunk counts.
+- Focused API coverage now isolates generated plugin output to each test's temp
+  directory so generated-plugin sync does not pollute remediation queue
+  ordering.
+
+Latest validation for Stage 17 truncated-plan artifact reconstruction writing:
+
+- `python -m pytest
+  tests/test_api_plugins.py::test_plugins_capability_pack_quality_evidence_remediation_reconstructs_missing_artifacts
+  tests/test_api_plugins.py::test_plugins_capability_pack_quality_evidence_remediation_reconstructs_truncated_plan_chunk
+  -q --tb=short --maxfail=1`
+  Result: `passed; 2 selected tests passed`
+- `python -m ruff check src/francis/api/routes/plugins.py
+  tests/test_api_plugins.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/plugins.py
+  tests/test_api_plugins.py`
+  Result: `passed`
+- `python -m mypy src/francis/api/routes/plugins.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed` with Git's existing CRLF normalization warning for
+  `src/francis/api/routes/plugins.py`.
+
+Validation risk:
+
+- This truncated-plan chunk follow-on is locally validated but not yet
+  GitHub-confirmed.
+- The writer still reconstructs missing artifacts from existing
+  registry/quality evidence under an operator decision; it does not execute
+  tests, approve proposals, promote capabilities, enable capabilities, execute
+  capabilities, or write memory.
+- This change does not apply to the real legacy backlog in `data/`; it only
+  makes large packs processable in explicit bounded chunks.
+
+Remaining truthful gap:
+
+- Stage 17 still needs GitHub confirmation for this partial chunk follow-on,
+  then operator-reviewed repeated application or closure of the remaining legacy
+  pack artifact backlog before capability-library maturity can be called
+  complete.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

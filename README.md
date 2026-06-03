@@ -35,21 +35,23 @@ Francis should be read from current repo truth, not from a hard-coded phase labe
 - `P1_INTERFACE`, `P7_EXECUTION`, and `P8_MEMORY` are partial and actively being connected into a truthful loop.
 - Stage 3 / Missions and Stage 5 / Reactor are closed for the current repo posture by ledger-backed audits.
 - Stage 6 / Lens has backend and chat-UI readback for Lens primitives, host readiness contracts, activation-denial receipts, preflight diagnostics, and bounded proof scripts. Do not read later roadmap work as proof of finished OS-wide summon, always-on resident presence, tray/hotkey/overlay runtime, or live Pilot takeover.
-- Stage 17 / Capability Economy now has read-only pack readiness, migration-plan, metadata-receipt, quality-standards, promotion-rules, quality-test, quality-doc, validation-receipt, proposal-lineage, promotion-receipt, operator-review evidence surfaces, GitHub-confirmed operator-review decision receipts, a GitHub-confirmed chat-UI decision surface for capability-pack reviews, a GitHub-confirmed promotion-discipline pack gate, a GitHub-confirmed chat-UI promotion-discipline readback, a GitHub-confirmed promotion-rule remediation queue, a GitHub-confirmed quality-evidence remediation readback, a GitHub-confirmed quality-reference remediation apply path, a GitHub-confirmed existing-artifact validation/proposal link path, and a GitHub-confirmed governed missing-artifact reconstruction writer. The current gap is still capability-library maturity: legacy packs need operator-reviewed application of actual or reconstructed pack-specific validation/proposal artifacts before Stage 17 can be called complete.
+- Stage 17 / Capability Economy now has read-only pack readiness, migration-plan, metadata-receipt, quality-standards, promotion-rules, quality-test, quality-doc, validation-receipt, proposal-lineage, promotion-receipt, operator-review evidence surfaces, GitHub-confirmed operator-review decision receipts, a GitHub-confirmed chat-UI decision surface for capability-pack reviews, a GitHub-confirmed promotion-discipline pack gate, a GitHub-confirmed chat-UI promotion-discipline readback, a GitHub-confirmed promotion-rule remediation queue, a GitHub-confirmed quality-evidence remediation readback, a GitHub-confirmed quality-reference remediation apply path, a GitHub-confirmed existing-artifact validation/proposal link path, and a GitHub-confirmed governed missing-artifact reconstruction writer. A locally validated follow-on lets that writer process truncated reconstruction plans as explicitly partial bounded chunks; that follow-on still needs GitHub confirmation. The current gap is still capability-library maturity: legacy packs need operator-reviewed application of actual or reconstructed pack-specific validation/proposal artifacts before Stage 17 can be called complete.
 
 ## Latest Progress Snapshot
 
 This block is intentionally overwritten as the build moves. The append-only
 history stays in [docs/operations/COMPLETION_LEDGER.md](docs/operations/COMPLETION_LEDGER.md).
 
-- Last updated: 2026-06-03, 13:42 America/Chicago.
+- Last updated: 2026-06-03, 14:53 America/Chicago.
 - Latest confirmed capability-code GitHub gate: `main` commit `ba816f41` passed CI on Ubuntu
   3.12, Ubuntu 3.13, Windows 3.12, and Windows 3.13; CodeQL passed for Actions,
   JavaScript/TypeScript, and Python.
 - Current slice: Stage 17 has a GitHub-confirmed governed reconstruction writer
   at `POST /plugins/capabilities/packs/quality/evidence/remediation/reconstruct`
   for packs that still lack pack-specific validation receipts or proposal
-  lineage after the existing-artifact link scan.
+  lineage after the existing-artifact link scan. A local follow-on now supports
+  truncated-plan reconstruction as explicitly partial bounded chunks; this
+  follow-on is not yet GitHub-confirmed.
 - GitHub gate: CI run `26902620300` passed across Ubuntu/Windows and Python
   3.12/3.13; CodeQL run `26902620290` passed for Actions,
   JavaScript/TypeScript, and Python.
@@ -57,9 +59,11 @@ history stays in [docs/operations/COMPLETION_LEDGER.md](docs/operations/COMPLETI
   reconstruction decision before non-dry writes, writes only bounded registry
   metadata plus validation/proposal artifact records, does not approve proposals,
   does not promote or execute capabilities, and does not claim new test
-  execution.
-- Next truthful gap: operator-reviewed application or closure of the remaining
-  legacy pack artifact backlog.
+  execution. Partial chunk responses report that they do not claim pack
+  completion.
+- Next truthful gap: GitHub confirmation for the partial chunk writer follow-on,
+  then operator-reviewed application or closure of the remaining legacy pack
+  artifact backlog.
 
 Use [docs/operations/COMPLETION_LEDGER.md](docs/operations/COMPLETION_LEDGER.md) for shipped truth. Use [docs/canonical/ROADMAP.md](docs/canonical/ROADMAP.md) and [docs/canonical/BUILD_MANIFEST.md](docs/canonical/BUILD_MANIFEST.md) for target state and build order. Phase and stage names are orientation markers only; each build pass should derive the active priority from the ledger and canonical roadmap instead of locking Francis into one fixed phase.
 
