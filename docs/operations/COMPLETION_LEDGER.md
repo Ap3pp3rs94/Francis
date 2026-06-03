@@ -57848,6 +57848,48 @@ Remaining truthful gap:
   pack artifact backlog before capability-library maturity can be called
   complete.
 
+### 2026-06-03 - Stage 17 truncated-plan reconstruction chunk follow-on passes GitHub CI
+
+Roadmap area: Stage 17 / Capability Economy, GitHub-visible validation for
+governed partial reconstruction of large legacy capability packs.
+
+Material change:
+
+- The bounded truncated-plan reconstruction follow-on is now GitHub-confirmed on
+  `main` at commit `9ff3d240`.
+- The previous CI failure on commit `24dd1fd7` was caused by generated plugin
+  fixtures polluting repo-level generated-plugin sync and displacing later
+  promotion-rule remediation tests from the limited queue. The fix isolates both
+  generated plugin build output and generated-plugin sync roots in the focused
+  API fixtures.
+- This closes the documented GitHub-confirmation gap for the partial chunk
+  writer follow-on. It does not close the remaining legacy pack artifact
+  backlog or Stage 17 capability-library maturity.
+
+Latest validation for Stage 17 truncated-plan artifact reconstruction writing:
+
+- GitHub CI run `26910397976` for commit `9ff3d240`
+  Result: `passed` across Ubuntu 3.12, Ubuntu 3.13, Windows 3.12, and Windows
+  3.13.
+- GitHub CodeQL run `26910399889` for commit `9ff3d240`
+  Result: `passed` for Actions, JavaScript/TypeScript, and Python.
+
+Validation risk:
+
+- GitHub confirms the final pushed tree including the reconstruction chunk
+  writer, generated-plugin fixture isolation, lint, type check, and full pytest
+  matrix.
+- The writer still reconstructs missing artifacts from existing
+  registry/quality evidence under an operator decision; it does not execute
+  tests, approve proposals, promote capabilities, enable capabilities, execute
+  capabilities, or write memory.
+
+Remaining truthful gap:
+
+- Stage 17 still needs operator-reviewed repeated application or closure of the
+  remaining legacy pack artifact backlog before capability-library maturity can
+  be called complete.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
