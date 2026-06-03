@@ -57804,17 +57804,20 @@ Material change:
 - Registry metadata written during partial reconstruction records that the
   capability was reconstructed as part of a partial pack chunk and preserves the
   required-vs-applied chunk counts.
-- Focused API coverage now isolates generated plugin output to each test's temp
-  directory so generated-plugin sync does not pollute remediation queue
-  ordering.
+- Focused API coverage now isolates both generated plugin build output and
+  generated-plugin sync roots to each test's temp directory so remediation queue
+  ordering is not polluted by prior generated-plugin fixtures.
 
 Latest validation for Stage 17 truncated-plan artifact reconstruction writing:
 
 - `python -m pytest
+  tests/test_api_plugins.py::test_plugins_capability_pack_quality_evidence_remediation_projects_artifact_reconstruction_plan
   tests/test_api_plugins.py::test_plugins_capability_pack_quality_evidence_remediation_reconstructs_missing_artifacts
   tests/test_api_plugins.py::test_plugins_capability_pack_quality_evidence_remediation_reconstructs_truncated_plan_chunk
+  tests/test_api_plugins.py::test_plugins_capability_pack_promotion_rule_remediation_projects_read_only_backlog
+  tests/test_api_plugins.py::test_plugins_capability_pack_promotion_rule_remediation_apply_writes_metadata_receipt
   -q --tb=short --maxfail=1`
-  Result: `passed; 2 selected tests passed`
+  Result: `passed; 5 selected tests passed`
 - `python -m ruff check src/francis/api/routes/plugins.py
   tests/test_api_plugins.py`
   Result: `passed`

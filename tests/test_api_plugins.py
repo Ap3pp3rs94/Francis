@@ -57,6 +57,14 @@ def _approve_capability_pack_operator_review(
     return approved_body
 
 
+def _isolate_generated_plugin_root(monkeypatch, plugins_module, tmp_path: Path) -> None:
+    from francis.plugin_factory import spec_builder
+
+    generated_root = tmp_path / "generated_plugins"
+    monkeypatch.setattr(plugins_module, "_gen_dir", lambda: generated_root)
+    monkeypatch.setattr(spec_builder, "_gen_dir", lambda: generated_root)
+
+
 def test_plugins_atomic_write_json_uses_unique_temp_siblings(monkeypatch, tmp_path: Path) -> None:
     from francis.api.routes import plugins
 
@@ -98,7 +106,9 @@ def test_plugins_build_lifecycle_and_run(monkeypatch, tmp_path: Path) -> None:
     from fastapi.testclient import TestClient
 
     from francis.api.app import create_app
+    from francis.api.routes import plugins
 
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
     client = TestClient(create_app())
 
     raw_secret = "sk-" + ("x" * 24)
@@ -272,7 +282,9 @@ def test_plugins_build_requires_forge_staging_quality(monkeypatch, tmp_path: Pat
     from fastapi.testclient import TestClient
 
     from francis.api.app import create_app
+    from francis.api.routes import plugins
 
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
     client = TestClient(create_app())
 
     built = client.post(
@@ -1141,6 +1153,7 @@ def test_plugins_capability_pack_quality_evidence_remediation_projects_truthful_
     from francis.api.app import create_app
     from francis.api.routes import plugins
 
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
     client = TestClient(create_app())
     expected_pack_id = "ops.quality_evidence_remediation"
     expected_pack_version = "1.0.0"
@@ -1352,7 +1365,7 @@ def test_plugins_capability_pack_quality_evidence_remediation_projects_artifact_
     from francis.api.app import create_app
     from francis.api.routes import plugins
 
-    monkeypatch.setattr(plugins, "_gen_dir", lambda: tmp_path / "generated_plugins")
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
     client = TestClient(create_app())
     built = client.post(
         "/plugins/build",
@@ -1504,7 +1517,7 @@ def test_plugins_capability_pack_quality_evidence_remediation_reconstructs_missi
     from francis.api.app import create_app
     from francis.api.routes import plugins
 
-    monkeypatch.setattr(plugins, "_gen_dir", lambda: tmp_path / "generated_plugins")
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
     client = TestClient(create_app())
     built = client.post(
         "/plugins/build",
@@ -1721,7 +1734,7 @@ def test_plugins_capability_pack_quality_evidence_remediation_reconstructs_trunc
     from francis.api.app import create_app
     from francis.api.routes import plugins
 
-    monkeypatch.setattr(plugins, "_gen_dir", lambda: tmp_path / "generated_plugins")
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
     client = TestClient(create_app())
     capability_limit = plugins._CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_PLAN_LIMIT
     plugin_ids: list[str] = []
@@ -1894,6 +1907,7 @@ def test_plugins_capability_pack_quality_evidence_remediation_apply_backfills_ca
     from francis.api.app import create_app
     from francis.api.routes import plugins
 
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
     client = TestClient(create_app())
     built = client.post(
         "/plugins/build",
@@ -2245,7 +2259,9 @@ def test_plugins_capability_pack_promotion_rule_remediation_projects_read_only_b
     from fastapi.testclient import TestClient
 
     from francis.api.app import create_app
+    from francis.api.routes import plugins
 
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
     client = TestClient(create_app())
     meta = {
         **_forge_promotion_meta("capability_promotion_rule_remediation"),
@@ -2311,6 +2327,7 @@ def test_plugins_capability_pack_promotion_rule_remediation_apply_writes_metadat
     from francis.api.app import create_app
     from francis.api.routes import plugins
 
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
     client = TestClient(create_app())
     packs = [
         {

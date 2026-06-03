@@ -42,7 +42,7 @@ Francis should be read from current repo truth, not from a hard-coded phase labe
 This block is intentionally overwritten as the build moves. The append-only
 history stays in [docs/operations/COMPLETION_LEDGER.md](docs/operations/COMPLETION_LEDGER.md).
 
-- Last updated: 2026-06-03, 14:53 America/Chicago.
+- Last updated: 2026-06-03, 15:12 America/Chicago.
 - Latest confirmed capability-code GitHub gate: `main` commit `ba816f41` passed CI on Ubuntu
   3.12, Ubuntu 3.13, Windows 3.12, and Windows 3.13; CodeQL passed for Actions,
   JavaScript/TypeScript, and Python.
