@@ -58044,6 +58044,84 @@ Remaining truthful gap:
   decision, and 25 of those entries also need pack metadata receipt coverage
   before reconstruction can safely proceed.
 
+### 2026-06-03 - Stage 17 metadata receipt review unlocks one remaining legacy pack
+
+Roadmap area: Stage 17 / Capability Economy, using existing governed metadata
+receipt review before quality-reference and reconstruction application.
+
+Material change:
+
+- The existing `bulk-from-plan` metadata receipt route was applied to the
+  smallest remaining migration-plan candidate:
+  `legacy.generated.capabilityartifactreconstructionwriterplugin`.
+- That metadata receipt recorded 1 pack / 4 capabilities and reduced the
+  migration-plan candidate total from 35 to 34.
+- After metadata receipt review, the same pack became eligible for the existing
+  quality-reference apply route and then the governed artifact reconstruction
+  route.
+- The latest quality-evidence remediation readback reports
+  `remediation_queue_count=34`, `artifact_reconstruction_required_count=34`,
+  `validation_receipt_reconstruction_required_count=746`, and
+  `proposal_lineage_reconstruction_required_count=746`.
+- The latest blocker counts are aligned at `docs_missing=34`,
+  `tests_missing=34`, `validation_receipt_missing=34`, and
+  `proposal_id_missing=34`.
+
+Latest validation for this local live pass:
+
+- Metadata receipt apply:
+  Result: `status=recorded`, `recorded_pack_count=1`,
+  `recorded_capability_count=4`, `writes_registry_metadata=true`, and
+  `writes_receipts=true`.
+- Quality-reference dry-run for
+  `legacy.generated.capabilityartifactreconstructionwriterplugin`:
+  Result: planned 1 pack / 4 capabilities, 0 skipped.
+- Quality-reference apply:
+  Result: `status=recorded`, `recorded_capability_count=4`,
+  `quality_reference_backfill_only=true`, no receipt, proposal, promotion,
+  execution, generated-artifact, or memory writes.
+- Artifact reconstruction dry-run:
+  Result: planned 4 validation receipts and 4 reconstructed proposal lineages,
+  0 skipped, `partial_reconstruction_count=0`.
+- Artifact reconstruction apply:
+  Result: `status=recorded`, `validation_receipt_write_count=4`,
+  `proposal_lineage_write_count=4`, and
+  `operator_reconstruction_decision_captured=true`.
+- Readback after apply:
+  Result: selected pack absent from the remediation queue,
+  `remediation_queue_count=34`, and validation/proposal reconstruction required
+  counts reduced to 746.
+- Focused API contract tests:
+  `python -m pytest tests/test_api_plugins.py -k
+  "metadata_receipts_bulk_from_migration_plan or
+  quality_evidence_remediation_apply_backfills_candidate_refs or
+  quality_evidence_remediation_reconstructs_missing_artifacts or
+  quality_evidence_remediation_reconstructs_truncated_plan_chunk"`
+  Result: `4 passed, 31 deselected`.
+
+Validation risk:
+
+- The changed registry/catalog/artifact payloads live under `data/**`, which is
+  intentionally gitignored. This ledger entry records local operational posture;
+  it is not a portable data migration and does not make other clones contain
+  those local artifacts.
+- Candidate quality references remain explicitly scoped as candidate references,
+  not pack-specific proof. Reconstructed proposal lineages are unreviewed and do
+  not claim proposal approval.
+- The metadata receipt route writes metadata receipts and registry metadata, but
+  does not approve proposals, promote capabilities, enable capabilities,
+  execute capabilities, or write memory.
+- GitHub CodeQL passed for the previous ledger-only commit `e973b476`; its CI
+  matrix was still in progress when this local live pass was recorded.
+
+Remaining truthful gap:
+
+- Stage 17 still needs operator-reviewed repeated application or closure of the
+  remaining 34 legacy pack remediation entries. The next safe live path is to
+  continue using metadata receipt review for bounded migration-plan candidates,
+  then quality-reference apply, then governed reconstruction only after clean
+  dry-run evidence.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
