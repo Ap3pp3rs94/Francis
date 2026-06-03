@@ -57890,6 +57890,78 @@ Remaining truthful gap:
   remaining legacy pack artifact backlog before capability-library maturity can
   be called complete.
 
+### 2026-06-03 - Stage 17 legacy quality evidence remediation begins live backlog application
+
+Roadmap area: Stage 17 / Capability Economy, operator-reviewed application of
+governed quality-reference and reconstructed validation/proposal evidence for
+legacy capability packs.
+
+Material change:
+
+- The governed quality-evidence remediation apply and reconstruction routes have
+  now been applied against local live `data/**` state for seven one-capability
+  legacy generated packs:
+  `legacy.generated.bulkdirectplugin`, `legacy.generated.bulkfastplugin`,
+  `legacy.generated.expandabledirectplanplugin`,
+  `legacy.generated.metadatareceiptdirectplugin`,
+  `legacy.generated.migrationplandirectplugin`,
+  `legacy.generated.promotionrulesdirect`, and
+  `legacy.generated.qualitystandardsdirectplugin`.
+- The latest readback reports `remediation_queue_count=39`, down from 46 at the
+  start of the local live application. It also reports
+  `artifact_reconstruction_required_count=36`,
+  `validation_receipt_reconstruction_required_count=762`, and
+  `proposal_lineage_reconstruction_required_count=762`.
+- The latest blocker counts are now `docs_missing=39`, `tests_missing=39`,
+  `validation_receipt_missing=36`, and `proposal_id_missing=36`.
+- The quality-reference apply route wrote registry metadata only. The
+  reconstruction route wrote pack-specific validation receipts, reconstructed
+  unreviewed proposal lineages, and registry metadata only after an explicit
+  `operator_reconstruction_decision`.
+
+Latest validation for local live Stage 17 backlog application:
+
+- Quality-reference apply dry-run for the six-pack follow-on batch:
+  Result: planned 6 packs / 6 capabilities, 0 skipped, existing repo reference
+  candidates only.
+- Quality-reference apply for the six-pack follow-on batch:
+  Result: `status=recorded`, `writes_registry_metadata=true`, no receipt,
+  proposal, promotion, execution, generated-artifact, or memory writes.
+- Artifact reconstruction dry-run for the six-pack follow-on batch:
+  Result: planned 6 validation receipts and 6 reconstructed proposal lineages,
+  0 skipped, `partial_reconstruction_count=0`.
+- Artifact reconstruction apply for the six-pack follow-on batch:
+  Result: `status=recorded`, `validation_receipt_write_count=6`,
+  `proposal_lineage_write_count=6`, and
+  `operator_reconstruction_decision_captured=true`.
+- Readback after apply:
+  Result: all six follow-on pack ids were absent from the remediation queue and
+  aggregate queue/blocker counts dropped by exactly 6.
+- Focused API contract tests:
+  `python -m pytest tests/test_api_plugins.py -k
+  "quality_evidence_remediation_apply_backfills_candidate_refs or
+  quality_evidence_remediation_reconstructs_missing_artifacts or
+  quality_evidence_remediation_reconstructs_truncated_plan_chunk"`
+  Result: `3 passed, 32 deselected`.
+
+Validation risk:
+
+- The changed registry/catalog/artifact payloads live under `data/**`, which is
+  intentionally gitignored. This ledger entry records the local operational
+  posture; it is not a portable data migration and does not make other clones
+  contain those local artifacts.
+- Candidate quality references remain explicitly scoped as candidate references,
+  not pack-specific proof. Reconstructed proposal lineages are unreviewed and do
+  not claim proposal approval.
+- The writer still does not execute tests, approve proposals, promote
+  capabilities, enable capabilities, execute capabilities, or write memory.
+
+Remaining truthful gap:
+
+- Stage 17 still needs operator-reviewed repeated application or closure of the
+  remaining 39 legacy pack remediation entries, including 36 entries that still
+  require pack-specific validation/proposal reconstruction.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
