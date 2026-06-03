@@ -57745,6 +57745,45 @@ Remaining truthful gap:
   writer, then operator-reviewed closure of the remaining legacy pack artifact
   backlog before capability-library maturity can be called complete.
 
+### 2026-06-03 - Stage 17 artifact reconstruction writer passes GitHub CI
+
+Roadmap area: Stage 17 / Capability Economy, GitHub-visible validation for the
+governed pack-specific validation receipt and proposal lineage reconstruction
+writer.
+
+Material change:
+
+- The governed reconstruction writer added in commit `ba816f41` is now
+  GitHub-confirmed on `main`.
+- README current-state truth now describes the writer as GitHub-confirmed rather
+  than locally validated.
+- This closes the documented GitHub-confirmation gap for the reconstruction
+  writer itself. It does not close the remaining legacy pack artifact backlog or
+  Stage 17 capability-library maturity.
+
+Latest validation for Stage 17 missing-artifact reconstruction writing:
+
+- GitHub CI run `26902620300` for commit `ba816f41`
+  Result: `passed` across Ubuntu 3.12, Ubuntu 3.13, Windows 3.12, and Windows
+  3.13.
+- GitHub CodeQL run `26902620290` for commit `ba816f41`
+  Result: `passed` for Actions, JavaScript/TypeScript, and Python.
+
+Validation risk:
+
+- GitHub confirms the writer contract, lint, type check, and full pytest matrix
+  for the pushed commit.
+- The writer still reconstructs missing artifacts from existing
+  registry/quality evidence under an operator decision; it does not execute
+  tests, approve proposals, promote capabilities, enable capabilities, execute
+  capabilities, or write memory.
+
+Remaining truthful gap:
+
+- Stage 17 still needs operator-reviewed application or closure of the remaining
+  legacy pack artifact backlog before capability-library maturity can be called
+  complete.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
