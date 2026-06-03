@@ -57962,6 +57962,88 @@ Remaining truthful gap:
   remaining 39 legacy pack remediation entries, including 36 entries that still
   require pack-specific validation/proposal reconstruction.
 
+### 2026-06-03 - Stage 17 live backlog application exhausts currently supported candidates
+
+Roadmap area: Stage 17 / Capability Economy, operator-reviewed live application
+of governed quality-reference and reconstructed validation/proposal evidence for
+legacy capability packs.
+
+Material change:
+
+- The local live `data/**` backlog application has now closed 11 remediation
+  queue entries since the first local live pass.
+- This follow-on applied quality-reference metadata for three quality-only
+  packs: `legacy.generated.demo`, `legacy.generated.probeplugin`, and
+  `legacy.generated.memoryevidenceplugin`.
+- This follow-on also applied quality-reference metadata and reconstructed
+  pack-specific validation receipts plus reconstructed unreviewed proposal
+  lineages for the 12-capability `legacy.generated.underreadyplugin` pack.
+- The latest remediation readback reports `remediation_queue_count=35`,
+  `artifact_reconstruction_required_count=35`,
+  `validation_receipt_reconstruction_required_count=750`, and
+  `proposal_lineage_reconstruction_required_count=750`.
+- The latest blocker counts are aligned at `docs_missing=35`,
+  `tests_missing=35`, `validation_receipt_missing=35`, and
+  `proposal_id_missing=35`.
+- No currently supported quality-reference remediation candidates remain in the
+  readback. The remaining queue now requires another implementation slice before
+  further live application can continue safely.
+
+Latest validation for local live Stage 17 backlog application:
+
+- Quality-only apply dry-run for `legacy.generated.demo`,
+  `legacy.generated.probeplugin`, and
+  `legacy.generated.memoryevidenceplugin`:
+  Result: planned 3 packs / 25 capabilities, 0 skipped, existing repo reference
+  candidates only.
+- Quality-only apply for those three packs:
+  Result: `status=recorded`, `writes_registry_metadata=true`, no receipt,
+  proposal, promotion, execution, generated-artifact, or memory writes.
+- `legacy.generated.underreadyplugin` quality-reference dry-run:
+  Result: planned 1 pack / 12 capabilities, 0 skipped.
+- `legacy.generated.underreadyplugin` quality-reference apply:
+  Result: `status=recorded`, `writes_registry_metadata=true`, no receipt,
+  proposal, promotion, execution, generated-artifact, or memory writes.
+- `legacy.generated.underreadyplugin` reconstruction dry-run:
+  Result: planned 12 validation receipts and 12 reconstructed proposal lineages,
+  0 skipped, `partial_reconstruction_count=0`.
+- `legacy.generated.underreadyplugin` reconstruction apply:
+  Result: `status=recorded`, `validation_receipt_write_count=12`,
+  `proposal_lineage_write_count=12`, and
+  `operator_reconstruction_decision_captured=true`.
+- Readback after apply:
+  Result: all four follow-on pack ids were absent from the remediation queue,
+  `remediation_queue_count=35`, and no supported candidates remained.
+- Focused API contract tests:
+  `python -m pytest tests/test_api_plugins.py -k
+  "quality_evidence_remediation_apply_backfills_candidate_refs or
+  quality_evidence_remediation_reconstructs_missing_artifacts or
+  quality_evidence_remediation_reconstructs_truncated_plan_chunk"`
+  Result: `3 passed, 32 deselected`.
+
+Validation risk:
+
+- The changed registry/catalog/artifact payloads live under `data/**`, which is
+  intentionally gitignored. This ledger entry records local operational posture;
+  it is not a portable data migration and does not make other clones contain
+  those local artifacts.
+- Candidate quality references remain explicitly scoped as candidate references,
+  not pack-specific proof. Reconstructed proposal lineages are unreviewed and do
+  not claim proposal approval.
+- The writer still does not execute tests, approve proposals, promote
+  capabilities, enable capabilities, execute capabilities, or write memory.
+- The pushed ledger-only commit that recorded the previous live pass has CodeQL
+  success on GitHub, but its GitHub CI matrix was still in `Pytest` when this
+  follow-on local live pass was recorded.
+
+Remaining truthful gap:
+
+- Stage 17 needs a new governed implementation slice for the remaining 35
+  remediation entries. Current readback shows all 35 still need quality doc/test
+  references plus explicit proposal-lineage source or operator reconstruction
+  decision, and 25 of those entries also need pack metadata receipt coverage
+  before reconstruction can safely proceed.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
