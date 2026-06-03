@@ -1258,6 +1258,188 @@ def test_plugins_capability_pack_quality_evidence_remediation_projects_truthful_
     assert "validation_receipt_id" not in post_meta
 
 
+def test_plugins_capability_pack_quality_evidence_remediation_apply_backfills_candidate_refs(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    client = TestClient(create_app())
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Capability Quality Evidence Remediation Apply Plugin",
+            "description": "Stage 17 quality evidence remediation apply coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": _forge_promotion_meta("capability_quality_evidence_remediation_apply"),
+        },
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    plugin_id = str(built_body["plugin_id"])
+
+    pack_id = "ops.quality_evidence_remediation_apply"
+    pack_version = "1.0.0"
+    recorded = client.post(
+        "/plugins/capabilities/packs/metadata/receipts",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "record reviewed pack metadata before quality remediation apply",
+            "pack_id": pack_id,
+            "pack_version": pack_version,
+            "pack_name": "Ops Quality Evidence Remediation Apply Pack",
+            "capability_ids": [plugin_id],
+            "promotion_rules": [
+                "metadata_receipt_before_promotion",
+                "quality_standards_before_promotion",
+                "operator_review_before_promotion",
+            ],
+            "pack_governance": {
+                "risk_tier": "normal",
+                "scope": "build_dev",
+                "operator_review_required": True,
+                "requires_validation_receipt": True,
+            },
+        },
+    )
+    assert recorded.status_code == 200
+    recorded_body = recorded.json()
+    assert recorded_body["ok"] is True
+
+    registry = plugins._load_registry()
+    plugin = plugins._read_plugin(registry, plugin_id)
+    assert plugin is not None
+    meta = dict(plugin.get("meta") or {})
+    for key in (
+        "tests",
+        "test_refs",
+        "docs",
+        "documentation",
+        "quality",
+        "quality_reference_remediation_source",
+        "proposal_id",
+        "forge_proposal_id",
+        "proposal_path",
+        "validation_receipt_id",
+        "validation_receipt_path",
+    ):
+        meta.pop(key, None)
+    plugin["meta"] = meta
+    plugins._write_plugin(registry, plugins._normalize_plugin_record(plugin_id, plugin))
+    plugins._save_registry_and_catalog(registry)
+
+    before = client.get("/plugins/capabilities/packs/quality/evidence/remediation").json()
+    before_item = next(item for item in before["remediation_queue"] if item["pack_id"] == pack_id)
+    assert before_item["pack_version"] == pack_version
+    assert before_item["blockers"] == [
+        "tests_missing",
+        "docs_missing",
+        "validation_receipt_missing",
+        "proposal_id_missing",
+    ]
+    assert before_item["quality_reference_backfill_candidate"] is True
+    receipts_before = client.get("/plugins/capabilities/packs/metadata/receipts?limit=20").json()["items"]
+
+    dry_run = client.post(
+        "/plugins/capabilities/packs/quality/evidence/remediation/apply",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "dry run reviewed quality reference remediation",
+            "pack_ids": [pack_id],
+            "dry_run": True,
+        },
+    )
+    assert dry_run.status_code == 200
+    dry_run_body = dry_run.json()
+    assert dry_run_body["ok"] is True
+    assert dry_run_body["status"] == "dry_run"
+    assert dry_run_body["planned_pack_count"] == 1
+    assert dry_run_body["governance"]["writes_registry_metadata"] is False
+    post_dry_run = plugins._read_plugin(plugins._load_registry(), plugin_id)
+    assert post_dry_run is not None
+    assert "quality" not in dict(post_dry_run.get("meta") or {})
+
+    applied = client.post(
+        "/plugins/capabilities/packs/quality/evidence/remediation/apply",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "apply reviewed quality reference remediation",
+            "pack_ids": [pack_id],
+            "max_pack_count": 1,
+        },
+    )
+
+    assert applied.status_code == 200
+    applied_body = applied.json()
+    assert applied_body["ok"] is True
+    assert applied_body["applied"] is True
+    assert applied_body["status"] == "recorded"
+    assert applied_body["planned_pack_count"] == 1
+    assert applied_body["recorded_pack_count"] == 1
+    assert applied_body["recorded_capability_count"] == 1
+    assert applied_body["governance"]["writes_registry_metadata"] is True
+    assert applied_body["governance"]["writes_receipts"] is False
+    assert applied_body["governance"]["quality_reference_backfill_only"] is True
+    assert applied_body["governance"]["candidate_references_do_not_claim_pack_specific_coverage"] is True
+    assert applied_body["governance"]["does_not_write_validation_receipts"] is True
+    assert applied_body["governance"]["does_not_write_proposals"] is True
+    assert applied_body["governance"]["does_not_promote_capabilities"] is True
+    assert applied_body["governance"]["does_not_execute_capabilities"] is True
+    assert applied_body["governance"]["promotion_authority"] is False
+    assert applied_body["governance"]["execution_authority"] is False
+
+    recorded_item = applied_body["recorded"][0]
+    assert recorded_item["pack_id"] == pack_id
+    assert recorded_item["applied_evidence_blockers"] == ["tests_missing", "docs_missing"]
+    assert recorded_item["quality_references"]["tests"] == ["tests/test_api_plugins.py"]
+    assert recorded_item["quality_references"]["docs"] == ["README.md", "docs/operations/COMPLETION_LEDGER.md"]
+    assert recorded_item["quality_references"]["pack_specific_coverage_claimed"] is False
+
+    catalog = client.get("/plugins/capabilities/catalog?limit=5000").json()
+    entry = next(item for item in catalog["items"] if item["capability"] == plugin_id)
+    metadata = entry["metadata"]
+    catalog_quality = entry["quality"]
+    assert catalog_quality["tests"] == ["tests/test_api_plugins.py"]
+    assert catalog_quality["docs"] == ["README.md", "docs/operations/COMPLETION_LEDGER.md"]
+    post_apply_plugin = plugins._read_plugin(plugins._load_registry(), plugin_id)
+    assert post_apply_plugin is not None
+    stored_meta = dict(post_apply_plugin.get("meta") or {})
+    stored_quality = stored_meta["quality"]
+    assert stored_quality["tests"] == ["tests/test_api_plugins.py"]
+    assert stored_quality["docs"] == ["README.md", "docs/operations/COMPLETION_LEDGER.md"]
+    assert stored_quality["claim_scope"] == "candidate_reference_only_not_pack_specific_proof"
+    assert stored_quality["pack_specific_coverage_claimed"] is False
+    assert stored_quality["validation_receipt_written"] is False
+    assert stored_quality["proposal_lineage_written"] is False
+    assert stored_meta["quality_reference_remediation_source"] == (
+        "stage17_capability_pack_quality_evidence_remediation_apply"
+    )
+    assert "proposal_id" not in metadata
+    assert "validation_receipt_id" not in metadata
+    assert "proposal_id" not in stored_meta
+    assert "validation_receipt_id" not in stored_meta
+
+    receipts_after = client.get("/plugins/capabilities/packs/metadata/receipts?limit=20").json()["items"]
+    assert [item["receipt_id"] for item in receipts_after] == [item["receipt_id"] for item in receipts_before]
+
+    remaining_item = next(item for item in applied_body["remaining_remediation_queue"] if item["pack_id"] == pack_id)
+    assert remaining_item["blockers"] == ["validation_receipt_missing", "proposal_id_missing"]
+    assert remaining_item["quality_reference_backfill_candidate"] is False
+    assert remaining_item["recommended_next_action"] == "write_pack_specific_validation_receipt"
+
+    after = client.get("/plugins/capabilities/packs/quality/evidence/remediation").json()
+    after_item = next(item for item in after["remediation_queue"] if item["pack_id"] == pack_id)
+    assert after_item["blockers"] == ["validation_receipt_missing", "proposal_id_missing"]
+    assert after_item["quality_reference_backfill_candidate"] is False
+
+
 def test_plugins_capability_pack_promotion_receipts_projects_read_only_receipt_evidence(
     monkeypatch,
     tmp_path: Path,

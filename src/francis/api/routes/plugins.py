@@ -1559,6 +1559,25 @@ def _capability_pack_quality_remediation_next_action(
     return "review_capability_pack_evidence"
 
 
+def _capability_pack_quality_remediation_next_gap(
+    *,
+    quality_backfill_candidate_count: int,
+    blocker_counts: dict[str, int],
+    fallback: str,
+) -> str:
+    if quality_backfill_candidate_count:
+        return "stage17_capability_pack_quality_evidence_remediation_apply"
+    for blocker, gap in (
+        ("tests_missing", "stage17_capability_pack_quality_tests"),
+        ("docs_missing", "stage17_capability_pack_quality_docs"),
+        ("validation_receipt_missing", "stage17_capability_pack_validation_receipts"),
+        ("proposal_id_missing", "stage17_capability_pack_lineage"),
+    ):
+        if blocker_counts.get(blocker, 0) > 0:
+            return gap
+    return fallback or "stage17_capability_pack_quality_evidence_review"
+
+
 def _capability_pack_quality_evidence_remediation_item(
     item: dict[str, Any],
     *,
@@ -1723,12 +1742,124 @@ def _capability_pack_quality_evidence_remediation_projection(
             "memory_write": False,
         },
         "next_smallest_truthful_gap": (
-            "stage17_capability_pack_quality_evidence_remediation_apply"
-            if quality_backfill_candidate_count
-            else _safe_str(promotion_remediation.get("next_smallest_truthful_gap")).strip()
-            or "stage17_capability_pack_quality_evidence_review"
+            _capability_pack_quality_remediation_next_gap(
+                quality_backfill_candidate_count=quality_backfill_candidate_count,
+                blocker_counts=blocker_counts,
+                fallback=_safe_str(promotion_remediation.get("next_smallest_truthful_gap")).strip(),
+            )
         ),
     }
+
+
+def _quality_reference_paths(reference_candidates: dict[str, Any], key: str) -> list[str]:
+    raw_items = reference_candidates.get(key)
+    items = raw_items if isinstance(raw_items, list) else []
+    return _unique_texts(
+        [_safe_str(item.get("path")).strip() for item in items if isinstance(item, dict) and bool(item.get("exists"))],
+        limit=50,
+    )
+
+
+def _quality_reference_plan_for_remediation_item(
+    item: dict[str, Any],
+    reference_candidates: dict[str, Any],
+) -> dict[str, list[str]]:
+    evidence = item.get("evidence_backfill") if isinstance(item.get("evidence_backfill"), dict) else {}
+    tests = evidence.get("tests") if isinstance(evidence.get("tests"), dict) else {}
+    docs = evidence.get("docs") if isinstance(evidence.get("docs"), dict) else {}
+    return {
+        "tests": _quality_reference_paths(reference_candidates, "tests")
+        if bool(tests.get("candidate_apply_supported"))
+        else [],
+        "docs": _quality_reference_paths(reference_candidates, "docs")
+        if bool(docs.get("candidate_apply_supported"))
+        else [],
+    }
+
+
+def _merge_quality_references(existing: Any, additions: list[str]) -> list[str]:
+    return _unique_texts([*_unique_texts(existing, limit=50), *additions], limit=50)
+
+
+def _record_capability_pack_quality_evidence_remediation_batch(
+    *,
+    registry: dict[str, Any],
+    prepared: list[dict[str, Any]],
+) -> dict[str, list[dict[str, Any]]]:
+    recorded_ts = _now_s()
+    failed: list[dict[str, Any]] = []
+    recorded: list[dict[str, Any]] = []
+    changed = False
+
+    for item in prepared:
+        pack_id = _safe_str(item.get("pack_id")).strip()
+        pack_version = _safe_str(item.get("pack_version")).strip()
+        capability_ids = _unique_texts(item.get("capability_ids"), limit=500)
+        references = item.get("quality_references") if isinstance(item.get("quality_references"), dict) else {}
+        test_refs = _unique_texts(references.get("tests"), limit=50)
+        doc_refs = _unique_texts(references.get("docs"), limit=50)
+        missing = [capability_id for capability_id in capability_ids if _read_plugin(registry, capability_id) is None]
+        if missing:
+            failed.append(
+                {
+                    "pack_id": pack_id,
+                    "pack_version": pack_version,
+                    "status": "blocked",
+                    "error": "capability_not_found",
+                    "missing_capability_ids": missing,
+                }
+            )
+            continue
+
+        changed_capability_ids: list[str] = []
+        for capability_id in capability_ids:
+            current = _read_plugin(registry, capability_id)
+            if current is None:
+                continue
+            meta = dict(current.get("meta") or {}) if isinstance(current.get("meta"), dict) else {}
+            quality = dict(meta.get("quality") or {}) if isinstance(meta.get("quality"), dict) else {}
+            before_quality = dict(quality)
+            if test_refs:
+                quality["tests"] = _merge_quality_references(quality.get("tests"), test_refs)
+            if doc_refs:
+                quality["docs"] = _merge_quality_references(quality.get("docs"), doc_refs)
+            if quality == before_quality:
+                continue
+            quality["reference_source"] = "stage17_quality_evidence_remediation_apply"
+            quality["claim_scope"] = "candidate_reference_only_not_pack_specific_proof"
+            quality["pack_specific_coverage_claimed"] = False
+            quality["validation_receipt_written"] = False
+            quality["proposal_lineage_written"] = False
+            meta["quality"] = quality
+            meta["quality_reference_remediation_source"] = "stage17_capability_pack_quality_evidence_remediation_apply"
+            current["meta"] = meta
+            current["updated_ts"] = recorded_ts
+            _write_plugin(registry, _normalize_plugin_record(capability_id, current))
+            changed = True
+            changed_capability_ids.append(capability_id)
+
+        recorded.append(
+            {
+                "pack_id": pack_id,
+                "pack_version": pack_version,
+                "capability_count": len(capability_ids),
+                "changed_capability_count": len(changed_capability_ids),
+                "changed_capability_ids": changed_capability_ids[:50],
+                "changed_capability_ids_truncated": len(changed_capability_ids) > 50,
+                "quality_references": {
+                    "tests": test_refs,
+                    "docs": doc_refs,
+                    "claim_scope": "candidate_reference_only_not_pack_specific_proof",
+                    "pack_specific_coverage_claimed": False,
+                },
+                "applied_evidence_blockers": _unique_texts(item.get("evidence_blockers"), limit=50),
+                "status": "recorded" if changed_capability_ids else "unchanged",
+            }
+        )
+
+    if changed:
+        _save_registry_and_catalog(registry)
+    return {"recorded": recorded, "failed": failed}
 
 
 def _record_capability_pack_promotion_rule_remediation_batch(
@@ -2983,6 +3114,17 @@ class CapabilityPackPromotionRuleRemediationApplyIn(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
+class CapabilityPackQualityEvidenceRemediationApplyIn(BaseModel):
+    actor: str = ""
+    reason: str = "stage17_quality_evidence_remediation"
+    pack_ids: list[str] = Field(default_factory=list)
+    max_pack_count: int = 10
+    max_total_capability_count: int = 1000
+    max_capability_count_per_pack: int = 500
+    dry_run: bool = False
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
 class PluginRunIn(BaseModel):
     id: str
     action: str
@@ -3477,6 +3619,269 @@ def capability_pack_quality_evidence_remediation() -> dict[str, object]:
         return {
             "ok": False,
             "kind": "plugin.capability_pack.quality_evidence.remediation",
+            "error": api_error_message(exc),
+        }
+
+
+@router.post("/capabilities/packs/quality/evidence/remediation/apply")
+def apply_capability_pack_quality_evidence_remediation(
+    payload: CapabilityPackQualityEvidenceRemediationApplyIn,
+    request: Request,
+) -> dict[str, object]:
+    try:
+        permission = _write_permission(payload.actor, route=request.url.path, method=request.method)
+        if not permission.allowed:
+            return _permission_denied(permission)
+
+        safe_max_pack_count = max(1, min(int(payload.max_pack_count or 10), 50))
+        safe_max_total_capability_count = max(1, min(int(payload.max_total_capability_count or 1000), 10000))
+        safe_max_capability_count_per_pack = max(1, min(int(payload.max_capability_count_per_pack or 500), 500))
+        try:
+            selected_pack_ids = {_validate_plugin_id(raw_id) for raw_id in _unique_texts(payload.pack_ids, limit=100)}
+        except Exception:
+            return {"ok": False, "applied": False, "status": "blocked", "error": "invalid_pack_id"}
+
+        registry = _load_registry()
+        _sync_generated_plugins(registry)
+        catalog = _save_registry_and_catalog(registry)
+        runtime_catalog = _read_runtime_catalog_payload(catalog)
+        marketplace = marketplace_from_plugin_catalog(runtime_catalog)
+        entries = marketplace.catalog()
+        promotion_remediation = analyze_capability_pack_promotion_rule_remediation(entries)
+        before = _capability_pack_quality_evidence_remediation_projection(entries, promotion_remediation)
+        reference_candidates = (
+            before.get("reference_candidates") if isinstance(before.get("reference_candidates"), dict) else {}
+        )
+        raw_queue = before.get("remediation_queue")
+        queue = [item for item in raw_queue if isinstance(item, dict)] if isinstance(raw_queue, list) else []
+        if selected_pack_ids:
+            queue = [item for item in queue if _safe_str(item.get("pack_id")).strip() in selected_pack_ids]
+        if not queue:
+            return {
+                "ok": True,
+                "applied": False,
+                "status": "no_candidates",
+                "planned_pack_count": 0,
+                "recorded_pack_count": 0,
+                "recorded_capability_count": 0,
+                "before": before,
+                "governance": {
+                    "scope": _PLUGIN_WRITE_SCOPE,
+                    "route": request.url.path,
+                    "writes_registry_metadata": False,
+                    "writes_receipts": False,
+                    "promotion_authority": False,
+                    "execution_authority": False,
+                    "approval_authority": False,
+                    "memory_write": False,
+                    "mutates_generated_artifacts": False,
+                },
+            }
+        if len(queue) > safe_max_pack_count:
+            return {
+                "ok": False,
+                "applied": False,
+                "status": "blocked",
+                "error": "remediation_pack_limit_exceeded",
+                "candidate_total": len(queue),
+                "limit": safe_max_pack_count,
+            }
+
+        prepared: list[dict[str, Any]] = []
+        skipped: list[dict[str, Any]] = []
+        total_capability_count = 0
+        for item in queue:
+            pack_id = _safe_str(item.get("pack_id")).strip()
+            pack_version = _safe_str(item.get("pack_version")).strip()
+            if not pack_id or not pack_version:
+                skipped.append(
+                    {"pack_id": pack_id, "pack_version": pack_version, "error": "pack_id_or_version_missing"}
+                )
+                continue
+            try:
+                pack_id = _validate_plugin_id(pack_id)
+            except Exception:
+                skipped.append({"pack_id": pack_id, "pack_version": pack_version, "error": "invalid_pack_id"})
+                continue
+            references = _quality_reference_plan_for_remediation_item(item, reference_candidates)
+            evidence_blockers = [
+                blocker
+                for blocker, refs in (("tests_missing", references["tests"]), ("docs_missing", references["docs"]))
+                if refs and blocker in _unique_texts(item.get("blockers"), limit=50)
+            ]
+            if not evidence_blockers:
+                skipped.append(
+                    {
+                        "pack_id": pack_id,
+                        "pack_version": pack_version,
+                        "error": "no_supported_quality_reference_backfill",
+                        "blockers": _unique_texts(item.get("blockers"), limit=50),
+                    }
+                )
+                continue
+            capability_ids = _capability_ids_for_pack(entries, pack_id=pack_id, pack_version=pack_version)
+            capability_count = len(capability_ids)
+            total_capability_count += capability_count
+            if capability_count <= 0:
+                skipped.append({"pack_id": pack_id, "pack_version": pack_version, "error": "capability_ids_required"})
+                continue
+            if capability_count > safe_max_capability_count_per_pack:
+                skipped.append(
+                    {
+                        "pack_id": pack_id,
+                        "pack_version": pack_version,
+                        "error": "candidate_capability_limit_exceeded",
+                        "capability_count": capability_count,
+                        "limit": safe_max_capability_count_per_pack,
+                    }
+                )
+                continue
+            prepared.append(
+                {
+                    "item": item,
+                    "pack_id": pack_id,
+                    "pack_version": pack_version,
+                    "pack_name": _safe_str(item.get("pack_name")).strip() or pack_id,
+                    "capability_ids": capability_ids,
+                    "quality_references": references,
+                    "evidence_blockers": evidence_blockers,
+                }
+            )
+        if total_capability_count > safe_max_total_capability_count:
+            return {
+                "ok": False,
+                "applied": False,
+                "status": "blocked",
+                "error": "total_capability_limit_exceeded",
+                "capability_count": total_capability_count,
+                "limit": safe_max_total_capability_count,
+            }
+        if not prepared:
+            return {
+                "ok": True,
+                "applied": False,
+                "status": "no_supported_quality_reference_backfill",
+                "planned_pack_count": 0,
+                "recorded_pack_count": 0,
+                "recorded_capability_count": 0,
+                "skipped": skipped,
+                "before": before,
+                "governance": {
+                    "scope": _PLUGIN_WRITE_SCOPE,
+                    "route": request.url.path,
+                    "writes_registry_metadata": False,
+                    "writes_receipts": False,
+                    "promotion_authority": False,
+                    "execution_authority": False,
+                    "approval_authority": False,
+                    "memory_write": False,
+                    "mutates_generated_artifacts": False,
+                },
+            }
+
+        planned = [
+            {
+                "pack_id": item["pack_id"],
+                "pack_version": item["pack_version"],
+                "pack_name": item["pack_name"],
+                "capability_count": len(item["capability_ids"]),
+                "quality_references": item["quality_references"],
+                "applied_evidence_blockers": item["evidence_blockers"],
+                "claim_scope": "candidate_reference_only_not_pack_specific_proof",
+            }
+            for item in prepared
+        ]
+        if payload.dry_run:
+            return {
+                "ok": True,
+                "applied": False,
+                "status": "dry_run",
+                "planned_pack_count": len(planned),
+                "planned_capability_count": sum(int(item.get("capability_count") or 0) for item in planned),
+                "planned": planned,
+                "skipped": skipped,
+                "before": before,
+                "governance": {
+                    "scope": _PLUGIN_WRITE_SCOPE,
+                    "route": request.url.path,
+                    "writes_registry_metadata": False,
+                    "writes_receipts": False,
+                    "promotion_authority": False,
+                    "execution_authority": False,
+                    "approval_authority": False,
+                    "memory_write": False,
+                    "mutates_generated_artifacts": False,
+                },
+            }
+
+        batch = _record_capability_pack_quality_evidence_remediation_batch(
+            registry=registry,
+            prepared=prepared,
+        )
+        recorded = batch["recorded"]
+        failed = batch["failed"]
+        changed_records = [item for item in recorded if item.get("status") == "recorded"]
+
+        refreshed_registry = _load_registry()
+        refreshed_catalog = _compile_runtime_catalog(refreshed_registry)
+        refreshed_runtime_catalog = _read_runtime_catalog_payload(refreshed_catalog)
+        refreshed_marketplace = marketplace_from_plugin_catalog(refreshed_runtime_catalog)
+        refreshed_entries = refreshed_marketplace.catalog()
+        refreshed_promotion_remediation = analyze_capability_pack_promotion_rule_remediation(refreshed_entries)
+        after = _capability_pack_quality_evidence_remediation_projection(
+            refreshed_entries,
+            refreshed_promotion_remediation,
+        )
+        selected_after_queue = [
+            item
+            for item in after.get("remediation_queue", [])
+            if isinstance(item, dict)
+            and (
+                not selected_pack_ids
+                or _safe_str(item.get("pack_id")).strip() in selected_pack_ids
+                or _safe_str(item.get("pack_id")).strip() in {str(record.get("pack_id")) for record in recorded}
+            )
+        ]
+        applied = bool(changed_records)
+        return {
+            "ok": not failed,
+            "applied": applied,
+            "status": "recorded" if not failed and applied else ("partial" if applied else "blocked"),
+            "planned_pack_count": len(prepared),
+            "recorded_pack_count": len(changed_records),
+            "recorded_capability_count": sum(
+                int(item.get("changed_capability_count") or 0) for item in changed_records
+            ),
+            "recorded": recorded,
+            "failed": failed,
+            "skipped": skipped,
+            "remaining_remediation_queue": selected_after_queue,
+            "remaining_remediation_queue_count": int(after.get("remediation_queue_count") or 0),
+            "next_smallest_truthful_gap": _safe_str(after.get("next_smallest_truthful_gap")).strip(),
+            "governance": {
+                "scope": _PLUGIN_WRITE_SCOPE,
+                "route": request.url.path,
+                "writes_registry_metadata": applied,
+                "writes_receipts": False,
+                "quality_reference_backfill_only": True,
+                "candidate_references_do_not_claim_pack_specific_coverage": True,
+                "does_not_write_validation_receipts": True,
+                "does_not_write_proposals": True,
+                "does_not_approve_proposals": True,
+                "does_not_promote_capabilities": True,
+                "does_not_enable_capabilities": True,
+                "does_not_execute_capabilities": True,
+                "promotion_authority": False,
+                "execution_authority": False,
+                "approval_authority": False,
+                "memory_write": False,
+                "mutates_generated_artifacts": False,
+            },
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "kind": "plugin.capability_pack.quality_evidence.remediation.apply",
             "error": api_error_message(exc),
         }
 

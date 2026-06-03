@@ -91,8 +91,10 @@ def test_plugin_registry_catalog_projects_legacy_source_kind_to_migration_pack_m
                 "generated_dir": "plugins/generated/1771955744_opsplugin",
                 "meta": {
                     "promotion_status": "staged",
-                    "tests": ["tests/test_ops.py"],
-                    "docs": ["README.md"],
+                    "quality": {
+                        "tests": ["tests/test_ops.py"],
+                        "docs": ["README.md"],
+                    },
                 },
             }
         ]
@@ -101,6 +103,8 @@ def test_plugin_registry_catalog_projects_legacy_source_kind_to_migration_pack_m
     listing = capability_listings_from_plugin_catalog(catalog)[0]
 
     assert listing.source == "generated"
+    assert listing.tests == ("tests/test_ops.py",)
+    assert listing.docs == ("README.md",)
     assert listing.metadata["pack_id"] == "legacy.generated.opsplugin"
     assert listing.metadata["pack_version"] == "0.0.0-migration"
     assert listing.metadata["pack_name"] == "Legacy Generated Opsplugin Pack"

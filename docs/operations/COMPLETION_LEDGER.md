@@ -57466,6 +57466,72 @@ Remaining truthful gap:
   backfill plus pack-specific validation-receipt and proposal-lineage
   remediation before it can be called complete.
 
+### 2026-06-02 - Stage 17 quality evidence remediation gets governed apply route
+
+Roadmap area: Stage 17 / Capability Economy, bounded execution of
+quality-reference remediation for generated capability packs.
+
+Material change:
+
+- Added `POST /plugins/capabilities/packs/quality/evidence/remediation/apply`.
+- The route requires the existing `plugins.write` permission gate, supports
+  dry-run, validates selected pack ids and count limits, and backfills selected
+  pack registry metadata with existing repository test/doc reference candidates.
+- Backfilled references are stored under `meta.quality.tests` and
+  `meta.quality.docs` with `claim_scope` set to
+  `candidate_reference_only_not_pack_specific_proof`; Francis still does not
+  claim pack-specific validation from generic contract-surface references.
+- The capability catalog projection now reads nested `metadata.quality` test/doc
+  references so remediation metadata becomes visible to Stage 17 analyzers
+  without duplicating quality state into unrelated top-level metadata fields.
+- After applying quality references, the selected pack remains blocked on
+  `validation_receipt_missing` and `proposal_id_missing`, preserving the next
+  real quality-evidence work instead of marking the pack complete.
+- `README.md` `Latest Progress Snapshot` was intentionally overwritten to show
+  this locally validated apply slice while keeping GitHub confirmation pending.
+
+Authority boundary:
+
+- This route writes registry quality-reference metadata only.
+- It does not write receipts, write validation receipts, write proposals,
+  approve proposals, promote capabilities, enable capabilities, execute
+  capabilities, write memory, mutate generated artifacts, or grant
+  promotion/execution/approval authority.
+
+Latest validation for Stage 17 quality-evidence remediation apply:
+
+- `python -m pytest tests/unit/test_capability_catalog_projection.py
+  tests/test_api_plugins.py::test_plugins_capability_pack_quality_evidence_remediation_apply_backfills_candidate_refs
+  tests/test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q --tb=short --maxfail=1`
+  Result: `passed; 4 selected tests passed`
+- `python -m ruff check src/francis/api/routes/plugins.py
+  src/francis/economy/markets/capability_catalog_projection.py
+  tests/test_api_plugins.py tests/test_api_contract_chat_ui.py
+  tests/unit/test_capability_catalog_projection.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/plugins.py
+  src/francis/economy/markets/capability_catalog_projection.py
+  tests/test_api_plugins.py tests/test_api_contract_chat_ui.py
+  tests/unit/test_capability_catalog_projection.py`
+  Result: `passed`
+- `python -m mypy src/francis/api/routes/plugins.py
+  src/francis/economy/markets/capability_catalog_projection.py`
+  Result: `passed`
+- `git diff --check`
+  Result: `passed; line-ending warnings only`
+
+Validation risk:
+
+- This slice is locally validated but not yet GitHub-confirmed.
+- Full local `scripts/check.ps1` was not rerun for this slice.
+
+Remaining truthful gap:
+
+- Stage 17 still needs GitHub confirmation for this quality-reference apply
+  route, then pack-specific validation-receipt and proposal-lineage remediation
+  before it can be called complete.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

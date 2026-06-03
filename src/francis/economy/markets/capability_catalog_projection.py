@@ -96,8 +96,9 @@ def _catalog_metadata(plugin: Mapping[str, Any], metadata: Mapping[str, Any]) ->
 
 
 def _quality_refs(metadata: Mapping[str, Any]) -> dict[str, tuple[str, ...]]:
-    tests = _str_tuple(metadata.get("tests") or metadata.get("test_refs"))
-    docs = _str_tuple(metadata.get("docs") or metadata.get("documentation"))
+    quality = _mapping(metadata.get("quality"))
+    tests = _str_tuple(metadata.get("tests") or metadata.get("test_refs") or quality.get("tests"))
+    docs = _str_tuple(metadata.get("docs") or metadata.get("documentation") or quality.get("docs"))
     return {"tests": tests, "docs": docs}
 
 
