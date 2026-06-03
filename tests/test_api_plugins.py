@@ -1142,13 +1142,21 @@ def test_plugins_capability_pack_quality_evidence_remediation_projects_truthful_
     from francis.api.routes import plugins
 
     client = TestClient(create_app())
+    expected_pack_id = "ops.quality_evidence_remediation"
+    expected_pack_version = "1.0.0"
+    meta = {
+        **_forge_promotion_meta("capability_quality_evidence_remediation"),
+        "pack_id": expected_pack_id,
+        "pack_version": expected_pack_version,
+        "pack_name": "Ops Quality Evidence Remediation Pack",
+    }
     built = client.post(
         "/plugins/build",
         json={
             "name": "Capability Quality Evidence Remediation Plugin",
             "description": "Stage 17 quality evidence remediation coverage",
             "actor": _PLUGIN_ACTOR,
-            "meta": _forge_promotion_meta("capability_quality_evidence_remediation"),
+            "meta": meta,
         },
     )
     assert built.status_code == 200
@@ -1156,21 +1164,32 @@ def test_plugins_capability_pack_quality_evidence_remediation_projects_truthful_
     assert built_body["ok"] is True
     plugin_id = str(built_body["plugin_id"])
 
-    plan = client.get("/plugins/capabilities/packs/migration/plan").json()
-    candidate = next(item for item in plan["candidates"] if plugin_id in item["capability_ids_sample"])
     recorded = client.post(
-        "/plugins/capabilities/packs/metadata/receipts/bulk-from-plan",
+        "/plugins/capabilities/packs/metadata/receipts",
         json={
-            "actor": _PLUGIN_ACTOR,
             "reason": "record reviewed migration plan candidate before quality remediation readback",
-            "pack_ids": [candidate["pack_id"]],
+            "actor": _PLUGIN_ACTOR,
+            "pack_id": expected_pack_id,
+            "pack_version": expected_pack_version,
+            "pack_name": "Ops Quality Evidence Remediation Pack",
+            "capability_ids": [plugin_id],
+            "promotion_rules": [
+                "metadata_receipt_before_promotion",
+                "quality_standards_before_promotion",
+                "operator_review_before_promotion",
+            ],
+            "pack_governance": {
+                "risk_tier": "normal",
+                "scope": "build_dev",
+                "requires_validation_receipt": True,
+            },
         },
     )
     assert recorded.status_code == 200
     recorded_body = recorded.json()
     assert recorded_body["ok"] is True
-    pack_id = str(recorded_body["recorded"][0]["pack_id"])
-    pack_version = str(recorded_body["recorded"][0]["pack_version"])
+    pack_id = str(recorded_body["receipt"]["pack_id"])
+    pack_version = str(recorded_body["receipt"]["pack_version"])
 
     registry = plugins._load_registry()
     plugin = plugins._read_plugin(registry, plugin_id)
