@@ -57638,6 +57638,59 @@ Remaining truthful gap:
   then pack-specific validation/proposal artifact creation or reconstruction for
   legacy packs that have no existing artifacts.
 
+### 2026-06-03 - Stage 17 quality evidence remediation projects missing-artifact reconstruction plan
+
+Roadmap area: Stage 17 / Capability Economy, pack-specific validation receipt
+and proposal lineage reconstruction planning.
+
+Material change:
+
+- Extended the read-only quality-evidence remediation projection with an
+  `artifact_reconstruction_plan` for packs that still lack validation receipts
+  or proposal lineage after the existing-artifact link scan.
+- The plan exposes per-pack and per-capability reconstruction requirements,
+  including missing validation-receipt needs, missing proposal-lineage needs,
+  available registry/metadata inputs, missing inputs, and next writer
+  requirements.
+- The plan explicitly reports that the reconstruction writer is not implemented.
+  It does not write validation receipts, does not write proposals, does not
+  approve proposals, does not promote capabilities, does not execute
+  capabilities, and does not mutate registry metadata or generated artifacts.
+- The top-level remediation readback now reports reconstruction-required counts
+  so the next Stage 17 gap is visible without claiming artifact generation or
+  reconstruction is complete.
+
+Latest validation for Stage 17 missing-artifact reconstruction planning:
+
+- `python -m pytest
+  tests/test_api_plugins.py::test_plugins_capability_pack_quality_evidence_remediation_projects_truthful_read_only_plan
+  tests/test_api_plugins.py::test_plugins_capability_pack_quality_evidence_remediation_projects_artifact_reconstruction_plan
+  tests/test_api_plugins.py::test_plugins_capability_pack_quality_evidence_remediation_apply_backfills_candidate_refs
+  -q --tb=short --maxfail=1`
+  Result: `passed; 3 selected tests passed`
+- `python -m ruff check src/francis/api/routes/plugins.py
+  tests/test_api_plugins.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/plugins.py
+  tests/test_api_plugins.py`
+  Result: `passed`
+- `python -m mypy src/francis/api/routes/plugins.py`
+  Result: `passed`
+
+Validation risk:
+
+- This reconstruction-plan slice is locally validated but not yet
+  GitHub-confirmed.
+- This is still a read-only planning surface. It does not create pack-specific
+  validation receipt artifacts, proposal artifacts, or proposal approval
+  evidence.
+
+Remaining truthful gap:
+
+- Stage 17 still needs GitHub confirmation for this read-only reconstruction
+  plan, then a governed writer for pack-specific validation/proposal artifact
+  reconstruction.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

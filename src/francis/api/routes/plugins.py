@@ -123,6 +123,7 @@ _CAPABILITY_PACK_QUALITY_EVIDENCE_BLOCKERS = {
     "proposal_id_missing",
 }
 _CAPABILITY_PACK_QUALITY_EVIDENCE_QUEUE_LIMIT = 50
+_CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_PLAN_LIMIT = 25
 _PLUGIN_ARTIFACT_LINK_BODY_MAX_BYTES = 256 * 1024
 _CAPABILITY_PACK_QUALITY_TEST_REFERENCE_CANDIDATES = ("tests/test_api_plugins.py",)
 _CAPABILITY_PACK_QUALITY_DOC_REFERENCE_CANDIDATES = (
@@ -1712,6 +1713,118 @@ def _artifact_links_for_capabilities(
     }
 
 
+def _capability_pack_artifact_reconstruction_plan(
+    *,
+    capability_ids: list[str],
+    pack_entries: list[dict[str, Any]],
+    blockers: list[str],
+    validation_links: dict[str, Any],
+    proposal_links: dict[str, Any],
+) -> dict[str, Any]:
+    validation_link_map = validation_links.get("links") if isinstance(validation_links.get("links"), dict) else {}
+    proposal_link_map = proposal_links.get("links") if isinstance(proposal_links.get("links"), dict) else {}
+    validation_missing = (
+        [capability_id for capability_id in capability_ids if capability_id not in validation_link_map]
+        if "validation_receipt_missing" in blockers and not bool(validation_links.get("candidate_apply_supported"))
+        else []
+    )
+    proposal_missing = (
+        [capability_id for capability_id in capability_ids if capability_id not in proposal_link_map]
+        if "proposal_id_missing" in blockers and not bool(proposal_links.get("candidate_apply_supported"))
+        else []
+    )
+    missing_capability_ids = _unique_texts([*validation_missing, *proposal_missing], limit=500)
+    entries_by_capability = {
+        _safe_str(entry.get("capability")).strip(): entry
+        for entry in pack_entries
+        if _safe_str(entry.get("capability")).strip()
+    }
+
+    capabilities: list[dict[str, Any]] = []
+    for capability_id in missing_capability_ids[:_CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_PLAN_LIMIT]:
+        entry = entries_by_capability.get(capability_id, {})
+        metadata = entry.get("metadata") if isinstance(entry.get("metadata"), dict) else {}
+        quality = metadata.get("quality") if isinstance(metadata.get("quality"), dict) else {}
+        tests = _unique_texts(
+            [
+                *_unique_texts(quality.get("tests"), limit=50),
+                *_unique_texts(metadata.get("tests"), limit=50),
+                *_unique_texts(metadata.get("test_refs"), limit=50),
+            ],
+            limit=50,
+        )
+        docs = _unique_texts(
+            [
+                *_unique_texts(quality.get("docs"), limit=50),
+                *_unique_texts(metadata.get("docs"), limit=50),
+                *_unique_texts(metadata.get("documentation"), limit=50),
+            ],
+            limit=50,
+        )
+        needs_validation_receipt = capability_id in validation_missing
+        needs_proposal_lineage = capability_id in proposal_missing
+        missing_inputs: list[str] = []
+        if needs_validation_receipt and not tests:
+            missing_inputs.append("quality_test_references")
+        if needs_validation_receipt and not docs:
+            missing_inputs.append("quality_doc_references")
+        if needs_validation_receipt and not _safe_str(metadata.get("pack_metadata_receipt_id")).strip():
+            missing_inputs.append("pack_metadata_receipt")
+        if needs_proposal_lineage:
+            missing_inputs.append("explicit_proposal_lineage_source_or_operator_reconstruction_decision")
+
+        writer_requirements: list[str] = []
+        if needs_validation_receipt:
+            writer_requirements.append("create_or_attach_pack_specific_validation_receipt_after_validation")
+        if needs_proposal_lineage:
+            writer_requirements.append("create_or_attach_explicit_proposal_lineage_without_approval_claim")
+        if writer_requirements:
+            writer_requirements.append("operator_review_before_artifact_write")
+
+        capabilities.append(
+            {
+                "capability": capability_id,
+                "needs_validation_receipt": needs_validation_receipt,
+                "needs_proposal_lineage": needs_proposal_lineage,
+                "available_inputs": {
+                    "registry_metadata": bool(metadata),
+                    "pack_metadata_receipt": bool(_safe_str(metadata.get("pack_metadata_receipt_id")).strip()),
+                    "registry_snapshot": bool(_safe_str(metadata.get("registry_snapshot_path")).strip()),
+                    "artifact_zip": bool(
+                        _safe_str(metadata.get("artifact_zip")).strip() or _safe_str(entry.get("artifact_zip")).strip()
+                    ),
+                    "quality_test_references": bool(tests),
+                    "quality_doc_references": bool(docs),
+                    "existing_validation_receipt_link": capability_id in validation_link_map,
+                    "existing_proposal_lineage_link": capability_id in proposal_link_map,
+                },
+                "missing_inputs": _unique_texts(missing_inputs, limit=25),
+                "next_writer_requirements": _unique_texts(writer_requirements, limit=25),
+            }
+        )
+
+    required_count = len(missing_capability_ids)
+    return {
+        "required": required_count > 0,
+        "read_only": True,
+        "writer_implemented": False,
+        "writer_route": "",
+        "selection_policy": "missing_pack_specific_artifact_after_existing_link_scan",
+        "validation_receipt_reconstruction_required_count": len(validation_missing),
+        "proposal_lineage_reconstruction_required_count": len(proposal_missing),
+        "capability_count": required_count,
+        "capabilities": capabilities,
+        "capabilities_truncated": required_count > _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_PLAN_LIMIT,
+        "does_not_write_validation_receipts": True,
+        "does_not_write_proposals": True,
+        "does_not_approve_proposals": True,
+        "does_not_promote_capabilities": True,
+        "next_smallest_truthful_gap": (
+            "stage17_capability_pack_artifact_reconstruction_writer" if required_count else ""
+        ),
+    }
+
+
 def _capability_pack_quality_remediation_next_action(
     *,
     blockers: list[str],
@@ -1737,6 +1850,7 @@ def _capability_pack_quality_remediation_next_gap(
     quality_backfill_candidate_count: int,
     validation_receipt_link_candidate_count: int = 0,
     proposal_lineage_link_candidate_count: int = 0,
+    artifact_reconstruction_required_count: int = 0,
     blocker_counts: dict[str, int],
     fallback: str,
 ) -> str:
@@ -1746,6 +1860,8 @@ def _capability_pack_quality_remediation_next_gap(
         or proposal_lineage_link_candidate_count
     ):
         return "stage17_capability_pack_quality_evidence_remediation_apply"
+    if artifact_reconstruction_required_count:
+        return "stage17_capability_pack_artifact_reconstruction_writer"
     for blocker, gap in (
         ("tests_missing", "stage17_capability_pack_quality_tests"),
         ("docs_missing", "stage17_capability_pack_quality_docs"),
@@ -1822,6 +1938,13 @@ def _capability_pack_quality_evidence_remediation_item(
         and not capability_ids_truncated
         and bool(proposal_links["candidate_apply_supported"])
     )
+    artifact_reconstruction_plan = _capability_pack_artifact_reconstruction_plan(
+        capability_ids=capability_ids,
+        pack_entries=pack_entries,
+        blockers=blockers,
+        validation_links=validation_links,
+        proposal_links=proposal_links,
+    )
     return {
         "pack_id": pack_id,
         "pack_version": pack_version,
@@ -1887,6 +2010,7 @@ def _capability_pack_quality_evidence_remediation_item(
                 ),
             },
         },
+        "artifact_reconstruction_plan": artifact_reconstruction_plan,
         "recommended_next_action": _capability_pack_quality_remediation_next_action(
             blockers=blockers,
             quality_reference_candidate=quality_reference_candidate,
@@ -1942,6 +2066,39 @@ def _capability_pack_quality_evidence_remediation_projection(
             .get("candidate_apply_supported")
         )
     )
+    artifact_reconstruction_required_count = sum(
+        1
+        for item in items
+        if bool(
+            (
+                item.get("artifact_reconstruction_plan")
+                if isinstance(item.get("artifact_reconstruction_plan"), dict)
+                else {}
+            ).get("required")
+        )
+    )
+    validation_receipt_reconstruction_required_count = sum(
+        int(
+            (
+                item.get("artifact_reconstruction_plan")
+                if isinstance(item.get("artifact_reconstruction_plan"), dict)
+                else {}
+            ).get("validation_receipt_reconstruction_required_count")
+            or 0
+        )
+        for item in items
+    )
+    proposal_lineage_reconstruction_required_count = sum(
+        int(
+            (
+                item.get("artifact_reconstruction_plan")
+                if isinstance(item.get("artifact_reconstruction_plan"), dict)
+                else {}
+            ).get("proposal_lineage_reconstruction_required_count")
+            or 0
+        )
+        for item in items
+    )
     return {
         "stage": "Stage 17 / Capability Economy",
         "status": "blocked" if items else "ready",
@@ -1956,6 +2113,9 @@ def _capability_pack_quality_evidence_remediation_projection(
         "quality_reference_backfill_candidate_count": quality_backfill_candidate_count,
         "validation_receipt_link_candidate_count": validation_receipt_link_candidate_count,
         "proposal_lineage_link_candidate_count": proposal_lineage_link_candidate_count,
+        "artifact_reconstruction_required_count": artifact_reconstruction_required_count,
+        "validation_receipt_reconstruction_required_count": validation_receipt_reconstruction_required_count,
+        "proposal_lineage_reconstruction_required_count": proposal_lineage_reconstruction_required_count,
         "validation_receipt_backfill_required_count": sum(
             1 for item in items if "validation_receipt_missing" in item["blockers"]
         ),
@@ -1992,6 +2152,8 @@ def _capability_pack_quality_evidence_remediation_projection(
             "existing_proposal_lineage_links_require_matching_plugin_id": True,
             "proposal_lineage_links_do_not_approve_proposals": True,
             "artifact_body_reads_are_bounded": True,
+            "artifact_reconstruction_plan_is_read_only": True,
+            "artifact_reconstruction_writer_not_implemented": True,
             "generated_or_legacy_pack_only_for_quality_backfill_candidates": True,
         },
         "governance": {
@@ -2008,6 +2170,8 @@ def _capability_pack_quality_evidence_remediation_projection(
             "does_not_write_receipts": True,
             "does_not_write_validation_receipts": True,
             "does_not_write_proposals": True,
+            "artifact_reconstruction_plan_only": True,
+            "artifact_reconstruction_writer_implemented": False,
             "does_not_mutate_registry": True,
             "does_not_mutate_generated_artifacts": True,
             "does_not_approve_proposals": True,
@@ -2024,6 +2188,7 @@ def _capability_pack_quality_evidence_remediation_projection(
                 quality_backfill_candidate_count=quality_backfill_candidate_count,
                 validation_receipt_link_candidate_count=validation_receipt_link_candidate_count,
                 proposal_lineage_link_candidate_count=proposal_lineage_link_candidate_count,
+                artifact_reconstruction_required_count=artifact_reconstruction_required_count,
                 blocker_counts=blocker_counts,
                 fallback=_safe_str(promotion_remediation.get("next_smallest_truthful_gap")).strip(),
             )
