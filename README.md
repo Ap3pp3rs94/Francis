@@ -35,30 +35,31 @@ Francis should be read from current repo truth, not from a hard-coded phase labe
 - `P1_INTERFACE`, `P7_EXECUTION`, and `P8_MEMORY` are partial and actively being connected into a truthful loop.
 - Stage 3 / Missions and Stage 5 / Reactor are closed for the current repo posture by ledger-backed audits.
 - Stage 6 / Lens has backend and chat-UI readback for Lens primitives, host readiness contracts, activation-denial receipts, preflight diagnostics, and bounded proof scripts. Do not read later roadmap work as proof of finished OS-wide summon, always-on resident presence, tray/hotkey/overlay runtime, or live Pilot takeover.
-- Stage 17 / Capability Economy now has read-only pack readiness, migration-plan, metadata-receipt, quality-standards, promotion-rules, quality-test, quality-doc, validation-receipt, proposal-lineage, promotion-receipt, operator-review evidence surfaces, GitHub-confirmed operator-review decision receipts, a GitHub-confirmed chat-UI decision surface for capability-pack reviews, a GitHub-confirmed promotion-discipline pack gate, a GitHub-confirmed chat-UI promotion-discipline readback, a GitHub-confirmed promotion-rule remediation queue, a GitHub-confirmed quality-evidence remediation readback, a GitHub-confirmed quality-reference remediation apply path, a GitHub-confirmed existing-artifact validation/proposal link path, and a locally validated missing-artifact reconstruction plan. The current gap is still capability-library maturity: legacy packs need actual validation/proposal artifacts before Stage 17 can be called complete.
+- Stage 17 / Capability Economy now has read-only pack readiness, migration-plan, metadata-receipt, quality-standards, promotion-rules, quality-test, quality-doc, validation-receipt, proposal-lineage, promotion-receipt, operator-review evidence surfaces, GitHub-confirmed operator-review decision receipts, a GitHub-confirmed chat-UI decision surface for capability-pack reviews, a GitHub-confirmed promotion-discipline pack gate, a GitHub-confirmed chat-UI promotion-discipline readback, a GitHub-confirmed promotion-rule remediation queue, a GitHub-confirmed quality-evidence remediation readback, a GitHub-confirmed quality-reference remediation apply path, a GitHub-confirmed existing-artifact validation/proposal link path, and a locally validated governed missing-artifact reconstruction writer. The current gap is still capability-library maturity: legacy packs need operator-reviewed application of actual or reconstructed pack-specific validation/proposal artifacts before Stage 17 can be called complete.
 
 ## Latest Progress Snapshot
 
 This block is intentionally overwritten as the build moves. The append-only
 history stays in [docs/operations/COMPLETION_LEDGER.md](docs/operations/COMPLETION_LEDGER.md).
 
-- Last updated: 2026-06-03, 10:56 America/Chicago.
-- Latest confirmed capability-code GitHub gate: `main` commit `ff0c3331` passed CI on Ubuntu
+- Last updated: 2026-06-03, 12:39 America/Chicago.
+- Latest confirmed capability-code GitHub gate: `main` commit `e37b4a1e` passed CI on Ubuntu
   3.12, Ubuntu 3.13, Windows 3.12, and Windows 3.13; CodeQL passed for Actions,
   JavaScript/TypeScript, and Python.
-- Current slice: Stage 17 has a locally validated read-only reconstruction plan
-  inside `GET /plugins/capabilities/packs/quality/evidence/remediation` for
-  packs that still lack pack-specific validation receipts or proposal lineage
-  after the existing-artifact link scan.
-- Local gate: focused Stage 17 remediation pytest, Ruff lint, Ruff format check,
-  and mypy passed for the touched plugin API path.
-- Guardrails: the reconstruction plan is read-only, marks the reconstruction
-  writer as not implemented, does not write validation receipts or proposals,
-  does not approve proposals, does not promote or execute capabilities, and
-  continues to rely on the existing bounded artifact-link scan rather than
-  unbounded artifact body reads.
-- Next truthful gap: GitHub confirmation for this read-only reconstruction plan,
-  then a governed pack-specific artifact reconstruction writer.
+- Current slice: Stage 17 has a locally validated governed reconstruction writer
+  at `POST /plugins/capabilities/packs/quality/evidence/remediation/reconstruct`
+  for packs that still lack pack-specific validation receipts or proposal
+  lineage after the existing-artifact link scan.
+- Local gate: focused Stage 17 remediation pytest passed for the read-only
+  reconstruction projection, governed reconstruction writer, and adjacent
+  existing-artifact apply path.
+- Guardrails: the writer supports dry-run without mutation, requires an operator
+  reconstruction decision before non-dry writes, writes only bounded registry
+  metadata plus validation/proposal artifact records, does not approve proposals,
+  does not promote or execute capabilities, and does not claim new test
+  execution.
+- Next truthful gap: GitHub confirmation for this governed reconstruction writer,
+  then applying or otherwise closing the remaining legacy pack artifact backlog.
 
 Use [docs/operations/COMPLETION_LEDGER.md](docs/operations/COMPLETION_LEDGER.md) for shipped truth. Use [docs/canonical/ROADMAP.md](docs/canonical/ROADMAP.md) and [docs/canonical/BUILD_MANIFEST.md](docs/canonical/BUILD_MANIFEST.md) for target state and build order. Phase and stage names are orientation markers only; each build pass should derive the active priority from the ledger and canonical roadmap instead of locking Francis into one fixed phase.
 

@@ -1428,9 +1428,13 @@ def test_plugins_capability_pack_quality_evidence_remediation_projects_artifact_
     body = response.json()
     assert body["ok"] is True
     assert body["requirements"]["artifact_reconstruction_plan_is_read_only"] is True
-    assert body["requirements"]["artifact_reconstruction_writer_not_implemented"] is True
+    assert body["requirements"]["artifact_reconstruction_writer_not_implemented"] is False
+    assert (
+        body["requirements"]["artifact_reconstruction_writer_route"]
+        == "/plugins/capabilities/packs/quality/evidence/remediation/reconstruct"
+    )
     assert body["governance"]["artifact_reconstruction_plan_only"] is True
-    assert body["governance"]["artifact_reconstruction_writer_implemented"] is False
+    assert body["governance"]["artifact_reconstruction_writer_implemented"] is True
     assert body["artifact_reconstruction_required_count"] >= 1
     assert body["validation_receipt_reconstruction_required_count"] >= 1
     assert body["proposal_lineage_reconstruction_required_count"] >= 1
@@ -1447,15 +1451,15 @@ def test_plugins_capability_pack_quality_evidence_remediation_projects_artifact_
     reconstruction = item["artifact_reconstruction_plan"]
     assert reconstruction["required"] is True
     assert reconstruction["read_only"] is True
-    assert reconstruction["writer_implemented"] is False
-    assert reconstruction["writer_route"] == ""
+    assert reconstruction["writer_implemented"] is True
+    assert reconstruction["writer_route"] == "/plugins/capabilities/packs/quality/evidence/remediation/reconstruct"
     assert reconstruction["selection_policy"] == "missing_pack_specific_artifact_after_existing_link_scan"
     assert reconstruction["validation_receipt_reconstruction_required_count"] == 1
     assert reconstruction["proposal_lineage_reconstruction_required_count"] == 1
     assert reconstruction["does_not_write_validation_receipts"] is True
     assert reconstruction["does_not_write_proposals"] is True
     assert reconstruction["does_not_approve_proposals"] is True
-    assert reconstruction["next_smallest_truthful_gap"] == ("stage17_capability_pack_artifact_reconstruction_writer")
+    assert reconstruction["next_smallest_truthful_gap"] == ("stage17_capability_pack_artifact_reconstruction_apply")
 
     capability_plan = reconstruction["capabilities"][0]
     assert capability_plan["capability"] == plugin_id
@@ -1485,6 +1489,222 @@ def test_plugins_capability_pack_quality_evidence_remediation_projects_artifact_
     assert "validation_receipt_id" not in post_meta
     assert not validation_path.exists()
     assert not proposal_path.exists()
+
+
+def test_plugins_capability_pack_quality_evidence_remediation_reconstructs_missing_artifacts(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    client = TestClient(create_app())
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Capability Artifact Reconstruction Writer Plugin",
+            "description": "Stage 17 governed artifact reconstruction writer coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": _forge_promotion_meta("capability_artifact_reconstruction_writer"),
+        },
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    plugin_id = str(built_body["plugin_id"])
+
+    pack_id = "ops.artifact_reconstruction_writer"
+    pack_version = "1.0.0"
+    recorded = client.post(
+        "/plugins/capabilities/packs/metadata/receipts",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "record reviewed pack metadata before artifact reconstruction writer",
+            "pack_id": pack_id,
+            "pack_version": pack_version,
+            "pack_name": "Ops Artifact Reconstruction Writer Pack",
+            "capability_ids": [plugin_id],
+            "promotion_rules": [
+                "metadata_receipt_before_promotion",
+                "quality_standards_before_promotion",
+                "operator_review_before_promotion",
+            ],
+            "pack_governance": {
+                "risk_tier": "normal",
+                "scope": "build_dev",
+                "operator_review_required": True,
+                "requires_validation_receipt": True,
+            },
+        },
+    )
+    assert recorded.status_code == 200
+    assert recorded.json()["ok"] is True
+
+    original_validation_path = (
+        data_root / "artifacts" / "plugins" / "validations" / f"{built_body['validation_receipt_id']}.json"
+    )
+    original_proposal_path = data_root / "artifacts" / "plugins" / "proposals" / f"{built_body['proposal_id']}.json"
+    original_validation_path.unlink()
+    original_proposal_path.unlink()
+
+    registry = plugins._load_registry()
+    plugin = plugins._read_plugin(registry, plugin_id)
+    assert plugin is not None
+    meta = dict(plugin.get("meta") or {})
+    for key in (
+        "proposal_id",
+        "forge_proposal_id",
+        "proposal_path",
+        "validation_receipt_id",
+        "validation_receipt_path",
+    ):
+        meta.pop(key, None)
+    meta["quality"] = {
+        "tests": ["tests/test_api_plugins.py"],
+        "docs": ["README.md", "docs/operations/COMPLETION_LEDGER.md"],
+        "claim_scope": "explicit_reconstruction_fixture_quality_references",
+        "pack_specific_coverage_claimed": False,
+    }
+    plugin["meta"] = meta
+    plugins._write_plugin(registry, plugins._normalize_plugin_record(plugin_id, plugin))
+    plugins._save_registry_and_catalog(registry)
+
+    before = client.get("/plugins/capabilities/packs/quality/evidence/remediation").json()
+    before_item = next(item for item in before["remediation_queue"] if item["pack_id"] == pack_id)
+    reconstruction = before_item["artifact_reconstruction_plan"]
+    assert reconstruction["required"] is True
+    assert reconstruction["writer_implemented"] is True
+    assert reconstruction["writer_route"] == "/plugins/capabilities/packs/quality/evidence/remediation/reconstruct"
+    capability_plan = reconstruction["capabilities"][0]
+    assert capability_plan["capability"] == plugin_id
+    assert capability_plan["needs_validation_receipt"] is True
+    assert capability_plan["needs_proposal_lineage"] is True
+    assert "quality_test_references" not in capability_plan["missing_inputs"]
+    assert "quality_doc_references" not in capability_plan["missing_inputs"]
+
+    dry_run = client.post(
+        "/plugins/capabilities/packs/quality/evidence/remediation/reconstruct",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "dry run reviewed artifact reconstruction",
+            "pack_ids": [pack_id],
+            "dry_run": True,
+        },
+    )
+    assert dry_run.status_code == 200
+    dry_run_body = dry_run.json()
+    assert dry_run_body["ok"] is True
+    assert dry_run_body["status"] == "dry_run"
+    assert dry_run_body["planned_pack_count"] == 1
+    assert dry_run_body["planned"][0]["validation_receipts"]["count"] == 1
+    assert dry_run_body["planned"][0]["validation_receipts"]["writes_validation_receipts"] is False
+    assert dry_run_body["planned"][0]["proposal_lineages"]["count"] == 1
+    assert dry_run_body["planned"][0]["proposal_lineages"]["writes_proposals"] is False
+    assert dry_run_body["governance"]["writes_registry_metadata"] is False
+    post_dry_run = plugins._read_plugin(plugins._load_registry(), plugin_id)
+    assert post_dry_run is not None
+    post_dry_meta = dict(post_dry_run.get("meta") or {})
+    assert "proposal_id" not in post_dry_meta
+    assert "validation_receipt_id" not in post_dry_meta
+
+    blocked = client.post(
+        "/plugins/capabilities/packs/quality/evidence/remediation/reconstruct",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "missing operator reconstruction decision",
+            "pack_ids": [pack_id],
+        },
+    )
+    assert blocked.status_code == 200
+    blocked_body = blocked.json()
+    assert blocked_body["ok"] is False
+    assert blocked_body["applied"] is False
+    assert blocked_body["error"] == "operator_reconstruction_decision_required"
+    assert blocked_body["governance"]["writes_validation_receipts"] is False
+    assert blocked_body["governance"]["writes_proposals"] is False
+    post_blocked = plugins._read_plugin(plugins._load_registry(), plugin_id)
+    assert post_blocked is not None
+    post_blocked_meta = dict(post_blocked.get("meta") or {})
+    assert "proposal_id" not in post_blocked_meta
+    assert "validation_receipt_id" not in post_blocked_meta
+
+    applied = client.post(
+        "/plugins/capabilities/packs/quality/evidence/remediation/reconstruct",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "operator approved bounded artifact reconstruction",
+            "pack_ids": [pack_id],
+            "max_pack_count": 1,
+            "meta": {"operator_reconstruction_decision": "approved_for_reconstruction"},
+        },
+    )
+
+    assert applied.status_code == 200
+    applied_body = applied.json()
+    assert applied_body["ok"] is True
+    assert applied_body["applied"] is True
+    assert applied_body["status"] == "recorded"
+    assert applied_body["planned_pack_count"] == 1
+    assert applied_body["recorded_pack_count"] == 1
+    assert applied_body["recorded_capability_count"] == 1
+    assert applied_body["governance"]["writes_registry_metadata"] is True
+    assert applied_body["governance"]["writes_validation_receipts"] is True
+    assert applied_body["governance"]["writes_proposals"] is True
+    assert applied_body["governance"]["operator_reconstruction_decision_captured"] is True
+    assert applied_body["governance"]["proposal_lineage_does_not_approve_proposals"] is True
+    assert applied_body["governance"]["does_not_promote_capabilities"] is True
+    assert applied_body["governance"]["does_not_execute_capabilities"] is True
+
+    recorded_item = applied_body["recorded"][0]
+    assert recorded_item["pack_id"] == pack_id
+    assert recorded_item["reconstructed_capability_count"] == 1
+    validation_record = recorded_item["validation_receipts"][0]
+    proposal_record = recorded_item["proposal_lineages"][0]
+    validation_id = validation_record["validation_receipt_id"]
+    proposal_id = proposal_record["proposal_id"]
+    validation_path = data_root / "artifacts" / "plugins" / "validations" / f"{validation_id}.json"
+    proposal_path = data_root / "artifacts" / "plugins" / "proposals" / f"{proposal_id}.json"
+    assert validation_path.exists()
+    assert proposal_path.exists()
+
+    validation_payload = json.loads(validation_path.read_text(encoding="utf-8"))
+    assert validation_payload["kind"] == "plugin.validation.receipt"
+    assert validation_payload["plugin_id"] == plugin_id
+    assert validation_payload["status"] == "passed"
+    assert validation_payload["valid"] is True
+    assert validation_payload["governance"]["route"] == (
+        "/plugins/capabilities/packs/quality/evidence/remediation/reconstruct"
+    )
+    assert validation_payload["governance"]["does_not_approve_proposals"] is True
+    proposal_payload = json.loads(proposal_path.read_text(encoding="utf-8"))
+    assert proposal_payload["kind"] == "plugin.proposal"
+    assert proposal_payload["plugin_id"] == plugin_id
+    assert proposal_payload["status"] == "reconstructed_lineage"
+    assert proposal_payload["review"]["approval_claimed"] is False
+    assert proposal_payload["governance"]["does_not_approve_proposals"] is True
+
+    post_apply_plugin = plugins._read_plugin(plugins._load_registry(), plugin_id)
+    assert post_apply_plugin is not None
+    stored_meta = dict(post_apply_plugin.get("meta") or {})
+    assert stored_meta["validation_receipt_id"] == validation_id
+    assert stored_meta["validation_receipt_path"] == f"data/artifacts/plugins/validations/{validation_id}.json"
+    assert stored_meta["proposal_id"] == proposal_id
+    assert stored_meta["proposal_path"] == f"data/artifacts/plugins/proposals/{proposal_id}.json"
+    assert stored_meta["proposal_lineage_approval_claimed"] is False
+    assert stored_meta["proposal_status"] == "reconstructed_lineage_unreviewed"
+    assert stored_meta["artifact_reconstruction_source"] == "stage17_capability_pack_artifact_reconstruction_apply"
+    stored_quality = stored_meta["quality"]
+    assert stored_quality["validation_receipt_written"] is True
+    assert stored_quality["proposal_lineage_written"] is True
+    assert stored_quality["pack_specific_coverage_claimed"] is False
+
+    after = client.get("/plugins/capabilities/packs/quality/evidence/remediation").json()
+    assert all(item["pack_id"] != pack_id for item in after["remediation_queue"])
 
 
 def test_plugins_capability_pack_quality_evidence_remediation_apply_backfills_candidate_refs(

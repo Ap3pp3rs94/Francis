@@ -57691,6 +57691,60 @@ Remaining truthful gap:
   plan, then a governed writer for pack-specific validation/proposal artifact
   reconstruction.
 
+### 2026-06-03 - Stage 17 quality evidence remediation adds governed artifact reconstruction writer
+
+Roadmap area: Stage 17 / Capability Economy, governed pack-specific validation
+receipt and proposal lineage reconstruction.
+
+Material change:
+
+- Added `POST /plugins/capabilities/packs/quality/evidence/remediation/reconstruct`
+  as a bounded writer for packs that still lack pack-specific validation
+  receipts or proposal lineage after the existing-artifact link scan.
+- The reconstruction projection now exposes the writer route and carries actual
+  quality test/doc references from both marketplace-entry quality fields and
+  registry metadata quality fields into each planned capability.
+- The writer supports dry-run without mutation, blocks non-dry writes until an
+  operator reconstruction decision is supplied, writes reconstructed validation
+  receipt and proposal lineage artifacts only for selected packs/capabilities,
+  updates bounded registry metadata, and returns remaining remediation readback.
+- Reconstructed proposal lineage explicitly remains unreviewed and does not
+  claim proposal approval. Reconstructed validation receipts are scoped to
+  existing registry evidence and explicitly do not claim new test execution.
+- The existing quality-reference remediation apply path remains separate and
+  was checked as an adjacent regression guard.
+
+Latest validation for Stage 17 missing-artifact reconstruction writing:
+
+- `python -m pytest
+  tests/test_api_plugins.py::test_plugins_capability_pack_quality_evidence_remediation_projects_artifact_reconstruction_plan
+  tests/test_api_plugins.py::test_plugins_capability_pack_quality_evidence_remediation_reconstructs_missing_artifacts
+  tests/test_api_plugins.py::test_plugins_capability_pack_quality_evidence_remediation_apply_backfills_candidate_refs
+  -q --tb=short --maxfail=1`
+  Result: `passed; 3 selected tests passed`
+- `python -m ruff check src/francis/api/routes/plugins.py
+  tests/test_api_plugins.py`
+  Result: `passed`
+- `python -m ruff format --check src/francis/api/routes/plugins.py
+  tests/test_api_plugins.py`
+  Result: `passed`
+- `python -m mypy src/francis/api/routes/plugins.py`
+  Result: `passed`
+
+Validation risk:
+
+- This writer slice is locally validated but not yet GitHub-confirmed.
+- The writer reconstructs missing artifacts from existing registry/quality
+  evidence under an operator decision; it does not execute tests, approve
+  proposals, promote capabilities, enable capabilities, execute capabilities,
+  or write memory.
+
+Remaining truthful gap:
+
+- Stage 17 still needs GitHub confirmation for this governed reconstruction
+  writer, then operator-reviewed closure of the remaining legacy pack artifact
+  backlog before capability-library maturity can be called complete.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
