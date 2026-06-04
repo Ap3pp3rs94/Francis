@@ -2103,6 +2103,190 @@ def test_plugins_capability_pack_quality_evidence_remediation_apply_backfills_ca
     assert all(item["pack_id"] != pack_id for item in after["remediation_queue"])
 
 
+def test_plugins_capability_pack_quality_evidence_remediation_links_existing_artifacts_in_chunks(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
+    client = TestClient(create_app())
+    capability_count = plugins._CAPABILITY_PACK_QUALITY_EVIDENCE_CAPABILITY_PREVIEW_LIMIT + 1
+    link_chunk_limit = plugins._CAPABILITY_PACK_QUALITY_EVIDENCE_LINK_PREVIEW_LIMIT
+    plugin_ids: list[str] = []
+    for index in range(capability_count):
+        built = client.post(
+            "/plugins/build",
+            json={
+                "name": f"Capability Quality Existing Link Chunk Plugin {index}",
+                "description": "Stage 17 existing artifact chunk link coverage",
+                "actor": _PLUGIN_ACTOR,
+                "meta": _forge_promotion_meta(f"capability_quality_existing_link_chunk_{index}"),
+            },
+        )
+        assert built.status_code == 200
+        built_body = built.json()
+        assert built_body["ok"] is True
+        plugin_ids.append(str(built_body["plugin_id"]))
+
+    pack_id = "ops.quality_existing_link_chunk"
+    pack_version = "1.0.0"
+    recorded = client.post(
+        "/plugins/capabilities/packs/metadata/receipts",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "record reviewed large pack metadata before existing artifact link chunking",
+            "pack_id": pack_id,
+            "pack_version": pack_version,
+            "pack_name": "Ops Quality Existing Link Chunk Pack",
+            "capability_ids": plugin_ids,
+            "promotion_rules": [
+                "metadata_receipt_before_promotion",
+                "quality_standards_before_promotion",
+                "operator_review_before_promotion",
+            ],
+            "pack_governance": {
+                "risk_tier": "normal",
+                "scope": "build_dev",
+                "operator_review_required": True,
+                "requires_validation_receipt": True,
+            },
+        },
+    )
+    assert recorded.status_code == 200
+    assert recorded.json()["ok"] is True
+
+    registry = plugins._load_registry()
+    for plugin_id in plugin_ids:
+        plugin = plugins._read_plugin(registry, plugin_id)
+        assert plugin is not None
+        meta = dict(plugin.get("meta") or {})
+        for key in (
+            "proposal_id",
+            "forge_proposal_id",
+            "proposal_path",
+            "validation_receipt_id",
+            "validation_receipt_path",
+        ):
+            meta.pop(key, None)
+        plugin["meta"] = meta
+        plugins._write_plugin(registry, plugins._normalize_plugin_record(plugin_id, plugin))
+    plugins._save_registry_and_catalog(registry)
+
+    before = client.get("/plugins/capabilities/packs/quality/evidence/remediation").json()
+    before_item = next(item for item in before["remediation_queue"] if item["pack_id"] == pack_id)
+    assert before_item["capability_count"] == capability_count
+    assert len(before_item["capability_ids"]) == plugins._CAPABILITY_PACK_QUALITY_EVIDENCE_CAPABILITY_PREVIEW_LIMIT
+    assert before_item["capability_ids_truncated"] is True
+    assert before_item["quality_reference_backfill_candidate"] is False
+    validation_backfill = before_item["evidence_backfill"]["validation_receipt"]
+    proposal_backfill = before_item["evidence_backfill"]["forge_proposal"]
+    assert validation_backfill["candidate_reference_count"] == capability_count
+    assert validation_backfill["candidate_apply_supported"] is True
+    assert validation_backfill["missing_candidate_count"] == 0
+    assert len(validation_backfill["links"]) == link_chunk_limit
+    assert validation_backfill["links_truncated"] is True
+    assert proposal_backfill["candidate_reference_count"] == capability_count
+    assert proposal_backfill["candidate_apply_supported"] is True
+    assert proposal_backfill["missing_candidate_count"] == 0
+    assert len(proposal_backfill["links"]) == link_chunk_limit
+    assert proposal_backfill["links_truncated"] is True
+    assert before_item["artifact_reconstruction_plan"]["required"] is False
+
+    chunk_request = {
+        "actor": _PLUGIN_ACTOR,
+        "reason": "apply bounded existing artifact link chunk",
+        "pack_ids": [pack_id],
+        "max_pack_count": 1,
+        "max_total_capability_count": link_chunk_limit,
+        "max_capability_count_per_pack": link_chunk_limit,
+    }
+    dry_run = client.post(
+        "/plugins/capabilities/packs/quality/evidence/remediation/apply",
+        json={**chunk_request, "dry_run": True},
+    )
+    assert dry_run.status_code == 200
+    dry_run_body = dry_run.json()
+    assert dry_run_body["ok"] is True
+    assert dry_run_body["status"] == "dry_run"
+    assert dry_run_body["planned_capability_count"] == link_chunk_limit
+    planned_item = dry_run_body["planned"][0]
+    assert planned_item["capability_count"] == capability_count
+    assert planned_item["planned_registry_metadata_capability_count"] == link_chunk_limit
+    assert planned_item["validation_receipt_links"]["count"] == link_chunk_limit
+    assert planned_item["proposal_lineage_links"]["count"] == link_chunk_limit
+    assert planned_item["partial_existing_artifact_link_backfill"] is True
+    assert planned_item["partial_link_backfill_does_not_claim_pack_complete"] is True
+    assert dry_run_body["governance"]["writes_registry_metadata"] is False
+    assert dry_run_body["governance"]["partial_existing_artifact_link_backfill_count"] == 1
+    assert dry_run_body["governance"]["partial_link_backfill_does_not_claim_pack_complete"] is True
+
+    applied = client.post(
+        "/plugins/capabilities/packs/quality/evidence/remediation/apply",
+        json=chunk_request,
+    )
+    assert applied.status_code == 200
+    applied_body = applied.json()
+    assert applied_body["ok"] is True
+    assert applied_body["applied"] is True
+    assert applied_body["status"] == "recorded"
+    assert applied_body["recorded_capability_count"] == link_chunk_limit
+    assert applied_body["governance"]["writes_registry_metadata"] is True
+    assert applied_body["governance"]["partial_existing_artifact_link_backfill_count"] == 1
+    recorded_item = applied_body["recorded"][0]
+    assert recorded_item["partial_existing_artifact_link_backfill"] is True
+    assert recorded_item["partial_link_backfill_does_not_claim_pack_complete"] is True
+
+    remaining_item = next(item for item in applied_body["remaining_remediation_queue"] if item["pack_id"] == pack_id)
+    assert remaining_item["artifact_reconstruction_plan"]["required"] is False
+
+    post_chunk_registry = plugins._load_registry()
+    linked_count = 0
+    unlinked_count = 0
+    for plugin_id in plugin_ids:
+        plugin = plugins._read_plugin(post_chunk_registry, plugin_id)
+        assert plugin is not None
+        meta = dict(plugin.get("meta") or {})
+        if meta.get("validation_receipt_id") and meta.get("proposal_id"):
+            linked_count += 1
+            assert meta["validation_receipt_link_source"] == (
+                "stage17_capability_pack_quality_evidence_remediation_apply"
+            )
+            assert meta["proposal_lineage_link_source"] == (
+                "stage17_capability_pack_quality_evidence_remediation_apply"
+            )
+            assert meta["proposal_lineage_approval_claimed"] is False
+        else:
+            unlinked_count += 1
+    assert linked_count == link_chunk_limit
+    assert unlinked_count == capability_count - link_chunk_limit
+
+    finish_request = {
+        **chunk_request,
+        "max_total_capability_count": capability_count,
+        "max_capability_count_per_pack": capability_count,
+    }
+    finished = client.post(
+        "/plugins/capabilities/packs/quality/evidence/remediation/apply",
+        json=finish_request,
+    )
+    assert finished.status_code == 200
+    finished_body = finished.json()
+    assert finished_body["ok"] is True
+    assert finished_body["applied"] is True
+    assert finished_body["recorded_capability_count"] == capability_count - link_chunk_limit
+    assert all(item["pack_id"] != pack_id for item in finished_body["remaining_remediation_queue"])
+
+    after = client.get("/plugins/capabilities/packs/quality/evidence/remediation").json()
+    assert all(item["pack_id"] != pack_id for item in after["remediation_queue"])
+
+
 def test_plugins_capability_pack_promotion_receipts_projects_read_only_receipt_evidence(
     monkeypatch,
     tmp_path: Path,

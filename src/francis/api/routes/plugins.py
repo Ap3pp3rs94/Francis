@@ -123,6 +123,8 @@ _CAPABILITY_PACK_QUALITY_EVIDENCE_BLOCKERS = {
     "proposal_id_missing",
 }
 _CAPABILITY_PACK_QUALITY_EVIDENCE_QUEUE_LIMIT = 50
+_CAPABILITY_PACK_QUALITY_EVIDENCE_CAPABILITY_PREVIEW_LIMIT = 50
+_CAPABILITY_PACK_QUALITY_EVIDENCE_LINK_PREVIEW_LIMIT = 25
 _CAPABILITY_PACK_ARTIFACT_RECONSTRUCTION_PLAN_LIMIT = 25
 _PLUGIN_ARTIFACT_LINK_BODY_MAX_BYTES = 256 * 1024
 _CAPABILITY_PACK_QUALITY_TEST_REFERENCE_CANDIDATES = ("tests/test_api_plugins.py",)
@@ -1923,7 +1925,8 @@ def _capability_pack_quality_evidence_remediation_item(
         "docs_missing" in blockers and generated_or_legacy and has_metadata_receipts and candidate_doc_count > 0
     )
     quality_reference_candidate = test_backfill_candidate or doc_backfill_candidate
-    capability_ids = _capability_ids_for_pack(entries, pack_id=pack_id, pack_version=pack_version)[:50]
+    pack_capability_ids = _capability_ids_for_pack(entries, pack_id=pack_id, pack_version=pack_version)
+    capability_ids = pack_capability_ids[:_CAPABILITY_PACK_QUALITY_EVIDENCE_CAPABILITY_PREVIEW_LIMIT]
     validation_candidates = (
         artifact_link_candidates.get("validation_receipts")
         if isinstance(artifact_link_candidates.get("validation_receipts"), dict)
@@ -1932,21 +1935,17 @@ def _capability_pack_quality_evidence_remediation_item(
     proposal_candidates = (
         artifact_link_candidates.get("proposals") if isinstance(artifact_link_candidates.get("proposals"), dict) else {}
     )
-    validation_links = _artifact_links_for_capabilities(capability_ids, validation_candidates)
-    proposal_links = _artifact_links_for_capabilities(capability_ids, proposal_candidates)
-    capability_ids_truncated = len(pack_entries) > 50
-    validation_receipt_link_candidate = (
-        "validation_receipt_missing" in blockers
-        and not capability_ids_truncated
-        and bool(validation_links["candidate_apply_supported"])
+    validation_links = _artifact_links_for_capabilities(pack_capability_ids, validation_candidates)
+    proposal_links = _artifact_links_for_capabilities(pack_capability_ids, proposal_candidates)
+    capability_ids_truncated = len(pack_capability_ids) > len(capability_ids)
+    validation_receipt_link_candidate = "validation_receipt_missing" in blockers and bool(
+        validation_links["candidate_apply_supported"]
     )
-    proposal_lineage_link_candidate = (
-        "proposal_id_missing" in blockers
-        and not capability_ids_truncated
-        and bool(proposal_links["candidate_apply_supported"])
+    proposal_lineage_link_candidate = "proposal_id_missing" in blockers and bool(
+        proposal_links["candidate_apply_supported"]
     )
     artifact_reconstruction_plan = _capability_pack_artifact_reconstruction_plan(
-        capability_ids=capability_ids,
+        capability_ids=pack_capability_ids,
         pack_entries=pack_entries,
         blockers=blockers,
         validation_links=validation_links,
@@ -1990,8 +1989,11 @@ def _capability_pack_quality_evidence_remediation_item(
                 "missing_candidate_capability_ids_truncated": bool(
                     validation_links["missing_candidate_capability_ids_truncated"]
                 ),
-                "links": list(validation_links["links"].values())[:25],
-                "links_truncated": len(validation_links["links"]) > 25,
+                "links": list(validation_links["links"].values())[
+                    :_CAPABILITY_PACK_QUALITY_EVIDENCE_LINK_PREVIEW_LIMIT
+                ],
+                "links_truncated": len(validation_links["links"])
+                > _CAPABILITY_PACK_QUALITY_EVIDENCE_LINK_PREVIEW_LIMIT,
                 "reason": (
                     "existing_pack_specific_validation_receipt_available"
                     if validation_receipt_link_candidate
@@ -2008,8 +2010,8 @@ def _capability_pack_quality_evidence_remediation_item(
                 "missing_candidate_capability_ids_truncated": bool(
                     proposal_links["missing_candidate_capability_ids_truncated"]
                 ),
-                "links": list(proposal_links["links"].values())[:25],
-                "links_truncated": len(proposal_links["links"]) > 25,
+                "links": list(proposal_links["links"].values())[:_CAPABILITY_PACK_QUALITY_EVIDENCE_LINK_PREVIEW_LIMIT],
+                "links_truncated": len(proposal_links["links"]) > _CAPABILITY_PACK_QUALITY_EVIDENCE_LINK_PREVIEW_LIMIT,
                 "reason": (
                     "existing_plugin_proposal_lineage_available"
                     if proposal_lineage_link_candidate
@@ -2247,6 +2249,38 @@ def _artifact_link_plan_for_remediation_item(item: dict[str, Any], key: str) -> 
     return planned
 
 
+def _artifact_link_plan_for_pack_capabilities(
+    *,
+    registry: dict[str, Any],
+    capability_ids: list[str],
+    candidates: dict[str, Any],
+    artifact_id_key: str,
+    path_key: str,
+    limit: int,
+) -> dict[str, dict[str, Any]]:
+    raw_by_plugin_id = candidates.get("by_plugin_id")
+    by_plugin_id = raw_by_plugin_id if isinstance(raw_by_plugin_id, dict) else {}
+    planned: dict[str, dict[str, Any]] = {}
+    safe_limit = max(1, limit)
+    for capability_id in capability_ids:
+        current = _read_plugin(registry, capability_id)
+        if current is None:
+            continue
+        meta = dict(current.get("meta") or {}) if isinstance(current.get("meta"), dict) else {}
+        if _safe_str(meta.get(artifact_id_key)).strip() and _safe_str(meta.get(path_key)).strip():
+            continue
+        raw_link = by_plugin_id.get(capability_id)
+        link = raw_link if isinstance(raw_link, dict) else {}
+        artifact_id = _safe_str(link.get(artifact_id_key)).strip()
+        artifact_path = _safe_str(link.get(path_key)).strip()
+        if not artifact_id or not artifact_path:
+            continue
+        planned[capability_id] = dict(link)
+        if len(planned) >= safe_limit:
+            break
+    return planned
+
+
 def _merge_quality_references(existing: Any, additions: list[str]) -> list[str]:
     return _unique_texts([*_unique_texts(existing, limit=50), *additions], limit=50)
 
@@ -2274,6 +2308,7 @@ def _record_capability_pack_quality_evidence_remediation_batch(
         proposal_links = (
             item.get("proposal_lineage_links") if isinstance(item.get("proposal_lineage_links"), dict) else {}
         )
+        partial_existing_artifact_link_backfill = bool(item.get("partial_existing_artifact_link_backfill"))
         missing = [capability_id for capability_id in capability_ids if _read_plugin(registry, capability_id) is None]
         if missing:
             failed.append(
@@ -2364,6 +2399,8 @@ def _record_capability_pack_quality_evidence_remediation_batch(
                     "proposal_approval_claimed": False,
                     "writes_proposals": False,
                 },
+                "partial_existing_artifact_link_backfill": partial_existing_artifact_link_backfill,
+                "partial_link_backfill_does_not_claim_pack_complete": partial_existing_artifact_link_backfill,
                 "applied_evidence_blockers": _unique_texts(item.get("evidence_blockers"), limit=50),
                 "status": "recorded" if changed_capability_ids else "unchanged",
             }
@@ -4513,6 +4550,17 @@ def apply_capability_pack_quality_evidence_remediation(
         reference_candidates = (
             before.get("reference_candidates") if isinstance(before.get("reference_candidates"), dict) else {}
         )
+        artifact_link_candidates = _capability_pack_existing_artifact_link_candidates()
+        validation_candidates = (
+            artifact_link_candidates.get("validation_receipts")
+            if isinstance(artifact_link_candidates.get("validation_receipts"), dict)
+            else {}
+        )
+        proposal_candidates = (
+            artifact_link_candidates.get("proposals")
+            if isinstance(artifact_link_candidates.get("proposals"), dict)
+            else {}
+        )
         raw_queue = before.get("remediation_queue")
         queue = [item for item in raw_queue if isinstance(item, dict)] if isinstance(raw_queue, list) else []
         if selected_pack_ids:
@@ -4564,9 +4612,26 @@ def apply_capability_pack_quality_evidence_remediation(
             except Exception:
                 skipped.append({"pack_id": pack_id, "pack_version": pack_version, "error": "invalid_pack_id"})
                 continue
+            capability_ids = _capability_ids_for_pack(entries, pack_id=pack_id, pack_version=pack_version)
+            capability_count = len(capability_ids)
             references = _quality_reference_plan_for_remediation_item(item, reference_candidates)
-            validation_receipt_links = _artifact_link_plan_for_remediation_item(item, "validation_receipt")
-            proposal_lineage_links = _artifact_link_plan_for_remediation_item(item, "forge_proposal")
+            quality_reference_backfill = bool(references["tests"] or references["docs"])
+            validation_receipt_links = _artifact_link_plan_for_pack_capabilities(
+                registry=registry,
+                capability_ids=capability_ids,
+                candidates=validation_candidates,
+                artifact_id_key="validation_receipt_id",
+                path_key="validation_receipt_path",
+                limit=safe_max_capability_count_per_pack,
+            )
+            proposal_lineage_links = _artifact_link_plan_for_pack_capabilities(
+                registry=registry,
+                capability_ids=capability_ids,
+                candidates=proposal_candidates,
+                artifact_id_key="proposal_id",
+                path_key="proposal_path",
+                limit=safe_max_capability_count_per_pack,
+            )
             evidence_blockers = []
             for blocker, supported in (
                 ("tests_missing", bool(references["tests"])),
@@ -4586,13 +4651,10 @@ def apply_capability_pack_quality_evidence_remediation(
                     }
                 )
                 continue
-            capability_ids = _capability_ids_for_pack(entries, pack_id=pack_id, pack_version=pack_version)
-            capability_count = len(capability_ids)
-            total_capability_count += capability_count
             if capability_count <= 0:
                 skipped.append({"pack_id": pack_id, "pack_version": pack_version, "error": "capability_ids_required"})
                 continue
-            if capability_count > safe_max_capability_count_per_pack:
+            if quality_reference_backfill and capability_count > safe_max_capability_count_per_pack:
                 skipped.append(
                     {
                         "pack_id": pack_id,
@@ -4603,6 +4665,13 @@ def apply_capability_pack_quality_evidence_remediation(
                     }
                 )
                 continue
+            planned_link_capability_count = len(
+                set(validation_receipt_links.keys()) | set(proposal_lineage_links.keys())
+            )
+            effective_capability_count = (
+                capability_count if quality_reference_backfill else planned_link_capability_count
+            )
+            total_capability_count += effective_capability_count
             prepared.append(
                 {
                     "item": item,
@@ -4610,6 +4679,11 @@ def apply_capability_pack_quality_evidence_remediation(
                     "pack_version": pack_version,
                     "pack_name": _safe_str(item.get("pack_name")).strip() or pack_id,
                     "capability_ids": capability_ids,
+                    "partial_existing_artifact_link_backfill": (
+                        not quality_reference_backfill
+                        and planned_link_capability_count > 0
+                        and planned_link_capability_count < capability_count
+                    ),
                     "quality_references": references,
                     "validation_receipt_links": validation_receipt_links,
                     "proposal_lineage_links": proposal_lineage_links,
@@ -4654,6 +4728,11 @@ def apply_capability_pack_quality_evidence_remediation(
                 "pack_version": item["pack_version"],
                 "pack_name": item["pack_name"],
                 "capability_count": len(item["capability_ids"]),
+                "planned_registry_metadata_capability_count": (
+                    len(item["capability_ids"])
+                    if (item["quality_references"]["tests"] or item["quality_references"]["docs"])
+                    else len(set(item["validation_receipt_links"].keys()) | set(item["proposal_lineage_links"].keys()))
+                ),
                 "quality_references": item["quality_references"],
                 "validation_receipt_links": {
                     "count": len(item["validation_receipt_links"]),
@@ -4666,6 +4745,10 @@ def apply_capability_pack_quality_evidence_remediation(
                     "proposal_approval_claimed": False,
                     "writes_proposals": False,
                 },
+                "partial_existing_artifact_link_backfill": bool(item.get("partial_existing_artifact_link_backfill")),
+                "partial_link_backfill_does_not_claim_pack_complete": bool(
+                    item.get("partial_existing_artifact_link_backfill")
+                ),
                 "applied_evidence_blockers": item["evidence_blockers"],
                 "claim_scope": "bounded_quality_reference_and_existing_artifact_links_only",
             }
@@ -4677,7 +4760,9 @@ def apply_capability_pack_quality_evidence_remediation(
                 "applied": False,
                 "status": "dry_run",
                 "planned_pack_count": len(planned),
-                "planned_capability_count": sum(int(item.get("capability_count") or 0) for item in planned),
+                "planned_capability_count": sum(
+                    int(item.get("planned_registry_metadata_capability_count") or 0) for item in planned
+                ),
                 "planned": planned,
                 "skipped": skipped,
                 "before": before,
@@ -4686,6 +4771,12 @@ def apply_capability_pack_quality_evidence_remediation(
                     "route": request.url.path,
                     "writes_registry_metadata": False,
                     "writes_receipts": False,
+                    "partial_existing_artifact_link_backfill_count": sum(
+                        1 for item in prepared if bool(item.get("partial_existing_artifact_link_backfill"))
+                    ),
+                    "partial_link_backfill_does_not_claim_pack_complete": any(
+                        bool(item.get("partial_existing_artifact_link_backfill")) for item in prepared
+                    ),
                     "promotion_authority": False,
                     "execution_authority": False,
                     "approval_authority": False,
@@ -4748,6 +4839,12 @@ def apply_capability_pack_quality_evidence_remediation(
                     for item in prepared
                 ),
                 "existing_artifact_link_backfill_supported": True,
+                "partial_existing_artifact_link_backfill_count": sum(
+                    1 for item in prepared if bool(item.get("partial_existing_artifact_link_backfill"))
+                ),
+                "partial_link_backfill_does_not_claim_pack_complete": any(
+                    bool(item.get("partial_existing_artifact_link_backfill")) for item in prepared
+                ),
                 "candidate_references_do_not_claim_pack_specific_coverage": True,
                 "does_not_write_validation_receipts": True,
                 "does_not_write_proposals": True,

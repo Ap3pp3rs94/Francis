@@ -60173,6 +60173,89 @@ Remaining truthful gap:
   then quality-reference apply, then governed reconstruction only after clean
   dry-run evidence.
 
+### 2026-06-03 - Stage 17 quality evidence remediation handles large-pack artifact reconstruction beyond preview
+
+Roadmap area: Stage 17 / Capability Economy, preserving the governed
+readback/apply boundary for capability-pack quality evidence remediation.
+
+Material change:
+
+- The quality-evidence remediation projection now evaluates full pack membership
+  for existing validation/proposal artifact candidates and artifact
+  reconstruction planning while still exposing bounded `capability_ids` and
+  artifact link previews to operators.
+- The quality-evidence apply route now plans existing artifact links from the
+  live registry plus the bounded artifact index instead of replaying only the
+  truncated readback preview. It skips capabilities that are already linked and
+  reports partial link chunks without claiming pack completion.
+- This fixed the large-pack blind spot where
+  `legacy.generated.capabilitycatalogplugin` had 207 capabilities, the first 50
+  were visible to the old preview window, and the remaining 157 capabilities
+  still required governed reconstruction.
+- Live application reconstructed the remaining 157 capabilities in seven bounded
+  chunks: six chunks of 25 capabilities and one final chunk of 7 capabilities.
+- The selected pack is now absent from the quality-evidence remediation queue.
+  The live queue moved from 10 entries to 9 entries, with latest blocker counts
+  aligned at `docs_missing=9`, `tests_missing=9`,
+  `validation_receipt_missing=9`, and `proposal_id_missing=9`.
+
+Latest validation for this local live pass:
+
+- Initial patched readback for
+  `legacy.generated.capabilitycatalogplugin`:
+  `capability_count=207`, `capability_ids_truncated=true`,
+  `artifact_plan_capability_count=157`,
+  `validation_missing_candidate_count=157`, and
+  `proposal_missing_candidate_count=157`.
+- Governed reconstruction apply:
+  Result: chunks recorded `25 + 25 + 25 + 25 + 25 + 25 + 7` capabilities,
+  `writes_registry_metadata=true`, `writes_validation_receipts=true`,
+  `writes_proposals=true`, `does_not_approve_proposals=true`,
+  `does_not_promote_capabilities=true`, and `memory_write=false`.
+- Final remediation readback:
+  Result: `final_selected_present=false`,
+  `final_remediation_queue_count=9`, and
+  `next_smallest_truthful_gap=stage17_capability_pack_artifact_reconstruction_apply`.
+- Focused API contract tests:
+  `python -m pytest tests/test_api_plugins.py -k
+  "metadata_receipt_is_written_and_projected or
+  capability_pack_migration_plan_projects_review_candidates or
+  metadata_receipts_bulk_from_migration_plan or
+  metadata_receipt_expands_reviewed_migration_plan_candidate or
+  quality_evidence_remediation_links_existing_artifacts_in_chunks or
+  quality_evidence_remediation_apply_backfills_candidate_refs or
+  quality_evidence_remediation_reconstructs_missing_artifacts or
+  quality_evidence_remediation_reconstructs_truncated_plan_chunk"`
+  Result: `8 passed, 28 deselected in 18.98s`.
+- Ruff validation:
+  `python -m ruff check src/francis/api/routes/plugins.py tests/test_api_plugins.py`
+  Result: `All checks passed!`.
+- Ruff format check:
+  `python -m ruff format --check src/francis/api/routes/plugins.py
+  tests/test_api_plugins.py`
+  Result: `2 files already formatted`.
+
+Validation risk:
+
+- The changed registry/catalog/artifact payloads live under `data/**`, which is
+  intentionally gitignored. This ledger entry records local operational posture;
+  it is not a portable data migration and does not make other clones contain
+  those local artifacts.
+- Reconstructed validation receipts and proposal lineages remain bounded
+  reconstruction artifacts; proposal lineages are unreviewed and do not claim
+  proposal approval.
+- The writer route did not promote capabilities, enable capabilities, execute
+  capabilities, or write memory.
+- GitHub confirmation for this ledger entry was not available at ledger write
+  time.
+
+Remaining truthful gap:
+
+- Stage 17 still needs operator-reviewed repeated application or closure of the
+  remaining 9 legacy pack remediation entries. The next safe live path is to
+  continue using dry-run evidence first, then governed reconstruction/application
+  in bounded chunks only when the route reports supported candidates.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
