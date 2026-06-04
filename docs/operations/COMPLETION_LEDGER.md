@@ -60414,6 +60414,86 @@ Remaining truthful gap:
   then quality-reference apply, then governed reconstruction only after clean
   dry-run evidence.
 
+### 2026-06-03 - Stage 17 metadata receipt review clears forge readback plugin pack
+
+Roadmap area: Stage 17 / Capability Economy, using governed metadata receipt
+review before quality-reference and reconstruction application.
+
+Material change:
+
+- The current local migration plan reported 7 metadata-receipt candidates before
+  this pass. The smallest remaining candidate was
+  `legacy.generated.forgereadbackplugin` with 235 capabilities.
+- The existing `bulk-from-plan` metadata receipt route was applied only to that
+  pack with `max_pack_count=1`, `max_total_capability_count=235`, and
+  `max_capability_count_per_pack=235`.
+- The metadata receipt apply recorded 1 pack / 235 capabilities and reduced the
+  migration-plan candidate total from 7 to 6.
+- After metadata receipt review, the same pack became eligible for the existing
+  quality-reference apply route and then the governed artifact reconstruction
+  route.
+- Artifact reconstruction required ten bounded chunks because the reconstruction
+  plan was truncated: nine chunks of 25 capabilities and one final chunk of 10
+  capabilities.
+- The selected pack is now absent from both the migration-plan candidate list and
+  the quality-evidence remediation queue. The quality-evidence remediation queue
+  moved from 7 entries to 6 entries, with latest blocker counts aligned at
+  `docs_missing=6`, `tests_missing=6`, `validation_receipt_missing=6`, and
+  `proposal_id_missing=6`.
+
+Latest validation for this local live pass:
+
+- Metadata receipt apply:
+  Result: `status=recorded`, `recorded_pack_count=1`,
+  `recorded_capability_count=235`, `remaining_candidate_total=6`,
+  `writes_registry_metadata=true`, and `writes_receipts=true`.
+- Metadata receipt id:
+  `capability_pack_metadata_1780546065_legacy-generated-forgereadbackplugin`.
+- Quality-reference dry-run for `legacy.generated.forgereadbackplugin`:
+  Result: planned 1 pack / 235 capabilities, 0 skipped, with
+  `tests/test_api_plugins.py`, `README.md`, and
+  `docs/operations/COMPLETION_LEDGER.md` as candidate references.
+- Quality-reference apply:
+  Result: `status=recorded`, `recorded_capability_count=235`,
+  `quality_reference_backfill_only=true`, no receipt, proposal, promotion,
+  execution, generated-artifact, or memory writes.
+- Artifact reconstruction apply:
+  Result: chunks recorded
+  `25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 10` capabilities,
+  `writes_registry_metadata=true`, `writes_validation_receipts=true`,
+  `writes_proposals=true`, `does_not_approve_proposals=true`,
+  `does_not_promote_capabilities=true`, and `memory_write=false`.
+- Final readback:
+  Result: selected pack absent from the migration-plan candidates and the
+  quality-evidence remediation queue; `migration_candidate_total=6`,
+  `quality_remediation_queue_count=6`, and
+  `next_smallest_truthful_gap=stage17_capability_pack_artifact_reconstruction_apply`.
+
+Validation risk:
+
+- The changed registry/catalog/artifact payloads live under `data/**`, which is
+  intentionally gitignored. This ledger entry records local operational posture;
+  it is not a portable data migration and does not make other clones contain
+  those local artifacts.
+- Candidate quality references remain explicitly scoped as candidate references,
+  not pack-specific proof. Reconstructed proposal lineages are unreviewed and do
+  not claim proposal approval.
+- The writer route did not promote capabilities, enable capabilities, execute
+  capabilities, or write memory.
+- GitHub confirmation for this ledger entry was not available at ledger write
+  time. CodeQL for the preceding forge-review ledger commit passed, while the
+  GitHub CI run for that commit was still in progress. Separate Dependabot
+  update runs failed independently and were not caused by this Stage 17 ledger
+  update.
+
+Remaining truthful gap:
+
+- Stage 17 still needs operator-reviewed repeated application or closure of the
+  remaining 6 legacy pack remediation entries. The next safe live path is to
+  continue using metadata receipt review for bounded migration-plan candidates,
+  then quality-reference apply, then governed reconstruction only after clean
+  dry-run evidence.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
