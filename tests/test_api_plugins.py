@@ -631,7 +631,9 @@ def test_plugins_capability_pack_metadata_receipt_is_written_and_projected(
     from fastapi.testclient import TestClient
 
     from francis.api.app import create_app
+    from francis.api.routes import plugins
 
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
     client = TestClient(create_app())
     built = client.post(
         "/plugins/build",
@@ -715,7 +717,9 @@ def test_plugins_capability_pack_migration_plan_projects_review_candidates(monke
     from fastapi.testclient import TestClient
 
     from francis.api.app import create_app
+    from francis.api.routes import plugins
 
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
     client = TestClient(create_app())
     built = client.post(
         "/plugins/build",
@@ -770,7 +774,9 @@ def test_plugins_capability_pack_metadata_receipts_bulk_from_migration_plan(
     from fastapi.testclient import TestClient
 
     from francis.api.app import create_app
+    from francis.api.routes import plugins
 
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
     client = TestClient(create_app())
     built = client.post(
         "/plugins/build",
@@ -811,7 +817,6 @@ def test_plugins_capability_pack_metadata_receipts_bulk_from_migration_plan(
     assert recorded_body["governance"]["execution_authority"] is False
     receipt_ref = recorded_body["recorded"][0]
     assert receipt_ref["pack_id"] == candidate["pack_id"]
-    from francis.api.routes import plugins
 
     assert plugins.os.path.exists(plugins._filesystem_path(Path(str(receipt_ref["receipt_path"]))))
 
@@ -2757,7 +2762,9 @@ def test_plugins_capability_pack_metadata_receipt_expands_reviewed_migration_pla
     from fastapi.testclient import TestClient
 
     from francis.api.app import create_app
+    from francis.api.routes import plugins
 
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
     client = TestClient(create_app())
     built = client.post(
         "/plugins/build",
