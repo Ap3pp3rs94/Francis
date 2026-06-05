@@ -1426,6 +1426,14 @@ export type PluginCapabilityLibraryOperatorEvidenceImportRowsTextSummary = {
   parse_error?: string;
 };
 
+export type PluginCapabilityLibraryOperatorEvidenceRefsTextSummary = {
+  raw_ref_count: number;
+  unique_ref_count: number;
+  duplicate_ref_count: number;
+  blank_entry_count: number;
+  ready_for_row_fill: boolean;
+};
+
 export type PluginCapabilityLibraryOperatorEvidenceImportPreviewGuardSummary = {
   read_only: string;
   preview_only: string;
@@ -1957,6 +1965,32 @@ export function operatorEvidenceBatchToImportPreviewText(
         evidence_refs_input: evidenceRefsInput,
       }));
   return JSON.stringify(rows.filter((row) => row.pack_id && row.capability), null, 2);
+}
+
+export function summarizeOperatorEvidenceRefsText(
+  value: string,
+): PluginCapabilityLibraryOperatorEvidenceRefsTextSummary {
+  const trimmed = safeString(value, "").trim();
+  if (!trimmed) {
+    return {
+      raw_ref_count: 0,
+      unique_ref_count: 0,
+      duplicate_ref_count: 0,
+      blank_entry_count: 0,
+      ready_for_row_fill: false,
+    };
+  }
+
+  const entries = trimmed.split(/[\n,]/).map((entry) => entry.trim());
+  const rawRefs = entries.filter((entry) => entry.length > 0);
+  const uniqueRefs = new Set(rawRefs);
+  return {
+    raw_ref_count: rawRefs.length,
+    unique_ref_count: uniqueRefs.size,
+    duplicate_ref_count: Math.max(rawRefs.length - uniqueRefs.size, 0),
+    blank_entry_count: entries.filter((entry) => entry.length === 0).length,
+    ready_for_row_fill: uniqueRefs.size > 0,
+  };
 }
 
 function operatorEvidenceRefsInputCount(value: unknown): number {

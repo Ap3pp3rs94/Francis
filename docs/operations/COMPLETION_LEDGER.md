@@ -64117,6 +64117,38 @@ Remaining truthful gap:
   still requires real operator refs to pass through backend import-preview,
   dry-run, and governed apply before proposal-evidence counts can move.
 
+### Stage 17 operator evidence typed-ref local readback
+
+This pass made the operator-typed evidence reference input state explicit before
+the refs are copied into next-batch or export import rows.
+
+Shipped behavior:
+
+- `apps/chat_ui/src/plugin_browser/index.ts` now exposes
+  `summarizeOperatorEvidenceRefsText()`, a framework-agnostic helper that
+  counts raw refs, unique refs, duplicate refs, and blank entries in the local
+  typed-ref textarea.
+- `apps/chat_ui/src/App.tsx` now renders typed-ref count badges in the Source
+  Readiness next-batch controls and the selected-pack operator intake controls.
+- The readback is local/advisory only. It does not validate evidence truth,
+  prove current candidate status, call import-preview, dry-run, apply refs,
+  approve proposals, promote capabilities, or write memory/registry metadata.
+
+Latest validation for this UI helper:
+
+- Chat UI client/contract tests:
+  `cd apps\chat_ui; npm run test -- src/plugin_browser/index.test.ts`
+  Result: 228 tests passed.
+- Chat UI production build:
+  `cd apps\chat_ui; npm run build`
+  Result: passed. Vite emitted the existing non-fatal large chunk warning.
+
+Remaining truthful gap:
+
+- Typed-ref counts do not make the refs true evidence. Stage 17 still requires
+  real operator refs to pass through backend import-preview, dry-run, and
+  governed apply before proposal-evidence counts can move.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

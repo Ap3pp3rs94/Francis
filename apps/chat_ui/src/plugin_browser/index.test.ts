@@ -9,6 +9,7 @@ import {
   summarizeOperatorEvidenceIntakeResponseGuards,
   summarizeOperatorEvidenceImportPreviewGuards,
   summarizeOperatorEvidenceImportRowsText,
+  summarizeOperatorEvidenceRefsText,
 } from "./index.ts";
 
 type FetchHandler = (url: string, init?: RequestInit) => Response | Promise<Response>;
@@ -157,6 +158,24 @@ test("operatorEvidenceBatchToImportPreviewText can fill typed refs from payload 
       evidence_refs_input: JSON.stringify(["mission.operator.ref", "mission.operator.ref.2"]),
     },
   ]);
+});
+
+test("summarizeOperatorEvidenceRefsText reports local typed-ref readiness", () => {
+  assert.deepEqual(summarizeOperatorEvidenceRefsText(""), {
+    raw_ref_count: 0,
+    unique_ref_count: 0,
+    duplicate_ref_count: 0,
+    blank_entry_count: 0,
+    ready_for_row_fill: false,
+  });
+
+  assert.deepEqual(summarizeOperatorEvidenceRefsText(" mission.one, mission.two\nmission.one,, "), {
+    raw_ref_count: 3,
+    unique_ref_count: 2,
+    duplicate_ref_count: 1,
+    blank_entry_count: 2,
+    ready_for_row_fill: true,
+  });
 });
 
 test("summarizeOperatorEvidenceImportRowsText reports local import readiness", () => {

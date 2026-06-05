@@ -115,6 +115,7 @@ import {
   summarizeOperatorEvidenceIntakeResponseGuards,
   summarizeOperatorEvidenceImportPreviewGuards,
   summarizeOperatorEvidenceImportRowsText,
+  summarizeOperatorEvidenceRefsText,
 } from "./plugin_browser";
 import {
   SettingsApiError,
@@ -18863,6 +18864,10 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
     () => parseDelimitedIds(capabilityLibraryOperatorProposalEvidenceRefs),
     [capabilityLibraryOperatorProposalEvidenceRefs],
   );
+  const operatorProposalEvidenceRefsTextSummary = useMemo(
+    () => summarizeOperatorEvidenceRefsText(capabilityLibraryOperatorProposalEvidenceRefs),
+    [capabilityLibraryOperatorProposalEvidenceRefs],
+  );
   const operatorProposalEvidenceSelectedPackMissingCount =
     selectedCapabilityLibraryOperatorProposalEvidenceIntakeChecklistPack?.candidate_capability_count ??
     selectedCapabilityLibraryProposalEvidencePack?.proposal_evidence_missing_count ??
@@ -20162,6 +20167,27 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
                     ) : null}
                   </div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <span
+                      style={badgeStyle(
+                        operatorProposalEvidenceRefsTextSummary.ready_for_row_fill ? "ready" : "blocked",
+                      )}
+                    >
+                      typed refs {operatorProposalEvidenceRefsTextSummary.unique_ref_count}
+                    </span>
+                    <span
+                      style={badgeStyle(
+                        operatorProposalEvidenceRefsTextSummary.duplicate_ref_count > 0 ? "pending" : "clear",
+                      )}
+                    >
+                      duplicate refs {operatorProposalEvidenceRefsTextSummary.duplicate_ref_count}
+                    </span>
+                    <span
+                      style={badgeStyle(
+                        operatorProposalEvidenceRefsTextSummary.blank_entry_count > 0 ? "pending" : "clear",
+                      )}
+                    >
+                      blank entries {operatorProposalEvidenceRefsTextSummary.blank_entry_count}
+                    </span>
                     <button
                       style={buttonStyle}
                       disabled={busy || !nextOperatorEvidenceBatchHasImportRows}
@@ -21358,6 +21384,32 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
                 style={inputStyle}
               />
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <span
+                  style={badgeStyle(operatorProposalEvidenceRefsTextSummary.ready_for_row_fill ? "ready" : "blocked")}
+                >
+                  typed refs {operatorProposalEvidenceRefsTextSummary.unique_ref_count}
+                </span>
+                <span
+                  style={badgeStyle(
+                    operatorProposalEvidenceRefsTextSummary.raw_ref_count > 0 ? "input" : "pending",
+                  )}
+                >
+                  raw refs {operatorProposalEvidenceRefsTextSummary.raw_ref_count}
+                </span>
+                <span
+                  style={badgeStyle(
+                    operatorProposalEvidenceRefsTextSummary.duplicate_ref_count > 0 ? "pending" : "clear",
+                  )}
+                >
+                  duplicate refs {operatorProposalEvidenceRefsTextSummary.duplicate_ref_count}
+                </span>
+                <span
+                  style={badgeStyle(
+                    operatorProposalEvidenceRefsTextSummary.blank_entry_count > 0 ? "pending" : "clear",
+                  )}
+                >
+                  blank entries {operatorProposalEvidenceRefsTextSummary.blank_entry_count}
+                </span>
                 <button
                   style={buttonStyle}
                   disabled={busy || !operatorProposalEvidenceIntakeCanDryRun}
