@@ -63758,6 +63758,24 @@ Remaining truthful gap:
   for 2262 capabilities. Automatic evidence sources are exhausted in the local
   readback, and synthetic evidence remains disallowed.
 
+Follow-up validation artifact guard:
+
+- The promotion-rules API test now isolates its generated-plugin root before
+  building a generated plugin, matching the other generated lifecycle tests.
+- Disabled the live validation artifact
+  `1780673744_capabilitypromotionrulesplugin` through `/plugins/disable`.
+- Re-ran the focused promotion-rules API test:
+  `python -m pytest tests\test_api_plugins.py -k
+  "capability_pack_promotion_rules_project_governed_rule_readiness" -q`
+  Result: 1 selected test passed.
+- Re-read the live Stage 17 queue after the test. Promotion-rule remediation
+  remained `status=ready`, `blocked_pack_count=0`,
+  `remediation_queue_count=0`, and `inactive_entry_count=12`.
+- Source readiness remained `status=operator_evidence_refs_required`,
+  `proposal_evidence_source_readiness_ready=true`,
+  `operator_evidence_ref_required_count=2262`, and
+  `next_smallest_truthful_gap=stage17_capability_library_operator_proposal_evidence_refs`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

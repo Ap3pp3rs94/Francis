@@ -2539,7 +2539,9 @@ def test_plugins_capability_pack_promotion_rules_project_governed_rule_readiness
     from fastapi.testclient import TestClient
 
     from francis.api.app import create_app
+    from francis.api.routes import plugins
 
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
     client = TestClient(create_app())
     meta = {
         **_forge_promotion_meta("capability_promotion_rules"),
