@@ -63919,6 +63919,43 @@ Remaining truthful gap:
   remains blocked on real operator-supplied evidence refs applied through the
   governed intake path.
 
+### Stage 17 operator evidence explicit-ref row fill UI
+
+This pass made the export-row seeding flow accept already-typed operator refs
+without changing the governed preview/apply boundary.
+
+Shipped behavior:
+
+- `operatorEvidenceExportRowsToImportPreviewText()` now accepts optional
+  explicit evidence refs. When refs are provided, it serializes them into each
+  selected export row's `evidence_refs_input`; when refs are absent, blank slots
+  remain blank.
+- `apps/chat_ui/src/App.tsx` now includes a `Fill rows with typed refs` action
+  beside the import-preview controls. It is disabled until selected backend
+  export rows and typed operator refs are both present.
+- The action only fills local textarea state. It does not call import-preview,
+  dry-run, apply, proposal approval, promotion, memory writes, or registry
+  writes.
+
+Latest validation for this UI helper:
+
+- Chat UI client/contract tests:
+  `cd apps\chat_ui; npm run test -- src/plugin_browser/index.test.ts`
+  Result: 221 tests passed.
+- Chat UI production build:
+  `cd apps\chat_ui; npm run build`
+  Result: passed. Vite emitted the existing non-fatal large chunk warning.
+- Whitespace check:
+  `git diff --check`
+  Result: passed with the existing Git CRLF normalization warning for
+  `apps/chat_ui/src/plugin_browser/index.ts`.
+
+Remaining truthful gap:
+
+- Real operator evidence refs still must be supplied, import-previewed,
+  dry-run, and applied through the governed intake route before Stage 17
+  proposal-evidence counts can move.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

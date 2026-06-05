@@ -79,6 +79,31 @@ test("operatorEvidenceExportRowsToImportPreviewText preserves blank evidence slo
   ]);
 });
 
+test("operatorEvidenceExportRowsToImportPreviewText fills explicit operator refs", () => {
+  const text = operatorEvidenceExportRowsToImportPreviewText(
+    [
+      {
+        pack_id: "legacy.generated.ops",
+        pack_version: "1.0.0",
+        capability: "generated.ops.run",
+        proposal_id: "plugin_proposal_generated_ops_run",
+        evidence_refs_input: "",
+      },
+    ],
+    ["mission.operator.ref", "", "mission.operator.ref.2"],
+  );
+
+  assert.deepEqual(JSON.parse(text), [
+    {
+      pack_id: "legacy.generated.ops",
+      pack_version: "1.0.0",
+      capability: "generated.ops.run",
+      proposal_id: "plugin_proposal_generated_ops_run",
+      evidence_refs_input: JSON.stringify(["mission.operator.ref", "mission.operator.ref.2"]),
+    },
+  ]);
+});
+
 test("PluginBrowserClient lifecycle mutations send an explicit plugin actor", async () => {
   const captured: Record<string, Record<string, unknown>> = {};
   const restoreFetch = installFetch(async (url, init) => {

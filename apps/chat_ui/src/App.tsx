@@ -19419,19 +19419,27 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
     }
   }
 
-  function loadSelectedOperatorProposalEvidenceExportRows() {
+  function loadSelectedOperatorProposalEvidenceExportRows(evidenceRefs?: string[]) {
     const rows = selectedCapabilityLibraryOperatorProposalEvidenceIntakeExportPack?.rows ?? [];
     if (!rows.length) {
       setError("No selected operator evidence export rows are available to load.");
       return;
     }
     setCapabilityLibraryOperatorProposalEvidenceImportRows(
-      operatorEvidenceExportRowsToImportPreviewText(rows),
+      operatorEvidenceExportRowsToImportPreviewText(rows, evidenceRefs),
     );
     setCapabilityLibraryOperatorProposalEvidenceImportPreview(null);
     setCapabilityLibraryOperatorProposalEvidenceImportApplyGroupKey("");
     setCapabilityLibraryOperatorProposalEvidenceIntakeResponse(null);
     setError(null);
+  }
+
+  function loadSelectedOperatorProposalEvidenceExportRowsWithRefs() {
+    if (!operatorProposalEvidenceRefs.length) {
+      setError("Add at least one operator evidence reference before filling export rows.");
+      return;
+    }
+    loadSelectedOperatorProposalEvidenceExportRows(operatorProposalEvidenceRefs);
   }
 
   async function previewCapabilityLibraryOperatorProposalEvidenceImport() {
@@ -20929,9 +20937,20 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
                     disabled={
                       busy || !(selectedCapabilityLibraryOperatorProposalEvidenceIntakeExportPack?.rows.length ?? 0)
                     }
-                    onClick={loadSelectedOperatorProposalEvidenceExportRows}
+                    onClick={() => loadSelectedOperatorProposalEvidenceExportRows()}
                   >
                     Load selected export rows
+                  </button>
+                  <button
+                    style={buttonStyle}
+                    disabled={
+                      busy ||
+                      !(selectedCapabilityLibraryOperatorProposalEvidenceIntakeExportPack?.rows.length ?? 0) ||
+                      !operatorProposalEvidenceRefs.length
+                    }
+                    onClick={loadSelectedOperatorProposalEvidenceExportRowsWithRefs}
+                  >
+                    Fill rows with typed refs
                   </button>
                   <button
                     style={buttonStyle}

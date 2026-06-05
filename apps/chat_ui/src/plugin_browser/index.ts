@@ -1872,14 +1872,19 @@ function safeUnknownArray(v: unknown): unknown[] | undefined {
 
 export function operatorEvidenceExportRowsToImportPreviewText(
   rows: PluginCapabilityLibraryOperatorProposalEvidenceIntakeExportRow[],
+  evidenceRefs?: string[],
 ): string {
+  const normalizedEvidenceRefs = (Array.isArray(evidenceRefs) ? evidenceRefs : [])
+    .map((ref) => safeString(ref, "").trim())
+    .filter((ref) => ref.length > 0);
+  const evidenceRefsInput = normalizedEvidenceRefs.length ? JSON.stringify(normalizedEvidenceRefs) : "";
   const normalizedRows = (Array.isArray(rows) ? rows : [])
     .map((row) => ({
       pack_id: safeString(row.pack_id, ""),
       pack_version: safeString(row.pack_version, ""),
       capability: safeString(row.capability, ""),
       proposal_id: safeString(row.proposal_id, ""),
-      evidence_refs_input: safeString(row.evidence_refs_input, ""),
+      evidence_refs_input: evidenceRefsInput || safeString(row.evidence_refs_input, ""),
     }))
     .filter((row) => row.pack_id && row.capability);
   return JSON.stringify(normalizedRows, null, 2);
