@@ -65751,6 +65751,79 @@ Remaining truthful gap:
   isolation, export safe deltas, activate SLAs, bind roles, or decommission
   tenant state.
 
+### 2026-06-05 - Stage 17 operator proposal-evidence refs record bulk operator review pack 1
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence for the capability-library promotion path.
+
+This pass walked the next visible Stage 17 operator evidence pack,
+`legacy.generated.capabilitybulkoperatorreviewplugin1`, through the existing
+governed operator proposal-evidence intake route one capability at a time.
+
+Capabilities recorded:
+
+- `1780628006_capabilitybulkoperatorreviewplugin1`
+- `1780629639_capabilitybulkoperatorreviewplugin1`
+- `1780633340_capabilitybulkoperatorreviewplugin1`
+
+Recorded evidence ref pattern:
+
+- each capability recorded its matching proposal artifact ref
+- each capability recorded its matching validation artifact ref
+- each capability recorded shared pack metadata ref
+  `artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1780633521_legacy-generated-capabilitybulkoperatorreviewplugin1.json`
+- each capability recorded shared operator-review ref
+  `artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1780633934_legacy-generated-capabilitybulkoperatorreviewplugin1_340800.json`
+
+Latest validation for this live Stage 17 intake:
+
+- Artifact existence check:
+  all proposal, validation, metadata, and operator-review refs for the 3
+  capabilities existed under `data/artifacts/plugins`.
+- Operator-review receipt selection:
+  the pack had two operator-review receipts. The older
+  `capability_pack_operator_review_1780632847_legacy-generated-capabilitybulkoperatorreviewplugin1_972400`
+  receipt covered only `1780628006_capabilitybulkoperatorreviewplugin1`; the
+  selected `1780633934` receipt covered all 3 capability ids.
+- Governed dry-run/apply runner:
+  the pack walker called
+  `POST /plugins/capabilities/library/proposal-evidence/operator-intake/apply`
+  once per capability with actor `stage17.operator`,
+  `FRANCIS_API_ACTOR_SCOPES={"stage17.operator":["plugins.write"]}`,
+  `max_pack_count: 1`, `max_total_capability_count: 1`, and
+  `max_capability_count_per_pack: 1`. For every capability, dry-run returned
+  `ok: true`, `status: dry_run`, `planned_capability_count: 1`,
+  `evidence_ref_count: 4`, and a fingerprint before apply used the returned
+  fingerprint. Every apply returned `ok: true`, `status: recorded`,
+  `applied: true`, `recorded_capability_count: 1`, and
+  `evidence_ref_count: 4`.
+- Per-capability readback:
+  after apply, `GET /plugins/get?id=<capability_id>` returned the same four
+  refs, future review required, `proposal_evidence_writes_proposals: false`,
+  `proposal_evidence_approval_claimed: false`, and unchanged plugin
+  status/enabled values.
+- Direct pack summary:
+  all 3 pack capabilities had `proposal_evidence_count: 4`, all required future
+  review, none wrote proposals, and none claimed approval.
+- Proposal-review readback:
+  proposal states reported `approved: false` and `review_status: not_reviewed`.
+- Public queue readback:
+  `GET /plugins/capabilities/library/proposal-evidence/operator-intake/checklist`
+  returned `status: ready_for_operator_evidence_refs`,
+  `candidate_pack_count: 38`, `candidate_capability_count: 2215`,
+  `evidence_ref_required_count: 2215`, and next visible pack
+  `legacy.generated.capabilitybulkoperatorreviewplugin2`.
+
+Remaining truthful gap:
+
+- This does not close Stage 17, promote capabilities, approve proposals, grant
+  execution authority, grant mutation authority beyond governed evidence-ref
+  recording, close the proposal-review or promotion gates, independently verify
+  artifact truth, clear the remaining 2215 capability evidence refs, close Stage
+  18, create managed copies, write managed-copy receipts, enforce tenant
+  isolation, export safe deltas, activate SLAs, bind roles, or decommission
+  tenant state.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
