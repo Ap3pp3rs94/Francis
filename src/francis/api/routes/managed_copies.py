@@ -11,6 +11,7 @@ from francis.managed_copies import (
     managed_copy_decommission_contract_snapshot,
     managed_copy_isolation_rules_contract_snapshot,
     managed_copy_rogue_recovery_contract_snapshot,
+    managed_copy_runtime_evidence_contract_snapshot,
     managed_copy_safe_delta_model_contract_snapshot,
     managed_copy_sla_framework_contract_snapshot,
     managed_copy_roles_contract_snapshot,
@@ -62,3 +63,8 @@ def decommission_contract() -> dict[str, Any]:
 @router.get("/completion-review")
 def completion_review() -> dict[str, Any]:
     return managed_copy_completion_review_snapshot()
+
+
+@router.get("/runtime-evidence-contract")
+def runtime_evidence_contract() -> dict[str, Any]:
+    return managed_copy_runtime_evidence_contract_snapshot()

@@ -12,6 +12,7 @@ MANAGED_COPIES_SLA_FRAMEWORK_CONTRACT_KIND = "francis.stage18.managed_copies.sla
 MANAGED_COPIES_ROLES_CONTRACT_KIND = "francis.stage18.managed_copies.roles_contract"
 MANAGED_COPIES_DECOMMISSION_CONTRACT_KIND = "francis.stage18.managed_copies.decommission_contract"
 MANAGED_COPIES_COMPLETION_REVIEW_KIND = "francis.stage18.managed_copies.completion_review"
+MANAGED_COPIES_RUNTIME_EVIDENCE_CONTRACT_KIND = "francis.stage18.managed_copies.runtime_evidence_contract"
 STAGE17_OPERATOR_EVIDENCE_REFS_GAP = "stage17_capability_library_operator_proposal_evidence_refs"
 
 
@@ -245,6 +246,32 @@ def _completion_check(
     }
 
 
+def _runtime_evidence_requirement(
+    requirement_id: str,
+    title: str,
+    *,
+    source_contract_route: str,
+    proof_kind: str,
+    blocker: str,
+    requires_receipt: bool = True,
+) -> dict[str, Any]:
+    return {
+        "id": requirement_id,
+        "title": title,
+        "status": "required_not_present",
+        "ready": False,
+        "source_contract_route": source_contract_route,
+        "proof_kind": proof_kind,
+        "blocker": blocker,
+        "requires_receipt": requires_receipt,
+        "recording_enabled": False,
+        "writes_receipt": False,
+        "mutates_tenant_state": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+    }
+
+
 def managed_copies_status_snapshot() -> dict[str, Any]:
     """Return the Stage 18 managed-copy substrate posture without creating state."""
     governance = _governance()
@@ -353,6 +380,7 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "sla_framework_contract": "/managed-copies/sla-framework-contract",
             "roles_contract": "/managed-copies/roles-contract",
             "decommission_contract": "/managed-copies/decommission-contract",
+            "runtime_evidence_contract": "/managed-copies/runtime-evidence-contract",
             "completion_review": "/managed-copies/completion-review",
         },
         "managed_copy_roles_required": [
@@ -1571,6 +1599,117 @@ def managed_copy_completion_review_snapshot() -> dict[str, Any]:
             "requires_runtime_evidence": True,
             "requires_stage17_closure_receipt": True,
             "stage_closure_decision_required": ready_to_close,
+        },
+        "read_only": governance["read_only"],
+        "projection_only": governance["projection_only"],
+        "copy_creation_enabled": governance["copy_creation_enabled"],
+        "writes_registry": governance["writes_registry"],
+        "writes_memory": governance["writes_memory"],
+        "writes_receipts": governance["writes_receipts"],
+        "writes_tenant_state": governance["writes_tenant_state"],
+        "runs_tools": governance["runs_tools"],
+        "runs_shell": governance["runs_shell"],
+        "runs_git": governance["runs_git"],
+        "launches_browser": governance["launches_browser"],
+        "captures_screen": governance["captures_screen"],
+        "grants_execution_authority": governance["grants_execution_authority"],
+        "grants_mutation_authority": governance["grants_mutation_authority"],
+        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+    }
+
+
+def managed_copy_runtime_evidence_contract_snapshot() -> dict[str, Any]:
+    """Return required managed-copy runtime proof slots without collecting evidence."""
+    governance = _governance()
+    status = managed_copies_status_snapshot()
+    requirements = [
+        _runtime_evidence_requirement(
+            "stage17_closure_receipt",
+            "Stage 17 closure receipt proves capability-economy prerequisites are closed",
+            source_contract_route="/managed-copies/status",
+            proof_kind="ledger_closure_receipt",
+            blocker=STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        ),
+        _runtime_evidence_requirement(
+            "copy_creation_runtime_proof",
+            "A governed managed copy is created with isolated state and required receipts",
+            source_contract_route="/managed-copies/copy-creation-contract",
+            proof_kind="managed_copy_creation_runtime_receipt",
+            blocker="stage18_copy_creation_runtime_not_implemented",
+        ),
+        _runtime_evidence_requirement(
+            "tenant_isolation_runtime_proof",
+            "Tenant data, memory, receipts, connectors, policy, and support authority are isolated",
+            source_contract_route="/managed-copies/isolation-rules-contract",
+            proof_kind="tenant_isolation_runtime_receipt",
+            blocker="stage18_tenant_isolation_runtime_not_implemented",
+        ),
+        _runtime_evidence_requirement(
+            "safe_delta_runtime_proof",
+            "Safe deltas move only approved non-private signals with lineage and redaction evidence",
+            source_contract_route="/managed-copies/safe-delta-model-contract",
+            proof_kind="safe_delta_runtime_receipt",
+            blocker="stage18_safe_delta_runtime_not_implemented",
+        ),
+        _runtime_evidence_requirement(
+            "rogue_recovery_runtime_proof",
+            "A rogue-copy scenario can be detected, halted, reviewed, replaced, and restored with evidence",
+            source_contract_route="/managed-copies/rogue-recovery-contract",
+            proof_kind="rogue_recovery_runtime_receipt",
+            blocker="stage18_rogue_recovery_runtime_not_implemented",
+        ),
+        _runtime_evidence_requirement(
+            "sla_runtime_proof",
+            "Managed-copy SLA commitments are backed by monitoring, incident, support, and recovery evidence",
+            source_contract_route="/managed-copies/sla-framework-contract",
+            proof_kind="sla_runtime_receipt",
+            blocker="stage18_sla_runtime_not_implemented",
+        ),
+        _runtime_evidence_requirement(
+            "role_authority_runtime_proof",
+            "Managed-copy role and credential authority is explicitly bound, scoped, auditable, and revocable",
+            source_contract_route="/managed-copies/roles-contract",
+            proof_kind="managed_copy_role_authority_receipt",
+            blocker="stage18_role_authority_runtime_not_implemented",
+        ),
+        _runtime_evidence_requirement(
+            "decommission_runtime_proof",
+            "Managed-copy exit rights can export, delete, retain, revoke, unpair, and prove outcomes",
+            source_contract_route="/managed-copies/decommission-contract",
+            proof_kind="decommission_runtime_receipt",
+            blocker="stage18_decommission_runtime_not_implemented",
+        ),
+    ]
+    return {
+        "ok": True,
+        "kind": MANAGED_COPIES_RUNTIME_EVIDENCE_CONTRACT_KIND,
+        "stage": STAGE18_MANAGED_COPIES_STAGE,
+        "source_id": "managed_copies",
+        "status": "blocked",
+        "contract_readback_ready": True,
+        "runtime_evidence_contract_ready": False,
+        "runtime_evidence_recording_enabled": False,
+        "runtime_evidence_ready": False,
+        "stage17_closed_by_receipt": bool(status["stage17_closed_by_receipt"]),
+        "stage17_blocker": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "requirements": requirements,
+        "ready_count": sum(1 for requirement in requirements if requirement["ready"]),
+        "required_count": len(requirements),
+        "blockers": [requirement["blocker"] for requirement in requirements],
+        "accepted_proof_kinds": [requirement["proof_kind"] for requirement in requirements],
+        "receipt_logical_scope": "future_managed_copy_runtime_evidence",
+        "completion_review_route": "/managed-copies/completion-review",
+        "routes": {
+            **status["routes"],
+            "runtime_evidence_contract": "/managed-copies/runtime-evidence-contract",
+        },
+        "governance": {
+            **governance,
+            "runtime_evidence_contract_only": True,
+            "evidence_collection_enabled": False,
+            "does_not_record_runtime_evidence": True,
+            "does_not_mark_stage_closed": True,
+            "requires_stage17_closure_receipt": True,
         },
         "read_only": governance["read_only"],
         "projection_only": governance["projection_only"],
