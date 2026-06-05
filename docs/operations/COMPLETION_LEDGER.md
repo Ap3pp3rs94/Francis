@@ -64573,7 +64573,7 @@ Latest validation for this readback:
   Result: passed.
 - Ruff format check:
   `python -m ruff format --check src\francis\managed_copies.py src\francis\api\routes\managed_copies.py tests\test_api_managed_copies.py tests\test_api_contract_chat_ui.py`
-  Result: passed with non-fatal `.ruff_cache` write warnings.
+  Result: passed.
 - Mypy:
   `python -m mypy src\francis\managed_copies.py src\francis\api\routes\managed_copies.py`
   Result: passed.
