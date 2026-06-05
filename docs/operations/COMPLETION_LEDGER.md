@@ -64227,6 +64227,53 @@ Remaining truthful gap:
   rogue kill/replace flows, define SLA operations, or establish managed-copy
   decommission/export/delete receipts.
 
+### Stage 18 managed-copy creation contract readback
+
+This pass made the Stage 18 copy-creation process inspectable without enabling
+copy creation or tenant mutation.
+
+Shipped behavior:
+
+- `src/francis/managed_copies.py` now exposes
+  `managed_copy_creation_contract_snapshot()`, a read-only process contract for
+  managed-copy creation.
+- `GET /managed-copies/copy-creation-contract` now returns required
+  prerequisites, disabled process steps, state-machine names, required
+  receipts, isolation boundaries, and blocked failure modes.
+- `GET /managed-copies/status` now advertises the copy-creation contract route
+  and records the `copy_creation_process` deliverable as
+  `contract_readback_ready` while still reporting `ready: false`.
+- The contract keeps `copy_creation_enabled: false` and
+  `copy_creation_allowed: false`. It does not create instances, provision
+  tenant state, write registries, write memory, write receipts, run tools, run
+  shell, run git, launch browsers, capture screens, grant execution authority,
+  or grant mutation authority.
+- The contract preserves the current blocker as
+  `stage17_capability_library_operator_proposal_evidence_refs` and reports
+  `stage17_closed_by_receipt: false`.
+
+Latest validation for this readback:
+
+- Focused API contract tests:
+  `python -m pytest tests\test_api_managed_copies.py tests\test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted -q`
+  Result: 3 tests passed.
+- Ruff lint:
+  `python -m ruff check src\francis\managed_copies.py src\francis\api\routes\managed_copies.py tests\test_api_managed_copies.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Ruff format check:
+  `python -m ruff format --check src\francis\managed_copies.py src\francis\api\routes\managed_copies.py tests\test_api_managed_copies.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Mypy:
+  `python -m mypy src\francis\managed_copies.py src\francis\api\routes\managed_copies.py`
+  Result: passed.
+
+Remaining truthful gap:
+
+- This does not close Stage 17, create managed copies, persist tenant identity
+  contracts, enforce isolation, implement governed provisioning, write
+  copy-creation receipts, implement safe delta handling, implement rogue
+  recovery, or define SLA operations.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

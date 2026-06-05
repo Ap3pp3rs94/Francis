@@ -4,6 +4,7 @@ from typing import Any
 
 STAGE18_MANAGED_COPIES_STAGE = "Stage 18 / Managed Copies Platform"
 MANAGED_COPIES_STATUS_KIND = "francis.stage18.managed_copies.status"
+MANAGED_COPIES_COPY_CREATION_CONTRACT_KIND = "francis.stage18.managed_copies.copy_creation_contract"
 STAGE17_OPERATOR_EVIDENCE_REFS_GAP = "stage17_capability_library_operator_proposal_evidence_refs"
 
 
@@ -49,6 +50,46 @@ def _governance() -> dict[str, Any]:
     }
 
 
+def _contract_requirement(
+    requirement_id: str,
+    title: str,
+    *,
+    ready: bool,
+    required: bool = True,
+    next_gap: str,
+    evidence: list[str] | None = None,
+) -> dict[str, Any]:
+    return {
+        "id": requirement_id,
+        "title": title,
+        "ready": ready,
+        "required": required,
+        "next_gap": next_gap,
+        "evidence": evidence or [],
+    }
+
+
+def _contract_step(
+    step_id: str,
+    title: str,
+    *,
+    status: str,
+    writes_tenant_state: bool = False,
+    writes_registry: bool = False,
+    writes_receipt: bool = False,
+    requires_operator_approval: bool = True,
+) -> dict[str, Any]:
+    return {
+        "id": step_id,
+        "title": title,
+        "status": status,
+        "writes_tenant_state": writes_tenant_state,
+        "writes_registry": writes_registry,
+        "writes_receipt": writes_receipt,
+        "requires_operator_approval": requires_operator_approval,
+    }
+
+
 def managed_copies_status_snapshot() -> dict[str, Any]:
     """Return the Stage 18 managed-copy substrate posture without creating state."""
     governance = _governance()
@@ -67,8 +108,11 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "copy_creation_process",
             "Copy creation process",
             ready=False,
-            status="blocked",
+            status="contract_readback_ready",
             next_gap="stage18_copy_creation_process",
+            evidence=[
+                "GET /managed-copies/copy-creation-contract exposes required gates without enabling creation.",
+            ],
         ),
         _deliverable(
             "isolation_rules",
@@ -129,6 +173,7 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
         "deliverables": deliverables,
         "routes": {
             "status": "/managed-copies/status",
+            "copy_creation_contract": "/managed-copies/copy-creation-contract",
         },
         "managed_copy_roles_required": [
             "end_user",
@@ -155,6 +200,177 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
         "read_only": governance["read_only"],
         "projection_only": governance["projection_only"],
         "copy_creation_enabled": governance["copy_creation_enabled"],
+        "writes_registry": governance["writes_registry"],
+        "writes_memory": governance["writes_memory"],
+        "writes_receipts": governance["writes_receipts"],
+        "writes_tenant_state": governance["writes_tenant_state"],
+        "runs_tools": governance["runs_tools"],
+        "runs_shell": governance["runs_shell"],
+        "runs_git": governance["runs_git"],
+        "launches_browser": governance["launches_browser"],
+        "captures_screen": governance["captures_screen"],
+        "grants_execution_authority": governance["grants_execution_authority"],
+        "grants_mutation_authority": governance["grants_mutation_authority"],
+        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+    }
+
+
+def managed_copy_creation_contract_snapshot() -> dict[str, Any]:
+    """Return the governed copy-creation process contract without creating copies."""
+    governance = _governance()
+    requirements = [
+        _contract_requirement(
+            "stage17_closed_by_receipt",
+            "Stage 17 closure is backed by real operator proposal-evidence refs",
+            ready=False,
+            next_gap=STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+            evidence=[
+                "Current ledger posture keeps Stage 17 open until real refs pass import-preview, dry-run, and apply.",
+            ],
+        ),
+        _contract_requirement(
+            "tenant_identity_contract",
+            "Tenant identity and administrator authority are declared before planning",
+            ready=False,
+            next_gap="stage18_tenant_identity_contract",
+        ),
+        _contract_requirement(
+            "tenant_policy_contract",
+            "Tenant policy boundaries are explicit before provisioning",
+            ready=False,
+            next_gap="stage18_tenant_policy_contract",
+        ),
+        _contract_requirement(
+            "isolation_profile_contract",
+            "Data, memory, receipt, connector, and capability-pack isolation profile is declared",
+            ready=False,
+            next_gap="stage18_copy_isolation_rules",
+        ),
+        _contract_requirement(
+            "capability_lineage_contract",
+            "Capability pack lineage and allowed customization layers are declared",
+            ready=False,
+            next_gap="stage18_capability_lineage_contract",
+        ),
+        _contract_requirement(
+            "safe_delta_policy_contract",
+            "Safe delta policy blocks raw private pooling and uncontrolled improvement flow",
+            ready=False,
+            next_gap="stage18_safe_delta_model",
+        ),
+        _contract_requirement(
+            "rogue_recovery_contract",
+            "Rogue halt, quarantine, replacement, and support authority boundaries are declared",
+            ready=False,
+            next_gap="stage18_rogue_kill_replace_flows",
+        ),
+        _contract_requirement(
+            "decommission_contract",
+            "Export, deletion, retention, rotation, and proof receipts are declared",
+            ready=False,
+            next_gap="stage18_decommission_export_delete_contract",
+        ),
+    ]
+    process_steps = [
+        _contract_step(
+            "request",
+            "Record an operator-approved managed-copy request",
+            status="not_implemented",
+        ),
+        _contract_step(
+            "preflight",
+            "Check Stage 17 closure, tenant identity, policy, isolation, lineage, and support prerequisites",
+            status="contract_only",
+        ),
+        _contract_step(
+            "plan",
+            "Produce a copy-creation plan without provisioning state",
+            status="contract_only",
+        ),
+        _contract_step(
+            "approve",
+            "Require explicit tenant-admin or operator approval before any provision step",
+            status="contract_only",
+        ),
+        _contract_step(
+            "provision",
+            "Create isolated tenant state only after governed approval and receipt setup",
+            status="disabled",
+            writes_tenant_state=True,
+            writes_registry=True,
+            writes_receipt=True,
+        ),
+        _contract_step(
+            "verify",
+            "Verify isolation, lineage, policy, support boundaries, and decommission readiness",
+            status="disabled",
+            writes_receipt=True,
+        ),
+        _contract_step(
+            "handoff",
+            "Expose tenant/admin/support handoff only after verification receipts exist",
+            status="disabled",
+            writes_receipt=True,
+        ),
+    ]
+    return {
+        "ok": True,
+        "kind": MANAGED_COPIES_COPY_CREATION_CONTRACT_KIND,
+        "stage": STAGE18_MANAGED_COPIES_STAGE,
+        "source_id": "managed_copies",
+        "status": "contract_readback_ready",
+        "contract_readback_ready": True,
+        "copy_creation_enabled": False,
+        "copy_creation_allowed": False,
+        "stage17_closed_by_receipt": False,
+        "stage17_blocker": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "requirements": requirements,
+        "required_count": len(requirements),
+        "ready_count": sum(1 for requirement in requirements if requirement["ready"]),
+        "process_steps": process_steps,
+        "state_machine": {
+            "current_state": "not_implemented",
+            "states": [
+                "requested",
+                "preflight_blocked",
+                "planned",
+                "approved",
+                "provisioning",
+                "verifying",
+                "active",
+                "quarantined",
+                "decommissioned",
+            ],
+            "active_transitions_enabled": False,
+        },
+        "required_receipts": [
+            "copy_request_receipt",
+            "preflight_receipt",
+            "copy_creation_plan_receipt",
+            "operator_approval_receipt",
+            "provisioning_receipt",
+            "isolation_verification_receipt",
+            "support_handoff_receipt",
+        ],
+        "isolation_boundaries": [
+            "tenant_data",
+            "tenant_memory",
+            "tenant_receipts",
+            "tenant_connectors",
+            "tenant_capability_packs",
+            "tenant_policy",
+            "support_operator_authority",
+        ],
+        "blocked_failure_modes": [
+            "core_surrender",
+            "privacy_weak_pooling",
+            "uncontrolled_forks",
+            "support_chaos",
+            "invisible_vendor_power",
+        ],
+        "governance": governance,
+        "read_only": governance["read_only"],
+        "projection_only": governance["projection_only"],
         "writes_registry": governance["writes_registry"],
         "writes_memory": governance["writes_memory"],
         "writes_receipts": governance["writes_receipts"],
