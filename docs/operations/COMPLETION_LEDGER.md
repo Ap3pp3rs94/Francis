@@ -63442,6 +63442,145 @@ Remaining truthful gap:
 - Stage 18 Managed Copies Platform remains a next-stage target, not a current
   completion claim.
 
+### 2026-06-05 - Stage 17 current generated promotion-review drift clears again
+
+Roadmap area: Stage 17 / Capability Economy.
+
+Truthful change:
+
+- A live local readback after the registry friction-summary refs UI slice found
+  Stage 17 had drifted back to an upstream capability-pack blocker:
+  `proposal_evidence_plan.status=blocked`,
+  `proposal_evidence_missing_count=2248`, and
+  `next_smallest_truthful_gap=stage17_capability_pack_promotion_rules`.
+- The registry friction-summary refs route correctly refused to produce
+  candidates while promotion discipline was blocked:
+  `status=blocked`, `candidate_pack_count=0`,
+  `candidate_capability_count=0`.
+- The current promotion-rule remediation queue contained one pack,
+  `legacy.generated.capabilitypromotiondisciplineplugin`, with 20 current
+  capabilities and metadata/governance blockers. The dry-run planned exactly
+  that one pack / 20 capabilities with no writes.
+- The governed promotion-rule remediation apply recorded one metadata receipt
+  for that pack and updated registry metadata for 20 capabilities. It wrote no
+  quality evidence, validation receipts, proposal-review receipts, approvals,
+  promotions, enables, executions, generated artifacts, or memory.
+- The quality-evidence remediation queue then contained the same one pack. The
+  quality dry-run planned one pack / 20 capabilities using existing candidate
+  references `tests/test_api_plugins.py`, `README.md`, and
+  `docs/operations/COMPLETION_LEDGER.md`.
+- The quality-reference apply recorded one pack and changed 3 registry records.
+  It remained `quality_reference_backfill_only=true`, wrote no validation
+  receipts or proposals, and did not approve, promote, enable, execute, or write
+  memory.
+- Artifact reconstruction then planned one pack / 3 capabilities. The apply
+  recorded one pack / 3 capabilities, wrote 3 reconstructed validation receipts,
+  wrote 3 reconstructed proposal-lineage records, captured
+  `operator_reconstruction_decision=approved_for_reconstruction`, and still did
+  not approve proposals, promote capabilities, enable capabilities, execute
+  capabilities, or write memory.
+- The bulk operator-review dry-run then isolated one pending pack,
+  `legacy.generated.capabilitypromotiondisciplineplugin`, with 20 capabilities.
+  The apply recorded one operator-review receipt for that pack only, wrote no
+  registry metadata, and did not approve proposals, promote capabilities,
+  enable capabilities, execute capabilities, or write memory.
+- Final promotion and remediation readbacks now report the local capability-pack
+  gates clear again: promotion-rule remediation `status=ready`,
+  `remediation_queue_count=0`; quality remediation `status=ready`,
+  `remediation_queue_count=0`; operator surface
+  `status=ready_for_explicit_promotion`, `pending_review_queue_count=0`;
+  promotion discipline `status=ready`, `pack_total=50`,
+  `ready_pack_count=50`, `blocked_pack_count=0`.
+- Proposal evidence remains a real blocker, not a data gap to fake. Final
+  proposal-evidence readback reports `status=blocked`,
+  `candidate_pack_count=47`, `candidate_capability_count=2268`,
+  `proposal_evidence_missing_count=2268`, and
+  `next_smallest_truthful_gap=stage17_capability_library_promotion_readiness`.
+- Final registry friction-summary refs readback reports
+  `status=no_existing_friction_summary_ref_candidates`,
+  `candidate_pack_count=0`, and `candidate_capability_count=0`. No real
+  operator proposal-evidence refs were recorded in this pass.
+
+Latest validation for this local live pass:
+
+- Promotion-rule remediation dry-run:
+  Result: `status=dry_run`, `planned_pack_count=1`,
+  `planned_capability_count=20`, `writes_registry_metadata=false`,
+  `writes_receipts=false`, `promotion_authority=false`,
+  `execution_authority=false`, and `memory_write=false`.
+- Promotion-rule remediation apply:
+  Result: `status=recorded`, `recorded_pack_count=1`,
+  `recorded_capability_count=20`,
+  `receipt_id=capability_pack_metadata_1780668652_legacy-generated-capabilitypromotiondisciplineplugin`,
+  `writes_registry_metadata=true`, `writes_receipts=true`,
+  `does_not_approve_proposals=true`, `does_not_promote_capabilities=true`,
+  `does_not_execute_capabilities=true`, and `memory_write=false`.
+- Quality-reference remediation dry-run:
+  Result: `status=dry_run`, `planned_pack_count=1`,
+  `planned_capability_count=20`, `writes_registry_metadata=false`,
+  `writes_receipts=false`, and `memory_write=false`.
+- Quality-reference remediation apply:
+  Result: `status=recorded`, `recorded_pack_count=1`,
+  `recorded_capability_count=3`, `quality_reference_backfill_only=true`,
+  `does_not_write_validation_receipts=true`,
+  `does_not_write_proposals=true`, `does_not_approve_proposals=true`,
+  `does_not_promote_capabilities=true`, and `memory_write=false`.
+- Artifact reconstruction dry-run:
+  Result: `status=dry_run`, `planned_pack_count=1`,
+  `planned_capability_count=3`, `partial_reconstruction_count=0`,
+  `writes_validation_receipts=false`, `writes_proposals=false`,
+  `does_not_approve_proposals=true`, `does_not_promote_capabilities=true`,
+  and `memory_write=false`.
+- Artifact reconstruction apply:
+  Result: `status=recorded`, `recorded_pack_count=1`,
+  `recorded_capability_count=3`, `partial_reconstruction_count=0`,
+  `validation_receipt_write_count=3`, `proposal_lineage_write_count=3`,
+  `operator_reconstruction_decision_captured=true`,
+  `does_not_approve_proposals=true`, `does_not_promote_capabilities=true`,
+  `does_not_enable_capabilities=true`, `does_not_execute_capabilities=true`,
+  and `memory_write=false`.
+- Bulk operator-review dry-run:
+  Result: `status=dry_run`, `planned_pack_count=1`,
+  `planned_capability_count=20`, `skipped_count=49`,
+  `writes_receipts=false`, `does_not_mutate_registry=true`,
+  `does_not_promote_capabilities=true`, `does_not_execute_capabilities=true`,
+  and `memory_write=false`.
+- Bulk operator-review apply:
+  Result: `status=recorded`, `recorded_pack_count=1`,
+  `recorded_capability_count=20`,
+  `receipt_id=capability_pack_operator_review_1780669150_legacy-generated-capabilitypromotiondisciplineplugin_605100`,
+  `writes_receipts=true`, `receipt_write_count=1`,
+  `does_not_mutate_registry=true`, `does_not_approve_proposals=true`,
+  `does_not_promote_capabilities=true`, `does_not_execute_capabilities=true`,
+  and `memory_write=false`.
+
+Validation risk:
+
+- The changed registry/catalog/artifact/receipt payloads live under `data/**`,
+  which is intentionally gitignored. This ledger entry records local operational
+  posture; it is not a portable data migration and does not make other clones
+  contain those local artifacts.
+- The reconstructed validation receipts and proposal lineages are bounded
+  reconstruction records from existing registry evidence. They do not claim
+  proposal approval.
+- Candidate quality references remain candidate references, not independent
+  pack-specific proof.
+- No real operator proposal-evidence refs were supplied or recorded. The
+  operator-evidence route remains available, but this pass did not invent
+  evidence references.
+- Stage 18 Managed Copies Platform remains a next-stage target, not a current
+  completion claim.
+
+Remaining truthful gap:
+
+- Stage 17 capability-pack remediation and operator-review gates are clear for
+  the current local data set again, but capability-library promotion is still
+  blocked on real proposal evidence:
+  `stage17_capability_library_promotion_readiness`.
+- The next legitimate path is to supply/record real operator proposal-evidence
+  references or add another bounded evidence-source route if a truthful source
+  exists. The current registry friction-summary route reports no candidates.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
