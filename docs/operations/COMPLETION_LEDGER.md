@@ -64323,6 +64323,55 @@ Remaining truthful gap:
   flows at runtime, create managed copies, implement safe delta handling, or
   implement rogue recovery.
 
+### Stage 18 managed-copy safe delta model contract readback
+
+This pass made the Stage 18 managed-copy safe delta model inspectable without
+exporting tenant data, importing deltas, or writing learning state.
+
+Shipped behavior:
+
+- `src/francis/managed_copies.py` now exposes
+  `managed_copy_safe_delta_model_contract_snapshot()`, a read-only safe delta
+  model contract for managed copies.
+- `GET /managed-copies/safe-delta-model-contract` now returns allowed abstracted
+  signal classes, denied raw/private signal classes, approval gates, required
+  receipts, flow states, and blocked failure modes.
+- `GET /managed-copies/status` now advertises the safe-delta model contract
+  route and records the `safe_delta_model` deliverable as
+  `contract_readback_ready` while still reporting `ready: false`.
+- The contract keeps `safe_delta_model_ready: false`,
+  `delta_export_enabled: false`, `delta_import_enabled: false`,
+  `learning_write_enabled: false`, and `copy_creation_enabled: false`.
+  It does not export raw customer artifacts, pool tenant memory, write
+  registries, write memory, write receipts, write tenant state, run tools, run
+  shell, run git, launch browsers, capture screens, grant execution authority,
+  or grant mutation authority.
+- The contract preserves the current blocker as
+  `stage17_capability_library_operator_proposal_evidence_refs` and reports
+  `stage17_closed_by_receipt: false`.
+
+Latest validation for this readback:
+
+- Focused API contract tests:
+  `python -m pytest tests\test_api_managed_copies.py tests\test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted -q`
+  Result: 5 tests passed.
+- Ruff lint:
+  `python -m ruff check src\francis\managed_copies.py src\francis\api\routes\managed_copies.py tests\test_api_managed_copies.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Ruff format check:
+  `python -m ruff format --check src\francis\managed_copies.py src\francis\api\routes\managed_copies.py tests\test_api_managed_copies.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Mypy:
+  `python -m mypy src\francis\managed_copies.py src\francis\api\routes\managed_copies.py`
+  Result: passed.
+
+Remaining truthful gap:
+
+- This does not close Stage 17, export safe deltas, import safe deltas, write
+  core learning state, perform redaction review, persist tenant policy
+  allowances, write delta lineage receipts, create managed copies, enforce
+  tenant isolation at runtime, or implement rogue recovery.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

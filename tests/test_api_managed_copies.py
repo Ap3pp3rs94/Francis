@@ -30,6 +30,7 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
         "status": "/managed-copies/status",
         "copy_creation_contract": "/managed-copies/copy-creation-contract",
         "isolation_rules_contract": "/managed-copies/isolation-rules-contract",
+        "safe_delta_model_contract": "/managed-copies/safe-delta-model-contract",
     }
 
     deliverable_ids = {item["id"] for item in body["deliverables"]}
@@ -99,6 +100,125 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
     assert governance["privacy_weak_pooling_allowed"] is False
     assert governance["uncontrolled_forks_allowed"] is False
     assert governance["invisible_vendor_power_allowed"] is False
+    assert not data_root.exists()
+
+
+def test_managed_copy_safe_delta_model_contract_denies_raw_pooling_and_exports(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    response = TestClient(create_app()).get("/managed-copies/safe-delta-model-contract")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kind"] == "francis.stage18.managed_copies.safe_delta_model_contract"
+    assert body["stage"] == "Stage 18 / Managed Copies Platform"
+    assert body["source_id"] == "managed_copies"
+    assert body["status"] == "contract_readback_ready"
+    assert body["contract_readback_ready"] is True
+    assert body["safe_delta_model_ready"] is False
+    assert body["delta_export_enabled"] is False
+    assert body["delta_import_enabled"] is False
+    assert body["learning_write_enabled"] is False
+    assert body["copy_creation_enabled"] is False
+    assert body["stage17_closed_by_receipt"] is False
+    assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+
+    allowed_ids = {item["id"] for item in body["allowed_signal_classes"]}
+    assert allowed_ids == {
+        "capability_metadata",
+        "policy_hardening_delta",
+        "quality_gate_learning",
+        "regression_case_summary",
+        "performance_signal",
+        "class_level_friction_pattern",
+        "non_sensitive_outcome_metric",
+    }
+    assert body["allowed_signal_count"] == len(body["allowed_signal_classes"])
+    assert all(item["allowed"] is True for item in body["allowed_signal_classes"])
+    assert all(item["status"] == "contract_only" for item in body["allowed_signal_classes"])
+    assert all(item["redaction_required"] is True for item in body["allowed_signal_classes"])
+
+    denied_ids = {item["id"] for item in body["denied_signal_classes"]}
+    assert denied_ids == {
+        "raw_customer_artifact",
+        "tenant_memory_trace",
+        "tenant_receipt_payload",
+        "credential_or_connector_secret",
+        "support_session_private_context",
+        "tenant_identifying_metadata",
+    }
+    assert body["denied_signal_count"] == len(body["denied_signal_classes"])
+    assert all(item["allowed"] is False for item in body["denied_signal_classes"])
+    assert all(item["status"] == "denied" for item in body["denied_signal_classes"])
+
+    assert body["approval_gates_required"] == [
+        "tenant_policy_allows_safe_delta_export",
+        "tenant_admin_or_operator_approval",
+        "redaction_and_abstraction_review",
+        "lineage_attribution_review",
+        "risk_tier_review",
+        "revocation_and_retention_review",
+    ]
+    assert body["required_receipts"] == [
+        "safe_delta_preflight_receipt",
+        "redaction_review_receipt",
+        "tenant_policy_allowance_receipt",
+        "operator_approval_receipt",
+        "delta_lineage_receipt",
+        "safe_delta_export_receipt",
+        "core_learning_ingest_receipt",
+    ]
+    assert body["flow_states"] == [
+        "candidate_detected",
+        "redaction_pending",
+        "operator_review_required",
+        "tenant_policy_blocked",
+        "approved_for_delta",
+        "export_disabled",
+        "ingest_disabled",
+        "revoked",
+    ]
+    assert body["blocked_failure_modes"] == [
+        "raw_private_data_pooling",
+        "tenant_reidentification",
+        "cross_customer_contamination",
+        "unattributed_core_learning",
+        "policy_bypass_learning",
+        "support_confusion",
+    ]
+
+    assert body["read_only"] is True
+    assert body["projection_only"] is True
+    assert body["writes_registry"] is False
+    assert body["writes_memory"] is False
+    assert body["writes_receipts"] is False
+    assert body["writes_tenant_state"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["launches_browser"] is False
+    assert body["captures_screen"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["raw_private_pooling_allowed"] is False
+    assert body["cross_tenant_data_flow_allowed"] is False
+    assert body["tenant_reidentification_allowed"] is False
+    assert body["unattributed_learning_allowed"] is False
+    assert body["safe_delta_flow_active"] is False
+
+    governance = body["governance"]
+    assert governance["read_only"] is True
+    assert governance["projection_only"] is True
+    assert governance["copy_creation_enabled"] is False
+    assert governance["writes_tenant_state"] is False
+    assert governance["writes_receipts"] is False
+    assert governance["grants_execution_authority"] is False
+    assert governance["grants_mutation_authority"] is False
     assert not data_root.exists()
 
 

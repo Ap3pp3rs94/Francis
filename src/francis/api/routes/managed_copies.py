@@ -8,6 +8,7 @@ from francis.managed_copies import (
     managed_copies_status_snapshot,
     managed_copy_creation_contract_snapshot,
     managed_copy_isolation_rules_contract_snapshot,
+    managed_copy_safe_delta_model_contract_snapshot,
 )
 
 router = APIRouter()
@@ -26,3 +27,8 @@ def copy_creation_contract() -> dict[str, Any]:
 @router.get("/isolation-rules-contract")
 def isolation_rules_contract() -> dict[str, Any]:
     return managed_copy_isolation_rules_contract_snapshot()
+
+
+@router.get("/safe-delta-model-contract")
+def safe_delta_model_contract() -> dict[str, Any]:
+    return managed_copy_safe_delta_model_contract_snapshot()

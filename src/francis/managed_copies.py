@@ -6,6 +6,7 @@ STAGE18_MANAGED_COPIES_STAGE = "Stage 18 / Managed Copies Platform"
 MANAGED_COPIES_STATUS_KIND = "francis.stage18.managed_copies.status"
 MANAGED_COPIES_COPY_CREATION_CONTRACT_KIND = "francis.stage18.managed_copies.copy_creation_contract"
 MANAGED_COPIES_ISOLATION_RULES_CONTRACT_KIND = "francis.stage18.managed_copies.isolation_rules_contract"
+MANAGED_COPIES_SAFE_DELTA_MODEL_CONTRACT_KIND = "francis.stage18.managed_copies.safe_delta_model_contract"
 STAGE17_OPERATOR_EVIDENCE_REFS_GAP = "stage17_capability_library_operator_proposal_evidence_refs"
 
 
@@ -108,6 +109,23 @@ def _isolation_domain(
     }
 
 
+def _safe_delta_signal_class(
+    signal_id: str,
+    title: str,
+    *,
+    allowed: bool,
+    status: str,
+    redaction_required: bool = True,
+) -> dict[str, Any]:
+    return {
+        "id": signal_id,
+        "title": title,
+        "allowed": allowed,
+        "status": status,
+        "redaction_required": redaction_required,
+    }
+
+
 def managed_copies_status_snapshot() -> dict[str, Any]:
     """Return the Stage 18 managed-copy substrate posture without creating state."""
     governance = _governance()
@@ -146,8 +164,11 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "safe_delta_model",
             "Safe delta model",
             ready=False,
-            status="pending",
+            status="contract_readback_ready",
             next_gap="stage18_safe_delta_model",
+            evidence=[
+                "GET /managed-copies/safe-delta-model-contract exposes allowed signal classes without exporting data.",
+            ],
         ),
         _deliverable(
             "rogue_recovery",
@@ -196,6 +217,7 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "status": "/managed-copies/status",
             "copy_creation_contract": "/managed-copies/copy-creation-contract",
             "isolation_rules_contract": "/managed-copies/isolation-rules-contract",
+            "safe_delta_model_contract": "/managed-copies/safe-delta-model-contract",
         },
         "managed_copy_roles_required": [
             "end_user",
@@ -529,5 +551,166 @@ def managed_copy_isolation_rules_contract_snapshot() -> dict[str, Any]:
         "raw_private_pooling_allowed": False,
         "support_backdoor_allowed": False,
         "tenant_state_shared": False,
+        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+    }
+
+
+def managed_copy_safe_delta_model_contract_snapshot() -> dict[str, Any]:
+    """Return the safe-delta model contract without exporting tenant data."""
+    governance = _governance()
+    allowed_signal_classes = [
+        _safe_delta_signal_class(
+            "capability_metadata",
+            "Capability metadata that preserves pack lineage without customer artifacts",
+            allowed=True,
+            status="contract_only",
+        ),
+        _safe_delta_signal_class(
+            "policy_hardening_delta",
+            "Policy hardening deltas that improve defaults without tenant secrets",
+            allowed=True,
+            status="contract_only",
+        ),
+        _safe_delta_signal_class(
+            "quality_gate_learning",
+            "Quality gate learnings expressed as non-sensitive rule improvements",
+            allowed=True,
+            status="contract_only",
+        ),
+        _safe_delta_signal_class(
+            "regression_case_summary",
+            "Regression case summaries with tenant details removed",
+            allowed=True,
+            status="contract_only",
+        ),
+        _safe_delta_signal_class(
+            "performance_signal",
+            "Performance and reliability signals without private payloads",
+            allowed=True,
+            status="contract_only",
+        ),
+        _safe_delta_signal_class(
+            "class_level_friction_pattern",
+            "Class-level friction patterns that do not identify a tenant or artifact",
+            allowed=True,
+            status="contract_only",
+        ),
+        _safe_delta_signal_class(
+            "non_sensitive_outcome_metric",
+            "Non-sensitive outcome metrics that cannot reconstruct tenant work",
+            allowed=True,
+            status="contract_only",
+        ),
+    ]
+    denied_signal_classes = [
+        _safe_delta_signal_class(
+            "raw_customer_artifact",
+            "Raw customer files, transcripts, messages, or artifacts",
+            allowed=False,
+            status="denied",
+        ),
+        _safe_delta_signal_class(
+            "tenant_memory_trace",
+            "Tenant memory and continuity traces",
+            allowed=False,
+            status="denied",
+        ),
+        _safe_delta_signal_class(
+            "tenant_receipt_payload",
+            "Tenant receipt payloads outside an explicit support/audit scope",
+            allowed=False,
+            status="denied",
+        ),
+        _safe_delta_signal_class(
+            "credential_or_connector_secret",
+            "Credentials, connector secrets, or raw integration payloads",
+            allowed=False,
+            status="denied",
+        ),
+        _safe_delta_signal_class(
+            "support_session_private_context",
+            "Support session private context and operator notes",
+            allowed=False,
+            status="denied",
+        ),
+        _safe_delta_signal_class(
+            "tenant_identifying_metadata",
+            "Tenant-identifying metadata that can re-link an abstracted signal",
+            allowed=False,
+            status="denied",
+        ),
+    ]
+    return {
+        "ok": True,
+        "kind": MANAGED_COPIES_SAFE_DELTA_MODEL_CONTRACT_KIND,
+        "stage": STAGE18_MANAGED_COPIES_STAGE,
+        "source_id": "managed_copies",
+        "status": "contract_readback_ready",
+        "contract_readback_ready": True,
+        "safe_delta_model_ready": False,
+        "delta_export_enabled": False,
+        "delta_import_enabled": False,
+        "learning_write_enabled": False,
+        "copy_creation_enabled": False,
+        "stage17_closed_by_receipt": False,
+        "stage17_blocker": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "allowed_signal_classes": allowed_signal_classes,
+        "denied_signal_classes": denied_signal_classes,
+        "allowed_signal_count": len(allowed_signal_classes),
+        "denied_signal_count": len(denied_signal_classes),
+        "approval_gates_required": [
+            "tenant_policy_allows_safe_delta_export",
+            "tenant_admin_or_operator_approval",
+            "redaction_and_abstraction_review",
+            "lineage_attribution_review",
+            "risk_tier_review",
+            "revocation_and_retention_review",
+        ],
+        "required_receipts": [
+            "safe_delta_preflight_receipt",
+            "redaction_review_receipt",
+            "tenant_policy_allowance_receipt",
+            "operator_approval_receipt",
+            "delta_lineage_receipt",
+            "safe_delta_export_receipt",
+            "core_learning_ingest_receipt",
+        ],
+        "flow_states": [
+            "candidate_detected",
+            "redaction_pending",
+            "operator_review_required",
+            "tenant_policy_blocked",
+            "approved_for_delta",
+            "export_disabled",
+            "ingest_disabled",
+            "revoked",
+        ],
+        "blocked_failure_modes": [
+            "raw_private_data_pooling",
+            "tenant_reidentification",
+            "cross_customer_contamination",
+            "unattributed_core_learning",
+            "policy_bypass_learning",
+            "support_confusion",
+        ],
+        "governance": governance,
+        "read_only": governance["read_only"],
+        "projection_only": governance["projection_only"],
+        "writes_registry": governance["writes_registry"],
+        "writes_memory": governance["writes_memory"],
+        "writes_receipts": governance["writes_receipts"],
+        "writes_tenant_state": governance["writes_tenant_state"],
+        "runs_tools": governance["runs_tools"],
+        "runs_shell": governance["runs_shell"],
+        "runs_git": governance["runs_git"],
+        "launches_browser": governance["launches_browser"],
+        "captures_screen": governance["captures_screen"],
+        "grants_execution_authority": governance["grants_execution_authority"],
+        "grants_mutation_authority": governance["grants_mutation_authority"],
+        "raw_private_pooling_allowed": False,
+        "cross_tenant_data_flow_allowed": False,
+        "tenant_reidentification_allowed": False,
+        "unattributed_learning_allowed": False,
+        "safe_delta_flow_active": False,
         "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
     }
