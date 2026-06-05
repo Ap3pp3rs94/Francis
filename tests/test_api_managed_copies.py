@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from fastapi.testclient import TestClient
 
 from francis.api.app import create_app
@@ -36,6 +38,7 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
         "roles_contract": "/managed-copies/roles-contract",
         "decommission_contract": "/managed-copies/decommission-contract",
         "runtime_evidence_contract": "/managed-copies/runtime-evidence-contract",
+        "runtime_evidence_readbacks": "/managed-copies/runtime-evidence-readbacks",
         "completion_review": "/managed-copies/completion-review",
     }
 
@@ -130,6 +133,21 @@ def test_managed_copy_completion_review_blocks_closure_without_runtime_evidence(
     assert body["stage18_completion_review_ready"] is False
     assert body["ready_to_close"] is False
     assert body["stage_closure_decision_required"] is False
+    assert body["runtime_evidence_readback_ready"] is False
+    assert body["runtime_evidence_readbacks"]["status"] == "empty"
+    assert body["runtime_evidence_readbacks"]["count"] == 0
+    assert body["runtime_evidence_readbacks"]["ready_count"] == 0
+    assert body["runtime_evidence_readbacks"]["required_count"] == body["required_count"]
+    assert body["runtime_evidence_readbacks"]["missing_evidence"] == [
+        "stage17_closure_receipt",
+        "copy_creation_runtime_proof",
+        "tenant_isolation_runtime_proof",
+        "safe_delta_runtime_proof",
+        "rogue_recovery_runtime_proof",
+        "sla_runtime_proof",
+        "role_authority_runtime_proof",
+        "decommission_runtime_proof",
+    ]
     assert body["readback_ready_count"] == body["required_count"]
     assert body["runtime_ready_count"] == 0
     assert body["passed_count"] == 0
@@ -171,6 +189,7 @@ def test_managed_copy_completion_review_blocks_closure_without_runtime_evidence(
     }
     assert body["routes"]["completion_review"] == "/managed-copies/completion-review"
     assert body["routes"]["runtime_evidence_contract"] == "/managed-copies/runtime-evidence-contract"
+    assert body["routes"]["runtime_evidence_readbacks"] == "/managed-copies/runtime-evidence-readbacks"
 
     assert body["read_only"] is True
     assert body["projection_only"] is True
@@ -224,6 +243,7 @@ def test_managed_copy_runtime_evidence_contract_is_readonly_and_not_recording(
     assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
     assert body["completion_review_route"] == "/managed-copies/completion-review"
     assert body["routes"]["runtime_evidence_contract"] == "/managed-copies/runtime-evidence-contract"
+    assert body["routes"]["runtime_evidence_readbacks"] == "/managed-copies/runtime-evidence-readbacks"
     assert body["ready_count"] == 0
     assert body["required_count"] == len(body["requirements"])
 
@@ -299,6 +319,141 @@ def test_managed_copy_runtime_evidence_contract_is_readonly_and_not_recording(
     assert governance["grants_execution_authority"] is False
     assert governance["grants_mutation_authority"] is False
     assert not data_root.exists()
+
+
+def test_managed_copy_runtime_evidence_readbacks_are_empty_and_readonly(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    response = TestClient(create_app()).get("/managed-copies/runtime-evidence-readbacks")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kind"] == "francis.stage18.managed_copies.runtime_evidence_readbacks"
+    assert body["stage"] == "Stage 18 / Managed Copies Platform"
+    assert body["source_id"] == "managed_copies"
+    assert body["status"] == "empty"
+    assert body["items"] == []
+    assert body["count"] == 0
+    assert body["receipt_ready_count"] == 0
+    assert body["ready_count"] == 0
+    assert body["required_count"] == len(body["checks"])
+    assert body["runtime_evidence_readback_ready"] is False
+    assert body["runtime_evidence_ready"] is False
+    assert body["runtime_evidence_recording_enabled"] is False
+    assert body["expected_receipt_path"] == "logs/managed_copies/runtime_evidence.jsonl"
+    assert body["missing_evidence"] == [
+        "stage17_closure_receipt",
+        "copy_creation_runtime_proof",
+        "tenant_isolation_runtime_proof",
+        "safe_delta_runtime_proof",
+        "rogue_recovery_runtime_proof",
+        "sla_runtime_proof",
+        "role_authority_runtime_proof",
+        "decommission_runtime_proof",
+    ]
+    assert body["missing_blockers"] == [
+        "stage17_capability_library_operator_proposal_evidence_refs",
+        "stage18_copy_creation_runtime_not_implemented",
+        "stage18_tenant_isolation_runtime_not_implemented",
+        "stage18_safe_delta_runtime_not_implemented",
+        "stage18_rogue_recovery_runtime_not_implemented",
+        "stage18_sla_runtime_not_implemented",
+        "stage18_role_authority_runtime_not_implemented",
+        "stage18_decommission_runtime_not_implemented",
+    ]
+    assert all(item["passed"] is False for item in body["checks"])
+    assert all(item["receipt_ready"] is False for item in body["checks"])
+    assert all(item["status"] == "not_observed" for item in body["checks"])
+
+    assert body["read_only"] is True
+    assert body["projection_only"] is True
+    assert body["writes_registry"] is False
+    assert body["writes_memory"] is False
+    assert body["writes_receipts"] is False
+    assert body["writes_tenant_state"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["launches_browser"] is False
+    assert body["captures_screen"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+
+    governance = body["governance"]
+    assert governance["runtime_evidence_readback_only"] is True
+    assert governance["does_not_record_runtime_evidence"] is True
+    assert governance["does_not_mark_stage_closed"] is True
+    assert governance["writes_receipts"] is False
+    assert governance["writes_tenant_state"] is False
+    assert not data_root.exists()
+
+
+def test_managed_copy_runtime_evidence_readbacks_consume_existing_receipts_without_writing(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    receipt_path = data_root / "logs" / "managed_copies" / "runtime_evidence.jsonl"
+    receipt_path.parent.mkdir(parents=True)
+    receipt_path.write_text(
+        json.dumps(
+            {
+                "requirement_id": "copy_creation_runtime_proof",
+                "proof_kind": "managed_copy_creation_runtime_receipt",
+                "receipt_id": "mc-copy-runtime-proof-1",
+                "trace_id": "trace-managed-copy-runtime-proof-1",
+                "status": "observed",
+                "observed": True,
+                "evidence_summary": "bounded test receipt for managed-copy creation runtime proof",
+                "governance": {
+                    "runtime_evidence_receipt": True,
+                    "trace_linked": True,
+                    "redacted": True,
+                    "contains_raw_private_data": False,
+                    "grants_execution_authority": False,
+                    "grants_mutation_authority": False,
+                },
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    response = TestClient(create_app()).get("/managed-copies/runtime-evidence-readbacks")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "partial"
+    assert body["count"] == 1
+    assert body["receipt_ready_count"] == 1
+    assert body["ready_count"] == 1
+    assert body["runtime_evidence_readback_ready"] is False
+    assert body["missing_evidence"] == [
+        "stage17_closure_receipt",
+        "tenant_isolation_runtime_proof",
+        "safe_delta_runtime_proof",
+        "rogue_recovery_runtime_proof",
+        "sla_runtime_proof",
+        "role_authority_runtime_proof",
+        "decommission_runtime_proof",
+    ]
+    check_by_id = {item["id"]: item for item in body["checks"]}
+    assert check_by_id["copy_creation_runtime_proof"]["passed"] is True
+    assert check_by_id["copy_creation_runtime_proof"]["receipt_id"] == "mc-copy-runtime-proof-1"
+    assert check_by_id["copy_creation_runtime_proof"]["proof_kind"] == "managed_copy_creation_runtime_receipt"
+    assert check_by_id["copy_creation_runtime_proof"]["trace_id"] == "trace-managed-copy-runtime-proof-1"
+    assert check_by_id["copy_creation_runtime_proof"]["status"] == "observed"
+    assert body["writes_receipts"] is False
+    assert body["writes_tenant_state"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
 
 
 def test_managed_copy_decommission_contract_is_projection_only_and_inactive(

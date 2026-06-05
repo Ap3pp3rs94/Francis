@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
+
+from francis.kernel.paths import data_dir
 
 STAGE18_MANAGED_COPIES_STAGE = "Stage 18 / Managed Copies Platform"
 MANAGED_COPIES_STATUS_KIND = "francis.stage18.managed_copies.status"
@@ -13,7 +17,40 @@ MANAGED_COPIES_ROLES_CONTRACT_KIND = "francis.stage18.managed_copies.roles_contr
 MANAGED_COPIES_DECOMMISSION_CONTRACT_KIND = "francis.stage18.managed_copies.decommission_contract"
 MANAGED_COPIES_COMPLETION_REVIEW_KIND = "francis.stage18.managed_copies.completion_review"
 MANAGED_COPIES_RUNTIME_EVIDENCE_CONTRACT_KIND = "francis.stage18.managed_copies.runtime_evidence_contract"
+MANAGED_COPIES_RUNTIME_EVIDENCE_READBACKS_KIND = "francis.stage18.managed_copies.runtime_evidence_readbacks"
 STAGE17_OPERATOR_EVIDENCE_REFS_GAP = "stage17_capability_library_operator_proposal_evidence_refs"
+
+
+def _safe_str(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value)
+
+
+def _safe_limit(value: int, *, default: int = 100) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = default
+    return min(max(parsed, 1), 500)
+
+
+def _runtime_evidence_path() -> Path:
+    return data_dir() / "logs" / "managed_copies" / "runtime_evidence.jsonl"
+
+
+def _read_jsonl_tail(path: Path, *, limit: int) -> list[dict[str, Any]]:
+    if not path.exists() or not path.is_file():
+        return []
+    rows: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines()[-_safe_limit(limit) :]:
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(item, dict):
+            rows.append(item)
+    return rows
 
 
 def _deliverable(
@@ -272,6 +309,35 @@ def _runtime_evidence_requirement(
     }
 
 
+def _runtime_evidence_ready(item: dict[str, Any], requirement: dict[str, Any]) -> bool:
+    raw_governance = item.get("governance")
+    governance: dict[str, Any] = raw_governance if isinstance(raw_governance, dict) else {}
+    return (
+        _safe_str(item.get("requirement_id")).strip() == requirement["id"]
+        and _safe_str(item.get("proof_kind")).strip() == requirement["proof_kind"]
+        and _safe_str(item.get("receipt_id")).strip() != ""
+        and _safe_str(item.get("trace_id")).strip() != ""
+        and _safe_str(item.get("evidence_summary")).strip() != ""
+        and bool(item.get("observed"))
+        and _safe_str(item.get("status")).strip() == "observed"
+        and bool(governance.get("runtime_evidence_receipt"))
+        and bool(governance.get("trace_linked"))
+        and bool(governance.get("redacted"))
+        and not bool(governance.get("contains_raw_private_data"))
+        and not bool(governance.get("grants_execution_authority"))
+        and not bool(governance.get("grants_mutation_authority"))
+    )
+
+
+def _latest_runtime_evidence_by_requirement(items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    latest: dict[str, dict[str, Any]] = {}
+    for item in items:
+        requirement_id = _safe_str(item.get("requirement_id")).strip()
+        if requirement_id:
+            latest[requirement_id] = item
+    return latest
+
+
 def managed_copies_status_snapshot() -> dict[str, Any]:
     """Return the Stage 18 managed-copy substrate posture without creating state."""
     governance = _governance()
@@ -381,6 +447,7 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "roles_contract": "/managed-copies/roles-contract",
             "decommission_contract": "/managed-copies/decommission-contract",
             "runtime_evidence_contract": "/managed-copies/runtime-evidence-contract",
+            "runtime_evidence_readbacks": "/managed-copies/runtime-evidence-readbacks",
             "completion_review": "/managed-copies/completion-review",
         },
         "managed_copy_roles_required": [
@@ -1564,6 +1631,7 @@ def managed_copy_completion_review_snapshot() -> dict[str, Any]:
     runtime_ready = all(check["runtime_ready"] for check in checks)
     ready_to_close = readback_ready and runtime_ready
     blockers = [check["blocker"] for check in checks if not check["passed"]]
+    runtime_evidence_readbacks = managed_copy_runtime_evidence_readbacks_snapshot()
     return {
         "ok": True,
         "kind": MANAGED_COPIES_COMPLETION_REVIEW_KIND,
@@ -1576,6 +1644,14 @@ def managed_copy_completion_review_snapshot() -> dict[str, Any]:
         "stage18_completion_review_ready": ready_to_close,
         "ready_to_close": ready_to_close,
         "stage_closure_decision_required": ready_to_close,
+        "runtime_evidence_readback_ready": bool(runtime_evidence_readbacks["runtime_evidence_readback_ready"]),
+        "runtime_evidence_readbacks": {
+            "status": runtime_evidence_readbacks["status"],
+            "count": runtime_evidence_readbacks["count"],
+            "ready_count": runtime_evidence_readbacks["ready_count"],
+            "required_count": runtime_evidence_readbacks["required_count"],
+            "missing_evidence": runtime_evidence_readbacks["missing_evidence"],
+        },
         "checks": checks,
         "readback_ready_count": sum(1 for check in checks if check["readback_ready"]),
         "runtime_ready_count": sum(1 for check in checks if check["runtime_ready"]),
@@ -1726,4 +1802,79 @@ def managed_copy_runtime_evidence_contract_snapshot() -> dict[str, Any]:
         "grants_execution_authority": governance["grants_execution_authority"],
         "grants_mutation_authority": governance["grants_mutation_authority"],
         "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+    }
+
+
+def managed_copy_runtime_evidence_readbacks_snapshot(*, limit: int = 100) -> dict[str, Any]:
+    """Return managed-copy runtime evidence receipts already present on disk."""
+    governance = _governance()
+    contract = managed_copy_runtime_evidence_contract_snapshot()
+    items = _read_jsonl_tail(_runtime_evidence_path(), limit=limit)
+    latest_by_requirement = _latest_runtime_evidence_by_requirement(items)
+    checks: list[dict[str, Any]] = []
+    for requirement in contract["requirements"]:
+        item = latest_by_requirement.get(requirement["id"], {})
+        receipt_ready = _runtime_evidence_ready(item, requirement)
+        checks.append(
+            {
+                "id": requirement["id"],
+                "passed": receipt_ready,
+                "receipt_ready": receipt_ready,
+                "status": "observed" if receipt_ready else "not_observed",
+                "receipt_id": _safe_str(item.get("receipt_id")).strip(),
+                "proof_kind": _safe_str(item.get("proof_kind")).strip(),
+                "trace_id": _safe_str(item.get("trace_id")).strip(),
+                "source_contract_route": requirement["source_contract_route"],
+                "blocker": requirement["blocker"],
+                "evidence": _safe_str(item.get("evidence_summary")).strip()
+                or f"no {requirement['id']} runtime evidence receipt has been recorded",
+            }
+        )
+    missing_evidence = [check["id"] for check in checks if not check["passed"]]
+    ready = not missing_evidence
+    return {
+        "ok": True,
+        "kind": MANAGED_COPIES_RUNTIME_EVIDENCE_READBACKS_KIND,
+        "stage": STAGE18_MANAGED_COPIES_STAGE,
+        "source_id": "managed_copies",
+        "status": "ready" if ready else "partial" if items else "empty",
+        "items": items,
+        "checks": checks,
+        "count": len(items),
+        "receipt_ready_count": sum(1 for check in checks if check["receipt_ready"]),
+        "ready_count": sum(1 for check in checks if check["passed"]),
+        "required_count": len(checks),
+        "runtime_evidence_readback_ready": ready,
+        "runtime_evidence_ready": ready,
+        "missing_evidence": missing_evidence,
+        "missing_blockers": [check["blocker"] for check in checks if not check["passed"]],
+        "expected_receipt_path": "logs/managed_copies/runtime_evidence.jsonl",
+        "runtime_evidence_recording_enabled": False,
+        "routes": {
+            **contract["routes"],
+            "runtime_evidence_readbacks": "/managed-copies/runtime-evidence-readbacks",
+        },
+        "governance": {
+            **governance,
+            "runtime_evidence_readback_only": True,
+            "does_not_record_runtime_evidence": True,
+            "does_not_mark_stage_closed": True,
+        },
+        "read_only": governance["read_only"],
+        "projection_only": governance["projection_only"],
+        "copy_creation_enabled": governance["copy_creation_enabled"],
+        "writes_registry": governance["writes_registry"],
+        "writes_memory": governance["writes_memory"],
+        "writes_receipts": governance["writes_receipts"],
+        "writes_tenant_state": governance["writes_tenant_state"],
+        "runs_tools": governance["runs_tools"],
+        "runs_shell": governance["runs_shell"],
+        "runs_git": governance["runs_git"],
+        "launches_browser": governance["launches_browser"],
+        "captures_screen": governance["captures_screen"],
+        "grants_execution_authority": governance["grants_execution_authority"],
+        "grants_mutation_authority": governance["grants_mutation_authority"],
+        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP
+        if missing_evidence
+        else "stage18_completion_review",
     }

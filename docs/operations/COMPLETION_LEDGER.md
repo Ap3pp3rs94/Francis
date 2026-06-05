@@ -64691,6 +64691,61 @@ Remaining truthful gap:
   state, purge memory, revoke credentials, unpair nodes, or write
   decommission/closure receipts.
 
+### Stage 18 managed-copy runtime evidence readback
+
+This pass made future managed-copy runtime evidence receipts inspectable without
+recording receipts, collecting evidence, closing Stage 18, creating managed
+copies, enforcing tenant isolation, exporting safe deltas, activating SLAs,
+binding roles, or decommissioning tenant state.
+
+Shipped behavior:
+
+- `src/francis/managed_copies.py` now exposes
+  `managed_copy_runtime_evidence_readbacks_snapshot()`, a read-only JSONL
+  receipt summary for managed-copy runtime evidence.
+- `GET /managed-copies/runtime-evidence-readbacks` now reads existing
+  `logs/managed_copies/runtime_evidence.jsonl` receipts when present and reports
+  missing evidence for the Stage 17 closure, copy creation, tenant isolation,
+  safe-delta, rogue-recovery, SLA, role-authority, and decommission proof slots.
+- `GET /managed-copies/status`, `GET /managed-copies/completion-review`, and
+  `GET /managed-copies/runtime-evidence-contract` now advertise the runtime
+  evidence readback route.
+- With no receipts present, the readback reports `status: empty`,
+  `runtime_evidence_readback_ready: false`, `runtime_evidence_ready: false`,
+  all required evidence IDs as missing, and the next smallest truthful gap as
+  `stage17_capability_library_operator_proposal_evidence_refs`.
+- When an existing valid runtime evidence receipt is present, the readback
+  counts that requirement as observed without writing a receipt or creating any
+  authority.
+- The readback is projection-only: it does not write registries, write memory,
+  write receipts, write tenant state, run tools, run shell, run git, launch
+  browsers, capture screens, grant execution authority, or grant mutation
+  authority.
+
+Latest validation for this readback:
+
+- Focused API contract tests:
+  `python -m pytest tests\test_api_managed_copies.py tests\test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted -q`
+  Result: 13 tests passed.
+- Ruff lint:
+  `python -m ruff check src\francis\managed_copies.py src\francis\api\routes\managed_copies.py tests\test_api_managed_copies.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Ruff format check:
+  `python -m ruff format --check src\francis\managed_copies.py src\francis\api\routes\managed_copies.py tests\test_api_managed_copies.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Mypy:
+  `python -m mypy src\francis\managed_copies.py src\francis\api\routes\managed_copies.py`
+  Result: passed.
+
+Remaining truthful gap:
+
+- This does not close Stage 17, close Stage 18, record runtime evidence, create
+  managed copies, enforce tenant isolation at runtime, export or import safe
+  deltas, detect/replace live rogue instances, activate SLA commitments, bind
+  managed-copy roles, export tenant data, delete tenant state, purge memory,
+  revoke credentials, unpair nodes, write decommission receipts, or write
+  closure receipts.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -12,6 +12,7 @@ from francis.managed_copies import (
     managed_copy_isolation_rules_contract_snapshot,
     managed_copy_rogue_recovery_contract_snapshot,
     managed_copy_runtime_evidence_contract_snapshot,
+    managed_copy_runtime_evidence_readbacks_snapshot,
     managed_copy_safe_delta_model_contract_snapshot,
     managed_copy_sla_framework_contract_snapshot,
     managed_copy_roles_contract_snapshot,
@@ -68,3 +69,8 @@ def completion_review() -> dict[str, Any]:
 @router.get("/runtime-evidence-contract")
 def runtime_evidence_contract() -> dict[str, Any]:
     return managed_copy_runtime_evidence_contract_snapshot()
+
+
+@router.get("/runtime-evidence-readbacks")
+def runtime_evidence_readbacks(limit: int = 100) -> dict[str, Any]:
+    return managed_copy_runtime_evidence_readbacks_snapshot(limit=limit)
