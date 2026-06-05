@@ -65256,6 +65256,60 @@ Remaining truthful gap:
   tenant identity or policy, write runtime evidence receipts, write
   copy-creation receipts, or write closure receipts.
 
+### 2026-06-05 - Stage 17 operator proposal-evidence refs record first live capability
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence for the capability-library promotion path.
+
+This pass used the governed operator proposal-evidence intake route to record
+real local artifact references for the first queued capability in the local
+Stage 17 capability-library backlog. The refs were supplied for pack
+`legacy.generated.bulkdirectplugin` and capability
+`1780356595_bulkdirectplugin`.
+
+Recorded evidence refs:
+
+- `artifact:plugins/proposals/plugin_proposal_1780524086_1780356595-bulkdirectplugin.json`
+- `artifact:plugins/validations/plugin_validation_1780524086_1780356595-bulkdirectplugin.json`
+- `artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1780356798_legacy-generated-bulkdirectplugin.json`
+- `artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1780632847_legacy-generated-bulkdirectplugin_548400.json`
+
+Latest validation for this live Stage 17 intake:
+
+- Artifact existence check:
+  all four referenced local files existed under `data/artifacts/plugins`.
+- Governed dry-run/apply:
+  `POST /plugins/capabilities/library/proposal-evidence/operator-intake/apply`
+  was called with actor `stage17.operator`,
+  `FRANCIS_API_ACTOR_SCOPES={"stage17.operator":["plugins.write"]}`,
+  `dry_run: true`, and then the returned dry-run fingerprint. Dry-run returned
+  `ok: true`, `status: dry_run`, `evidence_ref_count: 4`, and a fingerprint.
+  Apply returned `ok: true`, `status: recorded`, `applied: true`, and
+  `evidence_ref_count: 4`.
+- Public readback:
+  `GET /plugins/capabilities/library/proposal-evidence/operator-intake/audit`
+  returned `status: operator_evidence_refs_partially_recorded`,
+  `recorded_capability_count: 1`, and `evidence_ref_count: 4`.
+- Queue readback:
+  `GET /plugins/capabilities/library/proposal-evidence/operator-intake/checklist`
+  returned `status: ready_for_operator_evidence_refs`,
+  `candidate_pack_count: 45`, `candidate_capability_count: 2261`, and
+  `evidence_ref_required_count: 2261`.
+- Source-readiness readback:
+  `GET /plugins/capabilities/library/proposal-evidence/source-readiness`
+  returned `status: operator_evidence_refs_required` and next gap
+  `stage17_capability_library_operator_proposal_evidence_refs`,
+  `recorded_operator_evidence_refs.recorded_capability_count: 1`, and
+  `operator_supplied_evidence_refs.evidence_ref_required_count: 2261`.
+
+Remaining truthful gap:
+
+- This does not close Stage 17, promote capabilities, approve proposals, close
+  the proposal-review or promotion gates, independently verify artifact truth,
+  clear the remaining 2261 capability evidence refs, close Stage 18, create
+  managed copies, write managed-copy receipts, enforce tenant isolation, export
+  safe deltas, activate SLAs, bind roles, or decommission tenant state.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
