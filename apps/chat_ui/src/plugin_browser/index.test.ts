@@ -5,6 +5,7 @@ import {
   PluginBrowserApiError,
   PluginBrowserClient,
   operatorEvidenceExportRowsToImportPreviewText,
+  summarizeOperatorEvidenceIntakeResponseGuards,
   summarizeOperatorEvidenceImportPreviewGuards,
   summarizeOperatorEvidenceImportRowsText,
 } from "./index.ts";
@@ -181,6 +182,53 @@ test("summarizeOperatorEvidenceImportPreviewGuards preserves backend preview gua
   );
 
   assert.equal(summarizeOperatorEvidenceImportPreviewGuards(null).read_only, "unknown");
+});
+
+test("summarizeOperatorEvidenceIntakeResponseGuards preserves backend intake authority flags", () => {
+  assert.deepEqual(
+    summarizeOperatorEvidenceIntakeResponseGuards({
+      ok: true,
+      applied: false,
+      status: "dry_run",
+      dry_run: true,
+      dry_run_fingerprint: "abc123dryrunfingerprint",
+      dry_run_confirmation: {
+        required_for_apply: true,
+      },
+      governance: {
+        writes_registry_metadata: false,
+        writes_proposals: false,
+        dry_run_required_before_apply: true,
+        operator_supplied_evidence_not_independently_verified: true,
+        does_not_approve_proposals: true,
+        does_not_promote_capabilities: true,
+        memory_write: false,
+      },
+      planned: [],
+      recorded: [],
+      failed: [],
+      skipped: [],
+    }),
+    {
+      status: "dry_run",
+      dry_run: "true",
+      applied: "false",
+      dry_run_required_for_apply: "true",
+      dry_run_required_before_apply: "true",
+      dry_run_fingerprint_present: "true",
+      writes_registry_metadata: "false",
+      writes_proposals: "false",
+      does_not_approve_proposals: "true",
+      does_not_promote_capabilities: "true",
+      operator_supplied_evidence_not_independently_verified: "true",
+      memory_write: "false",
+    },
+  );
+
+  const unknown = summarizeOperatorEvidenceIntakeResponseGuards({ ok: false });
+  assert.equal(unknown.dry_run_required_for_apply, "unknown");
+  assert.equal(unknown.dry_run_fingerprint_present, "false");
+  assert.equal(unknown.does_not_approve_proposals, "unknown");
 });
 
 test("PluginBrowserClient lifecycle mutations send an explicit plugin actor", async () => {

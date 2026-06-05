@@ -1437,6 +1437,21 @@ export type PluginCapabilityLibraryOperatorEvidenceImportPreviewGuardSummary = {
   memory_write: string;
 };
 
+export type PluginCapabilityLibraryOperatorProposalEvidenceIntakeResponseGuardSummary = {
+  status: string;
+  dry_run: string;
+  applied: string;
+  dry_run_required_for_apply: string;
+  dry_run_required_before_apply: string;
+  dry_run_fingerprint_present: string;
+  writes_registry_metadata: string;
+  writes_proposals: string;
+  does_not_approve_proposals: string;
+  does_not_promote_capabilities: string;
+  operator_supplied_evidence_not_independently_verified: string;
+  memory_write: string;
+};
+
 export type PluginCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewRow = {
   row_index: number;
   pack_id?: string;
@@ -2016,6 +2031,29 @@ export function summarizeOperatorEvidenceImportPreviewGuards(
     writes_operator_evidence_metadata: booleanGuardStatus(governance.writes_operator_evidence_metadata),
     does_not_validate_evidence_truth: booleanGuardStatus(requirements.does_not_validate_evidence_truth),
     no_synthetic_evidence: booleanGuardStatus(requirements.no_synthetic_evidence),
+    memory_write: booleanGuardStatus(governance.memory_write),
+  };
+}
+
+export function summarizeOperatorEvidenceIntakeResponseGuards(
+  response: PluginCapabilityLibraryOperatorProposalEvidenceIntakeResponse | null | undefined,
+): PluginCapabilityLibraryOperatorProposalEvidenceIntakeResponseGuardSummary {
+  const governance = isRecord(response?.governance) ? response.governance : {};
+  const dryRunConfirmation = isRecord(response?.dry_run_confirmation) ? response.dry_run_confirmation : {};
+  return {
+    status: safeString(response?.status, response?.ok ? "ok" : "unknown") || "unknown",
+    dry_run: booleanGuardStatus(response?.dry_run),
+    applied: booleanGuardStatus(response?.applied),
+    dry_run_required_for_apply: booleanGuardStatus(dryRunConfirmation.required_for_apply),
+    dry_run_required_before_apply: booleanGuardStatus(governance.dry_run_required_before_apply),
+    dry_run_fingerprint_present: safeString(response?.dry_run_fingerprint, "").trim() ? "true" : "false",
+    writes_registry_metadata: booleanGuardStatus(governance.writes_registry_metadata),
+    writes_proposals: booleanGuardStatus(governance.writes_proposals),
+    does_not_approve_proposals: booleanGuardStatus(governance.does_not_approve_proposals),
+    does_not_promote_capabilities: booleanGuardStatus(governance.does_not_promote_capabilities),
+    operator_supplied_evidence_not_independently_verified: booleanGuardStatus(
+      governance.operator_supplied_evidence_not_independently_verified,
+    ),
     memory_write: booleanGuardStatus(governance.memory_write),
   };
 }

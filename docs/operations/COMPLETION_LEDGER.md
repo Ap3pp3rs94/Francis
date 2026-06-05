@@ -64032,6 +64032,41 @@ Remaining truthful gap:
   evidence refs. Stage 17 still requires real operator refs to pass through
   backend import-preview, dry-run, and governed apply.
 
+### Stage 17 operator evidence intake response guard readback
+
+This pass made the dry-run/apply intake response authority boundary explicit in
+the Chat UI after an operator evidence intake response exists.
+
+Shipped behavior:
+
+- `apps/chat_ui/src/plugin_browser/index.ts` now exposes
+  `summarizeOperatorEvidenceIntakeResponseGuards()`, a framework-agnostic
+  helper that preserves intake response guard flags as explicit `true`,
+  `false`, or `unknown` strings.
+- `apps/chat_ui/src/App.tsx` now renders response guard badges for dry-run
+  state, applied state, dry-run confirmation requirements, dry-run fingerprint
+  presence, registry/proposal writes, approval/promotion denial flags,
+  operator-supplied evidence truth limits, and memory writes.
+- The badges are readback only. They do not grant write authority, apply refs,
+  approve proposals, promote capabilities, validate evidence truth, or write
+  memory/registry metadata.
+
+Latest validation for this UI helper:
+
+- Chat UI client/contract tests:
+  `cd apps\chat_ui; npm run test -- src/plugin_browser/index.test.ts`
+  Result: 225 tests passed.
+- Chat UI production build:
+  `cd apps\chat_ui; npm run build`
+  Result: passed. Vite emitted the existing non-fatal large chunk warning.
+
+Remaining truthful gap:
+
+- This response readback does not supply, validate, dry-run, or apply real
+  operator evidence refs. Stage 17 still requires real operator refs to pass
+  through backend import-preview, dry-run, and governed apply before
+  proposal-evidence counts can move.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

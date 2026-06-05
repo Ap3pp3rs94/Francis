@@ -111,6 +111,7 @@ import {
   PluginBrowserApiError,
   PluginBrowserClient,
   operatorEvidenceExportRowsToImportPreviewText,
+  summarizeOperatorEvidenceIntakeResponseGuards,
   summarizeOperatorEvidenceImportPreviewGuards,
   summarizeOperatorEvidenceImportRowsText,
 } from "./plugin_browser";
@@ -18792,6 +18793,10 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
     () => summarizeOperatorEvidenceImportPreviewGuards(capabilityLibraryOperatorProposalEvidenceImportPreview),
     [capabilityLibraryOperatorProposalEvidenceImportPreview],
   );
+  const operatorProposalEvidenceIntakeResponseGuardSummary = useMemo(
+    () => summarizeOperatorEvidenceIntakeResponseGuards(capabilityLibraryOperatorProposalEvidenceIntakeResponse),
+    [capabilityLibraryOperatorProposalEvidenceIntakeResponse],
+  );
   const operatorProposalEvidenceAuditCounts = useMemo(
     () => ({
       packs: capabilityLibraryOperatorProposalEvidenceIntakeAudit?.recorded_pack_count ?? 0,
@@ -21376,63 +21381,114 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <span
                       style={badgeStyle(
-                        capabilityLibraryOperatorProposalEvidenceIntakeResponse.dry_run_confirmation?.required_for_apply
-                          ? "dry-run"
-                          : "blocked",
+                        operatorProposalEvidenceIntakeResponseGuardSummary.dry_run === "false" ? "clear" : "pending",
                       )}
                     >
-                      dry run required{" "}
-                      {String(
-                        capabilityLibraryOperatorProposalEvidenceIntakeResponse.dry_run_confirmation
-                          ?.required_for_apply ?? false,
-                      )}
+                      dry run {operatorProposalEvidenceIntakeResponseGuardSummary.dry_run}
                     </span>
                     <span
                       style={badgeStyle(
-                        capabilityLibraryOperatorProposalEvidenceIntakeResponse.governance?.writes_registry_metadata
-                          ? "write"
-                          : "dry_run",
+                        operatorProposalEvidenceIntakeResponseGuardSummary.applied === "false" ? "clear" : "pending",
                       )}
                     >
-                      registry{" "}
-                      <code>
-                        {String(
-                          capabilityLibraryOperatorProposalEvidenceIntakeResponse.governance?.writes_registry_metadata ??
-                            false,
-                        )}
-                      </code>
+                      applied {operatorProposalEvidenceIntakeResponseGuardSummary.applied}
                     </span>
-                    <span style={badgeStyle("clear")}>
-                      proposals{" "}
-                      <code>
-                        {String(
-                          capabilityLibraryOperatorProposalEvidenceIntakeResponse.governance?.writes_proposals ?? false,
-                        )}
-                      </code>
+                    <span
+                      style={badgeStyle(
+                        operatorProposalEvidenceIntakeResponseGuardSummary.dry_run_required_for_apply === "true"
+                          ? "clear"
+                          : "pending",
+                      )}
+                    >
+                      apply requires dry-run{" "}
+                      {operatorProposalEvidenceIntakeResponseGuardSummary.dry_run_required_for_apply}
                     </span>
-                    <span style={badgeStyle("clear")}>
-                      approvals{" "}
-                      <code>
-                        {String(
-                          capabilityLibraryOperatorProposalEvidenceIntakeResponse.governance
-                            ?.does_not_approve_proposals === false,
-                        )}
-                      </code>
+                    <span
+                      style={badgeStyle(
+                        operatorProposalEvidenceIntakeResponseGuardSummary.dry_run_required_before_apply === "true"
+                          ? "clear"
+                          : "pending",
+                      )}
+                    >
+                      dry-run required before apply{" "}
+                      {operatorProposalEvidenceIntakeResponseGuardSummary.dry_run_required_before_apply}
                     </span>
-                    <span style={badgeStyle("clear")}>
-                      promotion{" "}
-                      <code>
-                        {String(
-                          capabilityLibraryOperatorProposalEvidenceIntakeResponse.governance
-                            ?.does_not_promote_capabilities === false,
-                        )}
-                      </code>
+                    <span
+                      style={badgeStyle(
+                        operatorProposalEvidenceIntakeResponseGuardSummary.dry_run_fingerprint_present === "true"
+                          ? "clear"
+                          : "pending",
+                      )}
+                    >
+                      dry-run fingerprint present{" "}
+                      {operatorProposalEvidenceIntakeResponseGuardSummary.dry_run_fingerprint_present}
                     </span>
-                    <span style={badgeStyle("clear")}>
-                      memory{" "}
-                      <code>
-                        {String(capabilityLibraryOperatorProposalEvidenceIntakeResponse.governance?.memory_write ?? false)}
-                      </code>
+                    <span
+                      style={badgeStyle(
+                        operatorProposalEvidenceIntakeResponseGuardSummary.writes_registry_metadata === "false"
+                          ? "clear"
+                          : "pending",
+                      )}
+                    >
+                      registry writes {operatorProposalEvidenceIntakeResponseGuardSummary.writes_registry_metadata}
+                    </span>
+                    <span
+                      style={badgeStyle(
+                        operatorProposalEvidenceIntakeResponseGuardSummary.writes_proposals === "false"
+                          ? "clear"
+                          : "pending",
+                      )}
+                    >
+                      proposal writes {operatorProposalEvidenceIntakeResponseGuardSummary.writes_proposals}
+                    </span>
+                    <span
+                      style={badgeStyle(
+                        operatorProposalEvidenceIntakeResponseGuardSummary.does_not_approve_proposals === "true"
+                          ? "clear"
+                          : operatorProposalEvidenceIntakeResponseGuardSummary.does_not_approve_proposals === "false"
+                            ? "blocked"
+                            : "pending",
+                      )}
+                    >
+                      does not approve proposals{" "}
+                      {operatorProposalEvidenceIntakeResponseGuardSummary.does_not_approve_proposals}
+                    </span>
+                    <span
+                      style={badgeStyle(
+                        operatorProposalEvidenceIntakeResponseGuardSummary.does_not_promote_capabilities === "true"
+                          ? "clear"
+                          : operatorProposalEvidenceIntakeResponseGuardSummary.does_not_promote_capabilities === "false"
+                            ? "blocked"
+                            : "pending",
+                      )}
+                    >
+                      does not promote capabilities{" "}
+                      {operatorProposalEvidenceIntakeResponseGuardSummary.does_not_promote_capabilities}
+                    </span>
+                    <span
+                      style={badgeStyle(
+                        operatorProposalEvidenceIntakeResponseGuardSummary
+                          .operator_supplied_evidence_not_independently_verified === "true"
+                          ? "claim"
+                          : "pending",
+                      )}
+                    >
+                      not independently verified{" "}
+                      {
+                        operatorProposalEvidenceIntakeResponseGuardSummary
+                          .operator_supplied_evidence_not_independently_verified
+                      }
+                    </span>
+                    <span
+                      style={badgeStyle(
+                        operatorProposalEvidenceIntakeResponseGuardSummary.memory_write === "false"
+                          ? "clear"
+                          : operatorProposalEvidenceIntakeResponseGuardSummary.memory_write === "true"
+                            ? "blocked"
+                            : "pending",
+                      )}
+                    >
+                      memory writes {operatorProposalEvidenceIntakeResponseGuardSummary.memory_write}
                     </span>
                   </div>
                   {capabilityLibraryOperatorProposalEvidenceIntakeResponse.planned?.length ? (
