@@ -15,6 +15,8 @@ MANAGED_COPIES_ISOLATION_RULES_CONTRACT_KIND = "francis.stage18.managed_copies.i
 MANAGED_COPIES_ISOLATION_VERIFICATION_KIND = "francis.stage18.managed_copies.isolation_verification"
 MANAGED_COPIES_ISOLATION_VERIFICATION_WRITE_SCOPE = "managed_copies.isolation_verification.write"
 MANAGED_COPIES_SAFE_DELTA_MODEL_CONTRACT_KIND = "francis.stage18.managed_copies.safe_delta_model_contract"
+MANAGED_COPIES_SAFE_DELTA_REVIEW_KIND = "francis.stage18.managed_copies.safe_delta_review"
+MANAGED_COPIES_SAFE_DELTA_WRITE_SCOPE = "managed_copies.safe_delta.write"
 MANAGED_COPIES_ROGUE_RECOVERY_CONTRACT_KIND = "francis.stage18.managed_copies.rogue_recovery_contract"
 MANAGED_COPIES_SLA_FRAMEWORK_CONTRACT_KIND = "francis.stage18.managed_copies.sla_framework_contract"
 MANAGED_COPIES_ROLES_CONTRACT_KIND = "francis.stage18.managed_copies.roles_contract"
@@ -450,6 +452,7 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "isolation_rules_contract": "/managed-copies/isolation-rules-contract",
             "isolation_verification": "/managed-copies/isolation-verification",
             "safe_delta_model_contract": "/managed-copies/safe-delta-model-contract",
+            "safe_delta_review": "/managed-copies/safe-delta-review",
             "rogue_recovery_contract": "/managed-copies/rogue-recovery-contract",
             "sla_framework_contract": "/managed-copies/sla-framework-contract",
             "roles_contract": "/managed-copies/roles-contract",
@@ -997,6 +1000,7 @@ def managed_copy_isolation_verification_blocked_snapshot(
 def managed_copy_safe_delta_model_contract_snapshot() -> dict[str, Any]:
     """Return the safe-delta model contract without exporting tenant data."""
     governance = _governance()
+    status = managed_copies_status_snapshot()
     allowed_signal_classes = [
         _safe_delta_signal_class(
             "capability_metadata",
@@ -1124,6 +1128,12 @@ def managed_copy_safe_delta_model_contract_snapshot() -> dict[str, Any]:
             "ingest_disabled",
             "revoked",
         ],
+        "safe_delta_review_route": "/managed-copies/safe-delta-review",
+        "routes": {
+            **status["routes"],
+            "safe_delta_model_contract": "/managed-copies/safe-delta-model-contract",
+            "safe_delta_review": "/managed-copies/safe-delta-review",
+        },
         "blocked_failure_modes": [
             "raw_private_data_pooling",
             "tenant_reidentification",
@@ -1151,6 +1161,103 @@ def managed_copy_safe_delta_model_contract_snapshot() -> dict[str, Any]:
         "tenant_reidentification_allowed": False,
         "unattributed_learning_allowed": False,
         "safe_delta_flow_active": False,
+        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+    }
+
+
+def managed_copy_safe_delta_review_blocked_snapshot(
+    payload: dict[str, Any],
+    *,
+    actor: str,
+) -> dict[str, Any]:
+    """Return a governed safe-delta review preflight blocked by Stage 17."""
+    governance = _governance()
+    contract = managed_copy_safe_delta_model_contract_snapshot()
+    signal_class = _safe_str(payload.get("signal_class")).strip()
+    allowed_signal_ids = {item["id"] for item in contract["allowed_signal_classes"]}
+    denied_signal_ids = {item["id"] for item in contract["denied_signal_classes"]}
+    raw_direction = _safe_str(payload.get("direction")).strip()
+    direction = raw_direction if raw_direction in {"export", "import", "ingest"} else "unknown"
+    return {
+        "ok": False,
+        "kind": MANAGED_COPIES_SAFE_DELTA_REVIEW_KIND,
+        "stage": STAGE18_MANAGED_COPIES_STAGE,
+        "source_id": "managed_copies",
+        "status": "blocked_stage17_prerequisite",
+        "error": "stage17_prerequisite_not_closed",
+        "actor": _safe_str(actor).strip(),
+        "copy_id_present": bool(_safe_str(payload.get("copy_id")).strip()),
+        "tenant_id_present": bool(_safe_str(payload.get("tenant_id")).strip()),
+        "candidate_present": payload.get("candidate") is not None,
+        "signal_class": signal_class,
+        "signal_class_known": signal_class in allowed_signal_ids or signal_class in denied_signal_ids,
+        "signal_allowed_by_contract": signal_class in allowed_signal_ids,
+        "signal_denied_by_contract": signal_class in denied_signal_ids,
+        "direction": direction,
+        "stage17_closed_by_receipt": bool(contract["stage17_closed_by_receipt"]),
+        "stage17_blocker": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "safe_delta_model_ready": False,
+        "safe_delta_review_enabled": False,
+        "safe_delta_approved": False,
+        "safe_delta_flow_active": False,
+        "delta_export_enabled": False,
+        "delta_import_enabled": False,
+        "learning_write_enabled": False,
+        "raw_private_pooling_allowed": False,
+        "cross_tenant_data_flow_allowed": False,
+        "tenant_reidentification_allowed": False,
+        "unattributed_learning_allowed": False,
+        "receipt_ready": False,
+        "writes_registry": False,
+        "writes_memory": False,
+        "writes_receipt": False,
+        "writes_receipts": False,
+        "writes_tenant_state": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "expected_review_receipt_path": "logs/managed_copies/safe_delta_reviews.jsonl",
+        "required_scope": MANAGED_COPIES_SAFE_DELTA_WRITE_SCOPE,
+        "routes": {
+            **contract["routes"],
+            "safe_delta_review": "/managed-copies/safe-delta-review",
+        },
+        "governance": {
+            **governance,
+            "write_route": True,
+            "preflight_only": True,
+            "permission_scope": MANAGED_COPIES_SAFE_DELTA_WRITE_SCOPE,
+            "permission_checked": True,
+            "safe_delta_review_enabled": False,
+            "safe_delta_flow_active": False,
+            "does_not_export_delta": True,
+            "does_not_import_delta": True,
+            "does_not_write_learning": True,
+            "does_not_record_safe_delta_receipt": True,
+            "does_not_echo_raw_signal_payload": True,
+            "requires_stage17_closure_receipt": True,
+            "raw_private_pooling_allowed": False,
+            "cross_tenant_data_flow_allowed": False,
+            "tenant_reidentification_allowed": False,
+            "unattributed_learning_allowed": False,
+            "writes_registry": False,
+            "writes_memory": False,
+            "writes_receipts": False,
+            "writes_tenant_state": False,
+            "runs_tools": False,
+            "runs_shell": False,
+            "runs_git": False,
+            "launches_browser": False,
+            "captures_screen": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "read_only": governance["read_only"],
+        "projection_only": governance["projection_only"],
         "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
     }
 

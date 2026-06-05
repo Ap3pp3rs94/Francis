@@ -64921,6 +64921,68 @@ Remaining truthful gap:
   copy-creation receipts, write decommission receipts, or write closure
   receipts.
 
+### Stage 18 managed-copy safe-delta review gate
+
+This pass added the first governed safe-delta review boundary without exporting
+deltas, importing deltas, writing learning, writing safe-delta receipts,
+mutating tenant state, closing Stage 18, activating SLAs, binding roles, or
+decommissioning tenant state.
+
+Shipped behavior:
+
+- `POST /managed-copies/safe-delta-review` is now mounted as the safe-delta
+  review preflight route for managed copies.
+- The route is guarded by `FRANCIS_API_ACTOR_SCOPES` through a dedicated
+  `managed_copies.safe_delta.write` scope before any safe-delta candidate
+  payload is accepted.
+- Unscoped actors receive `api_permission_denied`, and the denial reports
+  `safe_delta_review_enabled: false`, `safe_delta_flow_active: false`,
+  `writes_receipts: false`, `writes_tenant_state: false`, and no execution or
+  mutation authority.
+- Scoped actors still receive `blocked_stage17_prerequisite` because
+  `stage17_closed_by_receipt` remains false and the current blocker is still
+  `stage17_capability_library_operator_proposal_evidence_refs`.
+- The blocked preflight reports copy and tenant ID presence, candidate
+  presence, normalized direction, and whether the requested signal class is
+  known, allowed, or denied by the safe-delta contract. It does not echo raw
+  tenant IDs or raw candidate payload text.
+- `GET /managed-copies/status`,
+  `GET /managed-copies/safe-delta-model-contract`, and
+  `GET /managed-copies/completion-review` now advertise the safe-delta review
+  preflight route.
+- The gate does not write `logs/managed_copies/safe_delta_reviews.jsonl`,
+  write registries, write memory, write receipts, write tenant state, run
+  tools, run shell, run git, launch browsers, capture screens, grant execution
+  authority, grant mutation authority, export deltas, import deltas, write
+  learning, permit raw private pooling, permit cross-tenant data flow, permit
+  tenant reidentification, or permit unattributed learning.
+
+Latest validation for this gate:
+
+- Focused API contract tests:
+  `python -m pytest tests\test_api_managed_copies.py tests\test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted -q`
+  Result: 21 tests passed.
+- Ruff lint:
+  `python -m ruff check src\francis\managed_copies.py src\francis\api\routes\managed_copies.py tests\test_api_managed_copies.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Ruff format check:
+  `python -m ruff format --check src\francis\managed_copies.py src\francis\api\routes\managed_copies.py tests\test_api_managed_copies.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Mypy:
+  `python -m mypy src\francis\managed_copies.py src\francis\api\routes\managed_copies.py`
+  Result: passed.
+
+Remaining truthful gap:
+
+- This does not close Stage 17, close Stage 18, review safe deltas at runtime,
+  export or import safe deltas, write learning, record safe-delta receipts,
+  enforce tenant isolation, verify tenant isolation at runtime, create managed
+  copies, persist tenant identity or policy, detect/replace live rogue
+  instances, activate SLA commitments, bind managed-copy roles, export tenant
+  data, delete tenant state, purge memory, revoke credentials, unpair nodes,
+  write runtime evidence receipts, write copy-creation receipts, write
+  decommission receipts, or write closure receipts.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -10,6 +10,7 @@ from francis.managed_copies import (
     MANAGED_COPIES_COPY_CREATION_WRITE_SCOPE,
     MANAGED_COPIES_ISOLATION_VERIFICATION_WRITE_SCOPE,
     MANAGED_COPIES_RUNTIME_EVIDENCE_WRITE_SCOPE,
+    MANAGED_COPIES_SAFE_DELTA_WRITE_SCOPE,
     managed_copies_status_snapshot,
     managed_copy_completion_review_snapshot,
     managed_copy_creation_contract_snapshot,
@@ -22,6 +23,7 @@ from francis.managed_copies import (
     managed_copy_runtime_evidence_readback_blocked_snapshot,
     managed_copy_runtime_evidence_readbacks_snapshot,
     managed_copy_safe_delta_model_contract_snapshot,
+    managed_copy_safe_delta_review_blocked_snapshot,
     managed_copy_sla_framework_contract_snapshot,
     managed_copy_roles_contract_snapshot,
 )
@@ -67,6 +69,8 @@ def _permission_denied(
         "isolation_enforcement_enabled": False,
         "isolation_verification_enabled": False,
         "runtime_evidence_recording_enabled": False,
+        "safe_delta_review_enabled": False,
+        "safe_delta_flow_active": False,
         "writes_receipt": False,
         "writes_receipts": False,
         "writes_tenant_state": False,
@@ -82,6 +86,8 @@ def _permission_denied(
             "isolation_enforcement_enabled": False,
             "isolation_verification_enabled": False,
             "runtime_evidence_recording_enabled": False,
+            "safe_delta_review_enabled": False,
+            "safe_delta_flow_active": False,
             "writes_receipts": False,
             "writes_tenant_state": False,
             "grants_execution_authority": False,
@@ -144,6 +150,24 @@ def isolation_verification(payload: dict[str, Any], request: Request) -> dict[st
 @router.get("/safe-delta-model-contract")
 def safe_delta_model_contract() -> dict[str, Any]:
     return managed_copy_safe_delta_model_contract_snapshot()
+
+
+@router.post("/safe-delta-review")
+def safe_delta_review(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    actor = _managed_copy_write_actor(payload)
+    decision = _write_permission(
+        actor,
+        required_scope=MANAGED_COPIES_SAFE_DELTA_WRITE_SCOPE,
+        route=request.url.path,
+        method=request.method,
+    )
+    if not decision.allowed:
+        return _permission_denied(
+            decision,
+            required_scope=MANAGED_COPIES_SAFE_DELTA_WRITE_SCOPE,
+            next_step="configure_actor_scope_before_reviewing_managed_copy_safe_delta",
+        )
+    return managed_copy_safe_delta_review_blocked_snapshot(payload, actor=actor)
 
 
 @router.get("/rogue-recovery-contract")
