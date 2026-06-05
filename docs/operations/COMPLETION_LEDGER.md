@@ -63879,6 +63879,46 @@ Remaining truthful gap:
   capabilities, or change backend readiness counts. Stage 17 remains blocked on
   real operator-supplied evidence refs applied through the governed intake path.
 
+### Stage 17 operator evidence export-row seeding UI
+
+This pass tightened the Chat UI operator evidence workflow without changing the
+backend apply path or recording proposal evidence refs.
+
+Shipped behavior:
+
+- `apps/chat_ui/src/plugin_browser/index.ts` now exposes
+  `operatorEvidenceExportRowsToImportPreviewText()`, a framework-agnostic helper
+  that formats backend-exported operator evidence rows into the existing
+  import-preview textarea shape.
+- The helper preserves blank `evidence_refs_input` fields so exported rows stay
+  pending until an operator supplies real evidence refs.
+- `apps/chat_ui/src/App.tsx` now includes a `Load selected export rows` action
+  beside the operator evidence import-preview control. The action only fills
+  local UI state from backend export rows; it does not call preview or apply.
+- The source-readiness next-batch guard labels now display the backend's
+  `does_not_validate_evidence_truth` and `no_synthetic_evidence` flags directly,
+  using `unknown` instead of inverting missing optional fields.
+
+Latest validation for this UI helper:
+
+- Chat UI client/contract tests:
+  `cd apps\chat_ui; npm run test -- src/plugin_browser/index.test.ts`
+  Result: 220 tests passed.
+- Chat UI production build:
+  `cd apps\chat_ui; npm run build`
+  Result: passed. Vite emitted the existing non-fatal large chunk warning.
+- Whitespace check:
+  `git diff --check`
+  Result: passed with the existing Git CRLF normalization warning for
+  `apps/chat_ui/src/plugin_browser/index.ts`.
+
+Remaining truthful gap:
+
+- This helper does not supply evidence refs, preview rows, apply refs, approve
+  proposals, promote capabilities, or change backend readiness counts. Stage 17
+  remains blocked on real operator-supplied evidence refs applied through the
+  governed intake path.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

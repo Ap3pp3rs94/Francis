@@ -107,7 +107,11 @@ import type {
   PluginToolRef,
   PluginToolRunRequest,
 } from "./plugin_browser";
-import { PluginBrowserApiError, PluginBrowserClient } from "./plugin_browser";
+import {
+  PluginBrowserApiError,
+  PluginBrowserClient,
+  operatorEvidenceExportRowsToImportPreviewText,
+} from "./plugin_browser";
 import {
   SettingsApiError,
   SettingsClient,
@@ -18665,6 +18669,14 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
   );
   const nextOperatorEvidenceBatch =
     capabilityLibraryProposalEvidenceSourceReadiness?.next_operator_evidence_batch ?? null;
+  const nextOperatorEvidenceBatchTruthValidationStatus =
+    typeof nextOperatorEvidenceBatch?.does_not_validate_evidence_truth === "boolean"
+      ? String(nextOperatorEvidenceBatch.does_not_validate_evidence_truth)
+      : "unknown";
+  const nextOperatorEvidenceBatchNoSyntheticEvidenceStatus =
+    typeof nextOperatorEvidenceBatch?.no_synthetic_evidence === "boolean"
+      ? String(nextOperatorEvidenceBatch.no_synthetic_evidence)
+      : "unknown";
   const nextOperatorEvidenceBatchPayloadHint = useMemo(() => {
     const hint = nextOperatorEvidenceBatch?.apply_payload_hint;
     if (!hint) {
@@ -19407,6 +19419,21 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
     }
   }
 
+  function loadSelectedOperatorProposalEvidenceExportRows() {
+    const rows = selectedCapabilityLibraryOperatorProposalEvidenceIntakeExportPack?.rows ?? [];
+    if (!rows.length) {
+      setError("No selected operator evidence export rows are available to load.");
+      return;
+    }
+    setCapabilityLibraryOperatorProposalEvidenceImportRows(
+      operatorEvidenceExportRowsToImportPreviewText(rows),
+    );
+    setCapabilityLibraryOperatorProposalEvidenceImportPreview(null);
+    setCapabilityLibraryOperatorProposalEvidenceImportApplyGroupKey("");
+    setCapabilityLibraryOperatorProposalEvidenceIntakeResponse(null);
+    setError(null);
+  }
+
   async function previewCapabilityLibraryOperatorProposalEvidenceImport() {
     let rows: Array<Record<string, unknown>>;
     try {
@@ -20048,11 +20075,11 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
                     <span style={badgeStyle(nextOperatorEvidenceBatch.operator_must_supply_evidence_refs ? "blocked" : "clear")}>
                       operator refs {String(nextOperatorEvidenceBatch.operator_must_supply_evidence_refs ?? false)}
                     </span>
-                    <span style={badgeStyle(nextOperatorEvidenceBatch.does_not_validate_evidence_truth ? "claim" : "clear")}>
-                      validates truth {String(!nextOperatorEvidenceBatch.does_not_validate_evidence_truth)}
+                    <span style={badgeStyle(nextOperatorEvidenceBatch.does_not_validate_evidence_truth ? "claim" : "pending")}>
+                      does not validate truth {nextOperatorEvidenceBatchTruthValidationStatus}
                     </span>
-                    <span style={badgeStyle(nextOperatorEvidenceBatch.no_synthetic_evidence ? "clear" : "blocked")}>
-                      synthetic evidence {String(!nextOperatorEvidenceBatch.no_synthetic_evidence)}
+                    <span style={badgeStyle(nextOperatorEvidenceBatch.no_synthetic_evidence ? "clear" : "pending")}>
+                      no synthetic evidence {nextOperatorEvidenceBatchNoSyntheticEvidenceStatus}
                     </span>
                     <span style={badgeStyle(nextOperatorEvidenceBatch.dry_run_required_before_apply ? "pending" : "clear")}>
                       dry-run required {String(nextOperatorEvidenceBatch.dry_run_required_before_apply ?? false)}
@@ -20897,6 +20924,15 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
                   style={inputStyle}
                 />
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button
+                    style={buttonStyle}
+                    disabled={
+                      busy || !(selectedCapabilityLibraryOperatorProposalEvidenceIntakeExportPack?.rows.length ?? 0)
+                    }
+                    onClick={loadSelectedOperatorProposalEvidenceExportRows}
+                  >
+                    Load selected export rows
+                  </button>
                   <button
                     style={buttonStyle}
                     disabled={busy || !capabilityLibraryOperatorProposalEvidenceImportRows.trim()}

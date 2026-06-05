@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { PluginBrowserApiError, PluginBrowserClient } from "./index.ts";
+import {
+  PluginBrowserApiError,
+  PluginBrowserClient,
+  operatorEvidenceExportRowsToImportPreviewText,
+} from "./index.ts";
 
 type FetchHandler = (url: string, init?: RequestInit) => Response | Promise<Response>;
 
@@ -42,6 +46,38 @@ function installFetch(handler: FetchHandler): () => void {
     }
   };
 }
+
+test("operatorEvidenceExportRowsToImportPreviewText preserves blank evidence slots", () => {
+  const text = operatorEvidenceExportRowsToImportPreviewText([
+    {
+      pack_id: "legacy.generated.ops",
+      pack_version: "1.0.0",
+      pack_name: "Generated Ops",
+      capability: "generated.ops.run",
+      proposal_id: "plugin_proposal_generated_ops_run",
+      evidence_refs_input: "",
+      evidence_refs_input_format: "comma_separated_or_json_array",
+      operator_evidence_refs_required: true,
+    },
+    {
+      pack_id: "legacy.generated.ops",
+      pack_version: "1.0.0",
+      capability: "",
+      proposal_id: "ignored",
+      evidence_refs_input: "mission.ignored",
+    },
+  ]);
+
+  assert.deepEqual(JSON.parse(text), [
+    {
+      pack_id: "legacy.generated.ops",
+      pack_version: "1.0.0",
+      capability: "generated.ops.run",
+      proposal_id: "plugin_proposal_generated_ops_run",
+      evidence_refs_input: "",
+    },
+  ]);
+});
 
 test("PluginBrowserClient lifecycle mutations send an explicit plugin actor", async () => {
   const captured: Record<string, Record<string, unknown>> = {};

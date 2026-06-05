@@ -1870,6 +1870,21 @@ function safeUnknownArray(v: unknown): unknown[] | undefined {
   return Array.isArray(v) ? v : undefined;
 }
 
+export function operatorEvidenceExportRowsToImportPreviewText(
+  rows: PluginCapabilityLibraryOperatorProposalEvidenceIntakeExportRow[],
+): string {
+  const normalizedRows = (Array.isArray(rows) ? rows : [])
+    .map((row) => ({
+      pack_id: safeString(row.pack_id, ""),
+      pack_version: safeString(row.pack_version, ""),
+      capability: safeString(row.capability, ""),
+      proposal_id: safeString(row.proposal_id, ""),
+      evidence_refs_input: safeString(row.evidence_refs_input, ""),
+    }))
+    .filter((row) => row.pack_id && row.capability);
+  return JSON.stringify(normalizedRows, null, 2);
+}
+
 function normalizeBaseUrl(url: string): string {
   return (url || "").trim().replace(/\/+$/, "");
 }
