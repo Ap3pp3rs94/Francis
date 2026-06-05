@@ -65467,6 +65467,89 @@ Remaining truthful gap:
   managed copies, write managed-copy receipts, enforce tenant isolation, export
   safe deltas, activate SLAs, bind roles, or decommission tenant state.
 
+### 2026-06-05 - Stage 17 operator proposal-evidence refs record artifact reconstruction plan pack
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence for the capability-library promotion path.
+
+This pass walked the next visible Stage 17 operator evidence pack,
+`legacy.generated.capabilityartifactreconstructionplanplugin`, through the
+existing governed operator proposal-evidence intake route one capability at a
+time. Each capability used its own matching proposal and validation artifact
+refs, plus the shared pack metadata and operator-review decision refs.
+
+Capabilities recorded:
+
+- `1780502051_capabilityartifactreconstructionplanplugin`
+- `1780502363_capabilityartifactreconstructionplanplugin`
+- `1780503673_capabilityartifactreconstructionplanplugin`
+- `1780505541_capabilityartifactreconstructionplanplugin`
+- `1780507744_capabilityartifactreconstructionplanplugin`
+- `1780507881_capabilityartifactreconstructionplanplugin`
+- `1780508145_capabilityartifactreconstructionplanplugin`
+- `1780508545_capabilityartifactreconstructionplanplugin`
+
+Recorded evidence ref pattern:
+
+- each capability recorded its matching
+  `artifact:plugins/proposals/plugin_proposal_1780531846_<capability-slug>.json`
+- each capability recorded its matching
+  `artifact:plugins/validations/plugin_validation_1780531846_<capability-slug>.json`
+- each capability recorded shared pack metadata ref
+  `artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1780531776_legacy-generated-capabilityartifactreconstructionplanplugin.json`
+- each capability recorded shared operator-review ref
+  `artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1780632847_legacy-generated-capabilityartifactreconstructionplanplugin_941800.json`
+
+Latest validation for this live Stage 17 intake:
+
+- Artifact existence check:
+  all proposal, validation, metadata, and operator-review refs for the 8
+  capabilities existed under `data/artifacts/plugins`.
+- Governed dry-run/apply runner:
+  the pack walker called
+  `POST /plugins/capabilities/library/proposal-evidence/operator-intake/apply`
+  once per capability with actor `stage17.operator`,
+  `FRANCIS_API_ACTOR_SCOPES={"stage17.operator":["plugins.write"]}`,
+  `max_pack_count: 1`, `max_total_capability_count: 1`, and
+  `max_capability_count_per_pack: 1`. For every capability, dry-run returned
+  `ok: true`, `status: dry_run`, `planned_capability_count: 1`,
+  `evidence_ref_count: 4`, and a fingerprint before apply used the returned
+  fingerprint. Every apply returned `ok: true`, `status: recorded`,
+  `applied: true`, `recorded_capability_count: 1`, and
+  `evidence_ref_count: 4`.
+- Runner assertion caveat:
+  two local post-apply assertions were corrected after follow-up readback showed
+  they were fixture-specific expectations: the live legacy generated plugins
+  were already `enabled`, and reconstructed proposal review state reports
+  `review_status: not_reviewed`. The evidence payload content and artifact refs
+  were unchanged, and the continued runner asserted status/enabled values did
+  not change across apply.
+- Per-capability readback:
+  after apply, `GET /plugins/get?id=<capability_id>` returned the same four
+  refs, future review required, `proposal_evidence_writes_proposals: false`,
+  and `proposal_evidence_approval_claimed: false`.
+- Direct pack summary:
+  all 8 pack capabilities had `proposal_evidence_count: 4`, all required future
+  review, none wrote proposals, and none claimed approval.
+- Proposal-review readback:
+  proposal states reported `approved: false` and `review_status: not_reviewed`.
+- Public queue readback:
+  `GET /plugins/capabilities/library/proposal-evidence/operator-intake/checklist`
+  returned `status: ready_for_operator_evidence_refs`,
+  `candidate_pack_count: 42`, `candidate_capability_count: 2224`,
+  `evidence_ref_required_count: 2224`, and next visible pack
+  `legacy.generated.capabilityartifactreconstructionwriterplugin`.
+
+Remaining truthful gap:
+
+- This does not close Stage 17, promote capabilities, approve proposals, grant
+  execution authority, grant mutation authority beyond governed evidence-ref
+  recording, close the proposal-review or promotion gates, independently verify
+  artifact truth, clear the remaining 2224 capability evidence refs, close Stage
+  18, create managed copies, write managed-copy receipts, enforce tenant
+  isolation, export safe deltas, activate SLAs, bind roles, or decommission
+  tenant state.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
