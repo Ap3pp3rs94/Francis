@@ -1010,6 +1010,136 @@ export type PluginCapabilityLibraryProposalEvidenceRemediationResponse = {
   catalog?: Record<string, unknown>;
 };
 
+export type PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefCapability = {
+  capability: string;
+  status?: string;
+  proposal_id?: string;
+  metadata_proposal_evidence?: unknown[];
+  friction_summary_field?: string;
+  friction_summary_ref?: string;
+  friction_summary_preview?: string;
+  evidence_source?: string;
+  writes_registry_metadata?: boolean;
+  writes_proposals?: boolean;
+  approves_proposals?: boolean;
+  promotes_capability?: boolean;
+  requires_future_review?: boolean;
+};
+
+export type PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefPack = {
+  pack_id: string;
+  pack_version: string;
+  pack_name?: string;
+  staged_capability_count?: number;
+  candidate_capability_count?: number;
+  capabilities: PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefCapability[];
+  capabilities_truncated?: boolean;
+};
+
+export type PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefResponse = {
+  ok: boolean;
+  kind?: string;
+  stage?: string;
+  status?: string;
+  proposal_evidence_friction_summary_refs_ready?: boolean;
+  pack_total?: number;
+  ready_pack_count?: number;
+  blocked_pack_count?: number;
+  candidate_pack_count?: number;
+  candidate_capability_count?: number;
+  existing_metadata_evidence_count?: number;
+  friction_summary_missing_count?: number;
+  proposal_id_missing_count?: number;
+  plugin_record_missing_count?: number;
+  source_proposal_evidence_plan?: PluginCapabilityLibraryProposalEvidenceRemediationSourcePlan;
+  packs: PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefPack[];
+  packs_truncated?: boolean;
+  capability_preview_limit?: number;
+  routes?: Record<string, string>;
+  requirements?: Record<string, boolean>;
+  governance?: Record<string, unknown>;
+  next_smallest_truthful_gap?: string;
+  catalog?: Record<string, unknown>;
+};
+
+export type PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyRequest = {
+  actor?: string;
+  reason?: string;
+  pack_ids?: string[];
+  max_pack_count?: number;
+  max_total_capability_count?: number;
+  max_capability_count_per_pack?: number;
+  dry_run?: boolean;
+  meta?: Record<string, unknown>;
+};
+
+export type PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyPlanCapability = {
+  capability: string;
+  proposal_id?: string;
+  friction_summary_field?: string;
+  friction_summary_ref?: string;
+};
+
+export type PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyPlan = {
+  pack_id: string;
+  pack_version: string;
+  pack_name?: string;
+  capability_count?: number;
+  evidence_source?: string;
+  capabilities?: PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyPlanCapability[];
+  writes_registry_metadata?: boolean;
+  writes_proposals?: boolean;
+  approves_proposals?: boolean;
+  promotes_capabilities?: boolean;
+  enables_capabilities?: boolean;
+  requires_future_review?: boolean;
+};
+
+export type PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyRecord = {
+  pack_id: string;
+  pack_version: string;
+  pack_name?: string;
+  capability_count?: number;
+  changed_capability_count?: number;
+  changed_capability_ids?: string[];
+  changed_capability_ids_truncated?: boolean;
+  evidence_source?: string;
+  writes_registry_metadata?: boolean;
+  writes_proposals?: boolean;
+  approves_proposals?: boolean;
+  promotes_capabilities?: boolean;
+  enables_capabilities?: boolean;
+  requires_future_review?: boolean;
+  status?: string;
+  error?: string;
+  capabilities?: unknown[];
+};
+
+export type PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyResponse = {
+  ok: boolean;
+  applied?: boolean;
+  kind?: string;
+  status?: string;
+  dry_run?: boolean;
+  error?: string;
+  planned_pack_count?: number;
+  planned_capability_count?: number;
+  recorded_pack_count?: number;
+  recorded_capability_count?: number;
+  candidate_total?: number;
+  limit?: number;
+  capability_count?: number;
+  planned?: PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyPlan[];
+  recorded?: PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyRecord[];
+  failed?: PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyRecord[];
+  skipped?: PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyRecord[];
+  before?: Record<string, unknown>;
+  remaining_candidate_pack_count?: number;
+  remaining_candidate_capability_count?: number;
+  next_smallest_truthful_gap?: string;
+  governance?: Record<string, unknown>;
+};
+
 export type PluginCapabilityLibraryOperatorProposalEvidenceIntakeChecklistCapability = {
   capability: string;
   status?: string;
@@ -2683,6 +2813,71 @@ function parseCapabilityLibraryProposalEvidenceRemediationPack(
   return pack;
 }
 
+function parseCapabilityLibraryProposalEvidenceFrictionSummaryRefCapability(
+  raw: unknown,
+): PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefCapability | null {
+  if (!isRecord(raw)) return null;
+
+  const capability = safeString(raw.capability, safeString(raw.id, "")).trim();
+  if (!capability) return null;
+
+  const item: PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefCapability = { capability };
+  const status = safeString(raw.status, "");
+  const proposalId = safeString(raw.proposal_id, safeString(raw.proposalId, ""));
+  const metadataProposalEvidence = safeUnknownArray(raw.metadata_proposal_evidence);
+  const frictionSummaryField = safeString(raw.friction_summary_field, safeString(raw.frictionSummaryField, ""));
+  const frictionSummaryRef = safeString(raw.friction_summary_ref, safeString(raw.frictionSummaryRef, ""));
+  const frictionSummaryPreview = safeString(raw.friction_summary_preview, safeString(raw.frictionSummaryPreview, ""));
+  const evidenceSource = safeString(raw.evidence_source, safeString(raw.evidenceSource, ""));
+  if (status) item.status = status;
+  if (proposalId) item.proposal_id = proposalId;
+  if (metadataProposalEvidence) item.metadata_proposal_evidence = metadataProposalEvidence;
+  if (frictionSummaryField) item.friction_summary_field = frictionSummaryField;
+  if (frictionSummaryRef) item.friction_summary_ref = frictionSummaryRef;
+  if (frictionSummaryPreview) item.friction_summary_preview = frictionSummaryPreview;
+  if (evidenceSource) item.evidence_source = evidenceSource;
+  if (typeof raw.writes_registry_metadata === "boolean") {
+    item.writes_registry_metadata = raw.writes_registry_metadata;
+  }
+  if (typeof raw.writes_proposals === "boolean") item.writes_proposals = raw.writes_proposals;
+  if (typeof raw.approves_proposals === "boolean") item.approves_proposals = raw.approves_proposals;
+  if (typeof raw.promotes_capability === "boolean") item.promotes_capability = raw.promotes_capability;
+  if (typeof raw.requires_future_review === "boolean") item.requires_future_review = raw.requires_future_review;
+  return item;
+}
+
+function parseCapabilityLibraryProposalEvidenceFrictionSummaryRefPack(
+  raw: unknown,
+): PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefPack | null {
+  if (!isRecord(raw)) return null;
+
+  const packId = safeString(raw.pack_id, safeString(raw.packId, "")).trim();
+  const packVersion = safeString(raw.pack_version, safeString(raw.packVersion, "")).trim();
+  if (!packId || !packVersion) return null;
+
+  const rawCapabilities = safeUnknownArray(raw.capabilities) ?? [];
+  const capabilities = rawCapabilities
+    .map(parseCapabilityLibraryProposalEvidenceFrictionSummaryRefCapability)
+    .filter(
+      (entry): entry is PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefCapability => entry !== null,
+    );
+  const pack: PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefPack = {
+    pack_id: packId,
+    pack_version: packVersion,
+    capabilities,
+  };
+  const packName = safeString(raw.pack_name, safeString(raw.packName, ""));
+  if (packName) pack.pack_name = packName;
+  if (Number.isFinite(safeNumber(raw.staged_capability_count, NaN))) {
+    pack.staged_capability_count = safeNumber(raw.staged_capability_count);
+  }
+  if (Number.isFinite(safeNumber(raw.candidate_capability_count, NaN))) {
+    pack.candidate_capability_count = safeNumber(raw.candidate_capability_count);
+  }
+  if (typeof raw.capabilities_truncated === "boolean") pack.capabilities_truncated = raw.capabilities_truncated;
+  return pack;
+}
+
 function parseCapabilityLibraryOperatorProposalEvidenceIntakeChecklistCapability(
   raw: unknown,
 ): PluginCapabilityLibraryOperatorProposalEvidenceIntakeChecklistCapability | null {
@@ -3279,6 +3474,172 @@ function parseCapabilityLibraryOperatorProposalEvidenceIntakeResponse(
   };
 }
 
+function parseCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyPlanCapability(
+  raw: unknown,
+): PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyPlanCapability | null {
+  if (!isRecord(raw)) return null;
+  const capability = safeString(raw.capability, safeString(raw.id, "")).trim();
+  if (!capability) return null;
+  const item: PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyPlanCapability = { capability };
+  const proposalId = safeString(raw.proposal_id, safeString(raw.proposalId, ""));
+  const frictionSummaryField = safeString(raw.friction_summary_field, safeString(raw.frictionSummaryField, ""));
+  const frictionSummaryRef = safeString(raw.friction_summary_ref, safeString(raw.frictionSummaryRef, ""));
+  if (proposalId) item.proposal_id = proposalId;
+  if (frictionSummaryField) item.friction_summary_field = frictionSummaryField;
+  if (frictionSummaryRef) item.friction_summary_ref = frictionSummaryRef;
+  return item;
+}
+
+function parseCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyPlan(
+  raw: unknown,
+): PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyPlan | null {
+  if (!isRecord(raw)) return null;
+  const packId = safeString(raw.pack_id, safeString(raw.packId, "")).trim();
+  const packVersion = safeString(raw.pack_version, safeString(raw.packVersion, "")).trim();
+  if (!packId || !packVersion) return null;
+  const capabilitiesRaw = safeUnknownArray(raw.capabilities) ?? [];
+  const capabilities = capabilitiesRaw
+    .map(parseCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyPlanCapability)
+    .filter(
+      (item): item is PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyPlanCapability => item !== null,
+    );
+  const item: PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyPlan = {
+    pack_id: packId,
+    pack_version: packVersion,
+  };
+  const packName = safeString(raw.pack_name, safeString(raw.packName, ""));
+  const evidenceSource = safeString(raw.evidence_source, safeString(raw.evidenceSource, ""));
+  if (packName) item.pack_name = packName;
+  if (Number.isFinite(safeNumber(raw.capability_count, NaN))) item.capability_count = safeNumber(raw.capability_count);
+  if (evidenceSource) item.evidence_source = evidenceSource;
+  if (capabilities.length) item.capabilities = capabilities;
+  if (typeof raw.writes_registry_metadata === "boolean") {
+    item.writes_registry_metadata = raw.writes_registry_metadata;
+  }
+  if (typeof raw.writes_proposals === "boolean") item.writes_proposals = raw.writes_proposals;
+  if (typeof raw.approves_proposals === "boolean") item.approves_proposals = raw.approves_proposals;
+  if (typeof raw.promotes_capabilities === "boolean") item.promotes_capabilities = raw.promotes_capabilities;
+  if (typeof raw.enables_capabilities === "boolean") item.enables_capabilities = raw.enables_capabilities;
+  if (typeof raw.requires_future_review === "boolean") item.requires_future_review = raw.requires_future_review;
+  return item;
+}
+
+function parseCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyRecord(
+  raw: unknown,
+): PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyRecord | null {
+  if (!isRecord(raw)) return null;
+  const packId = safeString(raw.pack_id, safeString(raw.packId, "")).trim();
+  const packVersion = safeString(raw.pack_version, safeString(raw.packVersion, "")).trim();
+  if (!packId || !packVersion) return null;
+  const item: PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyRecord = {
+    pack_id: packId,
+    pack_version: packVersion,
+  };
+  const packName = safeString(raw.pack_name, safeString(raw.packName, ""));
+  const evidenceSource = safeString(raw.evidence_source, safeString(raw.evidenceSource, ""));
+  const status = safeString(raw.status, "");
+  const error = safeString(raw.error, "");
+  const changedCapabilityIds = safeStringArray(raw.changed_capability_ids);
+  const capabilities = safeUnknownArray(raw.capabilities);
+  if (packName) item.pack_name = packName;
+  if (Number.isFinite(safeNumber(raw.capability_count, NaN))) item.capability_count = safeNumber(raw.capability_count);
+  if (Number.isFinite(safeNumber(raw.changed_capability_count, NaN))) {
+    item.changed_capability_count = safeNumber(raw.changed_capability_count);
+  }
+  if (changedCapabilityIds) item.changed_capability_ids = changedCapabilityIds;
+  if (typeof raw.changed_capability_ids_truncated === "boolean") {
+    item.changed_capability_ids_truncated = raw.changed_capability_ids_truncated;
+  }
+  if (evidenceSource) item.evidence_source = evidenceSource;
+  if (typeof raw.writes_registry_metadata === "boolean") {
+    item.writes_registry_metadata = raw.writes_registry_metadata;
+  }
+  if (typeof raw.writes_proposals === "boolean") item.writes_proposals = raw.writes_proposals;
+  if (typeof raw.approves_proposals === "boolean") item.approves_proposals = raw.approves_proposals;
+  if (typeof raw.promotes_capabilities === "boolean") item.promotes_capabilities = raw.promotes_capabilities;
+  if (typeof raw.enables_capabilities === "boolean") item.enables_capabilities = raw.enables_capabilities;
+  if (typeof raw.requires_future_review === "boolean") item.requires_future_review = raw.requires_future_review;
+  if (status) item.status = status;
+  if (error) item.error = error;
+  if (capabilities) item.capabilities = capabilities;
+  return item;
+}
+
+function parseCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyResponse(
+  json: unknown,
+  fallbackDryRun: boolean,
+): PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyResponse {
+  if (!isRecord(json)) return { ok: true, applied: false, dry_run: fallbackDryRun };
+
+  const plannedRaw = safeUnknownArray((json as Record<string, unknown>).planned) ?? [];
+  const recordedRaw = safeUnknownArray((json as Record<string, unknown>).recorded) ?? [];
+  const failedRaw = safeUnknownArray((json as Record<string, unknown>).failed) ?? [];
+  const skippedRaw = safeUnknownArray((json as Record<string, unknown>).skipped) ?? [];
+  const planned = plannedRaw
+    .map(parseCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyPlan)
+    .filter(
+      (item): item is PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyPlan => item !== null,
+    );
+  const recorded = recordedRaw
+    .map(parseCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyRecord)
+    .filter(
+      (item): item is PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyRecord => item !== null,
+    );
+  const failed = failedRaw
+    .map(parseCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyRecord)
+    .filter(
+      (item): item is PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyRecord => item !== null,
+    );
+  const skipped = skippedRaw
+    .map(parseCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyRecord)
+    .filter(
+      (item): item is PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyRecord => item !== null,
+    );
+  return {
+    ok: Boolean((json as Record<string, unknown>).ok ?? false),
+    applied:
+      typeof (json as Record<string, unknown>).applied === "boolean"
+        ? Boolean((json as Record<string, unknown>).applied)
+        : undefined,
+    kind: safeString((json as Record<string, unknown>).kind, "") || undefined,
+    status: safeString((json as Record<string, unknown>).status, "") || undefined,
+    dry_run:
+      typeof (json as Record<string, unknown>).dry_run === "boolean"
+        ? Boolean((json as Record<string, unknown>).dry_run)
+        : fallbackDryRun,
+    error: safeString((json as Record<string, unknown>).error, "") || undefined,
+    planned_pack_count: safeNumber((json as Record<string, unknown>).planned_pack_count, planned.length),
+    planned_capability_count: safeNumber((json as Record<string, unknown>).planned_capability_count, 0),
+    recorded_pack_count: safeNumber((json as Record<string, unknown>).recorded_pack_count, recorded.length),
+    recorded_capability_count: safeNumber((json as Record<string, unknown>).recorded_capability_count, 0),
+    candidate_total: safeNumber((json as Record<string, unknown>).candidate_total, 0) || undefined,
+    limit: safeNumber((json as Record<string, unknown>).limit, 0) || undefined,
+    capability_count: safeNumber((json as Record<string, unknown>).capability_count, 0) || undefined,
+    planned,
+    recorded,
+    failed,
+    skipped,
+    before: isRecord((json as Record<string, unknown>).before)
+      ? ((json as Record<string, unknown>).before as Record<string, unknown>)
+      : undefined,
+    remaining_candidate_pack_count: Number.isFinite(
+      safeNumber((json as Record<string, unknown>).remaining_candidate_pack_count, NaN),
+    )
+      ? safeNumber((json as Record<string, unknown>).remaining_candidate_pack_count)
+      : undefined,
+    remaining_candidate_capability_count: Number.isFinite(
+      safeNumber((json as Record<string, unknown>).remaining_candidate_capability_count, NaN),
+    )
+      ? safeNumber((json as Record<string, unknown>).remaining_candidate_capability_count)
+      : undefined,
+    next_smallest_truthful_gap:
+      safeString((json as Record<string, unknown>).next_smallest_truthful_gap, "") || undefined,
+    governance: isRecord((json as Record<string, unknown>).governance)
+      ? ((json as Record<string, unknown>).governance as Record<string, unknown>)
+      : undefined,
+  };
+}
+
 function parseCapabilityPackOperatorReviewDecision(raw: unknown): PluginCapabilityPackOperatorReviewDecision | null {
   if (!isRecord(raw)) return null;
 
@@ -3468,6 +3829,8 @@ export type PluginBrowserEndpoints = {
   capabilityLibraryProposalReviewPlan: () => string;
   capabilityLibraryProposalReviewApplyReadiness: () => string;
   capabilityLibraryProposalEvidenceRemediation: () => string;
+  capabilityLibraryProposalEvidenceFrictionSummaryRefs: () => string;
+  capabilityLibraryProposalEvidenceFrictionSummaryRefsApply: () => string;
   capabilityLibraryOperatorProposalEvidenceIntakeChecklist: () => string;
   capabilityLibraryOperatorProposalEvidenceIntakeWorksheet: () => string;
   capabilityLibraryOperatorProposalEvidenceIntakeExport: () => string;
@@ -3537,6 +3900,10 @@ export function defaultPluginBrowserEndpoints(): PluginBrowserEndpoints {
     capabilityLibraryProposalReviewApplyReadiness: () =>
       "/plugins/capabilities/library/proposal-review/apply-readiness",
     capabilityLibraryProposalEvidenceRemediation: () => "/plugins/capabilities/library/proposal-evidence/remediation",
+    capabilityLibraryProposalEvidenceFrictionSummaryRefs: () =>
+      "/plugins/capabilities/library/proposal-evidence/friction-summary-refs",
+    capabilityLibraryProposalEvidenceFrictionSummaryRefsApply: () =>
+      "/plugins/capabilities/library/proposal-evidence/friction-summary-refs/apply",
     capabilityLibraryOperatorProposalEvidenceIntakeChecklist: () =>
       "/plugins/capabilities/library/proposal-evidence/operator-intake/checklist",
     capabilityLibraryOperatorProposalEvidenceIntakeWorksheet: () =>
@@ -4504,6 +4871,113 @@ export class PluginBrowserClient {
         ? ((json as Record<string, unknown>).catalog as Record<string, unknown>)
         : undefined,
     };
+  }
+
+  /**
+   * List proposal-evidence candidates backed by existing registry friction-summary references.
+   */
+  async listCapabilityLibraryProposalEvidenceFrictionSummaryRefs(
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefResponse> {
+    const url = this.url(this.endpoints.capabilityLibraryProposalEvidenceFrictionSummaryRefs());
+    const json = await this.fetchJson(url, { method: "GET", signal: opts?.signal, timeoutMs: opts?.timeoutMs });
+    if (!isRecord(json)) return { ok: false, packs: [] };
+
+    const raw = Array.isArray((json as Record<string, unknown>).packs)
+      ? ((json as Record<string, unknown>).packs as unknown[])
+      : [];
+    const packs = raw
+      .map(parseCapabilityLibraryProposalEvidenceFrictionSummaryRefPack)
+      .filter((item): item is PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefPack => item !== null);
+    const sourcePlanRaw = (json as Record<string, unknown>).source_proposal_evidence_plan;
+    const sourcePlan = isRecord(sourcePlanRaw)
+      ? {
+          status: safeString(sourcePlanRaw.status, "") || undefined,
+          candidate_capability_count: safeNumber(sourcePlanRaw.candidate_capability_count, 0),
+          proposal_evidence_missing_count: safeNumber(sourcePlanRaw.proposal_evidence_missing_count, 0),
+          proposal_evidence_ready_count: safeNumber(sourcePlanRaw.proposal_evidence_ready_count, 0),
+          proposal_review_missing_count: safeNumber(sourcePlanRaw.proposal_review_missing_count, 0),
+          next_smallest_truthful_gap:
+            safeString(sourcePlanRaw.next_smallest_truthful_gap, "") || undefined,
+        }
+      : undefined;
+    return {
+      ok: Boolean((json as Record<string, unknown>).ok ?? false),
+      kind: safeString((json as Record<string, unknown>).kind, "") || undefined,
+      stage: safeString((json as Record<string, unknown>).stage, "") || undefined,
+      status: safeString((json as Record<string, unknown>).status, "") || undefined,
+      proposal_evidence_friction_summary_refs_ready:
+        typeof (json as Record<string, unknown>).proposal_evidence_friction_summary_refs_ready === "boolean"
+          ? Boolean((json as Record<string, unknown>).proposal_evidence_friction_summary_refs_ready)
+          : undefined,
+      pack_total: safeNumber((json as Record<string, unknown>).pack_total, 0),
+      ready_pack_count: safeNumber((json as Record<string, unknown>).ready_pack_count, 0),
+      blocked_pack_count: safeNumber((json as Record<string, unknown>).blocked_pack_count, 0),
+      candidate_pack_count: safeNumber((json as Record<string, unknown>).candidate_pack_count, packs.length),
+      candidate_capability_count: safeNumber((json as Record<string, unknown>).candidate_capability_count, 0),
+      existing_metadata_evidence_count: safeNumber(
+        (json as Record<string, unknown>).existing_metadata_evidence_count,
+        0,
+      ),
+      friction_summary_missing_count: safeNumber(
+        (json as Record<string, unknown>).friction_summary_missing_count,
+        0,
+      ),
+      proposal_id_missing_count: safeNumber((json as Record<string, unknown>).proposal_id_missing_count, 0),
+      plugin_record_missing_count: safeNumber((json as Record<string, unknown>).plugin_record_missing_count, 0),
+      source_proposal_evidence_plan: sourcePlan,
+      packs,
+      packs_truncated: Boolean((json as Record<string, unknown>).packs_truncated ?? false),
+      capability_preview_limit: safeNumber((json as Record<string, unknown>).capability_preview_limit, 0) || undefined,
+      routes: isRecord((json as Record<string, unknown>).routes)
+        ? Object.fromEntries(
+            Object.entries((json as Record<string, unknown>).routes as Record<string, unknown>).map(([key, value]) => [
+              key,
+              safeString(value, ""),
+            ]),
+          )
+        : undefined,
+      requirements: isRecord((json as Record<string, unknown>).requirements)
+        ? Object.fromEntries(
+            Object.entries((json as Record<string, unknown>).requirements as Record<string, unknown>)
+              .filter(([, value]) => typeof value === "boolean")
+              .map(([key, value]) => [key, Boolean(value)]),
+          )
+        : undefined,
+      governance: isRecord((json as Record<string, unknown>).governance)
+        ? ((json as Record<string, unknown>).governance as Record<string, unknown>)
+        : undefined,
+      next_smallest_truthful_gap:
+        safeString((json as Record<string, unknown>).next_smallest_truthful_gap, "") || undefined,
+      catalog: isRecord((json as Record<string, unknown>).catalog)
+        ? ((json as Record<string, unknown>).catalog as Record<string, unknown>)
+        : undefined,
+    };
+  }
+
+  /**
+   * Dry-run or write proposal-evidence refs for existing registry friction summaries.
+   */
+  async applyCapabilityLibraryProposalEvidenceFrictionSummaryRefs(
+    req: PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyRequest,
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyResponse> {
+    const url = this.url(this.endpoints.capabilityLibraryProposalEvidenceFrictionSummaryRefsApply());
+    const body = {
+      ...req,
+      actor: pluginMutationActor(req.actor),
+      pack_ids: safeStringArray(req.pack_ids) ?? [],
+      dry_run: req.dry_run !== false,
+    };
+    const json = await this.fetchJson(url, {
+      method: "POST",
+      body: JSON.stringify(body),
+      signal: opts?.signal,
+      timeoutMs: opts?.timeoutMs,
+    });
+
+    assertPluginMutationAllowed(json, "Proposal evidence friction-summary refs denied.", url);
+    return parseCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyResponse(json, body.dry_run);
   }
 
   /**

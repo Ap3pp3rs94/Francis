@@ -85,6 +85,9 @@ import type {
   PluginCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetResponse,
   PluginCapabilityLibraryProposalEvidencePack,
   PluginCapabilityLibraryProposalEvidencePlanResponse,
+  PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyResponse,
+  PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefPack,
+  PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefResponse,
   PluginCapabilityLibraryProposalEvidenceRemediationPack,
   PluginCapabilityLibraryProposalEvidenceRemediationResponse,
   PluginCapabilityLibraryProposalReviewApplyReadinessResponse,
@@ -18225,6 +18228,10 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
   const [capabilityLibraryProposalEvidenceRemediation, setCapabilityLibraryProposalEvidenceRemediation] =
     useState<PluginCapabilityLibraryProposalEvidenceRemediationResponse | null>(null);
   const [
+    capabilityLibraryProposalEvidenceFrictionSummaryRefs,
+    setCapabilityLibraryProposalEvidenceFrictionSummaryRefs,
+  ] = useState<PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefResponse | null>(null);
+  const [
     capabilityLibraryOperatorProposalEvidenceIntakeChecklist,
     setCapabilityLibraryOperatorProposalEvidenceIntakeChecklist,
   ] = useState<PluginCapabilityLibraryOperatorProposalEvidenceIntakeChecklistResponse | null>(null);
@@ -18256,6 +18263,10 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
     capabilityLibraryOperatorProposalEvidenceIntakeResponse,
     setCapabilityLibraryOperatorProposalEvidenceIntakeResponse,
   ] = useState<PluginCapabilityLibraryOperatorProposalEvidenceIntakeResponse | null>(null);
+  const [
+    capabilityLibraryProposalEvidenceFrictionSummaryRefResponse,
+    setCapabilityLibraryProposalEvidenceFrictionSummaryRefResponse,
+  ] = useState<PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyResponse | null>(null);
   const [capabilityPackOperatorReview, setCapabilityPackOperatorReview] =
     useState<PluginCapabilityPackOperatorReviewResponse | null>(null);
   const [capabilityPackOperatorReviewDecisions, setCapabilityPackOperatorReviewDecisions] = useState<
@@ -18408,6 +18419,28 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
       return packs.find((pack) => (pack.candidate_capability_count ?? 0) > 0) ?? packs[0] ?? null;
     }, [
       capabilityLibraryProposalEvidenceRemediation?.packs,
+      selectedCapabilityCatalogEntry?.metadata,
+      selectedPluginId,
+    ]);
+  const selectedCapabilityLibraryProposalEvidenceFrictionSummaryRefPack =
+    useMemo((): PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefPack | null => {
+      const packs = capabilityLibraryProposalEvidenceFrictionSummaryRefs?.packs ?? [];
+      if (!packs.length) return null;
+      const selectedPackId = safeString(selectedCapabilityCatalogEntry?.metadata?.pack_id).trim();
+      const selectedPackVersion = safeString(selectedCapabilityCatalogEntry?.metadata?.pack_version).trim();
+      if (selectedPackId && selectedPackVersion) {
+        const linked = packs.find(
+          (pack) => pack.pack_id === selectedPackId && pack.pack_version === selectedPackVersion,
+        );
+        if (linked) return linked;
+      }
+      if (selectedPluginId) {
+        const linked = packs.find((pack) => pack.capabilities.some((item) => item.capability === selectedPluginId));
+        if (linked) return linked;
+      }
+      return packs.find((pack) => (pack.candidate_capability_count ?? 0) > 0) ?? packs[0] ?? null;
+    }, [
+      capabilityLibraryProposalEvidenceFrictionSummaryRefs?.packs,
       selectedCapabilityCatalogEntry?.metadata,
       selectedPluginId,
     ]);
@@ -18628,6 +18661,24 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
     }),
     [capabilityLibraryProposalEvidenceRemediation],
   );
+  const proposalEvidenceFrictionSummaryRefCounts = useMemo(
+    () => ({
+      packs: capabilityLibraryProposalEvidenceFrictionSummaryRefs?.candidate_pack_count ?? 0,
+      candidates: capabilityLibraryProposalEvidenceFrictionSummaryRefs?.candidate_capability_count ?? 0,
+      existingMetadata: capabilityLibraryProposalEvidenceFrictionSummaryRefs?.existing_metadata_evidence_count ?? 0,
+      frictionMissing: capabilityLibraryProposalEvidenceFrictionSummaryRefs?.friction_summary_missing_count ?? 0,
+      sourceMissing:
+        capabilityLibraryProposalEvidenceFrictionSummaryRefs?.source_proposal_evidence_plan
+          ?.proposal_evidence_missing_count ?? 0,
+      sourceReady:
+        capabilityLibraryProposalEvidenceFrictionSummaryRefs?.source_proposal_evidence_plan
+          ?.proposal_evidence_ready_count ?? 0,
+      sourceReviewMissing:
+        capabilityLibraryProposalEvidenceFrictionSummaryRefs?.source_proposal_evidence_plan
+          ?.proposal_review_missing_count ?? 0,
+    }),
+    [capabilityLibraryProposalEvidenceFrictionSummaryRefs],
+  );
   const operatorProposalEvidenceChecklistCounts = useMemo(
     () => ({
       packs: capabilityLibraryOperatorProposalEvidenceIntakeChecklist?.candidate_pack_count ?? 0,
@@ -18773,6 +18824,31 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
           pack.pack_version === selectedOperatorProposalEvidencePack?.pack_version,
       ),
   );
+  const proposalEvidenceFrictionSummaryRefSelectedPackCandidateCount =
+    selectedCapabilityLibraryProposalEvidenceFrictionSummaryRefPack?.candidate_capability_count ?? 0;
+  const proposalEvidenceFrictionSummaryRefSelectedPackCapabilityLimit = Math.min(
+    Math.max(
+      proposalEvidenceFrictionSummaryRefSelectedPackCandidateCount ||
+        selectedCapabilityLibraryProposalEvidenceFrictionSummaryRefPack?.capabilities.length ||
+        1,
+      1,
+    ),
+    500,
+  );
+  const proposalEvidenceFrictionSummaryRefCanDryRun = Boolean(
+    selectedCapabilityLibraryProposalEvidenceFrictionSummaryRefPack &&
+      proposalEvidenceFrictionSummaryRefSelectedPackCandidateCount > 0,
+  );
+  const proposalEvidenceFrictionSummaryRefCanApply = Boolean(
+    proposalEvidenceFrictionSummaryRefCanDryRun &&
+      capabilityLibraryProposalEvidenceFrictionSummaryRefResponse?.status === "dry_run" &&
+      (capabilityLibraryProposalEvidenceFrictionSummaryRefResponse.planned_pack_count ?? 0) > 0 &&
+      capabilityLibraryProposalEvidenceFrictionSummaryRefResponse.planned?.some(
+        (pack) =>
+          pack.pack_id === selectedCapabilityLibraryProposalEvidenceFrictionSummaryRefPack?.pack_id &&
+          pack.pack_version === selectedCapabilityLibraryProposalEvidenceFrictionSummaryRefPack?.pack_version,
+      ),
+  );
   const promotionReadinessCounts = useMemo(() => {
     const ready = promotionReadiness.filter((item) => item.ready || item.status === "ready").length;
     const blocked = promotionReadiness.filter((item) => !item.ready && item.status !== "ready").length;
@@ -18900,6 +18976,7 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
         capabilityLibraryProposalReviewPlanRes,
         capabilityLibraryProposalReviewApplyReadinessRes,
         capabilityLibraryProposalEvidenceRemediationRes,
+        capabilityLibraryProposalEvidenceFrictionSummaryRefsRes,
         capabilityLibraryOperatorProposalEvidenceIntakeChecklistRes,
         capabilityLibraryOperatorProposalEvidenceIntakeWorksheetRes,
         capabilityLibraryOperatorProposalEvidenceIntakeExportRes,
@@ -18920,6 +18997,7 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
         client.listCapabilityLibraryProposalReviewPlan(),
         client.listCapabilityLibraryProposalReviewApplyReadiness(),
         client.listCapabilityLibraryProposalEvidenceRemediation(),
+        client.listCapabilityLibraryProposalEvidenceFrictionSummaryRefs(),
         client.listCapabilityLibraryOperatorProposalEvidenceIntakeChecklist(),
         client.listCapabilityLibraryOperatorProposalEvidenceIntakeWorksheet(),
         client.listCapabilityLibraryOperatorProposalEvidenceIntakeExport(),
@@ -18943,6 +19021,7 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
       setCapabilityLibraryProposalReviewPlan(capabilityLibraryProposalReviewPlanRes);
       setCapabilityLibraryProposalReviewApplyReadiness(capabilityLibraryProposalReviewApplyReadinessRes);
       setCapabilityLibraryProposalEvidenceRemediation(capabilityLibraryProposalEvidenceRemediationRes);
+      setCapabilityLibraryProposalEvidenceFrictionSummaryRefs(capabilityLibraryProposalEvidenceFrictionSummaryRefsRes);
       setCapabilityLibraryOperatorProposalEvidenceIntakeChecklist(
         capabilityLibraryOperatorProposalEvidenceIntakeChecklistRes,
       );
@@ -19041,6 +19120,7 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
     setPromotionActionResponse(null);
     setCapabilityPackDecisionResponse(null);
     setCapabilityPackBulkDecisionResponse(null);
+    setCapabilityLibraryProposalEvidenceFrictionSummaryRefResponse(null);
     setCapabilityLibraryOperatorProposalEvidenceIntakeResponse(null);
   }, [selectedPluginId]);
 
@@ -19375,6 +19455,51 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
         : await client.applyCapabilityLibraryOperatorProposalEvidenceIntake(intakeRequest);
       setCapabilityLibraryOperatorProposalEvidenceImportApplyGroupKey(groupKey);
       setCapabilityLibraryOperatorProposalEvidenceIntakeResponse(res);
+      setResult(JSON.stringify(res, null, 2));
+      await refreshPlugins();
+    } catch (err) {
+      setError(pluginErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function applyCapabilityLibraryProposalEvidenceFrictionSummaryRefs(dryRun: boolean) {
+    const pack = selectedCapabilityLibraryProposalEvidenceFrictionSummaryRefPack;
+    if (!pack) {
+      setError("Select a registry-friction proposal-evidence pack.");
+      return;
+    }
+    if (proposalEvidenceFrictionSummaryRefSelectedPackCandidateCount <= 0) {
+      setError("Selected registry-friction pack has no candidates.");
+      return;
+    }
+    if (!dryRun && !proposalEvidenceFrictionSummaryRefCanApply) {
+      setError("Dry-run the selected registry-friction references before applying.");
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    setRunResponse(null);
+    setCapabilityLibraryProposalEvidenceFrictionSummaryRefResponse(null);
+    try {
+      const res = await client.applyCapabilityLibraryProposalEvidenceFrictionSummaryRefs({
+        reason: dryRun
+          ? "dry-run registry friction proposal evidence refs from chat UI"
+          : "apply registry friction proposal evidence refs from chat UI",
+        pack_ids: [pack.pack_id],
+        max_pack_count: 1,
+        max_total_capability_count: proposalEvidenceFrictionSummaryRefSelectedPackCapabilityLimit,
+        max_capability_count_per_pack: proposalEvidenceFrictionSummaryRefSelectedPackCapabilityLimit,
+        dry_run: dryRun,
+        meta: {
+          surface: "chat_ui.plugins.proposal_evidence_friction_summary_refs",
+          pack_version: pack.pack_version,
+          claim_scope: "existing_registry_friction_summary_reference_not_independent_verification",
+        },
+      });
+      setCapabilityLibraryProposalEvidenceFrictionSummaryRefResponse(res);
       setResult(JSON.stringify(res, null, 2));
       await refreshPlugins();
     } catch (err) {
@@ -19893,9 +20018,293 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
                 </div>
               )}
             </div>
+        ) : (
+          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+            Proposal evidence remediation readback unavailable.
+          </div>
+        )}
+        </div>
+
+        <div style={{ borderTop: `1px solid ${THEME.panelBorder}`, marginTop: 10, paddingTop: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 12, fontWeight: 600 }}>Registry Friction References</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <span style={badgeStyle(proposalEvidenceFrictionSummaryRefCounts.candidates > 0 ? "ready" : "none")}>
+                candidates {proposalEvidenceFrictionSummaryRefCounts.candidates}
+              </span>
+              <span style={badgeStyle("packs")}>packs {proposalEvidenceFrictionSummaryRefCounts.packs}</span>
+              <span style={badgeStyle("metadata")}>
+                metadata {proposalEvidenceFrictionSummaryRefCounts.existingMetadata}
+              </span>
+              <span style={badgeStyle(proposalEvidenceFrictionSummaryRefCounts.frictionMissing > 0 ? "blocked" : "clear")}>
+                friction missing {proposalEvidenceFrictionSummaryRefCounts.frictionMissing}
+              </span>
+              <span style={badgeStyle(proposalEvidenceFrictionSummaryRefCounts.sourceMissing > 0 ? "blocked" : "clear")}>
+                source missing {proposalEvidenceFrictionSummaryRefCounts.sourceMissing}
+              </span>
+            </div>
+          </div>
+
+          {capabilityLibraryProposalEvidenceFrictionSummaryRefs ? (
+            <div style={{ display: "grid", gap: 6, fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <span style={badgeStyle(capabilityLibraryProposalEvidenceFrictionSummaryRefs.status || "unknown")}>
+                  {capabilityLibraryProposalEvidenceFrictionSummaryRefs.status || "unknown"}
+                </span>
+                {capabilityLibraryProposalEvidenceFrictionSummaryRefs.proposal_evidence_friction_summary_refs_ready ? (
+                  <span style={badgeStyle("ready")}>refs ready</span>
+                ) : (
+                  <span style={badgeStyle("none")}>no refs candidates</span>
+                )}
+                <span style={badgeStyle("source")}>
+                  source ready {proposalEvidenceFrictionSummaryRefCounts.sourceReady}
+                </span>
+                <span
+                  style={badgeStyle(
+                    proposalEvidenceFrictionSummaryRefCounts.sourceReviewMissing > 0 ? "blocked" : "clear",
+                  )}
+                >
+                  source reviews {proposalEvidenceFrictionSummaryRefCounts.sourceReviewMissing}
+                </span>
+                {capabilityLibraryProposalEvidenceFrictionSummaryRefs.next_smallest_truthful_gap ? (
+                  <span style={badgeStyle("gap")}>
+                    {capabilityLibraryProposalEvidenceFrictionSummaryRefs.next_smallest_truthful_gap}
+                  </span>
+                ) : null}
+              </div>
+
+              {selectedCapabilityLibraryProposalEvidenceFrictionSummaryRefPack ? (
+                <>
+                  <div>
+                    registry-friction pack{" "}
+                    <code>{selectedCapabilityLibraryProposalEvidenceFrictionSummaryRefPack.pack_id}</code> / version{" "}
+                    <code>{selectedCapabilityLibraryProposalEvidenceFrictionSummaryRefPack.pack_version}</code>
+                    {selectedCapabilityLibraryProposalEvidenceFrictionSummaryRefPack.pack_name ? (
+                      <>
+                        {" "}
+                        / name{" "}
+                        <code>{selectedCapabilityLibraryProposalEvidenceFrictionSummaryRefPack.pack_name}</code>
+                      </>
+                    ) : null}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <span style={badgeStyle("staged")}>
+                      staged {selectedCapabilityLibraryProposalEvidenceFrictionSummaryRefPack.staged_capability_count ?? 0}
+                    </span>
+                    <span
+                      style={badgeStyle(
+                        (selectedCapabilityLibraryProposalEvidenceFrictionSummaryRefPack.candidate_capability_count ??
+                          0) > 0
+                          ? "ready"
+                          : "none",
+                      )}
+                    >
+                      ref candidates{" "}
+                      {selectedCapabilityLibraryProposalEvidenceFrictionSummaryRefPack.candidate_capability_count ?? 0}
+                    </span>
+                    <span style={badgeStyle("limit")}>
+                      cap limit {proposalEvidenceFrictionSummaryRefSelectedPackCapabilityLimit}
+                    </span>
+                    {selectedCapabilityLibraryProposalEvidenceFrictionSummaryRefPack.capabilities_truncated ? (
+                      <span style={badgeStyle("truncated")}>sample truncated</span>
+                    ) : null}
+                  </div>
+
+                  {selectedCapabilityLibraryProposalEvidenceFrictionSummaryRefPack.capabilities.length ? (
+                    <div style={{ display: "grid", gap: 6 }}>
+                      {selectedCapabilityLibraryProposalEvidenceFrictionSummaryRefPack.capabilities
+                        .slice(0, 4)
+                        .map((item) => (
+                          <div key={`proposal-evidence-friction-ref-${item.capability}`} style={{ display: "grid", gap: 4 }}>
+                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                              <span style={badgeStyle(item.writes_registry_metadata ? "ready" : "none")}>
+                                registry metadata {String(item.writes_registry_metadata ?? false)}
+                              </span>
+                              {item.evidence_source ? (
+                                <span style={badgeStyle(item.evidence_source)}>{item.evidence_source}</span>
+                              ) : null}
+                              <span style={badgeStyle(item.requires_future_review ? "pending" : "clear")}>
+                                future review {String(item.requires_future_review ?? false)}
+                              </span>
+                              <span style={badgeStyle(item.writes_proposals ? "blocked" : "clear")}>
+                                proposals {String(item.writes_proposals ?? false)}
+                              </span>
+                              <span style={badgeStyle(item.approves_proposals ? "blocked" : "clear")}>
+                                approvals {String(item.approves_proposals ?? false)}
+                              </span>
+                              <span style={badgeStyle(item.promotes_capability ? "blocked" : "clear")}>
+                                promotion {String(item.promotes_capability ?? false)}
+                              </span>
+                            </div>
+                            <div>
+                              capability <code>{item.capability}</code>
+                              {item.proposal_id ? (
+                                <>
+                                  {" "}
+                                  / proposal <code>{item.proposal_id}</code>
+                                </>
+                              ) : null}
+                            </div>
+                            {item.friction_summary_ref ? (
+                              <div>
+                                ref <code>{item.friction_summary_ref}</code>
+                              </div>
+                            ) : null}
+                          </div>
+                        ))}
+                    </div>
+                  ) : (
+                    <div>No registry friction-summary candidate sample returned for this pack.</div>
+                  )}
+
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button
+                      style={buttonStyle}
+                      disabled={busy || !proposalEvidenceFrictionSummaryRefCanDryRun}
+                      onClick={() => void applyCapabilityLibraryProposalEvidenceFrictionSummaryRefs(true)}
+                    >
+                      Dry-run selected refs
+                    </button>
+                    <button
+                      style={buttonStyle}
+                      disabled={busy || !proposalEvidenceFrictionSummaryRefCanApply}
+                      onClick={() => void applyCapabilityLibraryProposalEvidenceFrictionSummaryRefs(false)}
+                    >
+                      Apply selected refs
+                    </button>
+                  </div>
+
+                  {capabilityLibraryProposalEvidenceFrictionSummaryRefResponse ? (
+                    <div style={{ display: "grid", gap: 6 }}>
+                      <div>
+                        ref response{" "}
+                        <code>
+                          {capabilityLibraryProposalEvidenceFrictionSummaryRefResponse.status ||
+                            (capabilityLibraryProposalEvidenceFrictionSummaryRefResponse.ok ? "ok" : "unknown")}
+                        </code>
+                        {typeof capabilityLibraryProposalEvidenceFrictionSummaryRefResponse.planned_pack_count ===
+                        "number" ? (
+                          <>
+                            {" "}
+                            / planned packs{" "}
+                            <code>{capabilityLibraryProposalEvidenceFrictionSummaryRefResponse.planned_pack_count}</code>
+                          </>
+                        ) : null}
+                        {typeof capabilityLibraryProposalEvidenceFrictionSummaryRefResponse.planned_capability_count ===
+                        "number" ? (
+                          <>
+                            {" "}
+                            / planned caps{" "}
+                            <code>
+                              {capabilityLibraryProposalEvidenceFrictionSummaryRefResponse.planned_capability_count}
+                            </code>
+                          </>
+                        ) : null}
+                        {typeof capabilityLibraryProposalEvidenceFrictionSummaryRefResponse.recorded_capability_count ===
+                        "number" ? (
+                          <>
+                            {" "}
+                            / recorded caps{" "}
+                            <code>
+                              {capabilityLibraryProposalEvidenceFrictionSummaryRefResponse.recorded_capability_count}
+                            </code>
+                          </>
+                        ) : null}
+                        {typeof capabilityLibraryProposalEvidenceFrictionSummaryRefResponse.remaining_candidate_capability_count ===
+                        "number" ? (
+                          <>
+                            {" "}
+                            / remaining candidates{" "}
+                            <code>
+                              {
+                                capabilityLibraryProposalEvidenceFrictionSummaryRefResponse.remaining_candidate_capability_count
+                              }
+                            </code>
+                          </>
+                        ) : null}
+                      </div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <span
+                          style={badgeStyle(
+                            capabilityLibraryProposalEvidenceFrictionSummaryRefResponse.governance
+                              ?.writes_registry_metadata
+                              ? "write"
+                              : "dry_run",
+                          )}
+                        >
+                          registry{" "}
+                          <code>
+                            {String(
+                              capabilityLibraryProposalEvidenceFrictionSummaryRefResponse.governance
+                                ?.writes_registry_metadata ?? false,
+                            )}
+                          </code>
+                        </span>
+                        <span style={badgeStyle("clear")}>
+                          proposals{" "}
+                          <code>
+                            {String(
+                              capabilityLibraryProposalEvidenceFrictionSummaryRefResponse.governance?.writes_proposals ??
+                                false,
+                            )}
+                          </code>
+                        </span>
+                        <span style={badgeStyle("clear")}>
+                          approvals{" "}
+                          <code>
+                            {String(
+                              capabilityLibraryProposalEvidenceFrictionSummaryRefResponse.governance
+                                ?.does_not_approve_proposals === false,
+                            )}
+                          </code>
+                        </span>
+                        <span style={badgeStyle("clear")}>
+                          promotion{" "}
+                          <code>
+                            {String(
+                              capabilityLibraryProposalEvidenceFrictionSummaryRefResponse.governance
+                                ?.does_not_promote_capabilities === false,
+                            )}
+                          </code>
+                        </span>
+                        <span style={badgeStyle("clear")}>
+                          memory{" "}
+                          <code>
+                            {String(
+                              capabilityLibraryProposalEvidenceFrictionSummaryRefResponse.governance?.memory_write ??
+                                false,
+                            )}
+                          </code>
+                        </span>
+                        {capabilityLibraryProposalEvidenceFrictionSummaryRefResponse.governance?.evidence_claim_scope ? (
+                          <span style={badgeStyle("claim")}>
+                            {
+                              capabilityLibraryProposalEvidenceFrictionSummaryRefResponse.governance
+                                .evidence_claim_scope as string
+                            }
+                          </span>
+                        ) : null}
+                      </div>
+                      {capabilityLibraryProposalEvidenceFrictionSummaryRefResponse.planned?.length ? (
+                        <div>
+                          planned{" "}
+                          {capabilityLibraryProposalEvidenceFrictionSummaryRefResponse.planned.slice(0, 3).map((pack) => (
+                            <span key={`friction-summary-ref-plan-${pack.pack_id}`} style={badgeStyle("planned")}>
+                              {pack.pack_id} {pack.capability_count ?? 0}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <div>No registry friction-summary candidates returned by the backend.</div>
+              )}
+            </div>
           ) : (
             <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
-              Proposal evidence remediation readback unavailable.
+              Registry friction-summary ref readback unavailable.
             </div>
           )}
         </div>

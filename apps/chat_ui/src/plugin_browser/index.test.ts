@@ -1116,6 +1116,279 @@ test("PluginBrowserClient lists capability library proposal evidence remediation
   }
 });
 
+test("PluginBrowserClient lists capability library proposal evidence friction summary refs", async () => {
+  const requests: string[] = [];
+  const restoreFetch = installFetch(async (url) => {
+    const parsed = new URL(url);
+    requests.push(parsed.pathname);
+    return jsonResponse({
+      ok: true,
+      kind: "plugin.capability_library.proposal_evidence_friction_summary_refs",
+      stage: "Stage 17 / Capability Economy",
+      status: "ready_for_proposal_evidence_friction_summary_ref_backfill",
+      proposal_evidence_friction_summary_refs_ready: true,
+      pack_total: 50,
+      ready_pack_count: 50,
+      blocked_pack_count: 0,
+      candidate_pack_count: 1,
+      candidate_capability_count: 2,
+      existing_metadata_evidence_count: 10,
+      friction_summary_missing_count: 3,
+      proposal_id_missing_count: 0,
+      plugin_record_missing_count: 0,
+      source_proposal_evidence_plan: {
+        status: "blocked",
+        candidate_capability_count: 2265,
+        proposal_evidence_missing_count: 2263,
+        proposal_evidence_ready_count: 2,
+        proposal_review_missing_count: 2265,
+        next_smallest_truthful_gap: "stage17_capability_library_promotion_readiness",
+      },
+      packs: [
+        {
+          pack_id: "legacy.generated.opsplugin",
+          pack_version: "1.0.0",
+          pack_name: "Ops Plugin",
+          staged_capability_count: 2,
+          candidate_capability_count: 2,
+          capabilities_truncated: false,
+          capabilities: [
+            {
+              capability: "generated.ops.run",
+              status: "staged",
+              proposal_id: "plugin_proposal_generated_ops_run",
+              metadata_proposal_evidence: [],
+              friction_summary_field: "friction_summary",
+              friction_summary_ref: "registry.plugins.generated.ops.run.meta.friction_summary",
+              friction_summary_preview: "Repeated ops run review",
+              evidence_source: "existing_registry_friction_summary_ref",
+              writes_registry_metadata: true,
+              writes_proposals: false,
+              approves_proposals: false,
+              promotes_capability: false,
+              requires_future_review: true,
+            },
+          ],
+        },
+      ],
+      routes: {
+        proposal_evidence_plan_route: "/plugins/capabilities/library/proposal-evidence/plan",
+        proposal_evidence_friction_summary_refs_apply_route:
+          "/plugins/capabilities/library/proposal-evidence/friction-summary-refs/apply",
+      },
+      requirements: {
+        only_existing_registry_friction_summary: true,
+        records_reference_not_friction_summary_body: true,
+        no_synthetic_evidence: true,
+        not_independent_verification: true,
+        requires_future_review: true,
+      },
+      governance: {
+        read_only: true,
+        apply_requires_plugins_write_scope: true,
+        does_not_approve_proposals: true,
+        does_not_promote_capabilities: true,
+        memory_write: false,
+      },
+      next_smallest_truthful_gap: "stage17_capability_library_proposal_evidence_friction_summary_refs_apply",
+    });
+  });
+
+  try {
+    const client = new PluginBrowserClient("http://127.0.0.1:8000", { retry: { retries: 0 } });
+
+    const refs = await client.listCapabilityLibraryProposalEvidenceFrictionSummaryRefs();
+
+    assert.deepEqual(requests, ["/plugins/capabilities/library/proposal-evidence/friction-summary-refs"]);
+    assert.equal(refs.status, "ready_for_proposal_evidence_friction_summary_ref_backfill");
+    assert.equal(refs.proposal_evidence_friction_summary_refs_ready, true);
+    assert.equal(refs.candidate_capability_count, 2);
+    assert.equal(refs.friction_summary_missing_count, 3);
+    assert.equal(refs.source_proposal_evidence_plan?.proposal_evidence_missing_count, 2263);
+    assert.equal(refs.requirements?.only_existing_registry_friction_summary, true);
+    assert.equal(refs.requirements?.records_reference_not_friction_summary_body, true);
+    assert.equal(refs.requirements?.not_independent_verification, true);
+    assert.equal(refs.governance?.apply_requires_plugins_write_scope, true);
+    assert.equal(refs.governance?.does_not_approve_proposals, true);
+    assert.equal(refs.governance?.does_not_promote_capabilities, true);
+    assert.equal(
+      refs.routes?.proposal_evidence_friction_summary_refs_apply_route,
+      "/plugins/capabilities/library/proposal-evidence/friction-summary-refs/apply",
+    );
+    assert.equal(refs.packs[0]?.pack_id, "legacy.generated.opsplugin");
+    assert.equal(refs.packs[0]?.candidate_capability_count, 2);
+    assert.equal(refs.packs[0]?.capabilities[0]?.capability, "generated.ops.run");
+    assert.equal(
+      refs.packs[0]?.capabilities[0]?.friction_summary_ref,
+      "registry.plugins.generated.ops.run.meta.friction_summary",
+    );
+    assert.equal(refs.packs[0]?.capabilities[0]?.writes_registry_metadata, true);
+    assert.equal(refs.packs[0]?.capabilities[0]?.writes_proposals, false);
+    assert.equal(refs.packs[0]?.capabilities[0]?.approves_proposals, false);
+    assert.equal(refs.packs[0]?.capabilities[0]?.promotes_capability, false);
+    assert.equal(refs.packs[0]?.capabilities[0]?.requires_future_review, true);
+  } finally {
+    restoreFetch();
+  }
+});
+
+test("PluginBrowserClient applies capability library proposal evidence friction summary refs", async () => {
+  const captured: Record<string, unknown>[] = [];
+  const restoreFetch = installFetch(async (url, init) => {
+    const parsed = new URL(url);
+    assert.equal(parsed.pathname, "/plugins/capabilities/library/proposal-evidence/friction-summary-refs/apply");
+    const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+    captured.push(body);
+    if (body.dry_run === false) {
+      return jsonResponse({
+        ok: true,
+        applied: true,
+        kind: "plugin.capability_library.proposal_evidence_friction_summary_refs.apply",
+        status: "recorded",
+        dry_run: false,
+        recorded_pack_count: 1,
+        recorded_capability_count: 2,
+        recorded: [
+          {
+            pack_id: "legacy.generated.opsplugin",
+            pack_version: "1.0.0",
+            pack_name: "Ops Plugin",
+            capability_count: 2,
+            changed_capability_count: 2,
+            changed_capability_ids: ["generated.ops.run", "generated.ops.wait"],
+            evidence_source: "existing_registry_friction_summary_ref",
+            writes_registry_metadata: true,
+            writes_proposals: false,
+            approves_proposals: false,
+            promotes_capabilities: false,
+            enables_capabilities: false,
+            requires_future_review: true,
+            status: "recorded",
+          },
+        ],
+        remaining_candidate_pack_count: 0,
+        remaining_candidate_capability_count: 0,
+        governance: {
+          writes_registry_metadata: true,
+          writes_receipts: false,
+          writes_proposals: false,
+          only_existing_registry_friction_summary: true,
+          evidence_claim_scope: "existing_registry_friction_summary_reference_not_independent_verification",
+          does_not_approve_proposals: true,
+          does_not_promote_capabilities: true,
+          memory_write: false,
+        },
+      });
+    }
+    return jsonResponse({
+      ok: true,
+      applied: false,
+      kind: "plugin.capability_library.proposal_evidence_friction_summary_refs.apply",
+      status: "dry_run",
+      dry_run: true,
+      planned_pack_count: 1,
+      planned_capability_count: 2,
+      planned: [
+        {
+          pack_id: "legacy.generated.opsplugin",
+          pack_version: "1.0.0",
+          pack_name: "Ops Plugin",
+          capability_count: 2,
+          evidence_source: "existing_registry_friction_summary_ref",
+          capabilities: [
+            {
+              capability: "generated.ops.run",
+              proposal_id: "plugin_proposal_generated_ops_run",
+              friction_summary_field: "friction_summary",
+              friction_summary_ref: "registry.plugins.generated.ops.run.meta.friction_summary",
+            },
+          ],
+          writes_registry_metadata: false,
+          writes_proposals: false,
+          approves_proposals: false,
+          promotes_capabilities: false,
+          enables_capabilities: false,
+          requires_future_review: true,
+        },
+      ],
+      governance: {
+        writes_registry_metadata: false,
+        writes_receipts: false,
+        writes_proposals: false,
+        only_existing_registry_friction_summary: true,
+        evidence_claim_scope: "existing_registry_friction_summary_reference_not_independent_verification",
+        does_not_approve_proposals: true,
+        does_not_promote_capabilities: true,
+        memory_write: false,
+      },
+      next_smallest_truthful_gap: "stage17_capability_library_proposal_evidence_friction_summary_refs_apply",
+    });
+  });
+
+  try {
+    const client = new PluginBrowserClient("http://127.0.0.1:8000", { retry: { retries: 0 } });
+
+    const dryRun = await client.applyCapabilityLibraryProposalEvidenceFrictionSummaryRefs({
+      pack_ids: ["legacy.generated.opsplugin"],
+      max_pack_count: 1,
+      max_total_capability_count: 2,
+      max_capability_count_per_pack: 2,
+      meta: { surface: "test" },
+    });
+    const applied = await client.applyCapabilityLibraryProposalEvidenceFrictionSummaryRefs({
+      pack_ids: ["legacy.generated.opsplugin"],
+      max_pack_count: 1,
+      max_total_capability_count: 2,
+      max_capability_count_per_pack: 2,
+      dry_run: false,
+      meta: { surface: "test" },
+    });
+
+    assert.equal(captured[0]?.actor, "chat_ui.plugins");
+    assert.equal(captured[0]?.dry_run, true);
+    assert.deepEqual(captured[0]?.pack_ids, ["legacy.generated.opsplugin"]);
+    assert.equal(captured[0]?.max_pack_count, 1);
+    assert.equal(captured[1]?.dry_run, false);
+    assert.equal(dryRun.status, "dry_run");
+    assert.equal(dryRun.applied, false);
+    assert.equal(dryRun.planned_pack_count, 1);
+    assert.equal(dryRun.planned_capability_count, 2);
+    assert.equal(dryRun.planned?.[0]?.pack_id, "legacy.generated.opsplugin");
+    assert.equal(dryRun.planned?.[0]?.capabilities?.[0]?.capability, "generated.ops.run");
+    assert.equal(
+      dryRun.planned?.[0]?.capabilities?.[0]?.friction_summary_ref,
+      "registry.plugins.generated.ops.run.meta.friction_summary",
+    );
+    assert.equal(dryRun.planned?.[0]?.writes_registry_metadata, false);
+    assert.equal(dryRun.planned?.[0]?.writes_proposals, false);
+    assert.equal(dryRun.planned?.[0]?.approves_proposals, false);
+    assert.equal(dryRun.planned?.[0]?.promotes_capabilities, false);
+    assert.equal(dryRun.planned?.[0]?.requires_future_review, true);
+    assert.equal(dryRun.governance?.writes_registry_metadata, false);
+    assert.equal(dryRun.governance?.only_existing_registry_friction_summary, true);
+    assert.equal(
+      dryRun.governance?.evidence_claim_scope,
+      "existing_registry_friction_summary_reference_not_independent_verification",
+    );
+    assert.equal(dryRun.governance?.does_not_promote_capabilities, true);
+    assert.equal(dryRun.governance?.memory_write, false);
+    assert.equal(applied.applied, true);
+    assert.equal(applied.recorded_pack_count, 1);
+    assert.equal(applied.recorded_capability_count, 2);
+    assert.deepEqual(applied.recorded?.[0]?.changed_capability_ids, ["generated.ops.run", "generated.ops.wait"]);
+    assert.equal(applied.recorded?.[0]?.writes_registry_metadata, true);
+    assert.equal(applied.recorded?.[0]?.writes_proposals, false);
+    assert.equal(applied.recorded?.[0]?.approves_proposals, false);
+    assert.equal(applied.recorded?.[0]?.promotes_capabilities, false);
+    assert.equal(applied.remaining_candidate_capability_count, 0);
+    assert.equal(applied.governance?.writes_registry_metadata, true);
+    assert.equal(applied.governance?.does_not_approve_proposals, true);
+    assert.equal(applied.governance?.memory_write, false);
+  } finally {
+    restoreFetch();
+  }
+});
+
 test("PluginBrowserClient lists capability library proposal review plan", async () => {
   const requests: string[] = [];
   const restoreFetch = installFetch(async (url) => {

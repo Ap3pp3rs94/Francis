@@ -63389,6 +63389,59 @@ Remaining truthful gap:
 - Stage 18 Managed Copies Platform remains a next-stage target, not a current
   completion claim.
 
+### 2026-06-05 - Stage 17 registry friction proposal-evidence refs reach chat UI
+
+Roadmap area: Stage 17 / Capability Economy.
+
+Truthful change:
+
+- Extended the Chat UI plugin-browser client contract for `GET
+  /plugins/capabilities/library/proposal-evidence/friction-summary-refs`
+  and governed `POST
+  /plugins/capabilities/library/proposal-evidence/friction-summary-refs/apply`.
+- The Plugins panel now loads the registry friction-summary refs readback with
+  the adjacent Stage 17 proposal-evidence surfaces.
+- Added a `Registry Friction References` operator section that shows candidate
+  counts, source proposal-evidence plan counts, selected pack details, sample
+  friction-summary ref targets, future-review posture, and no-proposal /
+  no-approval / no-promotion governance badges.
+- Added dry-run/apply controls for the selected pack. Apply remains disabled
+  until the same selected pack has a dry-run response from the new route.
+- This is a UI/client follow-through for the backend route. It does not record
+  real proposal-evidence refs by itself, does not approve proposals, does not
+  promote capabilities, does not enable capabilities, and does not write
+  memory.
+
+Latest validation for this UI pass:
+
+- Full chat UI test script:
+  `npm run test`
+  Result: 218 tests passed.
+- Chat UI production build:
+  `npm run build`
+  Result: passed. Vite emitted the existing non-fatal large chunk warning for
+  the bundled app asset.
+- Whitespace check:
+  `git diff --check`
+  Result: passed.
+
+Validation risk:
+
+- This pass did not run a browser screenshot or Playwright visual check, so the
+  UI validation claim is TypeScript/build and test coverage, not pixel-level
+  layout proof.
+- This pass did not run `.\scripts\check.ps1`.
+- This pass did not call the new route against the live operator dataset and
+  did not record real registry friction proposal-evidence refs.
+
+Remaining truthful gap:
+
+- Stage 17 remains active until proposal-evidence refs are recorded through a
+  governed path and the proposal-evidence plan no longer reports missing
+  evidence.
+- Stage 18 Managed Copies Platform remains a next-stage target, not a current
+  completion claim.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
