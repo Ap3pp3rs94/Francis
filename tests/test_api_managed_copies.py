@@ -35,6 +35,7 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
         "sla_framework_contract": "/managed-copies/sla-framework-contract",
         "roles_contract": "/managed-copies/roles-contract",
         "decommission_contract": "/managed-copies/decommission-contract",
+        "completion_review": "/managed-copies/completion-review",
     }
 
     deliverable_ids = {item["id"] for item in body["deliverables"]}
@@ -104,6 +105,97 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
     assert governance["privacy_weak_pooling_allowed"] is False
     assert governance["uncontrolled_forks_allowed"] is False
     assert governance["invisible_vendor_power_allowed"] is False
+    assert not data_root.exists()
+
+
+def test_managed_copy_completion_review_blocks_closure_without_runtime_evidence(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    response = TestClient(create_app()).get("/managed-copies/completion-review")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kind"] == "francis.stage18.managed_copies.completion_review"
+    assert body["stage"] == "Stage 18 / Managed Copies Platform"
+    assert body["source_id"] == "managed_copies"
+    assert body["status"] == "blocked"
+    assert body["stage17_closed_by_receipt"] is False
+    assert body["contract_readback_complete"] is True
+    assert body["runtime_readiness_ready"] is False
+    assert body["stage18_completion_review_ready"] is False
+    assert body["ready_to_close"] is False
+    assert body["stage_closure_decision_required"] is False
+    assert body["readback_ready_count"] == body["required_count"]
+    assert body["runtime_ready_count"] == 0
+    assert body["passed_count"] == 0
+
+    check_by_id = {item["id"]: item for item in body["checks"]}
+    assert set(check_by_id) == {
+        "stage17_ledger_closure_backstop",
+        "copy_creation_contract",
+        "isolation_rules_contract",
+        "safe_delta_model_contract",
+        "rogue_recovery_contract",
+        "sla_framework_contract",
+        "roles_contract",
+        "decommission_contract",
+    }
+    assert all(item["readback_ready"] is True for item in body["checks"])
+    assert all(item["runtime_ready"] is False for item in body["checks"])
+    assert all(item["passed"] is False for item in body["checks"])
+    assert check_by_id["stage17_ledger_closure_backstop"]["blocker"] == (
+        "stage17_capability_library_operator_proposal_evidence_refs"
+    )
+    assert check_by_id["copy_creation_contract"]["route"] == "/managed-copies/copy-creation-contract"
+    assert check_by_id["decommission_contract"]["route"] == "/managed-copies/decommission-contract"
+    assert body["blockers"] == [
+        "stage17_capability_library_operator_proposal_evidence_refs",
+        "stage18_copy_creation_runtime_not_implemented",
+        "stage18_tenant_isolation_runtime_not_implemented",
+        "stage18_safe_delta_runtime_not_implemented",
+        "stage18_rogue_recovery_runtime_not_implemented",
+        "stage18_sla_runtime_not_implemented",
+        "stage18_role_authority_runtime_not_implemented",
+        "stage18_decommission_runtime_not_implemented",
+    ]
+    assert body["done_criteria"] == {
+        "customer_instances_are_isolated": False,
+        "global_core_improves_through_safe_signals": False,
+        "rogue_instances_can_be_detected_and_replaced": False,
+        "business_model_aligned_to_product_law": False,
+    }
+    assert body["routes"]["completion_review"] == "/managed-copies/completion-review"
+
+    assert body["read_only"] is True
+    assert body["projection_only"] is True
+    assert body["copy_creation_enabled"] is False
+    assert body["writes_registry"] is False
+    assert body["writes_memory"] is False
+    assert body["writes_receipts"] is False
+    assert body["writes_tenant_state"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["launches_browser"] is False
+    assert body["captures_screen"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+
+    governance = body["governance"]
+    assert governance["completion_review_only"] is True
+    assert governance["does_not_mark_stage_closed"] is True
+    assert governance["requires_runtime_evidence"] is True
+    assert governance["requires_stage17_closure_receipt"] is True
+    assert governance["stage_closure_decision_required"] is False
+    assert governance["writes_tenant_state"] is False
+    assert governance["writes_receipts"] is False
+    assert governance["grants_execution_authority"] is False
+    assert governance["grants_mutation_authority"] is False
     assert not data_root.exists()
 
 

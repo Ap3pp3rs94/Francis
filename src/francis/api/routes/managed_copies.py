@@ -6,6 +6,7 @@ from fastapi import APIRouter
 
 from francis.managed_copies import (
     managed_copies_status_snapshot,
+    managed_copy_completion_review_snapshot,
     managed_copy_creation_contract_snapshot,
     managed_copy_decommission_contract_snapshot,
     managed_copy_isolation_rules_contract_snapshot,
@@ -56,3 +57,8 @@ def roles_contract() -> dict[str, Any]:
 @router.get("/decommission-contract")
 def decommission_contract() -> dict[str, Any]:
     return managed_copy_decommission_contract_snapshot()
+
+
+@router.get("/completion-review")
+def completion_review() -> dict[str, Any]:
+    return managed_copy_completion_review_snapshot()

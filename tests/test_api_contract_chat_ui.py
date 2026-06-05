@@ -81,6 +81,7 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("GET", "/managed-copies/sla-framework-contract"),
         ("GET", "/managed-copies/roles-contract"),
         ("GET", "/managed-copies/decommission-contract"),
+        ("GET", "/managed-copies/completion-review"),
         ("GET", "/federation/instances/list"),
         ("GET", "/federation/instances/get"),
         ("GET", "/federation/delegations/list"),

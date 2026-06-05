@@ -11,6 +11,7 @@ MANAGED_COPIES_ROGUE_RECOVERY_CONTRACT_KIND = "francis.stage18.managed_copies.ro
 MANAGED_COPIES_SLA_FRAMEWORK_CONTRACT_KIND = "francis.stage18.managed_copies.sla_framework_contract"
 MANAGED_COPIES_ROLES_CONTRACT_KIND = "francis.stage18.managed_copies.roles_contract"
 MANAGED_COPIES_DECOMMISSION_CONTRACT_KIND = "francis.stage18.managed_copies.decommission_contract"
+MANAGED_COPIES_COMPLETION_REVIEW_KIND = "francis.stage18.managed_copies.completion_review"
 STAGE17_OPERATOR_EVIDENCE_REFS_GAP = "stage17_capability_library_operator_proposal_evidence_refs"
 
 
@@ -223,6 +224,27 @@ def _decommission_step(
     }
 
 
+def _completion_check(
+    check_id: str,
+    title: str,
+    *,
+    readback_ready: bool,
+    runtime_ready: bool,
+    route: str,
+    blocker: str,
+) -> dict[str, Any]:
+    return {
+        "id": check_id,
+        "title": title,
+        "readback_ready": readback_ready,
+        "runtime_ready": runtime_ready,
+        "passed": readback_ready and runtime_ready,
+        "status": "ready" if readback_ready and runtime_ready else "blocked",
+        "route": route,
+        "blocker": blocker,
+    }
+
+
 def managed_copies_status_snapshot() -> dict[str, Any]:
     """Return the Stage 18 managed-copy substrate posture without creating state."""
     governance = _governance()
@@ -331,6 +353,7 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "sla_framework_contract": "/managed-copies/sla-framework-contract",
             "roles_contract": "/managed-copies/roles-contract",
             "decommission_contract": "/managed-copies/decommission-contract",
+            "completion_review": "/managed-copies/completion-review",
         },
         "managed_copy_roles_required": [
             "end_user",
@@ -1428,5 +1451,140 @@ def managed_copy_decommission_contract_snapshot() -> dict[str, Any]:
         "purges_memory": False,
         "records_decommission_receipt": False,
         "weakens_other_copies": False,
+        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+    }
+
+
+def managed_copy_completion_review_snapshot() -> dict[str, Any]:
+    """Return Stage 18 managed-copy closure readiness without recording closure."""
+    governance = _governance()
+    status = managed_copies_status_snapshot()
+    copy_creation = managed_copy_creation_contract_snapshot()
+    isolation = managed_copy_isolation_rules_contract_snapshot()
+    safe_delta = managed_copy_safe_delta_model_contract_snapshot()
+    rogue_recovery = managed_copy_rogue_recovery_contract_snapshot()
+    sla_framework = managed_copy_sla_framework_contract_snapshot()
+    roles = managed_copy_roles_contract_snapshot()
+    decommission = managed_copy_decommission_contract_snapshot()
+    checks = [
+        _completion_check(
+            "stage17_ledger_closure_backstop",
+            "Stage 17 is closed by receipt before managed-copy closure review",
+            readback_ready=True,
+            runtime_ready=bool(status["stage17_closed_by_receipt"]),
+            route="/managed-copies/status",
+            blocker=STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        ),
+        _completion_check(
+            "copy_creation_contract",
+            "Copy creation contract is read back and backed by runtime creation proof",
+            readback_ready=bool(copy_creation["contract_readback_ready"]),
+            runtime_ready=bool(copy_creation["copy_creation_allowed"]),
+            route="/managed-copies/copy-creation-contract",
+            blocker="stage18_copy_creation_runtime_not_implemented",
+        ),
+        _completion_check(
+            "isolation_rules_contract",
+            "Tenant isolation rules are read back and enforced at runtime",
+            readback_ready=bool(isolation["contract_readback_ready"]),
+            runtime_ready=bool(isolation["isolation_rules_ready"]),
+            route="/managed-copies/isolation-rules-contract",
+            blocker="stage18_tenant_isolation_runtime_not_implemented",
+        ),
+        _completion_check(
+            "safe_delta_model_contract",
+            "Safe delta model is read back and proven by governed runtime flow",
+            readback_ready=bool(safe_delta["contract_readback_ready"]),
+            runtime_ready=bool(safe_delta["safe_delta_model_ready"]),
+            route="/managed-copies/safe-delta-model-contract",
+            blocker="stage18_safe_delta_runtime_not_implemented",
+        ),
+        _completion_check(
+            "rogue_recovery_contract",
+            "Rogue recovery model is read back and backed by live detect/replace proof",
+            readback_ready=bool(rogue_recovery["contract_readback_ready"]),
+            runtime_ready=bool(rogue_recovery["rogue_recovery_ready"]),
+            route="/managed-copies/rogue-recovery-contract",
+            blocker="stage18_rogue_recovery_runtime_not_implemented",
+        ),
+        _completion_check(
+            "sla_framework_contract",
+            "SLA framework is read back and backed by active service evidence",
+            readback_ready=bool(sla_framework["contract_readback_ready"]),
+            runtime_ready=bool(sla_framework["sla_framework_ready"]),
+            route="/managed-copies/sla-framework-contract",
+            blocker="stage18_sla_runtime_not_implemented",
+        ),
+        _completion_check(
+            "roles_contract",
+            "Managed-copy role contract is read back and backed by authority binding proof",
+            readback_ready=bool(roles["contract_readback_ready"]),
+            runtime_ready=bool(roles["roles_contract_ready"]),
+            route="/managed-copies/roles-contract",
+            blocker="stage18_role_authority_runtime_not_implemented",
+        ),
+        _completion_check(
+            "decommission_contract",
+            "Decommission contract is read back and backed by exit-rights proof",
+            readback_ready=bool(decommission["contract_readback_ready"]),
+            runtime_ready=bool(decommission["decommission_contract_ready"]),
+            route="/managed-copies/decommission-contract",
+            blocker="stage18_decommission_runtime_not_implemented",
+        ),
+    ]
+    readback_ready = all(check["readback_ready"] for check in checks)
+    runtime_ready = all(check["runtime_ready"] for check in checks)
+    ready_to_close = readback_ready and runtime_ready
+    blockers = [check["blocker"] for check in checks if not check["passed"]]
+    return {
+        "ok": True,
+        "kind": MANAGED_COPIES_COMPLETION_REVIEW_KIND,
+        "stage": STAGE18_MANAGED_COPIES_STAGE,
+        "source_id": "managed_copies",
+        "status": "ready" if ready_to_close else "blocked",
+        "stage17_closed_by_receipt": bool(status["stage17_closed_by_receipt"]),
+        "contract_readback_complete": readback_ready,
+        "runtime_readiness_ready": runtime_ready,
+        "stage18_completion_review_ready": ready_to_close,
+        "ready_to_close": ready_to_close,
+        "stage_closure_decision_required": ready_to_close,
+        "checks": checks,
+        "readback_ready_count": sum(1 for check in checks if check["readback_ready"]),
+        "runtime_ready_count": sum(1 for check in checks if check["runtime_ready"]),
+        "passed_count": sum(1 for check in checks if check["passed"]),
+        "required_count": len(checks),
+        "blockers": blockers,
+        "done_criteria": {
+            "customer_instances_are_isolated": bool(isolation["isolation_rules_ready"]),
+            "global_core_improves_through_safe_signals": bool(safe_delta["safe_delta_model_ready"]),
+            "rogue_instances_can_be_detected_and_replaced": bool(rogue_recovery["rogue_recovery_ready"]),
+            "business_model_aligned_to_product_law": ready_to_close,
+        },
+        "routes": {
+            **status["routes"],
+            "completion_review": "/managed-copies/completion-review",
+        },
+        "governance": {
+            **governance,
+            "completion_review_only": True,
+            "does_not_mark_stage_closed": True,
+            "requires_runtime_evidence": True,
+            "requires_stage17_closure_receipt": True,
+            "stage_closure_decision_required": ready_to_close,
+        },
+        "read_only": governance["read_only"],
+        "projection_only": governance["projection_only"],
+        "copy_creation_enabled": governance["copy_creation_enabled"],
+        "writes_registry": governance["writes_registry"],
+        "writes_memory": governance["writes_memory"],
+        "writes_receipts": governance["writes_receipts"],
+        "writes_tenant_state": governance["writes_tenant_state"],
+        "runs_tools": governance["runs_tools"],
+        "runs_shell": governance["runs_shell"],
+        "runs_git": governance["runs_git"],
+        "launches_browser": governance["launches_browser"],
+        "captures_screen": governance["captures_screen"],
+        "grants_execution_authority": governance["grants_execution_authority"],
+        "grants_mutation_authority": governance["grants_mutation_authority"],
         "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
     }
