@@ -46,6 +46,7 @@ def analyze_capability_pack_promotion_discipline(
     packs = _pack_discipline(packed, approved_pack_reviews=approved_pack_reviews)
     ready_pack_count = sum(1 for pack in packs if pack["ready"])
     blocked_pack_count = len(packs) - ready_pack_count
+    approved_pack_operator_review_count = sum(1 for pack in packs if pack["operator_review_approved"])
 
     return {
         "stage": _STAGE17_CAPABILITY_ECONOMY_STAGE,
@@ -58,7 +59,7 @@ def analyze_capability_pack_promotion_discipline(
         "available_proposal_count": len(proposal_ids),
         "available_validation_receipt_count": len(validation_receipt_ids),
         "available_promotion_receipt_count": len(promotion_receipt_ids),
-        "approved_pack_operator_review_count": len(approved_pack_reviews),
+        "approved_pack_operator_review_count": approved_pack_operator_review_count,
         "packs": packs,
         "unpacked_capabilities": [_entry_identity(entry) for entry in sorted(unpacked, key=_entry_sort_key)[:50]],
         "unpacked_capabilities_truncated": len(unpacked) > 50,
@@ -98,7 +99,7 @@ def analyze_capability_pack_promotion_discipline(
 def _pack_discipline(
     entries: list[dict[str, Any]],
     *,
-    approved_pack_reviews: set[tuple[str, str]],
+    approved_pack_reviews: dict[tuple[str, str], set[str]],
 ) -> list[dict[str, Any]]:
     grouped: dict[tuple[str, str], list[dict[str, Any]]] = {}
     for entry in entries:
@@ -114,7 +115,13 @@ def _pack_discipline(
             approved_pack_reviews=approved_pack_reviews,
         )
         failing = [entry for entry in sorted_entries if _entry_gaps(entry)]
-        review_approved = (pack_id, pack_version) in approved_pack_reviews
+        review_coverage = _pack_review_coverage(
+            pack_id=pack_id,
+            pack_version=pack_version,
+            entries=grouped_entries,
+            approved_pack_reviews=approved_pack_reviews,
+        )
+        review_approved = not review_coverage["missing_capabilities"] and bool(review_coverage["staged_capabilities"])
         packs.append(
             {
                 "pack_id": pack_id,
@@ -146,6 +153,10 @@ def _pack_discipline(
                     _operator_review_governance_declared(entry) for entry in grouped_entries
                 ),
                 "operator_review_approved": review_approved,
+                "operator_review_approved_capability_count": len(review_coverage["approved_staged_capabilities"]),
+                "operator_review_missing_capability_count": len(review_coverage["missing_capabilities"]),
+                "operator_review_missing_capabilities_sample": review_coverage["missing_capabilities"][:25],
+                "operator_review_missing_capabilities_truncated": len(review_coverage["missing_capabilities"]) > 25,
                 "lifecycle_mixed": bool(staged_entries and promoted_entries),
                 "failing_capabilities_sample": [_entry_summary(entry) for entry in failing[:25]],
                 "failing_capabilities_truncated": len(failing) > 25,
@@ -157,7 +168,7 @@ def _pack_discipline(
 def _pack_blockers(
     entries: list[dict[str, Any]],
     *,
-    approved_pack_reviews: set[tuple[str, str]],
+    approved_pack_reviews: dict[tuple[str, str], set[str]],
 ) -> list[str]:
     blockers: list[str] = []
     if any(not entry["pack_version"] for entry in entries):
@@ -191,7 +202,12 @@ def _pack_blockers(
             blockers.append("operator_review_governance_missing")
         pack_id = entries[0]["pack_id"]
         pack_version = entries[0]["pack_version"]
-        if (pack_id, pack_version) not in approved_pack_reviews:
+        if not _pack_review_approved(
+            pack_id=pack_id,
+            pack_version=pack_version,
+            entries=entries,
+            approved_pack_reviews=approved_pack_reviews,
+        ):
             blockers.append("operator_review_decision_missing")
     if staged_entries and any(entry["status"] == "promoted" for entry in entries):
         blockers.append("mixed_staged_and_promoted_pack")
@@ -287,8 +303,8 @@ def _normalize_entry(
     }
 
 
-def _approved_pack_reviews(decisions: Iterable[Mapping[str, Any]]) -> set[tuple[str, str]]:
-    approved: set[tuple[str, str]] = set()
+def _approved_pack_reviews(decisions: Iterable[Mapping[str, Any]]) -> dict[tuple[str, str], set[str]]:
+    approved: dict[tuple[str, str], set[str]] = {}
     for decision in decisions:
         if not isinstance(decision, Mapping):
             continue
@@ -297,8 +313,50 @@ def _approved_pack_reviews(decisions: Iterable[Mapping[str, Any]]) -> set[tuple[
         pack_id = _text(decision.get("pack_id"))
         pack_version = _text(decision.get("pack_version"))
         if status == "approved" and receipt_id and pack_id and pack_version:
-            approved.add((pack_id, pack_version))
+            approved.setdefault((pack_id, pack_version), set()).update(_str_list(decision.get("capability_ids")))
     return approved
+
+
+def _pack_review_approved(
+    *,
+    pack_id: str,
+    pack_version: str,
+    entries: Iterable[Mapping[str, Any]],
+    approved_pack_reviews: Mapping[tuple[str, str], set[str]],
+) -> bool:
+    coverage = _pack_review_coverage(
+        pack_id=pack_id,
+        pack_version=pack_version,
+        entries=entries,
+        approved_pack_reviews=approved_pack_reviews,
+    )
+    return bool(coverage["staged_capabilities"]) and not coverage["missing_capabilities"]
+
+
+def _pack_review_coverage(
+    *,
+    pack_id: str,
+    pack_version: str,
+    entries: Iterable[Mapping[str, Any]],
+    approved_pack_reviews: Mapping[tuple[str, str], set[str]],
+) -> dict[str, list[str]]:
+    approved_capabilities = approved_pack_reviews.get((pack_id, pack_version), set())
+    staged_capabilities = sorted(
+        {
+            str(entry.get("capability") or "")
+            for entry in entries
+            if str(entry.get("status") or "") == "staged" and str(entry.get("capability") or "")
+        }
+    )
+    approved_staged_capabilities = [
+        capability for capability in staged_capabilities if capability in approved_capabilities
+    ]
+    missing_capabilities = [capability for capability in staged_capabilities if capability not in approved_capabilities]
+    return {
+        "staged_capabilities": staged_capabilities,
+        "approved_staged_capabilities": approved_staged_capabilities,
+        "missing_capabilities": missing_capabilities,
+    }
 
 
 def _operator_review_rule_declared(entry: Mapping[str, Any]) -> bool:

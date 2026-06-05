@@ -63218,6 +63218,63 @@ Remaining truthful gap:
 - The next bounded Stage 17 blocker remains
   `stage17_capability_library_operator_proposal_evidence_refs`.
 
+### 2026-06-05 - Stage 17 promotion-discipline requires capability-covered reviews
+
+Roadmap area: Stage 17 / Capability Economy.
+
+Truthful change:
+
+- Tightened the capability-pack promotion-discipline analyzer so an approved
+  operator review only clears the pack gate when the approved review receipts
+  cover every currently staged capability in the pack.
+- The readback now counts approved packs from actual full staged-capability
+  coverage instead of from the existence of a pack-level receipt alone.
+- Pack readbacks now expose approved staged-capability count, missing
+  staged-capability count, and a bounded missing capability sample so stale or
+  partial review coverage remains operator-visible.
+- This preserves the existing receipt contract: operator-review receipts remain
+  auditable records with `capability_ids`, and promotion discipline remains a
+  read-only gate analysis.
+
+Latest validation for this promotion-discipline pass:
+
+- Focused promotion-discipline tests:
+  `python -m pytest tests\unit\test_capability_pack_promotion_discipline.py
+  tests\test_api_plugins.py::test_plugins_capability_pack_promotion_discipline_projects_pack_gate
+  tests\test_api_plugins.py::test_plugins_capability_pack_operator_review_bulk_reopens_stale_capability_coverage
+  -q`
+  Result: passed.
+- Python syntax check:
+  `python -m py_compile
+  src\francis\economy\markets\capability_pack_promotion_discipline.py`
+  Result: passed.
+- Python lint on touched files:
+  `python -m ruff check
+  src\francis\economy\markets\capability_pack_promotion_discipline.py
+  tests\unit\test_capability_pack_promotion_discipline.py
+  tests\test_api_plugins.py`
+  Result: passed.
+- Python format check on touched files:
+  `python -m ruff format --check
+  src\francis\economy\markets\capability_pack_promotion_discipline.py
+  tests\unit\test_capability_pack_promotion_discipline.py
+  tests\test_api_plugins.py`
+  Result: passed after formatting the analyzer and unit test.
+
+Validation risk:
+
+- This pass did not run the full repository gate `.\scripts\check.ps1`.
+- This pass did not record real operator proposal-evidence refs, approve
+  proposals, promote capabilities, or begin Stage 18 Managed Copies Platform
+  implementation.
+
+Remaining truthful gap:
+
+- Stage 17 remains active until the capability library has real operator
+  proposal-evidence refs and the proposal-evidence plan no longer reports
+  missing evidence.
+- Stage 18 remains a next-stage target, not a claimed current posture.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -3389,6 +3389,9 @@ def test_plugins_capability_pack_promotion_discipline_projects_pack_gate(
     assert pack["staged_capability_count"] == 1
     assert pack["promoted_capability_count"] == 0
     assert pack["operator_review_approved"] is True
+    assert pack["operator_review_approved_capability_count"] == 1
+    assert pack["operator_review_missing_capability_count"] == 0
+    assert pack["operator_review_missing_capabilities_sample"] == []
     assert pack["promotion_rules_ready"] is True
     assert pack["pack_governance_ready"] is True
     assert pack["quality_evidence_ready"] is True

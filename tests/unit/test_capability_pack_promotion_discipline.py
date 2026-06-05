@@ -37,6 +37,7 @@ def test_capability_pack_promotion_discipline_passes_for_reviewed_quality_pack()
                 "status": "approved",
                 "pack_id": "ops.deploy",
                 "pack_version": "1.0.0",
+                "capability_ids": ["generated.deploy"],
             }
         ],
     )
@@ -57,12 +58,88 @@ def test_capability_pack_promotion_discipline_passes_for_reviewed_quality_pack()
     assert pack["ready"] is True
     assert pack["blockers"] == []
     assert pack["operator_review_approved"] is True
+    assert pack["operator_review_approved_capability_count"] == 1
+    assert pack["operator_review_missing_capability_count"] == 0
+    assert pack["operator_review_missing_capabilities_sample"] == []
     assert pack["promotion_rules_ready"] is True
     assert pack["quality_evidence_ready"] is True
     assert pack["validation_receipts_ready"] is True
     assert pack["proposal_lineage_ready"] is True
     assert pack["lifecycle_mixed"] is False
     assert pack["failing_capabilities_sample"] == []
+
+
+def test_capability_pack_promotion_discipline_blocks_partial_review_coverage() -> None:
+    entries = [
+        {
+            "capability": "generated.deploy",
+            "version": "0.1.0",
+            "source": "generated",
+            "status": "staged",
+            "proposal_id": "plugin_proposal_deploy",
+            "metadata": {
+                "pack_id": "ops.deploy",
+                "pack_version": "1.0.0",
+                "pack_name": "Ops Deploy Pack",
+                "validation_receipt_id": "plugin_validation_deploy",
+                "promotion_rules": [
+                    "metadata_receipt_before_promotion",
+                    "quality_standards_before_promotion",
+                    "operator_review_before_promotion",
+                ],
+                "pack_governance": {"scope": "build_dev", "operator_review_required": True},
+            },
+            "quality": {"tests": ["tests/test_deploy.py"], "docs": ["docs/deploy.md"]},
+        },
+        {
+            "capability": "generated.rollback",
+            "version": "0.1.0",
+            "source": "generated",
+            "status": "staged",
+            "proposal_id": "plugin_proposal_rollback",
+            "metadata": {
+                "pack_id": "ops.deploy",
+                "pack_version": "1.0.0",
+                "pack_name": "Ops Deploy Pack",
+                "validation_receipt_id": "plugin_validation_rollback",
+                "promotion_rules": [
+                    "metadata_receipt_before_promotion",
+                    "quality_standards_before_promotion",
+                    "operator_review_before_promotion",
+                ],
+                "pack_governance": {"scope": "build_dev", "operator_review_required": True},
+            },
+            "quality": {"tests": ["tests/test_rollback.py"], "docs": ["docs/rollback.md"]},
+        },
+    ]
+
+    analysis = analyze_capability_pack_promotion_discipline(
+        entries,
+        available_proposal_ids={"plugin_proposal_deploy", "plugin_proposal_rollback"},
+        available_validation_receipt_ids={"plugin_validation_deploy", "plugin_validation_rollback"},
+        operator_review_decisions=[
+            {
+                "receipt_id": "capability_pack_operator_review_1_ops_deploy",
+                "status": "approved",
+                "pack_id": "ops.deploy",
+                "pack_version": "1.0.0",
+                "capability_ids": ["generated.deploy"],
+            }
+        ],
+    )
+
+    assert analysis["status"] == "blocked"
+    assert analysis["ready_pack_count"] == 0
+    assert analysis["blocked_pack_count"] == 1
+    assert analysis["approved_pack_operator_review_count"] == 0
+    assert analysis["next_smallest_truthful_gap"] == "stage17_capability_pack_review_decisions"
+
+    pack = analysis["packs"][0]
+    assert pack["operator_review_approved"] is False
+    assert pack["operator_review_approved_capability_count"] == 1
+    assert pack["operator_review_missing_capability_count"] == 1
+    assert pack["operator_review_missing_capabilities_sample"] == ["generated.rollback"]
+    assert "operator_review_decision_missing" in pack["blockers"]
 
 
 def test_capability_pack_promotion_discipline_blocks_weak_pack_promotion_posture() -> None:
