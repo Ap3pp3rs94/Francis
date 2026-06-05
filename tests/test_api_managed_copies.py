@@ -34,6 +34,7 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
         "rogue_recovery_contract": "/managed-copies/rogue-recovery-contract",
         "sla_framework_contract": "/managed-copies/sla-framework-contract",
         "roles_contract": "/managed-copies/roles-contract",
+        "decommission_contract": "/managed-copies/decommission-contract",
     }
 
     deliverable_ids = {item["id"] for item in body["deliverables"]}
@@ -103,6 +104,144 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
     assert governance["privacy_weak_pooling_allowed"] is False
     assert governance["uncontrolled_forks_allowed"] is False
     assert governance["invisible_vendor_power_allowed"] is False
+    assert not data_root.exists()
+
+
+def test_managed_copy_decommission_contract_is_projection_only_and_inactive(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    response = TestClient(create_app()).get("/managed-copies/decommission-contract")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kind"] == "francis.stage18.managed_copies.decommission_contract"
+    assert body["stage"] == "Stage 18 / Managed Copies Platform"
+    assert body["source_id"] == "managed_copies"
+    assert body["status"] == "contract_readback_ready"
+    assert body["contract_readback_ready"] is True
+    assert body["decommission_contract_ready"] is False
+    assert body["decommission_enabled"] is False
+    assert body["export_enabled"] is False
+    assert body["delete_enabled"] is False
+    assert body["purge_enabled"] is False
+    assert body["credential_revocation_enabled"] is False
+    assert body["node_unpairing_enabled"] is False
+    assert body["proof_receipts_enabled"] is False
+    assert body["copy_creation_enabled"] is False
+    assert body["stage17_closed_by_receipt"] is False
+    assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+
+    step_by_id = {item["id"]: item for item in body["decommission_steps"]}
+    assert set(step_by_id) == {
+        "request",
+        "export_before_delete",
+        "revoke_credentials",
+        "unpair_nodes",
+        "delete_tenant_state",
+        "retain_required_records",
+        "prove_outcome",
+    }
+    assert body["step_count"] == len(body["decommission_steps"])
+    assert body["active_step_count"] == 0
+    assert step_by_id["request"]["status"] == "contract_only"
+    assert step_by_id["request"]["mutates_tenant_state"] is False
+    assert step_by_id["export_before_delete"]["status"] == "disabled"
+    assert step_by_id["export_before_delete"]["writes_receipt"] is True
+    assert step_by_id["revoke_credentials"]["status"] == "disabled"
+    assert step_by_id["revoke_credentials"]["mutates_tenant_state"] is True
+    assert step_by_id["unpair_nodes"]["status"] == "disabled"
+    assert step_by_id["delete_tenant_state"]["status"] == "disabled"
+    assert step_by_id["delete_tenant_state"]["mutates_tenant_state"] is True
+    assert step_by_id["retain_required_records"]["status"] == "contract_only"
+    assert step_by_id["prove_outcome"]["status"] == "disabled"
+    assert all(item["requires_operator_approval"] is True for item in body["decommission_steps"])
+
+    assert body["export_scope"] == [
+        "tenant_configuration",
+        "tenant_policy",
+        "tenant_receipts",
+        "tenant_memory_exports_where_policy_allows",
+        "tenant_capability_pack_lineage",
+        "tenant_sla_and_support_history",
+        "tenant_safe_delta_lineage",
+    ]
+    assert body["deletion_scope"] == [
+        "tenant_runtime_state",
+        "tenant_memory_state",
+        "tenant_connector_bindings",
+        "tenant_credentials",
+        "tenant_support_access",
+        "tenant_automation_principals",
+        "tenant_pairings",
+    ]
+    assert body["retention_scope"] == [
+        "legal_hold_records",
+        "billing_records",
+        "security_incident_records",
+        "policy_required_audit_summaries",
+        "deidentified_platform_safety_metrics_when_allowed",
+    ]
+    assert body["required_receipts"] == [
+        "decommission_request_receipt",
+        "export_before_delete_receipt",
+        "credential_revocation_receipt",
+        "node_unpairing_receipt",
+        "tenant_state_delete_receipt",
+        "retention_scope_receipt",
+        "decommission_proof_receipt",
+    ]
+    assert body["operator_controls_required"] == [
+        "tenant_admin_or_operator_request",
+        "export_review_before_delete",
+        "deletion_scope_review",
+        "retention_policy_review",
+        "cross_copy_non_weakening_review",
+        "final_proof_review",
+    ]
+    assert body["blocked_failure_modes"] == [
+        "trapped_tenant_state",
+        "residual_authority_after_decommission",
+        "delete_without_export",
+        "cross_copy_state_damage",
+        "unproved_deletion",
+        "hidden_retention",
+        "vendor_gravity_exit_block",
+    ]
+
+    assert body["read_only"] is True
+    assert body["projection_only"] is True
+    assert body["writes_registry"] is False
+    assert body["writes_memory"] is False
+    assert body["writes_receipts"] is False
+    assert body["writes_tenant_state"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["launches_browser"] is False
+    assert body["captures_screen"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["exports_tenant_data"] is False
+    assert body["deletes_tenant_state"] is False
+    assert body["revokes_credentials"] is False
+    assert body["unpairs_nodes"] is False
+    assert body["purges_memory"] is False
+    assert body["records_decommission_receipt"] is False
+    assert body["weakens_other_copies"] is False
+
+    governance = body["governance"]
+    assert governance["read_only"] is True
+    assert governance["projection_only"] is True
+    assert governance["copy_creation_enabled"] is False
+    assert governance["writes_tenant_state"] is False
+    assert governance["writes_receipts"] is False
+    assert governance["grants_execution_authority"] is False
+    assert governance["grants_mutation_authority"] is False
     assert not data_root.exists()
 
 

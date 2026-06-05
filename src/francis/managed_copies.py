@@ -10,6 +10,7 @@ MANAGED_COPIES_SAFE_DELTA_MODEL_CONTRACT_KIND = "francis.stage18.managed_copies.
 MANAGED_COPIES_ROGUE_RECOVERY_CONTRACT_KIND = "francis.stage18.managed_copies.rogue_recovery_contract"
 MANAGED_COPIES_SLA_FRAMEWORK_CONTRACT_KIND = "francis.stage18.managed_copies.sla_framework_contract"
 MANAGED_COPIES_ROLES_CONTRACT_KIND = "francis.stage18.managed_copies.roles_contract"
+MANAGED_COPIES_DECOMMISSION_CONTRACT_KIND = "francis.stage18.managed_copies.decommission_contract"
 STAGE17_OPERATOR_EVIDENCE_REFS_GAP = "stage17_capability_library_operator_proposal_evidence_refs"
 
 
@@ -203,6 +204,25 @@ def _managed_copy_role(
     }
 
 
+def _decommission_step(
+    step_id: str,
+    title: str,
+    *,
+    status: str,
+    writes_receipt: bool,
+    mutates_tenant_state: bool,
+    requires_operator_approval: bool = True,
+) -> dict[str, Any]:
+    return {
+        "id": step_id,
+        "title": title,
+        "status": status,
+        "writes_receipt": writes_receipt,
+        "mutates_tenant_state": mutates_tenant_state,
+        "requires_operator_approval": requires_operator_approval,
+    }
+
+
 def managed_copies_status_snapshot() -> dict[str, Any]:
     """Return the Stage 18 managed-copy substrate posture without creating state."""
     governance = _governance()
@@ -281,8 +301,11 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "exit_rights",
             "Decommission export and deletion contract",
             ready=False,
-            status="pending",
+            status="contract_readback_ready",
             next_gap="stage18_decommission_export_delete_contract",
+            evidence=[
+                "GET /managed-copies/decommission-contract exposes export/delete/revocation proof gates without acting.",
+            ],
         ),
     ]
     ready_count = sum(1 for deliverable in deliverables if deliverable["ready"])
@@ -307,6 +330,7 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "rogue_recovery_contract": "/managed-copies/rogue-recovery-contract",
             "sla_framework_contract": "/managed-copies/sla-framework-contract",
             "roles_contract": "/managed-copies/roles-contract",
+            "decommission_contract": "/managed-copies/decommission-contract",
         },
         "managed_copy_roles_required": [
             "end_user",
@@ -1253,5 +1277,156 @@ def managed_copy_roles_contract_snapshot() -> dict[str, Any]:
         "activates_automation_principal": False,
         "pairs_node": False,
         "revokes_role": False,
+        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+    }
+
+
+def managed_copy_decommission_contract_snapshot() -> dict[str, Any]:
+    """Return managed-copy exit-rights rules without mutating tenant state."""
+    governance = _governance()
+    steps = [
+        _decommission_step(
+            "request",
+            "Record a tenant-admin or operator decommission request",
+            status="contract_only",
+            writes_receipt=False,
+            mutates_tenant_state=False,
+        ),
+        _decommission_step(
+            "export_before_delete",
+            "Export tenant data, receipts, configuration, and lawful continuity before deletion",
+            status="disabled",
+            writes_receipt=True,
+            mutates_tenant_state=False,
+        ),
+        _decommission_step(
+            "revoke_credentials",
+            "Revoke credentials, connector bindings, support access, and automation principals",
+            status="disabled",
+            writes_receipt=True,
+            mutates_tenant_state=True,
+        ),
+        _decommission_step(
+            "unpair_nodes",
+            "Revoke paired-node relationships without weakening other copies",
+            status="disabled",
+            writes_receipt=True,
+            mutates_tenant_state=True,
+        ),
+        _decommission_step(
+            "delete_tenant_state",
+            "Delete tenant-specific state inside the declared decommission scope",
+            status="disabled",
+            writes_receipt=True,
+            mutates_tenant_state=True,
+        ),
+        _decommission_step(
+            "retain_required_records",
+            "Retain only policy-required audit, legal, billing, or safety records",
+            status="contract_only",
+            writes_receipt=False,
+            mutates_tenant_state=False,
+        ),
+        _decommission_step(
+            "prove_outcome",
+            "Prove what was exported, deleted, retained, rotated, revoked, or transferred",
+            status="disabled",
+            writes_receipt=True,
+            mutates_tenant_state=False,
+        ),
+    ]
+    return {
+        "ok": True,
+        "kind": MANAGED_COPIES_DECOMMISSION_CONTRACT_KIND,
+        "stage": STAGE18_MANAGED_COPIES_STAGE,
+        "source_id": "managed_copies",
+        "status": "contract_readback_ready",
+        "contract_readback_ready": True,
+        "decommission_contract_ready": False,
+        "decommission_enabled": False,
+        "export_enabled": False,
+        "delete_enabled": False,
+        "purge_enabled": False,
+        "credential_revocation_enabled": False,
+        "node_unpairing_enabled": False,
+        "proof_receipts_enabled": False,
+        "copy_creation_enabled": False,
+        "stage17_closed_by_receipt": False,
+        "stage17_blocker": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "decommission_steps": steps,
+        "step_count": len(steps),
+        "active_step_count": sum(1 for step in steps if step["status"] == "enabled"),
+        "export_scope": [
+            "tenant_configuration",
+            "tenant_policy",
+            "tenant_receipts",
+            "tenant_memory_exports_where_policy_allows",
+            "tenant_capability_pack_lineage",
+            "tenant_sla_and_support_history",
+            "tenant_safe_delta_lineage",
+        ],
+        "deletion_scope": [
+            "tenant_runtime_state",
+            "tenant_memory_state",
+            "tenant_connector_bindings",
+            "tenant_credentials",
+            "tenant_support_access",
+            "tenant_automation_principals",
+            "tenant_pairings",
+        ],
+        "retention_scope": [
+            "legal_hold_records",
+            "billing_records",
+            "security_incident_records",
+            "policy_required_audit_summaries",
+            "deidentified_platform_safety_metrics_when_allowed",
+        ],
+        "required_receipts": [
+            "decommission_request_receipt",
+            "export_before_delete_receipt",
+            "credential_revocation_receipt",
+            "node_unpairing_receipt",
+            "tenant_state_delete_receipt",
+            "retention_scope_receipt",
+            "decommission_proof_receipt",
+        ],
+        "operator_controls_required": [
+            "tenant_admin_or_operator_request",
+            "export_review_before_delete",
+            "deletion_scope_review",
+            "retention_policy_review",
+            "cross_copy_non_weakening_review",
+            "final_proof_review",
+        ],
+        "blocked_failure_modes": [
+            "trapped_tenant_state",
+            "residual_authority_after_decommission",
+            "delete_without_export",
+            "cross_copy_state_damage",
+            "unproved_deletion",
+            "hidden_retention",
+            "vendor_gravity_exit_block",
+        ],
+        "governance": governance,
+        "read_only": governance["read_only"],
+        "projection_only": governance["projection_only"],
+        "writes_registry": governance["writes_registry"],
+        "writes_memory": governance["writes_memory"],
+        "writes_receipts": governance["writes_receipts"],
+        "writes_tenant_state": governance["writes_tenant_state"],
+        "runs_tools": governance["runs_tools"],
+        "runs_shell": governance["runs_shell"],
+        "runs_git": governance["runs_git"],
+        "launches_browser": governance["launches_browser"],
+        "captures_screen": governance["captures_screen"],
+        "grants_execution_authority": governance["grants_execution_authority"],
+        "grants_mutation_authority": governance["grants_mutation_authority"],
+        "exports_tenant_data": False,
+        "deletes_tenant_state": False,
+        "revokes_credentials": False,
+        "unpairs_nodes": False,
+        "purges_memory": False,
+        "records_decommission_receipt": False,
+        "weakens_other_copies": False,
         "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
     }

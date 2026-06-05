@@ -7,6 +7,7 @@ from fastapi import APIRouter
 from francis.managed_copies import (
     managed_copies_status_snapshot,
     managed_copy_creation_contract_snapshot,
+    managed_copy_decommission_contract_snapshot,
     managed_copy_isolation_rules_contract_snapshot,
     managed_copy_rogue_recovery_contract_snapshot,
     managed_copy_safe_delta_model_contract_snapshot,
@@ -50,3 +51,8 @@ def sla_framework_contract() -> dict[str, Any]:
 @router.get("/roles-contract")
 def roles_contract() -> dict[str, Any]:
     return managed_copy_roles_contract_snapshot()
+
+
+@router.get("/decommission-contract")
+def decommission_contract() -> dict[str, Any]:
+    return managed_copy_decommission_contract_snapshot()

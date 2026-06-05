@@ -64532,6 +64532,60 @@ Remaining truthful gap:
   nodes, write role receipts, create managed copies, enforce tenant isolation at
   runtime, activate SLAs, export safe deltas, or implement live rogue recovery.
 
+### Stage 18 managed-copy decommission contract readback
+
+This pass made managed-copy exit rights inspectable without exporting tenant
+data, deleting tenant state, purging memory, revoking credentials, unpairing
+nodes, or writing proof receipts.
+
+Shipped behavior:
+
+- `src/francis/managed_copies.py` now exposes
+  `managed_copy_decommission_contract_snapshot()`, a read-only
+  decommission/export/delete contract for managed copies.
+- `GET /managed-copies/decommission-contract` now returns decommission process
+  steps, export scope, deletion scope, retention scope, required receipts,
+  operator controls, and blocked failure modes.
+- `GET /managed-copies/status` now advertises the decommission contract route
+  and records the `exit_rights` deliverable as `contract_readback_ready` while
+  still reporting `ready: false`.
+- The contract keeps `decommission_contract_ready: false`,
+  `decommission_enabled: false`, `export_enabled: false`,
+  `delete_enabled: false`, `purge_enabled: false`,
+  `credential_revocation_enabled: false`, `node_unpairing_enabled: false`,
+  `proof_receipts_enabled: false`, and `copy_creation_enabled: false`.
+  It does not export tenant data, delete tenant state, revoke credentials,
+  unpair nodes, purge memory, record decommission receipts, weaken other copies,
+  write registries, write memory, write receipts, write tenant state, run tools,
+  run shell, run git, launch browsers, capture screens, grant execution
+  authority, or grant mutation authority.
+- The contract preserves the current blocker as
+  `stage17_capability_library_operator_proposal_evidence_refs` and reports
+  `stage17_closed_by_receipt: false`.
+
+Latest validation for this readback:
+
+- Focused API contract tests:
+  `python -m pytest tests\test_api_managed_copies.py tests\test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted -q`
+  Result: 9 tests passed.
+- Ruff lint:
+  `python -m ruff check src\francis\managed_copies.py src\francis\api\routes\managed_copies.py tests\test_api_managed_copies.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Ruff format check:
+  `python -m ruff format --check src\francis\managed_copies.py src\francis\api\routes\managed_copies.py tests\test_api_managed_copies.py tests\test_api_contract_chat_ui.py`
+  Result: passed with non-fatal `.ruff_cache` write warnings.
+- Mypy:
+  `python -m mypy src\francis\managed_copies.py src\francis\api\routes\managed_copies.py`
+  Result: passed.
+
+Remaining truthful gap:
+
+- This does not close Stage 17, export tenant data, delete tenant state, purge
+  memory, revoke credentials, unpair nodes, write decommission receipts, prove
+  deletion/retention/rotation/transfer outcomes, create managed copies, enforce
+  tenant isolation at runtime, activate SLAs, export safe deltas, or implement
+  live rogue recovery.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
