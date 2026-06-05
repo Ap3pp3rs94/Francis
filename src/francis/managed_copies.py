@@ -18,6 +18,8 @@ MANAGED_COPIES_SAFE_DELTA_MODEL_CONTRACT_KIND = "francis.stage18.managed_copies.
 MANAGED_COPIES_SAFE_DELTA_REVIEW_KIND = "francis.stage18.managed_copies.safe_delta_review"
 MANAGED_COPIES_SAFE_DELTA_WRITE_SCOPE = "managed_copies.safe_delta.write"
 MANAGED_COPIES_ROGUE_RECOVERY_CONTRACT_KIND = "francis.stage18.managed_copies.rogue_recovery_contract"
+MANAGED_COPIES_ROGUE_RECOVERY_REVIEW_KIND = "francis.stage18.managed_copies.rogue_recovery_review"
+MANAGED_COPIES_ROGUE_RECOVERY_WRITE_SCOPE = "managed_copies.rogue_recovery.write"
 MANAGED_COPIES_SLA_FRAMEWORK_CONTRACT_KIND = "francis.stage18.managed_copies.sla_framework_contract"
 MANAGED_COPIES_ROLES_CONTRACT_KIND = "francis.stage18.managed_copies.roles_contract"
 MANAGED_COPIES_DECOMMISSION_CONTRACT_KIND = "francis.stage18.managed_copies.decommission_contract"
@@ -454,6 +456,7 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "safe_delta_model_contract": "/managed-copies/safe-delta-model-contract",
             "safe_delta_review": "/managed-copies/safe-delta-review",
             "rogue_recovery_contract": "/managed-copies/rogue-recovery-contract",
+            "rogue_recovery_review": "/managed-copies/rogue-recovery-review",
             "sla_framework_contract": "/managed-copies/sla-framework-contract",
             "roles_contract": "/managed-copies/roles-contract",
             "decommission_contract": "/managed-copies/decommission-contract",
@@ -1265,6 +1268,7 @@ def managed_copy_safe_delta_review_blocked_snapshot(
 def managed_copy_rogue_recovery_contract_snapshot() -> dict[str, Any]:
     """Return the rogue recovery contract without acting on managed copies."""
     governance = _governance()
+    status = managed_copies_status_snapshot()
     detection_signals = [
         _rogue_recovery_signal(
             "governance_drift",
@@ -1396,6 +1400,12 @@ def managed_copy_rogue_recovery_contract_snapshot() -> dict[str, Any]:
             "post_restore_verification_review",
             "revocation_path_available",
         ],
+        "rogue_recovery_review_route": "/managed-copies/rogue-recovery-review",
+        "routes": {
+            **status["routes"],
+            "rogue_recovery_contract": "/managed-copies/rogue-recovery-contract",
+            "rogue_recovery_review": "/managed-copies/rogue-recovery-review",
+        },
         "blocked_failure_modes": [
             "uncontained_anomalous_instance",
             "messy_replacement_without_lineage",
@@ -1423,6 +1433,108 @@ def managed_copy_rogue_recovery_contract_snapshot() -> dict[str, Any]:
         "replaces_copy": False,
         "restores_copy": False,
         "support_backdoor_allowed": False,
+        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+    }
+
+
+def managed_copy_rogue_recovery_review_blocked_snapshot(
+    payload: dict[str, Any],
+    *,
+    actor: str,
+) -> dict[str, Any]:
+    """Return a governed rogue-recovery review preflight blocked by Stage 17."""
+    governance = _governance()
+    contract = managed_copy_rogue_recovery_contract_snapshot()
+    signal_id = _safe_str(payload.get("signal_id") or payload.get("detection_signal")).strip()
+    signal_by_id = {item["id"]: item for item in contract["detection_signals"]}
+    signal = signal_by_id.get(signal_id, {})
+    action = _safe_str(payload.get("action") or payload.get("recovery_step")).strip()
+    step_by_id = {item["id"]: item for item in contract["recovery_steps"]}
+    step = step_by_id.get(action, {})
+    raw_evidence_refs = payload.get("evidence_refs")
+    evidence_ref_count = len(raw_evidence_refs) if isinstance(raw_evidence_refs, list) else 0
+    return {
+        "ok": False,
+        "kind": MANAGED_COPIES_ROGUE_RECOVERY_REVIEW_KIND,
+        "stage": STAGE18_MANAGED_COPIES_STAGE,
+        "source_id": "managed_copies",
+        "status": "blocked_stage17_prerequisite",
+        "error": "stage17_prerequisite_not_closed",
+        "actor": _safe_str(actor).strip(),
+        "copy_id_present": bool(_safe_str(payload.get("copy_id")).strip()),
+        "tenant_id_present": bool(_safe_str(payload.get("tenant_id")).strip()),
+        "incident_present": payload.get("incident") is not None,
+        "evidence_ref_count": evidence_ref_count,
+        "signal_id": signal_id,
+        "signal_known": bool(signal),
+        "signal_severity": _safe_str(signal.get("severity")).strip(),
+        "action": action,
+        "action_known": bool(step),
+        "action_writes_receipt": bool(step.get("writes_receipt")),
+        "action_mutates_copy_state": bool(step.get("mutates_copy_state")),
+        "stage17_closed_by_receipt": bool(contract["stage17_closed_by_receipt"]),
+        "stage17_blocker": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "rogue_recovery_ready": False,
+        "rogue_recovery_review_enabled": False,
+        "rogue_detection_enabled": False,
+        "halt_enabled": False,
+        "quarantine_enabled": False,
+        "replacement_enabled": False,
+        "restore_enabled": False,
+        "halts_copy": False,
+        "quarantines_copy": False,
+        "replaces_copy": False,
+        "restores_copy": False,
+        "support_backdoor_allowed": False,
+        "receipt_ready": False,
+        "writes_registry": False,
+        "writes_memory": False,
+        "writes_receipt": False,
+        "writes_receipts": False,
+        "writes_tenant_state": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "expected_review_receipt_path": "logs/managed_copies/rogue_recovery_reviews.jsonl",
+        "required_scope": MANAGED_COPIES_ROGUE_RECOVERY_WRITE_SCOPE,
+        "routes": {
+            **contract["routes"],
+            "rogue_recovery_review": "/managed-copies/rogue-recovery-review",
+        },
+        "governance": {
+            **governance,
+            "write_route": True,
+            "preflight_only": True,
+            "permission_scope": MANAGED_COPIES_ROGUE_RECOVERY_WRITE_SCOPE,
+            "permission_checked": True,
+            "rogue_recovery_review_enabled": False,
+            "does_not_detect_rogue_copy": True,
+            "does_not_halt_copy": True,
+            "does_not_quarantine_copy": True,
+            "does_not_replace_copy": True,
+            "does_not_restore_copy": True,
+            "does_not_record_rogue_recovery_receipt": True,
+            "does_not_mutate_copy_state": True,
+            "does_not_echo_raw_incident_payload": True,
+            "requires_stage17_closure_receipt": True,
+            "writes_registry": False,
+            "writes_memory": False,
+            "writes_receipts": False,
+            "writes_tenant_state": False,
+            "runs_tools": False,
+            "runs_shell": False,
+            "runs_git": False,
+            "launches_browser": False,
+            "captures_screen": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "read_only": governance["read_only"],
+        "projection_only": governance["projection_only"],
         "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
     }
 

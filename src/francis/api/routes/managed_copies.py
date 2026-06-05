@@ -9,6 +9,7 @@ from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPer
 from francis.managed_copies import (
     MANAGED_COPIES_COPY_CREATION_WRITE_SCOPE,
     MANAGED_COPIES_ISOLATION_VERIFICATION_WRITE_SCOPE,
+    MANAGED_COPIES_ROGUE_RECOVERY_WRITE_SCOPE,
     MANAGED_COPIES_RUNTIME_EVIDENCE_WRITE_SCOPE,
     MANAGED_COPIES_SAFE_DELTA_WRITE_SCOPE,
     managed_copies_status_snapshot,
@@ -19,6 +20,7 @@ from francis.managed_copies import (
     managed_copy_isolation_rules_contract_snapshot,
     managed_copy_isolation_verification_blocked_snapshot,
     managed_copy_rogue_recovery_contract_snapshot,
+    managed_copy_rogue_recovery_review_blocked_snapshot,
     managed_copy_runtime_evidence_contract_snapshot,
     managed_copy_runtime_evidence_readback_blocked_snapshot,
     managed_copy_runtime_evidence_readbacks_snapshot,
@@ -69,6 +71,12 @@ def _permission_denied(
         "isolation_enforcement_enabled": False,
         "isolation_verification_enabled": False,
         "runtime_evidence_recording_enabled": False,
+        "rogue_recovery_review_enabled": False,
+        "rogue_recovery_ready": False,
+        "halt_enabled": False,
+        "quarantine_enabled": False,
+        "replacement_enabled": False,
+        "restore_enabled": False,
         "safe_delta_review_enabled": False,
         "safe_delta_flow_active": False,
         "writes_receipt": False,
@@ -86,6 +94,12 @@ def _permission_denied(
             "isolation_enforcement_enabled": False,
             "isolation_verification_enabled": False,
             "runtime_evidence_recording_enabled": False,
+            "rogue_recovery_review_enabled": False,
+            "rogue_recovery_ready": False,
+            "halt_enabled": False,
+            "quarantine_enabled": False,
+            "replacement_enabled": False,
+            "restore_enabled": False,
             "safe_delta_review_enabled": False,
             "safe_delta_flow_active": False,
             "writes_receipts": False,
@@ -173,6 +187,24 @@ def safe_delta_review(payload: dict[str, Any], request: Request) -> dict[str, An
 @router.get("/rogue-recovery-contract")
 def rogue_recovery_contract() -> dict[str, Any]:
     return managed_copy_rogue_recovery_contract_snapshot()
+
+
+@router.post("/rogue-recovery-review")
+def rogue_recovery_review(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    actor = _managed_copy_write_actor(payload)
+    decision = _write_permission(
+        actor,
+        required_scope=MANAGED_COPIES_ROGUE_RECOVERY_WRITE_SCOPE,
+        route=request.url.path,
+        method=request.method,
+    )
+    if not decision.allowed:
+        return _permission_denied(
+            decision,
+            required_scope=MANAGED_COPIES_ROGUE_RECOVERY_WRITE_SCOPE,
+            next_step="configure_actor_scope_before_reviewing_managed_copy_rogue_recovery",
+        )
+    return managed_copy_rogue_recovery_review_blocked_snapshot(payload, actor=actor)
 
 
 @router.get("/sla-framework-contract")

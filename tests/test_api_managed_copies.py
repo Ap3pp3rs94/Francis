@@ -37,6 +37,7 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
         "safe_delta_model_contract": "/managed-copies/safe-delta-model-contract",
         "safe_delta_review": "/managed-copies/safe-delta-review",
         "rogue_recovery_contract": "/managed-copies/rogue-recovery-contract",
+        "rogue_recovery_review": "/managed-copies/rogue-recovery-review",
         "sla_framework_contract": "/managed-copies/sla-framework-contract",
         "roles_contract": "/managed-copies/roles-contract",
         "decommission_contract": "/managed-copies/decommission-contract",
@@ -322,6 +323,7 @@ def test_managed_copy_completion_review_blocks_closure_without_runtime_evidence(
     assert body["routes"]["copy_creation_request"] == "/managed-copies/copy-creation-request"
     assert body["routes"]["isolation_verification"] == "/managed-copies/isolation-verification"
     assert body["routes"]["safe_delta_review"] == "/managed-copies/safe-delta-review"
+    assert body["routes"]["rogue_recovery_review"] == "/managed-copies/rogue-recovery-review"
     assert body["routes"]["runtime_evidence_contract"] == "/managed-copies/runtime-evidence-contract"
     assert body["routes"]["runtime_evidence_readbacks"] == "/managed-copies/runtime-evidence-readbacks"
     assert body["routes"]["runtime_evidence_readback"] == "/managed-copies/runtime-evidence-readback"
@@ -1087,6 +1089,8 @@ def test_managed_copy_rogue_recovery_contract_is_projection_only_and_disabled(
     assert body["stage17_closed_by_receipt"] is False
     assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
     assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["rogue_recovery_review_route"] == "/managed-copies/rogue-recovery-review"
+    assert body["routes"]["rogue_recovery_review"] == "/managed-copies/rogue-recovery-review"
 
     signal_ids = {item["id"] for item in body["detection_signals"]}
     assert signal_ids == {
@@ -1174,6 +1178,152 @@ def test_managed_copy_rogue_recovery_contract_is_projection_only_and_disabled(
     assert governance["copy_creation_enabled"] is False
     assert governance["writes_tenant_state"] is False
     assert governance["writes_receipts"] is False
+    assert governance["grants_execution_authority"] is False
+    assert governance["grants_mutation_authority"] is False
+    assert not data_root.exists()
+
+
+def test_managed_copy_rogue_recovery_review_denies_unscoped_actor_without_writing(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+
+    response = TestClient(create_app()).post(
+        "/managed-copies/rogue-recovery-review",
+        json={
+            "request_actor": "stage18.rogue-unscoped",
+            "copy_id": "copy-denied",
+            "tenant_id": "tenant-denied",
+            "signal_id": "suspicious_cross_boundary_activity",
+            "action": "quarantine",
+            "incident": {"summary": "denied path should not mutate copy state"},
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["status"] == "denied"
+    assert body["error"] == "api_permission_denied"
+    assert body["required_scope"] == "managed_copies.rogue_recovery.write"
+    assert body["rogue_recovery_review_enabled"] is False
+    assert body["rogue_recovery_ready"] is False
+    assert body["halt_enabled"] is False
+    assert body["quarantine_enabled"] is False
+    assert body["replacement_enabled"] is False
+    assert body["restore_enabled"] is False
+    assert body["writes_receipts"] is False
+    assert body["writes_tenant_state"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+
+    governance = body["governance"]
+    assert governance["gate"] == "permission_gate"
+    assert governance["reason"] == "missing_scopes"
+    assert governance["required_scope"] == "managed_copies.rogue_recovery.write"
+    assert governance["evidence"]["route"] == "/managed-copies/rogue-recovery-review"
+    assert governance["evidence"]["method"] == "POST"
+    assert governance["evidence"]["required_scope_count"] == 1
+    assert governance["evidence"]["actor_scope_count"] == 0
+    assert not data_root.exists()
+
+
+def test_managed_copy_rogue_recovery_review_blocks_scoped_actor_until_stage17_closes(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    actor = "stage18.rogue-reviewer"
+    raw_tenant_id = "tenant-rogue-secret-should-not-echo"
+    raw_incident_text = "raw incident payload should not echo"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({actor: ["managed_copies.rogue_recovery.write"]}),
+    )
+
+    response = TestClient(create_app()).post(
+        "/managed-copies/rogue-recovery-review",
+        json={
+            "request_actor": actor,
+            "copy_id": "copy-123",
+            "tenant_id": raw_tenant_id,
+            "signal_id": "suspicious_cross_boundary_activity",
+            "action": "quarantine",
+            "incident": {"raw_text": raw_incident_text},
+            "evidence_refs": ["receipt-1", "receipt-2"],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    encoded = json.dumps(body)
+    assert body["ok"] is False
+    assert body["kind"] == "francis.stage18.managed_copies.rogue_recovery_review"
+    assert body["status"] == "blocked_stage17_prerequisite"
+    assert body["error"] == "stage17_prerequisite_not_closed"
+    assert body["actor"] == actor
+    assert body["copy_id_present"] is True
+    assert body["tenant_id_present"] is True
+    assert body["incident_present"] is True
+    assert body["evidence_ref_count"] == 2
+    assert raw_tenant_id not in encoded
+    assert raw_incident_text not in encoded
+    assert body["signal_id"] == "suspicious_cross_boundary_activity"
+    assert body["signal_known"] is True
+    assert body["signal_severity"] == "critical"
+    assert body["action"] == "quarantine"
+    assert body["action_known"] is True
+    assert body["action_writes_receipt"] is True
+    assert body["action_mutates_copy_state"] is True
+    assert body["stage17_closed_by_receipt"] is False
+    assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["rogue_recovery_ready"] is False
+    assert body["rogue_recovery_review_enabled"] is False
+    assert body["rogue_detection_enabled"] is False
+    assert body["halt_enabled"] is False
+    assert body["quarantine_enabled"] is False
+    assert body["replacement_enabled"] is False
+    assert body["restore_enabled"] is False
+    assert body["halts_copy"] is False
+    assert body["quarantines_copy"] is False
+    assert body["replaces_copy"] is False
+    assert body["restores_copy"] is False
+    assert body["support_backdoor_allowed"] is False
+    assert body["receipt_ready"] is False
+    assert body["writes_registry"] is False
+    assert body["writes_receipts"] is False
+    assert body["writes_tenant_state"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["expected_review_receipt_path"] == "logs/managed_copies/rogue_recovery_reviews.jsonl"
+    assert body["required_scope"] == "managed_copies.rogue_recovery.write"
+    assert body["routes"]["rogue_recovery_review"] == "/managed-copies/rogue-recovery-review"
+    assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+
+    governance = body["governance"]
+    assert governance["write_route"] is True
+    assert governance["preflight_only"] is True
+    assert governance["permission_scope"] == "managed_copies.rogue_recovery.write"
+    assert governance["permission_checked"] is True
+    assert governance["rogue_recovery_review_enabled"] is False
+    assert governance["does_not_detect_rogue_copy"] is True
+    assert governance["does_not_halt_copy"] is True
+    assert governance["does_not_quarantine_copy"] is True
+    assert governance["does_not_replace_copy"] is True
+    assert governance["does_not_restore_copy"] is True
+    assert governance["does_not_record_rogue_recovery_receipt"] is True
+    assert governance["does_not_mutate_copy_state"] is True
+    assert governance["does_not_echo_raw_incident_payload"] is True
+    assert governance["requires_stage17_closure_receipt"] is True
+    assert governance["writes_receipts"] is False
+    assert governance["writes_tenant_state"] is False
     assert governance["grants_execution_authority"] is False
     assert governance["grants_mutation_authority"] is False
     assert not data_root.exists()
