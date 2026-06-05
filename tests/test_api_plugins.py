@@ -4269,6 +4269,204 @@ def test_plugins_capability_library_proposal_evidence_remediation_backfills_exis
     assert proposal_state["review_status"] == "staged"
 
 
+def test_plugins_capability_library_proposal_evidence_friction_summary_refs_backfill_existing_registry_refs(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
+    client = TestClient(create_app())
+    pack_id = "ops.capability_library_proposal_evidence_friction_summary_refs"
+    pack_version = "1.0.0"
+    meta = {
+        **_forge_promotion_meta("capability_library_proposal_evidence_friction_summary_refs"),
+        "pack_id": pack_id,
+        "pack_version": pack_version,
+        "pack_name": "Ops Capability Library Proposal Evidence Friction Summary Refs Pack",
+        "promotion_rules": [
+            "metadata_receipt_before_promotion",
+            "quality_standards_before_promotion",
+            "operator_review_before_promotion",
+        ],
+        "pack_governance": {
+            "risk_tier": "normal",
+            "scope": "build_dev",
+            "operator_review_required": True,
+        },
+    }
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Capability Library Proposal Evidence Friction Summary Refs Plugin",
+            "description": "Stage 17 proposal evidence friction-summary refs apply coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": meta,
+        },
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    plugin_id = str(built_body["plugin_id"])
+    proposal_id = str(built_body["proposal_id"])
+    expected_ref = f"registry.plugins.{plugin_id}.meta.friction_summary"
+
+    registry = plugins._load_registry()
+    plugin = plugins._read_plugin(registry, plugin_id)
+    assert plugin is not None
+    plugin_meta = dict(plugin.get("meta") or {})
+    plugin_meta.pop("proposal_evidence", None)
+    plugin_meta.pop("evidence", None)
+    plugin_meta["friction_summary"] = meta["friction_summary"]
+    plugin["meta"] = plugin_meta
+    plugins._write_plugin(registry, plugins._normalize_plugin_record(plugin_id, plugin))
+    plugins._save_registry_and_catalog(registry)
+
+    _approve_capability_pack_operator_review(
+        client,
+        pack_id=pack_id,
+        pack_version=pack_version,
+    )
+
+    refs = client.get("/plugins/capabilities/library/proposal-evidence/friction-summary-refs")
+
+    assert refs.status_code == 200
+    refs_body = refs.json()
+    assert refs_body["ok"] is True
+    assert refs_body["kind"] == "plugin.capability_library.proposal_evidence_friction_summary_refs"
+    assert refs_body["status"] == "ready_for_proposal_evidence_friction_summary_ref_backfill"
+    assert refs_body["proposal_evidence_friction_summary_refs_ready"] is True
+    assert refs_body["candidate_pack_count"] == 1
+    assert refs_body["candidate_capability_count"] == 1
+    assert refs_body["requirements"]["only_existing_registry_friction_summary"] is True
+    assert refs_body["requirements"]["records_reference_not_friction_summary_body"] is True
+    assert refs_body["requirements"]["not_independent_verification"] is True
+    assert refs_body["requirements"]["requires_future_review"] is True
+    assert refs_body["requirements"]["no_synthetic_evidence"] is True
+    assert refs_body["governance"]["read_only"] is True
+    assert refs_body["governance"]["apply_requires_plugins_write_scope"] is True
+    assert refs_body["governance"]["does_not_approve_proposals"] is True
+    assert refs_body["governance"]["does_not_promote_capabilities"] is True
+    assert refs_body["governance"]["memory_write"] is False
+    assert refs_body["next_smallest_truthful_gap"] == (
+        "stage17_capability_library_proposal_evidence_friction_summary_refs_apply"
+    )
+
+    refs_pack = refs_body["packs"][0]
+    assert refs_pack["pack_id"] == pack_id
+    assert refs_pack["candidate_capability_count"] == 1
+    refs_capability = refs_pack["capabilities"][0]
+    assert refs_capability["capability"] == plugin_id
+    assert refs_capability["proposal_id"] == proposal_id
+    assert refs_capability["metadata_proposal_evidence"] == []
+    assert refs_capability["friction_summary_field"] == "friction_summary"
+    assert refs_capability["friction_summary_ref"] == expected_ref
+    assert refs_capability["evidence_source"] == "existing_registry_friction_summary_ref"
+    assert refs_capability["writes_registry_metadata"] is True
+    assert refs_capability["writes_proposals"] is False
+    assert refs_capability["approves_proposals"] is False
+    assert refs_capability["promotes_capability"] is False
+    assert refs_capability["requires_future_review"] is True
+
+    dry_run = client.post(
+        "/plugins/capabilities/library/proposal-evidence/friction-summary-refs/apply",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "dry run friction summary ref backfill",
+            "pack_ids": [pack_id],
+            "dry_run": True,
+            "max_pack_count": 1,
+            "max_total_capability_count": 1,
+            "max_capability_count_per_pack": 1,
+        },
+    )
+
+    assert dry_run.status_code == 200
+    dry_run_body = dry_run.json()
+    assert dry_run_body["ok"] is True
+    assert dry_run_body["applied"] is False
+    assert dry_run_body["status"] == "dry_run"
+    assert dry_run_body["planned_pack_count"] == 1
+    assert dry_run_body["planned_capability_count"] == 1
+    assert dry_run_body["governance"]["writes_registry_metadata"] is False
+    assert dry_run_body["governance"]["writes_proposals"] is False
+    assert dry_run_body["governance"]["only_existing_registry_friction_summary"] is True
+    assert dry_run_body["governance"]["evidence_claim_scope"] == (
+        "existing_registry_friction_summary_reference_not_independent_verification"
+    )
+    assert dry_run_body["governance"]["does_not_approve_proposals"] is True
+    assert dry_run_body["governance"]["does_not_promote_capabilities"] is True
+
+    fetched_after_dry_run = client.get(f"/plugins/get?id={plugin_id}").json()["item"]
+    assert "proposal_evidence" not in dict(fetched_after_dry_run.get("meta") or {})
+
+    applied = client.post(
+        "/plugins/capabilities/library/proposal-evidence/friction-summary-refs/apply",
+        json={
+            "actor": _PLUGIN_ACTOR,
+            "reason": "apply friction summary ref backfill",
+            "pack_ids": [pack_id],
+            "dry_run": False,
+            "max_pack_count": 1,
+            "max_total_capability_count": 1,
+            "max_capability_count_per_pack": 1,
+        },
+    )
+
+    assert applied.status_code == 200
+    applied_body = applied.json()
+    assert applied_body["ok"] is True
+    assert applied_body["applied"] is True
+    assert applied_body["status"] == "recorded"
+    assert applied_body["recorded_pack_count"] == 1
+    assert applied_body["recorded_capability_count"] == 1
+    assert applied_body["remaining_candidate_capability_count"] == 0
+    assert applied_body["governance"]["writes_registry_metadata"] is True
+    assert applied_body["governance"]["writes_receipts"] is False
+    assert applied_body["governance"]["writes_proposals"] is False
+    assert applied_body["governance"]["only_existing_registry_friction_summary"] is True
+    assert applied_body["governance"]["evidence_claim_scope"] == (
+        "existing_registry_friction_summary_reference_not_independent_verification"
+    )
+    assert applied_body["governance"]["does_not_approve_proposals"] is True
+    assert applied_body["governance"]["does_not_promote_capabilities"] is True
+    assert applied_body["governance"]["does_not_enable_capabilities"] is True
+    assert applied_body["governance"]["memory_write"] is False
+
+    fetched = client.get(f"/plugins/get?id={plugin_id}")
+    assert fetched.status_code == 200
+    fetched_item = fetched.json()["item"]
+    assert fetched_item["status"] == "staged"
+    assert fetched_item["enabled"] is False
+    stored_meta = dict(fetched_item.get("meta") or {})
+    assert stored_meta["proposal_evidence"] == [expected_ref]
+    assert stored_meta["proposal_evidence_link_source"] == (
+        "stage17_capability_library_proposal_evidence_friction_summary_refs_apply"
+    )
+    assert stored_meta["proposal_evidence_claim_scope"] == (
+        "existing_registry_friction_summary_reference_not_independent_verification"
+    )
+    assert stored_meta["proposal_evidence_friction_summary_ref"] == expected_ref
+    assert stored_meta["proposal_evidence_friction_summary_field"] == "friction_summary"
+    assert stored_meta["proposal_evidence_friction_summary_ref_route"] == (
+        "/plugins/capabilities/library/proposal-evidence/friction-summary-refs/apply"
+    )
+    assert stored_meta["proposal_evidence_friction_summary_ref_requires_future_review"] is True
+    assert stored_meta["proposal_evidence_artifact_proposal_id"] == proposal_id
+    assert stored_meta["proposal_evidence_writes_proposals"] is False
+    assert stored_meta["proposal_evidence_approval_claimed"] is False
+
+    proposal_state = plugins._plugin_proposal_review_state(proposal_id)
+    assert proposal_state["approved"] is False
+    assert proposal_state["review_status"] == "staged"
+
+
 def test_plugins_capability_library_operator_proposal_evidence_intake_records_operator_refs_only(
     monkeypatch,
     tmp_path: Path,

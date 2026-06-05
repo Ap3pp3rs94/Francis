@@ -63326,6 +63326,69 @@ Remaining truthful gap:
 - Stage 18 Managed Copies Platform remains a next-stage target, not a current
   completion claim.
 
+### 2026-06-05 - Stage 17 proposal-evidence can record existing registry friction references
+
+Roadmap area: Stage 17 / Capability Economy.
+
+Truthful change:
+
+- Added read-only `GET
+  /plugins/capabilities/library/proposal-evidence/friction-summary-refs`.
+- Added governed `POST
+  /plugins/capabilities/library/proposal-evidence/friction-summary-refs/apply`.
+- The new path only treats existing plugin registry `meta.friction_summary` or
+  `meta.friction` values as a source for proposal-evidence reference strings,
+  for example `registry.plugins.<capability_id>.meta.friction_summary`.
+- Apply keeps the same Stage 17 safety posture as the adjacent remediation
+  routes: `plugins.write` is required, dry-run is supported by default, pack and
+  capability counts are bounded, and the route does not write proposals,
+  proposal-review receipts, approvals, promotions, enables, executions, or
+  memory.
+- Recorded metadata marks the claim scope as
+  `existing_registry_friction_summary_reference_not_independent_verification`
+  and requires future review. This avoids converting chat approval or inferred
+  friction into fake independent evidence.
+- Added chat-UI route contract coverage so the new readback/apply endpoints are
+  mounted under the API surface expected by the operator UI.
+
+Latest validation for this backend pass:
+
+- Python syntax check:
+  `python -m py_compile src\francis\api\routes\plugins.py`
+  Result: passed.
+- Focused proposal-evidence API tests:
+  `python -m pytest tests\test_api_plugins.py -k
+  "proposal_evidence_friction_summary_refs or proposal_evidence_remediation or
+  operator_proposal_evidence_intake" -q`
+  Result: 3 tests passed.
+- Chat UI API route contract:
+  `python -m pytest tests\test_api_contract_chat_ui.py -q`
+  Result: passed.
+- Ruff format on touched files:
+  `python -m ruff format src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_contract_chat_ui.py`
+  Result: 3 files left unchanged.
+- Ruff lint on touched files:
+  `python -m ruff check src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+
+Validation risk:
+
+- This pass did not run the full repository gate `.\scripts\check.ps1`.
+- This pass did not run the route against the live operator dataset and did not
+  record real proposal-evidence refs.
+- The new route is intentionally registry-friction-only. It does not mine
+  proposal artifacts; the existing artifact remediation route remains the path
+  for linked proposal artifact evidence.
+
+Remaining truthful gap:
+
+- Stage 17 remains active until proposal evidence is recorded through a governed
+  path and the proposal-evidence plan no longer reports missing evidence.
+- Stage 18 Managed Copies Platform remains a next-stage target, not a current
+  completion claim.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
