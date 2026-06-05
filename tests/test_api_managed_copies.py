@@ -39,6 +39,7 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
         "decommission_contract": "/managed-copies/decommission-contract",
         "runtime_evidence_contract": "/managed-copies/runtime-evidence-contract",
         "runtime_evidence_readbacks": "/managed-copies/runtime-evidence-readbacks",
+        "runtime_evidence_readback": "/managed-copies/runtime-evidence-readback",
         "completion_review": "/managed-copies/completion-review",
     }
 
@@ -190,6 +191,7 @@ def test_managed_copy_completion_review_blocks_closure_without_runtime_evidence(
     assert body["routes"]["completion_review"] == "/managed-copies/completion-review"
     assert body["routes"]["runtime_evidence_contract"] == "/managed-copies/runtime-evidence-contract"
     assert body["routes"]["runtime_evidence_readbacks"] == "/managed-copies/runtime-evidence-readbacks"
+    assert body["routes"]["runtime_evidence_readback"] == "/managed-copies/runtime-evidence-readback"
 
     assert body["read_only"] is True
     assert body["projection_only"] is True
@@ -244,6 +246,7 @@ def test_managed_copy_runtime_evidence_contract_is_readonly_and_not_recording(
     assert body["completion_review_route"] == "/managed-copies/completion-review"
     assert body["routes"]["runtime_evidence_contract"] == "/managed-copies/runtime-evidence-contract"
     assert body["routes"]["runtime_evidence_readbacks"] == "/managed-copies/runtime-evidence-readbacks"
+    assert body["routes"]["runtime_evidence_readback"] == "/managed-copies/runtime-evidence-readback"
     assert body["ready_count"] == 0
     assert body["required_count"] == len(body["requirements"])
 
@@ -345,6 +348,7 @@ def test_managed_copy_runtime_evidence_readbacks_are_empty_and_readonly(
     assert body["runtime_evidence_ready"] is False
     assert body["runtime_evidence_recording_enabled"] is False
     assert body["expected_receipt_path"] == "logs/managed_copies/runtime_evidence.jsonl"
+    assert body["routes"]["runtime_evidence_readback"] == "/managed-copies/runtime-evidence-readback"
     assert body["missing_evidence"] == [
         "stage17_closure_receipt",
         "copy_creation_runtime_proof",
@@ -454,6 +458,115 @@ def test_managed_copy_runtime_evidence_readbacks_consume_existing_receipts_witho
     assert body["writes_tenant_state"] is False
     assert body["grants_execution_authority"] is False
     assert body["grants_mutation_authority"] is False
+
+
+def test_managed_copy_runtime_evidence_readback_denies_unscoped_actor_without_writing(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+
+    response = TestClient(create_app()).post(
+        "/managed-copies/runtime-evidence-readback",
+        json={
+            "request_actor": "stage18.unscoped",
+            "requirement_id": "copy_creation_runtime_proof",
+            "proof_kind": "managed_copy_creation_runtime_receipt",
+            "trace_id": "trace-managed-copy-runtime-proof-denied",
+            "evidence_summary": "denied path must not create a runtime evidence receipt",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["status"] == "denied"
+    assert body["error"] == "api_permission_denied"
+    assert body["required_scope"] == "managed_copies.runtime_evidence.write"
+    assert body["runtime_evidence_recording_enabled"] is False
+    assert body["writes_receipts"] is False
+    assert body["writes_tenant_state"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+
+    governance = body["governance"]
+    assert governance["gate"] == "permission_gate"
+    assert governance["reason"] == "missing_scopes"
+    assert governance["required_scope"] == "managed_copies.runtime_evidence.write"
+    assert governance["evidence"]["route"] == "/managed-copies/runtime-evidence-readback"
+    assert governance["evidence"]["method"] == "POST"
+    assert governance["evidence"]["required_scope_count"] == 1
+    assert governance["evidence"]["actor_scope_count"] == 0
+    assert not data_root.exists()
+
+
+def test_managed_copy_runtime_evidence_readback_blocks_scoped_actor_until_stage17_closes(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    actor = "stage18.runtime-writer"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({actor: ["managed_copies.runtime_evidence.write"]}),
+    )
+
+    response = TestClient(create_app()).post(
+        "/managed-copies/runtime-evidence-readback",
+        json={
+            "request_actor": actor,
+            "requirement_id": "copy_creation_runtime_proof",
+            "proof_kind": "managed_copy_creation_runtime_receipt",
+            "trace_id": "trace-managed-copy-runtime-proof-blocked",
+            "reason": "operator attempted to record runtime proof before Stage 17 closed",
+            "evidence_summary": "blocked path must not create a runtime evidence receipt",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["kind"] == "francis.stage18.managed_copies.runtime_evidence_readback"
+    assert body["status"] == "blocked_stage17_prerequisite"
+    assert body["error"] == "stage17_prerequisite_not_closed"
+    assert body["actor"] == actor
+    assert body["requirement_id"] == "copy_creation_runtime_proof"
+    assert body["requirement_known"] is True
+    assert body["proof_kind"] == "managed_copy_creation_runtime_receipt"
+    assert body["expected_proof_kind"] == "managed_copy_creation_runtime_receipt"
+    assert body["proof_kind_matches_requirement"] is True
+    assert body["trace_id"] == "trace-managed-copy-runtime-proof-blocked"
+    assert body["evidence_summary_present"] is True
+    assert body["stage17_closed_by_receipt"] is False
+    assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["runtime_evidence_recording_enabled"] is False
+    assert body["receipt_ready"] is False
+    assert body["writes_receipt"] is False
+    assert body["writes_receipts"] is False
+    assert body["writes_tenant_state"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["expected_receipt_path"] == "logs/managed_copies/runtime_evidence.jsonl"
+    assert body["required_scope"] == "managed_copies.runtime_evidence.write"
+    assert body["routes"]["runtime_evidence_readback"] == "/managed-copies/runtime-evidence-readback"
+    assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+
+    governance = body["governance"]
+    assert governance["write_route"] is True
+    assert governance["preflight_only"] is True
+    assert governance["permission_scope"] == "managed_copies.runtime_evidence.write"
+    assert governance["permission_checked"] is True
+    assert governance["runtime_evidence_recording_enabled"] is False
+    assert governance["does_not_record_runtime_evidence"] is True
+    assert governance["requires_stage17_closure_receipt"] is True
+    assert governance["writes_receipts"] is False
+    assert governance["writes_tenant_state"] is False
+    assert governance["grants_execution_authority"] is False
+    assert governance["grants_mutation_authority"] is False
+    assert not data_root.exists()
 
 
 def test_managed_copy_decommission_contract_is_projection_only_and_inactive(

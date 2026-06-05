@@ -18,6 +18,8 @@ MANAGED_COPIES_DECOMMISSION_CONTRACT_KIND = "francis.stage18.managed_copies.deco
 MANAGED_COPIES_COMPLETION_REVIEW_KIND = "francis.stage18.managed_copies.completion_review"
 MANAGED_COPIES_RUNTIME_EVIDENCE_CONTRACT_KIND = "francis.stage18.managed_copies.runtime_evidence_contract"
 MANAGED_COPIES_RUNTIME_EVIDENCE_READBACKS_KIND = "francis.stage18.managed_copies.runtime_evidence_readbacks"
+MANAGED_COPIES_RUNTIME_EVIDENCE_READBACK_KIND = "francis.stage18.managed_copies.runtime_evidence_readback"
+MANAGED_COPIES_RUNTIME_EVIDENCE_WRITE_SCOPE = "managed_copies.runtime_evidence.write"
 STAGE17_OPERATOR_EVIDENCE_REFS_GAP = "stage17_capability_library_operator_proposal_evidence_refs"
 
 
@@ -448,6 +450,7 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "decommission_contract": "/managed-copies/decommission-contract",
             "runtime_evidence_contract": "/managed-copies/runtime-evidence-contract",
             "runtime_evidence_readbacks": "/managed-copies/runtime-evidence-readbacks",
+            "runtime_evidence_readback": "/managed-copies/runtime-evidence-readback",
             "completion_review": "/managed-copies/completion-review",
         },
         "managed_copy_roles_required": [
@@ -1877,4 +1880,69 @@ def managed_copy_runtime_evidence_readbacks_snapshot(*, limit: int = 100) -> dic
         "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP
         if missing_evidence
         else "stage18_completion_review",
+    }
+
+
+def managed_copy_runtime_evidence_readback_blocked_snapshot(
+    payload: dict[str, Any],
+    *,
+    actor: str,
+) -> dict[str, Any]:
+    """Return a governed runtime-evidence write preflight blocked by Stage 17."""
+    governance = _governance()
+    contract = managed_copy_runtime_evidence_contract_snapshot()
+    requirement_id = _safe_str(payload.get("requirement_id")).strip()
+    proof_kind = _safe_str(payload.get("proof_kind")).strip()
+    requirement_by_id = {item["id"]: item for item in contract["requirements"]}
+    requirement = requirement_by_id.get(requirement_id, {})
+    expected_proof_kind = _safe_str(requirement.get("proof_kind")).strip()
+    return {
+        "ok": False,
+        "kind": MANAGED_COPIES_RUNTIME_EVIDENCE_READBACK_KIND,
+        "stage": STAGE18_MANAGED_COPIES_STAGE,
+        "source_id": "managed_copies",
+        "status": "blocked_stage17_prerequisite",
+        "error": "stage17_prerequisite_not_closed",
+        "actor": _safe_str(actor).strip(),
+        "requirement_id": requirement_id,
+        "requirement_known": bool(requirement),
+        "proof_kind": proof_kind,
+        "expected_proof_kind": expected_proof_kind,
+        "proof_kind_matches_requirement": bool(requirement) and proof_kind == expected_proof_kind,
+        "trace_id": _safe_str(payload.get("trace_id")).strip()[:240],
+        "reason": _safe_str(payload.get("reason")).strip()[:500],
+        "evidence_summary_present": bool(_safe_str(payload.get("evidence_summary")).strip()),
+        "stage17_closed_by_receipt": bool(contract["stage17_closed_by_receipt"]),
+        "stage17_blocker": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "runtime_evidence_recording_enabled": False,
+        "receipt_ready": False,
+        "writes_receipt": False,
+        "writes_receipts": False,
+        "writes_tenant_state": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "expected_receipt_path": "logs/managed_copies/runtime_evidence.jsonl",
+        "required_scope": MANAGED_COPIES_RUNTIME_EVIDENCE_WRITE_SCOPE,
+        "routes": {
+            **contract["routes"],
+            "runtime_evidence_readback": "/managed-copies/runtime-evidence-readback",
+        },
+        "governance": {
+            **governance,
+            "write_route": True,
+            "preflight_only": True,
+            "permission_scope": MANAGED_COPIES_RUNTIME_EVIDENCE_WRITE_SCOPE,
+            "permission_checked": True,
+            "runtime_evidence_recording_enabled": False,
+            "does_not_record_runtime_evidence": True,
+            "does_not_mark_stage_closed": True,
+            "requires_stage17_closure_receipt": True,
+            "writes_receipts": False,
+            "writes_tenant_state": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "read_only": governance["read_only"],
+        "projection_only": governance["projection_only"],
+        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
     }
