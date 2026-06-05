@@ -7,6 +7,7 @@ MANAGED_COPIES_STATUS_KIND = "francis.stage18.managed_copies.status"
 MANAGED_COPIES_COPY_CREATION_CONTRACT_KIND = "francis.stage18.managed_copies.copy_creation_contract"
 MANAGED_COPIES_ISOLATION_RULES_CONTRACT_KIND = "francis.stage18.managed_copies.isolation_rules_contract"
 MANAGED_COPIES_SAFE_DELTA_MODEL_CONTRACT_KIND = "francis.stage18.managed_copies.safe_delta_model_contract"
+MANAGED_COPIES_ROGUE_RECOVERY_CONTRACT_KIND = "francis.stage18.managed_copies.rogue_recovery_contract"
 STAGE17_OPERATOR_EVIDENCE_REFS_GAP = "stage17_capability_library_operator_proposal_evidence_refs"
 
 
@@ -126,6 +127,42 @@ def _safe_delta_signal_class(
     }
 
 
+def _rogue_recovery_signal(
+    signal_id: str,
+    title: str,
+    *,
+    status: str,
+    severity: str,
+    requires_evidence_preservation: bool = True,
+) -> dict[str, Any]:
+    return {
+        "id": signal_id,
+        "title": title,
+        "status": status,
+        "severity": severity,
+        "requires_evidence_preservation": requires_evidence_preservation,
+    }
+
+
+def _rogue_recovery_step(
+    step_id: str,
+    title: str,
+    *,
+    status: str,
+    writes_receipt: bool,
+    mutates_copy_state: bool,
+    requires_operator_approval: bool = True,
+) -> dict[str, Any]:
+    return {
+        "id": step_id,
+        "title": title,
+        "status": status,
+        "writes_receipt": writes_receipt,
+        "mutates_copy_state": mutates_copy_state,
+        "requires_operator_approval": requires_operator_approval,
+    }
+
+
 def managed_copies_status_snapshot() -> dict[str, Any]:
     """Return the Stage 18 managed-copy substrate posture without creating state."""
     governance = _governance()
@@ -174,8 +211,11 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "rogue_recovery",
             "Rogue kill/replace flows",
             ready=False,
-            status="pending",
+            status="contract_readback_ready",
             next_gap="stage18_rogue_kill_replace_flows",
+            evidence=[
+                "GET /managed-copies/rogue-recovery-contract exposes detect/halt/quarantine/replace gates without acting.",
+            ],
         ),
         _deliverable(
             "sla_framework",
@@ -218,6 +258,7 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "copy_creation_contract": "/managed-copies/copy-creation-contract",
             "isolation_rules_contract": "/managed-copies/isolation-rules-contract",
             "safe_delta_model_contract": "/managed-copies/safe-delta-model-contract",
+            "rogue_recovery_contract": "/managed-copies/rogue-recovery-contract",
         },
         "managed_copy_roles_required": [
             "end_user",
@@ -712,5 +753,170 @@ def managed_copy_safe_delta_model_contract_snapshot() -> dict[str, Any]:
         "tenant_reidentification_allowed": False,
         "unattributed_learning_allowed": False,
         "safe_delta_flow_active": False,
+        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+    }
+
+
+def managed_copy_rogue_recovery_contract_snapshot() -> dict[str, Any]:
+    """Return the rogue recovery contract without acting on managed copies."""
+    governance = _governance()
+    detection_signals = [
+        _rogue_recovery_signal(
+            "governance_drift",
+            "Governance or policy enforcement differs from the managed-copy contract",
+            status="contract_only",
+            severity="high",
+        ),
+        _rogue_recovery_signal(
+            "unexpected_capability_behavior",
+            "Capability behavior differs from declared lineage, risk tier, or approval scope",
+            status="contract_only",
+            severity="high",
+        ),
+        _rogue_recovery_signal(
+            "suspicious_cross_boundary_activity",
+            "Cross-tenant, support, connector, or safe-delta boundary activity is suspicious",
+            status="contract_only",
+            severity="critical",
+        ),
+        _rogue_recovery_signal(
+            "broken_receipt_discipline",
+            "Actions, support access, or policy changes lack required receipts",
+            status="contract_only",
+            severity="critical",
+        ),
+        _rogue_recovery_signal(
+            "corrupted_continuity_state",
+            "Continuity, memory, or tenant state appears corrupted or incoherent",
+            status="contract_only",
+            severity="high",
+        ),
+        _rogue_recovery_signal(
+            "repeated_unexplained_failures",
+            "Repeated failures occur without bounded explanation or repair lineage",
+            status="contract_only",
+            severity="medium",
+        ),
+        _rogue_recovery_signal(
+            "unsafe_execution_deviation",
+            "Execution deviates from approved scope, toolbelt, or tenant authority",
+            status="contract_only",
+            severity="critical",
+        ),
+    ]
+    recovery_steps = [
+        _rogue_recovery_step(
+            "detect",
+            "Detect anomalous managed-copy behavior and preserve evidence references",
+            status="contract_only",
+            writes_receipt=False,
+            mutates_copy_state=False,
+        ),
+        _rogue_recovery_step(
+            "halt",
+            "Halt risky managed-copy operation before further tenant or support action",
+            status="disabled",
+            writes_receipt=True,
+            mutates_copy_state=True,
+        ),
+        _rogue_recovery_step(
+            "quarantine",
+            "Quarantine the managed copy while preserving receipts, lineage, and diagnostic state",
+            status="disabled",
+            writes_receipt=True,
+            mutates_copy_state=True,
+        ),
+        _rogue_recovery_step(
+            "review",
+            "Run support/operator review with tenant-visible evidence and bounded authority",
+            status="contract_only",
+            writes_receipt=False,
+            mutates_copy_state=False,
+        ),
+        _rogue_recovery_step(
+            "replace",
+            "Replace from clean baseline, trusted snapshot, or controlled customer configuration",
+            status="disabled",
+            writes_receipt=True,
+            mutates_copy_state=True,
+        ),
+        _rogue_recovery_step(
+            "restore",
+            "Restore lawful continuity only after verification receipts exist",
+            status="disabled",
+            writes_receipt=True,
+            mutates_copy_state=True,
+        ),
+    ]
+    return {
+        "ok": True,
+        "kind": MANAGED_COPIES_ROGUE_RECOVERY_CONTRACT_KIND,
+        "stage": STAGE18_MANAGED_COPIES_STAGE,
+        "source_id": "managed_copies",
+        "status": "contract_readback_ready",
+        "contract_readback_ready": True,
+        "rogue_recovery_ready": False,
+        "rogue_detection_enabled": False,
+        "halt_enabled": False,
+        "quarantine_enabled": False,
+        "replacement_enabled": False,
+        "restore_enabled": False,
+        "copy_creation_enabled": False,
+        "stage17_closed_by_receipt": False,
+        "stage17_blocker": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "detection_signals": detection_signals,
+        "detection_signal_count": len(detection_signals),
+        "recovery_steps": recovery_steps,
+        "required_receipts": [
+            "rogue_detection_receipt",
+            "halt_decision_receipt",
+            "quarantine_receipt",
+            "evidence_preservation_receipt",
+            "support_review_receipt",
+            "replacement_plan_receipt",
+            "clean_baseline_verification_receipt",
+            "restore_verification_receipt",
+        ],
+        "replacement_sources_allowed": [
+            "clean_core_baseline",
+            "trusted_known_good_snapshot",
+            "validated_global_state",
+            "controlled_customer_configuration_state",
+        ],
+        "operator_controls_required": [
+            "explicit_operator_or_tenant_admin_decision",
+            "tenant_visible_incident_state",
+            "support_authority_scope_check",
+            "rollback_or_replace_plan_review",
+            "post_restore_verification_review",
+            "revocation_path_available",
+        ],
+        "blocked_failure_modes": [
+            "uncontained_anomalous_instance",
+            "messy_replacement_without_lineage",
+            "support_team_improvisation",
+            "evidence_loss_after_incident",
+            "trust_collapse_after_incident",
+            "hidden_vendor_control",
+        ],
+        "governance": governance,
+        "read_only": governance["read_only"],
+        "projection_only": governance["projection_only"],
+        "writes_registry": governance["writes_registry"],
+        "writes_memory": governance["writes_memory"],
+        "writes_receipts": governance["writes_receipts"],
+        "writes_tenant_state": governance["writes_tenant_state"],
+        "runs_tools": governance["runs_tools"],
+        "runs_shell": governance["runs_shell"],
+        "runs_git": governance["runs_git"],
+        "launches_browser": governance["launches_browser"],
+        "captures_screen": governance["captures_screen"],
+        "grants_execution_authority": governance["grants_execution_authority"],
+        "grants_mutation_authority": governance["grants_mutation_authority"],
+        "halts_copy": False,
+        "quarantines_copy": False,
+        "replaces_copy": False,
+        "restores_copy": False,
+        "support_backdoor_allowed": False,
         "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
     }

@@ -31,6 +31,7 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
         "copy_creation_contract": "/managed-copies/copy-creation-contract",
         "isolation_rules_contract": "/managed-copies/isolation-rules-contract",
         "safe_delta_model_contract": "/managed-copies/safe-delta-model-contract",
+        "rogue_recovery_contract": "/managed-copies/rogue-recovery-contract",
     }
 
     deliverable_ids = {item["id"] for item in body["deliverables"]}
@@ -100,6 +101,124 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
     assert governance["privacy_weak_pooling_allowed"] is False
     assert governance["uncontrolled_forks_allowed"] is False
     assert governance["invisible_vendor_power_allowed"] is False
+    assert not data_root.exists()
+
+
+def test_managed_copy_rogue_recovery_contract_is_projection_only_and_disabled(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    response = TestClient(create_app()).get("/managed-copies/rogue-recovery-contract")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kind"] == "francis.stage18.managed_copies.rogue_recovery_contract"
+    assert body["stage"] == "Stage 18 / Managed Copies Platform"
+    assert body["source_id"] == "managed_copies"
+    assert body["status"] == "contract_readback_ready"
+    assert body["contract_readback_ready"] is True
+    assert body["rogue_recovery_ready"] is False
+    assert body["rogue_detection_enabled"] is False
+    assert body["halt_enabled"] is False
+    assert body["quarantine_enabled"] is False
+    assert body["replacement_enabled"] is False
+    assert body["restore_enabled"] is False
+    assert body["copy_creation_enabled"] is False
+    assert body["stage17_closed_by_receipt"] is False
+    assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+
+    signal_ids = {item["id"] for item in body["detection_signals"]}
+    assert signal_ids == {
+        "governance_drift",
+        "unexpected_capability_behavior",
+        "suspicious_cross_boundary_activity",
+        "broken_receipt_discipline",
+        "corrupted_continuity_state",
+        "repeated_unexplained_failures",
+        "unsafe_execution_deviation",
+    }
+    assert body["detection_signal_count"] == len(body["detection_signals"])
+    assert all(item["status"] == "contract_only" for item in body["detection_signals"])
+    assert all(item["requires_evidence_preservation"] is True for item in body["detection_signals"])
+
+    step_by_id = {item["id"]: item for item in body["recovery_steps"]}
+    assert set(step_by_id) == {"detect", "halt", "quarantine", "review", "replace", "restore"}
+    assert step_by_id["detect"]["status"] == "contract_only"
+    assert step_by_id["detect"]["mutates_copy_state"] is False
+    assert step_by_id["halt"]["status"] == "disabled"
+    assert step_by_id["halt"]["writes_receipt"] is True
+    assert step_by_id["halt"]["mutates_copy_state"] is True
+    assert step_by_id["quarantine"]["status"] == "disabled"
+    assert step_by_id["quarantine"]["mutates_copy_state"] is True
+    assert step_by_id["review"]["status"] == "contract_only"
+    assert step_by_id["replace"]["status"] == "disabled"
+    assert step_by_id["restore"]["status"] == "disabled"
+    assert all(item["requires_operator_approval"] is True for item in body["recovery_steps"])
+
+    assert body["required_receipts"] == [
+        "rogue_detection_receipt",
+        "halt_decision_receipt",
+        "quarantine_receipt",
+        "evidence_preservation_receipt",
+        "support_review_receipt",
+        "replacement_plan_receipt",
+        "clean_baseline_verification_receipt",
+        "restore_verification_receipt",
+    ]
+    assert body["replacement_sources_allowed"] == [
+        "clean_core_baseline",
+        "trusted_known_good_snapshot",
+        "validated_global_state",
+        "controlled_customer_configuration_state",
+    ]
+    assert body["operator_controls_required"] == [
+        "explicit_operator_or_tenant_admin_decision",
+        "tenant_visible_incident_state",
+        "support_authority_scope_check",
+        "rollback_or_replace_plan_review",
+        "post_restore_verification_review",
+        "revocation_path_available",
+    ]
+    assert body["blocked_failure_modes"] == [
+        "uncontained_anomalous_instance",
+        "messy_replacement_without_lineage",
+        "support_team_improvisation",
+        "evidence_loss_after_incident",
+        "trust_collapse_after_incident",
+        "hidden_vendor_control",
+    ]
+
+    assert body["read_only"] is True
+    assert body["projection_only"] is True
+    assert body["writes_registry"] is False
+    assert body["writes_memory"] is False
+    assert body["writes_receipts"] is False
+    assert body["writes_tenant_state"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["launches_browser"] is False
+    assert body["captures_screen"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["halts_copy"] is False
+    assert body["quarantines_copy"] is False
+    assert body["replaces_copy"] is False
+    assert body["restores_copy"] is False
+    assert body["support_backdoor_allowed"] is False
+
+    governance = body["governance"]
+    assert governance["read_only"] is True
+    assert governance["projection_only"] is True
+    assert governance["copy_creation_enabled"] is False
+    assert governance["writes_tenant_state"] is False
+    assert governance["writes_receipts"] is False
+    assert governance["grants_execution_authority"] is False
+    assert governance["grants_mutation_authority"] is False
     assert not data_root.exists()
 
 
