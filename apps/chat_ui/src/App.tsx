@@ -69,8 +69,27 @@ import type {
   PluginCapabilityPackOperatorReviewDecision,
   PluginCapabilityPackOperatorReviewDecisionAction,
   PluginCapabilityPackOperatorReviewDecisionResponse,
+  PluginCapabilityPackOperatorReviewBulkDecisionResponse,
   PluginCapabilityPackOperatorReviewPack,
   PluginCapabilityPackOperatorReviewResponse,
+  PluginCapabilityLibraryOperatorProposalEvidenceIntakeAuditPack,
+  PluginCapabilityLibraryOperatorProposalEvidenceIntakeAuditResponse,
+  PluginCapabilityLibraryOperatorProposalEvidenceIntakeChecklistPack,
+  PluginCapabilityLibraryOperatorProposalEvidenceIntakeChecklistResponse,
+  PluginCapabilityLibraryOperatorProposalEvidenceIntakeExportPack,
+  PluginCapabilityLibraryOperatorProposalEvidenceIntakeExportResponse,
+  PluginCapabilityLibraryOperatorProposalEvidenceIntakeResponse,
+  PluginCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetPack,
+  PluginCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetResponse,
+  PluginCapabilityLibraryProposalEvidencePack,
+  PluginCapabilityLibraryProposalEvidencePlanResponse,
+  PluginCapabilityLibraryProposalEvidenceRemediationPack,
+  PluginCapabilityLibraryProposalEvidenceRemediationResponse,
+  PluginCapabilityLibraryProposalReviewApplyReadinessResponse,
+  PluginCapabilityLibraryPromotionPack,
+  PluginCapabilityLibraryPromotionPlanResponse,
+  PluginCapabilityLibraryProposalReviewPack,
+  PluginCapabilityLibraryProposalReviewPlanResponse,
   PluginForgePromotion,
   PluginForgeProposal,
   PluginForgeProposalDecisionAction,
@@ -18193,6 +18212,38 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
     useState<PluginCapabilityPackPromotionDisciplineResponse | null>(null);
   const [capabilityPackPromotionRuleRemediation, setCapabilityPackPromotionRuleRemediation] =
     useState<PluginCapabilityPackPromotionRuleRemediationResponse | null>(null);
+  const [capabilityLibraryPromotionPlan, setCapabilityLibraryPromotionPlan] =
+    useState<PluginCapabilityLibraryPromotionPlanResponse | null>(null);
+  const [capabilityLibraryProposalEvidencePlan, setCapabilityLibraryProposalEvidencePlan] =
+    useState<PluginCapabilityLibraryProposalEvidencePlanResponse | null>(null);
+  const [capabilityLibraryProposalReviewPlan, setCapabilityLibraryProposalReviewPlan] =
+    useState<PluginCapabilityLibraryProposalReviewPlanResponse | null>(null);
+  const [capabilityLibraryProposalReviewApplyReadiness, setCapabilityLibraryProposalReviewApplyReadiness] =
+    useState<PluginCapabilityLibraryProposalReviewApplyReadinessResponse | null>(null);
+  const [capabilityLibraryProposalEvidenceRemediation, setCapabilityLibraryProposalEvidenceRemediation] =
+    useState<PluginCapabilityLibraryProposalEvidenceRemediationResponse | null>(null);
+  const [
+    capabilityLibraryOperatorProposalEvidenceIntakeChecklist,
+    setCapabilityLibraryOperatorProposalEvidenceIntakeChecklist,
+  ] = useState<PluginCapabilityLibraryOperatorProposalEvidenceIntakeChecklistResponse | null>(null);
+  const [
+    capabilityLibraryOperatorProposalEvidenceIntakeWorksheet,
+    setCapabilityLibraryOperatorProposalEvidenceIntakeWorksheet,
+  ] = useState<PluginCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetResponse | null>(null);
+  const [
+    capabilityLibraryOperatorProposalEvidenceIntakeExport,
+    setCapabilityLibraryOperatorProposalEvidenceIntakeExport,
+  ] = useState<PluginCapabilityLibraryOperatorProposalEvidenceIntakeExportResponse | null>(null);
+  const [
+    capabilityLibraryOperatorProposalEvidenceIntakeAudit,
+    setCapabilityLibraryOperatorProposalEvidenceIntakeAudit,
+  ] = useState<PluginCapabilityLibraryOperatorProposalEvidenceIntakeAuditResponse | null>(null);
+  const [capabilityLibraryOperatorProposalEvidenceRefs, setCapabilityLibraryOperatorProposalEvidenceRefs] =
+    useState("");
+  const [
+    capabilityLibraryOperatorProposalEvidenceIntakeResponse,
+    setCapabilityLibraryOperatorProposalEvidenceIntakeResponse,
+  ] = useState<PluginCapabilityLibraryOperatorProposalEvidenceIntakeResponse | null>(null);
   const [capabilityPackOperatorReview, setCapabilityPackOperatorReview] =
     useState<PluginCapabilityPackOperatorReviewResponse | null>(null);
   const [capabilityPackOperatorReviewDecisions, setCapabilityPackOperatorReviewDecisions] = useState<
@@ -18208,6 +18259,8 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
   const [capabilityPackDecisionNotes, setCapabilityPackDecisionNotes] = useState("");
   const [capabilityPackDecisionResponse, setCapabilityPackDecisionResponse] =
     useState<PluginCapabilityPackOperatorReviewDecisionResponse | null>(null);
+  const [capabilityPackBulkDecisionResponse, setCapabilityPackBulkDecisionResponse] =
+    useState<PluginCapabilityPackOperatorReviewBulkDecisionResponse | null>(null);
   const [proposalDecisionReason, setProposalDecisionReason] = useState("operator reviewed Forge proposal");
   const [promotionReason, setPromotionReason] = useState("operator promoted Forge candidate");
   const [selectedPluginId, setSelectedPluginId] = useState("");
@@ -18285,6 +18338,180 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
       selectedCapabilityCatalogEntry?.metadata,
       selectedPluginId,
     ]);
+  const selectedCapabilityLibraryPromotionPack = useMemo((): PluginCapabilityLibraryPromotionPack | null => {
+    const packs = capabilityLibraryPromotionPlan?.packs ?? [];
+    if (!packs.length) return null;
+    const selectedPackId = safeString(selectedCapabilityCatalogEntry?.metadata?.pack_id).trim();
+    const selectedPackVersion = safeString(selectedCapabilityCatalogEntry?.metadata?.pack_version).trim();
+    if (selectedPackId && selectedPackVersion) {
+      const linked = packs.find(
+        (pack) => pack.pack_id === selectedPackId && pack.pack_version === selectedPackVersion,
+      );
+      if (linked) return linked;
+    }
+    if (selectedPluginId) {
+      const linked = packs.find((pack) => pack.capabilities.some((item) => item.capability === selectedPluginId));
+      if (linked) return linked;
+    }
+    return (
+      packs.find((pack) => (pack.blocked_capability_count ?? 0) > 0) ??
+      packs.find((pack) => (pack.promotable_capability_count ?? 0) > 0) ??
+      packs[0] ??
+      null
+    );
+  }, [capabilityLibraryPromotionPlan?.packs, selectedCapabilityCatalogEntry?.metadata, selectedPluginId]);
+  const selectedCapabilityLibraryProposalEvidencePack = useMemo((): PluginCapabilityLibraryProposalEvidencePack | null => {
+    const packs = capabilityLibraryProposalEvidencePlan?.packs ?? [];
+    if (!packs.length) return null;
+    const selectedPackId = safeString(selectedCapabilityCatalogEntry?.metadata?.pack_id).trim();
+    const selectedPackVersion = safeString(selectedCapabilityCatalogEntry?.metadata?.pack_version).trim();
+    if (selectedPackId && selectedPackVersion) {
+      const linked = packs.find(
+        (pack) => pack.pack_id === selectedPackId && pack.pack_version === selectedPackVersion,
+      );
+      if (linked) return linked;
+    }
+    if (selectedPluginId) {
+      const linked = packs.find((pack) => pack.capabilities.some((item) => item.capability === selectedPluginId));
+      if (linked) return linked;
+    }
+    return packs.find((pack) => (pack.proposal_evidence_missing_count ?? 0) > 0) ?? packs[0] ?? null;
+  }, [capabilityLibraryProposalEvidencePlan?.packs, selectedCapabilityCatalogEntry?.metadata, selectedPluginId]);
+  const selectedCapabilityLibraryProposalEvidenceRemediationPack =
+    useMemo((): PluginCapabilityLibraryProposalEvidenceRemediationPack | null => {
+      const packs = capabilityLibraryProposalEvidenceRemediation?.packs ?? [];
+      if (!packs.length) return null;
+      const selectedPackId = safeString(selectedCapabilityCatalogEntry?.metadata?.pack_id).trim();
+      const selectedPackVersion = safeString(selectedCapabilityCatalogEntry?.metadata?.pack_version).trim();
+      if (selectedPackId && selectedPackVersion) {
+        const linked = packs.find(
+          (pack) => pack.pack_id === selectedPackId && pack.pack_version === selectedPackVersion,
+        );
+        if (linked) return linked;
+      }
+      if (selectedPluginId) {
+        const linked = packs.find((pack) => pack.capabilities.some((item) => item.capability === selectedPluginId));
+        if (linked) return linked;
+      }
+      return packs.find((pack) => (pack.candidate_capability_count ?? 0) > 0) ?? packs[0] ?? null;
+    }, [
+      capabilityLibraryProposalEvidenceRemediation?.packs,
+      selectedCapabilityCatalogEntry?.metadata,
+      selectedPluginId,
+    ]);
+  const selectedCapabilityLibraryOperatorProposalEvidenceIntakeChecklistPack =
+    useMemo((): PluginCapabilityLibraryOperatorProposalEvidenceIntakeChecklistPack | null => {
+      const packs = capabilityLibraryOperatorProposalEvidenceIntakeChecklist?.packs ?? [];
+      if (!packs.length) return null;
+      const selectedPackId = safeString(selectedCapabilityCatalogEntry?.metadata?.pack_id).trim();
+      const selectedPackVersion = safeString(selectedCapabilityCatalogEntry?.metadata?.pack_version).trim();
+      if (selectedPackId && selectedPackVersion) {
+        const linked = packs.find(
+          (pack) => pack.pack_id === selectedPackId && pack.pack_version === selectedPackVersion,
+        );
+        if (linked) return linked;
+      }
+      if (selectedPluginId) {
+        const linked = packs.find((pack) => pack.capabilities.some((item) => item.capability === selectedPluginId));
+        if (linked) return linked;
+      }
+      return packs.find((pack) => (pack.candidate_capability_count ?? 0) > 0) ?? packs[0] ?? null;
+    }, [
+      capabilityLibraryOperatorProposalEvidenceIntakeChecklist?.packs,
+      selectedCapabilityCatalogEntry?.metadata,
+      selectedPluginId,
+    ]);
+  const selectedCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetPack =
+    useMemo((): PluginCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetPack | null => {
+      const packs = capabilityLibraryOperatorProposalEvidenceIntakeWorksheet?.packs ?? [];
+      if (!packs.length) return null;
+      const selectedPackId = safeString(selectedCapabilityCatalogEntry?.metadata?.pack_id).trim();
+      const selectedPackVersion = safeString(selectedCapabilityCatalogEntry?.metadata?.pack_version).trim();
+      if (selectedPackId && selectedPackVersion) {
+        const linked = packs.find(
+          (pack) => pack.pack_id === selectedPackId && pack.pack_version === selectedPackVersion,
+        );
+        if (linked) return linked;
+      }
+      if (selectedPluginId) {
+        const linked = packs.find((pack) => pack.rows.some((item) => item.capability === selectedPluginId));
+        if (linked) return linked;
+      }
+      return packs.find((pack) => (pack.worksheet_row_count ?? 0) > 0) ?? packs[0] ?? null;
+    }, [
+      capabilityLibraryOperatorProposalEvidenceIntakeWorksheet?.packs,
+      selectedCapabilityCatalogEntry?.metadata,
+      selectedPluginId,
+    ]);
+  const selectedCapabilityLibraryOperatorProposalEvidenceIntakeExportPack =
+    useMemo((): PluginCapabilityLibraryOperatorProposalEvidenceIntakeExportPack | null => {
+      const packs = capabilityLibraryOperatorProposalEvidenceIntakeExport?.packs ?? [];
+      if (!packs.length) return null;
+      const selectedPackId = safeString(selectedCapabilityCatalogEntry?.metadata?.pack_id).trim();
+      const selectedPackVersion = safeString(selectedCapabilityCatalogEntry?.metadata?.pack_version).trim();
+      if (selectedPackId && selectedPackVersion) {
+        const linked = packs.find(
+          (pack) => pack.pack_id === selectedPackId && pack.pack_version === selectedPackVersion,
+        );
+        if (linked) return linked;
+      }
+      if (selectedPluginId) {
+        const linked = packs.find((pack) => pack.rows.some((item) => item.capability === selectedPluginId));
+        if (linked) return linked;
+      }
+      return packs.find((pack) => (pack.exported_row_count ?? 0) > 0) ?? packs[0] ?? null;
+    }, [
+      capabilityLibraryOperatorProposalEvidenceIntakeExport?.packs,
+      selectedCapabilityCatalogEntry?.metadata,
+      selectedPluginId,
+    ]);
+  const selectedCapabilityLibraryOperatorProposalEvidenceIntakeAuditPack =
+    useMemo((): PluginCapabilityLibraryOperatorProposalEvidenceIntakeAuditPack | null => {
+      const packs = capabilityLibraryOperatorProposalEvidenceIntakeAudit?.packs ?? [];
+      if (!packs.length) return null;
+      const selectedPackId = safeString(selectedCapabilityCatalogEntry?.metadata?.pack_id).trim();
+      const selectedPackVersion = safeString(selectedCapabilityCatalogEntry?.metadata?.pack_version).trim();
+      if (selectedPackId && selectedPackVersion) {
+        const linked = packs.find(
+          (pack) => pack.pack_id === selectedPackId && pack.pack_version === selectedPackVersion,
+        );
+        if (linked) return linked;
+      }
+      if (selectedPluginId) {
+        const linked = packs.find((pack) => pack.capabilities.some((item) => item.capability === selectedPluginId));
+        if (linked) return linked;
+      }
+      return packs.find((pack) => (pack.recorded_capability_count ?? 0) > 0) ?? packs[0] ?? null;
+    }, [
+      capabilityLibraryOperatorProposalEvidenceIntakeAudit?.packs,
+      selectedCapabilityCatalogEntry?.metadata,
+      selectedPluginId,
+    ]);
+  const selectedOperatorProposalEvidencePack =
+    selectedCapabilityLibraryOperatorProposalEvidenceIntakeChecklistPack ??
+    selectedCapabilityLibraryProposalEvidencePack;
+  const selectedCapabilityLibraryProposalReviewPack = useMemo((): PluginCapabilityLibraryProposalReviewPack | null => {
+    const packs = capabilityLibraryProposalReviewPlan?.packs ?? [];
+    if (!packs.length) return null;
+    const selectedPackId = safeString(selectedCapabilityCatalogEntry?.metadata?.pack_id).trim();
+    const selectedPackVersion = safeString(selectedCapabilityCatalogEntry?.metadata?.pack_version).trim();
+    if (selectedPackId && selectedPackVersion) {
+      const linked = packs.find(
+        (pack) => pack.pack_id === selectedPackId && pack.pack_version === selectedPackVersion,
+      );
+      if (linked) return linked;
+    }
+    if (selectedPluginId) {
+      const linked = packs.find((pack) => pack.proposals.some((item) => item.capability === selectedPluginId));
+      if (linked) return linked;
+    }
+    return (
+      packs.find((pack) => (pack.blocked_before_review_capability_count ?? 0) > 0) ??
+      packs.find((pack) => (pack.reviewable_capability_count ?? 0) > 0) ??
+      packs[0] ??
+      null
+    );
+  }, [capabilityLibraryProposalReviewPlan?.packs, selectedCapabilityCatalogEntry?.metadata, selectedPluginId]);
   const selectedCapabilityPackReview = useMemo((): PluginCapabilityPackOperatorReviewPack | null => {
     const packs = capabilityPackOperatorReview?.packs ?? [];
     if (!packs.length) return null;
@@ -18335,6 +18562,8 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
       ready: capabilityPackOperatorReview?.ready_pack_count ?? 0,
       blocked: capabilityPackOperatorReview?.blocked_pack_count ?? 0,
       decisions: capabilityPackOperatorReview?.decision_required_pack_count ?? 0,
+      pending: capabilityPackOperatorReview?.pending_review_queue_count ?? 0,
+      recorded: capabilityPackOperatorReview?.decision_recorded_pack_count ?? capabilityPackOperatorReviewDecisions.length,
       receipts: capabilityPackOperatorReviewDecisions.length,
     }),
     [capabilityPackOperatorReview, capabilityPackOperatorReviewDecisions.length],
@@ -18360,6 +18589,166 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
       receipts: capabilityPackPromotionRuleRemediation?.missing_receipt_pack_count ?? 0,
     }),
     [capabilityPackPromotionRuleRemediation],
+  );
+  const proposalEvidencePlanCounts = useMemo(
+    () => ({
+      candidates: capabilityLibraryProposalEvidencePlan?.candidate_capability_count ?? 0,
+      missing: capabilityLibraryProposalEvidencePlan?.proposal_evidence_missing_count ?? 0,
+      ready: capabilityLibraryProposalEvidencePlan?.proposal_evidence_ready_count ?? 0,
+      proposals: capabilityLibraryProposalEvidencePlan?.unique_proposal_count ?? 0,
+      reviewMissing: capabilityLibraryProposalEvidencePlan?.proposal_review_missing_count ?? 0,
+      blockedBeforeEvidence: capabilityLibraryProposalEvidencePlan?.blocked_before_evidence_count ?? 0,
+    }),
+    [capabilityLibraryProposalEvidencePlan],
+  );
+  const proposalEvidenceRemediationCounts = useMemo(
+    () => ({
+      packs: capabilityLibraryProposalEvidenceRemediation?.candidate_pack_count ?? 0,
+      candidates: capabilityLibraryProposalEvidenceRemediation?.candidate_capability_count ?? 0,
+      existingMetadata: capabilityLibraryProposalEvidenceRemediation?.existing_metadata_evidence_count ?? 0,
+      sourceMissing:
+        capabilityLibraryProposalEvidenceRemediation?.source_proposal_evidence_plan?.proposal_evidence_missing_count ??
+        0,
+      sourceReady:
+        capabilityLibraryProposalEvidenceRemediation?.source_proposal_evidence_plan?.proposal_evidence_ready_count ?? 0,
+      sourceReviewMissing:
+        capabilityLibraryProposalEvidenceRemediation?.source_proposal_evidence_plan?.proposal_review_missing_count ?? 0,
+    }),
+    [capabilityLibraryProposalEvidenceRemediation],
+  );
+  const operatorProposalEvidenceChecklistCounts = useMemo(
+    () => ({
+      packs: capabilityLibraryOperatorProposalEvidenceIntakeChecklist?.candidate_pack_count ?? 0,
+      candidates: capabilityLibraryOperatorProposalEvidenceIntakeChecklist?.candidate_capability_count ?? 0,
+      refsRequired: capabilityLibraryOperatorProposalEvidenceIntakeChecklist?.evidence_ref_required_count ?? 0,
+      sourceMissing:
+        capabilityLibraryOperatorProposalEvidenceIntakeChecklist?.source_proposal_evidence_plan
+          ?.proposal_evidence_missing_count ?? 0,
+      sourceReady:
+        capabilityLibraryOperatorProposalEvidenceIntakeChecklist?.source_proposal_evidence_plan
+          ?.proposal_evidence_ready_count ?? 0,
+    }),
+    [capabilityLibraryOperatorProposalEvidenceIntakeChecklist],
+  );
+  const operatorProposalEvidenceWorksheetCounts = useMemo(
+    () => ({
+      packs: capabilityLibraryOperatorProposalEvidenceIntakeWorksheet?.worksheet_pack_count ?? 0,
+      rows: capabilityLibraryOperatorProposalEvidenceIntakeWorksheet?.worksheet_row_count ?? 0,
+      refsRequired: capabilityLibraryOperatorProposalEvidenceIntakeWorksheet?.evidence_ref_required_count ?? 0,
+      sourceMissing:
+        capabilityLibraryOperatorProposalEvidenceIntakeWorksheet?.source_proposal_evidence_plan
+          ?.proposal_evidence_missing_count ?? 0,
+      sourceReady:
+        capabilityLibraryOperatorProposalEvidenceIntakeWorksheet?.source_proposal_evidence_plan
+          ?.proposal_evidence_ready_count ?? 0,
+    }),
+    [capabilityLibraryOperatorProposalEvidenceIntakeWorksheet],
+  );
+  const operatorProposalEvidenceExportCounts = useMemo(
+    () => ({
+      packs: capabilityLibraryOperatorProposalEvidenceIntakeExport?.export_pack_count ?? 0,
+      rows: capabilityLibraryOperatorProposalEvidenceIntakeExport?.export_row_count ?? 0,
+      exported: capabilityLibraryOperatorProposalEvidenceIntakeExport?.exported_row_count ?? 0,
+      refsRequired: capabilityLibraryOperatorProposalEvidenceIntakeExport?.evidence_ref_required_count ?? 0,
+      rowLimit: capabilityLibraryOperatorProposalEvidenceIntakeExport?.row_limit ?? 0,
+      sourceMissing:
+        capabilityLibraryOperatorProposalEvidenceIntakeExport?.source_proposal_evidence_plan
+          ?.proposal_evidence_missing_count ?? 0,
+      sourceReady:
+        capabilityLibraryOperatorProposalEvidenceIntakeExport?.source_proposal_evidence_plan
+          ?.proposal_evidence_ready_count ?? 0,
+    }),
+    [capabilityLibraryOperatorProposalEvidenceIntakeExport],
+  );
+  const operatorProposalEvidenceAuditCounts = useMemo(
+    () => ({
+      packs: capabilityLibraryOperatorProposalEvidenceIntakeAudit?.recorded_pack_count ?? 0,
+      recorded: capabilityLibraryOperatorProposalEvidenceIntakeAudit?.recorded_capability_count ?? 0,
+      refs: capabilityLibraryOperatorProposalEvidenceIntakeAudit?.evidence_ref_count ?? 0,
+      futureReview: capabilityLibraryOperatorProposalEvidenceIntakeAudit?.future_review_required_count ?? 0,
+      sourceMissing:
+        capabilityLibraryOperatorProposalEvidenceIntakeAudit?.source_proposal_evidence_plan
+          ?.proposal_evidence_missing_count ?? 0,
+      sourceReady:
+        capabilityLibraryOperatorProposalEvidenceIntakeAudit?.source_proposal_evidence_plan
+          ?.proposal_evidence_ready_count ?? 0,
+    }),
+    [capabilityLibraryOperatorProposalEvidenceIntakeAudit],
+  );
+  const proposalReviewPlanCounts = useMemo(
+    () => ({
+      candidates: capabilityLibraryProposalReviewPlan?.candidate_capability_count ?? 0,
+      missing: capabilityLibraryProposalReviewPlan?.proposal_review_missing_count ?? 0,
+      approved: capabilityLibraryProposalReviewPlan?.approved_proposal_review_count ?? 0,
+      reviewable: capabilityLibraryProposalReviewPlan?.reviewable_capability_count ?? 0,
+      blockedBeforeReview: capabilityLibraryProposalReviewPlan?.blocked_before_review_capability_count ?? 0,
+      proposals: capabilityLibraryProposalReviewPlan?.unique_proposal_count ?? 0,
+    }),
+    [capabilityLibraryProposalReviewPlan],
+  );
+  const proposalReviewApplyReadinessCounts = useMemo(
+    () => ({
+      reviewable: capabilityLibraryProposalReviewApplyReadiness?.reviewable_capability_count ?? 0,
+      blockedBeforeReview:
+        capabilityLibraryProposalReviewApplyReadiness?.blocked_before_review_capability_count ?? 0,
+      evidenceMissing:
+        capabilityLibraryProposalReviewApplyReadiness?.source_proposal_evidence_plan
+          ?.proposal_evidence_missing_count ?? 0,
+      evidenceReady:
+        capabilityLibraryProposalReviewApplyReadiness?.source_proposal_evidence_plan
+          ?.proposal_evidence_ready_count ?? 0,
+      operatorRecorded:
+        capabilityLibraryProposalReviewApplyReadiness?.source_operator_evidence_intake_audit
+          ?.recorded_capability_count ?? 0,
+      futureReview:
+        capabilityLibraryProposalReviewApplyReadiness?.source_operator_evidence_intake_audit
+          ?.future_review_required_count ?? 0,
+    }),
+    [capabilityLibraryProposalReviewApplyReadiness],
+  );
+  const capabilityLibraryPromotionPlanCounts = useMemo(
+    () => ({
+      packs: capabilityLibraryPromotionPlan?.candidate_pack_count ?? 0,
+      candidates: capabilityLibraryPromotionPlan?.candidate_capability_count ?? 0,
+      promotable: capabilityLibraryPromotionPlan?.promotable_capability_count ?? 0,
+      blocked: capabilityLibraryPromotionPlan?.blocked_capability_count ?? 0,
+      readyPacks: capabilityLibraryPromotionPlan?.ready_pack_count ?? 0,
+    }),
+    [capabilityLibraryPromotionPlan],
+  );
+  const operatorProposalEvidenceRefs = useMemo(
+    () => parseDelimitedIds(capabilityLibraryOperatorProposalEvidenceRefs),
+    [capabilityLibraryOperatorProposalEvidenceRefs],
+  );
+  const operatorProposalEvidenceSelectedPackMissingCount =
+    selectedCapabilityLibraryOperatorProposalEvidenceIntakeChecklistPack?.candidate_capability_count ??
+    selectedCapabilityLibraryProposalEvidencePack?.proposal_evidence_missing_count ??
+    0;
+  const operatorProposalEvidenceSelectedPackCapabilityLimit = Math.min(
+    Math.max(
+      operatorProposalEvidenceSelectedPackMissingCount ||
+        selectedCapabilityLibraryOperatorProposalEvidenceIntakeChecklistPack?.capabilities.length ||
+        selectedCapabilityLibraryProposalEvidencePack?.capabilities.length ||
+        1,
+      1,
+    ),
+    500,
+  );
+  const operatorProposalEvidenceIntakeCanDryRun = Boolean(
+    selectedOperatorProposalEvidencePack &&
+      operatorProposalEvidenceSelectedPackMissingCount > 0 &&
+      operatorProposalEvidenceRefs.length > 0,
+  );
+  const operatorProposalEvidenceIntakeCanApply = Boolean(
+    operatorProposalEvidenceIntakeCanDryRun &&
+      capabilityLibraryOperatorProposalEvidenceIntakeResponse?.status === "dry_run" &&
+      capabilityLibraryOperatorProposalEvidenceIntakeResponse.dry_run_fingerprint &&
+      (capabilityLibraryOperatorProposalEvidenceIntakeResponse.planned_pack_count ?? 0) > 0 &&
+      capabilityLibraryOperatorProposalEvidenceIntakeResponse.planned?.some(
+        (pack) =>
+          pack.pack_id === selectedOperatorProposalEvidencePack?.pack_id &&
+          pack.pack_version === selectedOperatorProposalEvidencePack?.pack_version,
+      ),
   );
   const promotionReadinessCounts = useMemo(() => {
     const ready = promotionReadiness.filter((item) => item.ready || item.status === "ready").length;
@@ -18441,6 +18830,15 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
         capabilityCatalogRes,
         capabilityPackPromotionDisciplineRes,
         capabilityPackPromotionRuleRemediationRes,
+        capabilityLibraryPromotionPlanRes,
+        capabilityLibraryProposalEvidencePlanRes,
+        capabilityLibraryProposalReviewPlanRes,
+        capabilityLibraryProposalReviewApplyReadinessRes,
+        capabilityLibraryProposalEvidenceRemediationRes,
+        capabilityLibraryOperatorProposalEvidenceIntakeChecklistRes,
+        capabilityLibraryOperatorProposalEvidenceIntakeWorksheetRes,
+        capabilityLibraryOperatorProposalEvidenceIntakeExportRes,
+        capabilityLibraryOperatorProposalEvidenceIntakeAuditRes,
         capabilityPackReviewRes,
         capabilityPackDecisionRes,
         readiness,
@@ -18452,6 +18850,15 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
         client.listCapabilityCatalog({ limit: 5000 }),
         client.listCapabilityPackPromotionDiscipline(),
         client.listCapabilityPackPromotionRuleRemediation(),
+        client.listCapabilityLibraryPromotionPlan(),
+        client.listCapabilityLibraryProposalEvidencePlan(),
+        client.listCapabilityLibraryProposalReviewPlan(),
+        client.listCapabilityLibraryProposalReviewApplyReadiness(),
+        client.listCapabilityLibraryProposalEvidenceRemediation(),
+        client.listCapabilityLibraryOperatorProposalEvidenceIntakeChecklist(),
+        client.listCapabilityLibraryOperatorProposalEvidenceIntakeWorksheet(),
+        client.listCapabilityLibraryOperatorProposalEvidenceIntakeExport(),
+        client.listCapabilityLibraryOperatorProposalEvidenceIntakeAudit(),
         client.listCapabilityPackOperatorReview(),
         client.listCapabilityPackOperatorReviewDecisions({ limit: 200 }),
         client.listPromotionReadiness({ limit: 200 }),
@@ -18466,6 +18873,19 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
       setCapabilityCatalogCoherence(capabilityCatalogRes.coherence ?? null);
       setCapabilityPackPromotionDiscipline(capabilityPackPromotionDisciplineRes);
       setCapabilityPackPromotionRuleRemediation(capabilityPackPromotionRuleRemediationRes);
+      setCapabilityLibraryPromotionPlan(capabilityLibraryPromotionPlanRes);
+      setCapabilityLibraryProposalEvidencePlan(capabilityLibraryProposalEvidencePlanRes);
+      setCapabilityLibraryProposalReviewPlan(capabilityLibraryProposalReviewPlanRes);
+      setCapabilityLibraryProposalReviewApplyReadiness(capabilityLibraryProposalReviewApplyReadinessRes);
+      setCapabilityLibraryProposalEvidenceRemediation(capabilityLibraryProposalEvidenceRemediationRes);
+      setCapabilityLibraryOperatorProposalEvidenceIntakeChecklist(
+        capabilityLibraryOperatorProposalEvidenceIntakeChecklistRes,
+      );
+      setCapabilityLibraryOperatorProposalEvidenceIntakeWorksheet(
+        capabilityLibraryOperatorProposalEvidenceIntakeWorksheetRes,
+      );
+      setCapabilityLibraryOperatorProposalEvidenceIntakeExport(capabilityLibraryOperatorProposalEvidenceIntakeExportRes);
+      setCapabilityLibraryOperatorProposalEvidenceIntakeAudit(capabilityLibraryOperatorProposalEvidenceIntakeAuditRes);
       setCapabilityPackOperatorReview(capabilityPackReviewRes);
       setCapabilityPackOperatorReviewDecisions(capabilityPackDecisionRes.items ?? []);
       setPromotionReadiness(readiness.items ?? []);
@@ -18555,6 +18975,8 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
   useEffect(() => {
     setPromotionActionResponse(null);
     setCapabilityPackDecisionResponse(null);
+    setCapabilityPackBulkDecisionResponse(null);
+    setCapabilityLibraryOperatorProposalEvidenceIntakeResponse(null);
   }, [selectedPluginId]);
 
   const governanceTone = useMemo(() => {
@@ -18763,6 +19185,90 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
         capability_ids: (pack.review_items_sample ?? []).map((item) => item.capability).filter(Boolean),
       });
       setCapabilityPackDecisionResponse(res);
+      setResult(JSON.stringify(res, null, 2));
+      await refreshPlugins();
+    } catch (err) {
+      setError(pluginErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function decidePendingCapabilityPackOperatorReviews(dryRun: boolean) {
+    if (capabilityPackReviewCounts.pending <= 0) {
+      setError("No pending capability pack review decisions.");
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    setRunResponse(null);
+    setCapabilityPackBulkDecisionResponse(null);
+    try {
+      const res = await client.decideCapabilityPackOperatorReviewBulkFromSurface({
+        action: "approve",
+        reason: capabilityPackDecisionReason.trim() || "operator reviewed capability pack",
+        notes: capabilityPackDecisionNotes.trim(),
+        max_pack_count: Math.min(Math.max(capabilityPackReviewCounts.pending, 1), 50),
+        max_total_capability_count: 10000,
+        dry_run: dryRun,
+      });
+      setCapabilityPackBulkDecisionResponse(res);
+      setResult(JSON.stringify(res, null, 2));
+      await refreshPlugins();
+    } catch (err) {
+      setError(pluginErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function applyCapabilityLibraryOperatorProposalEvidenceIntake(dryRun: boolean) {
+    const pack = selectedOperatorProposalEvidencePack;
+    if (!pack) {
+      setError("Select a proposal-evidence pack.");
+      return;
+    }
+    if (operatorProposalEvidenceSelectedPackMissingCount <= 0) {
+      setError("Selected proposal-evidence pack has no missing evidence candidates.");
+      return;
+    }
+    if (!operatorProposalEvidenceRefs.length) {
+      setError("Add at least one operator evidence reference.");
+      return;
+    }
+    const dryRunFingerprint = capabilityLibraryOperatorProposalEvidenceIntakeResponse?.dry_run_fingerprint ?? "";
+    if (!dryRun && !dryRunFingerprint) {
+      setError("Preview the selected pack before applying operator evidence references.");
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    setRunResponse(null);
+    setCapabilityLibraryOperatorProposalEvidenceIntakeResponse(null);
+    try {
+      const intakeRequest = {
+        reason: dryRun
+          ? "preview operator supplied proposal evidence reference from chat UI"
+          : "apply operator supplied proposal evidence reference from chat UI",
+        pack_ids: [pack.pack_id],
+        evidence_refs: operatorProposalEvidenceRefs,
+        max_pack_count: 1,
+        max_total_capability_count: operatorProposalEvidenceSelectedPackCapabilityLimit,
+        max_capability_count_per_pack: operatorProposalEvidenceSelectedPackCapabilityLimit,
+        dry_run: dryRun,
+        dry_run_fingerprint: dryRun ? undefined : dryRunFingerprint,
+        meta: {
+          surface: "chat_ui.plugins.proposal_evidence_intake",
+          pack_version: pack.pack_version,
+          claim_scope: "operator_supplied_friction_evidence_reference_not_independent_verification",
+        },
+      };
+      const res = dryRun
+        ? await client.previewCapabilityLibraryOperatorProposalEvidenceIntake(intakeRequest)
+        : await client.applyCapabilityLibraryOperatorProposalEvidenceIntake(intakeRequest);
+      setCapabilityLibraryOperatorProposalEvidenceIntakeResponse(res);
       setResult(JSON.stringify(res, null, 2));
       await refreshPlugins();
     } catch (err) {
@@ -19004,6 +19510,1303 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
           border: `1px solid ${THEME.panelBorder}`,
           borderRadius: 8,
           padding: 10,
+          background: "#101617",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>Proposal Evidence Plan</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <span style={badgeStyle("candidate")}>candidates {proposalEvidencePlanCounts.candidates}</span>
+            <span style={badgeStyle(proposalEvidencePlanCounts.missing > 0 ? "blocked" : "clear")}>
+              missing {proposalEvidencePlanCounts.missing}
+            </span>
+            <span style={badgeStyle(proposalEvidencePlanCounts.ready > 0 ? "ready" : "none")}>
+              ready {proposalEvidencePlanCounts.ready}
+            </span>
+            <span style={badgeStyle("proposal")}>proposals {proposalEvidencePlanCounts.proposals}</span>
+            <span style={badgeStyle(proposalEvidencePlanCounts.reviewMissing > 0 ? "blocked" : "clear")}>
+              reviews {proposalEvidencePlanCounts.reviewMissing}
+            </span>
+          </div>
+        </div>
+
+        {capabilityLibraryProposalEvidencePlan ? (
+          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <span style={badgeStyle(capabilityLibraryProposalEvidencePlan.status || "unknown")}>
+                {capabilityLibraryProposalEvidencePlan.status || "unknown"}
+              </span>
+              {capabilityLibraryProposalEvidencePlan.proposal_evidence_plan_ready ? (
+                <span style={badgeStyle("readback")}>readback ready</span>
+              ) : null}
+              {proposalEvidencePlanCounts.blockedBeforeEvidence > 0 ? (
+                <span style={badgeStyle("blocked")}>pre-evidence blockers {proposalEvidencePlanCounts.blockedBeforeEvidence}</span>
+              ) : null}
+              {capabilityLibraryProposalEvidencePlan.next_smallest_truthful_gap ? (
+                <span style={badgeStyle("gap")}>{capabilityLibraryProposalEvidencePlan.next_smallest_truthful_gap}</span>
+              ) : null}
+            </div>
+            {selectedCapabilityLibraryProposalEvidencePack ? (
+              <>
+                <div style={{ marginTop: 6 }}>
+                  pack <code>{selectedCapabilityLibraryProposalEvidencePack.pack_id}</code> / version{" "}
+                  <code>{selectedCapabilityLibraryProposalEvidencePack.pack_version}</code>
+                  {selectedCapabilityLibraryProposalEvidencePack.pack_name ? (
+                    <>
+                      {" "}
+                      / name <code>{selectedCapabilityLibraryProposalEvidencePack.pack_name}</code>
+                    </>
+                  ) : null}
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+                  <span style={badgeStyle("staged")}>
+                    staged {selectedCapabilityLibraryProposalEvidencePack.staged_capability_count ?? 0}
+                  </span>
+                  <span
+                    style={badgeStyle(
+                      (selectedCapabilityLibraryProposalEvidencePack.proposal_evidence_missing_count ?? 0) > 0
+                        ? "blocked"
+                        : "clear",
+                    )}
+                  >
+                    evidence missing {selectedCapabilityLibraryProposalEvidencePack.proposal_evidence_missing_count ?? 0}
+                  </span>
+                  <span
+                    style={badgeStyle(
+                      (selectedCapabilityLibraryProposalEvidencePack.proposal_evidence_ready_count ?? 0) > 0
+                        ? "ready"
+                        : "none",
+                    )}
+                  >
+                    evidence ready {selectedCapabilityLibraryProposalEvidencePack.proposal_evidence_ready_count ?? 0}
+                  </span>
+                  {selectedCapabilityLibraryProposalEvidencePack.capabilities_truncated ? (
+                    <span style={badgeStyle("truncated")}>sample truncated</span>
+                  ) : null}
+                </div>
+                {selectedCapabilityLibraryProposalEvidencePack.capabilities.length ? (
+                  <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+                    {selectedCapabilityLibraryProposalEvidencePack.capabilities.slice(0, 4).map((item) => (
+                      <div key={`proposal-evidence-${item.capability}`} style={{ display: "grid", gap: 4 }}>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          <span style={badgeStyle(item.proposal_evidence_missing ? "blocked" : "ready")}>
+                            {item.proposal_evidence_missing ? "missing evidence" : "evidence ready"}
+                          </span>
+                          {item.status ? <span style={badgeStyle(item.status)}>{item.status}</span> : null}
+                          {item.evidence_source ? <span style={badgeStyle(item.evidence_source)}>{item.evidence_source}</span> : null}
+                        </div>
+                        <div>
+                          capability <code>{item.capability}</code>
+                          {item.proposal_id ? (
+                            <>
+                              {" "}
+                              / proposal <code>{item.proposal_id}</code>
+                            </>
+                          ) : null}
+                        </div>
+                        {item.missing_requirements?.length ? (
+                          <div>
+                            missing <code>{item.missing_requirements.join(", ")}</code>
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ marginTop: 6 }}>No missing-evidence capability sample returned for this pack.</div>
+                )}
+              </>
+            ) : (
+              <div style={{ marginTop: 6 }}>No proposal-evidence pack sample returned by the backend.</div>
+            )}
+          </div>
+        ) : (
+          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+            Proposal evidence plan readback unavailable.
+          </div>
+        )}
+
+        <div style={{ borderTop: `1px solid ${THEME.panelBorder}`, marginTop: 10, paddingTop: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 12, fontWeight: 600 }}>Existing-Artifact Remediation</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <span style={badgeStyle(proposalEvidenceRemediationCounts.candidates > 0 ? "ready" : "none")}>
+                candidates {proposalEvidenceRemediationCounts.candidates}
+              </span>
+              <span style={badgeStyle("packs")}>packs {proposalEvidenceRemediationCounts.packs}</span>
+              <span style={badgeStyle("metadata")}>metadata {proposalEvidenceRemediationCounts.existingMetadata}</span>
+              <span style={badgeStyle(proposalEvidenceRemediationCounts.sourceMissing > 0 ? "blocked" : "clear")}>
+                source missing {proposalEvidenceRemediationCounts.sourceMissing}
+              </span>
+            </div>
+          </div>
+
+          {capabilityLibraryProposalEvidenceRemediation ? (
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <span style={badgeStyle(capabilityLibraryProposalEvidenceRemediation.status || "unknown")}>
+                  {capabilityLibraryProposalEvidenceRemediation.status || "unknown"}
+                </span>
+                {capabilityLibraryProposalEvidenceRemediation.proposal_evidence_remediation_ready ? (
+                  <span style={badgeStyle("ready")}>backfill ready</span>
+                ) : null}
+                <span style={badgeStyle("source")}>source ready {proposalEvidenceRemediationCounts.sourceReady}</span>
+                <span style={badgeStyle(proposalEvidenceRemediationCounts.sourceReviewMissing > 0 ? "blocked" : "clear")}>
+                  source reviews {proposalEvidenceRemediationCounts.sourceReviewMissing}
+                </span>
+                {capabilityLibraryProposalEvidenceRemediation.next_smallest_truthful_gap ? (
+                  <span style={badgeStyle("gap")}>
+                    {capabilityLibraryProposalEvidenceRemediation.next_smallest_truthful_gap}
+                  </span>
+                ) : null}
+              </div>
+
+              {selectedCapabilityLibraryProposalEvidenceRemediationPack ? (
+                <>
+                  <div style={{ marginTop: 6 }}>
+                    pack <code>{selectedCapabilityLibraryProposalEvidenceRemediationPack.pack_id}</code> / version{" "}
+                    <code>{selectedCapabilityLibraryProposalEvidenceRemediationPack.pack_version}</code>
+                    {selectedCapabilityLibraryProposalEvidenceRemediationPack.pack_name ? (
+                      <>
+                        {" "}
+                        / name <code>{selectedCapabilityLibraryProposalEvidenceRemediationPack.pack_name}</code>
+                      </>
+                    ) : null}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+                    <span style={badgeStyle("staged")}>
+                      staged {selectedCapabilityLibraryProposalEvidenceRemediationPack.staged_capability_count ?? 0}
+                    </span>
+                    <span
+                      style={badgeStyle(
+                        (selectedCapabilityLibraryProposalEvidenceRemediationPack.candidate_capability_count ?? 0) > 0
+                          ? "ready"
+                          : "none",
+                      )}
+                    >
+                      backfill candidates{" "}
+                      {selectedCapabilityLibraryProposalEvidenceRemediationPack.candidate_capability_count ?? 0}
+                    </span>
+                    {selectedCapabilityLibraryProposalEvidenceRemediationPack.capabilities_truncated ? (
+                      <span style={badgeStyle("truncated")}>sample truncated</span>
+                    ) : null}
+                  </div>
+                  {selectedCapabilityLibraryProposalEvidenceRemediationPack.capabilities.length ? (
+                    <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+                      {selectedCapabilityLibraryProposalEvidenceRemediationPack.capabilities.slice(0, 4).map((item) => (
+                        <div key={`proposal-evidence-remediation-${item.capability}`} style={{ display: "grid", gap: 4 }}>
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <span style={badgeStyle(item.writes_registry_metadata ? "ready" : "none")}>
+                              registry metadata {String(item.writes_registry_metadata ?? false)}
+                            </span>
+                            {item.evidence_source ? <span style={badgeStyle(item.evidence_source)}>{item.evidence_source}</span> : null}
+                            <span style={badgeStyle(item.approves_proposals ? "blocked" : "clear")}>
+                              approve proposals {String(item.approves_proposals ?? false)}
+                            </span>
+                            <span style={badgeStyle(item.promotes_capability ? "blocked" : "clear")}>
+                              promote {String(item.promotes_capability ?? false)}
+                            </span>
+                          </div>
+                          <div>
+                            capability <code>{item.capability}</code>
+                            {item.proposal_id ? (
+                              <>
+                                {" "}
+                                / proposal <code>{item.proposal_id}</code>
+                              </>
+                            ) : null}
+                          </div>
+                          <div>
+                            artifact evidence <code>{item.linked_proposal_artifact_evidence?.length ?? 0}</code>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ marginTop: 6 }}>No existing-artifact remediation sample returned for this pack.</div>
+                  )}
+                </>
+              ) : (
+                <div style={{ marginTop: 6 }}>
+                  No existing linked proposal artifact evidence candidates returned by the backend.
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+              Proposal evidence remediation readback unavailable.
+            </div>
+          )}
+        </div>
+
+        <div style={{ borderTop: `1px solid ${THEME.panelBorder}`, marginTop: 10, paddingTop: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 12, fontWeight: 600 }}>Operator Evidence Intake</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <span style={badgeStyle(operatorProposalEvidenceRefs.length > 0 ? "ready" : "blocked")}>
+                refs {operatorProposalEvidenceRefs.length}
+              </span>
+              <span style={badgeStyle(selectedOperatorProposalEvidencePack ? "pack" : "blocked")}>
+                selected pack {selectedOperatorProposalEvidencePack ? "true" : "false"}
+              </span>
+              <span style={badgeStyle("limit")}>cap limit {operatorProposalEvidenceSelectedPackCapabilityLimit}</span>
+            </div>
+          </div>
+
+          {capabilityLibraryOperatorProposalEvidenceIntakeChecklist ? (
+            <div style={{ display: "grid", gap: 6, fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <span style={badgeStyle(capabilityLibraryOperatorProposalEvidenceIntakeChecklist.status || "unknown")}>
+                  {capabilityLibraryOperatorProposalEvidenceIntakeChecklist.status || "unknown"}
+                </span>
+                {capabilityLibraryOperatorProposalEvidenceIntakeChecklist.operator_evidence_intake_checklist_ready ? (
+                  <span style={badgeStyle("ready")}>checklist ready</span>
+                ) : (
+                  <span style={badgeStyle("none")}>no checklist candidates</span>
+                )}
+                <span style={badgeStyle("packs")}>packs {operatorProposalEvidenceChecklistCounts.packs}</span>
+                <span style={badgeStyle("candidate")}>
+                  candidates {operatorProposalEvidenceChecklistCounts.candidates}
+                </span>
+                <span style={badgeStyle("refs")}>refs required {operatorProposalEvidenceChecklistCounts.refsRequired}</span>
+                <span style={badgeStyle(operatorProposalEvidenceChecklistCounts.sourceMissing > 0 ? "blocked" : "clear")}>
+                  source missing {operatorProposalEvidenceChecklistCounts.sourceMissing}
+                </span>
+                <span style={badgeStyle("source")}>source ready {operatorProposalEvidenceChecklistCounts.sourceReady}</span>
+                {capabilityLibraryOperatorProposalEvidenceIntakeChecklist.next_smallest_truthful_gap ? (
+                  <span style={badgeStyle("gap")}>
+                    {capabilityLibraryOperatorProposalEvidenceIntakeChecklist.next_smallest_truthful_gap}
+                  </span>
+                ) : null}
+              </div>
+
+              {selectedCapabilityLibraryOperatorProposalEvidenceIntakeChecklistPack ? (
+                <>
+                  <div>
+                    checklist pack{" "}
+                    <code>{selectedCapabilityLibraryOperatorProposalEvidenceIntakeChecklistPack.pack_id}</code> / version{" "}
+                    <code>{selectedCapabilityLibraryOperatorProposalEvidenceIntakeChecklistPack.pack_version}</code>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <span style={badgeStyle("staged")}>
+                      staged {selectedCapabilityLibraryOperatorProposalEvidenceIntakeChecklistPack.staged_capability_count ?? 0}
+                    </span>
+                    <span
+                      style={badgeStyle(
+                        (selectedCapabilityLibraryOperatorProposalEvidenceIntakeChecklistPack.candidate_capability_count ??
+                          0) > 0
+                          ? "ready"
+                          : "none",
+                      )}
+                    >
+                      intake candidates{" "}
+                      {selectedCapabilityLibraryOperatorProposalEvidenceIntakeChecklistPack.candidate_capability_count ?? 0}
+                    </span>
+                    <span style={badgeStyle("refs")}>
+                      refs required{" "}
+                      {selectedCapabilityLibraryOperatorProposalEvidenceIntakeChecklistPack.evidence_ref_required_count ?? 0}
+                    </span>
+                    {selectedCapabilityLibraryOperatorProposalEvidenceIntakeChecklistPack.claim_scope ? (
+                      <span style={badgeStyle("claim")}>
+                        {selectedCapabilityLibraryOperatorProposalEvidenceIntakeChecklistPack.claim_scope}
+                      </span>
+                    ) : null}
+                    {selectedCapabilityLibraryOperatorProposalEvidenceIntakeChecklistPack.capabilities_truncated ? (
+                      <span style={badgeStyle("truncated")}>sample truncated</span>
+                    ) : null}
+                  </div>
+                  {selectedCapabilityLibraryOperatorProposalEvidenceIntakeChecklistPack.capabilities.length ? (
+                    <div style={{ display: "grid", gap: 6 }}>
+                      {selectedCapabilityLibraryOperatorProposalEvidenceIntakeChecklistPack.capabilities
+                        .slice(0, 4)
+                        .map((item) => (
+                          <div key={`operator-evidence-checklist-${item.capability}`} style={{ display: "grid", gap: 4 }}>
+                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                              <span style={badgeStyle(item.evidence_refs_required ? "blocked" : "clear")}>
+                                refs required {String(item.evidence_refs_required ?? false)}
+                              </span>
+                              <span
+                                style={badgeStyle(
+                                  item.operator_supplied_evidence_not_independently_verified ? "claim" : "clear",
+                                )}
+                              >
+                                operator supplied{" "}
+                                {String(item.operator_supplied_evidence_not_independently_verified ?? false)}
+                              </span>
+                              {item.intake_apply_route ? (
+                                <span style={badgeStyle("route")}>{item.intake_apply_route}</span>
+                              ) : null}
+                            </div>
+                            <div>
+                              capability <code>{item.capability}</code>
+                              {item.proposal_id ? (
+                                <>
+                                  {" "}
+                                  / proposal <code>{item.proposal_id}</code>
+                                </>
+                              ) : null}
+                            </div>
+                            {item.missing_requirements?.length ? (
+                              <div>missing {item.missing_requirements.join(", ")}</div>
+                            ) : null}
+                          </div>
+                        ))}
+                    </div>
+                  ) : (
+                    <div>No checklist capability sample returned for this pack.</div>
+                  )}
+                </>
+              ) : (
+                <div>No operator evidence intake checklist candidates returned by the backend.</div>
+              )}
+            </div>
+          ) : (
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+              Operator evidence intake checklist unavailable.
+            </div>
+          )}
+
+          {capabilityLibraryOperatorProposalEvidenceIntakeWorksheet ? (
+            <div
+              style={{
+                display: "grid",
+                gap: 6,
+                fontSize: 11,
+                color: THEME.muted,
+                marginTop: 8,
+                borderTop: `1px solid ${THEME.panelBorder}`,
+                paddingTop: 8,
+              }}
+            >
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <span style={badgeStyle(capabilityLibraryOperatorProposalEvidenceIntakeWorksheet.status || "unknown")}>
+                  worksheet {capabilityLibraryOperatorProposalEvidenceIntakeWorksheet.status || "unknown"}
+                </span>
+                {capabilityLibraryOperatorProposalEvidenceIntakeWorksheet.operator_evidence_intake_worksheet_ready ? (
+                  <span style={badgeStyle("ready")}>collection ready</span>
+                ) : (
+                  <span style={badgeStyle("none")}>no rows</span>
+                )}
+                <span style={badgeStyle("packs")}>packs {operatorProposalEvidenceWorksheetCounts.packs}</span>
+                <span style={badgeStyle("rows")}>rows {operatorProposalEvidenceWorksheetCounts.rows}</span>
+                <span style={badgeStyle("refs")}>refs required {operatorProposalEvidenceWorksheetCounts.refsRequired}</span>
+                <span style={badgeStyle(operatorProposalEvidenceWorksheetCounts.sourceMissing > 0 ? "blocked" : "clear")}>
+                  source missing {operatorProposalEvidenceWorksheetCounts.sourceMissing}
+                </span>
+                <span style={badgeStyle("source")}>source ready {operatorProposalEvidenceWorksheetCounts.sourceReady}</span>
+                {capabilityLibraryOperatorProposalEvidenceIntakeWorksheet.next_smallest_truthful_gap ? (
+                  <span style={badgeStyle("gap")}>
+                    {capabilityLibraryOperatorProposalEvidenceIntakeWorksheet.next_smallest_truthful_gap}
+                  </span>
+                ) : null}
+              </div>
+
+              {selectedCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetPack ? (
+                <>
+                  <div>
+                    worksheet pack{" "}
+                    <code>{selectedCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetPack.pack_id}</code> / version{" "}
+                    <code>{selectedCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetPack.pack_version}</code>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <span style={badgeStyle("staged")}>
+                      staged {selectedCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetPack.staged_capability_count ?? 0}
+                    </span>
+                    <span style={badgeStyle("rows")}>
+                      rows {selectedCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetPack.worksheet_row_count ?? 0}
+                    </span>
+                    <span style={badgeStyle("refs")}>
+                      refs required{" "}
+                      {selectedCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetPack.evidence_ref_required_count ?? 0}
+                    </span>
+                    {selectedCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetPack.claim_scope ? (
+                      <span style={badgeStyle("claim")}>
+                        {selectedCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetPack.claim_scope}
+                      </span>
+                    ) : null}
+                    {selectedCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetPack.rows_truncated ? (
+                      <span style={badgeStyle("truncated")}>sample truncated</span>
+                    ) : null}
+                  </div>
+                  {selectedCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetPack.rows.length ? (
+                    <div style={{ display: "grid", gap: 6 }}>
+                      {selectedCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetPack.rows.slice(0, 4).map((item) => (
+                        <div key={`operator-evidence-worksheet-${item.capability}`} style={{ display: "grid", gap: 4 }}>
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <span style={badgeStyle(item.operator_evidence_refs_required ? "blocked" : "clear")}>
+                              refs required {String(item.operator_evidence_refs_required ?? false)}
+                            </span>
+                            <span style={badgeStyle("pending")}>
+                              {item.evidence_ref_collection_status || "pending_operator_input"}
+                            </span>
+                            <span style={badgeStyle("refs")}>current refs {item.operator_evidence_ref_count ?? 0}</span>
+                            {item.intake_apply_route ? (
+                              <span style={badgeStyle("route")}>{item.intake_apply_route}</span>
+                            ) : null}
+                          </div>
+                          <div>
+                            capability <code>{item.capability}</code>
+                            {item.proposal_id ? (
+                              <>
+                                {" "}
+                                / proposal <code>{item.proposal_id}</code>
+                              </>
+                            ) : null}
+                          </div>
+                          {item.apply_payload_hint?.capability_ids?.length ? (
+                            <div>
+                              apply scope <code>{item.apply_payload_hint.capability_ids.join(", ")}</code>
+                            </div>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div>No worksheet rows returned for this pack.</div>
+                  )}
+                </>
+              ) : (
+                <div>No operator evidence worksheet rows returned by the backend.</div>
+              )}
+            </div>
+          ) : (
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+              Operator evidence intake worksheet unavailable.
+            </div>
+          )}
+
+          {capabilityLibraryOperatorProposalEvidenceIntakeExport ? (
+            <div
+              style={{
+                display: "grid",
+                gap: 6,
+                fontSize: 11,
+                color: THEME.muted,
+                marginTop: 8,
+                borderTop: `1px solid ${THEME.panelBorder}`,
+                paddingTop: 8,
+              }}
+            >
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <span style={badgeStyle(capabilityLibraryOperatorProposalEvidenceIntakeExport.status || "unknown")}>
+                  export {capabilityLibraryOperatorProposalEvidenceIntakeExport.status || "unknown"}
+                </span>
+                {capabilityLibraryOperatorProposalEvidenceIntakeExport.operator_evidence_intake_export_ready ? (
+                  <span style={badgeStyle("ready")}>export ready</span>
+                ) : (
+                  <span style={badgeStyle("none")}>no rows</span>
+                )}
+                <span style={badgeStyle("packs")}>packs {operatorProposalEvidenceExportCounts.packs}</span>
+                <span style={badgeStyle("rows")}>rows {operatorProposalEvidenceExportCounts.rows}</span>
+                <span style={badgeStyle("exported")}>exported {operatorProposalEvidenceExportCounts.exported}</span>
+                <span style={badgeStyle("refs")}>refs required {operatorProposalEvidenceExportCounts.refsRequired}</span>
+                <span
+                  style={badgeStyle(
+                    capabilityLibraryOperatorProposalEvidenceIntakeExport.export_rows_truncated ? "truncated" : "clear",
+                  )}
+                >
+                  row limit {operatorProposalEvidenceExportCounts.rowLimit}
+                </span>
+                <span style={badgeStyle(operatorProposalEvidenceExportCounts.sourceMissing > 0 ? "blocked" : "clear")}>
+                  source missing {operatorProposalEvidenceExportCounts.sourceMissing}
+                </span>
+                <span style={badgeStyle("source")}>source ready {operatorProposalEvidenceExportCounts.sourceReady}</span>
+                {capabilityLibraryOperatorProposalEvidenceIntakeExport.next_smallest_truthful_gap ? (
+                  <span style={badgeStyle("gap")}>
+                    {capabilityLibraryOperatorProposalEvidenceIntakeExport.next_smallest_truthful_gap}
+                  </span>
+                ) : null}
+              </div>
+
+              {selectedCapabilityLibraryOperatorProposalEvidenceIntakeExportPack ? (
+                <>
+                  <div>
+                    export pack <code>{selectedCapabilityLibraryOperatorProposalEvidenceIntakeExportPack.pack_id}</code> /
+                    version <code>{selectedCapabilityLibraryOperatorProposalEvidenceIntakeExportPack.pack_version}</code>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <span style={badgeStyle("staged")}>
+                      staged {selectedCapabilityLibraryOperatorProposalEvidenceIntakeExportPack.staged_capability_count ?? 0}
+                    </span>
+                    <span style={badgeStyle("rows")}>
+                      rows {selectedCapabilityLibraryOperatorProposalEvidenceIntakeExportPack.export_row_count ?? 0}
+                    </span>
+                    <span style={badgeStyle("exported")}>
+                      exported {selectedCapabilityLibraryOperatorProposalEvidenceIntakeExportPack.exported_row_count ?? 0}
+                    </span>
+                    <span style={badgeStyle("refs")}>
+                      refs required{" "}
+                      {selectedCapabilityLibraryOperatorProposalEvidenceIntakeExportPack.evidence_ref_required_count ?? 0}
+                    </span>
+                    {selectedCapabilityLibraryOperatorProposalEvidenceIntakeExportPack.claim_scope ? (
+                      <span style={badgeStyle("claim")}>
+                        {selectedCapabilityLibraryOperatorProposalEvidenceIntakeExportPack.claim_scope}
+                      </span>
+                    ) : null}
+                    {selectedCapabilityLibraryOperatorProposalEvidenceIntakeExportPack.rows_truncated ? (
+                      <span style={badgeStyle("truncated")}>rows truncated</span>
+                    ) : null}
+                  </div>
+                  {selectedCapabilityLibraryOperatorProposalEvidenceIntakeExportPack.rows.length ? (
+                    <div style={{ display: "grid", gap: 6 }}>
+                      {selectedCapabilityLibraryOperatorProposalEvidenceIntakeExportPack.rows.slice(0, 4).map((item) => (
+                        <div key={`operator-evidence-export-${item.capability}`} style={{ display: "grid", gap: 4 }}>
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <span style={badgeStyle(item.operator_evidence_refs_required ? "blocked" : "clear")}>
+                              refs required {String(item.operator_evidence_refs_required ?? false)}
+                            </span>
+                            <span style={badgeStyle("pending")}>
+                              {item.evidence_ref_collection_status || "pending_operator_input"}
+                            </span>
+                            <span style={badgeStyle(item.dry_run_required ? "dry-run" : "blocked")}>
+                              dry run {String(item.dry_run_required ?? false)}
+                            </span>
+                            <span style={badgeStyle("input")}>
+                              evidence input {item.evidence_refs_input_format || "comma_separated_or_json_array"}
+                            </span>
+                            {item.intake_apply_route ? (
+                              <span style={badgeStyle("route")}>{item.intake_apply_route}</span>
+                            ) : null}
+                          </div>
+                          <div>
+                            capability <code>{item.capability}</code>
+                            {item.proposal_id ? (
+                              <>
+                                {" "}
+                                / proposal <code>{item.proposal_id}</code>
+                              </>
+                            ) : null}
+                          </div>
+                          <div>
+                            evidence refs input <code>{item.evidence_refs_input ?? ""}</code>
+                          </div>
+                          {item.apply_payload_hint?.capability_ids?.length ? (
+                            <div>
+                              apply scope <code>{item.apply_payload_hint.capability_ids.join(", ")}</code>
+                            </div>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div>No export rows returned for this pack.</div>
+                  )}
+                </>
+              ) : (
+                <div>No operator evidence export rows returned by the backend.</div>
+              )}
+            </div>
+          ) : (
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+              Operator evidence intake export unavailable.
+            </div>
+          )}
+
+          {capabilityLibraryOperatorProposalEvidenceIntakeAudit ? (
+            <div
+              style={{
+                display: "grid",
+                gap: 6,
+                fontSize: 11,
+                color: THEME.muted,
+                marginTop: 8,
+                borderTop: `1px solid ${THEME.panelBorder}`,
+                paddingTop: 8,
+              }}
+            >
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <span style={badgeStyle(capabilityLibraryOperatorProposalEvidenceIntakeAudit.status || "unknown")}>
+                  audit {capabilityLibraryOperatorProposalEvidenceIntakeAudit.status || "unknown"}
+                </span>
+                {capabilityLibraryOperatorProposalEvidenceIntakeAudit.operator_evidence_intake_audit_ready ? (
+                  <span style={badgeStyle("ready")}>recorded refs present</span>
+                ) : (
+                  <span style={badgeStyle("none")}>no recorded refs</span>
+                )}
+                <span style={badgeStyle("packs")}>recorded packs {operatorProposalEvidenceAuditCounts.packs}</span>
+                <span style={badgeStyle("recorded")}>recorded caps {operatorProposalEvidenceAuditCounts.recorded}</span>
+                <span style={badgeStyle("refs")}>refs {operatorProposalEvidenceAuditCounts.refs}</span>
+                <span style={badgeStyle(operatorProposalEvidenceAuditCounts.futureReview > 0 ? "review" : "clear")}>
+                  future review {operatorProposalEvidenceAuditCounts.futureReview}
+                </span>
+                <span style={badgeStyle(operatorProposalEvidenceAuditCounts.sourceMissing > 0 ? "blocked" : "clear")}>
+                  source missing {operatorProposalEvidenceAuditCounts.sourceMissing}
+                </span>
+                <span style={badgeStyle("source")}>source ready {operatorProposalEvidenceAuditCounts.sourceReady}</span>
+                {capabilityLibraryOperatorProposalEvidenceIntakeAudit.next_smallest_truthful_gap ? (
+                  <span style={badgeStyle("gap")}>
+                    {capabilityLibraryOperatorProposalEvidenceIntakeAudit.next_smallest_truthful_gap}
+                  </span>
+                ) : null}
+              </div>
+
+              {selectedCapabilityLibraryOperatorProposalEvidenceIntakeAuditPack ? (
+                <>
+                  <div>
+                    audit pack <code>{selectedCapabilityLibraryOperatorProposalEvidenceIntakeAuditPack.pack_id}</code> /
+                    version <code>{selectedCapabilityLibraryOperatorProposalEvidenceIntakeAuditPack.pack_version}</code>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <span style={badgeStyle("staged")}>
+                      staged {selectedCapabilityLibraryOperatorProposalEvidenceIntakeAuditPack.staged_capability_count ?? 0}
+                    </span>
+                    <span style={badgeStyle("recorded")}>
+                      recorded{" "}
+                      {selectedCapabilityLibraryOperatorProposalEvidenceIntakeAuditPack.recorded_capability_count ?? 0}
+                    </span>
+                    <span style={badgeStyle("refs")}>
+                      refs {selectedCapabilityLibraryOperatorProposalEvidenceIntakeAuditPack.evidence_ref_count ?? 0}
+                    </span>
+                    {selectedCapabilityLibraryOperatorProposalEvidenceIntakeAuditPack.claim_scope ? (
+                      <span style={badgeStyle("claim")}>
+                        {selectedCapabilityLibraryOperatorProposalEvidenceIntakeAuditPack.claim_scope}
+                      </span>
+                    ) : null}
+                    {selectedCapabilityLibraryOperatorProposalEvidenceIntakeAuditPack.capabilities_truncated ? (
+                      <span style={badgeStyle("truncated")}>sample truncated</span>
+                    ) : null}
+                  </div>
+                  {selectedCapabilityLibraryOperatorProposalEvidenceIntakeAuditPack.capabilities.length ? (
+                    <div style={{ display: "grid", gap: 6 }}>
+                      {selectedCapabilityLibraryOperatorProposalEvidenceIntakeAuditPack.capabilities
+                        .slice(0, 4)
+                        .map((item) => (
+                          <div key={`operator-evidence-audit-${item.capability}`} style={{ display: "grid", gap: 4 }}>
+                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                              <span style={badgeStyle("refs")}>refs {item.evidence_ref_count ?? 0}</span>
+                              <span style={badgeStyle(item.requires_future_proposal_review ? "review" : "clear")}>
+                                future review {String(item.requires_future_proposal_review ?? false)}
+                              </span>
+                              <span style={badgeStyle(item.writes_proposals ? "blocked" : "clear")}>
+                                writes proposals {String(item.writes_proposals ?? false)}
+                              </span>
+                              <span style={badgeStyle(item.approval_claimed ? "blocked" : "clear")}>
+                                approval claimed {String(item.approval_claimed ?? false)}
+                              </span>
+                              {item.operator_intake_route ? (
+                                <span style={badgeStyle("route")}>{item.operator_intake_route}</span>
+                              ) : null}
+                            </div>
+                            <div>
+                              capability <code>{item.capability}</code>
+                              {item.proposal_id ? (
+                                <>
+                                  {" "}
+                                  / proposal <code>{item.proposal_id}</code>
+                                </>
+                              ) : null}
+                            </div>
+                            {item.evidence_refs?.length ? (
+                              <div>
+                                refs <code>{item.evidence_refs.join(", ")}</code>
+                              </div>
+                            ) : null}
+                          </div>
+                        ))}
+                    </div>
+                  ) : (
+                    <div>No recorded operator evidence refs returned for this audit pack.</div>
+                  )}
+                </>
+              ) : (
+                <div>No recorded operator evidence refs returned by the backend.</div>
+              )}
+            </div>
+          ) : (
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+              Operator evidence intake audit unavailable.
+            </div>
+          )}
+
+          {selectedOperatorProposalEvidencePack ? (
+            <div style={{ display: "grid", gap: 8, fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <span style={badgeStyle("pack")}>
+                  pack <code>{selectedOperatorProposalEvidencePack.pack_id}</code>
+                </span>
+                <span
+                  style={badgeStyle(
+                    operatorProposalEvidenceSelectedPackMissingCount > 0 ? "blocked" : "clear",
+                  )}
+                >
+                  missing {operatorProposalEvidenceSelectedPackMissingCount}
+                </span>
+                <span style={badgeStyle("claim")}>operator-supplied refs</span>
+                <span style={badgeStyle("review")}>future review required</span>
+              </div>
+              <textarea
+                value={capabilityLibraryOperatorProposalEvidenceRefs}
+                onChange={(e) => {
+                  setCapabilityLibraryOperatorProposalEvidenceRefs(e.target.value);
+                  setCapabilityLibraryOperatorProposalEvidenceIntakeResponse(null);
+                }}
+                placeholder="Operator evidence refs"
+                rows={3}
+                style={inputStyle}
+              />
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button
+                  style={buttonStyle}
+                  disabled={busy || !operatorProposalEvidenceIntakeCanDryRun}
+                  onClick={() => void applyCapabilityLibraryOperatorProposalEvidenceIntake(true)}
+                >
+                  Preview selected pack
+                </button>
+                <button
+                  style={buttonStyle}
+                  disabled={busy || !operatorProposalEvidenceIntakeCanApply}
+                  onClick={() => void applyCapabilityLibraryOperatorProposalEvidenceIntake(false)}
+                >
+                  Apply selected pack refs
+                </button>
+              </div>
+              {capabilityLibraryOperatorProposalEvidenceIntakeResponse ? (
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div>
+                    intake response{" "}
+                    <code>
+                      {capabilityLibraryOperatorProposalEvidenceIntakeResponse.status ||
+                        (capabilityLibraryOperatorProposalEvidenceIntakeResponse.ok ? "ok" : "unknown")}
+                    </code>
+                    {typeof capabilityLibraryOperatorProposalEvidenceIntakeResponse.planned_pack_count === "number" ? (
+                      <>
+                        {" "}
+                        / planned packs{" "}
+                        <code>{capabilityLibraryOperatorProposalEvidenceIntakeResponse.planned_pack_count}</code>
+                      </>
+                    ) : null}
+                    {typeof capabilityLibraryOperatorProposalEvidenceIntakeResponse.planned_capability_count ===
+                    "number" ? (
+                      <>
+                        {" "}
+                        / planned caps{" "}
+                        <code>{capabilityLibraryOperatorProposalEvidenceIntakeResponse.planned_capability_count}</code>
+                      </>
+                    ) : null}
+                    {typeof capabilityLibraryOperatorProposalEvidenceIntakeResponse.recorded_capability_count ===
+                    "number" ? (
+                      <>
+                        {" "}
+                        / recorded caps{" "}
+                        <code>{capabilityLibraryOperatorProposalEvidenceIntakeResponse.recorded_capability_count}</code>
+                      </>
+                    ) : null}
+                    {typeof capabilityLibraryOperatorProposalEvidenceIntakeResponse.remaining_proposal_evidence_missing_count ===
+                    "number" ? (
+                      <>
+                        {" "}
+                        / remaining missing{" "}
+                        <code>
+                          {
+                            capabilityLibraryOperatorProposalEvidenceIntakeResponse.remaining_proposal_evidence_missing_count
+                          }
+                        </code>
+                      </>
+                    ) : null}
+                    {capabilityLibraryOperatorProposalEvidenceIntakeResponse.dry_run_fingerprint ? (
+                      <>
+                        {" "}
+                        / dry-run fingerprint{" "}
+                        <code>
+                          {capabilityLibraryOperatorProposalEvidenceIntakeResponse.dry_run_fingerprint.slice(0, 12)}
+                        </code>
+                      </>
+                    ) : null}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <span
+                      style={badgeStyle(
+                        capabilityLibraryOperatorProposalEvidenceIntakeResponse.dry_run_confirmation?.required_for_apply
+                          ? "dry-run"
+                          : "blocked",
+                      )}
+                    >
+                      dry run required{" "}
+                      {String(
+                        capabilityLibraryOperatorProposalEvidenceIntakeResponse.dry_run_confirmation
+                          ?.required_for_apply ?? false,
+                      )}
+                    </span>
+                    <span
+                      style={badgeStyle(
+                        capabilityLibraryOperatorProposalEvidenceIntakeResponse.governance?.writes_registry_metadata
+                          ? "write"
+                          : "dry_run",
+                      )}
+                    >
+                      registry{" "}
+                      <code>
+                        {String(
+                          capabilityLibraryOperatorProposalEvidenceIntakeResponse.governance?.writes_registry_metadata ??
+                            false,
+                        )}
+                      </code>
+                    </span>
+                    <span style={badgeStyle("clear")}>
+                      proposals{" "}
+                      <code>
+                        {String(
+                          capabilityLibraryOperatorProposalEvidenceIntakeResponse.governance?.writes_proposals ?? false,
+                        )}
+                      </code>
+                    </span>
+                    <span style={badgeStyle("clear")}>
+                      approvals{" "}
+                      <code>
+                        {String(
+                          capabilityLibraryOperatorProposalEvidenceIntakeResponse.governance
+                            ?.does_not_approve_proposals === false,
+                        )}
+                      </code>
+                    </span>
+                    <span style={badgeStyle("clear")}>
+                      promotion{" "}
+                      <code>
+                        {String(
+                          capabilityLibraryOperatorProposalEvidenceIntakeResponse.governance
+                            ?.does_not_promote_capabilities === false,
+                        )}
+                      </code>
+                    </span>
+                    <span style={badgeStyle("clear")}>
+                      memory{" "}
+                      <code>
+                        {String(capabilityLibraryOperatorProposalEvidenceIntakeResponse.governance?.memory_write ?? false)}
+                      </code>
+                    </span>
+                  </div>
+                  {capabilityLibraryOperatorProposalEvidenceIntakeResponse.planned?.length ? (
+                    <div>
+                      planned{" "}
+                      {capabilityLibraryOperatorProposalEvidenceIntakeResponse.planned.slice(0, 3).map((pack) => (
+                        <span key={`operator-evidence-intake-plan-${pack.pack_id}`} style={badgeStyle("planned")}>
+                          {pack.pack_id} {pack.capability_count ?? 0}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+              No proposal-evidence pack selected for operator intake.
+            </div>
+          )}
+        </div>
+
+        <div style={{ borderTop: `1px solid ${THEME.panelBorder}`, marginTop: 10, paddingTop: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 12, fontWeight: 600 }}>Proposal Review Plan</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <span style={badgeStyle("candidate")}>candidates {proposalReviewPlanCounts.candidates}</span>
+              <span style={badgeStyle(proposalReviewPlanCounts.reviewable > 0 ? "ready" : "none")}>
+                reviewable {proposalReviewPlanCounts.reviewable}
+              </span>
+              <span style={badgeStyle(proposalReviewPlanCounts.blockedBeforeReview > 0 ? "blocked" : "clear")}>
+                blocked before review {proposalReviewPlanCounts.blockedBeforeReview}
+              </span>
+              <span style={badgeStyle("approved")}>approved {proposalReviewPlanCounts.approved}</span>
+            </div>
+          </div>
+
+          {capabilityLibraryProposalReviewPlan ? (
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <span style={badgeStyle(capabilityLibraryProposalReviewPlan.status || "unknown")}>
+                  {capabilityLibraryProposalReviewPlan.status || "unknown"}
+                </span>
+                {capabilityLibraryProposalReviewPlan.proposal_review_plan_ready ? (
+                  <span style={badgeStyle("ready")}>review ready</span>
+                ) : (
+                  <span style={badgeStyle("readback")}>readback only</span>
+                )}
+                <span style={badgeStyle("proposal")}>proposals {proposalReviewPlanCounts.proposals}</span>
+                <span style={badgeStyle(proposalReviewPlanCounts.missing > 0 ? "blocked" : "clear")}>
+                  missing reviews {proposalReviewPlanCounts.missing}
+                </span>
+                {capabilityLibraryProposalReviewPlan.next_smallest_truthful_gap ? (
+                  <span style={badgeStyle("gap")}>{capabilityLibraryProposalReviewPlan.next_smallest_truthful_gap}</span>
+                ) : null}
+              </div>
+
+              {capabilityLibraryProposalReviewApplyReadiness ? (
+                <div
+                  style={{
+                    display: "grid",
+                    gap: 6,
+                    marginTop: 8,
+                    borderTop: `1px solid ${THEME.panelBorder}`,
+                    paddingTop: 8,
+                  }}
+                >
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <span style={badgeStyle(capabilityLibraryProposalReviewApplyReadiness.status || "unknown")}>
+                      apply gate {capabilityLibraryProposalReviewApplyReadiness.status || "unknown"}
+                    </span>
+                    {capabilityLibraryProposalReviewApplyReadiness.proposal_review_apply_ready ? (
+                      <span style={badgeStyle("ready")}>apply ready</span>
+                    ) : (
+                      <span style={badgeStyle("blocked")}>apply blocked</span>
+                    )}
+                    <span style={badgeStyle(proposalReviewApplyReadinessCounts.reviewable > 0 ? "ready" : "none")}>
+                      reviewable {proposalReviewApplyReadinessCounts.reviewable}
+                    </span>
+                    <span
+                      style={badgeStyle(
+                        proposalReviewApplyReadinessCounts.blockedBeforeReview > 0 ? "blocked" : "clear",
+                      )}
+                    >
+                      blocked {proposalReviewApplyReadinessCounts.blockedBeforeReview}
+                    </span>
+                    <span style={badgeStyle(proposalReviewApplyReadinessCounts.evidenceMissing > 0 ? "blocked" : "clear")}>
+                      evidence missing {proposalReviewApplyReadinessCounts.evidenceMissing}
+                    </span>
+                    <span style={badgeStyle("source")}>evidence ready {proposalReviewApplyReadinessCounts.evidenceReady}</span>
+                    <span style={badgeStyle(proposalReviewApplyReadinessCounts.operatorRecorded > 0 ? "recorded" : "none")}>
+                      operator refs {proposalReviewApplyReadinessCounts.operatorRecorded}
+                    </span>
+                    <span style={badgeStyle(proposalReviewApplyReadinessCounts.futureReview > 0 ? "review" : "clear")}>
+                      future review {proposalReviewApplyReadinessCounts.futureReview}
+                    </span>
+                    {capabilityLibraryProposalReviewApplyReadiness.next_smallest_truthful_gap ? (
+                      <span style={badgeStyle("gap")}>
+                        {capabilityLibraryProposalReviewApplyReadiness.next_smallest_truthful_gap}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <span style={badgeStyle("route")}>
+                      {capabilityLibraryProposalReviewApplyReadiness.routes?.proposal_review_route ||
+                        "/forge/proposals/decision"}
+                    </span>
+                    <span style={badgeStyle("readback")}>
+                      read only <code>{String(capabilityLibraryProposalReviewApplyReadiness.governance?.read_only ?? true)}</code>
+                    </span>
+                    <span style={badgeStyle("clear")}>
+                      writes review receipts{" "}
+                      <code>
+                        {String(
+                          capabilityLibraryProposalReviewApplyReadiness.governance
+                            ?.does_not_write_proposal_review_receipts === false,
+                        )}
+                      </code>
+                    </span>
+                    <span style={badgeStyle("clear")}>
+                      approval authority{" "}
+                      <code>
+                        {String(capabilityLibraryProposalReviewApplyReadiness.governance?.proposal_review_authority ?? false)}
+                      </code>
+                    </span>
+                  </div>
+                </div>
+              ) : null}
+
+              {selectedCapabilityLibraryProposalReviewPack ? (
+                <>
+                  <div style={{ marginTop: 6 }}>
+                    pack <code>{selectedCapabilityLibraryProposalReviewPack.pack_id}</code> / version{" "}
+                    <code>{selectedCapabilityLibraryProposalReviewPack.pack_version}</code>
+                    {selectedCapabilityLibraryProposalReviewPack.pack_name ? (
+                      <>
+                        {" "}
+                        / name <code>{selectedCapabilityLibraryProposalReviewPack.pack_name}</code>
+                      </>
+                    ) : null}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+                    <span style={badgeStyle("staged")}>
+                      staged {selectedCapabilityLibraryProposalReviewPack.staged_capability_count ?? 0}
+                    </span>
+                    <span
+                      style={badgeStyle(
+                        (selectedCapabilityLibraryProposalReviewPack.reviewable_capability_count ?? 0) > 0
+                          ? "ready"
+                          : "none",
+                      )}
+                    >
+                      reviewable {selectedCapabilityLibraryProposalReviewPack.reviewable_capability_count ?? 0}
+                    </span>
+                    <span
+                      style={badgeStyle(
+                        (selectedCapabilityLibraryProposalReviewPack.blocked_before_review_capability_count ?? 0) > 0
+                          ? "blocked"
+                          : "clear",
+                      )}
+                    >
+                      blockers {selectedCapabilityLibraryProposalReviewPack.blocked_before_review_capability_count ?? 0}
+                    </span>
+                    <span style={badgeStyle("approved")}>
+                      approved {selectedCapabilityLibraryProposalReviewPack.approved_proposal_review_count ?? 0}
+                    </span>
+                    {selectedCapabilityLibraryProposalReviewPack.proposals_truncated ? (
+                      <span style={badgeStyle("truncated")}>sample truncated</span>
+                    ) : null}
+                  </div>
+                  {selectedCapabilityLibraryProposalReviewPack.proposals.length ? (
+                    <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+                      {selectedCapabilityLibraryProposalReviewPack.proposals.slice(0, 4).map((item) => (
+                        <div key={`proposal-review-plan-${item.capability}`} style={{ display: "grid", gap: 4 }}>
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <span style={badgeStyle(item.review_ready ? "ready" : "blocked")}>
+                              {item.review_ready ? "review ready" : "blocked"}
+                            </span>
+                            {item.proposal_review_status ? (
+                              <span style={badgeStyle(item.proposal_review_status)}>
+                                review {item.proposal_review_status}
+                              </span>
+                            ) : null}
+                            <span style={badgeStyle(item.proposal_review_would_write_receipt ? "receipt" : "none")}>
+                              receipt {String(item.proposal_review_would_write_receipt ?? false)}
+                            </span>
+                            <span style={badgeStyle(item.proposal_review_would_promote_capability ? "blocked" : "clear")}>
+                              promote {String(item.proposal_review_would_promote_capability ?? false)}
+                            </span>
+                            <span style={badgeStyle(item.proposal_review_would_enable_capability ? "blocked" : "clear")}>
+                              enable {String(item.proposal_review_would_enable_capability ?? false)}
+                            </span>
+                          </div>
+                          <div>
+                            capability <code>{item.capability}</code>
+                            {item.proposal_id ? (
+                              <>
+                                {" "}
+                                / proposal <code>{item.proposal_id}</code>
+                              </>
+                            ) : null}
+                          </div>
+                          {item.blockers_before_review?.length ? (
+                            <div>
+                              blockers before review <code>{item.blockers_before_review.join(", ")}</code>
+                            </div>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ marginTop: 6 }}>No proposal-review sample returned for this pack.</div>
+                  )}
+                </>
+              ) : (
+                <div style={{ marginTop: 6 }}>No proposal-review pack sample returned by the backend.</div>
+              )}
+
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                <span style={badgeStyle("readback")}>
+                  read only <code>{String(capabilityLibraryProposalReviewPlan.governance?.read_only ?? true)}</code>
+                </span>
+                <span style={badgeStyle("clear")}>
+                  approve proposals{" "}
+                  <code>
+                    {String(capabilityLibraryProposalReviewPlan.governance?.does_not_approve_proposals === false)}
+                  </code>
+                </span>
+                <span style={badgeStyle("clear")}>
+                  promote{" "}
+                  <code>
+                    {String(capabilityLibraryProposalReviewPlan.governance?.does_not_promote_capabilities === false)}
+                  </code>
+                </span>
+                <span style={badgeStyle("clear")}>
+                  enable{" "}
+                  <code>
+                    {String(capabilityLibraryProposalReviewPlan.governance?.does_not_enable_capabilities === false)}
+                  </code>
+                </span>
+                <span style={badgeStyle("clear")}>
+                  memory <code>{String(capabilityLibraryProposalReviewPlan.governance?.memory_write ?? false)}</code>
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+              Proposal review plan readback unavailable.
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div
+        style={{
+          marginTop: 10,
+          border: `1px solid ${THEME.panelBorder}`,
+          borderRadius: 8,
+          padding: 10,
+          background: "#101716",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>Capability Library Promotion Plan</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <span style={badgeStyle("packs")}>packs {capabilityLibraryPromotionPlanCounts.packs}</span>
+            <span style={badgeStyle("candidate")}>candidates {capabilityLibraryPromotionPlanCounts.candidates}</span>
+            <span style={badgeStyle(capabilityLibraryPromotionPlanCounts.promotable > 0 ? "ready" : "none")}>
+              promotable {capabilityLibraryPromotionPlanCounts.promotable}
+            </span>
+            <span style={badgeStyle(capabilityLibraryPromotionPlanCounts.blocked > 0 ? "blocked" : "clear")}>
+              blocked {capabilityLibraryPromotionPlanCounts.blocked}
+            </span>
+          </div>
+        </div>
+
+        {capabilityLibraryPromotionPlan ? (
+          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <span style={badgeStyle(capabilityLibraryPromotionPlan.status || "unknown")}>
+                {capabilityLibraryPromotionPlan.status || "unknown"}
+              </span>
+              {capabilityLibraryPromotionPlan.promotion_plan_ready ? (
+                <span style={badgeStyle("ready")}>promotion ready</span>
+              ) : (
+                <span style={badgeStyle("readback")}>readback only</span>
+              )}
+              <span style={badgeStyle("packs")}>ready packs {capabilityLibraryPromotionPlanCounts.readyPacks}</span>
+              {capabilityLibraryPromotionPlan.next_smallest_truthful_gap ? (
+                <span style={badgeStyle("gap")}>{capabilityLibraryPromotionPlan.next_smallest_truthful_gap}</span>
+              ) : null}
+            </div>
+
+            {selectedCapabilityLibraryPromotionPack ? (
+              <>
+                <div style={{ marginTop: 6 }}>
+                  pack <code>{selectedCapabilityLibraryPromotionPack.pack_id}</code> / version{" "}
+                  <code>{selectedCapabilityLibraryPromotionPack.pack_version}</code>
+                  {selectedCapabilityLibraryPromotionPack.pack_name ? (
+                    <>
+                      {" "}
+                      / name <code>{selectedCapabilityLibraryPromotionPack.pack_name}</code>
+                    </>
+                  ) : null}
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+                  <span style={badgeStyle("staged")}>
+                    staged {selectedCapabilityLibraryPromotionPack.staged_capability_count ?? 0}
+                  </span>
+                  <span
+                    style={badgeStyle(
+                      (selectedCapabilityLibraryPromotionPack.promotable_capability_count ?? 0) > 0
+                        ? "ready"
+                        : "none",
+                    )}
+                  >
+                    promotable {selectedCapabilityLibraryPromotionPack.promotable_capability_count ?? 0}
+                  </span>
+                  <span
+                    style={badgeStyle(
+                      (selectedCapabilityLibraryPromotionPack.blocked_capability_count ?? 0) > 0
+                        ? "blocked"
+                        : "clear",
+                    )}
+                  >
+                    blocked {selectedCapabilityLibraryPromotionPack.blocked_capability_count ?? 0}
+                  </span>
+                  {selectedCapabilityLibraryPromotionPack.capabilities_truncated ? (
+                    <span style={badgeStyle("truncated")}>sample truncated</span>
+                  ) : null}
+                </div>
+                {selectedCapabilityLibraryPromotionPack.capabilities.length ? (
+                  <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+                    {selectedCapabilityLibraryPromotionPack.capabilities.slice(0, 4).map((item) => (
+                      <div key={`capability-library-promotion-${item.capability}`} style={{ display: "grid", gap: 4 }}>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          <span style={badgeStyle(item.promotion_ready ? "ready" : "blocked")}>
+                            {item.promotion_ready ? "promotion ready" : "promotion blocked"}
+                          </span>
+                          {item.status ? <span style={badgeStyle(item.status)}>{item.status}</span> : null}
+                          <span style={badgeStyle(item.enabled ? "enabled" : "disabled")}>
+                            enabled {String(item.enabled ?? false)}
+                          </span>
+                          {item.proposal_review_status ? (
+                            <span style={badgeStyle(item.proposal_review_status)}>
+                              review {item.proposal_review_status}
+                            </span>
+                          ) : null}
+                          {item.pack_operator_review_status ? (
+                            <span style={badgeStyle(item.pack_operator_review_status)}>
+                              pack review {item.pack_operator_review_status}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div>
+                          capability <code>{item.capability}</code>
+                          {item.proposal_id ? (
+                            <>
+                              {" "}
+                              / proposal <code>{item.proposal_id}</code>
+                            </>
+                          ) : null}
+                          {item.promotion_route ? (
+                            <>
+                              {" "}
+                              / route <code>{item.promotion_route}</code>
+                            </>
+                          ) : null}
+                        </div>
+                        {item.missing_requirements?.length ? (
+                          <div>
+                            missing <code>{item.missing_requirements.join(", ")}</code>
+                          </div>
+                        ) : null}
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          <span style={badgeStyle(item.promotion_would_write_receipt ? "receipt" : "none")}>
+                            receipt {String(item.promotion_would_write_receipt ?? false)}
+                          </span>
+                          <span style={badgeStyle(item.promotion_would_enable_capability ? "enable" : "none")}>
+                            enable {String(item.promotion_would_enable_capability ?? false)}
+                          </span>
+                          {item.validation_receipt_id ? (
+                            <span style={badgeStyle("validation")}>validation receipt</span>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ marginTop: 6 }}>No promotion-plan capability sample returned for this pack.</div>
+                )}
+              </>
+            ) : (
+              <div style={{ marginTop: 6 }}>No capability-library promotion pack sample returned by the backend.</div>
+            )}
+
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+              <span style={badgeStyle("readback")}>
+                read only <code>{String(capabilityLibraryPromotionPlan.governance?.read_only ?? true)}</code>
+              </span>
+              <span style={badgeStyle("clear")}>
+                promotion authority{" "}
+                <code>{String(capabilityLibraryPromotionPlan.governance?.promotion_authority === true)}</code>
+              </span>
+              <span style={badgeStyle("clear")}>
+                promote{" "}
+                <code>{String(capabilityLibraryPromotionPlan.governance?.does_not_promote_capabilities === false)}</code>
+              </span>
+              <span style={badgeStyle("clear")}>
+                enable{" "}
+                <code>{String(capabilityLibraryPromotionPlan.governance?.does_not_enable_capabilities === false)}</code>
+              </span>
+              <span style={badgeStyle("clear")}>
+                receipts{" "}
+                <code>{String(capabilityLibraryPromotionPlan.governance?.does_not_write_promotion_receipts === false)}</code>
+              </span>
+              <span style={badgeStyle("clear")}>
+                memory <code>{String(capabilityLibraryPromotionPlan.governance?.memory_write ?? false)}</code>
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+            Capability-library promotion plan readback unavailable.
+          </div>
+        )}
+      </div>
+
+      <div
+        style={{
+          marginTop: 10,
+          border: `1px solid ${THEME.panelBorder}`,
+          borderRadius: 8,
+          padding: 10,
           background: "#101818",
         }}
       >
@@ -19229,12 +21032,73 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
             <span style={badgeStyle(capabilityPackReviewCounts.decisions > 0 ? "ready" : "none")}>
               decisions {capabilityPackReviewCounts.decisions}
             </span>
+            <span style={badgeStyle(capabilityPackReviewCounts.pending > 0 ? "ready" : "clear")}>
+              pending {capabilityPackReviewCounts.pending}
+            </span>
             <span style={badgeStyle(capabilityPackReviewCounts.blocked > 0 ? "blocked" : "clear")}>
               blocked {capabilityPackReviewCounts.blocked}
             </span>
+            <span style={badgeStyle("recorded")}>recorded {capabilityPackReviewCounts.recorded}</span>
             <span style={badgeStyle("receipt")}>receipts {capabilityPackReviewCounts.receipts}</span>
           </div>
         </div>
+
+        {capabilityPackReviewCounts.pending > 0 ? (
+          <div
+            style={{
+              marginTop: 8,
+              borderBottom: `1px solid ${THEME.panelBorder}`,
+              paddingBottom: 8,
+              fontSize: 11,
+              color: THEME.muted,
+            }}
+          >
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <span style={badgeStyle("bulk")}>bulk pending {capabilityPackReviewCounts.pending}</span>
+              <button
+                style={buttonStyle}
+                disabled={busy}
+                onClick={() => void decidePendingCapabilityPackOperatorReviews(true)}
+              >
+                Dry-run pending approvals
+              </button>
+              <button
+                style={buttonStyle}
+                disabled={busy || capabilityPackBulkDecisionResponse?.status !== "dry_run"}
+                onClick={() => void decidePendingCapabilityPackOperatorReviews(false)}
+              >
+                Apply pending approvals
+              </button>
+            </div>
+            {capabilityPackBulkDecisionResponse ? (
+              <div style={{ marginTop: 6 }}>
+                bulk response{" "}
+                <code>
+                  {capabilityPackBulkDecisionResponse.status ||
+                    (capabilityPackBulkDecisionResponse.ok ? "ok" : "unknown")}
+                </code>
+                {typeof capabilityPackBulkDecisionResponse.planned_pack_count === "number" ? (
+                  <>
+                    {" "}
+                    / planned <code>{capabilityPackBulkDecisionResponse.planned_pack_count}</code>
+                  </>
+                ) : null}
+                {typeof capabilityPackBulkDecisionResponse.recorded_pack_count === "number" ? (
+                  <>
+                    {" "}
+                    / recorded <code>{capabilityPackBulkDecisionResponse.recorded_pack_count}</code>
+                  </>
+                ) : null}
+                {typeof capabilityPackBulkDecisionResponse.planned_capability_count === "number" ? (
+                  <>
+                    {" "}
+                    / capabilities <code>{capabilityPackBulkDecisionResponse.planned_capability_count}</code>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         {selectedCapabilityPackReview ? (
           <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>

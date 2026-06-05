@@ -60494,6 +60494,2685 @@ Remaining truthful gap:
   then quality-reference apply, then governed reconstruction only after clean
   dry-run evidence.
 
+### 2026-06-04 - Stage 17 metadata receipt review clears catalog plugin pack
+
+Roadmap area: Stage 17 / Capability Economy, using governed metadata receipt
+review before quality-reference and reconstruction application.
+
+Material change:
+
+- The current local migration plan reported 5 metadata-receipt candidates before
+  this pass. The smallest remaining candidate was
+  `legacy.generated.catalogplugin` with 423 capabilities.
+- The existing `bulk-from-plan` metadata receipt route does not expose a
+  dry-run field, so it was applied only to that selected pack with
+  `max_pack_count=1`, `max_total_capability_count=423`, and
+  `max_capability_count_per_pack=423`.
+- The metadata receipt apply recorded 1 pack / 423 capabilities and reduced the
+  migration-plan candidate total from 5 to 4.
+- After metadata receipt review, the same pack became eligible for the existing
+  quality-reference apply route and then the governed artifact reconstruction
+  route.
+- Artifact reconstruction required seventeen bounded chunks because the
+  reconstruction plan was truncated: sixteen chunks of 25 capabilities and one
+  final chunk of 23 capabilities.
+- The selected pack is now absent from both the migration-plan candidate list and
+  the quality-evidence remediation queue. The quality-evidence remediation queue
+  moved from 5 entries to 4 entries, with latest blocker counts aligned at
+  `docs_missing=4`, `tests_missing=4`, `validation_receipt_missing=4`, and
+  `proposal_id_missing=4`.
+
+Latest validation for this local live pass:
+
+- Metadata receipt apply:
+  Result: `status=recorded`, `recorded_pack_count=1`,
+  `recorded_capability_count=423`, `remaining_candidate_total=4`,
+  `writes_registry_metadata=true`, and `writes_receipts=true`.
+- Metadata receipt id:
+  `capability_pack_metadata_1780586948_legacy-generated-catalogplugin`.
+- Quality-reference dry-run for `legacy.generated.catalogplugin`:
+  Result: planned 1 pack / 423 capabilities, 0 skipped, with
+  `tests/test_api_plugins.py`, `README.md`, and
+  `docs/operations/COMPLETION_LEDGER.md` as candidate references.
+- Quality-reference apply:
+  Result: `status=recorded`, `recorded_capability_count=423`,
+  `quality_reference_backfill_only=true`, no receipt, proposal, promotion,
+  execution, generated-artifact, or memory writes.
+- Artifact reconstruction dry-runs and applies:
+  Result: chunks recorded
+  `25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 23`
+  capabilities, `writes_registry_metadata=true`,
+  `writes_validation_receipts=true`, `writes_proposals=true`,
+  `does_not_approve_proposals=true`, `does_not_promote_capabilities=true`, and
+  `memory_write=false`.
+- Direct registry/artifact readback:
+  Result: selected pack has 423 registry records, 423 complete quality and
+  artifact references, 0 incomplete records, and sampled validation/proposal
+  artifact paths exist on disk.
+- Final readback:
+  Result: selected pack absent from the migration-plan candidates and the
+  quality-evidence remediation queue; `migration_candidate_total=4`,
+  `quality_remediation_queue_count=4`,
+  `validation_receipt_reconstruction_required_count=1773`,
+  `proposal_lineage_reconstruction_required_count=1773`, and
+  `next_smallest_truthful_gap=stage17_capability_pack_artifact_reconstruction_apply`.
+- Focused API contract tests:
+  `python -m pytest tests/test_api_plugins.py -k
+  "metadata_receipt_is_written_and_projected or
+  capability_pack_migration_plan_projects_review_candidates or
+  metadata_receipts_bulk_from_migration_plan or
+  metadata_receipt_expands_reviewed_migration_plan_candidate or
+  quality_evidence_remediation_links_existing_artifacts_in_chunks or
+  quality_evidence_remediation_apply_backfills_candidate_refs or
+  quality_evidence_remediation_reconstructs_missing_artifacts or
+  quality_evidence_remediation_reconstructs_truncated_plan_chunk"`
+  Result: `8 passed, 28 deselected in 20.25s`.
+
+Validation risk:
+
+- The changed registry/catalog/artifact payloads live under `data/**`, which is
+  intentionally gitignored. This ledger entry records local operational posture;
+  it is not a portable data migration and does not make other clones contain
+  those local artifacts.
+- Candidate quality references remain explicitly scoped as candidate references,
+  not pack-specific proof. Reconstructed proposal lineages are unreviewed and do
+  not claim proposal approval.
+- The writer route did not promote capabilities, enable capabilities, execute
+  capabilities, or write memory.
+- GitHub confirmation for this ledger entry was not available at ledger write
+  time.
+
+Remaining truthful gap:
+
+- Stage 17 still needs operator-reviewed repeated application or closure of the
+  remaining 4 legacy pack remediation entries. The next safe live path is to
+  continue using metadata receipt review for bounded migration-plan candidates,
+  then quality-reference apply, then governed reconstruction only after clean
+  dry-run evidence.
+
+### 2026-06-05 - Stage 17 metadata receipt review clears echo plugin pack
+
+Roadmap area: Stage 17 / Capability Economy, using governed metadata receipt
+review before quality-reference and reconstruction application.
+
+Material change:
+
+- The current local migration plan reported 4 metadata-receipt candidates before
+  this pass. The smallest remaining candidate was
+  `legacy.generated.echoplugin` with 445 capabilities.
+- The existing `bulk-from-plan` metadata receipt route was applied only to that
+  selected pack with `max_pack_count=1`, `max_total_capability_count=445`, and
+  `max_capability_count_per_pack=445`.
+- The metadata receipt apply recorded 1 pack / 445 capabilities and reduced the
+  migration-plan candidate total from 4 to 3.
+- After metadata receipt review, the same pack became eligible for the existing
+  quality-reference apply route and then the governed artifact reconstruction
+  route.
+- Artifact reconstruction required eighteen bounded chunks because the
+  reconstruction plan was truncated: seventeen chunks of 25 capabilities and
+  one final chunk of 20 capabilities.
+- The selected pack is now absent from both the migration-plan candidate list and
+  the quality-evidence remediation queue. The quality-evidence remediation queue
+  moved from 4 entries to 3 entries, with latest blocker counts aligned at
+  `docs_missing=3`, `tests_missing=3`, `validation_receipt_missing=3`, and
+  `proposal_id_missing=3`.
+
+Latest validation for this local live pass:
+
+- Stage 8 substrate orientation readback:
+  Result: `status=substrate_contract_ready`, `ready_count=7`,
+  `required_count=7`, `stage8_done_ready=true`, and
+  `next_smallest_truthful_gap=stage8_ledger_closure`.
+- Metadata receipt apply:
+  Result: `status=recorded`, `recorded_pack_count=1`,
+  `recorded_capability_count=445`, `remaining_candidate_total=3`,
+  `writes_registry_metadata=true`, and `writes_receipts=true`.
+- Metadata receipt id:
+  `capability_pack_metadata_1780621609_legacy-generated-echoplugin`.
+- Quality-reference dry-run for `legacy.generated.echoplugin`:
+  Result: planned 1 pack / 445 capabilities, 0 skipped, with
+  `tests/test_api_plugins.py`, `README.md`, and
+  `docs/operations/COMPLETION_LEDGER.md` as candidate references.
+- Quality-reference apply:
+  Result: `status=recorded`, `recorded_capability_count=445`,
+  `quality_reference_backfill_only=true`, no receipt, proposal, promotion,
+  execution, generated-artifact, or memory writes.
+- Artifact reconstruction dry-runs and applies:
+  Result: chunks recorded
+  `25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 20`
+  capabilities, `writes_registry_metadata=true`,
+  `writes_validation_receipts=true`, `writes_proposals=true`,
+  `does_not_approve_proposals=true`, `does_not_promote_capabilities=true`, and
+  `memory_write=false`.
+- Direct registry/artifact readback:
+  Result: selected pack has 445 registry records, 445 complete quality and
+  artifact references, 0 incomplete records, and sampled validation/proposal
+  artifact paths exist on disk.
+- Final readback:
+  Result: selected pack absent from the migration-plan candidates and the
+  quality-evidence remediation queue; `migration_candidate_total=3`,
+  `quality_remediation_queue_count=3`,
+  `validation_receipt_reconstruction_required_count=1328`,
+  `proposal_lineage_reconstruction_required_count=1328`, and
+  `next_smallest_truthful_gap=stage17_capability_pack_artifact_reconstruction_apply`.
+- Focused API contract tests:
+  `python -m pytest tests/test_api_plugins.py -k
+  "metadata_receipt_is_written_and_projected or
+  capability_pack_migration_plan_projects_review_candidates or
+  metadata_receipts_bulk_from_migration_plan or
+  metadata_receipt_expands_reviewed_migration_plan_candidate or
+  quality_evidence_remediation_links_existing_artifacts_in_chunks or
+  quality_evidence_remediation_apply_backfills_candidate_refs or
+  quality_evidence_remediation_reconstructs_missing_artifacts or
+  quality_evidence_remediation_reconstructs_truncated_plan_chunk"`
+  Result: `8 passed, 28 deselected in 22.62s`.
+
+Validation risk:
+
+- The changed registry/catalog/artifact payloads live under `data/**`, which is
+  intentionally gitignored. This ledger entry records local operational posture;
+  it is not a portable data migration and does not make other clones contain
+  those local artifacts.
+- Candidate quality references remain explicitly scoped as candidate references,
+  not pack-specific proof. Reconstructed proposal lineages are unreviewed and do
+  not claim proposal approval.
+- The writer route did not promote capabilities, enable capabilities, execute
+  capabilities, or write memory.
+- GitHub confirmation for this ledger entry was not available at ledger write
+  time.
+
+Remaining truthful gap:
+
+- Stage 17 still needs operator-reviewed repeated application or closure of the
+  remaining 3 legacy pack remediation entries. The next safe live path is to
+  continue using metadata receipt review for bounded migration-plan candidates,
+  then quality-reference apply, then governed reconstruction only after clean
+  dry-run evidence.
+
+### 2026-06-05 - Stage 17 metadata receipt review clears mission trace plugin pack
+
+Roadmap area: Stage 17 / Capability Economy, using governed metadata receipt
+review before quality-reference and reconstruction application.
+
+Material change:
+
+- The current local migration plan reported 3 metadata-receipt candidates before
+  this pass. The smallest remaining candidate was
+  `legacy.generated.missiontraceplugin` with 387 capabilities.
+- The existing `bulk-from-plan` metadata receipt route was applied only to that
+  selected pack with `max_pack_count=1`, `max_total_capability_count=387`, and
+  `max_capability_count_per_pack=387`.
+- The metadata receipt apply recorded 1 pack / 387 capabilities and reduced the
+  migration-plan candidate total from 3 to 2.
+- After metadata receipt review, the same pack became eligible for the existing
+  quality-reference apply route and then the governed artifact reconstruction
+  route.
+- Artifact reconstruction required sixteen bounded chunks because the
+  reconstruction plan was truncated: fifteen chunks of 25 capabilities and one
+  final chunk of 12 capabilities.
+- The selected pack is now absent from both the migration-plan candidate list and
+  the quality-evidence remediation queue. The quality-evidence remediation queue
+  moved from 3 entries to 2 entries, with latest blocker counts aligned at
+  `docs_missing=2`, `tests_missing=2`, `validation_receipt_missing=2`, and
+  `proposal_id_missing=2`.
+
+Latest validation for this local live pass:
+
+- Metadata receipt apply:
+  Result: `status=recorded`, `recorded_pack_count=1`,
+  `recorded_capability_count=387`, `remaining_candidate_total=2`,
+  `writes_registry_metadata=true`, and `writes_receipts=true`.
+- Metadata receipt id:
+  `capability_pack_metadata_1780622837_legacy-generated-missiontraceplugin`.
+- Quality-reference dry-run for `legacy.generated.missiontraceplugin`:
+  Result: planned 1 pack / 387 capabilities, 0 skipped, with
+  `tests/test_api_plugins.py`, `README.md`, and
+  `docs/operations/COMPLETION_LEDGER.md` as candidate references.
+- Quality-reference apply:
+  Result: `status=recorded`, `recorded_capability_count=387`,
+  `quality_reference_backfill_only=true`, no receipt, proposal, promotion,
+  execution, generated-artifact, or memory writes.
+- Artifact reconstruction dry-runs and applies:
+  Result: chunks recorded
+  `25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 12`
+  capabilities, `writes_registry_metadata=true`,
+  `writes_validation_receipts=true`, `writes_proposals=true`,
+  `does_not_approve_proposals=true`, `does_not_promote_capabilities=true`, and
+  `memory_write=false`.
+- Direct registry/artifact readback:
+  Result: selected pack has 387 registry records, 387 complete quality and
+  artifact references, 0 incomplete records, and sampled validation/proposal
+  artifact paths exist on disk.
+- Final readback:
+  Result: selected pack absent from the migration-plan candidates and the
+  quality-evidence remediation queue; `migration_candidate_total=2`,
+  `quality_remediation_queue_count=2`,
+  `validation_receipt_reconstruction_required_count=941`,
+  `proposal_lineage_reconstruction_required_count=941`, and
+  `next_smallest_truthful_gap=stage17_capability_pack_artifact_reconstruction_apply`.
+- Focused API contract tests:
+  `python -m pytest tests/test_api_plugins.py -k
+  "metadata_receipt_is_written_and_projected or
+  capability_pack_migration_plan_projects_review_candidates or
+  metadata_receipts_bulk_from_migration_plan or
+  metadata_receipt_expands_reviewed_migration_plan_candidate or
+  quality_evidence_remediation_links_existing_artifacts_in_chunks or
+  quality_evidence_remediation_apply_backfills_candidate_refs or
+  quality_evidence_remediation_reconstructs_missing_artifacts or
+  quality_evidence_remediation_reconstructs_truncated_plan_chunk"`
+  Result: `8 passed, 28 deselected in 17.90s`.
+
+Validation risk:
+
+- The changed registry/catalog/artifact payloads live under `data/**`, which is
+  intentionally gitignored. This ledger entry records local operational posture;
+  it is not a portable data migration and does not make other clones contain
+  those local artifacts.
+- Candidate quality references remain explicitly scoped as candidate references,
+  not pack-specific proof. Reconstructed proposal lineages are unreviewed and do
+  not claim proposal approval.
+- The writer route did not promote capabilities, enable capabilities, execute
+  capabilities, or write memory.
+- GitHub confirmation for this ledger entry was not available at ledger write
+  time.
+
+Remaining truthful gap:
+
+- Stage 17 still needs operator-reviewed repeated application or closure of the
+  remaining 2 legacy pack remediation entries. The next safe live path is to
+  continue using metadata receipt review for bounded migration-plan candidates,
+  then quality-reference apply, then governed reconstruction only after clean
+  dry-run evidence.
+
+### 2026-06-05 - Stage 17 metadata receipt review clears ops tool plugin pack
+
+Roadmap area: Stage 17 / Capability Economy, using governed metadata receipt
+review before quality-reference and reconstruction application.
+
+Material change:
+
+- The current local migration plan reported 2 metadata-receipt candidates before
+  this pass:
+  `legacy.generated.opsplugin` with 479 capabilities and
+  `legacy.generated.opstoolplugin` with 462 capabilities.
+- The smaller remaining candidate,
+  `legacy.generated.opstoolplugin`, was selected explicitly with
+  `pack_ids=["legacy.generated.opstoolplugin"]`.
+- The existing `bulk-from-plan` metadata receipt route was applied only to that
+  selected pack with `max_pack_count=1`, `max_total_capability_count=462`, and
+  `max_capability_count_per_pack=462`.
+- The metadata receipt apply recorded 1 pack / 462 capabilities and reduced the
+  migration-plan candidate total from 2 to 1.
+- After metadata receipt review, the same pack became eligible for the existing
+  quality-reference apply route and then the governed artifact reconstruction
+  route.
+- Artifact reconstruction required nineteen bounded chunks because the
+  reconstruction plan was truncated: eighteen chunks of 25 capabilities and one
+  final chunk of 12 capabilities.
+- The selected pack is now absent from both the migration-plan candidate list and
+  the quality-evidence remediation queue. The quality-evidence remediation queue
+  moved from 2 entries to 1 entry, with latest blocker counts aligned at
+  `docs_missing=1`, `tests_missing=1`, `validation_receipt_missing=1`, and
+  `proposal_id_missing=1`.
+
+Latest validation for this local live pass:
+
+- Metadata receipt apply:
+  Result: `status=recorded`, `recorded_pack_count=1`,
+  `recorded_capability_count=462`, `remaining_candidate_total=1`,
+  `writes_registry_metadata=true`, and `writes_receipts=true`.
+- Metadata receipt id:
+  `capability_pack_metadata_1780624181_legacy-generated-opstoolplugin`.
+- Quality-reference dry-run for `legacy.generated.opstoolplugin`:
+  Result: planned 1 pack / 462 capabilities, 0 skipped, with
+  `tests/test_api_plugins.py`, `README.md`, and
+  `docs/operations/COMPLETION_LEDGER.md` as candidate references.
+- Quality-reference apply:
+  Result: `status=recorded`, `recorded_capability_count=462`,
+  `quality_reference_backfill_only=true`, no receipt, proposal, promotion,
+  execution, generated-artifact, or memory writes.
+- Artifact reconstruction dry-runs and applies:
+  Result: chunks recorded
+  `25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 12`
+  capabilities, `writes_registry_metadata=true`,
+  `writes_validation_receipts=true`, `writes_proposals=true`,
+  `does_not_approve_proposals=true`, `does_not_promote_capabilities=true`, and
+  `memory_write=false`.
+- Direct registry/artifact readback:
+  Result: selected pack has 462 registry records, 462 complete quality and
+  artifact references, 0 incomplete records, and no missing validation/proposal
+  artifact paths.
+- Final readback:
+  Result: selected pack absent from the migration-plan candidates and the
+  quality-evidence remediation queue; `migration_candidate_total=1`,
+  `quality_remediation_queue_count=1`,
+  `validation_receipt_reconstruction_required_count=479`,
+  `proposal_lineage_reconstruction_required_count=479`, and
+  `next_smallest_truthful_gap=stage17_capability_pack_artifact_reconstruction_apply`.
+- Focused API contract tests:
+  `python -m pytest tests/test_api_plugins.py -k
+  "metadata_receipt_is_written_and_projected or
+  capability_pack_migration_plan_projects_review_candidates or
+  metadata_receipts_bulk_from_migration_plan or
+  metadata_receipt_expands_reviewed_migration_plan_candidate or
+  quality_evidence_remediation_links_existing_artifacts_in_chunks or
+  quality_evidence_remediation_apply_backfills_candidate_refs or
+  quality_evidence_remediation_reconstructs_missing_artifacts or
+  quality_evidence_remediation_reconstructs_truncated_plan_chunk"`
+  Result: `8 passed, 28 deselected in 19.57s`.
+
+Validation risk:
+
+- The changed registry/catalog/artifact payloads live under `data/**`, which is
+  intentionally gitignored. This ledger entry records local operational posture;
+  it is not a portable data migration and does not make other clones contain
+  those local artifacts.
+- Candidate quality references remain explicitly scoped as candidate references,
+  not pack-specific proof. Reconstructed proposal lineages are unreviewed and do
+  not claim proposal approval.
+- The writer route did not promote capabilities, enable capabilities, execute
+  capabilities, or write memory.
+- GitHub confirmation for this ledger entry was not available at ledger write
+  time.
+
+Remaining truthful gap:
+
+- Stage 17 still needs operator-reviewed repeated application or closure of the
+  remaining 1 legacy pack remediation entry. The next safe live path is to
+  continue using metadata receipt review for the remaining bounded migration-plan
+  candidate, then quality-reference apply, then governed reconstruction only
+  after clean dry-run evidence.
+
+### 2026-06-05 - Stage 17 metadata receipt review clears final legacy ops plugin pack
+
+Roadmap area: Stage 17 / Capability Economy, using governed metadata receipt
+review before quality-reference and reconstruction application.
+
+Material change:
+
+- The current local migration plan reported 1 metadata-receipt candidate before
+  this pass: `legacy.generated.opsplugin` with 479 capabilities.
+- The final remaining candidate was selected explicitly with
+  `pack_ids=["legacy.generated.opsplugin"]`.
+- The existing `bulk-from-plan` metadata receipt route was applied only to that
+  selected pack with `max_pack_count=1`, `max_total_capability_count=479`, and
+  `max_capability_count_per_pack=479`.
+- The metadata receipt apply recorded 1 pack / 479 capabilities and reduced the
+  migration-plan candidate total from 1 to 0.
+- After metadata receipt review, the same pack became eligible for the existing
+  quality-reference apply route and then the governed artifact reconstruction
+  route.
+- Artifact reconstruction required twenty bounded chunks because the
+  reconstruction plan was truncated: nineteen chunks of 25 capabilities and one
+  final chunk of 4 capabilities.
+- The selected pack is now absent from both the migration-plan candidate list and
+  the quality-evidence remediation queue. The quality-evidence remediation queue
+  moved from 1 entry to 0 entries, with latest blocker counts empty.
+- The live Stage 17 readback now reports
+  `next_smallest_truthful_gap=stage17_capability_pack_operator_surface` instead
+  of another metadata/quality remediation backlog item.
+
+Latest validation for this local live pass:
+
+- Metadata receipt apply:
+  Result: `status=recorded`, `recorded_pack_count=1`,
+  `recorded_capability_count=479`, `remaining_candidate_total=0`,
+  `writes_registry_metadata=true`, and `writes_receipts=true`.
+- Metadata receipt id:
+  `capability_pack_metadata_1780625413_legacy-generated-opsplugin`.
+- Quality-reference dry-run for `legacy.generated.opsplugin`:
+  Result: planned 1 pack / 479 capabilities, 0 skipped, with
+  `tests/test_api_plugins.py`, `README.md`, and
+  `docs/operations/COMPLETION_LEDGER.md` as candidate references.
+- Quality-reference apply:
+  Result: `status=recorded`, `recorded_capability_count=479`,
+  `quality_reference_backfill_only=true`, no receipt, proposal, promotion,
+  execution, generated-artifact, or memory writes.
+- Artifact reconstruction dry-runs and applies:
+  Result: chunks recorded
+  `25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 25 + 4`
+  capabilities, `writes_registry_metadata=true`,
+  `writes_validation_receipts=true`, `writes_proposals=true`,
+  `does_not_approve_proposals=true`, `does_not_promote_capabilities=true`, and
+  `memory_write=false`.
+- Direct registry/artifact readback:
+  Result: selected pack has 479 registry records, 479 complete quality and
+  artifact references, 0 incomplete records, and no missing validation/proposal
+  artifact paths.
+- Final readback:
+  Result: selected pack absent from the migration-plan candidates and the
+  quality-evidence remediation queue; `migration_candidate_total=0`,
+  `quality_remediation_queue_count=0`,
+  `validation_receipt_reconstruction_required_count=0`,
+  `proposal_lineage_reconstruction_required_count=0`, and
+  `next_smallest_truthful_gap=stage17_capability_pack_operator_surface`.
+- Focused API contract tests:
+  `python -m pytest tests/test_api_plugins.py -k
+  "metadata_receipt_is_written_and_projected or
+  capability_pack_migration_plan_projects_review_candidates or
+  metadata_receipts_bulk_from_migration_plan or
+  metadata_receipt_expands_reviewed_migration_plan_candidate or
+  quality_evidence_remediation_links_existing_artifacts_in_chunks or
+  quality_evidence_remediation_apply_backfills_candidate_refs or
+  quality_evidence_remediation_reconstructs_missing_artifacts or
+  quality_evidence_remediation_reconstructs_truncated_plan_chunk"`
+  Result: `8 passed, 28 deselected in 21.72s`.
+
+Validation risk:
+
+- The changed registry/catalog/artifact payloads live under `data/**`, which is
+  intentionally gitignored. This ledger entry records local operational posture;
+  it is not a portable data migration and does not make other clones contain
+  those local artifacts.
+- Candidate quality references remain explicitly scoped as candidate references,
+  not pack-specific proof. Reconstructed proposal lineages are unreviewed and do
+  not claim proposal approval.
+- The writer route did not promote capabilities, enable capabilities, execute
+  capabilities, or write memory.
+- GitHub confirmation for this ledger entry was not available at ledger write
+  time.
+
+Remaining truthful gap:
+
+- Stage 17's local legacy generated metadata/quality remediation backlog is
+  exhausted for the current data set. Stage 17 still needs the next operator
+  surface slice identified by live readback:
+  `stage17_capability_pack_operator_surface`.
+
+### 2026-06-05 - Stage 17 capability-pack operator surface readback lands
+
+Roadmap area: Stage 17 / Capability Economy, moving from remediated capability
+packs into explicit operator review and promotion discipline.
+
+Material change:
+
+- Added a consolidated read-only operator surface at
+  `GET /plugins/capabilities/packs/operator/surface`.
+- The surface composes existing Stage 17 readbacks and analyzers for capability
+  pack migration/readiness, promotion rules, promotion-rule remediation,
+  quality-evidence remediation, operator review, and promotion discipline.
+- The new route derives a single operator-facing `status`,
+  `remediation_backlog`, pack review preview, promotion-discipline preview, and
+  `next_smallest_truthful_gap` without writing operator decisions, metadata
+  receipts, validation receipts, promotion receipts, proposals, memory, or
+  promotion state.
+- The route intentionally does not perform generated-plugin registry sync; it
+  compiles from the current registry/catalog posture so the new surface can keep
+  its `does_not_mutate_registry=true` governance claim.
+- Route guidance now gives the operator the next governed paths for metadata
+  receipt review, promotion-rule remediation, quality-evidence remediation,
+  artifact reconstruction, operator-review decisions, promotion discipline, and
+  final promotion through `/plugins/enable`.
+
+Latest validation for this local live pass:
+
+- Live operator surface readback:
+  Result: `ok=true`, `kind=plugin.capability_pack.operator_surface`,
+  `status=ready_for_operator_review`, `pack_total=46`,
+  `next_smallest_truthful_gap=stage17_capability_pack_review_decisions`.
+- Live remediation backlog readback:
+  Result: `status=clear`, `open_count=0`,
+  `metadata_receipt_review_candidate_count=0`,
+  `promotion_rule_remediation_queue_count=0`,
+  `quality_evidence_remediation_queue_count=0`,
+  `artifact_reconstruction_required_count=0`, and
+  `source_quality_remediation_queue_count=0`.
+- Live operator review readback through the new surface:
+  Result: `pack_total=46`, `ready_pack_count=46`,
+  `blocked_pack_count=0`, `review_queue_count=43`, and
+  `decision_required_pack_count=43`.
+- Live promotion discipline readback through the new surface:
+  Result: `pack_total=46`, `ready_pack_count=3`,
+  `blocked_pack_count=43`, and
+  `approved_pack_operator_review_count=0`.
+- Live governance readback:
+  Result: `read_only=true`,
+  `generated_plugin_registry_sync_performed=false`,
+  `does_not_mutate_registry=true`,
+  `does_not_promote_capabilities=true`,
+  `does_not_execute_capabilities=true`, and `memory_write=false`.
+- Syntax validation:
+  `python -m py_compile src\francis\api\routes\plugins.py`
+  Result: passed.
+- Focused API contract tests:
+  `python -m pytest tests\test_api_plugins.py -k "operator_surface or
+  capability_pack_operator_review_projects_read_only_review_queue or
+  capability_pack_operator_review_decision_receipt_gates_pack_promotion or
+  capability_pack_promotion_discipline_projects_pack_gate" -q`
+  Result: 4 selected tests passed.
+- Diff whitespace validation:
+  `git diff --check`
+  Result: passed with Git's existing CRLF normalization warning for
+  `src/francis/api/routes/plugins.py`.
+
+Validation risk:
+
+- This surface is API-level only; no chat UI/operator HUD panel has been wired
+  to it yet.
+- The route reports what is ready and which governed route comes next. It does
+  not approve operator-review decisions, approve forge proposals, promote
+  capabilities, enable capabilities, execute capabilities, or write memory.
+- The live data posture still has 43 packs waiting for explicit operator-review
+  decisions before promotion discipline can clear for those packs.
+- GitHub confirmation for this ledger entry was not available at ledger write
+  time.
+
+Remaining truthful gap:
+
+- Stage 17 now needs the explicit review-decision slice for the 43 packs queued
+  by the operator surface:
+  `stage17_capability_pack_review_decisions`.
+
+### 2026-06-05 - Stage 17 bulk operator-review decision dry-run path lands
+
+Roadmap area: Stage 17 / Capability Economy, making queued capability-pack
+review decisions batch-inspectable without turning operator review into an
+automatic approval.
+
+Material change:
+
+- Added a governed batch decision route at
+  `POST /plugins/capabilities/packs/operator/review/decisions/bulk-from-surface`.
+- The route defaults to `dry_run=true`, requires the existing `plugins.write`
+  scope, honors `max_pack_count` and `max_total_capability_count`, supports
+  explicit pack selection by `pack_ids`, and writes receipts only when
+  `dry_run=false` is explicitly supplied.
+- The batch route reuses the same
+  `plugin.capability_pack.operator_review.decision_receipt` contract as the
+  single-pack decision route. It writes operator-review decision receipts only;
+  it does not approve forge proposals, promote capabilities, enable
+  capabilities, execute capabilities, mutate the plugin registry, or write
+  memory.
+- The operator surface now distinguishes total decision-required packs from
+  pending decision packs by subtracting already recorded operator-review
+  decision receipts. This prevents the surface from continuing to claim
+  `ready_for_operator_review` after receipts have been recorded.
+- The operator surface route map now includes the bulk decision route. The chat
+  UI mounted-route contract now includes the new backend route, but no dedicated
+  chat UI control was added in this slice.
+
+Latest validation for this local live pass:
+
+- Live bulk decision dry-run:
+  `POST /plugins/capabilities/packs/operator/review/decisions/bulk-from-surface`
+  with `actor=codex.stage17`, `action=approve`, `max_pack_count=50`,
+  `max_total_capability_count=10000`, and `dry_run=true`.
+  Result: `ok=true`, `applied=false`,
+  `kind=plugin.capability_pack.operator_review.bulk_decision`,
+  `status=dry_run`, `planned_pack_count=43`,
+  `planned_capability_count=2241`, `review_queue_count=43`,
+  `decision_recorded_pack_count=0`, `writes_receipts=false`,
+  `does_not_mutate_registry=true`, `does_not_promote_capabilities=true`,
+  `does_not_execute_capabilities=true`, and `memory_write=false`.
+- Live operator surface readback after the dry-run:
+  Result: `ok=true`, `status=ready_for_operator_review`,
+  `pack_total=46`, `review_queue_count=43`,
+  `pending_review_queue_count=43`, `decision_recorded_pack_count=0`,
+  `promotion_discipline.ready_pack_count=3`,
+  `promotion_discipline.blocked_pack_count=43`,
+  `approved_pack_operator_review_count=0`, and
+  `next_smallest_truthful_gap=stage17_capability_pack_review_decisions`.
+- Syntax validation:
+  `python -m py_compile src\francis\api\routes\plugins.py`
+  Result: passed.
+- Focused API contract tests:
+  `python -m pytest tests\test_api_plugins.py -k "operator_surface or
+  operator_review_bulk_from_surface or
+  capability_pack_operator_review_decision_receipt_gates_pack_promotion or
+  capability_pack_promotion_discipline_projects_pack_gate" -q`
+  Result: 4 selected tests passed.
+- Chat UI route-mount contract:
+  `python -m pytest
+  tests\test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted
+  -q`
+  Result: passed.
+- Ruff validation:
+  `python -m ruff check src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Diff whitespace validation:
+  `git diff --check`
+  Result: passed with Git's existing CRLF normalization warning for
+  `src/francis/api/routes/plugins.py`.
+
+Validation risk:
+
+- The live command was intentionally a dry-run. It did not record review
+  approvals for the 43 queued packs.
+- The route can write many decision receipts when `dry_run=false`; that remains
+  a real operator trust-boundary action and should be used only with explicit
+  operator intent, pack limits, and receipt review.
+- The chat UI route contract knows the endpoint is mounted, but a dedicated UI
+  control for the batch route was not implemented in this slice.
+- GitHub confirmation for this ledger entry was not available at ledger write
+  time.
+
+Remaining truthful gap:
+
+- Stage 17 still needs an explicit operator decision application for the 43
+  queued packs, or a deliberate operator choice to reject/defer selected packs.
+  The safe live path is now the dry-run-backed bulk decision route:
+  `stage17_capability_pack_review_decisions`.
+
+### 2026-06-05 - Stage 17 bulk operator-review decisions reach chat UI
+
+Roadmap area: Stage 17 / Capability Economy, operator-facing review decision
+control for dry-run-backed capability-pack batch decisions.
+
+Material change:
+
+- The chat UI plugin browser client now knows the governed bulk decision route:
+  `POST /plugins/capabilities/packs/operator/review/decisions/bulk-from-surface`.
+- The client sends the existing `chat_ui.plugins` actor, defaults bulk requests
+  to `dry_run=true`, preserves the backend's planned/recorded/skipped/failed
+  counts, and preserves governance fields including receipt writes,
+  promotion authority, execution authority, and memory-write posture.
+- The Plugins panel Capability Pack Review section now surfaces pending and
+  recorded pack-review decision counts.
+- The same section now has explicit operator controls for dry-running pending
+  pack approvals and applying pending pack approvals. The apply control remains
+  disabled until the panel has a dry-run response.
+- The UI does not auto-approve queued packs. It only exposes the governed
+  backend batch path through explicit operator button actions.
+
+Latest validation for this local UI pass:
+
+- Focused plugin browser client test:
+  `node --test --experimental-strip-types src\plugin_browser\index.test.ts`
+  from `apps/chat_ui`
+  Result: 13 tests passed, including the new bulk dry-run/apply client path.
+- Full chat UI test suite:
+  `npm run test` from `apps/chat_ui`
+  Result: 204 tests passed.
+- Chat UI production build:
+  `npm run build` from `apps/chat_ui`
+  Result: passed; Vite built `dist/index.html` and
+  `dist/assets/index-D3BCnqN0.js`.
+- Backend-focused Ruff validation:
+  `python -m ruff check src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Diff whitespace validation:
+  `git diff --check`
+  Result: passed with Git's existing CRLF normalization warnings for
+  `apps/chat_ui/src/plugin_browser/index.ts` and
+  `src/francis/api/routes/plugins.py`.
+
+Validation risk:
+
+- This slice wires UI/client access to the bulk route, but it did not apply live
+  operator-review decisions to the 43 queued packs.
+- The apply button can still write many review receipts when used after dry-run;
+  this remains an explicit operator trust-boundary action.
+- No browser screenshot or manual click-through proof was captured for this UI
+  slice. Validation is via typed client tests, full UI tests, and production
+  build.
+- GitHub confirmation for this ledger entry was not available at ledger write
+  time.
+
+Remaining truthful gap:
+
+- Stage 17 still needs explicit operator decision application for the 43 queued
+  packs, or a deliberate reject/defer decision for selected packs:
+  `stage17_capability_pack_review_decisions`.
+
+### 2026-06-05 - Stage 17 current generated review packs remediation clears
+
+Roadmap area: Stage 17 / Capability Economy, clearing newly surfaced local
+generated capability-pack remediation before operator-review decisions.
+
+Material change:
+
+- A current local operator-surface readback on the latest checkout reported
+  `pack_total=48`, `status=blocked`, and `remediation_backlog.open_count=20`.
+  The live next gap had moved back from operator-review decisions to remediation
+  because five current generated review packs were missing metadata, quality,
+  validation, and proposal-lineage evidence.
+- The read-only migration plan reported exactly five metadata-receipt
+  candidates: `legacy.generated.capabilitybulkoperatorreviewplugin1`,
+  `legacy.generated.capabilitybulkoperatorreviewplugin2`,
+  `legacy.generated.capabilityoperatorreviewdecisionplugin`,
+  `legacy.generated.capabilityoperatorreviewplugin`, and
+  `legacy.generated.capabilitypromotiondisciplineplugin`.
+- The existing governed metadata receipt `bulk-from-plan` route was applied
+  only to those selected pack IDs with `max_pack_count=5`,
+  `max_total_capability_count=41`, and `max_capability_count_per_pack=15`.
+- The metadata receipt apply recorded 5 packs / 41 capabilities and reduced
+  `remaining_candidate_total` to 0.
+- Promotion-rule remediation dry-run for the same selected packs correctly
+  no-oped: five skips, zero planned packs, no registry or receipt writes,
+  because metadata receipt review had already supplied the promotion rules and
+  pack governance.
+- Quality-reference remediation dry-run planned 5 packs / 41 capabilities using
+  existing candidate references only. The apply recorded 5 packs and changed 10
+  registry records; it did not write validation receipts, proposals, approvals,
+  promotions, executions, enablement state, generated artifacts, or memory.
+- Artifact reconstruction dry-run planned 5 packs / 10 capabilities with no
+  truncation or partial reconstruction. The apply recorded 5 packs / 10
+  capabilities, wrote 10 pack-specific validation receipts, wrote 10
+  proposal-lineage records, captured the explicit reconstruction decision, and
+  did not approve proposals, promote capabilities, enable capabilities, execute
+  capabilities, or write memory.
+- Final operator-surface readback now reports `status=ready_for_operator_review`,
+  `pack_total=48`, `ready_pack_count=48`, `blocked_pack_count=0`,
+  `remediation_backlog.open_count=0`, `review_queue_count=45`,
+  `pending_review_queue_count=45`, and
+  `next_smallest_truthful_gap=stage17_capability_pack_review_decisions`.
+
+Latest validation for this local live pass:
+
+- Metadata receipt apply:
+  Result: `status=recorded`, `recorded_pack_count=5`,
+  `recorded_capability_count=41`, `remaining_candidate_total=0`,
+  `writes_registry_metadata=true`, `writes_receipts=true`,
+  `promotion_authority=false`, `execution_authority=false`, and
+  `memory_write=false`.
+- Quality-reference apply:
+  Result: `status=recorded`, `recorded_pack_count=5`,
+  `recorded_capability_count=10`, `quality_reference_backfill_only=true`,
+  `does_not_write_validation_receipts=true`, `does_not_write_proposals=true`,
+  `does_not_approve_proposals=true`, `does_not_promote_capabilities=true`, and
+  `memory_write=false`.
+- Artifact reconstruction apply:
+  Result: `status=recorded`, `recorded_pack_count=5`,
+  `recorded_capability_count=10`, `partial_reconstruction_count=0`,
+  `remaining_remediation_queue_count=0`, `writes_validation_receipts=true`,
+  `validation_receipt_write_count=10`, `writes_proposals=true`,
+  `proposal_lineage_write_count=10`, `operator_reconstruction_decision_captured=true`,
+  `does_not_approve_proposals=true`, `does_not_promote_capabilities=true`,
+  `does_not_enable_capabilities=true`, `does_not_execute_capabilities=true`,
+  and `memory_write=false`.
+- Final promotion-rule readback:
+  Result: `status=ready`, `remediation_queue_count=0`, and
+  `next_smallest_truthful_gap=stage17_capability_pack_operator_surface`.
+- Final quality-evidence readback:
+  Result: `status=ready`, `remediation_queue_count=0`,
+  `quality_reference_backfill_candidate_count=0`,
+  `validation_receipt_reconstruction_required_count=0`,
+  `proposal_lineage_reconstruction_required_count=0`, and
+  `next_smallest_truthful_gap=stage17_capability_pack_operator_surface`.
+- Final operator-review bulk dry-run:
+  `POST /plugins/capabilities/packs/operator/review/decisions/bulk-from-surface`
+  with `actor=codex.stage17`, `action=approve`, `max_pack_count=50`,
+  `max_total_capability_count=10000`, and `dry_run=true`.
+  Result: `status=dry_run`, `planned_pack_count=45`,
+  `planned_capability_count=2251`, `writes_receipts=false`,
+  `does_not_mutate_registry=true`, `does_not_approve_proposals=true`,
+  `does_not_promote_capabilities=true`, `does_not_execute_capabilities=true`,
+  and `memory_write=false`.
+- Focused API contract tests:
+  `python -m pytest tests/test_api_plugins.py -k
+  "metadata_receipt_is_written_and_projected or
+  metadata_receipts_bulk_from_migration_plan or
+  metadata_receipt_expands_reviewed_migration_plan_candidate or
+  quality_evidence_remediation_apply_backfills_candidate_refs or
+  quality_evidence_remediation_reconstructs_missing_artifacts or
+  quality_evidence_remediation_reconstructs_truncated_plan_chunk or
+  operator_surface or operator_review_bulk_from_surface" -q`
+  Result: passed.
+
+Validation risk:
+
+- The changed registry/catalog/artifact payloads live under `data/**`, which is
+  intentionally gitignored. This ledger entry records local operational posture;
+  it is not a portable data migration and does not make other clones contain
+  those local artifacts.
+- Candidate quality references remain candidate references, not pack-specific
+  proof. Reconstructed proposal lineages are unreviewed lineage records and do
+  not claim proposal approval.
+- No live operator-review approvals were recorded in this pass. The 45 pending
+  pack-review decisions remain an explicit operator trust-boundary action.
+- GitHub confirmation for this ledger entry was not available at ledger write
+  time.
+
+Remaining truthful gap:
+
+- Stage 17 local remediation is clear again for the current data set. Stage 17
+  still needs explicit operator decision application for the 45 queued packs, or
+  a deliberate reject/defer decision for selected packs:
+  `stage17_capability_pack_review_decisions`.
+
+### 2026-06-05 - Stage 17 operator-review receipts become capability-coverage-aware
+
+Roadmap area: Stage 17 / Capability Economy, closing the explicit
+capability-pack operator-review decision gate without weakening promotion,
+proposal, enablement, execution, or memory authority.
+
+Material change:
+
+- The governed bulk operator-review decision route was applied to the current
+  45-pack queue after dry-run. The apply response recorded 45 packs / 2251
+  staged capabilities in batch
+  `capability_pack_operator_review_batch_1780632847_a2e46dde`.
+- The 45-pack apply wrote operator-review decision receipts only. It did not
+  mutate the registry, approve forge proposals, promote capabilities, enable
+  capabilities, execute capabilities, or write memory.
+- Follow-up promotion-discipline readback found a real stale-receipt gap:
+  generated plugin sync can change a pack's current staged capability set after
+  a pack/version approval receipt already exists. Treating any pack/version
+  receipt as sufficient could hide newly staged capabilities from explicit
+  operator review.
+- Promotion discipline now treats an approved pack review as current only when
+  the approved receipt coverage includes the pack's current staged capability
+  ids.
+- The operator surface and bulk decision route now use the same current
+  capability coverage rule for pending-review counts and
+  `pack_operator_review_decision_already_recorded` skips.
+- The bulk route no longer suppresses review for a pack/version whose existing
+  approval receipt covers only an older capability shape.
+- Focused tests now isolate generated plugin roots for the bulk-review path and
+  prove a changed pack shape reopens for review until a fresh receipt covers
+  the current capability ids.
+- Because the earlier local test run had already changed the live generated
+  plugin set before isolation was added, the six newly/current generated pack
+  shapes were cleared through existing governed remediation routes rather than
+  by hand-editing local data.
+- That remediation pass handled six packs / 34 capabilities for metadata
+  receipts, changed quality references for eight capabilities, reconstructed
+  eight validation/proposal-lineage artifacts, and then recorded fresh
+  operator-review receipts for the six current pack shapes in batch
+  `capability_pack_operator_review_batch_1780633934_902c9ee8`.
+- The stale live `8001` API process was restarted from the current checkout.
+  Live HTTP readback then exposed the same generated-shape drift again for two
+  packs: `legacy.generated.capabilityoperatorreviewdecisionplugin` advanced to
+  15 staged capabilities and
+  `legacy.generated.capabilitypromotiondisciplineplugin` advanced to 13 staged
+  capabilities.
+- The two live-restart blockers were handled through the same governed path.
+  Metadata/quality remediation left only two validation/proposal-lineage
+  reconstructions; the first artifact reconstruction attempt correctly blocked
+  with `operator_reconstruction_decision_required` until the explicit
+  `operator_reconstruction_decision=approved_for_reconstruction` metadata was
+  supplied.
+- The bounded live-restart reconstruction apply recorded two packs / two
+  capabilities, wrote two validation receipts and two proposal-lineage records,
+  captured the operator reconstruction decision, and did not approve proposals,
+  promote capabilities, enable capabilities, execute capabilities, or write
+  memory.
+- The bounded live-restart operator-review apply then recorded two current-shape
+  pack decision receipts covering 28 staged capabilities in batch
+  `capability_pack_operator_review_batch_1780635037_2f5a144a`.
+- Final operator-surface readback now reports
+  `status=ready_for_explicit_promotion`, `pack_total=50`,
+  `ready_pack_count=50`, `review_queue_count=47`,
+  `pending_review_queue_count=0`, `decision_recorded_pack_count=47`, and
+  `next_smallest_truthful_gap=stage17_capability_library_operator_surface`.
+- Final promotion-discipline readback now reports `status=ready`,
+  `ready_pack_count=50`, `blocked_pack_count=0`,
+  `approved_pack_operator_review_count=47`, and
+  `next_smallest_truthful_gap=stage17_capability_library_operator_surface`.
+
+Latest validation for this local live pass:
+
+- Initial 45-pack operator-review decision apply:
+  Result: `status=recorded`, `recorded_pack_count=45`,
+  `recorded_capability_count=2251`, `failed_count=0`,
+  `receipt_write_count=45`, `writes_receipts=true`,
+  `does_not_mutate_registry=true`, `does_not_approve_proposals=true`,
+  `does_not_promote_capabilities=true`, `does_not_enable_capabilities=true`,
+  `does_not_execute_capabilities=true`, and `memory_write=false`.
+- Coverage-aware six-pack review dry-run:
+  Result: `status=dry_run`, `planned_pack_count=6`,
+  `planned_capability_count=34`, `skipped_count=0`,
+  `writes_receipts=false`, `does_not_mutate_registry=true`,
+  `does_not_approve_proposals=true`, `does_not_promote_capabilities=true`,
+  `does_not_enable_capabilities=true`, `does_not_execute_capabilities=true`,
+  and `memory_write=false`.
+- Six-pack current-shape operator-review apply:
+  Result: `status=recorded`, `recorded_pack_count=6`,
+  `recorded_capability_count=34`, `failed_count=0`,
+  `skipped_count=0`, `receipt_write_count=6`, `writes_receipts=true`,
+  `does_not_mutate_registry=true`, `does_not_approve_proposals=true`,
+  `does_not_promote_capabilities=true`, `does_not_enable_capabilities=true`,
+  `does_not_execute_capabilities=true`, and `memory_write=false`.
+- Post-apply dry-run for the same six packs:
+  Result: `status=no_candidates`, `planned_pack_count=0`,
+  `recorded_pack_count=0`, `recorded_capability_count=0`,
+  `skipped_count=6`, and skipped reason
+  `pack_operator_review_decision_already_recorded`.
+- Live-restart quality readback after bounded metadata/quality remediation:
+  Result: `status=blocked`, `remediation_queue_count=2`,
+  `artifact_reconstruction_required_count=2`,
+  `validation_receipt_reconstruction_required_count=2`,
+  `proposal_lineage_reconstruction_required_count=2`, and
+  `next_smallest_truthful_gap=stage17_capability_pack_artifact_reconstruction_apply`.
+- Live-restart artifact reconstruction dry-run:
+  Result: `status=dry_run`, `planned_pack_count=2`,
+  `planned_capability_count=2`, `partial_reconstruction_count=0`,
+  `writes_validation_receipts=false`, `writes_proposals=false`,
+  `does_not_approve_proposals=true`, `does_not_promote_capabilities=true`,
+  `does_not_execute_capabilities=true`, and `memory_write=false`.
+- Live-restart artifact reconstruction apply:
+  Result: `status=recorded`, `recorded_pack_count=2`,
+  `recorded_capability_count=2`, `partial_reconstruction_count=0`,
+  `remaining_remediation_queue_count=0`, `validation_receipt_write_count=2`,
+  `proposal_lineage_write_count=2`,
+  `operator_reconstruction_decision_captured=true`,
+  `does_not_approve_proposals=true`, `does_not_promote_capabilities=true`,
+  `does_not_enable_capabilities=true`, `does_not_execute_capabilities=true`,
+  and `memory_write=false`.
+- Live-restart operator-review dry-run:
+  Result: `status=dry_run`, `planned_pack_count=2`,
+  `planned_capability_count=28`, `skipped_count=0`,
+  `writes_receipts=false`, `does_not_mutate_registry=true`,
+  `does_not_approve_proposals=true`, `does_not_promote_capabilities=true`,
+  `does_not_enable_capabilities=true`, `does_not_execute_capabilities=true`,
+  and `memory_write=false`.
+- Live-restart operator-review apply:
+  Result: `status=recorded`, `recorded_pack_count=2`,
+  `recorded_capability_count=28`, `failed_count=0`, `skipped_count=0`,
+  `receipt_write_count=2`, `writes_receipts=true`,
+  `does_not_mutate_registry=true`, `does_not_approve_proposals=true`,
+  `does_not_promote_capabilities=true`, `does_not_enable_capabilities=true`,
+  `does_not_execute_capabilities=true`, and `memory_write=false`.
+- Live HTTP readback from restarted `http://127.0.0.1:8001`:
+  Result: operator surface `status=ready_for_explicit_promotion`,
+  `pending_review_queue_count=0`, `decision_recorded_pack_count=47`,
+  `ready_pack_count=50`, `next_smallest_truthful_gap=stage17_capability_library_operator_surface`;
+  promotion discipline `status=ready`, `ready_pack_count=50`,
+  `blocked_pack_count=0`, and
+  `next_smallest_truthful_gap=stage17_capability_library_operator_surface`.
+- Decision receipt readback:
+  `GET /plugins/capabilities/packs/operator/review/decisions` returned the
+  target current-shape receipts with capability counts 1, 1, 3, 3, 14, and 12;
+  receipt metadata includes `bulk_decision_batch_id` for the six-pack apply.
+- Direct promotion-discipline readback:
+  Result: `status=ready`, `ready_pack_count=50`,
+  `blocked_pack_count=0`, `approved_pack_operator_review_count=47`, and
+  `next_smallest_truthful_gap=stage17_capability_library_operator_surface`.
+- Operator-surface readback:
+  Result: `status=ready_for_explicit_promotion`,
+  `pending_review_queue_count=0`, `decision_recorded_pack_count=47`,
+  `ready_pack_count=50`, `blocked_pack_count=0`, and
+  `next_smallest_truthful_gap=stage17_capability_library_operator_surface`.
+- Python compile check:
+  `python -m py_compile src\francis\api\routes\plugins.py
+  src\francis\economy\markets\capability_pack_promotion_discipline.py`
+  Result: passed.
+- Focused API contract tests:
+  `python -m pytest tests/test_api_plugins.py -k
+  "operator_review_bulk_from_surface or
+  operator_review_bulk_reopens_stale_capability_coverage or
+  promotion_discipline_projects_pack_gate or
+  operator_review_decision_receipt_gates_pack_promotion or operator_surface" -q`
+  Result: 5 tests passed.
+
+Validation risk:
+
+- The changed registry/catalog/artifact/receipt payloads live under `data/**`,
+  which is intentionally gitignored. This ledger entry records local
+  operational posture; it is not a portable data migration and does not make
+  other clones contain those local receipts or artifacts.
+- The six-pack remediation was needed because an earlier local test run changed
+  generated plugin state before the new generated-root isolation guard was in
+  place. The local state was handled through governed routes, but the origin of
+  those six candidates should remain visible in future reviews.
+- The restarted live API immediately showed that generated-plugin sync can keep
+  surfacing new local generated capabilities for packs touched by this work.
+  The coverage-aware gates prevented a false-ready claim, but future build/test
+  runs can still require another bounded remediation/review receipt pass.
+- Operator-review approval receipts are trust-boundary receipts for current
+  pack shapes. They do not approve forge proposals, promote capabilities,
+  enable capabilities, execute capabilities, or write memory.
+- GitHub confirmation for this ledger entry was not available at ledger write
+  time.
+
+Remaining truthful gap:
+
+- Stage 17 has cleared the current local capability-pack remediation and
+  operator-review decision queues. The next truthful gap has moved to
+  `stage17_capability_library_operator_surface`: presenting the now-ready pack
+  library and any later explicit promotion path without implying automatic
+  proposal approval, promotion, enablement, execution, or memory writes.
+
+### 2026-06-05 - Stage 17 capability library operator surface lands
+
+Roadmap area: Stage 17 / Capability Economy, presenting the ready capability
+pack library after remediation and operator-review receipts without creating
+promotion, proposal-approval, enablement, execution, or memory authority.
+
+Material change:
+
+- Added `GET /plugins/capabilities/library/operator/surface`.
+- The route derives its library posture from the existing promotion-discipline
+  analyzer rather than inventing separate readiness rules.
+- The surface lists only packs that promotion discipline already reports as
+  `ready`, preserving current operator-review coverage, quality evidence,
+  validation receipt, proposal-lineage, promotion-rule, and pack-governance
+  gates.
+- The surface reports ready pack totals, blocked pack totals, staged/promoted
+  capability totals, ready pack previews, route pointers, requirements, and
+  governance flags.
+- The surface names `/plugins/enable` as the later explicit promotion route but
+  does not promote, enable, execute, approve proposals, write receipts, write
+  proposals, or write memory.
+- The route truthfully reports generated-plugin registry sync. In the current
+  local data set, the new readback performed generated sync and initially
+  exposed one more generated-shape blocker instead of claiming the library was
+  ready.
+- That blocker was `legacy.generated.capabilitypromotiondisciplineplugin`, now
+  at 16 staged capabilities. It was cleared through the existing governed
+  metadata, quality, artifact reconstruction, and operator-review receipt paths
+  with caps set to one pack / 16 capabilities.
+- The bounded one-pack remediation recorded metadata for 16 capabilities,
+  quality-reference metadata for three capabilities, three reconstructed
+  validation receipts, three reconstructed proposal-lineage records, and one
+  fresh operator-review decision receipt covering the current 16-capability
+  pack shape in batch
+  `capability_pack_operator_review_batch_1780636197_36f6f9bc`.
+- Final live HTTP readback from restarted `http://127.0.0.1:8001` reports the
+  new library surface as `status=ready_for_explicit_promotion`,
+  `pack_total=50`, `ready_pack_count=50`, `blocked_pack_count=0`,
+  `ready_staged_capability_count=2264`, `packs_returned=50`, and
+  `next_smallest_truthful_gap=stage17_capability_library_explicit_promotion`.
+
+Latest validation for this local live pass:
+
+- Python compile check:
+  `python -m py_compile src\francis\api\routes\plugins.py`
+  Result: passed.
+- Focused API contract tests:
+  `python -m pytest tests\test_api_plugins.py -k
+  "capability_library_operator_surface or operator_surface or
+  promotion_discipline_projects_pack_gate" -q`
+  Result: 3 tests passed.
+- Chat UI route contract test:
+  `python -m pytest tests\test_api_contract_chat_ui.py -q`
+  Result: passed.
+- Ruff validation:
+  `python -m ruff check src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Live HTTP readback from restarted `http://127.0.0.1:8001`:
+  Result: library `status=ready_for_explicit_promotion`,
+  `next_smallest_truthful_gap=stage17_capability_library_explicit_promotion`,
+  `pack_total=50`, `ready_pack_count=50`, `blocked_pack_count=0`,
+  `ready_staged_capability_count=2264`, and `packs_returned=50`; promotion
+  discipline still reports `status=ready`, `ready_pack_count=50`,
+  `blocked_pack_count=0`, and
+  `next_smallest_truthful_gap=stage17_capability_library_operator_surface`.
+
+Validation risk:
+
+- The changed registry/catalog/artifact/receipt payloads live under `data/**`,
+  which is intentionally gitignored. This ledger entry records local
+  operational posture; it is not a portable data migration.
+- The library route can perform generated-plugin registry sync during readback.
+  It surfaces that fact in governance and does not claim
+  `does_not_mutate_registry=true` when sync occurred.
+- The route is a presentation/readback surface. It does not approve forge
+  proposals, promote capabilities, enable capabilities, execute capabilities,
+  or write memory.
+- No dedicated chat UI rendering was added for the new library route in this
+  slice. The route is mounted and covered by the route contract, but operator UI
+  presentation remains follow-up work.
+- GitHub confirmation for this ledger entry was not available at ledger write
+  time.
+
+Remaining truthful gap:
+
+- Stage 17 now has a live capability-library operator readback for the current
+  local data set. The next truthful gap is
+  `stage17_capability_library_explicit_promotion`: any future promotion path
+  must remain explicit, governed, receipt-backed, proposal-aware, and bounded.
+
+### 2026-06-05 - Stage 17 capability library promotion plan lands
+
+Roadmap area: Stage 17 / Capability Economy, projecting the explicit
+capability-library promotion path without granting promotion, proposal-approval,
+enablement, execution, receipt-writing, or memory authority.
+
+Material change:
+
+- Added `GET /plugins/capabilities/library/promotion/plan`.
+- The route derives candidate packs from the existing capability-pack promotion
+  discipline readback and derives per-capability promotion readiness from the
+  existing `_plugin_promotion_readiness` gate used by `/plugins/enable`.
+- The projection reports ready/blocked pack totals, candidate pack totals,
+  staged candidate totals, promotable/blocked capability totals, missing
+  requirement counts, bounded capability previews, route pointers, requirements,
+  governance flags, and the next smallest truthful gap.
+- The route does not approve proposals, promote capabilities, enable
+  capabilities, execute capabilities, write promotion receipts, write proposal
+  reviews, or write memory. Generated-plugin registry sync remains possible
+  during readback and is reported explicitly through governance flags.
+- Candidate counting was tightened so totals are computed across all ready packs
+  with staged capabilities while `packs` and per-capability details remain
+  bounded previews. Promoted-only ready packs no longer cause
+  `packs_truncated=true`.
+- Added a focused API contract test that proves a promoted-only ready pack is
+  excluded from staged promotion candidates, while a staged ready pack is
+  blocked until its forge proposal is explicitly approved. The test also proves
+  the route does not promote or enable the staged plugin.
+- Added the route to the chat UI/API contract allowlist.
+
+Latest validation for this local live pass:
+
+- Python compile check:
+  `python -m py_compile src\francis\api\routes\plugins.py`
+  Result: passed.
+- Ruff validation:
+  `python -m ruff check src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Focused promotion-plan API test:
+  `python -m pytest tests\test_api_plugins.py -k
+  "capability_library_promotion_plan" -q`
+  Result: passed.
+- Focused library/promotion-plan API tests:
+  `python -m pytest tests\test_api_plugins.py -k
+  "capability_library_promotion_plan or capability_library_operator_surface" -q`
+  Result: 2 tests passed.
+- Chat UI route contract test:
+  `python -m pytest tests\test_api_contract_chat_ui.py -q`
+  Result: passed.
+- Live HTTP readback from refreshed `http://127.0.0.1:8002`:
+  Result: promotion plan `status=blocked`,
+  `next_smallest_truthful_gap=stage17_capability_library_proposal_review`,
+  `pack_total=50`, `ready_pack_count=50`, `blocked_pack_count=0`,
+  `candidate_pack_count=47`, `candidate_capability_count=2265`,
+  `promotable_capability_count=0`, `blocked_capability_count=2265`,
+  `packs_returned=47`, `packs_truncated=false`,
+  `missing_requirement_counts={proposal_review: 2265, proposal_evidence: 2265,
+  tests: 2265}`, and `generated_plugin_registry_sync_performed=true`.
+- Same live readback:
+  Result: library surface still reports `status=ready_for_explicit_promotion`,
+  `ready_pack_count=50`, `blocked_pack_count=0`, and
+  `next_smallest_truthful_gap=stage17_capability_library_explicit_promotion`;
+  promotion discipline reports `status=ready`, `ready_pack_count=50`,
+  `blocked_pack_count=0`, and
+  `next_smallest_truthful_gap=stage17_capability_library_operator_surface`.
+
+Validation risk:
+
+- The changed registry/catalog/artifact/receipt payloads live under `data/**`,
+  which is intentionally gitignored. This ledger entry records local
+  operational posture; it is not a portable data migration.
+- The new route can perform generated-plugin registry sync during readback. It
+  surfaces that fact in governance and does not claim
+  `does_not_mutate_registry=true` when sync occurred.
+- The live promotion plan is intentionally blocked: 2265 staged candidates lack
+  explicit forge proposal review, proposal evidence, and test evidence required
+  by the existing promotion readiness gate.
+- No dedicated chat UI rendering was added for the promotion-plan route in this
+  slice. The route is mounted and covered by the route contract, but operator UI
+  presentation remains follow-up work.
+- GitHub confirmation for this ledger entry was not available at ledger write
+  time.
+
+Remaining truthful gap:
+
+- Stage 17 now has an explicit promotion-plan readback for the current local
+  data set. The next truthful gap is
+  `stage17_capability_library_proposal_review`: any later apply path must remain
+  explicit, governed, proposal-aware, receipt-backed, bounded, and must not
+  batch-promote candidates that still fail `/plugins/enable` readiness.
+
+### 2026-06-05 - Stage 17 capability library proposal-review plan lands
+
+Roadmap area: Stage 17 / Capability Economy, separating proposal-review
+readiness from promotion readiness so proposal approval cannot hide missing
+promotion evidence.
+
+Material change:
+
+- Added `GET /plugins/capabilities/library/proposal-review/plan`.
+- The route derives staged candidates from the same ready-pack library posture
+  used by the explicit promotion plan and reuses `_plugin_promotion_readiness`
+  to classify each candidate.
+- The plan reports candidate pack/capability totals, unique proposal totals,
+  missing proposal-review totals, reviewable proposal totals, blockers that must
+  be resolved before review, bounded proposal previews, route pointers,
+  requirements, governance flags, and the next smallest truthful gap.
+- A candidate is reviewable only when proposal review is the remaining blocker.
+  If proposal evidence, tests, docs, risk tier, proposal id, plugin record, or
+  required pack operator review is also missing, the plan stays blocked before
+  proposal review.
+- Tightened the existing promotion-plan next-gap logic so it no longer names
+  `stage17_capability_library_proposal_review` when non-review promotion
+  readiness blockers are also present.
+- The new route is read-only. It does not approve proposals, write proposal
+  review receipts, promote capabilities, enable capabilities, execute
+  capabilities, write promotion receipts, or write memory.
+- Added focused API coverage for both the reviewable proposal-review path and
+  the blocked-before-review evidence path. Added the route to the chat UI/API
+  contract allowlist.
+
+Latest validation for this local live pass:
+
+- Python compile check:
+  `python -m py_compile src\francis\api\routes\plugins.py`
+  Result: passed.
+- Ruff validation:
+  `python -m ruff check src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Focused proposal-review/promotion-plan API tests:
+  `python -m pytest tests\test_api_plugins.py -k
+  "capability_library_promotion_plan or capability_library_proposal_review_plan" -q`
+  Result: 2 tests passed.
+- Live HTTP readback from refreshed `http://127.0.0.1:8002`:
+  Result: proposal-review plan `status=blocked`,
+  `next_smallest_truthful_gap=stage17_capability_library_promotion_readiness`,
+  `pack_total=50`, `ready_pack_count=50`, `blocked_pack_count=0`,
+  `candidate_pack_count=47`, `candidate_capability_count=2265`,
+  `unique_proposal_count=2265`, `proposal_review_missing_count=2265`,
+  `reviewable_capability_count=0`, `reviewable_proposal_count=0`,
+  `blocked_before_review_capability_count=2265`, `blocked_proposal_count=2265`,
+  `approved_proposal_review_count=0`, `packs_returned=47`,
+  `packs_truncated=false`, `missing_requirement_counts={proposal_review: 2265,
+  proposal_evidence: 2265, tests: 2265}`, and
+  `generated_plugin_registry_sync_performed=true`.
+- Same live HTTP readback:
+  Result: explicit promotion plan now also reports
+  `next_smallest_truthful_gap=stage17_capability_library_promotion_readiness`
+  with `candidate_capability_count=2265`, `promotable_capability_count=0`,
+  `blocked_capability_count=2265`, and matching missing requirement counts for
+  `proposal_review`, `proposal_evidence`, and `tests`.
+
+Validation risk:
+
+- The changed registry/catalog/artifact/receipt payloads live under `data/**`,
+  which is intentionally gitignored. This ledger entry records local
+  operational posture; it is not a portable data migration.
+- The new route can perform generated-plugin registry sync during readback. It
+  surfaces that fact in governance and does not claim
+  `does_not_mutate_registry=true` when sync occurred.
+- The route only plans proposal review. It does not add a governed apply route
+  for proposal-review decisions and it intentionally reports zero reviewable
+  proposals in the current local data set.
+- No dedicated chat UI rendering was added for the proposal-review plan route in
+  this slice. The route is mounted and covered by the route contract, but
+  operator UI presentation remains follow-up work.
+- GitHub confirmation for this ledger entry was not available at ledger write
+  time.
+
+Remaining truthful gap:
+
+- Stage 17 now has an explicit proposal-review plan readback for the current
+  local data set. The next truthful gap is
+  `stage17_capability_library_promotion_readiness`: attach or reconstruct the
+  missing proposal evidence and test evidence before any proposal-review apply
+  path is considered.
+
+### 2026-06-05 - Stage 17 promotion readiness recognizes governed quality evidence
+
+Roadmap area: Stage 17 / Capability Economy, aligning plugin-level promotion
+readiness with the governed quality evidence already written by Stage 17
+capability-pack remediation.
+
+Material change:
+
+- `_plugin_promotion_readiness` now treats `meta.quality.tests` and
+  `meta.quality.docs` as valid promotion-readiness test/doc evidence when the
+  older flat `tests`, `test_refs`, `docs`, or `documentation` fields are absent.
+- `_plugin_promotion_quality` uses the same nested quality fallback so any later
+  promotion receipt preserves the evidence source that satisfied readiness.
+- Proposal evidence remains strict. Reconstructed proposal lineage with empty
+  friction evidence does not satisfy `proposal_evidence`.
+- Focused tests now prove governed quality test references clear the `tests`
+  blocker while missing proposal evidence still blocks before proposal review.
+
+Latest validation for this local live pass:
+
+- Python compile check:
+  `python -m py_compile src\francis\api\routes\plugins.py`
+  Result: passed.
+- Ruff validation:
+  `python -m ruff check src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Focused promotion/proposal-review plan API tests:
+  `python -m pytest tests\test_api_plugins.py -k
+  "capability_library_promotion_plan or capability_library_proposal_review_plan" -q`
+  Result: 2 tests passed.
+- Live HTTP readback from refreshed `http://127.0.0.1:8002`:
+  Result: explicit promotion plan `status=blocked`,
+  `next_smallest_truthful_gap=stage17_capability_library_promotion_readiness`,
+  `candidate_capability_count=2265`, `promotable_capability_count=0`,
+  `blocked_capability_count=2265`, `packs_returned=47`, and
+  `missing_requirement_counts={proposal_review: 2265, proposal_evidence: 2265}`.
+- Same live HTTP readback:
+  Result: proposal-review plan `status=blocked`,
+  `next_smallest_truthful_gap=stage17_capability_library_promotion_readiness`,
+  `candidate_capability_count=2265`, `unique_proposal_count=2265`,
+  `proposal_review_missing_count=2265`, `reviewable_capability_count=0`,
+  `reviewable_proposal_count=0`, `blocked_before_review_capability_count=2265`,
+  `packs_returned=47`, `generated_plugin_registry_sync_performed=true`, and
+  matching missing requirement counts for `proposal_review` and
+  `proposal_evidence`.
+
+Validation risk:
+
+- The changed registry/catalog/artifact/receipt payloads live under `data/**`,
+  which is intentionally gitignored. This ledger entry records local
+  operational posture; it is not a portable data migration.
+- Nested quality references are still candidate/governed evidence, not a claim
+  of pack-specific proof unless the metadata says so. This change only aligns
+  promotion readiness with the existing Stage 17 evidence contract.
+- Proposal evidence remains unresolved for the current local data set. Proposal
+  review is still not reviewable because approving an empty-evidence proposal
+  would mask that readiness gap.
+- GitHub confirmation for this ledger entry was not available at ledger write
+  time.
+
+Remaining truthful gap:
+
+- Stage 17 now recognizes governed quality test/doc metadata during promotion
+  readiness. The next truthful gap remains
+  `stage17_capability_library_promotion_readiness`: attach or reconstruct
+  non-empty proposal evidence before any proposal-review apply path is
+  considered.
+
+### 2026-06-05 - Stage 17 promotion readiness reads linked proposal artifact evidence
+
+Roadmap area: Stage 17 / Capability Economy, preserving the governed
+promotion-readiness boundary while allowing proposal evidence already written
+to the linked proposal artifact to be read back consistently.
+
+Material change:
+
+- `_plugin_promotion_readiness` now reads non-empty `friction.evidence` from
+  the linked proposal artifact when staged plugin metadata lacks the older flat
+  `proposal_evidence` or `evidence` fields.
+- `_write_plugin_promotion_receipt` uses the same linked-artifact fallback so a
+  promotion receipt preserves the proposal evidence source that satisfied
+  readiness.
+- Empty reconstructed proposal lineage still does not satisfy
+  `proposal_evidence`; the fallback only accepts explicit non-empty artifact
+  evidence.
+- The new fallback test now isolates generated plugin output under the test
+  temp root. An accidental local test artifact,
+  `1780646368_proposalartifactevidenceplugin`, was removed from the live
+  registry/catalog and generated plugin directory before live readback.
+
+Latest validation for this local live pass:
+
+- Python compile check:
+  `python -m py_compile src\francis\api\routes\plugins.py`
+  Result: passed.
+- Ruff validation:
+  `python -m ruff check src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Exact proposal-artifact evidence fallback test:
+  `FRANCIS_PYTEST_SESSION_RETENTION_ROOT=data/test_runs/pytest/c python -m
+  pytest
+  tests\test_api_plugins.py::test_staged_plugin_promotion_readiness_uses_linked_proposal_artifact_evidence
+  -q`
+  Result: 1 test passed.
+- Focused promotion/proposal-review plan API tests:
+  `FRANCIS_PYTEST_SESSION_RETENTION_ROOT=data/test_runs/pytest/c python -m
+  pytest tests\test_api_plugins.py -k
+  "proposal_artifact_evidence or capability_library_promotion_plan or
+  capability_library_proposal_review_plan" -q`
+  Result: 3 tests passed.
+- Adjacent operator-surface plan API tests:
+  `FRANCIS_PYTEST_SESSION_RETENTION_ROOT=data/test_runs/pytest/c python -m
+  pytest tests\test_api_plugins.py -k
+  "capability_library_promotion_plan or capability_library_proposal_review_plan
+  or capability_library_operator_surface" -q`
+  Result: 3 tests passed.
+- Chat UI API contract test:
+  `FRANCIS_PYTEST_SESSION_RETENTION_ROOT=data/test_runs/pytest/c python -m
+  pytest tests\test_api_contract_chat_ui.py -q`
+  Result: 1 test passed.
+- Live HTTP readback from refreshed `http://127.0.0.1:8002`:
+  Result: promotion discipline `status=ready`,
+  `next_smallest_truthful_gap=stage17_capability_library_operator_surface`,
+  `pack_total=50`, `ready_pack_count=50`, and `blocked_pack_count=0`.
+- Same live HTTP readback:
+  Result: explicit promotion plan `status=blocked`,
+  `next_smallest_truthful_gap=stage17_capability_library_promotion_readiness`,
+  `candidate_capability_count=2265`, `promotable_capability_count=0`,
+  `blocked_capability_count=2265`, and
+  `missing_requirement_counts={proposal_review: 2265, proposal_evidence:
+  2265}`.
+- Same live HTTP readback:
+  Result: proposal-review plan `status=blocked`,
+  `next_smallest_truthful_gap=stage17_capability_library_promotion_readiness`,
+  `candidate_capability_count=2265`, `unique_proposal_count=2265`,
+  `proposal_review_missing_count=2265`, `reviewable_capability_count=0`,
+  `blocked_before_review_capability_count=2265`, and matching missing
+  requirement counts for `proposal_review` and `proposal_evidence`.
+
+Validation risk:
+
+- The cleanup touched local generated/plugin data under gitignored `data/**`
+  and `plugins/generated/**`; this records local operational truth, not a
+  portable migration.
+- Local pytest startup was initially slowed by the full
+  `data/test_runs/pytest` retention scan. The successful focused validation
+  used the supported shorter retention subroot
+  `data/test_runs/pytest/c` to avoid scanning unrelated historical test runs
+  and to keep Windows paths short.
+- GitHub confirmation for this ledger entry was not available at ledger write
+  time.
+
+Remaining truthful gap:
+
+- Stage 17 can now read linked proposal artifact evidence when it exists, but
+  the current local capability candidates still lack non-empty proposal
+  evidence. The next truthful gap remains
+  `stage17_capability_library_promotion_readiness`: reconstruct or attach
+  non-empty proposal evidence before proposal-review apply is considered.
+
+### 2026-06-05 - Stage 17 proposal-evidence plan exposes the promotion-readiness blocker
+
+Roadmap area: Stage 17 / Capability Economy, making the current
+proposal-evidence blocker directly operator-visible before any proposal-review
+or promotion apply path is considered.
+
+Material change:
+
+- Added read-only `GET /plugins/capabilities/library/proposal-evidence/plan`.
+- The new plan composes the existing plugin promotion-readiness contract and
+  promotion-discipline readback; it does not introduce a separate evidence
+  authority or looser evidence rule.
+- The plan enumerates staged capabilities in ready packs that are blocked on
+  `proposal_evidence`, reports whether linked proposal artifact friction
+  evidence exists, and keeps empty reconstructed lineage blocked.
+- Existing promotion and proposal-review plans now cross-link to the
+  proposal-evidence plan route.
+- The chat UI API contract now asserts the new route is mounted.
+
+Latest validation for this local live pass:
+
+- Python compile check:
+  `python -m py_compile src\francis\api\routes\plugins.py`
+  Result: passed.
+- Ruff validation:
+  `python -m ruff check src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Focused proposal-evidence projection tests:
+  `FRANCIS_PYTEST_SESSION_RETENTION_ROOT=data/test_runs/pytest/c python -m
+  pytest tests\test_api_plugins.py -k
+  "proposal_evidence_plan or
+  proposal_review_plan_blocks_before_review_when_evidence_missing" -q`
+  Result: 2 tests passed.
+- Chat UI API contract test:
+  `FRANCIS_PYTEST_SESSION_RETENTION_ROOT=data/test_runs/pytest/c python -m
+  pytest tests\test_api_contract_chat_ui.py -q`
+  Result: 1 test passed.
+- Adjacent Stage 17 plan tests:
+  `FRANCIS_PYTEST_SESSION_RETENTION_ROOT=data/test_runs/pytest/c python -m
+  pytest tests\test_api_plugins.py -k
+  "capability_library_promotion_plan or capability_library_proposal_review_plan
+  or proposal_evidence_plan" -q`
+  Result: 3 tests passed.
+- Live HTTP readback from refreshed `http://127.0.0.1:8002`:
+  Result: proposal-evidence plan `status=blocked`,
+  `proposal_evidence_plan_ready=true`,
+  `next_smallest_truthful_gap=stage17_capability_library_promotion_readiness`,
+  `candidate_capability_count=2265`, `unique_proposal_count=2265`,
+  `proposal_evidence_missing_count=2265`,
+  `proposal_evidence_ready_count=0`,
+  `missing_proposal_evidence_count=2265`,
+  `evidence_ready_proposal_count=0`,
+  `proposal_review_missing_count=2265`,
+  `blocked_before_evidence_count=0`, `packs_returned=47`, and
+  `missing_requirement_counts={proposal_review: 2265, proposal_evidence:
+  2265}`.
+- Same live HTTP readback:
+  Result: promotion plan and proposal-review plan still agree on
+  `next_smallest_truthful_gap=stage17_capability_library_promotion_readiness`
+  with matching missing requirement counts for `proposal_review` and
+  `proposal_evidence`.
+
+Validation risk:
+
+- This is an operator-facing readback surface only. It does not reconstruct
+  proposal evidence, write registry metadata, write proposals, approve proposal
+  reviews, promote capabilities, enable capabilities, execute capabilities, or
+  write memory.
+- Local pytest used the shorter supported retention subroot
+  `data/test_runs/pytest/c` to avoid unrelated historical test-run scans and
+  Windows path-length noise.
+- GitHub confirmation for this ledger entry was not available at ledger write
+  time.
+
+Remaining truthful gap:
+
+- The evidence-specific queue is now directly inspectable, but the actual
+  readiness blocker remains: the current local capability candidates still need
+  non-empty proposal evidence before proposal-review apply or explicit
+  promotion apply should be considered.
+
+### 2026-06-05 - Stage 17 proposal-evidence plan reaches the chat UI
+
+Roadmap area: Stage 17 / Capability Economy, surfacing the read-only
+proposal-evidence readiness blocker in the operator UI before any review or
+promotion action.
+
+Material change:
+
+- The chat UI plugin-browser client now has typed readback support for
+  `GET /plugins/capabilities/library/proposal-evidence/plan`.
+- The plugin browser refresh path now loads the proposal-evidence plan together
+  with the existing promotion discipline, rule remediation, operator review,
+  Forge proposal, and promotion readiness readbacks.
+- The Plugins panel now shows candidate, missing, ready, proposal, review, and
+  pre-evidence blocker counts for the proposal-evidence plan.
+- The selected pack view shows pack identity, staged count, evidence
+  missing/ready counts, truncation state, and a bounded sample of capabilities
+  with evidence source and missing requirements.
+- This UI slice is readback-only for proposal evidence. It does not reconstruct
+  evidence, write registry metadata, write proposals, approve proposal reviews,
+  promote capabilities, enable capabilities, execute capabilities, or write
+  memory.
+
+Latest validation for this local UI pass:
+
+- Plugin-browser TypeScript contract test:
+  `node --test --experimental-strip-types src/plugin_browser/index.test.ts`
+  from `apps/chat_ui`
+  Result: 14 tests passed, including the new proposal-evidence plan client
+  path.
+- Full chat UI TypeScript test script:
+  `npm run test` from `apps/chat_ui`
+  Result: 205 tests passed.
+- Chat UI production build:
+  `npm run build` from `apps/chat_ui`
+  Result: Vite build passed.
+- Diff whitespace check:
+  `git diff --check`
+  Result: passed. Git warned that two working-copy files will be normalized
+  from CRLF to LF the next time Git touches them.
+
+Validation risk:
+
+- This pass did not run a browser screenshot or Playwright visual check, so the
+  validated claim is TypeScript/client/build integration, not pixel-level
+  layout proof.
+- This pass did not rerun the Python backend tests from the prior
+  proposal-evidence route entry because the current change was limited to the
+  chat UI client and panel wiring.
+
+Remaining truthful gap:
+
+- The operator can now see the proposal-evidence blocker in the chat UI, but
+  Stage 17 remains blocked on the same live posture: 2265 capability candidates
+  still need non-empty proposal evidence before proposal-review apply or
+  explicit promotion apply should be considered.
+
+### 2026-06-05 - Stage 17 proposal-evidence remediation is bounded to existing artifacts
+
+Roadmap area: Stage 17 / Capability Economy, adding a governed remediation path
+for proposal evidence without fabricating evidence, approving proposals, or
+promoting capabilities.
+
+Material change:
+
+- Added read-only
+  `GET /plugins/capabilities/library/proposal-evidence/remediation`.
+- Added governed dry-run/apply route
+  `POST /plugins/capabilities/library/proposal-evidence/remediation/apply`.
+- The remediation projection uses the same promotion-discipline evidence inputs
+  as the existing capability-library proposal-review and promotion-plan routes:
+  available proposals, validation receipts, promotion receipts, and capability
+  pack operator-review decisions.
+- The apply route defaults to dry-run and requires `plugins.write` before any
+  registry metadata mutation.
+- The apply route can only copy existing, non-empty linked proposal artifact
+  friction evidence into plugin registry metadata as `proposal_evidence`.
+- The route records claim scope on the plugin metadata:
+  `existing_linked_proposal_artifact_friction_evidence`.
+- This route does not generate evidence, write proposal artifacts, approve
+  proposals, write proposal-review receipts, promote capabilities, enable
+  capabilities, execute capabilities, or write memory.
+- The chat UI API route contract now asserts the remediation readback and apply
+  routes are mounted.
+
+Latest validation for this local pass:
+
+- Python compile check:
+  `python -m py_compile src\francis\api\routes\plugins.py`
+  Result: passed.
+- Ruff validation:
+  `python -m ruff check src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Focused proposal-evidence remediation tests:
+  `FRANCIS_PYTEST_SESSION_RETENTION_ROOT=data/test_runs/pytest/c python -m
+  pytest tests\test_api_plugins.py -k
+  "proposal_evidence_remediation or proposal_evidence_plan or
+  proposal_review_plan_blocks_before_review_when_evidence_missing" -q`
+  Result: 3 tests passed.
+- Adjacent capability-library plan tests:
+  `FRANCIS_PYTEST_SESSION_RETENTION_ROOT=data/test_runs/pytest/c python -m
+  pytest tests\test_api_plugins.py -k
+  "capability_library_promotion_plan or capability_library_proposal_review_plan
+  or proposal_evidence_plan or proposal_evidence_remediation" -q`
+  Result: 4 tests passed.
+- Chat UI API contract test:
+  `FRANCIS_PYTEST_SESSION_RETENTION_ROOT=data/test_runs/pytest/c python -m
+  pytest tests\test_api_contract_chat_ui.py -q`
+  Result: 1 test passed.
+- Diff whitespace check:
+  `git diff --check`
+  Result: passed. Git warned that two working-copy files will be normalized
+  from CRLF to LF the next time Git touches them.
+- Local data readback through FastAPI TestClient:
+  Result: proposal-evidence remediation `status=no_existing_artifact_evidence_candidates`,
+  `proposal_evidence_remediation_ready=false`, `candidate_pack_count=0`,
+  `candidate_capability_count=0`, and
+  `next_smallest_truthful_gap=stage17_capability_library_promotion_readiness`.
+- Same local data readback source plan:
+  Result: proposal-evidence plan still `status=blocked`,
+  `candidate_capability_count=2265`,
+  `proposal_evidence_missing_count=2265`,
+  `proposal_evidence_ready_count=0`,
+  `proposal_review_missing_count=2265`, and
+  `next_smallest_truthful_gap=stage17_capability_library_promotion_readiness`.
+
+Validation risk:
+
+- This is a registry metadata backfill route only when matching proposal
+  artifacts already contain non-empty friction evidence. It does not create or
+  infer evidence for the current local 2265 missing-evidence candidates.
+- This pass did not wire the new remediation apply route into the chat UI
+  controls; only the backend route and mounted-route contract were changed.
+- Local readback used FastAPI TestClient instead of an already-running external
+  API server.
+
+Remaining truthful gap:
+
+- The safe existing-artifact backfill path is now present, but the current local
+  data has no existing linked proposal artifact evidence candidates. Stage 17
+  still needs non-empty proposal evidence for 2265 capability candidates before
+  proposal-review apply or explicit promotion apply should be considered.
+
+### 2026-06-05 - Stage 17 proposal-evidence remediation reaches the chat UI
+
+Roadmap area: Stage 17 / Capability Economy, surfacing the bounded
+existing-artifact proposal-evidence remediation readback in the operator UI.
+
+Material change:
+
+- The chat UI plugin-browser client now has typed readback support for
+  `GET /plugins/capabilities/library/proposal-evidence/remediation`.
+- The plugin browser refresh path now loads proposal-evidence remediation
+  status alongside the proposal-evidence plan.
+- The Plugins panel now shows existing-artifact remediation status, candidate
+  pack/capability counts, existing metadata evidence count, source-plan missing
+  and ready counts, source proposal-review missing count, and selected-pack
+  candidate samples when the backend returns any.
+- This UI slice is readback-only. It does not add an apply button, write
+  registry metadata, write proposals, approve proposal reviews, promote
+  capabilities, enable capabilities, execute capabilities, or write memory.
+
+Latest validation for this local UI pass:
+
+- Plugin-browser TypeScript contract test:
+  `node --test --experimental-strip-types src/plugin_browser/index.test.ts`
+  from `apps/chat_ui`
+  Result: 15 tests passed, including the new proposal-evidence remediation
+  client path.
+- Full chat UI TypeScript test script:
+  `npm run test` from `apps/chat_ui`
+  Result: 206 tests passed.
+- Chat UI production build:
+  `npm run build` from `apps/chat_ui`
+  Result: Vite build passed.
+- Diff whitespace check:
+  `git diff --check`
+  Result: passed. Git warned that two working-copy files will be normalized
+  from CRLF to LF the next time Git touches them.
+
+Validation risk:
+
+- This pass did not run a browser screenshot or Playwright visual check, so the
+  validated claim is TypeScript/client/build integration, not pixel-level
+  layout proof.
+- This pass did not rerun the backend proposal-evidence remediation pytest set
+  because the current change was limited to the chat UI client and panel
+  readback wiring.
+
+Remaining truthful gap:
+
+- The operator can now see whether existing proposal artifacts can backfill
+  proposal evidence, but the current local data still reports no such
+  candidates and 2265 missing proposal-evidence blockers remain.
+
+### 2026-06-05 - Stage 17 operator proposal-evidence intake is governed
+
+Roadmap area: Stage 17 / Capability Economy, creating the next bounded path for
+the current missing proposal-evidence blocker when no existing linked proposal
+artifact evidence is available.
+
+Material change:
+
+- Added governed dry-run/apply route
+  `POST /plugins/capabilities/library/proposal-evidence/operator-intake/apply`.
+- The route requires `plugins.write`, defaults to dry-run, and requires
+  non-empty `evidence_refs` supplied by the operator.
+- Candidate selection composes the existing capability-library
+  proposal-evidence plan and promotion-discipline gates. It only selects staged
+  capabilities in ready packs that have a proposal id, are blocked on
+  `proposal_evidence`, and have no earlier blockers before proposal evidence.
+- Dry-run reports planned packs/capabilities and claim scope without mutating
+  registry metadata.
+- Apply writes only plugin registry metadata:
+  `proposal_evidence`, intake source, actor, reason, route, timestamp, and claim
+  scope.
+- The recorded claim scope is explicit:
+  `operator_supplied_friction_evidence_reference_not_independent_verification`.
+- The route does not write proposal artifacts, approve proposals, write
+  proposal-review receipts, promote capabilities, enable capabilities, execute
+  capabilities, or write memory.
+- The chat UI API route contract now asserts the operator-intake apply route is
+  mounted.
+
+Latest validation for this local pass:
+
+- Python compile check:
+  `python -m py_compile src\francis\api\routes\plugins.py`
+  Result: passed.
+- Ruff validation:
+  `python -m ruff check src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Focused proposal-evidence intake/remediation tests:
+  `FRANCIS_PYTEST_SESSION_RETENTION_ROOT=data/test_runs/pytest/c python -m
+  pytest tests\test_api_plugins.py -k
+  "operator_proposal_evidence_intake or proposal_evidence_remediation or
+  proposal_evidence_plan or
+  proposal_review_plan_blocks_before_review_when_evidence_missing" -q`
+  Result: 4 tests passed.
+- Adjacent capability-library plan tests:
+  `FRANCIS_PYTEST_SESSION_RETENTION_ROOT=data/test_runs/pytest/c python -m
+  pytest tests\test_api_plugins.py -k
+  "capability_library_promotion_plan or capability_library_proposal_review_plan
+  or proposal_evidence_plan or proposal_evidence_remediation or
+  operator_proposal_evidence_intake" -q`
+  Result: 5 tests passed.
+- Chat UI API contract test:
+  `FRANCIS_PYTEST_SESSION_RETENTION_ROOT=data/test_runs/pytest/c python -m
+  pytest tests\test_api_contract_chat_ui.py -q`
+  Result: 1 test passed.
+- Diff whitespace check:
+  `git diff --check`
+  Result: passed. Git warned that two working-copy files will be normalized
+  from CRLF to LF the next time Git touches them.
+- Local data dry-run through FastAPI TestClient:
+  Result: operator proposal-evidence intake `status=dry_run`, `applied=false`,
+  `planned_pack_count=47`, `planned_capability_count=2265`,
+  `evidence_ref_count=1`, source plan `proposal_evidence_missing_count=2265`,
+  `proposal_evidence_ready_count=0`, and
+  `next_smallest_truthful_gap=stage17_capability_library_promotion_readiness`.
+- Same local data dry-run governance:
+  Result: `writes_registry_metadata=false`, `writes_proposals=false`,
+  `does_not_approve_proposals=true`,
+  `does_not_promote_capabilities=true`, and `memory_write=false`.
+
+Validation risk:
+
+- The local dry-run used a sample evidence reference only to validate planning;
+  no operator evidence was applied to the local registry in this pass.
+- Operator-supplied evidence is now structurally supported, but it remains an
+  operator-provided reference, not independently verified proof.
+- This pass did not wire the operator-intake apply route into chat UI controls.
+
+Remaining truthful gap:
+
+- The missing proposal-evidence queue can now be dry-run planned as 47 packs /
+  2265 capabilities, but Stage 17 still needs real operator evidence references
+  to be supplied and applied before proposal-review apply or explicit promotion
+  apply should be considered.
+
+### 2026-06-05 - Stage 17 operator proposal-evidence intake reaches chat UI
+
+Roadmap area: Stage 17 / Capability Economy, operator-facing control for the
+governed proposal-evidence intake route added in the prior backend slice.
+
+Material change:
+
+- Added a typed chat UI client endpoint for
+  `POST /plugins/capabilities/library/proposal-evidence/operator-intake/apply`.
+- The client defaults the route to dry-run, normalizes the plugin mutation actor,
+  requires non-empty `evidence_refs`, and preserves route governance readback.
+- The Plugins panel now exposes Operator Evidence Intake under Proposal Evidence
+  Plan.
+- The panel requires a selected proposal-evidence pack and non-empty operator
+  evidence refs before dry-run.
+- Apply is disabled until the current selected pack has a matching dry-run
+  response.
+- The UI sends `pack_ids` with `max_pack_count=1`, preventing accidental
+  all-queue application across the current 2265 missing proposal-evidence
+  candidates.
+- The panel surfaces planned/recorded counts and governance badges for registry
+  writes, proposal writes, approvals, promotion, and memory writes.
+- No evidence references were applied to the local registry in this pass.
+
+Latest validation for this chat UI pass:
+
+- Focused plugin browser client tests:
+  `node --test --experimental-strip-types src/plugin_browser/index.test.ts`
+  Result: 16 tests passed, including the new operator proposal-evidence intake
+  dry-run client contract.
+- Chat UI production build:
+  `npm run build`
+  Result: passed.
+- Full chat UI test script:
+  `npm run test`
+  Result: 207 tests passed.
+- Diff whitespace check:
+  `git diff --check`
+  Result: passed. Git warned that two working-copy files will be normalized
+  from CRLF to LF the next time Git touches them.
+
+Validation risk:
+
+- This pass did not run a browser screenshot or Playwright visual check, so the
+  validation claim is client contract, TypeScript/build, and UI test coverage,
+  not pixel-level layout proof.
+- This pass did not rerun backend proposal-evidence intake pytest because the
+  backend route was not changed in this slice.
+- The UI exposes a real apply control, but it remains bounded to the selected
+  pack and gated by dry-run plus operator-supplied evidence refs.
+
+Remaining truthful gap:
+
+- Stage 17 remains blocked until real operator evidence references are supplied,
+  applied pack by pack, and the later proposal-review/promotion gates are
+  satisfied.
+
+### 2026-06-05 - Stage 17 proposal-review plan reaches chat UI
+
+Roadmap area: Stage 17 / Capability Economy, making the proposal-review gate
+operator-visible after the proposal-evidence intake surface without granting
+proposal approval authority.
+
+Material change:
+
+- Added typed chat UI client support for
+  `GET /plugins/capabilities/library/proposal-review/plan`.
+- The client preserves proposal-review pack samples, blocker counts,
+  reviewable counts, missing-requirement counts, route hints, requirements, and
+  no-authority governance fields.
+- The Plugins panel now loads the proposal-review plan alongside the
+  proposal-evidence plan during refresh.
+- The Proposal Evidence Plan card now includes a read-only Proposal Review Plan
+  section.
+- The section shows candidate, reviewable, blocked-before-review, approved, and
+  missing-review counts, plus selected-pack proposal samples and blockers before
+  review.
+- The section surfaces governance badges for read-only posture, proposal
+  approval, promotion, enablement, and memory writes.
+- No proposal-review decision route, receipt writer, promotion, enablement, or
+  registry mutation was added in this pass.
+
+Latest validation for this chat UI pass:
+
+- Focused plugin browser client tests:
+  `node --test --experimental-strip-types src/plugin_browser/index.test.ts`
+  Result: 17 tests passed, including the new proposal-review plan readback
+  client contract.
+- Chat UI production build:
+  `npm run build`
+  Result: passed. Vite emitted a non-fatal large chunk warning for the bundled
+  app asset.
+- Full chat UI test script:
+  `npm run test`
+  Result: 208 tests passed.
+- Diff whitespace check:
+  `git diff --check`
+  Result: passed. Git warned that two working-copy files will be normalized
+  from CRLF to LF the next time Git touches them.
+
+Validation risk:
+
+- This pass did not run a browser screenshot or Playwright visual check, so the
+  validation claim is client contract, TypeScript/build, and UI test coverage,
+  not pixel-level layout proof.
+- This pass did not rerun backend proposal-review plan pytest because the
+  backend route was not changed in this slice.
+
+Remaining truthful gap:
+
+- Stage 17 still cannot proceed to proposal-review application for the current
+  local queue until real operator proposal-evidence references are supplied and
+  applied pack by pack.
+
+### 2026-06-05 - Stage 17 capability-library promotion plan reaches chat UI
+
+Roadmap area: Stage 17 / Capability Economy, making explicit promotion
+readiness operator-visible without adding a promotion apply route.
+
+Material change:
+
+- Added typed chat UI client support for
+  `GET /plugins/capabilities/library/promotion/plan`.
+- The client preserves promotion-plan pack samples, promotable/blocked counts,
+  missing-requirement counts, route hints, requirements, and no-authority
+  governance fields.
+- The Plugins panel now loads the promotion plan alongside the proposal-evidence
+  and proposal-review plans during refresh.
+- Added a read-only Capability Library Promotion Plan card that surfaces
+  candidate, promotable, blocked, ready-pack, and selected-pack capability
+  samples.
+- The card surfaces the backend-reported promotion route, proposal-review
+  status, pack-review status, validation receipt presence, missing requirements,
+  receipt/write expectations, and governance badges for promotion authority,
+  promotion, enablement, promotion receipts, and memory writes.
+- No promotion apply route, enable button, promotion receipt writer, proposal
+  approval, registry mutation, or memory write was added in this pass.
+
+Latest validation for this chat UI pass:
+
+- Focused plugin browser client tests:
+  `node --test --experimental-strip-types src/plugin_browser/index.test.ts`
+  Result: 18 tests passed, including the new capability-library promotion plan
+  readback client contract.
+- Chat UI production build:
+  `npm run build`
+  Result: passed. Vite emitted a non-fatal large chunk warning for the bundled
+  app asset.
+- Full chat UI test script:
+  `npm run test`
+  Result: 209 tests passed.
+- Diff whitespace check:
+  `git diff --check`
+  Result: passed. Git warned that two working-copy files will be normalized
+  from CRLF to LF the next time Git touches them.
+
+Validation risk:
+
+- This pass did not run a browser screenshot or Playwright visual check, so the
+  validation claim is client contract, TypeScript/build, and UI test coverage,
+  not pixel-level layout proof.
+- This pass did not rerun backend promotion-plan pytest because the backend
+  route was not changed in this slice.
+
+Remaining truthful gap:
+
+- Stage 17 still remains blocked on real operator proposal-evidence references
+  for the current local queue before proposal-review application or explicit
+  promotion application should be considered.
+
+### 2026-06-05 - Stage 17 operator proposal-evidence intake checklist reaches chat UI
+
+Roadmap area: Stage 17 / Capability Economy, making the operator-supplied
+proposal-evidence intake queue directly inspectable before dry-run/apply.
+
+Material change:
+
+- Added read-only
+  `GET /plugins/capabilities/library/proposal-evidence/operator-intake/checklist`.
+- The checklist composes the same Stage 17 promotion-discipline and
+  operator-intake candidate selector used by the governed apply route, but does
+  not accept evidence refs and does not call the registry metadata writer.
+- The route returns bounded pack/capability previews, source proposal-evidence
+  plan counts, required operator evidence-ref counts, apply-route hints,
+  requirements, and no-authority governance fields.
+- The chat UI mounted-route contract now asserts the checklist route remains
+  available.
+- The plugin browser client now has typed readback support for the checklist.
+- The Plugins panel now loads the checklist with the proposal-evidence plan,
+  remediation, proposal-review plan, and promotion plan. Operator Evidence
+  Intake now shows checklist status, candidate packs/capabilities, refs
+  required, selected-pack checklist candidates, claim scope, and apply-route
+  hints before the existing dry-run/apply controls.
+- The dry-run/apply controls still send one selected pack, require non-empty
+  operator evidence refs, and still call only the existing governed
+  `POST /plugins/capabilities/library/proposal-evidence/operator-intake/apply`
+  route.
+
+Latest validation for this checklist pass:
+
+- Focused backend operator-intake route test:
+  `python -m pytest tests\test_api_plugins.py -k
+  operator_proposal_evidence_intake -q`
+  Result: 1 test passed.
+- Chat UI mounted-route contract:
+  `python -m pytest tests\test_api_contract_chat_ui.py -q`
+  Result: 1 test passed.
+- Python lint on touched API/contract files:
+  `python -m ruff check src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Python format check on touched API/contract files:
+  `python -m ruff format --check src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Focused plugin-browser client tests:
+  `node --test --experimental-strip-types src/plugin_browser/index.test.ts`
+  Result: 19 tests passed, including the new checklist client path.
+- Chat UI production build:
+  `npm run build`
+  Result: passed. Vite emitted a non-fatal large chunk warning for the bundled
+  app asset.
+- Full chat UI test script:
+  `npm run test`
+  Result: 210 tests passed.
+- Local data readback through FastAPI TestClient:
+  Result: operator proposal-evidence intake checklist
+  `status=ready_for_operator_evidence_refs`,
+  `operator_evidence_intake_checklist_ready=true`,
+  `candidate_pack_count=47`, `candidate_capability_count=2265`,
+  `evidence_ref_required_count=2265`, source proposal-evidence
+  `proposal_evidence_missing_count=2265`,
+  `proposal_evidence_ready_count=0`, and
+  `next_smallest_truthful_gap=stage17_capability_library_operator_proposal_evidence_refs`.
+- Diff whitespace check:
+  `git diff --check`
+  Result: passed. Git warned that two working-copy files will be normalized
+  from CRLF to LF the next time Git touches them.
+
+Validation risk:
+
+- This pass did not run a browser screenshot or Playwright visual check, so the
+  UI validation claim is client contract, TypeScript/build, and test coverage,
+  not pixel-level layout proof.
+- The checklist is read-only except for the existing generated-plugin registry
+  sync behavior shared by the adjacent readback routes. It does not write
+  operator evidence refs, write proposal-review receipts, approve proposals,
+  promote capabilities, enable capabilities, execute capabilities, or write
+  memory.
+
+Remaining truthful gap:
+
+- Stage 17 now exposes the exact operator-intake queue, but the queue is still
+  blocked until real operator evidence references are supplied and applied
+  pack by pack before proposal-review application or explicit promotion
+  application should be considered.
+
+### 2026-06-05 - Stage 17 operator proposal-evidence intake audit reaches chat UI
+
+Roadmap area: Stage 17 / Capability Economy.
+
+Truthful change:
+
+- Added a read-only backend audit route at
+  `GET /plugins/capabilities/library/proposal-evidence/operator-intake/audit`.
+- The audit scans staged capabilities in ready capability-library packs and
+  reports only operator evidence refs already recorded by the governed
+  operator-intake apply route.
+- The audit response exposes recorded pack/capability/ref counts, bounded pack
+  and capability previews, claim scope, future-review requirements, source
+  proposal-evidence plan counts, and explicit governance/read-only fields.
+- The audit does not synthesize evidence refs, validate evidence truth, write
+  registry metadata, write proposals, write proposal-review receipts, approve
+  proposals, promote or enable capabilities, execute capabilities, or write
+  memory.
+- The chat UI mounted-route contract now asserts the audit route remains
+  available.
+- The plugin browser client now has typed readback support for the audit.
+- The Plugins panel now loads the audit with the existing proposal-evidence
+  checklist and shows recorded operator refs separately from the dry-run/apply
+  controls.
+
+Latest validation for this audit pass:
+
+- Focused backend operator-intake route test:
+  `python -m pytest tests\test_api_plugins.py -k
+  operator_proposal_evidence_intake -q`
+  Result: 1 test passed.
+- Chat UI mounted-route contract:
+  `python -m pytest tests\test_api_contract_chat_ui.py -q`
+  Result: 1 test passed.
+- Python lint on touched API/contract files:
+  `python -m ruff check src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Python format check on touched API/contract files:
+  `python -m ruff format --check src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Focused plugin-browser client tests:
+  `node --test --experimental-strip-types src/plugin_browser/index.test.ts`
+  Result: 20 tests passed, including the new audit client path.
+- Chat UI production build:
+  `npm run build`
+  Result: passed. Vite emitted a non-fatal large chunk warning for the bundled
+  app asset.
+- Full chat UI test script:
+  `npm run test`
+  Result: 211 tests passed.
+- Local data readback through FastAPI TestClient:
+  Result: operator proposal-evidence intake audit
+  `status=no_operator_evidence_refs_recorded`,
+  `operator_evidence_intake_audit_ready=false`,
+  `recorded_pack_count=0`, `recorded_capability_count=0`,
+  `evidence_ref_count=0`, source proposal-evidence
+  `proposal_evidence_missing_count=2265`,
+  `proposal_evidence_ready_count=0`, and
+  `next_smallest_truthful_gap=stage17_capability_library_operator_proposal_evidence_refs`.
+
+Validation risk:
+
+- This pass did not run a browser screenshot or Playwright visual check, so the
+  UI validation claim is client contract, TypeScript/build, and test coverage,
+  not pixel-level layout proof.
+- The audit is read-only except for the existing generated-plugin registry sync
+  behavior shared by adjacent readback routes. It does not write operator
+  evidence refs, write proposal-review receipts, approve proposals, promote
+  capabilities, enable capabilities, execute capabilities, or write memory.
+
+Remaining truthful gap:
+
+- Stage 17 can now show both the operator-evidence queue and recorded
+  operator-evidence readback, but the queue is still blocked until real
+  operator evidence references are supplied and applied pack by pack.
+- Proposal-review application and explicit promotion application should remain
+  blocked until the audit shows recorded refs and the source proposal-evidence
+  plan no longer reports missing proposal evidence.
+
+### 2026-06-05 - Stage 17 proposal-review apply readiness reaches chat UI
+
+Roadmap area: Stage 17 / Capability Economy.
+
+Truthful change:
+
+- Added a read-only backend readiness route at
+  `GET /plugins/capabilities/library/proposal-review/apply-readiness`.
+- The readiness route composes the existing proposal-review plan,
+  proposal-evidence plan, and operator proposal-evidence intake audit to show
+  whether proposal-review receipt writing is actually unblocked.
+- The readiness route reports reviewable pack/capability counts, blocked
+  before-review counts, source proposal-evidence missing/ready counts,
+  operator-recorded evidence-ref counts, future-review requirements, bounded
+  proposal samples, route pointers, and explicit governance fields.
+- The readiness route does not apply reviews, approve proposals, write
+  proposal-review receipts, write registry metadata, promote or enable
+  capabilities, execute capabilities, or write memory.
+- The chat UI mounted-route contract now asserts the readiness route remains
+  available.
+- The plugin browser client now has typed readback support for the readiness
+  route.
+- The Plugins panel now loads the readiness gate with the proposal-review plan
+  and shows the apply gate as blocked/ready without adding a proposal-review
+  apply button.
+
+Latest validation for this readiness pass:
+
+- Focused backend proposal-review route tests:
+  `python -m pytest tests\test_api_plugins.py -k
+  "proposal_review_plan or proposal_review_apply_readiness" -q`
+  Result: 1 test passed.
+- Chat UI mounted-route contract:
+  `python -m pytest tests\test_api_contract_chat_ui.py -q`
+  Result: 1 test passed.
+- Python lint on touched API/contract files:
+  `python -m ruff check src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Python format check on touched API/contract files:
+  `python -m ruff format --check src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Focused plugin-browser client tests:
+  `node --test --experimental-strip-types src/plugin_browser/index.test.ts`
+  Result: 21 tests passed, including the new proposal-review apply-readiness
+  client path.
+- Chat UI production build:
+  `npm run build`
+  Result: passed. Vite emitted a non-fatal large chunk warning for the bundled
+  app asset.
+- Full chat UI test script:
+  `npm run test`
+  Result: 212 tests passed.
+- Local data readback through FastAPI TestClient:
+  Result: proposal-review apply readiness
+  `status=blocked_on_operator_evidence_refs`,
+  `proposal_review_apply_ready=false`,
+  `reviewable_capability_count=0`,
+  `blocked_before_review_capability_count=2265`,
+  source proposal-evidence `proposal_evidence_missing_count=2265`,
+  `proposal_evidence_ready_count=0`,
+  source operator-evidence audit `recorded_capability_count=0`, and
+  `next_smallest_truthful_gap=stage17_capability_library_operator_proposal_evidence_refs`.
+
+Validation risk:
+
+- This pass did not run a browser screenshot or Playwright visual check, so the
+  UI validation claim is client contract, TypeScript/build, and test coverage,
+  not pixel-level layout proof.
+- The readiness route is read-only except for the existing generated-plugin
+  registry sync behavior shared by adjacent readback routes. It does not write
+  operator evidence refs, proposal-review receipts, approvals, promotion
+  receipts, capability status, execution receipts, or memory.
+
+Remaining truthful gap:
+
+- Proposal-review application is explicitly blocked by the readiness gate until
+  real proposal evidence refs are supplied and the proposal-evidence plan no
+  longer reports missing evidence.
+- The next bounded Stage 17 blocker remains
+  `stage17_capability_library_operator_proposal_evidence_refs`.
+
+### 2026-06-05 - Stage 17 operator proposal-evidence worksheet reaches chat UI
+
+Roadmap area: Stage 17 / Capability Economy.
+
+Truthful change:
+
+- Added a read-only backend worksheet route at
+  `GET /plugins/capabilities/library/proposal-evidence/operator-intake/worksheet`.
+- The worksheet route composes the existing proposal-evidence plan,
+  promotion-discipline readback, and operator-intake candidate filter to produce
+  blank operator evidence slots for capabilities that are blocked exactly at
+  proposal evidence.
+- Worksheet rows preserve capability id, proposal id, missing requirements,
+  before-evidence blockers, future proposal-review requirement, the governed
+  intake apply route, and a dry-run payload hint with empty `evidence_refs`.
+- The worksheet explicitly labels operator-supplied references as friction
+  evidence references that are not independent verification.
+- The worksheet does not fabricate evidence refs, write registry metadata, write
+  proposals, approve proposals, write proposal-review receipts, promote or
+  enable capabilities, execute capabilities, or write memory.
+- The chat UI mounted-route contract now asserts the worksheet route remains
+  available.
+- The plugin browser client now has typed readback support for the worksheet
+  route.
+- The Plugins panel now loads the worksheet with the proposal-evidence intake
+  surfaces and shows the selected pack rows without adding a new mutation
+  button.
+
+Latest validation for this worksheet pass:
+
+- Focused backend operator-intake route test:
+  `python -m pytest tests\test_api_plugins.py -k
+  operator_proposal_evidence_intake -q`
+  Result: 1 test passed, covering the checklist, worksheet, governed intake
+  dry-run/apply path, and audit readback for the operator-evidence route family.
+- Chat UI mounted-route contract:
+  `python -m pytest tests\test_api_contract_chat_ui.py -q`
+  Result: 1 test passed.
+- Python lint on touched API/contract files:
+  `python -m ruff check src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Python format check on touched API/contract files:
+  `python -m ruff format --check src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Focused plugin-browser client tests:
+  `node --test --experimental-strip-types src/plugin_browser/index.test.ts`
+  Result: 22 tests passed, including the new operator proposal-evidence
+  worksheet client path.
+- Chat UI production build:
+  `npm run build`
+  Result: passed. Vite emitted the existing non-fatal large chunk warning for
+  the bundled app asset.
+- Full chat UI test script:
+  `npm run test`
+  Result: 213 tests passed.
+- Local data readback through FastAPI TestClient:
+  Result: operator proposal-evidence intake worksheet
+  `status=ready_for_operator_evidence_collection`,
+  `operator_evidence_intake_worksheet_ready=true`,
+  `worksheet_pack_count=47`, `worksheet_row_count=2265`,
+  `evidence_ref_required_count=2265`, source proposal-evidence
+  `proposal_evidence_missing_count=2265`,
+  `proposal_evidence_ready_count=0`, and
+  `next_smallest_truthful_gap=stage17_capability_library_operator_proposal_evidence_refs`.
+
+Validation risk:
+
+- This pass did not run a browser screenshot or Playwright visual check, so the
+  UI validation claim is client contract, TypeScript/build, and test coverage,
+  not pixel-level layout proof.
+- The worksheet route is read-only except for the existing generated-plugin
+  registry sync behavior shared by adjacent readback routes. It does not record
+  operator refs; the existing governed apply route remains the only intake write
+  path.
+
+Remaining truthful gap:
+
+- Stage 17 now gives the operator a concrete worksheet for collecting real
+  proposal-evidence refs, but no refs were recorded in this pass.
+- Proposal-review application and explicit promotion application remain blocked
+  until real operator evidence references are supplied and the proposal-evidence
+  plan no longer reports missing evidence.
+- The next bounded Stage 17 blocker remains
+  `stage17_capability_library_operator_proposal_evidence_refs`.
+
+### 2026-06-05 - Stage 17 operator proposal-evidence export reaches chat UI
+
+Roadmap area: Stage 17 / Capability Economy.
+
+Truthful change:
+
+- Added a read-only backend export route at
+  `GET /plugins/capabilities/library/proposal-evidence/operator-intake/export`.
+- The export route composes the same proposal-evidence plan,
+  promotion-discipline readback, and operator-intake candidate filter used by
+  the worksheet route.
+- The route returns bounded JSON export rows for collecting real
+  operator-supplied proposal-evidence references outside the UI, with blank
+  `evidence_refs_input`, proposal ids, pack/capability scope, missing
+  requirements, dry-run payload hints, and the governed intake apply route.
+- Export rows are bounded by `row_limit=5000` and report truncation explicitly.
+- The route does not fabricate evidence refs, validate evidence truth, write
+  registry metadata, write proposals, approve proposals, write proposal-review
+  receipts, promote or enable capabilities, execute capabilities, or write
+  memory.
+- The chat UI mounted-route contract now asserts the export route remains
+  available.
+- The plugin browser client now has typed readback support for the export route.
+- The Plugins panel now loads the export readback with the operator-evidence
+  surfaces and shows export totals, row limit/truncation state, selected pack
+  rows, blank evidence-input slots, and the governed apply route.
+
+Latest validation for this export pass:
+
+- Focused backend operator-intake route test:
+  `python -m pytest tests\test_api_plugins.py -k
+  operator_proposal_evidence_intake -q`
+  Result: 1 test passed, covering checklist, worksheet, export, governed
+  intake dry-run/apply path, and audit readback for the operator-evidence route
+  family.
+- Chat UI mounted-route contract:
+  `python -m pytest tests\test_api_contract_chat_ui.py -q`
+  Result: 1 test passed.
+- Python lint on touched API/contract files:
+  `python -m ruff check src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Python format check on touched API/contract files:
+  `python -m ruff format --check src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Focused plugin-browser client tests:
+  `node --test --experimental-strip-types src/plugin_browser/index.test.ts`
+  Result: 23 tests passed, including the new operator proposal-evidence export
+  client path.
+- Chat UI production build:
+  `npm run build`
+  Result: passed. Vite emitted the existing non-fatal large chunk warning for
+  the bundled app asset.
+- Full chat UI test script:
+  `npm run test`
+  Result: 214 tests passed.
+- Local data readback through FastAPI TestClient:
+  Result: operator proposal-evidence intake export
+  `status=ready_for_operator_evidence_export`,
+  `operator_evidence_intake_export_ready=true`,
+  `export_pack_count=47`, `export_row_count=2265`,
+  `exported_row_count=2265`, `evidence_ref_required_count=2265`,
+  `export_rows_truncated=false`, `row_limit=5000`, source
+  proposal-evidence `proposal_evidence_missing_count=2265`,
+  `proposal_evidence_ready_count=0`, and
+  `next_smallest_truthful_gap=stage17_capability_library_operator_proposal_evidence_refs`.
+
+Validation risk:
+
+- This pass did not run a browser screenshot or Playwright visual check, so the
+  UI validation claim is client contract, TypeScript/build, and test coverage,
+  not pixel-level layout proof.
+- The export route is read-only except for the existing generated-plugin
+  registry sync behavior shared by adjacent readback routes. It does not record
+  operator refs; the existing governed apply route remains the only intake write
+  path.
+
+Remaining truthful gap:
+
+- Stage 17 now gives the operator a bounded export for collecting real
+  proposal-evidence refs, but no refs were recorded in this pass.
+- Proposal-review application and explicit promotion application remain blocked
+  until real operator evidence references are supplied and the proposal-evidence
+  plan no longer reports missing evidence.
+- The next bounded Stage 17 blocker remains
+  `stage17_capability_library_operator_proposal_evidence_refs`.
+
+### 2026-06-05 - Stage 17 operator proposal-evidence apply requires dry-run confirmation
+
+Roadmap area: Stage 17 / Capability Economy.
+
+Truthful change:
+
+- Hardened the governed operator proposal-evidence intake apply route so
+  non-dry-run application now requires a dry-run fingerprint.
+- Dry-run responses from
+  `POST /plugins/capabilities/library/proposal-evidence/operator-intake/apply`
+  now return `dry_run_fingerprint` plus a `dry_run_confirmation` block that
+  names the fingerprint contract, planned pack/capability counts, evidence-ref
+  count, claim scope, and apply route.
+- Non-dry-run application now rejects requests that omit or mismatch the dry-run
+  fingerprint with
+  `operator_evidence_intake_dry_run_confirmation_required`, without writing
+  registry metadata.
+- Successful non-dry-run application reports that the fingerprint matched and
+  keeps the existing governance boundary: registry metadata only, no proposal
+  writes, no proposal-review receipts, no approvals, no promotions, no enables,
+  no executions, and no memory writes.
+- The plugin browser client now preserves `dry_run_fingerprint` and
+  `dry_run_confirmation`, and sends the fingerprint only when the operator
+  applies after a dry-run response.
+- The Plugins panel now requires the captured dry-run fingerprint before
+  enabling apply and surfaces the dry-run confirmation state in the intake
+  response readback.
+
+Latest validation for this dry-run confirmation pass:
+
+- Focused backend operator-intake route test:
+  `python -m pytest tests\test_api_plugins.py -k
+  operator_proposal_evidence_intake -q`
+  Result: 1 test passed, covering dry-run fingerprint emission, blocked
+  non-dry-run apply without fingerprint, unchanged metadata after the blocked
+  request, and successful apply with the echoed fingerprint.
+- Chat UI mounted-route contract:
+  `python -m pytest tests\test_api_contract_chat_ui.py -q`
+  Result: 1 test passed.
+- Python lint on touched API/contract files:
+  `python -m ruff check src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Python format check on touched API/contract files:
+  `python -m ruff format --check src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Focused plugin-browser client tests:
+  `node --test --experimental-strip-types src/plugin_browser/index.test.ts`
+  Result: 23 tests passed, including preservation and request forwarding of the
+  dry-run fingerprint.
+- Chat UI production build:
+  `npm run build`
+  Result: passed. Vite emitted the existing non-fatal large chunk warning for
+  the bundled app asset.
+- Full chat UI test script:
+  `npm run test`
+  Result: 214 tests passed.
+- Local data dry-run/blocked-apply probe through FastAPI TestClient:
+  Result: first current export row dry-run returned `status=dry_run`,
+  `applied=false`, `dry_run_fingerprint` length `64`,
+  `writes_registry_metadata=false`, and
+  `dry_run_required_before_apply=true`. The follow-up non-dry-run request
+  without the fingerprint returned `status=blocked`,
+  `error=operator_evidence_intake_dry_run_confirmation_required`,
+  `applied=false`, `writes_registry_metadata=false`, and the remaining gap
+  stayed `stage17_capability_library_operator_proposal_evidence_refs`.
+
+Validation risk:
+
+- This pass did not run a browser screenshot or Playwright visual check, so the
+  UI validation claim is client contract, TypeScript/build, and test coverage,
+  not pixel-level layout proof.
+- The dry-run fingerprint is a protocol confirmation over the planned pack,
+  capability, proposal, and evidence-ref set. It is not a cryptographic
+  authorization secret; actor scope and the existing `plugins.write` gate remain
+  the authority boundary.
+
+Remaining truthful gap:
+
+- Stage 17 now enforces dry-run confirmation before operator-evidence intake
+  apply, but no real operator proposal-evidence refs were recorded in this pass.
+- Proposal-review application and explicit promotion application remain blocked
+  until real operator evidence references are supplied and the proposal-evidence
+  plan no longer reports missing evidence.
+- The next bounded Stage 17 blocker remains
+  `stage17_capability_library_operator_proposal_evidence_refs`.
+
+### 2026-06-05 - Stage 17 operator proposal-evidence intake preview route
+
+Roadmap area: Stage 17 / Capability Economy.
+
+Truthful change:
+
+- Added
+  `POST /plugins/capabilities/library/proposal-evidence/operator-intake/preview`
+  as a read-only, authority-denying preview surface for operator-supplied
+  proposal-evidence references.
+- The preview route accepts the same bounded pack/capability selectors and
+  evidence refs as the governed apply route, returns the planned pack/capability
+  scope, and emits the same dry-run fingerprint contract without writing
+  operator evidence metadata.
+- Existing checklist, worksheet, export, audit, and proposal-review readiness
+  readbacks now advertise the preview route alongside the governed apply route.
+- The plugin browser client now has
+  `previewCapabilityLibraryOperatorProposalEvidenceIntake`, and the Plugins
+  panel "Preview selected pack" action uses that preview route before apply.
+- The apply route and its existing `plugins.write` authority boundary remain the
+  write contract. The preview fingerprint is a plan-confirmation value, not an
+  authorization secret.
+
+Latest validation for this preview pass:
+
+- Focused backend operator-intake route test:
+  `python -m pytest tests\test_api_plugins.py -k
+  operator_proposal_evidence_intake -q`
+  Result: 1 test passed, covering preview response shape, no preview metadata
+  write, preview/apply-dry-run fingerprint parity, blocked apply without
+  fingerprint, and successful apply with the echoed fingerprint.
+- Chat UI mounted-route contract:
+  `python -m pytest tests\test_api_contract_chat_ui.py -q`
+  Result: 1 test passed, including the mounted preview route.
+- Python syntax check:
+  `python -m py_compile src\francis\api\routes\plugins.py`
+  Result: passed.
+- Python lint on touched API/contract files:
+  `python -m ruff check src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Python format check on touched API/contract files:
+  `python -m ruff format --check src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Focused plugin-browser client tests:
+  `node --test --experimental-strip-types src/plugin_browser/index.test.ts`
+  Result: 24 tests passed, including preview request parsing and governance
+  readback.
+- Chat UI production build:
+  `npm run build`
+  Result: passed. Vite emitted the existing non-fatal large chunk warning for
+  the bundled app asset.
+- Full chat UI test script:
+  `npm run test`
+  Result: 215 tests passed.
+- Local data preview/dry-run probe through FastAPI TestClient:
+  Result: current export returned 2265 rows. The first row preview returned
+  `status=preview`, `applied=false`, `read_only=true`,
+  `write_authority=false`, `writes_operator_evidence_metadata=false`, and did
+  not change the selected plugin's `proposal_evidence` metadata. The follow-up
+  apply-route dry-run returned `status=dry_run`, `applied=false`; its
+  fingerprint matched the preview fingerprint and had length `64`.
+- Whitespace check:
+  `git diff --check`
+  Result: passed with the existing CRLF warning for
+  `apps/chat_ui/src/plugin_browser/index.ts`.
+
+Validation risk:
+
+- This pass did not run a browser screenshot or Playwright visual check, so the
+  UI validation claim is client contract, TypeScript/build, and test coverage,
+  not pixel-level layout proof.
+- The preview route can produce the same deterministic dry-run fingerprint as
+  apply-route dry-run for the same plan. That fingerprint still does not grant
+  write authority; non-dry-run apply remains gated by `plugins.write`.
+
+Remaining truthful gap:
+
+- No real operator proposal-evidence refs were recorded in this pass.
+- Proposal-review application and explicit promotion application remain blocked
+  until real operator evidence references are supplied and the proposal-evidence
+  plan no longer reports missing evidence.
+- The next bounded Stage 17 blocker remains
+  `stage17_capability_library_operator_proposal_evidence_refs`.
+
+### 2026-06-05 - Stage 17 operator proposal-evidence export import-preview route
+
+Roadmap area: Stage 17 / Capability Economy.
+
+Truthful change:
+
+- Added
+  `POST /plugins/capabilities/library/proposal-evidence/operator-intake/import-preview`
+  as a read-only parser for operator-filled proposal-evidence export rows.
+- The route accepts bounded rows from the existing operator-intake export shape,
+  parses `evidence_refs_input` as either a JSON array or comma/newline-separated
+  refs, and reports ready, pending, and invalid rows without writing registry
+  metadata.
+- Ready rows are grouped into pack-scoped preview/apply payload hints so
+  operators can feed real evidence refs through the existing preview and
+  governed apply routes instead of hand-assembling requests.
+- Existing operator-intake readbacks now advertise the import-preview route.
+- The plugin browser client now has
+  `previewCapabilityLibraryOperatorProposalEvidenceIntakeImport` plus contract
+  tests for ready, pending, invalid, and grouped payload readback.
+
+Latest validation for this import-preview pass:
+
+- Python syntax check:
+  `python -m py_compile src\francis\api\routes\plugins.py`
+  Result: passed.
+- Focused backend operator-intake route test:
+  `python -m pytest tests\test_api_plugins.py -k
+  operator_proposal_evidence_intake -q`
+  Result: 1 test passed, covering import-preview parsing, grouped payload
+  hints, pending blank input, invalid stale candidate rows, no metadata write,
+  preview/dry-run fingerprint parity, blocked apply without fingerprint, and
+  successful apply with the echoed fingerprint.
+- Chat UI mounted-route contract:
+  `python -m pytest tests\test_api_contract_chat_ui.py -q`
+  Result: 1 test passed, including the mounted import-preview route.
+- Python lint on touched API/contract files:
+  `python -m ruff check src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Python format check on touched API/contract files:
+  `python -m ruff format --check src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_contract_chat_ui.py`
+  Result: passed after formatting `src\francis\api\routes\plugins.py` and
+  `tests\test_api_plugins.py`.
+- Focused plugin-browser client tests:
+  `node --test --experimental-strip-types src/plugin_browser/index.test.ts`
+  Result: 25 tests passed, including import-preview request parsing and
+  governance readback.
+- Chat UI production build:
+  `npm run build`
+  Result: passed. Vite emitted the existing non-fatal large chunk warning for
+  the bundled app asset.
+- Full chat UI test script:
+  `npm run test`
+  Result: 216 tests passed.
+- Local data import-preview probe through FastAPI TestClient:
+  Result: current export returned 2265 rows. Filling the first row with
+  `operator.case.live.import.preview` produced
+  `status=ready_for_operator_evidence_import_preview`, `ready_row_count=1`,
+  `pending_row_count=0`, `invalid_row_count=0`, `apply_group_count=1`,
+  preview/apply route hints, `read_only=true`, `write_authority=false`, and no
+  change to the selected plugin's `proposal_evidence` metadata.
+
+Validation risk:
+
+- This pass did not run a browser screenshot or Playwright visual check, so the
+  UI validation claim is client contract, TypeScript/build, and test coverage,
+  not pixel-level layout proof.
+- The import-preview route parses and groups operator-supplied refs, but it does
+  not validate evidence truth and does not record refs. Non-dry-run apply still
+  requires the existing dry-run fingerprint and `plugins.write` authority.
+
+Remaining truthful gap:
+
+- No real operator proposal-evidence refs were recorded in this pass.
+- Proposal-review application and explicit promotion application remain blocked
+  until real operator evidence references are supplied and the proposal-evidence
+  plan no longer reports missing evidence.
+- The next bounded Stage 17 blocker remains
+  `stage17_capability_library_operator_proposal_evidence_refs`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -34,6 +34,7 @@
  *  - GET    /plugins/capabilities/packs/operator/review
  *  - GET    /plugins/capabilities/packs/operator/review/decisions
  *  - POST   /plugins/capabilities/packs/operator/review/decisions
+ *  - POST   /plugins/capabilities/packs/operator/review/decisions/bulk-from-surface
  *
  * Notes
  * -----
@@ -635,6 +636,8 @@ export type PluginCapabilityPackOperatorReviewResponse = {
   blocked_pack_count?: number;
   decision_required_pack_count?: number;
   review_queue_count?: number;
+  pending_review_queue_count?: number;
+  decision_recorded_pack_count?: number;
   packs: PluginCapabilityPackOperatorReviewPack[];
   decision_routes?: Record<string, string>;
   requirements?: Record<string, boolean>;
@@ -728,6 +731,683 @@ export type PluginCapabilityPackPromotionRuleRemediationResponse = {
   catalog?: Record<string, unknown>;
 };
 
+export type PluginCapabilityLibraryProposalEvidenceCapability = {
+  capability: string;
+  status?: string;
+  proposal_id?: string;
+  proposal_review_status?: string;
+  proposal_review_receipt_id?: string;
+  proposal_evidence_ready?: boolean;
+  proposal_evidence_missing?: boolean;
+  proposal_evidence?: unknown[];
+  linked_proposal_artifact_evidence?: unknown[];
+  evidence_source?: string;
+  missing_requirements?: string[];
+  blockers_before_evidence?: string[];
+};
+
+export type PluginCapabilityLibraryProposalEvidencePack = {
+  pack_id: string;
+  pack_version: string;
+  pack_name?: string;
+  staged_capability_count?: number;
+  proposal_evidence_missing_count?: number;
+  proposal_evidence_ready_count?: number;
+  blocked_before_evidence_count?: number;
+  capabilities: PluginCapabilityLibraryProposalEvidenceCapability[];
+  capabilities_truncated?: boolean;
+};
+
+export type PluginCapabilityLibraryProposalEvidencePlanResponse = {
+  ok: boolean;
+  kind?: string;
+  stage?: string;
+  status?: string;
+  proposal_evidence_plan_ready?: boolean;
+  pack_total?: number;
+  ready_pack_count?: number;
+  blocked_pack_count?: number;
+  candidate_pack_count?: number;
+  candidate_capability_count?: number;
+  unique_proposal_count?: number;
+  proposal_evidence_missing_count?: number;
+  proposal_evidence_ready_count?: number;
+  missing_proposal_evidence_count?: number;
+  evidence_ready_proposal_count?: number;
+  proposal_id_missing_count?: number;
+  proposal_review_missing_count?: number;
+  blocked_before_evidence_count?: number;
+  missing_requirement_counts?: Record<string, number>;
+  packs: PluginCapabilityLibraryProposalEvidencePack[];
+  packs_truncated?: boolean;
+  capability_preview_limit?: number;
+  routes?: Record<string, string>;
+  requirements?: Record<string, boolean>;
+  governance?: Record<string, unknown>;
+  next_smallest_truthful_gap?: string;
+  catalog?: Record<string, unknown>;
+};
+
+export type PluginCapabilityLibraryPromotionCapability = {
+  capability: string;
+  status?: string;
+  enabled?: boolean;
+  promotion_ready?: boolean;
+  missing_requirements?: string[];
+  proposal_id?: string;
+  proposal_review_status?: string;
+  proposal_review_receipt_id?: string;
+  validation_receipt_id?: string;
+  pack_operator_review_required?: boolean;
+  pack_operator_review_status?: string;
+  pack_operator_review_receipt_id?: string;
+  promotion_route?: string;
+  promotion_would_write_receipt?: boolean;
+  promotion_would_enable_capability?: boolean;
+};
+
+export type PluginCapabilityLibraryPromotionPack = {
+  pack_id: string;
+  pack_version: string;
+  pack_name?: string;
+  staged_capability_count?: number;
+  promotable_capability_count?: number;
+  blocked_capability_count?: number;
+  capabilities: PluginCapabilityLibraryPromotionCapability[];
+  capabilities_truncated?: boolean;
+};
+
+export type PluginCapabilityLibraryPromotionPlanResponse = {
+  ok: boolean;
+  kind?: string;
+  stage?: string;
+  status?: string;
+  promotion_plan_ready?: boolean;
+  pack_total?: number;
+  ready_pack_count?: number;
+  blocked_pack_count?: number;
+  candidate_pack_count?: number;
+  candidate_capability_count?: number;
+  promotable_capability_count?: number;
+  blocked_capability_count?: number;
+  missing_requirement_counts?: Record<string, number>;
+  packs: PluginCapabilityLibraryPromotionPack[];
+  packs_truncated?: boolean;
+  capability_preview_limit?: number;
+  routes?: Record<string, string>;
+  requirements?: Record<string, boolean>;
+  governance?: Record<string, unknown>;
+  next_smallest_truthful_gap?: string;
+  catalog?: Record<string, unknown>;
+};
+
+export type PluginCapabilityLibraryProposalReviewProposal = {
+  capability: string;
+  status?: string;
+  proposal_id?: string;
+  proposal_review_status?: string;
+  proposal_review_receipt_id?: string;
+  proposal_review_missing?: boolean;
+  review_ready?: boolean;
+  approved_review?: boolean;
+  missing_requirements?: string[];
+  blockers_before_review?: string[];
+  proposal_review_route?: string;
+  proposal_review_would_write_receipt?: boolean;
+  proposal_review_would_promote_capability?: boolean;
+  proposal_review_would_enable_capability?: boolean;
+};
+
+export type PluginCapabilityLibraryProposalReviewPack = {
+  pack_id: string;
+  pack_version: string;
+  pack_name?: string;
+  staged_capability_count?: number;
+  reviewable_capability_count?: number;
+  blocked_before_review_capability_count?: number;
+  approved_proposal_review_count?: number;
+  proposals: PluginCapabilityLibraryProposalReviewProposal[];
+  proposals_truncated?: boolean;
+};
+
+export type PluginCapabilityLibraryProposalReviewPlanResponse = {
+  ok: boolean;
+  kind?: string;
+  stage?: string;
+  status?: string;
+  proposal_review_plan_ready?: boolean;
+  pack_total?: number;
+  ready_pack_count?: number;
+  blocked_pack_count?: number;
+  candidate_pack_count?: number;
+  candidate_capability_count?: number;
+  unique_proposal_count?: number;
+  proposal_review_missing_count?: number;
+  approved_proposal_review_count?: number;
+  reviewable_capability_count?: number;
+  reviewable_proposal_count?: number;
+  blocked_before_review_capability_count?: number;
+  blocked_proposal_count?: number;
+  approved_proposal_count?: number;
+  missing_requirement_counts?: Record<string, number>;
+  packs: PluginCapabilityLibraryProposalReviewPack[];
+  packs_truncated?: boolean;
+  proposal_preview_limit?: number;
+  routes?: Record<string, string>;
+  requirements?: Record<string, boolean>;
+  governance?: Record<string, unknown>;
+  next_smallest_truthful_gap?: string;
+  catalog?: Record<string, unknown>;
+};
+
+export type PluginCapabilityLibraryProposalReviewApplyReadinessEvidenceSource = {
+  status?: string;
+  proposal_evidence_missing_count?: number;
+  proposal_evidence_ready_count?: number;
+  proposal_review_missing_count?: number;
+  next_smallest_truthful_gap?: string;
+};
+
+export type PluginCapabilityLibraryProposalReviewApplyReadinessOperatorAudit = {
+  status?: string;
+  operator_evidence_intake_audit_ready?: boolean;
+  recorded_pack_count?: number;
+  recorded_capability_count?: number;
+  evidence_ref_count?: number;
+  future_review_required_count?: number;
+  next_smallest_truthful_gap?: string;
+};
+
+export type PluginCapabilityLibraryProposalReviewApplyReadinessReviewSource = {
+  status?: string;
+  proposal_review_plan_ready?: boolean;
+  candidate_capability_count?: number;
+  reviewable_capability_count?: number;
+  blocked_before_review_capability_count?: number;
+  proposal_review_missing_count?: number;
+  approved_proposal_review_count?: number;
+  next_smallest_truthful_gap?: string;
+};
+
+export type PluginCapabilityLibraryProposalReviewApplyReadinessResponse = {
+  ok: boolean;
+  kind?: string;
+  stage?: string;
+  status?: string;
+  proposal_review_apply_ready?: boolean;
+  reviewable_pack_count?: number;
+  blocked_pack_count?: number;
+  reviewable_capability_count?: number;
+  proposal_review_missing_count?: number;
+  blocked_before_review_capability_count?: number;
+  approved_proposal_review_count?: number;
+  source_proposal_evidence_plan?: PluginCapabilityLibraryProposalReviewApplyReadinessEvidenceSource;
+  source_operator_evidence_intake_audit?: PluginCapabilityLibraryProposalReviewApplyReadinessOperatorAudit;
+  source_proposal_review_plan?: PluginCapabilityLibraryProposalReviewApplyReadinessReviewSource;
+  packs: PluginCapabilityLibraryProposalReviewPack[];
+  packs_truncated?: boolean;
+  routes?: Record<string, string>;
+  requirements?: Record<string, boolean>;
+  governance?: Record<string, unknown>;
+  next_smallest_truthful_gap?: string;
+  catalog?: Record<string, unknown>;
+};
+
+export type PluginCapabilityLibraryProposalEvidenceRemediationCapability = {
+  capability: string;
+  status?: string;
+  proposal_id?: string;
+  metadata_proposal_evidence?: unknown[];
+  linked_proposal_artifact_evidence?: unknown[];
+  evidence_source?: string;
+  writes_registry_metadata?: boolean;
+  writes_proposals?: boolean;
+  approves_proposals?: boolean;
+  promotes_capability?: boolean;
+};
+
+export type PluginCapabilityLibraryProposalEvidenceRemediationPack = {
+  pack_id: string;
+  pack_version: string;
+  pack_name?: string;
+  staged_capability_count?: number;
+  candidate_capability_count?: number;
+  capabilities: PluginCapabilityLibraryProposalEvidenceRemediationCapability[];
+  capabilities_truncated?: boolean;
+};
+
+export type PluginCapabilityLibraryProposalEvidenceRemediationSourcePlan = {
+  status?: string;
+  candidate_capability_count?: number;
+  proposal_evidence_missing_count?: number;
+  proposal_evidence_ready_count?: number;
+  proposal_review_missing_count?: number;
+  next_smallest_truthful_gap?: string;
+};
+
+export type PluginCapabilityLibraryProposalEvidenceRemediationResponse = {
+  ok: boolean;
+  kind?: string;
+  stage?: string;
+  status?: string;
+  proposal_evidence_remediation_ready?: boolean;
+  pack_total?: number;
+  ready_pack_count?: number;
+  blocked_pack_count?: number;
+  candidate_pack_count?: number;
+  candidate_capability_count?: number;
+  existing_metadata_evidence_count?: number;
+  proposal_id_missing_count?: number;
+  plugin_record_missing_count?: number;
+  source_proposal_evidence_plan?: PluginCapabilityLibraryProposalEvidenceRemediationSourcePlan;
+  packs: PluginCapabilityLibraryProposalEvidenceRemediationPack[];
+  packs_truncated?: boolean;
+  capability_preview_limit?: number;
+  routes?: Record<string, string>;
+  requirements?: Record<string, boolean>;
+  governance?: Record<string, unknown>;
+  next_smallest_truthful_gap?: string;
+  catalog?: Record<string, unknown>;
+};
+
+export type PluginCapabilityLibraryOperatorProposalEvidenceIntakeChecklistCapability = {
+  capability: string;
+  status?: string;
+  proposal_id?: string;
+  proposal_review_status?: string;
+  proposal_review_receipt_id?: string;
+  missing_requirements?: string[];
+  blockers_before_evidence?: string[];
+  evidence_refs_required?: boolean;
+  operator_supplied_evidence_not_independently_verified?: boolean;
+  intake_apply_route?: string;
+};
+
+export type PluginCapabilityLibraryOperatorProposalEvidenceIntakeChecklistPack = {
+  pack_id: string;
+  pack_version: string;
+  pack_name?: string;
+  staged_capability_count?: number;
+  candidate_capability_count?: number;
+  evidence_ref_required_count?: number;
+  claim_scope?: string;
+  capabilities: PluginCapabilityLibraryOperatorProposalEvidenceIntakeChecklistCapability[];
+  capabilities_truncated?: boolean;
+};
+
+export type PluginCapabilityLibraryOperatorProposalEvidenceIntakeChecklistSourcePlan = {
+  status?: string;
+  candidate_capability_count?: number;
+  proposal_evidence_missing_count?: number;
+  proposal_evidence_ready_count?: number;
+  proposal_review_missing_count?: number;
+  next_smallest_truthful_gap?: string;
+};
+
+export type PluginCapabilityLibraryOperatorProposalEvidenceIntakeChecklistResponse = {
+  ok: boolean;
+  kind?: string;
+  stage?: string;
+  status?: string;
+  operator_evidence_intake_checklist_ready?: boolean;
+  candidate_pack_count?: number;
+  candidate_capability_count?: number;
+  evidence_ref_required_count?: number;
+  source_proposal_evidence_plan?: PluginCapabilityLibraryOperatorProposalEvidenceIntakeChecklistSourcePlan;
+  packs: PluginCapabilityLibraryOperatorProposalEvidenceIntakeChecklistPack[];
+  packs_truncated?: boolean;
+  capability_preview_limit?: number;
+  routes?: Record<string, string>;
+  requirements?: Record<string, boolean>;
+  governance?: Record<string, unknown>;
+  next_smallest_truthful_gap?: string;
+  catalog?: Record<string, unknown>;
+};
+
+export type PluginCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetPayloadHint = {
+  pack_ids?: string[];
+  capability_ids?: string[];
+  evidence_refs?: string[];
+  dry_run?: boolean;
+};
+
+export type PluginCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetRow = {
+  capability: string;
+  status?: string;
+  proposal_id?: string;
+  proposal_review_status?: string;
+  proposal_review_receipt_id?: string;
+  missing_requirements?: string[];
+  blockers_before_evidence?: string[];
+  operator_evidence_refs?: string[];
+  operator_evidence_ref_count?: number;
+  operator_evidence_refs_required?: boolean;
+  evidence_ref_collection_status?: string;
+  claim_scope?: string;
+  apply_payload_hint?: PluginCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetPayloadHint;
+  operator_supplied_evidence_not_independently_verified?: boolean;
+  requires_future_proposal_review?: boolean;
+  intake_apply_route?: string;
+};
+
+export type PluginCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetPack = {
+  pack_id: string;
+  pack_version: string;
+  pack_name?: string;
+  staged_capability_count?: number;
+  worksheet_row_count?: number;
+  evidence_ref_required_count?: number;
+  claim_scope?: string;
+  rows: PluginCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetRow[];
+  rows_truncated?: boolean;
+};
+
+export type PluginCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetSourcePlan = {
+  status?: string;
+  candidate_capability_count?: number;
+  proposal_evidence_missing_count?: number;
+  proposal_evidence_ready_count?: number;
+  proposal_review_missing_count?: number;
+  next_smallest_truthful_gap?: string;
+};
+
+export type PluginCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetResponse = {
+  ok: boolean;
+  kind?: string;
+  stage?: string;
+  status?: string;
+  operator_evidence_intake_worksheet_ready?: boolean;
+  worksheet_pack_count?: number;
+  worksheet_row_count?: number;
+  evidence_ref_required_count?: number;
+  source_proposal_evidence_plan?: PluginCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetSourcePlan;
+  packs: PluginCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetPack[];
+  packs_truncated?: boolean;
+  row_preview_limit?: number;
+  routes?: Record<string, string>;
+  requirements?: Record<string, boolean>;
+  governance?: Record<string, unknown>;
+  next_smallest_truthful_gap?: string;
+  catalog?: Record<string, unknown>;
+};
+
+export type PluginCapabilityLibraryOperatorProposalEvidenceIntakeExportRow = {
+  pack_id?: string;
+  pack_version?: string;
+  pack_name?: string;
+  capability: string;
+  status?: string;
+  proposal_id?: string;
+  proposal_review_status?: string;
+  proposal_review_receipt_id?: string;
+  missing_requirements?: string[];
+  blockers_before_evidence?: string[];
+  evidence_refs_input?: string;
+  evidence_refs_input_format?: string;
+  operator_evidence_refs_required?: boolean;
+  evidence_ref_collection_status?: string;
+  claim_scope?: string;
+  dry_run_required?: boolean;
+  apply_payload_hint?: PluginCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetPayloadHint;
+  operator_supplied_evidence_not_independently_verified?: boolean;
+  requires_future_proposal_review?: boolean;
+  intake_apply_route?: string;
+};
+
+export type PluginCapabilityLibraryOperatorProposalEvidenceIntakeExportPack = {
+  pack_id: string;
+  pack_version: string;
+  pack_name?: string;
+  staged_capability_count?: number;
+  export_row_count?: number;
+  exported_row_count?: number;
+  evidence_ref_required_count?: number;
+  claim_scope?: string;
+  rows: PluginCapabilityLibraryOperatorProposalEvidenceIntakeExportRow[];
+  rows_truncated?: boolean;
+};
+
+export type PluginCapabilityLibraryOperatorProposalEvidenceIntakeExportSourcePlan = {
+  status?: string;
+  candidate_capability_count?: number;
+  proposal_evidence_missing_count?: number;
+  proposal_evidence_ready_count?: number;
+  proposal_review_missing_count?: number;
+  next_smallest_truthful_gap?: string;
+};
+
+export type PluginCapabilityLibraryOperatorProposalEvidenceIntakeExportResponse = {
+  ok: boolean;
+  kind?: string;
+  stage?: string;
+  status?: string;
+  operator_evidence_intake_export_ready?: boolean;
+  export_pack_count?: number;
+  export_row_count?: number;
+  exported_row_count?: number;
+  evidence_ref_required_count?: number;
+  export_rows_truncated?: boolean;
+  row_limit?: number;
+  source_proposal_evidence_plan?: PluginCapabilityLibraryOperatorProposalEvidenceIntakeExportSourcePlan;
+  export_schema?: Record<string, unknown>;
+  packs: PluginCapabilityLibraryOperatorProposalEvidenceIntakeExportPack[];
+  packs_truncated?: boolean;
+  routes?: Record<string, string>;
+  requirements?: Record<string, boolean>;
+  governance?: Record<string, unknown>;
+  next_smallest_truthful_gap?: string;
+  catalog?: Record<string, unknown>;
+};
+
+export type PluginCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewRequest = {
+  actor?: string;
+  rows: Array<Record<string, unknown>>;
+  max_row_count?: number;
+  max_apply_group_count?: number;
+  meta?: Record<string, unknown>;
+};
+
+export type PluginCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewRow = {
+  row_index: number;
+  pack_id?: string;
+  pack_version?: string;
+  capability?: string;
+  proposal_id?: string;
+  status?: string;
+  error?: string;
+  evidence_refs?: string[];
+  evidence_ref_count?: number;
+};
+
+export type PluginCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewGroup = {
+  pack_id: string;
+  pack_version?: string;
+  capability_count?: number;
+  evidence_ref_count?: number;
+  row_indexes?: number[];
+  row_indexes_truncated?: boolean;
+  preview_payload?: PluginCapabilityLibraryOperatorProposalEvidenceIntakeRequest;
+  apply_payload_hint?: PluginCapabilityLibraryOperatorProposalEvidenceIntakeRequest & {
+    dry_run_fingerprint_required?: boolean;
+  };
+  preview_route?: string;
+  apply_route?: string;
+};
+
+export type PluginCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewResponse = {
+  ok: boolean;
+  kind?: string;
+  stage?: string;
+  status?: string;
+  operator_evidence_intake_import_preview_ready?: boolean;
+  input_row_count?: number;
+  processed_row_count?: number;
+  row_input_truncated?: boolean;
+  ready_row_count?: number;
+  pending_row_count?: number;
+  invalid_row_count?: number;
+  apply_group_count?: number;
+  apply_groups_truncated?: boolean;
+  row_limit?: number;
+  apply_group_limit?: number;
+  ready_rows?: PluginCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewRow[];
+  ready_rows_truncated?: boolean;
+  pending_rows?: PluginCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewRow[];
+  pending_rows_truncated?: boolean;
+  invalid_rows?: PluginCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewRow[];
+  invalid_rows_truncated?: boolean;
+  apply_payload_groups?: PluginCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewGroup[];
+  source_proposal_evidence_plan?: PluginCapabilityLibraryOperatorProposalEvidenceIntakeExportSourcePlan;
+  routes?: Record<string, string>;
+  requirements?: Record<string, boolean>;
+  governance?: Record<string, unknown>;
+  next_smallest_truthful_gap?: string;
+  catalog?: Record<string, unknown>;
+};
+
+export type PluginCapabilityLibraryOperatorProposalEvidenceIntakeAuditCapability = {
+  capability: string;
+  status?: string;
+  proposal_id?: string;
+  evidence_ref_count?: number;
+  evidence_refs?: string[];
+  evidence_refs_truncated?: boolean;
+  claim_scope?: string;
+  operator_intake_actor?: string;
+  operator_intake_reason?: string;
+  operator_intake_ts?: number;
+  operator_intake_route?: string;
+  operator_supplied_evidence_not_independently_verified?: boolean;
+  requires_future_proposal_review?: boolean;
+  writes_proposals?: boolean;
+  approval_claimed?: boolean;
+};
+
+export type PluginCapabilityLibraryOperatorProposalEvidenceIntakeAuditPack = {
+  pack_id: string;
+  pack_version: string;
+  pack_name?: string;
+  staged_capability_count?: number;
+  recorded_capability_count?: number;
+  evidence_ref_count?: number;
+  claim_scope?: string;
+  capabilities: PluginCapabilityLibraryOperatorProposalEvidenceIntakeAuditCapability[];
+  capabilities_truncated?: boolean;
+};
+
+export type PluginCapabilityLibraryOperatorProposalEvidenceIntakeAuditSourcePlan = {
+  status?: string;
+  candidate_capability_count?: number;
+  proposal_evidence_missing_count?: number;
+  proposal_evidence_ready_count?: number;
+  proposal_review_missing_count?: number;
+  next_smallest_truthful_gap?: string;
+};
+
+export type PluginCapabilityLibraryOperatorProposalEvidenceIntakeAuditResponse = {
+  ok: boolean;
+  kind?: string;
+  stage?: string;
+  status?: string;
+  operator_evidence_intake_audit_ready?: boolean;
+  recorded_pack_count?: number;
+  recorded_capability_count?: number;
+  evidence_ref_count?: number;
+  future_review_required_count?: number;
+  source_proposal_evidence_plan?: PluginCapabilityLibraryOperatorProposalEvidenceIntakeAuditSourcePlan;
+  packs: PluginCapabilityLibraryOperatorProposalEvidenceIntakeAuditPack[];
+  packs_truncated?: boolean;
+  capability_preview_limit?: number;
+  routes?: Record<string, string>;
+  requirements?: Record<string, boolean>;
+  governance?: Record<string, unknown>;
+  next_smallest_truthful_gap?: string;
+  catalog?: Record<string, unknown>;
+};
+
+export type PluginCapabilityLibraryOperatorProposalEvidenceIntakeRequest = {
+  actor?: string;
+  reason?: string;
+  pack_ids?: string[];
+  capability_ids?: string[];
+  evidence_refs: string[];
+  max_pack_count?: number;
+  max_total_capability_count?: number;
+  max_capability_count_per_pack?: number;
+  dry_run?: boolean;
+  dry_run_fingerprint?: string;
+  meta?: Record<string, unknown>;
+};
+
+export type PluginCapabilityLibraryOperatorProposalEvidenceIntakeCapability = {
+  capability: string;
+  proposal_id?: string;
+  missing_requirements?: string[];
+};
+
+export type PluginCapabilityLibraryOperatorProposalEvidenceIntakePlan = {
+  pack_id: string;
+  pack_version: string;
+  pack_name?: string;
+  capability_count?: number;
+  evidence_ref_count?: number;
+  claim_scope?: string;
+  capabilities?: PluginCapabilityLibraryOperatorProposalEvidenceIntakeCapability[];
+  writes_registry_metadata?: boolean;
+  writes_proposals?: boolean;
+  approves_proposals?: boolean;
+  promotes_capabilities?: boolean;
+  enables_capabilities?: boolean;
+};
+
+export type PluginCapabilityLibraryOperatorProposalEvidenceIntakeRecord = {
+  pack_id: string;
+  pack_version: string;
+  pack_name?: string;
+  capability_count?: number;
+  changed_capability_count?: number;
+  changed_capability_ids?: string[];
+  changed_capability_ids_truncated?: boolean;
+  evidence_ref_count?: number;
+  claim_scope?: string;
+  writes_registry_metadata?: boolean;
+  writes_proposals?: boolean;
+  approves_proposals?: boolean;
+  promotes_capabilities?: boolean;
+  enables_capabilities?: boolean;
+  status?: string;
+  error?: string;
+  capabilities?: unknown[];
+};
+
+export type PluginCapabilityLibraryOperatorProposalEvidenceIntakeResponse = {
+  ok: boolean;
+  applied?: boolean;
+  kind?: string;
+  status?: string;
+  dry_run?: boolean;
+  error?: string;
+  planned_pack_count?: number;
+  planned_capability_count?: number;
+  evidence_ref_count?: number;
+  recorded_pack_count?: number;
+  recorded_capability_count?: number;
+  candidate_total?: number;
+  limit?: number;
+  capability_count?: number;
+  dry_run_fingerprint?: string;
+  dry_run_confirmation?: Record<string, unknown>;
+  planned?: PluginCapabilityLibraryOperatorProposalEvidenceIntakePlan[];
+  recorded?: PluginCapabilityLibraryOperatorProposalEvidenceIntakeRecord[];
+  failed?: PluginCapabilityLibraryOperatorProposalEvidenceIntakeRecord[];
+  skipped?: PluginCapabilityLibraryOperatorProposalEvidenceIntakeRecord[];
+  before?: Record<string, unknown>;
+  remaining_proposal_evidence_missing_count?: number;
+  remaining_proposal_evidence_ready_count?: number;
+  next_smallest_truthful_gap?: string;
+  governance?: Record<string, unknown>;
+};
+
 export type PluginCapabilityPackOperatorReviewDecision = {
   id: string;
   receipt_id: string;
@@ -791,6 +1471,67 @@ export type PluginCapabilityPackOperatorReviewDecisionResponse = {
   receipt_path?: string;
   receipt?: PluginCapabilityPackOperatorReviewDecision;
   pack?: PluginCapabilityPackOperatorReviewPack;
+  governance?: Record<string, unknown>;
+};
+
+export type PluginCapabilityPackOperatorReviewBulkDecisionRequest = {
+  action: PluginCapabilityPackOperatorReviewDecisionAction;
+  actor?: string;
+  reason?: string;
+  notes?: string;
+  pack_ids?: string[];
+  max_pack_count?: number;
+  max_total_capability_count?: number;
+  dry_run?: boolean;
+  meta?: Record<string, unknown>;
+};
+
+export type PluginCapabilityPackOperatorReviewBulkDecisionPlan = {
+  pack_id: string;
+  pack_version: string;
+  pack_name?: string;
+  action?: string;
+  decision_status?: string;
+  capability_count?: number;
+  staged_capability_count?: number;
+  quality_evidence_ready?: boolean;
+  proposal_lineage_ready?: boolean;
+  validation_receipts_ready?: boolean;
+  operator_review_rule_declared?: boolean;
+  operator_review_governance_declared?: boolean;
+  writes_receipt?: boolean;
+};
+
+export type PluginCapabilityPackOperatorReviewBulkDecisionRecord = {
+  pack_id: string;
+  pack_version: string;
+  receipt_id?: string;
+  receipt_path?: string;
+  capability_count?: number;
+  status?: string;
+  error?: string;
+};
+
+export type PluginCapabilityPackOperatorReviewBulkDecisionResponse = {
+  ok: boolean;
+  applied?: boolean;
+  kind?: string;
+  status?: string;
+  dry_run?: boolean;
+  error?: string;
+  allowed_actions?: string[];
+  batch_id?: string;
+  planned_pack_count?: number;
+  planned_capability_count?: number;
+  recorded_pack_count?: number;
+  recorded_capability_count?: number;
+  planned?: PluginCapabilityPackOperatorReviewBulkDecisionPlan[];
+  recorded?: PluginCapabilityPackOperatorReviewBulkDecisionRecord[];
+  failed?: PluginCapabilityPackOperatorReviewBulkDecisionRecord[];
+  skipped?: PluginCapabilityPackOperatorReviewBulkDecisionRecord[];
+  before?: Record<string, unknown>;
+  promotion_discipline?: Record<string, unknown>;
+  next_smallest_truthful_gap?: string;
   governance?: Record<string, unknown>;
 };
 
@@ -1655,6 +2396,889 @@ function parseCapabilityPackPromotionRuleRemediationItem(
   return item;
 }
 
+function parseCapabilityLibraryProposalEvidenceCapability(
+  raw: unknown,
+): PluginCapabilityLibraryProposalEvidenceCapability | null {
+  if (!isRecord(raw)) return null;
+
+  const capability = safeString(raw.capability, safeString(raw.id, "")).trim();
+  if (!capability) return null;
+
+  const item: PluginCapabilityLibraryProposalEvidenceCapability = { capability };
+  const status = safeString(raw.status, "");
+  const proposalId = safeString(raw.proposal_id, safeString(raw.proposalId, ""));
+  const proposalReviewStatus = safeString(raw.proposal_review_status, safeString(raw.proposalReviewStatus, ""));
+  const proposalReviewReceiptId = safeString(
+    raw.proposal_review_receipt_id,
+    safeString(raw.proposalReviewReceiptId, ""),
+  );
+  const evidenceSource = safeString(raw.evidence_source, safeString(raw.evidenceSource, ""));
+  const proposalEvidence = safeUnknownArray(raw.proposal_evidence);
+  const linkedProposalArtifactEvidence = safeUnknownArray(raw.linked_proposal_artifact_evidence);
+  const missingRequirements = safeStringArray(raw.missing_requirements);
+  const blockersBeforeEvidence = safeStringArray(raw.blockers_before_evidence);
+  if (status) item.status = status;
+  if (proposalId) item.proposal_id = proposalId;
+  if (proposalReviewStatus) item.proposal_review_status = proposalReviewStatus;
+  if (proposalReviewReceiptId) item.proposal_review_receipt_id = proposalReviewReceiptId;
+  if (typeof raw.proposal_evidence_ready === "boolean") item.proposal_evidence_ready = raw.proposal_evidence_ready;
+  if (typeof raw.proposal_evidence_missing === "boolean") {
+    item.proposal_evidence_missing = raw.proposal_evidence_missing;
+  }
+  if (proposalEvidence) item.proposal_evidence = proposalEvidence;
+  if (linkedProposalArtifactEvidence) item.linked_proposal_artifact_evidence = linkedProposalArtifactEvidence;
+  if (evidenceSource) item.evidence_source = evidenceSource;
+  if (missingRequirements) item.missing_requirements = missingRequirements;
+  if (blockersBeforeEvidence) item.blockers_before_evidence = blockersBeforeEvidence;
+  return item;
+}
+
+function parseCapabilityLibraryProposalEvidencePack(
+  raw: unknown,
+): PluginCapabilityLibraryProposalEvidencePack | null {
+  if (!isRecord(raw)) return null;
+
+  const packId = safeString(raw.pack_id, safeString(raw.packId, "")).trim();
+  const packVersion = safeString(raw.pack_version, safeString(raw.packVersion, "")).trim();
+  if (!packId || !packVersion) return null;
+
+  const rawCapabilities = safeUnknownArray(raw.capabilities) ?? [];
+  const capabilities = rawCapabilities
+    .map(parseCapabilityLibraryProposalEvidenceCapability)
+    .filter((entry): entry is PluginCapabilityLibraryProposalEvidenceCapability => entry !== null);
+  const pack: PluginCapabilityLibraryProposalEvidencePack = {
+    pack_id: packId,
+    pack_version: packVersion,
+    capabilities,
+  };
+  const packName = safeString(raw.pack_name, safeString(raw.packName, ""));
+  if (packName) pack.pack_name = packName;
+  if (Number.isFinite(safeNumber(raw.staged_capability_count, NaN))) {
+    pack.staged_capability_count = safeNumber(raw.staged_capability_count);
+  }
+  if (Number.isFinite(safeNumber(raw.proposal_evidence_missing_count, NaN))) {
+    pack.proposal_evidence_missing_count = safeNumber(raw.proposal_evidence_missing_count);
+  }
+  if (Number.isFinite(safeNumber(raw.proposal_evidence_ready_count, NaN))) {
+    pack.proposal_evidence_ready_count = safeNumber(raw.proposal_evidence_ready_count);
+  }
+  if (Number.isFinite(safeNumber(raw.blocked_before_evidence_count, NaN))) {
+    pack.blocked_before_evidence_count = safeNumber(raw.blocked_before_evidence_count);
+  }
+  if (typeof raw.capabilities_truncated === "boolean") pack.capabilities_truncated = raw.capabilities_truncated;
+  return pack;
+}
+
+function parseCapabilityLibraryPromotionCapability(raw: unknown): PluginCapabilityLibraryPromotionCapability | null {
+  if (!isRecord(raw)) return null;
+
+  const capability = safeString(raw.capability, safeString(raw.id, "")).trim();
+  if (!capability) return null;
+
+  const item: PluginCapabilityLibraryPromotionCapability = { capability };
+  const status = safeString(raw.status, "");
+  const proposalId = safeString(raw.proposal_id, safeString(raw.proposalId, ""));
+  const proposalReviewStatus = safeString(raw.proposal_review_status, safeString(raw.proposalReviewStatus, ""));
+  const proposalReviewReceiptId = safeString(
+    raw.proposal_review_receipt_id,
+    safeString(raw.proposalReviewReceiptId, ""),
+  );
+  const validationReceiptId = safeString(raw.validation_receipt_id, safeString(raw.validationReceiptId, ""));
+  const packOperatorReviewStatus = safeString(
+    raw.pack_operator_review_status,
+    safeString(raw.packOperatorReviewStatus, ""),
+  );
+  const packOperatorReviewReceiptId = safeString(
+    raw.pack_operator_review_receipt_id,
+    safeString(raw.packOperatorReviewReceiptId, ""),
+  );
+  const promotionRoute = safeString(raw.promotion_route, safeString(raw.promotionRoute, ""));
+  const missingRequirements = safeStringArray(raw.missing_requirements);
+  if (status) item.status = status;
+  if (typeof raw.enabled === "boolean") item.enabled = raw.enabled;
+  if (typeof raw.promotion_ready === "boolean") item.promotion_ready = raw.promotion_ready;
+  if (missingRequirements) item.missing_requirements = missingRequirements;
+  if (proposalId) item.proposal_id = proposalId;
+  if (proposalReviewStatus) item.proposal_review_status = proposalReviewStatus;
+  if (proposalReviewReceiptId) item.proposal_review_receipt_id = proposalReviewReceiptId;
+  if (validationReceiptId) item.validation_receipt_id = validationReceiptId;
+  if (typeof raw.pack_operator_review_required === "boolean") {
+    item.pack_operator_review_required = raw.pack_operator_review_required;
+  }
+  if (packOperatorReviewStatus) item.pack_operator_review_status = packOperatorReviewStatus;
+  if (packOperatorReviewReceiptId) item.pack_operator_review_receipt_id = packOperatorReviewReceiptId;
+  if (promotionRoute) item.promotion_route = promotionRoute;
+  if (typeof raw.promotion_would_write_receipt === "boolean") {
+    item.promotion_would_write_receipt = raw.promotion_would_write_receipt;
+  }
+  if (typeof raw.promotion_would_enable_capability === "boolean") {
+    item.promotion_would_enable_capability = raw.promotion_would_enable_capability;
+  }
+  return item;
+}
+
+function parseCapabilityLibraryPromotionPack(raw: unknown): PluginCapabilityLibraryPromotionPack | null {
+  if (!isRecord(raw)) return null;
+
+  const packId = safeString(raw.pack_id, safeString(raw.packId, "")).trim();
+  const packVersion = safeString(raw.pack_version, safeString(raw.packVersion, "")).trim();
+  if (!packId || !packVersion) return null;
+
+  const rawCapabilities = safeUnknownArray(raw.capabilities) ?? [];
+  const capabilities = rawCapabilities
+    .map(parseCapabilityLibraryPromotionCapability)
+    .filter((entry): entry is PluginCapabilityLibraryPromotionCapability => entry !== null);
+  const pack: PluginCapabilityLibraryPromotionPack = {
+    pack_id: packId,
+    pack_version: packVersion,
+    capabilities,
+  };
+  const packName = safeString(raw.pack_name, safeString(raw.packName, ""));
+  if (packName) pack.pack_name = packName;
+  if (Number.isFinite(safeNumber(raw.staged_capability_count, NaN))) {
+    pack.staged_capability_count = safeNumber(raw.staged_capability_count);
+  }
+  if (Number.isFinite(safeNumber(raw.promotable_capability_count, NaN))) {
+    pack.promotable_capability_count = safeNumber(raw.promotable_capability_count);
+  }
+  if (Number.isFinite(safeNumber(raw.blocked_capability_count, NaN))) {
+    pack.blocked_capability_count = safeNumber(raw.blocked_capability_count);
+  }
+  if (typeof raw.capabilities_truncated === "boolean") pack.capabilities_truncated = raw.capabilities_truncated;
+  return pack;
+}
+
+function parseCapabilityLibraryProposalReviewProposal(
+  raw: unknown,
+): PluginCapabilityLibraryProposalReviewProposal | null {
+  if (!isRecord(raw)) return null;
+
+  const capability = safeString(raw.capability, safeString(raw.id, "")).trim();
+  if (!capability) return null;
+
+  const item: PluginCapabilityLibraryProposalReviewProposal = { capability };
+  const status = safeString(raw.status, "");
+  const proposalId = safeString(raw.proposal_id, safeString(raw.proposalId, ""));
+  const proposalReviewStatus = safeString(raw.proposal_review_status, safeString(raw.proposalReviewStatus, ""));
+  const proposalReviewReceiptId = safeString(
+    raw.proposal_review_receipt_id,
+    safeString(raw.proposalReviewReceiptId, ""),
+  );
+  const missingRequirements = safeStringArray(raw.missing_requirements);
+  const blockersBeforeReview = safeStringArray(raw.blockers_before_review);
+  const proposalReviewRoute = safeString(raw.proposal_review_route, safeString(raw.proposalReviewRoute, ""));
+  if (status) item.status = status;
+  if (proposalId) item.proposal_id = proposalId;
+  if (proposalReviewStatus) item.proposal_review_status = proposalReviewStatus;
+  if (proposalReviewReceiptId) item.proposal_review_receipt_id = proposalReviewReceiptId;
+  if (typeof raw.proposal_review_missing === "boolean") item.proposal_review_missing = raw.proposal_review_missing;
+  if (typeof raw.review_ready === "boolean") item.review_ready = raw.review_ready;
+  if (typeof raw.approved_review === "boolean") item.approved_review = raw.approved_review;
+  if (missingRequirements) item.missing_requirements = missingRequirements;
+  if (blockersBeforeReview) item.blockers_before_review = blockersBeforeReview;
+  if (proposalReviewRoute) item.proposal_review_route = proposalReviewRoute;
+  if (typeof raw.proposal_review_would_write_receipt === "boolean") {
+    item.proposal_review_would_write_receipt = raw.proposal_review_would_write_receipt;
+  }
+  if (typeof raw.proposal_review_would_promote_capability === "boolean") {
+    item.proposal_review_would_promote_capability = raw.proposal_review_would_promote_capability;
+  }
+  if (typeof raw.proposal_review_would_enable_capability === "boolean") {
+    item.proposal_review_would_enable_capability = raw.proposal_review_would_enable_capability;
+  }
+  return item;
+}
+
+function parseCapabilityLibraryProposalReviewPack(
+  raw: unknown,
+): PluginCapabilityLibraryProposalReviewPack | null {
+  if (!isRecord(raw)) return null;
+
+  const packId = safeString(raw.pack_id, safeString(raw.packId, "")).trim();
+  const packVersion = safeString(raw.pack_version, safeString(raw.packVersion, "")).trim();
+  if (!packId || !packVersion) return null;
+
+  const rawProposals = safeUnknownArray(raw.proposals) ?? [];
+  const proposals = rawProposals
+    .map(parseCapabilityLibraryProposalReviewProposal)
+    .filter((entry): entry is PluginCapabilityLibraryProposalReviewProposal => entry !== null);
+  const pack: PluginCapabilityLibraryProposalReviewPack = {
+    pack_id: packId,
+    pack_version: packVersion,
+    proposals,
+  };
+  const packName = safeString(raw.pack_name, safeString(raw.packName, ""));
+  if (packName) pack.pack_name = packName;
+  if (Number.isFinite(safeNumber(raw.staged_capability_count, NaN))) {
+    pack.staged_capability_count = safeNumber(raw.staged_capability_count);
+  }
+  if (Number.isFinite(safeNumber(raw.reviewable_capability_count, NaN))) {
+    pack.reviewable_capability_count = safeNumber(raw.reviewable_capability_count);
+  }
+  if (Number.isFinite(safeNumber(raw.blocked_before_review_capability_count, NaN))) {
+    pack.blocked_before_review_capability_count = safeNumber(raw.blocked_before_review_capability_count);
+  }
+  if (Number.isFinite(safeNumber(raw.approved_proposal_review_count, NaN))) {
+    pack.approved_proposal_review_count = safeNumber(raw.approved_proposal_review_count);
+  }
+  if (typeof raw.proposals_truncated === "boolean") pack.proposals_truncated = raw.proposals_truncated;
+  return pack;
+}
+
+function parseCapabilityLibraryProposalEvidenceRemediationCapability(
+  raw: unknown,
+): PluginCapabilityLibraryProposalEvidenceRemediationCapability | null {
+  if (!isRecord(raw)) return null;
+
+  const capability = safeString(raw.capability, safeString(raw.id, "")).trim();
+  if (!capability) return null;
+
+  const item: PluginCapabilityLibraryProposalEvidenceRemediationCapability = { capability };
+  const status = safeString(raw.status, "");
+  const proposalId = safeString(raw.proposal_id, safeString(raw.proposalId, ""));
+  const metadataProposalEvidence = safeUnknownArray(raw.metadata_proposal_evidence);
+  const linkedProposalArtifactEvidence = safeUnknownArray(raw.linked_proposal_artifact_evidence);
+  const evidenceSource = safeString(raw.evidence_source, safeString(raw.evidenceSource, ""));
+  if (status) item.status = status;
+  if (proposalId) item.proposal_id = proposalId;
+  if (metadataProposalEvidence) item.metadata_proposal_evidence = metadataProposalEvidence;
+  if (linkedProposalArtifactEvidence) item.linked_proposal_artifact_evidence = linkedProposalArtifactEvidence;
+  if (evidenceSource) item.evidence_source = evidenceSource;
+  if (typeof raw.writes_registry_metadata === "boolean") {
+    item.writes_registry_metadata = raw.writes_registry_metadata;
+  }
+  if (typeof raw.writes_proposals === "boolean") item.writes_proposals = raw.writes_proposals;
+  if (typeof raw.approves_proposals === "boolean") item.approves_proposals = raw.approves_proposals;
+  if (typeof raw.promotes_capability === "boolean") item.promotes_capability = raw.promotes_capability;
+  return item;
+}
+
+function parseCapabilityLibraryProposalEvidenceRemediationPack(
+  raw: unknown,
+): PluginCapabilityLibraryProposalEvidenceRemediationPack | null {
+  if (!isRecord(raw)) return null;
+
+  const packId = safeString(raw.pack_id, safeString(raw.packId, "")).trim();
+  const packVersion = safeString(raw.pack_version, safeString(raw.packVersion, "")).trim();
+  if (!packId || !packVersion) return null;
+
+  const rawCapabilities = safeUnknownArray(raw.capabilities) ?? [];
+  const capabilities = rawCapabilities
+    .map(parseCapabilityLibraryProposalEvidenceRemediationCapability)
+    .filter((entry): entry is PluginCapabilityLibraryProposalEvidenceRemediationCapability => entry !== null);
+  const pack: PluginCapabilityLibraryProposalEvidenceRemediationPack = {
+    pack_id: packId,
+    pack_version: packVersion,
+    capabilities,
+  };
+  const packName = safeString(raw.pack_name, safeString(raw.packName, ""));
+  if (packName) pack.pack_name = packName;
+  if (Number.isFinite(safeNumber(raw.staged_capability_count, NaN))) {
+    pack.staged_capability_count = safeNumber(raw.staged_capability_count);
+  }
+  if (Number.isFinite(safeNumber(raw.candidate_capability_count, NaN))) {
+    pack.candidate_capability_count = safeNumber(raw.candidate_capability_count);
+  }
+  if (typeof raw.capabilities_truncated === "boolean") pack.capabilities_truncated = raw.capabilities_truncated;
+  return pack;
+}
+
+function parseCapabilityLibraryOperatorProposalEvidenceIntakeChecklistCapability(
+  raw: unknown,
+): PluginCapabilityLibraryOperatorProposalEvidenceIntakeChecklistCapability | null {
+  if (!isRecord(raw)) return null;
+
+  const capability = safeString(raw.capability, safeString(raw.id, "")).trim();
+  if (!capability) return null;
+
+  const item: PluginCapabilityLibraryOperatorProposalEvidenceIntakeChecklistCapability = { capability };
+  const status = safeString(raw.status, "");
+  const proposalId = safeString(raw.proposal_id, safeString(raw.proposalId, ""));
+  const proposalReviewStatus = safeString(raw.proposal_review_status, safeString(raw.proposalReviewStatus, ""));
+  const proposalReviewReceiptId = safeString(
+    raw.proposal_review_receipt_id,
+    safeString(raw.proposalReviewReceiptId, ""),
+  );
+  const missingRequirements = safeStringArray(raw.missing_requirements);
+  const blockersBeforeEvidence = safeStringArray(raw.blockers_before_evidence);
+  const intakeApplyRoute = safeString(raw.intake_apply_route, safeString(raw.intakeApplyRoute, ""));
+  if (status) item.status = status;
+  if (proposalId) item.proposal_id = proposalId;
+  if (proposalReviewStatus) item.proposal_review_status = proposalReviewStatus;
+  if (proposalReviewReceiptId) item.proposal_review_receipt_id = proposalReviewReceiptId;
+  if (missingRequirements) item.missing_requirements = missingRequirements;
+  if (blockersBeforeEvidence) item.blockers_before_evidence = blockersBeforeEvidence;
+  if (typeof raw.evidence_refs_required === "boolean") item.evidence_refs_required = raw.evidence_refs_required;
+  if (typeof raw.operator_supplied_evidence_not_independently_verified === "boolean") {
+    item.operator_supplied_evidence_not_independently_verified =
+      raw.operator_supplied_evidence_not_independently_verified;
+  }
+  if (intakeApplyRoute) item.intake_apply_route = intakeApplyRoute;
+  return item;
+}
+
+function parseCapabilityLibraryOperatorProposalEvidenceIntakeChecklistPack(
+  raw: unknown,
+): PluginCapabilityLibraryOperatorProposalEvidenceIntakeChecklistPack | null {
+  if (!isRecord(raw)) return null;
+
+  const packId = safeString(raw.pack_id, safeString(raw.packId, "")).trim();
+  const packVersion = safeString(raw.pack_version, safeString(raw.packVersion, "")).trim();
+  if (!packId || !packVersion) return null;
+
+  const rawCapabilities = safeUnknownArray(raw.capabilities) ?? [];
+  const capabilities = rawCapabilities
+    .map(parseCapabilityLibraryOperatorProposalEvidenceIntakeChecklistCapability)
+    .filter(
+      (entry): entry is PluginCapabilityLibraryOperatorProposalEvidenceIntakeChecklistCapability => entry !== null,
+    );
+  const item: PluginCapabilityLibraryOperatorProposalEvidenceIntakeChecklistPack = {
+    pack_id: packId,
+    pack_version: packVersion,
+    capabilities,
+  };
+  const packName = safeString(raw.pack_name, safeString(raw.packName, ""));
+  const claimScope = safeString(raw.claim_scope, safeString(raw.claimScope, ""));
+  if (packName) item.pack_name = packName;
+  if (Number.isFinite(safeNumber(raw.staged_capability_count, NaN))) {
+    item.staged_capability_count = safeNumber(raw.staged_capability_count);
+  }
+  if (Number.isFinite(safeNumber(raw.candidate_capability_count, NaN))) {
+    item.candidate_capability_count = safeNumber(raw.candidate_capability_count);
+  }
+  if (Number.isFinite(safeNumber(raw.evidence_ref_required_count, NaN))) {
+    item.evidence_ref_required_count = safeNumber(raw.evidence_ref_required_count);
+  }
+  if (claimScope) item.claim_scope = claimScope;
+  if (typeof raw.capabilities_truncated === "boolean") item.capabilities_truncated = raw.capabilities_truncated;
+  return item;
+}
+
+function parseCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetPayloadHint(
+  raw: unknown,
+): PluginCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetPayloadHint | undefined {
+  if (!isRecord(raw)) return undefined;
+  const hint: PluginCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetPayloadHint = {};
+  const packIds = safeStringArray(raw.pack_ids);
+  const capabilityIds = safeStringArray(raw.capability_ids);
+  const evidenceRefs = safeStringArray(raw.evidence_refs);
+  if (packIds) hint.pack_ids = packIds;
+  if (capabilityIds) hint.capability_ids = capabilityIds;
+  if (evidenceRefs) hint.evidence_refs = evidenceRefs;
+  if (typeof raw.dry_run === "boolean") hint.dry_run = raw.dry_run;
+  return hint;
+}
+
+function parseCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetRow(
+  raw: unknown,
+): PluginCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetRow | null {
+  if (!isRecord(raw)) return null;
+
+  const capability = safeString(raw.capability, safeString(raw.id, "")).trim();
+  if (!capability) return null;
+
+  const item: PluginCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetRow = { capability };
+  const status = safeString(raw.status, "");
+  const proposalId = safeString(raw.proposal_id, safeString(raw.proposalId, ""));
+  const proposalReviewStatus = safeString(raw.proposal_review_status, safeString(raw.proposalReviewStatus, ""));
+  const proposalReviewReceiptId = safeString(
+    raw.proposal_review_receipt_id,
+    safeString(raw.proposalReviewReceiptId, ""),
+  );
+  const missingRequirements = safeStringArray(raw.missing_requirements);
+  const blockersBeforeEvidence = safeStringArray(raw.blockers_before_evidence);
+  const operatorEvidenceRefs = safeStringArray(raw.operator_evidence_refs) ?? [];
+  const collectionStatus = safeString(raw.evidence_ref_collection_status, safeString(raw.evidenceRefCollectionStatus, ""));
+  const claimScope = safeString(raw.claim_scope, safeString(raw.claimScope, ""));
+  const intakeApplyRoute = safeString(raw.intake_apply_route, safeString(raw.intakeApplyRoute, ""));
+  const applyPayloadHint = parseCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetPayloadHint(
+    raw.apply_payload_hint,
+  );
+  if (status) item.status = status;
+  if (proposalId) item.proposal_id = proposalId;
+  if (proposalReviewStatus) item.proposal_review_status = proposalReviewStatus;
+  if (proposalReviewReceiptId) item.proposal_review_receipt_id = proposalReviewReceiptId;
+  if (missingRequirements) item.missing_requirements = missingRequirements;
+  if (blockersBeforeEvidence) item.blockers_before_evidence = blockersBeforeEvidence;
+  item.operator_evidence_refs = operatorEvidenceRefs;
+  if (Number.isFinite(safeNumber(raw.operator_evidence_ref_count, NaN))) {
+    item.operator_evidence_ref_count = safeNumber(raw.operator_evidence_ref_count);
+  }
+  if (typeof raw.operator_evidence_refs_required === "boolean") {
+    item.operator_evidence_refs_required = raw.operator_evidence_refs_required;
+  }
+  if (collectionStatus) item.evidence_ref_collection_status = collectionStatus;
+  if (claimScope) item.claim_scope = claimScope;
+  if (applyPayloadHint) item.apply_payload_hint = applyPayloadHint;
+  if (typeof raw.operator_supplied_evidence_not_independently_verified === "boolean") {
+    item.operator_supplied_evidence_not_independently_verified =
+      raw.operator_supplied_evidence_not_independently_verified;
+  }
+  if (typeof raw.requires_future_proposal_review === "boolean") {
+    item.requires_future_proposal_review = raw.requires_future_proposal_review;
+  }
+  if (intakeApplyRoute) item.intake_apply_route = intakeApplyRoute;
+  return item;
+}
+
+function parseCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetPack(
+  raw: unknown,
+): PluginCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetPack | null {
+  if (!isRecord(raw)) return null;
+
+  const packId = safeString(raw.pack_id, safeString(raw.packId, "")).trim();
+  const packVersion = safeString(raw.pack_version, safeString(raw.packVersion, "")).trim();
+  if (!packId || !packVersion) return null;
+
+  const rawRows = safeUnknownArray(raw.rows) ?? [];
+  const rows = rawRows
+    .map(parseCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetRow)
+    .filter((entry): entry is PluginCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetRow => entry !== null);
+  const item: PluginCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetPack = {
+    pack_id: packId,
+    pack_version: packVersion,
+    rows,
+  };
+  const packName = safeString(raw.pack_name, safeString(raw.packName, ""));
+  const claimScope = safeString(raw.claim_scope, safeString(raw.claimScope, ""));
+  if (packName) item.pack_name = packName;
+  if (Number.isFinite(safeNumber(raw.staged_capability_count, NaN))) {
+    item.staged_capability_count = safeNumber(raw.staged_capability_count);
+  }
+  if (Number.isFinite(safeNumber(raw.worksheet_row_count, NaN))) {
+    item.worksheet_row_count = safeNumber(raw.worksheet_row_count);
+  }
+  if (Number.isFinite(safeNumber(raw.evidence_ref_required_count, NaN))) {
+    item.evidence_ref_required_count = safeNumber(raw.evidence_ref_required_count);
+  }
+  if (claimScope) item.claim_scope = claimScope;
+  if (typeof raw.rows_truncated === "boolean") item.rows_truncated = raw.rows_truncated;
+  return item;
+}
+
+function parseCapabilityLibraryOperatorProposalEvidenceIntakeExportRow(
+  raw: unknown,
+): PluginCapabilityLibraryOperatorProposalEvidenceIntakeExportRow | null {
+  if (!isRecord(raw)) return null;
+
+  const capability = safeString(raw.capability, safeString(raw.id, "")).trim();
+  if (!capability) return null;
+
+  const item: PluginCapabilityLibraryOperatorProposalEvidenceIntakeExportRow = { capability };
+  const packId = safeString(raw.pack_id, safeString(raw.packId, ""));
+  const packVersion = safeString(raw.pack_version, safeString(raw.packVersion, ""));
+  const packName = safeString(raw.pack_name, safeString(raw.packName, ""));
+  const status = safeString(raw.status, "");
+  const proposalId = safeString(raw.proposal_id, safeString(raw.proposalId, ""));
+  const proposalReviewStatus = safeString(raw.proposal_review_status, safeString(raw.proposalReviewStatus, ""));
+  const proposalReviewReceiptId = safeString(
+    raw.proposal_review_receipt_id,
+    safeString(raw.proposalReviewReceiptId, ""),
+  );
+  const missingRequirements = safeStringArray(raw.missing_requirements);
+  const blockersBeforeEvidence = safeStringArray(raw.blockers_before_evidence);
+  const evidenceRefsInput = safeString(raw.evidence_refs_input, safeString(raw.evidenceRefsInput, ""));
+  const evidenceRefsInputFormat = safeString(
+    raw.evidence_refs_input_format,
+    safeString(raw.evidenceRefsInputFormat, ""),
+  );
+  const collectionStatus = safeString(raw.evidence_ref_collection_status, safeString(raw.evidenceRefCollectionStatus, ""));
+  const claimScope = safeString(raw.claim_scope, safeString(raw.claimScope, ""));
+  const intakeApplyRoute = safeString(raw.intake_apply_route, safeString(raw.intakeApplyRoute, ""));
+  const applyPayloadHint = parseCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetPayloadHint(
+    raw.apply_payload_hint,
+  );
+  if (packId) item.pack_id = packId;
+  if (packVersion) item.pack_version = packVersion;
+  if (packName) item.pack_name = packName;
+  if (status) item.status = status;
+  if (proposalId) item.proposal_id = proposalId;
+  if (proposalReviewStatus) item.proposal_review_status = proposalReviewStatus;
+  if (proposalReviewReceiptId) item.proposal_review_receipt_id = proposalReviewReceiptId;
+  if (missingRequirements) item.missing_requirements = missingRequirements;
+  if (blockersBeforeEvidence) item.blockers_before_evidence = blockersBeforeEvidence;
+  item.evidence_refs_input = evidenceRefsInput;
+  if (evidenceRefsInputFormat) item.evidence_refs_input_format = evidenceRefsInputFormat;
+  if (typeof raw.operator_evidence_refs_required === "boolean") {
+    item.operator_evidence_refs_required = raw.operator_evidence_refs_required;
+  }
+  if (collectionStatus) item.evidence_ref_collection_status = collectionStatus;
+  if (claimScope) item.claim_scope = claimScope;
+  if (typeof raw.dry_run_required === "boolean") item.dry_run_required = raw.dry_run_required;
+  if (applyPayloadHint) item.apply_payload_hint = applyPayloadHint;
+  if (typeof raw.operator_supplied_evidence_not_independently_verified === "boolean") {
+    item.operator_supplied_evidence_not_independently_verified =
+      raw.operator_supplied_evidence_not_independently_verified;
+  }
+  if (typeof raw.requires_future_proposal_review === "boolean") {
+    item.requires_future_proposal_review = raw.requires_future_proposal_review;
+  }
+  if (intakeApplyRoute) item.intake_apply_route = intakeApplyRoute;
+  return item;
+}
+
+function parseCapabilityLibraryOperatorProposalEvidenceIntakeExportPack(
+  raw: unknown,
+): PluginCapabilityLibraryOperatorProposalEvidenceIntakeExportPack | null {
+  if (!isRecord(raw)) return null;
+
+  const packId = safeString(raw.pack_id, safeString(raw.packId, "")).trim();
+  const packVersion = safeString(raw.pack_version, safeString(raw.packVersion, "")).trim();
+  if (!packId || !packVersion) return null;
+
+  const rawRows = safeUnknownArray(raw.rows) ?? [];
+  const rows = rawRows
+    .map(parseCapabilityLibraryOperatorProposalEvidenceIntakeExportRow)
+    .filter((entry): entry is PluginCapabilityLibraryOperatorProposalEvidenceIntakeExportRow => entry !== null);
+  const item: PluginCapabilityLibraryOperatorProposalEvidenceIntakeExportPack = {
+    pack_id: packId,
+    pack_version: packVersion,
+    rows,
+  };
+  const packName = safeString(raw.pack_name, safeString(raw.packName, ""));
+  const claimScope = safeString(raw.claim_scope, safeString(raw.claimScope, ""));
+  if (packName) item.pack_name = packName;
+  if (Number.isFinite(safeNumber(raw.staged_capability_count, NaN))) {
+    item.staged_capability_count = safeNumber(raw.staged_capability_count);
+  }
+  if (Number.isFinite(safeNumber(raw.export_row_count, NaN))) {
+    item.export_row_count = safeNumber(raw.export_row_count);
+  }
+  if (Number.isFinite(safeNumber(raw.exported_row_count, NaN))) {
+    item.exported_row_count = safeNumber(raw.exported_row_count);
+  }
+  if (Number.isFinite(safeNumber(raw.evidence_ref_required_count, NaN))) {
+    item.evidence_ref_required_count = safeNumber(raw.evidence_ref_required_count);
+  }
+  if (claimScope) item.claim_scope = claimScope;
+  if (typeof raw.rows_truncated === "boolean") item.rows_truncated = raw.rows_truncated;
+  return item;
+}
+
+function parseCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewRow(
+  raw: unknown,
+): PluginCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewRow | null {
+  if (!isRecord(raw)) return null;
+  const rowIndex = safeNumber(raw.row_index, NaN);
+  if (!Number.isFinite(rowIndex)) return null;
+  const item: PluginCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewRow = { row_index: rowIndex };
+  const packId = safeString(raw.pack_id, safeString(raw.packId, ""));
+  const packVersion = safeString(raw.pack_version, safeString(raw.packVersion, ""));
+  const capability = safeString(raw.capability, safeString(raw.capability_id, ""));
+  const proposalId = safeString(raw.proposal_id, safeString(raw.proposalId, ""));
+  const status = safeString(raw.status, "");
+  const error = safeString(raw.error, "");
+  const evidenceRefs = safeStringArray(raw.evidence_refs);
+  if (packId) item.pack_id = packId;
+  if (packVersion) item.pack_version = packVersion;
+  if (capability) item.capability = capability;
+  if (proposalId) item.proposal_id = proposalId;
+  if (status) item.status = status;
+  if (error) item.error = error;
+  if (evidenceRefs) item.evidence_refs = evidenceRefs;
+  if (Number.isFinite(safeNumber(raw.evidence_ref_count, NaN))) {
+    item.evidence_ref_count = safeNumber(raw.evidence_ref_count);
+  }
+  return item;
+}
+
+function parseCapabilityLibraryOperatorProposalEvidenceIntakePayload(raw: unknown) {
+  if (!isRecord(raw)) return undefined;
+  return {
+    pack_ids: safeStringArray(raw.pack_ids) ?? [],
+    capability_ids: safeStringArray(raw.capability_ids) ?? [],
+    evidence_refs: safeStringArray(raw.evidence_refs) ?? [],
+    dry_run: typeof raw.dry_run === "boolean" ? raw.dry_run : true,
+    dry_run_fingerprint: safeString(raw.dry_run_fingerprint, "") || undefined,
+    max_pack_count: Number.isFinite(safeNumber(raw.max_pack_count, NaN)) ? safeNumber(raw.max_pack_count) : undefined,
+    max_total_capability_count: Number.isFinite(safeNumber(raw.max_total_capability_count, NaN))
+      ? safeNumber(raw.max_total_capability_count)
+      : undefined,
+    max_capability_count_per_pack: Number.isFinite(safeNumber(raw.max_capability_count_per_pack, NaN))
+      ? safeNumber(raw.max_capability_count_per_pack)
+      : undefined,
+    dry_run_fingerprint_required:
+      typeof raw.dry_run_fingerprint_required === "boolean" ? raw.dry_run_fingerprint_required : undefined,
+  };
+}
+
+function parseCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewGroup(
+  raw: unknown,
+): PluginCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewGroup | null {
+  if (!isRecord(raw)) return null;
+  const packId = safeString(raw.pack_id, safeString(raw.packId, "")).trim();
+  if (!packId) return null;
+  const rowIndexesRaw = safeUnknownArray(raw.row_indexes) ?? [];
+  const rowIndexes = rowIndexesRaw.map((item) => safeNumber(item, NaN)).filter((item) => Number.isFinite(item));
+  const item: PluginCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewGroup = { pack_id: packId };
+  const packVersion = safeString(raw.pack_version, safeString(raw.packVersion, ""));
+  if (packVersion) item.pack_version = packVersion;
+  if (Number.isFinite(safeNumber(raw.capability_count, NaN))) {
+    item.capability_count = safeNumber(raw.capability_count);
+  }
+  if (Number.isFinite(safeNumber(raw.evidence_ref_count, NaN))) {
+    item.evidence_ref_count = safeNumber(raw.evidence_ref_count);
+  }
+  if (rowIndexes.length) item.row_indexes = rowIndexes;
+  if (typeof raw.row_indexes_truncated === "boolean") item.row_indexes_truncated = raw.row_indexes_truncated;
+  const previewPayload = parseCapabilityLibraryOperatorProposalEvidenceIntakePayload(raw.preview_payload);
+  const applyPayloadHint = parseCapabilityLibraryOperatorProposalEvidenceIntakePayload(raw.apply_payload_hint);
+  if (previewPayload) item.preview_payload = previewPayload;
+  if (applyPayloadHint) item.apply_payload_hint = applyPayloadHint;
+  const previewRoute = safeString(raw.preview_route, safeString(raw.previewRoute, ""));
+  const applyRoute = safeString(raw.apply_route, safeString(raw.applyRoute, ""));
+  if (previewRoute) item.preview_route = previewRoute;
+  if (applyRoute) item.apply_route = applyRoute;
+  return item;
+}
+
+function parseCapabilityLibraryOperatorProposalEvidenceIntakeAuditCapability(
+  raw: unknown,
+): PluginCapabilityLibraryOperatorProposalEvidenceIntakeAuditCapability | null {
+  if (!isRecord(raw)) return null;
+
+  const capability = safeString(raw.capability, safeString(raw.id, "")).trim();
+  if (!capability) return null;
+
+  const item: PluginCapabilityLibraryOperatorProposalEvidenceIntakeAuditCapability = { capability };
+  const status = safeString(raw.status, "");
+  const proposalId = safeString(raw.proposal_id, safeString(raw.proposalId, ""));
+  const evidenceRefs = safeStringArray(raw.evidence_refs);
+  const claimScope = safeString(raw.claim_scope, safeString(raw.claimScope, ""));
+  const operatorIntakeActor = safeString(raw.operator_intake_actor, safeString(raw.operatorIntakeActor, ""));
+  const operatorIntakeReason = safeString(raw.operator_intake_reason, safeString(raw.operatorIntakeReason, ""));
+  const operatorIntakeRoute = safeString(raw.operator_intake_route, safeString(raw.operatorIntakeRoute, ""));
+  const operatorIntakeTs =
+    normalizeUnixSeconds(raw.operator_intake_ts) ?? normalizeUnixSeconds(raw.operatorIntakeTs);
+  if (status) item.status = status;
+  if (proposalId) item.proposal_id = proposalId;
+  if (Number.isFinite(safeNumber(raw.evidence_ref_count, NaN))) {
+    item.evidence_ref_count = safeNumber(raw.evidence_ref_count);
+  }
+  if (evidenceRefs) item.evidence_refs = evidenceRefs;
+  if (typeof raw.evidence_refs_truncated === "boolean") item.evidence_refs_truncated = raw.evidence_refs_truncated;
+  if (claimScope) item.claim_scope = claimScope;
+  if (operatorIntakeActor) item.operator_intake_actor = operatorIntakeActor;
+  if (operatorIntakeReason) item.operator_intake_reason = operatorIntakeReason;
+  if (Number.isFinite(operatorIntakeTs)) item.operator_intake_ts = operatorIntakeTs;
+  if (operatorIntakeRoute) item.operator_intake_route = operatorIntakeRoute;
+  if (typeof raw.operator_supplied_evidence_not_independently_verified === "boolean") {
+    item.operator_supplied_evidence_not_independently_verified =
+      raw.operator_supplied_evidence_not_independently_verified;
+  }
+  if (typeof raw.requires_future_proposal_review === "boolean") {
+    item.requires_future_proposal_review = raw.requires_future_proposal_review;
+  }
+  if (typeof raw.writes_proposals === "boolean") item.writes_proposals = raw.writes_proposals;
+  if (typeof raw.approval_claimed === "boolean") item.approval_claimed = raw.approval_claimed;
+  return item;
+}
+
+function parseCapabilityLibraryOperatorProposalEvidenceIntakeAuditPack(
+  raw: unknown,
+): PluginCapabilityLibraryOperatorProposalEvidenceIntakeAuditPack | null {
+  if (!isRecord(raw)) return null;
+
+  const packId = safeString(raw.pack_id, safeString(raw.packId, "")).trim();
+  const packVersion = safeString(raw.pack_version, safeString(raw.packVersion, "")).trim();
+  if (!packId || !packVersion) return null;
+
+  const rawCapabilities = safeUnknownArray(raw.capabilities) ?? [];
+  const capabilities = rawCapabilities
+    .map(parseCapabilityLibraryOperatorProposalEvidenceIntakeAuditCapability)
+    .filter((entry): entry is PluginCapabilityLibraryOperatorProposalEvidenceIntakeAuditCapability => entry !== null);
+  const item: PluginCapabilityLibraryOperatorProposalEvidenceIntakeAuditPack = {
+    pack_id: packId,
+    pack_version: packVersion,
+    capabilities,
+  };
+  const packName = safeString(raw.pack_name, safeString(raw.packName, ""));
+  const claimScope = safeString(raw.claim_scope, safeString(raw.claimScope, ""));
+  if (packName) item.pack_name = packName;
+  if (Number.isFinite(safeNumber(raw.staged_capability_count, NaN))) {
+    item.staged_capability_count = safeNumber(raw.staged_capability_count);
+  }
+  if (Number.isFinite(safeNumber(raw.recorded_capability_count, NaN))) {
+    item.recorded_capability_count = safeNumber(raw.recorded_capability_count);
+  }
+  if (Number.isFinite(safeNumber(raw.evidence_ref_count, NaN))) {
+    item.evidence_ref_count = safeNumber(raw.evidence_ref_count);
+  }
+  if (claimScope) item.claim_scope = claimScope;
+  if (typeof raw.capabilities_truncated === "boolean") item.capabilities_truncated = raw.capabilities_truncated;
+  return item;
+}
+
+function parseCapabilityLibraryOperatorProposalEvidenceIntakeCapability(
+  raw: unknown,
+): PluginCapabilityLibraryOperatorProposalEvidenceIntakeCapability | null {
+  if (!isRecord(raw)) return null;
+
+  const capability = safeString(raw.capability, safeString(raw.id, "")).trim();
+  if (!capability) return null;
+
+  const item: PluginCapabilityLibraryOperatorProposalEvidenceIntakeCapability = { capability };
+  const proposalId = safeString(raw.proposal_id, safeString(raw.proposalId, ""));
+  const missingRequirements = safeStringArray(raw.missing_requirements);
+  if (proposalId) item.proposal_id = proposalId;
+  if (missingRequirements) item.missing_requirements = missingRequirements;
+  return item;
+}
+
+function parseCapabilityLibraryOperatorProposalEvidenceIntakePlan(
+  raw: unknown,
+): PluginCapabilityLibraryOperatorProposalEvidenceIntakePlan | null {
+  if (!isRecord(raw)) return null;
+
+  const packId = safeString(raw.pack_id, safeString(raw.packId, "")).trim();
+  const packVersion = safeString(raw.pack_version, safeString(raw.packVersion, "")).trim();
+  if (!packId || !packVersion) return null;
+
+  const rawCapabilities = safeUnknownArray(raw.capabilities) ?? [];
+  const capabilities = rawCapabilities
+    .map(parseCapabilityLibraryOperatorProposalEvidenceIntakeCapability)
+    .filter((entry): entry is PluginCapabilityLibraryOperatorProposalEvidenceIntakeCapability => entry !== null);
+  const item: PluginCapabilityLibraryOperatorProposalEvidenceIntakePlan = {
+    pack_id: packId,
+    pack_version: packVersion,
+    capabilities,
+  };
+  const packName = safeString(raw.pack_name, safeString(raw.packName, ""));
+  const claimScope = safeString(raw.claim_scope, safeString(raw.claimScope, ""));
+  if (packName) item.pack_name = packName;
+  if (Number.isFinite(safeNumber(raw.capability_count, NaN))) item.capability_count = safeNumber(raw.capability_count);
+  if (Number.isFinite(safeNumber(raw.evidence_ref_count, NaN))) {
+    item.evidence_ref_count = safeNumber(raw.evidence_ref_count);
+  }
+  if (claimScope) item.claim_scope = claimScope;
+  if (typeof raw.writes_registry_metadata === "boolean") {
+    item.writes_registry_metadata = raw.writes_registry_metadata;
+  }
+  if (typeof raw.writes_proposals === "boolean") item.writes_proposals = raw.writes_proposals;
+  if (typeof raw.approves_proposals === "boolean") item.approves_proposals = raw.approves_proposals;
+  if (typeof raw.promotes_capabilities === "boolean") item.promotes_capabilities = raw.promotes_capabilities;
+  if (typeof raw.enables_capabilities === "boolean") item.enables_capabilities = raw.enables_capabilities;
+  return item;
+}
+
+function parseCapabilityLibraryOperatorProposalEvidenceIntakeRecord(
+  raw: unknown,
+): PluginCapabilityLibraryOperatorProposalEvidenceIntakeRecord | null {
+  if (!isRecord(raw)) return null;
+
+  const packId = safeString(raw.pack_id, safeString(raw.packId, "")).trim();
+  const packVersion = safeString(raw.pack_version, safeString(raw.packVersion, "")).trim();
+  if (!packId) return null;
+
+  const item: PluginCapabilityLibraryOperatorProposalEvidenceIntakeRecord = {
+    pack_id: packId,
+    pack_version: packVersion,
+  };
+  const packName = safeString(raw.pack_name, safeString(raw.packName, ""));
+  const claimScope = safeString(raw.claim_scope, safeString(raw.claimScope, ""));
+  const status = safeString(raw.status, "");
+  const error = safeString(raw.error, "");
+  const changedCapabilityIds = safeStringArray(raw.changed_capability_ids);
+  const capabilities = safeUnknownArray(raw.capabilities);
+  if (packName) item.pack_name = packName;
+  if (Number.isFinite(safeNumber(raw.capability_count, NaN))) item.capability_count = safeNumber(raw.capability_count);
+  if (Number.isFinite(safeNumber(raw.changed_capability_count, NaN))) {
+    item.changed_capability_count = safeNumber(raw.changed_capability_count);
+  }
+  if (changedCapabilityIds) item.changed_capability_ids = changedCapabilityIds;
+  if (typeof raw.changed_capability_ids_truncated === "boolean") {
+    item.changed_capability_ids_truncated = raw.changed_capability_ids_truncated;
+  }
+  if (Number.isFinite(safeNumber(raw.evidence_ref_count, NaN))) {
+    item.evidence_ref_count = safeNumber(raw.evidence_ref_count);
+  }
+  if (claimScope) item.claim_scope = claimScope;
+  if (typeof raw.writes_registry_metadata === "boolean") {
+    item.writes_registry_metadata = raw.writes_registry_metadata;
+  }
+  if (typeof raw.writes_proposals === "boolean") item.writes_proposals = raw.writes_proposals;
+  if (typeof raw.approves_proposals === "boolean") item.approves_proposals = raw.approves_proposals;
+  if (typeof raw.promotes_capabilities === "boolean") item.promotes_capabilities = raw.promotes_capabilities;
+  if (typeof raw.enables_capabilities === "boolean") item.enables_capabilities = raw.enables_capabilities;
+  if (status) item.status = status;
+  if (error) item.error = error;
+  if (capabilities) item.capabilities = capabilities;
+  return item;
+}
+
+function parseCapabilityLibraryOperatorProposalEvidenceIntakeResponse(
+  json: unknown,
+  fallbackDryRun: boolean,
+  fallbackEvidenceRefCount: number,
+): PluginCapabilityLibraryOperatorProposalEvidenceIntakeResponse {
+  if (!isRecord(json)) return { ok: true, applied: false, dry_run: fallbackDryRun };
+
+  const plannedRaw = safeUnknownArray((json as Record<string, unknown>).planned) ?? [];
+  const recordedRaw = safeUnknownArray((json as Record<string, unknown>).recorded) ?? [];
+  const failedRaw = safeUnknownArray((json as Record<string, unknown>).failed) ?? [];
+  const skippedRaw = safeUnknownArray((json as Record<string, unknown>).skipped) ?? [];
+  const planned = plannedRaw
+    .map(parseCapabilityLibraryOperatorProposalEvidenceIntakePlan)
+    .filter((item): item is PluginCapabilityLibraryOperatorProposalEvidenceIntakePlan => item !== null);
+  const recorded = recordedRaw
+    .map(parseCapabilityLibraryOperatorProposalEvidenceIntakeRecord)
+    .filter((item): item is PluginCapabilityLibraryOperatorProposalEvidenceIntakeRecord => item !== null);
+  const failed = failedRaw
+    .map(parseCapabilityLibraryOperatorProposalEvidenceIntakeRecord)
+    .filter((item): item is PluginCapabilityLibraryOperatorProposalEvidenceIntakeRecord => item !== null);
+  const skipped = skippedRaw
+    .map(parseCapabilityLibraryOperatorProposalEvidenceIntakeRecord)
+    .filter((item): item is PluginCapabilityLibraryOperatorProposalEvidenceIntakeRecord => item !== null);
+  return {
+    ok: Boolean((json as Record<string, unknown>).ok ?? false),
+    applied:
+      typeof (json as Record<string, unknown>).applied === "boolean"
+        ? Boolean((json as Record<string, unknown>).applied)
+        : undefined,
+    kind: safeString((json as Record<string, unknown>).kind, "") || undefined,
+    status: safeString((json as Record<string, unknown>).status, "") || undefined,
+    dry_run:
+      typeof (json as Record<string, unknown>).dry_run === "boolean"
+        ? Boolean((json as Record<string, unknown>).dry_run)
+        : fallbackDryRun,
+    error: safeString((json as Record<string, unknown>).error, "") || undefined,
+    planned_pack_count: safeNumber((json as Record<string, unknown>).planned_pack_count, planned.length),
+    planned_capability_count: safeNumber((json as Record<string, unknown>).planned_capability_count, 0),
+    evidence_ref_count: safeNumber((json as Record<string, unknown>).evidence_ref_count, fallbackEvidenceRefCount),
+    recorded_pack_count: safeNumber((json as Record<string, unknown>).recorded_pack_count, recorded.length),
+    recorded_capability_count: safeNumber((json as Record<string, unknown>).recorded_capability_count, 0),
+    candidate_total: safeNumber((json as Record<string, unknown>).candidate_total, 0) || undefined,
+    limit: safeNumber((json as Record<string, unknown>).limit, 0) || undefined,
+    capability_count: safeNumber((json as Record<string, unknown>).capability_count, 0) || undefined,
+    dry_run_fingerprint: safeString((json as Record<string, unknown>).dry_run_fingerprint, "") || undefined,
+    dry_run_confirmation: isRecord((json as Record<string, unknown>).dry_run_confirmation)
+      ? ((json as Record<string, unknown>).dry_run_confirmation as Record<string, unknown>)
+      : undefined,
+    planned,
+    recorded,
+    failed,
+    skipped,
+    before: isRecord((json as Record<string, unknown>).before)
+      ? ((json as Record<string, unknown>).before as Record<string, unknown>)
+      : undefined,
+    remaining_proposal_evidence_missing_count: Number.isFinite(
+      safeNumber((json as Record<string, unknown>).remaining_proposal_evidence_missing_count, NaN),
+    )
+      ? safeNumber((json as Record<string, unknown>).remaining_proposal_evidence_missing_count)
+      : undefined,
+    remaining_proposal_evidence_ready_count: Number.isFinite(
+      safeNumber((json as Record<string, unknown>).remaining_proposal_evidence_ready_count, NaN),
+    )
+      ? safeNumber((json as Record<string, unknown>).remaining_proposal_evidence_ready_count)
+      : undefined,
+    next_smallest_truthful_gap:
+      safeString((json as Record<string, unknown>).next_smallest_truthful_gap, "") || undefined,
+    governance: isRecord((json as Record<string, unknown>).governance)
+      ? ((json as Record<string, unknown>).governance as Record<string, unknown>)
+      : undefined,
+  };
+}
+
 function parseCapabilityPackOperatorReviewDecision(raw: unknown): PluginCapabilityPackOperatorReviewDecision | null {
   if (!isRecord(raw)) return null;
 
@@ -1695,6 +3319,63 @@ function parseCapabilityPackOperatorReviewDecision(raw: unknown): PluginCapabili
   if (relativePath) item.relative_path = relativePath;
   if (isRecord(raw.review_snapshot)) item.review_snapshot = raw.review_snapshot;
   if (isRecord(raw.governance)) item.governance = raw.governance;
+  return item;
+}
+
+function parseCapabilityPackOperatorReviewBulkDecisionPlan(
+  raw: unknown,
+): PluginCapabilityPackOperatorReviewBulkDecisionPlan | null {
+  if (!isRecord(raw)) return null;
+  const packId = safeString(raw.pack_id, safeString(raw.packId, "")).trim();
+  const packVersion = safeString(raw.pack_version, safeString(raw.packVersion, "")).trim();
+  if (!packId || !packVersion) return null;
+
+  const item: PluginCapabilityPackOperatorReviewBulkDecisionPlan = {
+    pack_id: packId,
+    pack_version: packVersion,
+  };
+  const packName = safeString(raw.pack_name, safeString(raw.packName, ""));
+  const action = safeString(raw.action, "");
+  const decisionStatus = safeString(raw.decision_status, safeString(raw.decisionStatus, ""));
+  if (packName) item.pack_name = packName;
+  if (action) item.action = action;
+  if (decisionStatus) item.decision_status = decisionStatus;
+  if (Number.isFinite(safeNumber(raw.capability_count, NaN))) item.capability_count = safeNumber(raw.capability_count);
+  if (Number.isFinite(safeNumber(raw.staged_capability_count, NaN))) {
+    item.staged_capability_count = safeNumber(raw.staged_capability_count);
+  }
+  if (typeof raw.quality_evidence_ready === "boolean") item.quality_evidence_ready = raw.quality_evidence_ready;
+  if (typeof raw.proposal_lineage_ready === "boolean") item.proposal_lineage_ready = raw.proposal_lineage_ready;
+  if (typeof raw.validation_receipts_ready === "boolean") item.validation_receipts_ready = raw.validation_receipts_ready;
+  if (typeof raw.operator_review_rule_declared === "boolean") {
+    item.operator_review_rule_declared = raw.operator_review_rule_declared;
+  }
+  if (typeof raw.operator_review_governance_declared === "boolean") {
+    item.operator_review_governance_declared = raw.operator_review_governance_declared;
+  }
+  if (typeof raw.writes_receipt === "boolean") item.writes_receipt = raw.writes_receipt;
+  return item;
+}
+
+function parseCapabilityPackOperatorReviewBulkDecisionRecord(
+  raw: unknown,
+): PluginCapabilityPackOperatorReviewBulkDecisionRecord | null {
+  if (!isRecord(raw)) return null;
+  const packId = safeString(raw.pack_id, safeString(raw.packId, "")).trim();
+  if (!packId) return null;
+  const item: PluginCapabilityPackOperatorReviewBulkDecisionRecord = {
+    pack_id: packId,
+    pack_version: safeString(raw.pack_version, safeString(raw.packVersion, "")),
+  };
+  const receiptId = safeString(raw.receipt_id, safeString(raw.receiptId, ""));
+  const receiptPath = safeString(raw.receipt_path, safeString(raw.receiptPath, ""));
+  const status = safeString(raw.status, "");
+  const error = safeString(raw.error, "");
+  if (receiptId) item.receipt_id = receiptId;
+  if (receiptPath) item.receipt_path = receiptPath;
+  if (Number.isFinite(safeNumber(raw.capability_count, NaN))) item.capability_count = safeNumber(raw.capability_count);
+  if (status) item.status = status;
+  if (error) item.error = error;
   return item;
 }
 
@@ -1782,9 +3463,22 @@ export type PluginBrowserEndpoints = {
   capabilityCatalog: (q?: PluginCapabilityCatalogParams) => string;
   capabilityPackPromotionDiscipline: () => string;
   capabilityPackPromotionRuleRemediation: () => string;
+  capabilityLibraryPromotionPlan: () => string;
+  capabilityLibraryProposalEvidencePlan: () => string;
+  capabilityLibraryProposalReviewPlan: () => string;
+  capabilityLibraryProposalReviewApplyReadiness: () => string;
+  capabilityLibraryProposalEvidenceRemediation: () => string;
+  capabilityLibraryOperatorProposalEvidenceIntakeChecklist: () => string;
+  capabilityLibraryOperatorProposalEvidenceIntakeWorksheet: () => string;
+  capabilityLibraryOperatorProposalEvidenceIntakeExport: () => string;
+  capabilityLibraryOperatorProposalEvidenceIntakeImportPreview: () => string;
+  capabilityLibraryOperatorProposalEvidenceIntakeAudit: () => string;
+  capabilityLibraryOperatorProposalEvidenceIntakePreview: () => string;
+  capabilityLibraryOperatorProposalEvidenceIntake: () => string;
   capabilityPackOperatorReview: () => string;
   capabilityPackOperatorReviewDecisions: (q?: PluginCapabilityPackOperatorReviewDecisionListParams) => string;
   capabilityPackOperatorReviewDecision: () => string;
+  capabilityPackOperatorReviewBulkDecision: () => string;
   promotionReadinessList: (q?: PluginPromotionReadinessListParams) => string;
   proposalsList: (q?: PluginForgeArtifactListParams) => string;
   proposalReviewsList: (q?: PluginForgeArtifactListParams) => string;
@@ -1837,6 +3531,26 @@ export function defaultPluginBrowserEndpoints(): PluginBrowserEndpoints {
       })}`,
     capabilityPackPromotionDiscipline: () => "/plugins/capabilities/packs/promotion/discipline",
     capabilityPackPromotionRuleRemediation: () => "/plugins/capabilities/packs/promotion/rules/remediation",
+    capabilityLibraryPromotionPlan: () => "/plugins/capabilities/library/promotion/plan",
+    capabilityLibraryProposalEvidencePlan: () => "/plugins/capabilities/library/proposal-evidence/plan",
+    capabilityLibraryProposalReviewPlan: () => "/plugins/capabilities/library/proposal-review/plan",
+    capabilityLibraryProposalReviewApplyReadiness: () =>
+      "/plugins/capabilities/library/proposal-review/apply-readiness",
+    capabilityLibraryProposalEvidenceRemediation: () => "/plugins/capabilities/library/proposal-evidence/remediation",
+    capabilityLibraryOperatorProposalEvidenceIntakeChecklist: () =>
+      "/plugins/capabilities/library/proposal-evidence/operator-intake/checklist",
+    capabilityLibraryOperatorProposalEvidenceIntakeWorksheet: () =>
+      "/plugins/capabilities/library/proposal-evidence/operator-intake/worksheet",
+    capabilityLibraryOperatorProposalEvidenceIntakeExport: () =>
+      "/plugins/capabilities/library/proposal-evidence/operator-intake/export",
+    capabilityLibraryOperatorProposalEvidenceIntakeImportPreview: () =>
+      "/plugins/capabilities/library/proposal-evidence/operator-intake/import-preview",
+    capabilityLibraryOperatorProposalEvidenceIntakeAudit: () =>
+      "/plugins/capabilities/library/proposal-evidence/operator-intake/audit",
+    capabilityLibraryOperatorProposalEvidenceIntakePreview: () =>
+      "/plugins/capabilities/library/proposal-evidence/operator-intake/preview",
+    capabilityLibraryOperatorProposalEvidenceIntake: () =>
+      "/plugins/capabilities/library/proposal-evidence/operator-intake/apply",
     capabilityPackOperatorReview: () => "/plugins/capabilities/packs/operator/review",
     capabilityPackOperatorReviewDecisions: (q) =>
       `/plugins/capabilities/packs/operator/review/decisions${encodeQuery({
@@ -1845,6 +3559,8 @@ export function defaultPluginBrowserEndpoints(): PluginBrowserEndpoints {
         pack_version: q?.pack_version,
       })}`,
     capabilityPackOperatorReviewDecision: () => "/plugins/capabilities/packs/operator/review/decisions",
+    capabilityPackOperatorReviewBulkDecision: () =>
+      "/plugins/capabilities/packs/operator/review/decisions/bulk-from-surface",
     promotionReadinessList: (q) =>
       `/forge/promotion_readiness/list${encodeQuery({
         limit: q?.limit,
@@ -2246,6 +3962,8 @@ export class PluginBrowserClient {
       blocked_pack_count: safeNumber((json as Record<string, unknown>).blocked_pack_count, 0),
       decision_required_pack_count: safeNumber((json as Record<string, unknown>).decision_required_pack_count, 0),
       review_queue_count: safeNumber((json as Record<string, unknown>).review_queue_count, 0),
+      pending_review_queue_count: safeNumber((json as Record<string, unknown>).pending_review_queue_count, 0),
+      decision_recorded_pack_count: safeNumber((json as Record<string, unknown>).decision_recorded_pack_count, 0),
       packs,
       decision_routes: isRecord((json as Record<string, unknown>).decision_routes)
         ? Object.fromEntries(
@@ -2386,6 +4104,870 @@ export class PluginBrowserClient {
   }
 
   /**
+   * List read-only capability-library explicit promotion readiness before promotion apply.
+   */
+  async listCapabilityLibraryPromotionPlan(
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<PluginCapabilityLibraryPromotionPlanResponse> {
+    const url = this.url(this.endpoints.capabilityLibraryPromotionPlan());
+    const json = await this.fetchJson(url, { method: "GET", signal: opts?.signal, timeoutMs: opts?.timeoutMs });
+    if (!isRecord(json)) return { ok: false, packs: [] };
+
+    const raw = Array.isArray((json as Record<string, unknown>).packs)
+      ? ((json as Record<string, unknown>).packs as unknown[])
+      : [];
+    const packs = raw
+      .map(parseCapabilityLibraryPromotionPack)
+      .filter((item): item is PluginCapabilityLibraryPromotionPack => item !== null);
+    return {
+      ok: Boolean((json as Record<string, unknown>).ok ?? false),
+      kind: safeString((json as Record<string, unknown>).kind, "") || undefined,
+      stage: safeString((json as Record<string, unknown>).stage, "") || undefined,
+      status: safeString((json as Record<string, unknown>).status, "") || undefined,
+      promotion_plan_ready:
+        typeof (json as Record<string, unknown>).promotion_plan_ready === "boolean"
+          ? Boolean((json as Record<string, unknown>).promotion_plan_ready)
+          : undefined,
+      pack_total: safeNumber((json as Record<string, unknown>).pack_total, 0),
+      ready_pack_count: safeNumber((json as Record<string, unknown>).ready_pack_count, 0),
+      blocked_pack_count: safeNumber((json as Record<string, unknown>).blocked_pack_count, 0),
+      candidate_pack_count: safeNumber((json as Record<string, unknown>).candidate_pack_count, packs.length),
+      candidate_capability_count: safeNumber((json as Record<string, unknown>).candidate_capability_count, 0),
+      promotable_capability_count: safeNumber((json as Record<string, unknown>).promotable_capability_count, 0),
+      blocked_capability_count: safeNumber((json as Record<string, unknown>).blocked_capability_count, 0),
+      missing_requirement_counts: isRecord((json as Record<string, unknown>).missing_requirement_counts)
+        ? numericRecord((json as Record<string, unknown>).missing_requirement_counts as Record<string, unknown>)
+        : undefined,
+      packs,
+      packs_truncated: Boolean((json as Record<string, unknown>).packs_truncated ?? false),
+      capability_preview_limit: safeNumber((json as Record<string, unknown>).capability_preview_limit, 0) || undefined,
+      routes: isRecord((json as Record<string, unknown>).routes)
+        ? Object.fromEntries(
+            Object.entries((json as Record<string, unknown>).routes as Record<string, unknown>).map(([key, value]) => [
+              key,
+              safeString(value, ""),
+            ]),
+          )
+        : undefined,
+      requirements: isRecord((json as Record<string, unknown>).requirements)
+        ? Object.fromEntries(
+            Object.entries((json as Record<string, unknown>).requirements as Record<string, unknown>)
+              .filter(([, value]) => typeof value === "boolean")
+              .map(([key, value]) => [key, Boolean(value)]),
+          )
+        : undefined,
+      governance: isRecord((json as Record<string, unknown>).governance)
+        ? ((json as Record<string, unknown>).governance as Record<string, unknown>)
+        : undefined,
+      next_smallest_truthful_gap:
+        safeString((json as Record<string, unknown>).next_smallest_truthful_gap, "") || undefined,
+      catalog: isRecord((json as Record<string, unknown>).catalog)
+        ? ((json as Record<string, unknown>).catalog as Record<string, unknown>)
+        : undefined,
+    };
+  }
+
+  /**
+   * List read-only proposal-evidence blockers before proposal review or promotion.
+   */
+  async listCapabilityLibraryProposalEvidencePlan(
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<PluginCapabilityLibraryProposalEvidencePlanResponse> {
+    const url = this.url(this.endpoints.capabilityLibraryProposalEvidencePlan());
+    const json = await this.fetchJson(url, { method: "GET", signal: opts?.signal, timeoutMs: opts?.timeoutMs });
+    if (!isRecord(json)) return { ok: false, packs: [] };
+
+    const raw = Array.isArray((json as Record<string, unknown>).packs)
+      ? ((json as Record<string, unknown>).packs as unknown[])
+      : [];
+    const packs = raw
+      .map(parseCapabilityLibraryProposalEvidencePack)
+      .filter((item): item is PluginCapabilityLibraryProposalEvidencePack => item !== null);
+    return {
+      ok: Boolean((json as Record<string, unknown>).ok ?? false),
+      kind: safeString((json as Record<string, unknown>).kind, "") || undefined,
+      stage: safeString((json as Record<string, unknown>).stage, "") || undefined,
+      status: safeString((json as Record<string, unknown>).status, "") || undefined,
+      proposal_evidence_plan_ready:
+        typeof (json as Record<string, unknown>).proposal_evidence_plan_ready === "boolean"
+          ? Boolean((json as Record<string, unknown>).proposal_evidence_plan_ready)
+          : undefined,
+      pack_total: safeNumber((json as Record<string, unknown>).pack_total, 0),
+      ready_pack_count: safeNumber((json as Record<string, unknown>).ready_pack_count, 0),
+      blocked_pack_count: safeNumber((json as Record<string, unknown>).blocked_pack_count, 0),
+      candidate_pack_count: safeNumber((json as Record<string, unknown>).candidate_pack_count, packs.length),
+      candidate_capability_count: safeNumber((json as Record<string, unknown>).candidate_capability_count, 0),
+      unique_proposal_count: safeNumber((json as Record<string, unknown>).unique_proposal_count, 0),
+      proposal_evidence_missing_count: safeNumber(
+        (json as Record<string, unknown>).proposal_evidence_missing_count,
+        0,
+      ),
+      proposal_evidence_ready_count: safeNumber((json as Record<string, unknown>).proposal_evidence_ready_count, 0),
+      missing_proposal_evidence_count: safeNumber(
+        (json as Record<string, unknown>).missing_proposal_evidence_count,
+        0,
+      ),
+      evidence_ready_proposal_count: safeNumber(
+        (json as Record<string, unknown>).evidence_ready_proposal_count,
+        0,
+      ),
+      proposal_id_missing_count: safeNumber((json as Record<string, unknown>).proposal_id_missing_count, 0),
+      proposal_review_missing_count: safeNumber((json as Record<string, unknown>).proposal_review_missing_count, 0),
+      blocked_before_evidence_count: safeNumber((json as Record<string, unknown>).blocked_before_evidence_count, 0),
+      missing_requirement_counts: isRecord((json as Record<string, unknown>).missing_requirement_counts)
+        ? numericRecord((json as Record<string, unknown>).missing_requirement_counts as Record<string, unknown>)
+        : undefined,
+      packs,
+      packs_truncated: Boolean((json as Record<string, unknown>).packs_truncated ?? false),
+      capability_preview_limit: safeNumber((json as Record<string, unknown>).capability_preview_limit, 0) || undefined,
+      routes: isRecord((json as Record<string, unknown>).routes)
+        ? Object.fromEntries(
+            Object.entries((json as Record<string, unknown>).routes as Record<string, unknown>).map(([key, value]) => [
+              key,
+              safeString(value, ""),
+            ]),
+          )
+        : undefined,
+      requirements: isRecord((json as Record<string, unknown>).requirements)
+        ? Object.fromEntries(
+            Object.entries((json as Record<string, unknown>).requirements as Record<string, unknown>)
+              .filter(([, value]) => typeof value === "boolean")
+              .map(([key, value]) => [key, Boolean(value)]),
+          )
+        : undefined,
+      governance: isRecord((json as Record<string, unknown>).governance)
+        ? ((json as Record<string, unknown>).governance as Record<string, unknown>)
+        : undefined,
+      next_smallest_truthful_gap:
+        safeString((json as Record<string, unknown>).next_smallest_truthful_gap, "") || undefined,
+      catalog: isRecord((json as Record<string, unknown>).catalog)
+        ? ((json as Record<string, unknown>).catalog as Record<string, unknown>)
+        : undefined,
+    };
+  }
+
+  /**
+   * List read-only proposal-review readiness after proposal evidence and quality gates.
+   */
+  async listCapabilityLibraryProposalReviewPlan(
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<PluginCapabilityLibraryProposalReviewPlanResponse> {
+    const url = this.url(this.endpoints.capabilityLibraryProposalReviewPlan());
+    const json = await this.fetchJson(url, { method: "GET", signal: opts?.signal, timeoutMs: opts?.timeoutMs });
+    if (!isRecord(json)) return { ok: false, packs: [] };
+
+    const raw = Array.isArray((json as Record<string, unknown>).packs)
+      ? ((json as Record<string, unknown>).packs as unknown[])
+      : [];
+    const packs = raw
+      .map(parseCapabilityLibraryProposalReviewPack)
+      .filter((item): item is PluginCapabilityLibraryProposalReviewPack => item !== null);
+    return {
+      ok: Boolean((json as Record<string, unknown>).ok ?? false),
+      kind: safeString((json as Record<string, unknown>).kind, "") || undefined,
+      stage: safeString((json as Record<string, unknown>).stage, "") || undefined,
+      status: safeString((json as Record<string, unknown>).status, "") || undefined,
+      proposal_review_plan_ready:
+        typeof (json as Record<string, unknown>).proposal_review_plan_ready === "boolean"
+          ? Boolean((json as Record<string, unknown>).proposal_review_plan_ready)
+          : undefined,
+      pack_total: safeNumber((json as Record<string, unknown>).pack_total, 0),
+      ready_pack_count: safeNumber((json as Record<string, unknown>).ready_pack_count, 0),
+      blocked_pack_count: safeNumber((json as Record<string, unknown>).blocked_pack_count, 0),
+      candidate_pack_count: safeNumber((json as Record<string, unknown>).candidate_pack_count, packs.length),
+      candidate_capability_count: safeNumber((json as Record<string, unknown>).candidate_capability_count, 0),
+      unique_proposal_count: safeNumber((json as Record<string, unknown>).unique_proposal_count, 0),
+      proposal_review_missing_count: safeNumber((json as Record<string, unknown>).proposal_review_missing_count, 0),
+      approved_proposal_review_count: safeNumber(
+        (json as Record<string, unknown>).approved_proposal_review_count,
+        0,
+      ),
+      reviewable_capability_count: safeNumber((json as Record<string, unknown>).reviewable_capability_count, 0),
+      reviewable_proposal_count: safeNumber((json as Record<string, unknown>).reviewable_proposal_count, 0),
+      blocked_before_review_capability_count: safeNumber(
+        (json as Record<string, unknown>).blocked_before_review_capability_count,
+        0,
+      ),
+      blocked_proposal_count: safeNumber((json as Record<string, unknown>).blocked_proposal_count, 0),
+      approved_proposal_count: safeNumber((json as Record<string, unknown>).approved_proposal_count, 0),
+      missing_requirement_counts: isRecord((json as Record<string, unknown>).missing_requirement_counts)
+        ? numericRecord((json as Record<string, unknown>).missing_requirement_counts as Record<string, unknown>)
+        : undefined,
+      packs,
+      packs_truncated: Boolean((json as Record<string, unknown>).packs_truncated ?? false),
+      proposal_preview_limit: safeNumber((json as Record<string, unknown>).proposal_preview_limit, 0) || undefined,
+      routes: isRecord((json as Record<string, unknown>).routes)
+        ? Object.fromEntries(
+            Object.entries((json as Record<string, unknown>).routes as Record<string, unknown>).map(([key, value]) => [
+              key,
+              safeString(value, ""),
+            ]),
+          )
+        : undefined,
+      requirements: isRecord((json as Record<string, unknown>).requirements)
+        ? Object.fromEntries(
+            Object.entries((json as Record<string, unknown>).requirements as Record<string, unknown>)
+              .filter(([, value]) => typeof value === "boolean")
+              .map(([key, value]) => [key, Boolean(value)]),
+          )
+        : undefined,
+      governance: isRecord((json as Record<string, unknown>).governance)
+        ? ((json as Record<string, unknown>).governance as Record<string, unknown>)
+        : undefined,
+      next_smallest_truthful_gap:
+        safeString((json as Record<string, unknown>).next_smallest_truthful_gap, "") || undefined,
+      catalog: isRecord((json as Record<string, unknown>).catalog)
+        ? ((json as Record<string, unknown>).catalog as Record<string, unknown>)
+        : undefined,
+    };
+  }
+
+  /**
+   * List read-only proposal-review apply readiness before any Forge decision receipt is written.
+   */
+  async listCapabilityLibraryProposalReviewApplyReadiness(
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<PluginCapabilityLibraryProposalReviewApplyReadinessResponse> {
+    const url = this.url(this.endpoints.capabilityLibraryProposalReviewApplyReadiness());
+    const json = await this.fetchJson(url, { method: "GET", signal: opts?.signal, timeoutMs: opts?.timeoutMs });
+    if (!isRecord(json)) return { ok: false, packs: [] };
+
+    const raw = Array.isArray((json as Record<string, unknown>).packs)
+      ? ((json as Record<string, unknown>).packs as unknown[])
+      : [];
+    const packs = raw
+      .map(parseCapabilityLibraryProposalReviewPack)
+      .filter((item): item is PluginCapabilityLibraryProposalReviewPack => item !== null);
+    const evidenceRaw = (json as Record<string, unknown>).source_proposal_evidence_plan;
+    const auditRaw = (json as Record<string, unknown>).source_operator_evidence_intake_audit;
+    const reviewRaw = (json as Record<string, unknown>).source_proposal_review_plan;
+    return {
+      ok: Boolean((json as Record<string, unknown>).ok ?? false),
+      kind: safeString((json as Record<string, unknown>).kind, "") || undefined,
+      stage: safeString((json as Record<string, unknown>).stage, "") || undefined,
+      status: safeString((json as Record<string, unknown>).status, "") || undefined,
+      proposal_review_apply_ready:
+        typeof (json as Record<string, unknown>).proposal_review_apply_ready === "boolean"
+          ? Boolean((json as Record<string, unknown>).proposal_review_apply_ready)
+          : undefined,
+      reviewable_pack_count: safeNumber((json as Record<string, unknown>).reviewable_pack_count, 0),
+      blocked_pack_count: safeNumber((json as Record<string, unknown>).blocked_pack_count, 0),
+      reviewable_capability_count: safeNumber((json as Record<string, unknown>).reviewable_capability_count, 0),
+      proposal_review_missing_count: safeNumber((json as Record<string, unknown>).proposal_review_missing_count, 0),
+      blocked_before_review_capability_count: safeNumber(
+        (json as Record<string, unknown>).blocked_before_review_capability_count,
+        0,
+      ),
+      approved_proposal_review_count: safeNumber(
+        (json as Record<string, unknown>).approved_proposal_review_count,
+        0,
+      ),
+      source_proposal_evidence_plan: isRecord(evidenceRaw)
+        ? {
+            status: safeString(evidenceRaw.status, "") || undefined,
+            proposal_evidence_missing_count: safeNumber(evidenceRaw.proposal_evidence_missing_count, 0),
+            proposal_evidence_ready_count: safeNumber(evidenceRaw.proposal_evidence_ready_count, 0),
+            proposal_review_missing_count: safeNumber(evidenceRaw.proposal_review_missing_count, 0),
+            next_smallest_truthful_gap: safeString(evidenceRaw.next_smallest_truthful_gap, "") || undefined,
+          }
+        : undefined,
+      source_operator_evidence_intake_audit: isRecord(auditRaw)
+        ? {
+            status: safeString(auditRaw.status, "") || undefined,
+            operator_evidence_intake_audit_ready:
+              typeof auditRaw.operator_evidence_intake_audit_ready === "boolean"
+                ? Boolean(auditRaw.operator_evidence_intake_audit_ready)
+                : undefined,
+            recorded_pack_count: safeNumber(auditRaw.recorded_pack_count, 0),
+            recorded_capability_count: safeNumber(auditRaw.recorded_capability_count, 0),
+            evidence_ref_count: safeNumber(auditRaw.evidence_ref_count, 0),
+            future_review_required_count: safeNumber(auditRaw.future_review_required_count, 0),
+            next_smallest_truthful_gap: safeString(auditRaw.next_smallest_truthful_gap, "") || undefined,
+          }
+        : undefined,
+      source_proposal_review_plan: isRecord(reviewRaw)
+        ? {
+            status: safeString(reviewRaw.status, "") || undefined,
+            proposal_review_plan_ready:
+              typeof reviewRaw.proposal_review_plan_ready === "boolean"
+                ? Boolean(reviewRaw.proposal_review_plan_ready)
+                : undefined,
+            candidate_capability_count: safeNumber(reviewRaw.candidate_capability_count, 0),
+            reviewable_capability_count: safeNumber(reviewRaw.reviewable_capability_count, 0),
+            blocked_before_review_capability_count: safeNumber(reviewRaw.blocked_before_review_capability_count, 0),
+            proposal_review_missing_count: safeNumber(reviewRaw.proposal_review_missing_count, 0),
+            approved_proposal_review_count: safeNumber(reviewRaw.approved_proposal_review_count, 0),
+            next_smallest_truthful_gap: safeString(reviewRaw.next_smallest_truthful_gap, "") || undefined,
+          }
+        : undefined,
+      packs,
+      packs_truncated: Boolean((json as Record<string, unknown>).packs_truncated ?? false),
+      routes: isRecord((json as Record<string, unknown>).routes)
+        ? Object.fromEntries(
+            Object.entries((json as Record<string, unknown>).routes as Record<string, unknown>).map(([key, value]) => [
+              key,
+              safeString(value, ""),
+            ]),
+          )
+        : undefined,
+      requirements: isRecord((json as Record<string, unknown>).requirements)
+        ? Object.fromEntries(
+            Object.entries((json as Record<string, unknown>).requirements as Record<string, unknown>)
+              .filter(([, value]) => typeof value === "boolean")
+              .map(([key, value]) => [key, Boolean(value)]),
+          )
+        : undefined,
+      governance: isRecord((json as Record<string, unknown>).governance)
+        ? ((json as Record<string, unknown>).governance as Record<string, unknown>)
+        : undefined,
+      next_smallest_truthful_gap:
+        safeString((json as Record<string, unknown>).next_smallest_truthful_gap, "") || undefined,
+      catalog: isRecord((json as Record<string, unknown>).catalog)
+        ? ((json as Record<string, unknown>).catalog as Record<string, unknown>)
+        : undefined,
+    };
+  }
+
+  /**
+   * List read-only proposal-evidence remediation candidates backed by existing proposal artifacts.
+   */
+  async listCapabilityLibraryProposalEvidenceRemediation(
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<PluginCapabilityLibraryProposalEvidenceRemediationResponse> {
+    const url = this.url(this.endpoints.capabilityLibraryProposalEvidenceRemediation());
+    const json = await this.fetchJson(url, { method: "GET", signal: opts?.signal, timeoutMs: opts?.timeoutMs });
+    if (!isRecord(json)) return { ok: false, packs: [] };
+
+    const raw = Array.isArray((json as Record<string, unknown>).packs)
+      ? ((json as Record<string, unknown>).packs as unknown[])
+      : [];
+    const packs = raw
+      .map(parseCapabilityLibraryProposalEvidenceRemediationPack)
+      .filter((item): item is PluginCapabilityLibraryProposalEvidenceRemediationPack => item !== null);
+    const sourcePlanRaw = (json as Record<string, unknown>).source_proposal_evidence_plan;
+    const sourcePlan = isRecord(sourcePlanRaw)
+      ? {
+          status: safeString(sourcePlanRaw.status, "") || undefined,
+          candidate_capability_count: safeNumber(sourcePlanRaw.candidate_capability_count, 0),
+          proposal_evidence_missing_count: safeNumber(sourcePlanRaw.proposal_evidence_missing_count, 0),
+          proposal_evidence_ready_count: safeNumber(sourcePlanRaw.proposal_evidence_ready_count, 0),
+          proposal_review_missing_count: safeNumber(sourcePlanRaw.proposal_review_missing_count, 0),
+          next_smallest_truthful_gap:
+            safeString(sourcePlanRaw.next_smallest_truthful_gap, "") || undefined,
+        }
+      : undefined;
+    return {
+      ok: Boolean((json as Record<string, unknown>).ok ?? false),
+      kind: safeString((json as Record<string, unknown>).kind, "") || undefined,
+      stage: safeString((json as Record<string, unknown>).stage, "") || undefined,
+      status: safeString((json as Record<string, unknown>).status, "") || undefined,
+      proposal_evidence_remediation_ready:
+        typeof (json as Record<string, unknown>).proposal_evidence_remediation_ready === "boolean"
+          ? Boolean((json as Record<string, unknown>).proposal_evidence_remediation_ready)
+          : undefined,
+      pack_total: safeNumber((json as Record<string, unknown>).pack_total, 0),
+      ready_pack_count: safeNumber((json as Record<string, unknown>).ready_pack_count, 0),
+      blocked_pack_count: safeNumber((json as Record<string, unknown>).blocked_pack_count, 0),
+      candidate_pack_count: safeNumber((json as Record<string, unknown>).candidate_pack_count, packs.length),
+      candidate_capability_count: safeNumber((json as Record<string, unknown>).candidate_capability_count, 0),
+      existing_metadata_evidence_count: safeNumber(
+        (json as Record<string, unknown>).existing_metadata_evidence_count,
+        0,
+      ),
+      proposal_id_missing_count: safeNumber((json as Record<string, unknown>).proposal_id_missing_count, 0),
+      plugin_record_missing_count: safeNumber((json as Record<string, unknown>).plugin_record_missing_count, 0),
+      source_proposal_evidence_plan: sourcePlan,
+      packs,
+      packs_truncated: Boolean((json as Record<string, unknown>).packs_truncated ?? false),
+      capability_preview_limit: safeNumber((json as Record<string, unknown>).capability_preview_limit, 0) || undefined,
+      routes: isRecord((json as Record<string, unknown>).routes)
+        ? Object.fromEntries(
+            Object.entries((json as Record<string, unknown>).routes as Record<string, unknown>).map(([key, value]) => [
+              key,
+              safeString(value, ""),
+            ]),
+          )
+        : undefined,
+      requirements: isRecord((json as Record<string, unknown>).requirements)
+        ? Object.fromEntries(
+            Object.entries((json as Record<string, unknown>).requirements as Record<string, unknown>)
+              .filter(([, value]) => typeof value === "boolean")
+              .map(([key, value]) => [key, Boolean(value)]),
+          )
+        : undefined,
+      governance: isRecord((json as Record<string, unknown>).governance)
+        ? ((json as Record<string, unknown>).governance as Record<string, unknown>)
+        : undefined,
+      next_smallest_truthful_gap:
+        safeString((json as Record<string, unknown>).next_smallest_truthful_gap, "") || undefined,
+      catalog: isRecord((json as Record<string, unknown>).catalog)
+        ? ((json as Record<string, unknown>).catalog as Record<string, unknown>)
+        : undefined,
+    };
+  }
+
+  /**
+   * List read-only operator proposal-evidence intake candidates before dry-run/apply.
+   */
+  async listCapabilityLibraryOperatorProposalEvidenceIntakeChecklist(
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<PluginCapabilityLibraryOperatorProposalEvidenceIntakeChecklistResponse> {
+    const url = this.url(this.endpoints.capabilityLibraryOperatorProposalEvidenceIntakeChecklist());
+    const json = await this.fetchJson(url, { method: "GET", signal: opts?.signal, timeoutMs: opts?.timeoutMs });
+    if (!isRecord(json)) return { ok: false, packs: [] };
+
+    const raw = Array.isArray((json as Record<string, unknown>).packs)
+      ? ((json as Record<string, unknown>).packs as unknown[])
+      : [];
+    const packs = raw
+      .map(parseCapabilityLibraryOperatorProposalEvidenceIntakeChecklistPack)
+      .filter((item): item is PluginCapabilityLibraryOperatorProposalEvidenceIntakeChecklistPack => item !== null);
+    const sourcePlanRaw = (json as Record<string, unknown>).source_proposal_evidence_plan;
+    const sourcePlan = isRecord(sourcePlanRaw)
+      ? {
+          status: safeString(sourcePlanRaw.status, "") || undefined,
+          candidate_capability_count: safeNumber(sourcePlanRaw.candidate_capability_count, 0),
+          proposal_evidence_missing_count: safeNumber(sourcePlanRaw.proposal_evidence_missing_count, 0),
+          proposal_evidence_ready_count: safeNumber(sourcePlanRaw.proposal_evidence_ready_count, 0),
+          proposal_review_missing_count: safeNumber(sourcePlanRaw.proposal_review_missing_count, 0),
+          next_smallest_truthful_gap:
+            safeString(sourcePlanRaw.next_smallest_truthful_gap, "") || undefined,
+        }
+      : undefined;
+    return {
+      ok: Boolean((json as Record<string, unknown>).ok ?? false),
+      kind: safeString((json as Record<string, unknown>).kind, "") || undefined,
+      stage: safeString((json as Record<string, unknown>).stage, "") || undefined,
+      status: safeString((json as Record<string, unknown>).status, "") || undefined,
+      operator_evidence_intake_checklist_ready:
+        typeof (json as Record<string, unknown>).operator_evidence_intake_checklist_ready === "boolean"
+          ? Boolean((json as Record<string, unknown>).operator_evidence_intake_checklist_ready)
+          : undefined,
+      candidate_pack_count: safeNumber((json as Record<string, unknown>).candidate_pack_count, packs.length),
+      candidate_capability_count: safeNumber((json as Record<string, unknown>).candidate_capability_count, 0),
+      evidence_ref_required_count: safeNumber((json as Record<string, unknown>).evidence_ref_required_count, 0),
+      source_proposal_evidence_plan: sourcePlan,
+      packs,
+      packs_truncated: Boolean((json as Record<string, unknown>).packs_truncated ?? false),
+      capability_preview_limit: safeNumber((json as Record<string, unknown>).capability_preview_limit, 0) || undefined,
+      routes: isRecord((json as Record<string, unknown>).routes)
+        ? Object.fromEntries(
+            Object.entries((json as Record<string, unknown>).routes as Record<string, unknown>).map(([key, value]) => [
+              key,
+              safeString(value, ""),
+            ]),
+          )
+        : undefined,
+      requirements: isRecord((json as Record<string, unknown>).requirements)
+        ? Object.fromEntries(
+            Object.entries((json as Record<string, unknown>).requirements as Record<string, unknown>)
+              .filter(([, value]) => typeof value === "boolean")
+              .map(([key, value]) => [key, Boolean(value)]),
+          )
+        : undefined,
+      governance: isRecord((json as Record<string, unknown>).governance)
+        ? ((json as Record<string, unknown>).governance as Record<string, unknown>)
+        : undefined,
+      next_smallest_truthful_gap:
+        safeString((json as Record<string, unknown>).next_smallest_truthful_gap, "") || undefined,
+      catalog: isRecord((json as Record<string, unknown>).catalog)
+        ? ((json as Record<string, unknown>).catalog as Record<string, unknown>)
+        : undefined,
+    };
+  }
+
+  /**
+   * List read-only operator proposal-evidence worksheet rows with blank evidence-ref slots.
+   */
+  async listCapabilityLibraryOperatorProposalEvidenceIntakeWorksheet(
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<PluginCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetResponse> {
+    const url = this.url(this.endpoints.capabilityLibraryOperatorProposalEvidenceIntakeWorksheet());
+    const json = await this.fetchJson(url, { method: "GET", signal: opts?.signal, timeoutMs: opts?.timeoutMs });
+    if (!isRecord(json)) return { ok: false, packs: [] };
+
+    const raw = Array.isArray((json as Record<string, unknown>).packs)
+      ? ((json as Record<string, unknown>).packs as unknown[])
+      : [];
+    const packs = raw
+      .map(parseCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetPack)
+      .filter((item): item is PluginCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetPack => item !== null);
+    const sourcePlanRaw = (json as Record<string, unknown>).source_proposal_evidence_plan;
+    const sourcePlan = isRecord(sourcePlanRaw)
+      ? {
+          status: safeString(sourcePlanRaw.status, "") || undefined,
+          candidate_capability_count: safeNumber(sourcePlanRaw.candidate_capability_count, 0),
+          proposal_evidence_missing_count: safeNumber(sourcePlanRaw.proposal_evidence_missing_count, 0),
+          proposal_evidence_ready_count: safeNumber(sourcePlanRaw.proposal_evidence_ready_count, 0),
+          proposal_review_missing_count: safeNumber(sourcePlanRaw.proposal_review_missing_count, 0),
+          next_smallest_truthful_gap:
+            safeString(sourcePlanRaw.next_smallest_truthful_gap, "") || undefined,
+        }
+      : undefined;
+    return {
+      ok: Boolean((json as Record<string, unknown>).ok ?? false),
+      kind: safeString((json as Record<string, unknown>).kind, "") || undefined,
+      stage: safeString((json as Record<string, unknown>).stage, "") || undefined,
+      status: safeString((json as Record<string, unknown>).status, "") || undefined,
+      operator_evidence_intake_worksheet_ready:
+        typeof (json as Record<string, unknown>).operator_evidence_intake_worksheet_ready === "boolean"
+          ? Boolean((json as Record<string, unknown>).operator_evidence_intake_worksheet_ready)
+          : undefined,
+      worksheet_pack_count: safeNumber((json as Record<string, unknown>).worksheet_pack_count, packs.length),
+      worksheet_row_count: safeNumber((json as Record<string, unknown>).worksheet_row_count, 0),
+      evidence_ref_required_count: safeNumber((json as Record<string, unknown>).evidence_ref_required_count, 0),
+      source_proposal_evidence_plan: sourcePlan,
+      packs,
+      packs_truncated: Boolean((json as Record<string, unknown>).packs_truncated ?? false),
+      row_preview_limit: safeNumber((json as Record<string, unknown>).row_preview_limit, 0) || undefined,
+      routes: isRecord((json as Record<string, unknown>).routes)
+        ? Object.fromEntries(
+            Object.entries((json as Record<string, unknown>).routes as Record<string, unknown>).map(([key, value]) => [
+              key,
+              safeString(value, ""),
+            ]),
+          )
+        : undefined,
+      requirements: isRecord((json as Record<string, unknown>).requirements)
+        ? Object.fromEntries(
+            Object.entries((json as Record<string, unknown>).requirements as Record<string, unknown>)
+              .filter(([, value]) => typeof value === "boolean")
+              .map(([key, value]) => [key, Boolean(value)]),
+          )
+        : undefined,
+      governance: isRecord((json as Record<string, unknown>).governance)
+        ? ((json as Record<string, unknown>).governance as Record<string, unknown>)
+        : undefined,
+      next_smallest_truthful_gap:
+        safeString((json as Record<string, unknown>).next_smallest_truthful_gap, "") || undefined,
+      catalog: isRecord((json as Record<string, unknown>).catalog)
+        ? ((json as Record<string, unknown>).catalog as Record<string, unknown>)
+        : undefined,
+    };
+  }
+
+  /**
+   * List read-only operator proposal-evidence export rows for offline evidence-ref collection.
+   */
+  async listCapabilityLibraryOperatorProposalEvidenceIntakeExport(
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<PluginCapabilityLibraryOperatorProposalEvidenceIntakeExportResponse> {
+    const url = this.url(this.endpoints.capabilityLibraryOperatorProposalEvidenceIntakeExport());
+    const json = await this.fetchJson(url, { method: "GET", signal: opts?.signal, timeoutMs: opts?.timeoutMs });
+    if (!isRecord(json)) return { ok: false, packs: [] };
+
+    const raw = Array.isArray((json as Record<string, unknown>).packs)
+      ? ((json as Record<string, unknown>).packs as unknown[])
+      : [];
+    const packs = raw
+      .map(parseCapabilityLibraryOperatorProposalEvidenceIntakeExportPack)
+      .filter((item): item is PluginCapabilityLibraryOperatorProposalEvidenceIntakeExportPack => item !== null);
+    const sourcePlanRaw = (json as Record<string, unknown>).source_proposal_evidence_plan;
+    const sourcePlan = isRecord(sourcePlanRaw)
+      ? {
+          status: safeString(sourcePlanRaw.status, "") || undefined,
+          candidate_capability_count: safeNumber(sourcePlanRaw.candidate_capability_count, 0),
+          proposal_evidence_missing_count: safeNumber(sourcePlanRaw.proposal_evidence_missing_count, 0),
+          proposal_evidence_ready_count: safeNumber(sourcePlanRaw.proposal_evidence_ready_count, 0),
+          proposal_review_missing_count: safeNumber(sourcePlanRaw.proposal_review_missing_count, 0),
+          next_smallest_truthful_gap:
+            safeString(sourcePlanRaw.next_smallest_truthful_gap, "") || undefined,
+        }
+      : undefined;
+    return {
+      ok: Boolean((json as Record<string, unknown>).ok ?? false),
+      kind: safeString((json as Record<string, unknown>).kind, "") || undefined,
+      stage: safeString((json as Record<string, unknown>).stage, "") || undefined,
+      status: safeString((json as Record<string, unknown>).status, "") || undefined,
+      operator_evidence_intake_export_ready:
+        typeof (json as Record<string, unknown>).operator_evidence_intake_export_ready === "boolean"
+          ? Boolean((json as Record<string, unknown>).operator_evidence_intake_export_ready)
+          : undefined,
+      export_pack_count: safeNumber((json as Record<string, unknown>).export_pack_count, packs.length),
+      export_row_count: safeNumber((json as Record<string, unknown>).export_row_count, 0),
+      exported_row_count: safeNumber((json as Record<string, unknown>).exported_row_count, 0),
+      evidence_ref_required_count: safeNumber((json as Record<string, unknown>).evidence_ref_required_count, 0),
+      export_rows_truncated: Boolean((json as Record<string, unknown>).export_rows_truncated ?? false),
+      row_limit: safeNumber((json as Record<string, unknown>).row_limit, 0) || undefined,
+      source_proposal_evidence_plan: sourcePlan,
+      export_schema: isRecord((json as Record<string, unknown>).export_schema)
+        ? ((json as Record<string, unknown>).export_schema as Record<string, unknown>)
+        : undefined,
+      packs,
+      packs_truncated: Boolean((json as Record<string, unknown>).packs_truncated ?? false),
+      routes: isRecord((json as Record<string, unknown>).routes)
+        ? Object.fromEntries(
+            Object.entries((json as Record<string, unknown>).routes as Record<string, unknown>).map(([key, value]) => [
+              key,
+              safeString(value, ""),
+            ]),
+          )
+        : undefined,
+      requirements: isRecord((json as Record<string, unknown>).requirements)
+        ? Object.fromEntries(
+            Object.entries((json as Record<string, unknown>).requirements as Record<string, unknown>)
+              .filter(([, value]) => typeof value === "boolean")
+              .map(([key, value]) => [key, Boolean(value)]),
+          )
+        : undefined,
+      governance: isRecord((json as Record<string, unknown>).governance)
+        ? ((json as Record<string, unknown>).governance as Record<string, unknown>)
+        : undefined,
+      next_smallest_truthful_gap:
+        safeString((json as Record<string, unknown>).next_smallest_truthful_gap, "") || undefined,
+      catalog: isRecord((json as Record<string, unknown>).catalog)
+        ? ((json as Record<string, unknown>).catalog as Record<string, unknown>)
+        : undefined,
+    };
+  }
+
+  /**
+   * Preview operator-filled proposal-evidence export rows without mutating registry metadata.
+   */
+  async previewCapabilityLibraryOperatorProposalEvidenceIntakeImport(
+    req: PluginCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewRequest,
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<PluginCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewResponse> {
+    const rows = Array.isArray(req?.rows) ? req.rows : [];
+    const url = this.url(this.endpoints.capabilityLibraryOperatorProposalEvidenceIntakeImportPreview());
+    const json = await this.fetchJson(url, {
+      method: "POST",
+      body: JSON.stringify({
+        ...req,
+        actor: pluginMutationActor(req.actor),
+        rows,
+      }),
+      signal: opts?.signal,
+      timeoutMs: opts?.timeoutMs,
+    });
+    if (!isRecord(json)) return { ok: false, ready_rows: [], pending_rows: [], invalid_rows: [], apply_payload_groups: [] };
+
+    const readyRowsRaw = safeUnknownArray((json as Record<string, unknown>).ready_rows) ?? [];
+    const pendingRowsRaw = safeUnknownArray((json as Record<string, unknown>).pending_rows) ?? [];
+    const invalidRowsRaw = safeUnknownArray((json as Record<string, unknown>).invalid_rows) ?? [];
+    const groupsRaw = safeUnknownArray((json as Record<string, unknown>).apply_payload_groups) ?? [];
+    const readyRows = readyRowsRaw
+      .map(parseCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewRow)
+      .filter((item): item is PluginCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewRow => item !== null);
+    const pendingRows = pendingRowsRaw
+      .map(parseCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewRow)
+      .filter((item): item is PluginCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewRow => item !== null);
+    const invalidRows = invalidRowsRaw
+      .map(parseCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewRow)
+      .filter((item): item is PluginCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewRow => item !== null);
+    const groups = groupsRaw
+      .map(parseCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewGroup)
+      .filter(
+        (item): item is PluginCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewGroup => item !== null,
+      );
+    const sourcePlanRaw = (json as Record<string, unknown>).source_proposal_evidence_plan;
+    const sourcePlan = isRecord(sourcePlanRaw)
+      ? {
+          status: safeString(sourcePlanRaw.status, "") || undefined,
+          candidate_capability_count: safeNumber(sourcePlanRaw.candidate_capability_count, 0),
+          proposal_evidence_missing_count: safeNumber(sourcePlanRaw.proposal_evidence_missing_count, 0),
+          proposal_evidence_ready_count: safeNumber(sourcePlanRaw.proposal_evidence_ready_count, 0),
+          proposal_review_missing_count: safeNumber(sourcePlanRaw.proposal_review_missing_count, 0),
+          next_smallest_truthful_gap:
+            safeString(sourcePlanRaw.next_smallest_truthful_gap, "") || undefined,
+        }
+      : undefined;
+    return {
+      ok: Boolean((json as Record<string, unknown>).ok ?? false),
+      kind: safeString((json as Record<string, unknown>).kind, "") || undefined,
+      stage: safeString((json as Record<string, unknown>).stage, "") || undefined,
+      status: safeString((json as Record<string, unknown>).status, "") || undefined,
+      operator_evidence_intake_import_preview_ready:
+        typeof (json as Record<string, unknown>).operator_evidence_intake_import_preview_ready === "boolean"
+          ? Boolean((json as Record<string, unknown>).operator_evidence_intake_import_preview_ready)
+          : undefined,
+      input_row_count: safeNumber((json as Record<string, unknown>).input_row_count, rows.length),
+      processed_row_count: safeNumber((json as Record<string, unknown>).processed_row_count, 0),
+      row_input_truncated: Boolean((json as Record<string, unknown>).row_input_truncated ?? false),
+      ready_row_count: safeNumber((json as Record<string, unknown>).ready_row_count, readyRows.length),
+      pending_row_count: safeNumber((json as Record<string, unknown>).pending_row_count, pendingRows.length),
+      invalid_row_count: safeNumber((json as Record<string, unknown>).invalid_row_count, invalidRows.length),
+      apply_group_count: safeNumber((json as Record<string, unknown>).apply_group_count, groups.length),
+      apply_groups_truncated: Boolean((json as Record<string, unknown>).apply_groups_truncated ?? false),
+      row_limit: safeNumber((json as Record<string, unknown>).row_limit, 0) || undefined,
+      apply_group_limit: safeNumber((json as Record<string, unknown>).apply_group_limit, 0) || undefined,
+      ready_rows: readyRows,
+      ready_rows_truncated: Boolean((json as Record<string, unknown>).ready_rows_truncated ?? false),
+      pending_rows: pendingRows,
+      pending_rows_truncated: Boolean((json as Record<string, unknown>).pending_rows_truncated ?? false),
+      invalid_rows: invalidRows,
+      invalid_rows_truncated: Boolean((json as Record<string, unknown>).invalid_rows_truncated ?? false),
+      apply_payload_groups: groups,
+      source_proposal_evidence_plan: sourcePlan,
+      routes: isRecord((json as Record<string, unknown>).routes)
+        ? Object.fromEntries(
+            Object.entries((json as Record<string, unknown>).routes as Record<string, unknown>).map(([key, value]) => [
+              key,
+              safeString(value, ""),
+            ]),
+          )
+        : undefined,
+      requirements: isRecord((json as Record<string, unknown>).requirements)
+        ? Object.fromEntries(
+            Object.entries((json as Record<string, unknown>).requirements as Record<string, unknown>)
+              .filter(([, value]) => typeof value === "boolean")
+              .map(([key, value]) => [key, Boolean(value)]),
+          )
+        : undefined,
+      governance: isRecord((json as Record<string, unknown>).governance)
+        ? ((json as Record<string, unknown>).governance as Record<string, unknown>)
+        : undefined,
+      next_smallest_truthful_gap:
+        safeString((json as Record<string, unknown>).next_smallest_truthful_gap, "") || undefined,
+      catalog: isRecord((json as Record<string, unknown>).catalog)
+        ? ((json as Record<string, unknown>).catalog as Record<string, unknown>)
+        : undefined,
+    };
+  }
+
+  /**
+   * Audit read-only operator-supplied proposal-evidence refs already recorded by governed apply.
+   */
+  async listCapabilityLibraryOperatorProposalEvidenceIntakeAudit(
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<PluginCapabilityLibraryOperatorProposalEvidenceIntakeAuditResponse> {
+    const url = this.url(this.endpoints.capabilityLibraryOperatorProposalEvidenceIntakeAudit());
+    const json = await this.fetchJson(url, { method: "GET", signal: opts?.signal, timeoutMs: opts?.timeoutMs });
+    if (!isRecord(json)) return { ok: false, packs: [] };
+
+    const raw = Array.isArray((json as Record<string, unknown>).packs)
+      ? ((json as Record<string, unknown>).packs as unknown[])
+      : [];
+    const packs = raw
+      .map(parseCapabilityLibraryOperatorProposalEvidenceIntakeAuditPack)
+      .filter((item): item is PluginCapabilityLibraryOperatorProposalEvidenceIntakeAuditPack => item !== null);
+    const sourcePlanRaw = (json as Record<string, unknown>).source_proposal_evidence_plan;
+    const sourcePlan = isRecord(sourcePlanRaw)
+      ? {
+          status: safeString(sourcePlanRaw.status, "") || undefined,
+          candidate_capability_count: safeNumber(sourcePlanRaw.candidate_capability_count, 0),
+          proposal_evidence_missing_count: safeNumber(sourcePlanRaw.proposal_evidence_missing_count, 0),
+          proposal_evidence_ready_count: safeNumber(sourcePlanRaw.proposal_evidence_ready_count, 0),
+          proposal_review_missing_count: safeNumber(sourcePlanRaw.proposal_review_missing_count, 0),
+          next_smallest_truthful_gap:
+            safeString(sourcePlanRaw.next_smallest_truthful_gap, "") || undefined,
+        }
+      : undefined;
+    return {
+      ok: Boolean((json as Record<string, unknown>).ok ?? false),
+      kind: safeString((json as Record<string, unknown>).kind, "") || undefined,
+      stage: safeString((json as Record<string, unknown>).stage, "") || undefined,
+      status: safeString((json as Record<string, unknown>).status, "") || undefined,
+      operator_evidence_intake_audit_ready:
+        typeof (json as Record<string, unknown>).operator_evidence_intake_audit_ready === "boolean"
+          ? Boolean((json as Record<string, unknown>).operator_evidence_intake_audit_ready)
+          : undefined,
+      recorded_pack_count: safeNumber((json as Record<string, unknown>).recorded_pack_count, packs.length),
+      recorded_capability_count: safeNumber((json as Record<string, unknown>).recorded_capability_count, 0),
+      evidence_ref_count: safeNumber((json as Record<string, unknown>).evidence_ref_count, 0),
+      future_review_required_count: safeNumber(
+        (json as Record<string, unknown>).future_review_required_count,
+        0,
+      ),
+      source_proposal_evidence_plan: sourcePlan,
+      packs,
+      packs_truncated: Boolean((json as Record<string, unknown>).packs_truncated ?? false),
+      capability_preview_limit: safeNumber((json as Record<string, unknown>).capability_preview_limit, 0) || undefined,
+      routes: isRecord((json as Record<string, unknown>).routes)
+        ? Object.fromEntries(
+            Object.entries((json as Record<string, unknown>).routes as Record<string, unknown>).map(([key, value]) => [
+              key,
+              safeString(value, ""),
+            ]),
+          )
+        : undefined,
+      requirements: isRecord((json as Record<string, unknown>).requirements)
+        ? Object.fromEntries(
+            Object.entries((json as Record<string, unknown>).requirements as Record<string, unknown>)
+              .filter(([, value]) => typeof value === "boolean")
+              .map(([key, value]) => [key, Boolean(value)]),
+          )
+        : undefined,
+      governance: isRecord((json as Record<string, unknown>).governance)
+        ? ((json as Record<string, unknown>).governance as Record<string, unknown>)
+        : undefined,
+      next_smallest_truthful_gap:
+        safeString((json as Record<string, unknown>).next_smallest_truthful_gap, "") || undefined,
+      catalog: isRecord((json as Record<string, unknown>).catalog)
+        ? ((json as Record<string, unknown>).catalog as Record<string, unknown>)
+        : undefined,
+    };
+  }
+
+  /**
+   * Preview operator-supplied proposal-evidence references without apply authority.
+   */
+  async previewCapabilityLibraryOperatorProposalEvidenceIntake(
+    req: PluginCapabilityLibraryOperatorProposalEvidenceIntakeRequest,
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<PluginCapabilityLibraryOperatorProposalEvidenceIntakeResponse> {
+    const evidenceRefs = safeStringArray(req?.evidence_refs) ?? [];
+    if (!evidenceRefs.length) {
+      throw new Error(
+        "PluginBrowserClient.previewCapabilityLibraryOperatorProposalEvidenceIntake requires req.evidence_refs",
+      );
+    }
+
+    const url = this.url(this.endpoints.capabilityLibraryOperatorProposalEvidenceIntakePreview());
+    const body = {
+      ...req,
+      actor: pluginMutationActor(req.actor),
+      pack_ids: safeStringArray(req.pack_ids) ?? [],
+      capability_ids: safeStringArray(req.capability_ids) ?? [],
+      evidence_refs: evidenceRefs,
+      dry_run: true,
+      dry_run_fingerprint: undefined,
+    };
+    const json = await this.fetchJson(url, {
+      method: "POST",
+      body: JSON.stringify(body),
+      signal: opts?.signal,
+      timeoutMs: opts?.timeoutMs,
+    });
+
+    return parseCapabilityLibraryOperatorProposalEvidenceIntakeResponse(json, true, evidenceRefs.length);
+  }
+
+  /**
+   * Dry-run or write governed operator-supplied proposal-evidence references for selected packs.
+   */
+  async applyCapabilityLibraryOperatorProposalEvidenceIntake(
+    req: PluginCapabilityLibraryOperatorProposalEvidenceIntakeRequest,
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<PluginCapabilityLibraryOperatorProposalEvidenceIntakeResponse> {
+    const evidenceRefs = safeStringArray(req?.evidence_refs) ?? [];
+    if (!evidenceRefs.length) {
+      throw new Error(
+        "PluginBrowserClient.applyCapabilityLibraryOperatorProposalEvidenceIntake requires req.evidence_refs",
+      );
+    }
+
+    const url = this.url(this.endpoints.capabilityLibraryOperatorProposalEvidenceIntake());
+    const body = {
+      ...req,
+      actor: pluginMutationActor(req.actor),
+      pack_ids: safeStringArray(req.pack_ids) ?? [],
+      capability_ids: safeStringArray(req.capability_ids) ?? [],
+      evidence_refs: evidenceRefs,
+      dry_run: req.dry_run !== false,
+    };
+    const json = await this.fetchJson(url, {
+      method: "POST",
+      body: JSON.stringify(body),
+      signal: opts?.signal,
+      timeoutMs: opts?.timeoutMs,
+    });
+
+    assertPluginMutationAllowed(json, "Operator proposal-evidence intake denied.", url);
+    return parseCapabilityLibraryOperatorProposalEvidenceIntakeResponse(json, body.dry_run, evidenceRefs.length);
+  }
+
+  /**
    * List read-only capability-pack operator review decision receipts.
    */
   async listCapabilityPackOperatorReviewDecisions(
@@ -2462,6 +5044,89 @@ export class PluginBrowserClient {
       receipt_path: safeString((json as Record<string, unknown>).receipt_path, "") || undefined,
       receipt: receipt ?? undefined,
       pack: pack ?? undefined,
+      governance: isRecord((json as Record<string, unknown>).governance)
+        ? ((json as Record<string, unknown>).governance as Record<string, unknown>)
+        : undefined,
+    };
+  }
+
+  /**
+   * Dry-run or write governed capability-pack operator review decision receipts from the current surface.
+   */
+  async decideCapabilityPackOperatorReviewBulkFromSurface(
+    req: PluginCapabilityPackOperatorReviewBulkDecisionRequest,
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<PluginCapabilityPackOperatorReviewBulkDecisionResponse> {
+    const action = (req?.action || "").trim();
+    if (!action) {
+      throw new Error("PluginBrowserClient.decideCapabilityPackOperatorReviewBulkFromSurface requires req.action");
+    }
+
+    const url = this.url(this.endpoints.capabilityPackOperatorReviewBulkDecision());
+    const body = {
+      ...req,
+      action,
+      actor: pluginMutationActor(req.actor),
+      pack_ids: safeStringArray(req.pack_ids) ?? [],
+      dry_run: req.dry_run !== false,
+    };
+    const json = await this.fetchJson(url, {
+      method: "POST",
+      body: JSON.stringify(body),
+      signal: opts?.signal,
+      timeoutMs: opts?.timeoutMs,
+    });
+
+    assertPluginMutationAllowed(json, "Capability pack bulk operator review decision denied.", url);
+    if (!isRecord(json)) return { ok: true, applied: false, dry_run: body.dry_run };
+
+    const plannedRaw = safeUnknownArray((json as Record<string, unknown>).planned) ?? [];
+    const recordedRaw = safeUnknownArray((json as Record<string, unknown>).recorded) ?? [];
+    const failedRaw = safeUnknownArray((json as Record<string, unknown>).failed) ?? [];
+    const skippedRaw = safeUnknownArray((json as Record<string, unknown>).skipped) ?? [];
+    const planned = plannedRaw
+      .map(parseCapabilityPackOperatorReviewBulkDecisionPlan)
+      .filter((item): item is PluginCapabilityPackOperatorReviewBulkDecisionPlan => item !== null);
+    const recorded = recordedRaw
+      .map(parseCapabilityPackOperatorReviewBulkDecisionRecord)
+      .filter((item): item is PluginCapabilityPackOperatorReviewBulkDecisionRecord => item !== null);
+    const failed = failedRaw
+      .map(parseCapabilityPackOperatorReviewBulkDecisionRecord)
+      .filter((item): item is PluginCapabilityPackOperatorReviewBulkDecisionRecord => item !== null);
+    const skipped = skippedRaw
+      .map(parseCapabilityPackOperatorReviewBulkDecisionRecord)
+      .filter((item): item is PluginCapabilityPackOperatorReviewBulkDecisionRecord => item !== null);
+    return {
+      ok: Boolean((json as Record<string, unknown>).ok ?? false),
+      applied:
+        typeof (json as Record<string, unknown>).applied === "boolean"
+          ? Boolean((json as Record<string, unknown>).applied)
+          : undefined,
+      kind: safeString((json as Record<string, unknown>).kind, "") || undefined,
+      status: safeString((json as Record<string, unknown>).status, "") || undefined,
+      dry_run:
+        typeof (json as Record<string, unknown>).dry_run === "boolean"
+          ? Boolean((json as Record<string, unknown>).dry_run)
+          : undefined,
+      error: safeString((json as Record<string, unknown>).error, "") || undefined,
+      allowed_actions: safeStringArray((json as Record<string, unknown>).allowed_actions),
+      batch_id: safeString((json as Record<string, unknown>).batch_id, "") || undefined,
+      planned_pack_count: safeNumber((json as Record<string, unknown>).planned_pack_count, planned.length),
+      planned_capability_count: safeNumber((json as Record<string, unknown>).planned_capability_count, 0),
+      recorded_pack_count: safeNumber((json as Record<string, unknown>).recorded_pack_count, recorded.length),
+      recorded_capability_count: safeNumber((json as Record<string, unknown>).recorded_capability_count, 0),
+      planned,
+      recorded,
+      failed,
+      skipped,
+      before: isRecord((json as Record<string, unknown>).before)
+        ? ((json as Record<string, unknown>).before as Record<string, unknown>)
+        : undefined,
+      promotion_discipline: isRecord((json as Record<string, unknown>).promotion_discipline)
+        ? ((json as Record<string, unknown>).promotion_discipline as Record<string, unknown>)
+        : undefined,
+      next_smallest_truthful_gap:
+        safeString((json as Record<string, unknown>).next_smallest_truthful_gap, "") || undefined,
       governance: isRecord((json as Record<string, unknown>).governance)
         ? ((json as Record<string, unknown>).governance as Record<string, unknown>)
         : undefined,
