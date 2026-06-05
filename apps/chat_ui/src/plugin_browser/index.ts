@@ -1905,14 +1905,18 @@ function safeUnknownArray(v: unknown): unknown[] | undefined {
   return Array.isArray(v) ? v : undefined;
 }
 
+function operatorEvidenceRefsInputText(evidenceRefs?: string[]): string {
+  const normalizedEvidenceRefs = (Array.isArray(evidenceRefs) ? evidenceRefs : [])
+    .map((ref) => safeString(ref, "").trim())
+    .filter((ref) => ref.length > 0);
+  return normalizedEvidenceRefs.length ? JSON.stringify(normalizedEvidenceRefs) : "";
+}
+
 export function operatorEvidenceExportRowsToImportPreviewText(
   rows: PluginCapabilityLibraryOperatorProposalEvidenceIntakeExportRow[],
   evidenceRefs?: string[],
 ): string {
-  const normalizedEvidenceRefs = (Array.isArray(evidenceRefs) ? evidenceRefs : [])
-    .map((ref) => safeString(ref, "").trim())
-    .filter((ref) => ref.length > 0);
-  const evidenceRefsInput = normalizedEvidenceRefs.length ? JSON.stringify(normalizedEvidenceRefs) : "";
+  const evidenceRefsInput = operatorEvidenceRefsInputText(evidenceRefs);
   const normalizedRows = (Array.isArray(rows) ? rows : [])
     .map((row) => ({
       pack_id: safeString(row.pack_id, ""),
@@ -1923,6 +1927,36 @@ export function operatorEvidenceExportRowsToImportPreviewText(
     }))
     .filter((row) => row.pack_id && row.capability);
   return JSON.stringify(normalizedRows, null, 2);
+}
+
+export function operatorEvidenceBatchToImportPreviewText(
+  batch: PluginCapabilityLibraryOperatorEvidenceBatch | null | undefined,
+  evidenceRefs?: string[],
+): string {
+  const evidenceRefsInput = operatorEvidenceRefsInputText(evidenceRefs);
+  const hint = isRecord(batch?.apply_payload_hint) ? batch.apply_payload_hint : {};
+  const hintPackIds = safeStringArray(hint.pack_ids) ?? [];
+  const packId = safeString(batch?.pack_id, hintPackIds[0] ?? "");
+  const packVersion = safeString(batch?.pack_version, "");
+  const capabilityRows = Array.isArray(batch?.capabilities) ? batch.capabilities : [];
+  const rowsFromCapabilities = capabilityRows.map((capability) => ({
+    pack_id: packId,
+    pack_version: packVersion,
+    capability: safeString(capability.capability, ""),
+    proposal_id: safeString(capability.proposal_id, ""),
+    evidence_refs_input: evidenceRefsInput,
+  }));
+  const hintCapabilityIds = safeStringArray(hint.capability_ids) ?? [];
+  const rows = rowsFromCapabilities.length
+    ? rowsFromCapabilities
+    : hintCapabilityIds.map((capability) => ({
+        pack_id: packId,
+        pack_version: packVersion,
+        capability,
+        proposal_id: "",
+        evidence_refs_input: evidenceRefsInput,
+      }));
+  return JSON.stringify(rows.filter((row) => row.pack_id && row.capability), null, 2);
 }
 
 function operatorEvidenceRefsInputCount(value: unknown): number {

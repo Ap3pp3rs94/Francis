@@ -64067,6 +64067,56 @@ Remaining truthful gap:
   through backend import-preview, dry-run, and governed apply before
   proposal-evidence counts can move.
 
+### Stage 17 operator evidence next-batch import-row bridge
+
+This pass connected the source-readiness next operator evidence batch to the
+existing import-preview textarea without bypassing the governed intake route.
+
+Shipped behavior:
+
+- `apps/chat_ui/src/plugin_browser/index.ts` now exposes
+  `operatorEvidenceBatchToImportPreviewText()`, a framework-agnostic helper
+  that converts the backend `next_operator_evidence_batch` readback into the
+  existing import-preview row JSON shape.
+- The helper leaves `evidence_refs_input` blank unless explicit operator refs
+  are already typed, and it can fall back to backend `apply_payload_hint`
+  pack/capability scope when capability samples are absent.
+- `apps/chat_ui/src/App.tsx` now offers `Load next-batch rows` and
+  `Fill next batch with typed refs` controls in the Source Readiness
+  next-batch block. These controls only update local textarea state and reset
+  stale import-preview/dry-run readbacks.
+- The controls do not call import-preview, dry-run, apply, approve proposals,
+  promote capabilities, validate evidence truth, or write memory/registry
+  metadata.
+
+Latest validation for this UI helper:
+
+- Chat UI client/contract tests:
+  `cd apps\chat_ui; npm run test -- src/plugin_browser/index.test.ts`
+  Result: 227 tests passed.
+- Chat UI production build:
+  `cd apps\chat_ui; npm run build`
+  Result: passed. Vite emitted the existing non-fatal large chunk warning.
+- Read-only local data route probe through FastAPI TestClient:
+  Result: source-readiness returned `status=operator_evidence_refs_required`,
+  `proposal_evidence_missing_count=2262`,
+  `operator_evidence_ref_required_count=2262`,
+  `next_operator_evidence_batch_ready=true`,
+  `next_operator_evidence_batch_capability_count=1`, and next batch
+  `pack_id=legacy.generated.bulkdirectplugin`. Export returned
+  `status=ready_for_operator_evidence_export`, `export_pack_count=46`,
+  `exported_row_count=2262`, and audit returned
+  `status=no_operator_evidence_refs_recorded`, `recorded_capability_count=0`.
+  Existing automatic sources remained empty:
+  `existing_registry_friction_summary_ref.candidate_capability_count=0` and
+  `existing_linked_proposal_artifact.candidate_capability_count=0`.
+
+Remaining truthful gap:
+
+- This bridge does not supply or verify real operator evidence refs. Stage 17
+  still requires real operator refs to pass through backend import-preview,
+  dry-run, and governed apply before proposal-evidence counts can move.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

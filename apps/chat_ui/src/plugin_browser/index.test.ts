@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   PluginBrowserApiError,
   PluginBrowserClient,
+  operatorEvidenceBatchToImportPreviewText,
   operatorEvidenceExportRowsToImportPreviewText,
   summarizeOperatorEvidenceIntakeResponseGuards,
   summarizeOperatorEvidenceImportPreviewGuards,
@@ -102,6 +103,57 @@ test("operatorEvidenceExportRowsToImportPreviewText fills explicit operator refs
       pack_version: "1.0.0",
       capability: "generated.ops.run",
       proposal_id: "plugin_proposal_generated_ops_run",
+      evidence_refs_input: JSON.stringify(["mission.operator.ref", "mission.operator.ref.2"]),
+    },
+  ]);
+});
+
+test("operatorEvidenceBatchToImportPreviewText converts next batch capabilities without refs", () => {
+  const text = operatorEvidenceBatchToImportPreviewText({
+    status: "ready_for_operator_evidence_batch",
+    pack_id: "legacy.generated.ops",
+    pack_version: "1.0.0",
+    capabilities: [
+      {
+        capability: "generated.ops.run",
+        proposal_id: "plugin_proposal_generated_ops_run",
+      },
+      {
+        capability: "",
+        proposal_id: "ignored",
+      },
+    ],
+  });
+
+  assert.deepEqual(JSON.parse(text), [
+    {
+      pack_id: "legacy.generated.ops",
+      pack_version: "1.0.0",
+      capability: "generated.ops.run",
+      proposal_id: "plugin_proposal_generated_ops_run",
+      evidence_refs_input: "",
+    },
+  ]);
+});
+
+test("operatorEvidenceBatchToImportPreviewText can fill typed refs from payload hint scope", () => {
+  const text = operatorEvidenceBatchToImportPreviewText(
+    {
+      status: "ready_for_operator_evidence_batch",
+      apply_payload_hint: {
+        pack_ids: ["legacy.generated.ops"],
+        capability_ids: ["generated.ops.run"],
+      },
+    },
+    ["mission.operator.ref", "", "mission.operator.ref.2"],
+  );
+
+  assert.deepEqual(JSON.parse(text), [
+    {
+      pack_id: "legacy.generated.ops",
+      pack_version: "",
+      capability: "generated.ops.run",
+      proposal_id: "",
       evidence_refs_input: JSON.stringify(["mission.operator.ref", "mission.operator.ref.2"]),
     },
   ]);

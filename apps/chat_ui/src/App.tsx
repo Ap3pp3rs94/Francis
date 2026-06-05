@@ -110,6 +110,7 @@ import type {
 import {
   PluginBrowserApiError,
   PluginBrowserClient,
+  operatorEvidenceBatchToImportPreviewText,
   operatorEvidenceExportRowsToImportPreviewText,
   summarizeOperatorEvidenceIntakeResponseGuards,
   summarizeOperatorEvidenceImportPreviewGuards,
@@ -18697,6 +18698,11 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
       dryRun: typeof hint.dry_run === "boolean" ? Boolean(hint.dry_run) : undefined,
     };
   }, [nextOperatorEvidenceBatch?.apply_payload_hint]);
+  const nextOperatorEvidenceBatchHasImportRows = Boolean(
+    (nextOperatorEvidenceBatch?.pack_id || nextOperatorEvidenceBatchPayloadHint.packIds.length > 0) &&
+      ((nextOperatorEvidenceBatch.capabilities ?? []).some((item) => safeString(item.capability).trim()) ||
+        nextOperatorEvidenceBatchPayloadHint.capabilityIds.length > 0),
+  );
   const proposalEvidenceRemediationCounts = useMemo(
     () => ({
       packs: capabilityLibraryProposalEvidenceRemediation?.candidate_pack_count ?? 0,
@@ -19457,6 +19463,32 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
     loadSelectedOperatorProposalEvidenceExportRows(operatorProposalEvidenceRefs);
   }
 
+  function loadNextOperatorEvidenceBatchImportRows(evidenceRefs?: string[]) {
+    if (!nextOperatorEvidenceBatch) {
+      setError("No next operator evidence batch is available to load.");
+      return;
+    }
+    const rowsText = operatorEvidenceBatchToImportPreviewText(nextOperatorEvidenceBatch, evidenceRefs);
+    const rows = parseOperatorEvidenceImportRowsInput(rowsText);
+    if (!rows.length) {
+      setError("The next operator evidence batch did not include importable capability rows.");
+      return;
+    }
+    setCapabilityLibraryOperatorProposalEvidenceImportRows(rowsText);
+    setCapabilityLibraryOperatorProposalEvidenceImportPreview(null);
+    setCapabilityLibraryOperatorProposalEvidenceImportApplyGroupKey("");
+    setCapabilityLibraryOperatorProposalEvidenceIntakeResponse(null);
+    setError(null);
+  }
+
+  function loadNextOperatorEvidenceBatchImportRowsWithRefs() {
+    if (!operatorProposalEvidenceRefs.length) {
+      setError("Add at least one operator evidence reference before filling next-batch rows.");
+      return;
+    }
+    loadNextOperatorEvidenceBatchImportRows(operatorProposalEvidenceRefs);
+  }
+
   async function previewCapabilityLibraryOperatorProposalEvidenceImport() {
     let rows: Array<Record<string, unknown>>;
     try {
@@ -20128,6 +20160,22 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
                         hint dry-run {String(nextOperatorEvidenceBatchPayloadHint.dryRun)}
                       </span>
                     ) : null}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button
+                      style={buttonStyle}
+                      disabled={busy || !nextOperatorEvidenceBatchHasImportRows}
+                      onClick={() => loadNextOperatorEvidenceBatchImportRows()}
+                    >
+                      Load next-batch rows
+                    </button>
+                    <button
+                      style={buttonStyle}
+                      disabled={busy || !nextOperatorEvidenceBatchHasImportRows || !operatorProposalEvidenceRefs.length}
+                      onClick={loadNextOperatorEvidenceBatchImportRowsWithRefs}
+                    >
+                      Fill next batch with typed refs
+                    </button>
                   </div>
                   {nextOperatorEvidenceBatch.capabilities?.length ? (
                     <div style={{ display: "grid", gap: 6 }}>
