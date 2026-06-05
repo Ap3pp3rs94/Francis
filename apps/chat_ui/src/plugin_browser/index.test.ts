@@ -6,6 +6,7 @@ import {
   PluginBrowserClient,
   operatorEvidenceBatchToImportPreviewText,
   operatorEvidenceExportRowsToImportPreviewText,
+  summarizeOperatorEvidenceImportGroupApplyReadiness,
   summarizeOperatorEvidenceIntakeResponseGuards,
   summarizeOperatorEvidenceImportPreviewGuards,
   summarizeOperatorEvidenceImportRowsText,
@@ -300,6 +301,64 @@ test("summarizeOperatorEvidenceIntakeResponseGuards preserves backend intake aut
   assert.equal(unknown.dry_run_required_for_apply, "unknown");
   assert.equal(unknown.dry_run_fingerprint_present, "false");
   assert.equal(unknown.does_not_approve_proposals, "unknown");
+});
+
+test("summarizeOperatorEvidenceImportGroupApplyReadiness reports active dry-run scope", () => {
+  const group = {
+    pack_id: "legacy.generated.ops",
+    pack_version: "1.0.0",
+  };
+
+  assert.deepEqual(
+    summarizeOperatorEvidenceImportGroupApplyReadiness(
+      group,
+      {
+        ok: true,
+        status: "dry_run",
+        dry_run_fingerprint: "abc123dryrunfingerprint",
+        planned: [
+          {
+            pack_id: "legacy.generated.ops",
+            pack_version: "1.0.0",
+          },
+        ],
+      },
+      "group-key",
+      "group-key",
+    ),
+    {
+      active_group: true,
+      dry_run_response: true,
+      dry_run_fingerprint_present: true,
+      planned_pack_matches_group: true,
+      ready_for_apply: true,
+    },
+  );
+
+  assert.deepEqual(
+    summarizeOperatorEvidenceImportGroupApplyReadiness(
+      group,
+      {
+        ok: true,
+        status: "dry_run",
+        planned: [
+          {
+            pack_id: "legacy.generated.ops",
+            pack_version: "1.0.0",
+          },
+        ],
+      },
+      "stale-group-key",
+      "group-key",
+    ),
+    {
+      active_group: false,
+      dry_run_response: true,
+      dry_run_fingerprint_present: false,
+      planned_pack_matches_group: true,
+      ready_for_apply: false,
+    },
+  );
 });
 
 test("PluginBrowserClient lifecycle mutations send an explicit plugin actor", async () => {

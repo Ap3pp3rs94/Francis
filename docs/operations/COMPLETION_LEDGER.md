@@ -64149,6 +64149,41 @@ Remaining truthful gap:
   real operator refs to pass through backend import-preview, dry-run, and
   governed apply before proposal-evidence counts can move.
 
+### Stage 17 operator evidence import-group apply readiness readback
+
+This pass made the import-preview group apply gate inspectable in the operator
+UI before `Apply group refs` can be clicked.
+
+Shipped behavior:
+
+- `apps/chat_ui/src/plugin_browser/index.ts` now exposes
+  `summarizeOperatorEvidenceImportGroupApplyReadiness()`, a
+  framework-agnostic helper that summarizes whether a preview group has the
+  active dry-run key, a dry-run response, a dry-run fingerprint, a matching
+  planned pack, and overall local apply readiness.
+- `apps/chat_ui/src/App.tsx` now renders those group readiness fields beside
+  each operator-evidence import-preview apply group and uses the same helper to
+  enable `Apply group refs`.
+- The readback is local/advisory over the existing guarded response. It does
+  not validate evidence truth, invent refs, approve proposals, promote
+  capabilities, write memory, or bypass the backend dry-run/fingerprint/apply
+  boundary.
+
+Latest validation for this UI helper:
+
+- Chat UI client/contract tests:
+  `cd apps\chat_ui; npm run test -- src/plugin_browser/index.test.ts`
+  Result: 229 tests passed.
+- Chat UI production build:
+  `cd apps\chat_ui; npm run build`
+  Result: passed. Vite emitted the existing non-fatal large chunk warning.
+
+Remaining truthful gap:
+
+- This does not supply real operator evidence refs. Stage 17 still requires
+  real refs to pass import-preview, dry-run, and governed apply before
+  proposal-evidence counts can move.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

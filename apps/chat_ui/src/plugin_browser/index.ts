@@ -1434,6 +1434,14 @@ export type PluginCapabilityLibraryOperatorEvidenceRefsTextSummary = {
   ready_for_row_fill: boolean;
 };
 
+export type PluginCapabilityLibraryOperatorEvidenceImportGroupApplyReadinessSummary = {
+  active_group: boolean;
+  dry_run_response: boolean;
+  dry_run_fingerprint_present: boolean;
+  planned_pack_matches_group: boolean;
+  ready_for_apply: boolean;
+};
+
 export type PluginCapabilityLibraryOperatorEvidenceImportPreviewGuardSummary = {
   read_only: string;
   preview_only: string;
@@ -2123,6 +2131,33 @@ export function summarizeOperatorEvidenceIntakeResponseGuards(
       governance.operator_supplied_evidence_not_independently_verified,
     ),
     memory_write: booleanGuardStatus(governance.memory_write),
+  };
+}
+
+export function summarizeOperatorEvidenceImportGroupApplyReadiness(
+  group: PluginCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewGroup | null | undefined,
+  response: PluginCapabilityLibraryOperatorProposalEvidenceIntakeResponse | null | undefined,
+  activeGroupKey: string | null | undefined,
+  groupKey: string | null | undefined,
+): PluginCapabilityLibraryOperatorEvidenceImportGroupApplyReadinessSummary {
+  const normalizedActiveGroupKey = safeString(activeGroupKey, "").trim();
+  const normalizedGroupKey = safeString(groupKey, "").trim();
+  const activeGroup = Boolean(
+    normalizedActiveGroupKey && normalizedGroupKey && normalizedActiveGroupKey === normalizedGroupKey,
+  );
+  const dryRunResponse = response?.status === "dry_run";
+  const dryRunFingerprintPresent = Boolean(safeString(response?.dry_run_fingerprint, "").trim());
+  const plannedPackMatchesGroup = Boolean(
+    group?.pack_id &&
+      response?.planned?.some((pack) => pack.pack_id === group.pack_id && pack.pack_version === group.pack_version),
+  );
+
+  return {
+    active_group: activeGroup,
+    dry_run_response: dryRunResponse,
+    dry_run_fingerprint_present: dryRunFingerprintPresent,
+    planned_pack_matches_group: plannedPackMatchesGroup,
+    ready_for_apply: activeGroup && dryRunResponse && dryRunFingerprintPresent && plannedPackMatchesGroup,
   };
 }
 

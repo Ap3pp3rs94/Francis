@@ -112,6 +112,7 @@ import {
   PluginBrowserClient,
   operatorEvidenceBatchToImportPreviewText,
   operatorEvidenceExportRowsToImportPreviewText,
+  summarizeOperatorEvidenceImportGroupApplyReadiness,
   summarizeOperatorEvidenceIntakeResponseGuards,
   summarizeOperatorEvidenceImportPreviewGuards,
   summarizeOperatorEvidenceImportRowsText,
@@ -19023,17 +19024,15 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
     ].join("|");
   }
 
-  function operatorProposalEvidenceImportGroupCanApply(
+  function operatorProposalEvidenceImportGroupApplyReadinessSummary(
     group: PluginCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewGroup,
   ) {
     const groupKey = operatorProposalEvidenceImportGroupKey(group);
-    return Boolean(
-      capabilityLibraryOperatorProposalEvidenceImportApplyGroupKey === groupKey &&
-        capabilityLibraryOperatorProposalEvidenceIntakeResponse?.status === "dry_run" &&
-        capabilityLibraryOperatorProposalEvidenceIntakeResponse.dry_run_fingerprint &&
-        capabilityLibraryOperatorProposalEvidenceIntakeResponse.planned?.some(
-          (pack) => pack.pack_id === group.pack_id && pack.pack_version === group.pack_version,
-        ),
+    return summarizeOperatorEvidenceImportGroupApplyReadiness(
+      group,
+      capabilityLibraryOperatorProposalEvidenceIntakeResponse,
+      capabilityLibraryOperatorProposalEvidenceImportApplyGroupKey,
+      groupKey,
     );
   }
 
@@ -21167,13 +21166,13 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
                 {capabilityLibraryOperatorProposalEvidenceImportPreview?.apply_payload_groups?.length ? (
                   <div style={{ display: "grid", gap: 6 }}>
                     {capabilityLibraryOperatorProposalEvidenceImportPreview.apply_payload_groups.slice(0, 3).map((group, index) => {
-                      const groupKey = operatorProposalEvidenceImportGroupKey(group);
                       const groupCanDryRun = Boolean(
                         group.preview_payload?.pack_ids?.length &&
                           group.preview_payload.capability_ids?.length &&
                           group.preview_payload.evidence_refs?.length,
                       );
-                      const groupCanApply = operatorProposalEvidenceImportGroupCanApply(group);
+                      const groupApplyReadiness = operatorProposalEvidenceImportGroupApplyReadinessSummary(group);
+                      const groupCanApply = groupApplyReadiness.ready_for_apply;
                       return (
                         <div
                           key={`operator-evidence-import-group-${group.pack_id}-${group.pack_version ?? ""}-${index}`}
@@ -21186,9 +21185,25 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
                             {group.apply_payload_hint?.dry_run_fingerprint_required ? (
                               <span style={badgeStyle("dry-run")}>fingerprint required</span>
                             ) : null}
-                            {capabilityLibraryOperatorProposalEvidenceImportApplyGroupKey === groupKey ? (
-                              <span style={badgeStyle(groupCanApply ? "ready" : "dry-run")}>group dry-run active</span>
-                            ) : null}
+                            <span style={badgeStyle(groupApplyReadiness.active_group ? "ready" : "dry-run")}>
+                              dry-run active {String(groupApplyReadiness.active_group)}
+                            </span>
+                            <span style={badgeStyle(groupApplyReadiness.dry_run_response ? "ready" : "dry-run")}>
+                              dry-run response {String(groupApplyReadiness.dry_run_response)}
+                            </span>
+                            <span
+                              style={badgeStyle(groupApplyReadiness.dry_run_fingerprint_present ? "ready" : "dry-run")}
+                            >
+                              fingerprint {String(groupApplyReadiness.dry_run_fingerprint_present)}
+                            </span>
+                            <span
+                              style={badgeStyle(groupApplyReadiness.planned_pack_matches_group ? "ready" : "dry-run")}
+                            >
+                              planned match {String(groupApplyReadiness.planned_pack_matches_group)}
+                            </span>
+                            <span style={badgeStyle(groupCanApply ? "ready" : "dry-run")}>
+                              apply ready {String(groupCanApply)}
+                            </span>
                           </div>
                           {group.preview_payload?.capability_ids?.length ? (
                             <div>
