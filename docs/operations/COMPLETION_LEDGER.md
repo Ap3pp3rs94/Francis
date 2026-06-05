@@ -65371,6 +65371,102 @@ Remaining truthful gap:
   managed copies, write managed-copy receipts, enforce tenant isolation, export
   safe deltas, activate SLAs, bind roles, or decommission tenant state.
 
+### 2026-06-05 - Stage 17 operator proposal-evidence refs record bulk migration plan pack
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence for the capability-library promotion path.
+
+This pass walked the next visible Stage 17 operator evidence pack,
+`legacy.generated.bulkmigrationplanplugin`, through the existing governed
+operator proposal-evidence intake route one capability at a time. The pack was
+not batch-applied with a shared per-capability proposal/validation ref set.
+Each capability used its own matching proposal and validation artifact refs,
+plus the shared pack metadata and operator-review decision refs.
+
+Capabilities recorded:
+
+- `1780356694_bulkmigrationplanplugin`
+- `1780358536_bulkmigrationplanplugin`
+- `1780358609_bulkmigrationplanplugin`
+- `1780358677_bulkmigrationplanplugin`
+- `1780358779_bulkmigrationplanplugin`
+- `1780358854_bulkmigrationplanplugin`
+- `1780358921_bulkmigrationplanplugin`
+- `1780359005_bulkmigrationplanplugin`
+- `1780447049_bulkmigrationplanplugin`
+- `1780462591_bulkmigrationplanplugin`
+- `1780487794_bulkmigrationplanplugin`
+- `1780490241_bulkmigrationplanplugin`
+- `1780494612_bulkmigrationplanplugin`
+- `1780505401_bulkmigrationplanplugin`
+- `1780526698_bulkmigrationplanplugin`
+- `1780527371_bulkmigrationplanplugin`
+- `1780528000_bulkmigrationplanplugin`
+- `1780528564_bulkmigrationplanplugin`
+- `1780529101_bulkmigrationplanplugin`
+- `1780529630_bulkmigrationplanplugin`
+- `1780530173_bulkmigrationplanplugin`
+- `1780530706_bulkmigrationplanplugin`
+- `1780531446_bulkmigrationplanplugin`
+- `1780531987_bulkmigrationplanplugin`
+- `1780532465_bulkmigrationplanplugin`
+- `1780532999_bulkmigrationplanplugin`
+- `1780533130_bulkmigrationplanplugin`
+- `1780533227_bulkmigrationplanplugin`
+
+Recorded evidence ref pattern:
+
+- each capability recorded its matching
+  `artifact:plugins/proposals/plugin_proposal_<proposal-ts>_<capability-slug>.json`
+- each capability recorded its matching
+  `artifact:plugins/validations/plugin_validation_<validation-ts>_<capability-slug>.json`
+- each capability recorded shared pack metadata ref
+  `artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1780538631_legacy-generated-bulkmigrationplanplugin.json`
+- each capability recorded shared operator-review ref
+  `artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1780632847_legacy-generated-bulkmigrationplanplugin_721700.json`
+
+Latest validation for this live Stage 17 intake:
+
+- Artifact existence check:
+  all proposal, validation, metadata, and operator-review refs for the 28
+  capabilities existed under `data/artifacts/plugins`.
+- Governed dry-run/apply runner:
+  the pack walker called
+  `POST /plugins/capabilities/library/proposal-evidence/operator-intake/apply`
+  once per capability with actor `stage17.operator`,
+  `FRANCIS_API_ACTOR_SCOPES={"stage17.operator":["plugins.write"]}`,
+  `max_pack_count: 1`, `max_total_capability_count: 1`, and
+  `max_capability_count_per_pack: 1`. For every capability, dry-run returned
+  `ok: true`, `status: dry_run`, `planned_capability_count: 1`,
+  `evidence_ref_count: 4`, and a fingerprint before apply used the returned
+  fingerprint. Every apply returned `ok: true`, `status: recorded`,
+  `applied: true`, `recorded_capability_count: 1`, and
+  `evidence_ref_count: 4`.
+- Per-capability readback:
+  after each apply, `GET /plugins/get?id=<capability_id>` returned the same four
+  refs, future review required, `proposal_evidence_writes_proposals: false`,
+  and `proposal_evidence_approval_claimed: false`.
+- Direct pack summary:
+  all 28 pack capabilities had `proposal_evidence_count: 4`, all required
+  future review, none wrote proposals, and none claimed approval.
+- Proposal-review spot checks:
+  first and last proposal states reported `approved: false`,
+  `review_status: not_reviewed`, and `status: reconstructed_lineage`.
+- Public queue readback:
+  `GET /plugins/capabilities/library/proposal-evidence/operator-intake/checklist`
+  returned `status: ready_for_operator_evidence_refs`,
+  `candidate_pack_count: 43`, `candidate_capability_count: 2232`,
+  `evidence_ref_required_count: 2232`, and next visible pack
+  `legacy.generated.capabilityartifactreconstructionplanplugin`.
+
+Remaining truthful gap:
+
+- This does not close Stage 17, promote capabilities, approve proposals, close
+  the proposal-review or promotion gates, independently verify artifact truth,
+  clear the remaining 2232 capability evidence refs, close Stage 18, create
+  managed copies, write managed-copy receipts, enforce tenant isolation, export
+  safe deltas, activate SLAs, bind roles, or decommission tenant state.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
