@@ -275,6 +275,99 @@ def test_plugins_build_lifecycle_and_run(monkeypatch, tmp_path: Path) -> None:
     assert plugin_id in registry["plugins"]
 
 
+def test_plugins_disable_generated_staged_plugin_updates_catalog_lifecycle_status(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
+    client = TestClient(create_app())
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Generated Staged Disable Plugin",
+            "description": "Stage 17 lifecycle status regression coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": _forge_promotion_meta("generated_staged_disable"),
+        },
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    assert built_body["status"] == "staged"
+    plugin_id = str(built_body["plugin_id"])
+
+    staged_catalog = client.get("/plugins/capabilities/catalog?limit=5000")
+    assert staged_catalog.status_code == 200
+    staged_entry = next(item for item in staged_catalog.json()["items"] if item["capability"] == plugin_id)
+    assert staged_entry["status"] == "staged"
+
+    staged_remediation = client.get("/plugins/capabilities/packs/promotion/rules/remediation")
+    assert staged_remediation.status_code == 200
+    assert plugin_id in json.dumps(staged_remediation.json(), sort_keys=True)
+
+    disabled = client.post(
+        "/plugins/disable",
+        json={
+            "id": plugin_id,
+            "actor": _PLUGIN_ACTOR,
+            "reason": "operator disabled generated staged plugin before promotion",
+        },
+    )
+    assert disabled.status_code == 200
+    disabled_body = disabled.json()
+    assert disabled_body["ok"] is True
+    assert disabled_body["enabled"] is False
+    assert disabled_body["status"] == "disabled"
+
+    fetched = client.get(f"/plugins/get?id={plugin_id}")
+    assert fetched.status_code == 200
+    fetched_item = fetched.json()["item"]
+    assert fetched_item["status"] == "disabled"
+    assert fetched_item["enabled"] is False
+    assert fetched_item["meta"]["status"] == "disabled"
+    assert fetched_item["meta"]["promotion_status"] == "disabled"
+    assert fetched_item["meta"]["disabled_from_status"] == "staged"
+    assert fetched_item["meta"]["disabled_from_promotion_status"] == "staged"
+
+    disabled_catalog = client.get("/plugins/capabilities/catalog?limit=5000")
+    assert disabled_catalog.status_code == 200
+    disabled_entry = next(item for item in disabled_catalog.json()["items"] if item["capability"] == plugin_id)
+    assert disabled_entry["status"] == "disabled"
+
+    remediated = client.get("/plugins/capabilities/packs/promotion/rules/remediation")
+    assert remediated.status_code == 200
+    remediated_body = remediated.json()
+    assert remediated_body["ok"] is True
+    assert remediated_body["remediation_queue_count"] == 0
+    assert plugin_id not in json.dumps(remediated_body, sort_keys=True)
+
+    reenabled = client.post(
+        "/plugins/enable",
+        json={
+            "id": plugin_id,
+            "actor": _PLUGIN_ACTOR,
+            "reason": "operator attempted re-enable before proposal review",
+        },
+    )
+    assert reenabled.status_code == 200
+    reenabled_body = reenabled.json()
+    assert reenabled_body["ok"] is False
+    assert reenabled_body["error"] == "promotion_readiness_blocked"
+    assert reenabled_body["readiness"]["requirements"]["proposal_review"] is False
+
+    still_disabled = client.get(f"/plugins/get?id={plugin_id}")
+    assert still_disabled.status_code == 200
+    assert still_disabled.json()["item"]["status"] == "disabled"
+
+
 def test_plugins_build_requires_forge_staging_quality(monkeypatch, tmp_path: Path) -> None:
     data_root = tmp_path / "francis_data"
     monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
@@ -634,7 +727,9 @@ def test_plugins_capability_catalog_projects_stage17_pack_readiness(monkeypatch,
     from fastapi.testclient import TestClient
 
     from francis.api.app import create_app
+    from francis.api.routes import plugins
 
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
     client = TestClient(create_app())
     meta = {
         **_forge_promotion_meta("capability_pack"),
@@ -3315,7 +3410,9 @@ def test_plugins_capability_pack_promotion_discipline_projects_pack_gate(
     from fastapi.testclient import TestClient
 
     from francis.api.app import create_app
+    from francis.api.routes import plugins
 
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
     client = TestClient(create_app())
     pack_id = "ops.promotion_discipline"
     pack_version = "1.0.0"

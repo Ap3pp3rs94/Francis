@@ -63670,6 +63670,94 @@ Remaining truthful gap:
   in the local readback. The legitimate proposal-evidence gap remains operator
   evidence refs, not synthetic backfill.
 
+### Stage 17 generated capability lifecycle and inactive artifact filtering
+
+This pass fixed the generated-plugin lifecycle/readback boundary that allowed
+disabled generated artifacts to keep appearing as active Stage 17 pack
+remediation blockers.
+
+Shipped behavior:
+
+- `/plugins/disable` now aligns registry lifecycle metadata by setting
+  `meta.status=disabled` and `meta.promotion_status=disabled`, while preserving
+  `disabled_from_status` and `disabled_from_promotion_status` for auditability.
+- `/plugins/enable` now treats plugins disabled from staged promotion state as
+  promotion-gated instead of allowing a non-staged enable bypass.
+- Capability pack promotion-rule and promotion-discipline analyzers now count
+  disabled/uninstalled entries as inactive and exclude them from active pack
+  readiness and remediation queues.
+- API tests that build generated promotion-rule or promotion-discipline plugins
+  now isolate the generated-plugin root so validation runs do not create live
+  generated artifacts.
+
+Live local remediation performed:
+
+- Disabled the accidental generated debug plugin
+  `1780670314_debugsourcereadinessfrictionplugin` through `/plugins/disable`.
+- Disabled generated validation artifacts in
+  `legacy.generated.capabilitypromotionrulesplugin` and
+  `legacy.generated.capabilitypromotiondisciplineplugin` through
+  `/plugins/disable`.
+- No generated directories were deleted.
+
+Latest validation for this lifecycle pass:
+
+- Focused API and analyzer regression tests:
+  `python -m pytest tests\unit\test_capability_pack_promotion_discipline.py
+  tests\unit\test_capability_pack_promotion_rules.py tests\test_api_plugins.py
+  -k "disable_generated_staged_plugin_updates_catalog_lifecycle_status or
+  capability_pack_promotion_rules_project_governed_rule_readiness or
+  capability_pack_promotion_discipline_projects_pack_gate or
+  proposal_evidence_source_readiness_inventory" -q`
+  Result: 4 selected tests passed.
+- Analyzer unit tests:
+  `python -m pytest tests\unit\test_capability_pack_promotion_discipline.py
+  tests\unit\test_capability_pack_promotion_rules.py -q`
+  Result: 9 tests passed.
+- Python lint:
+  `python -m ruff check src\francis\api\routes\plugins.py
+  src\francis\economy\markets\capability_pack_promotion_rules.py
+  src\francis\economy\markets\capability_pack_promotion_discipline.py
+  tests\test_api_plugins.py
+  tests\unit\test_capability_pack_promotion_rules.py
+  tests\unit\test_capability_pack_promotion_discipline.py`
+  Result: passed.
+- Python format check:
+  `python -m ruff format --check src\francis\api\routes\plugins.py
+  src\francis\economy\markets\capability_pack_promotion_rules.py
+  src\francis\economy\markets\capability_pack_promotion_discipline.py
+  tests\test_api_plugins.py
+  tests\unit\test_capability_pack_promotion_rules.py
+  tests\unit\test_capability_pack_promotion_discipline.py`
+  Result: passed.
+
+Live local readback after remediation:
+
+- `GET /plugins/capabilities/packs/promotion/rules/remediation` returned
+  `status=ready`, `pack_total=49`, `ready_pack_count=49`,
+  `blocked_pack_count=0`, `remediation_queue_count=0`,
+  `inactive_entry_count=11`, and
+  `next_smallest_truthful_gap=stage17_capability_pack_operator_surface`.
+- `GET /plugins/capabilities/packs/promotion/discipline` returned
+  `status=ready`, `pack_total=49`, `ready_pack_count=49`,
+  `blocked_pack_count=0`, `inactive_entry_count=11`, and
+  `next_smallest_truthful_gap=stage17_capability_library_operator_surface`.
+- `GET /plugins/capabilities/library/proposal-evidence/source-readiness`
+  returned `status=operator_evidence_refs_required`,
+  `proposal_evidence_source_readiness_ready=true`,
+  `proposal_evidence_missing_count=2262`,
+  `operator_evidence_ref_required_count=2262`,
+  `automatic_sources_exhausted=true`, and
+  `next_smallest_truthful_gap=stage17_capability_library_operator_proposal_evidence_refs`.
+
+Remaining truthful gap:
+
+- Stage 17 is no longer blocked by the local generated-artifact promotion-rule
+  or promotion-discipline remediation queue.
+- The current Stage 17 blocker is real operator-supplied proposal evidence refs
+  for 2262 capabilities. Automatic evidence sources are exhausted in the local
+  readback, and synthetic evidence remains disallowed.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

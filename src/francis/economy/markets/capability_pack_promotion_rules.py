@@ -15,6 +15,7 @@ _CANONICAL_PROMOTION_RULES = [
     "quality_standards_before_promotion",
     "operator_review_before_promotion",
 ]
+_INACTIVE_LIFECYCLE_STATUSES = {"disabled", "uninstalled"}
 _REMEDIATION_QUEUE_LIMIT = 50
 _REMEDIATION_ACTION_BY_BLOCKER = {
     "pack_version_missing": "record_versioned_pack_metadata",
@@ -37,14 +38,19 @@ def canonical_capability_pack_promotion_rules() -> list[str]:
 def analyze_capability_pack_promotion_rules(entries: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     normalized = [_normalize_entry(entry) for entry in entries]
     normalized = [entry for entry in normalized if entry["capability"]]
-    unpacked = [entry for entry in normalized if not entry["pack_id"]]
-    packed = [entry for entry in normalized if entry["pack_id"]]
+    active = _active_promotion_rule_entries(normalized)
+    unpacked = [entry for entry in active if not entry["pack_id"]]
+    packed = [entry for entry in active if entry["pack_id"]]
     packs = _pack_rules(packed)
     ready_pack_count = sum(1 for pack in packs if pack["ready"])
     return {
         "stage": _STAGE17_CAPABILITY_ECONOMY_STAGE,
-        "status": "ready" if packs and ready_pack_count == len(packs) and not unpacked else "blocked",
+        "status": "ready"
+        if packs and ready_pack_count == len(packs) and not unpacked
+        else ("empty" if not active else "blocked"),
         "total_entries": len(normalized),
+        "active_entry_count": len(active),
+        "inactive_entry_count": len(normalized) - len(active),
         "pack_total": len(packs),
         "ready_pack_count": ready_pack_count,
         "blocked_pack_count": len(packs) - ready_pack_count,
@@ -77,8 +83,9 @@ def analyze_capability_pack_promotion_rules(entries: Iterable[Mapping[str, Any]]
 def analyze_capability_pack_promotion_rule_remediation(entries: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     normalized = [_normalize_entry(entry) for entry in entries]
     normalized = [entry for entry in normalized if entry["capability"]]
-    unpacked = [entry for entry in normalized if not entry["pack_id"]]
-    packed = [entry for entry in normalized if entry["pack_id"]]
+    active = _active_promotion_rule_entries(normalized)
+    unpacked = [entry for entry in active if not entry["pack_id"]]
+    packed = [entry for entry in active if entry["pack_id"]]
     packs = _pack_rules(packed)
     ready_pack_count = sum(1 for pack in packs if pack["ready"] and not _missing_canonical_promotion_rules(pack))
     remediation_queue = [item for pack in packs if (item := _promotion_rule_remediation_item(pack)) is not None]
@@ -89,6 +96,8 @@ def analyze_capability_pack_promotion_rule_remediation(entries: Iterable[Mapping
         "stage": _STAGE17_CAPABILITY_ECONOMY_STAGE,
         "status": "blocked" if unpacked or remediation_queue else ("ready" if packs else "empty"),
         "total_entries": len(normalized),
+        "active_entry_count": len(active),
+        "inactive_entry_count": len(normalized) - len(active),
         "pack_total": len(packs),
         "ready_pack_count": ready_pack_count,
         "blocked_pack_count": len(packs) - ready_pack_count,
@@ -129,6 +138,10 @@ def analyze_capability_pack_promotion_rule_remediation(entries: Iterable[Mapping
             packs=packs,
         ),
     }
+
+
+def _active_promotion_rule_entries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [entry for entry in entries if entry["status"] not in _INACTIVE_LIFECYCLE_STATUSES]
 
 
 def _pack_rules(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:

@@ -166,6 +166,35 @@ def test_capability_pack_promotion_rule_remediation_projects_read_only_backlog()
     assert item["failing_capabilities_sample"][0]["capability"] == "generated.partial"
 
 
+def test_capability_pack_promotion_rule_remediation_ignores_disabled_generated_packs() -> None:
+    analysis = analyze_capability_pack_promotion_rule_remediation(
+        [
+            {
+                "capability": "generated.disabled",
+                "version": "0.1.0",
+                "source": "generated",
+                "status": "disabled",
+                "risk_tier": "normal",
+                "quality": {"tests": [], "docs": []},
+                "metadata": {
+                    "pack_id": "legacy.generated.disabled",
+                    "pack_version": "0.0.0-migration",
+                    "pack_name": "Legacy Generated Disabled Pack",
+                    "pack_metadata_source": "legacy_generated_projection",
+                },
+            }
+        ]
+    )
+
+    assert analysis["status"] == "empty"
+    assert analysis["total_entries"] == 1
+    assert analysis["active_entry_count"] == 0
+    assert analysis["inactive_entry_count"] == 1
+    assert analysis["pack_total"] == 0
+    assert analysis["remediation_queue_count"] == 0
+    assert analysis["remediation_queue"] == []
+
+
 def test_capability_pack_promotion_rule_remediation_is_empty_for_governed_pack() -> None:
     analysis = analyze_capability_pack_promotion_rule_remediation(
         [

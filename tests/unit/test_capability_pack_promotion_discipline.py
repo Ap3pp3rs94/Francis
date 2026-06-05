@@ -142,6 +142,33 @@ def test_capability_pack_promotion_discipline_blocks_partial_review_coverage() -
     assert "operator_review_decision_missing" in pack["blockers"]
 
 
+def test_capability_pack_promotion_discipline_ignores_disabled_generated_packs() -> None:
+    analysis = analyze_capability_pack_promotion_discipline(
+        [
+            {
+                "capability": "generated.disabled",
+                "version": "0.1.0",
+                "source": "generated",
+                "status": "disabled",
+                "metadata": {
+                    "pack_id": "legacy.generated.disabled",
+                    "pack_version": "0.0.0-migration",
+                    "pack_name": "Legacy Generated Disabled Pack",
+                },
+                "quality": {"tests": [], "docs": []},
+            }
+        ]
+    )
+
+    assert analysis["status"] == "empty"
+    assert analysis["total_entries"] == 1
+    assert analysis["active_entry_count"] == 0
+    assert analysis["inactive_entry_count"] == 1
+    assert analysis["pack_total"] == 0
+    assert analysis["blocked_pack_count"] == 0
+    assert analysis["packs"] == []
+
+
 def test_capability_pack_promotion_discipline_blocks_weak_pack_promotion_posture() -> None:
     analysis = analyze_capability_pack_promotion_discipline(
         [

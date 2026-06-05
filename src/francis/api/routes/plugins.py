@@ -12138,8 +12138,22 @@ def enable_plugin(payload: PluginToggleIn, request: Request) -> dict[str, object
             return {"ok": False, "error": "not_found", "id": plugin_id}
 
         previous = dict(current)
-        was_staged = _safe_str(previous.get("status")).strip().lower() == "staged"
+        previous_meta = dict(previous.get("meta") or {}) if isinstance(previous.get("meta"), dict) else {}
+        previous_status = _safe_str(previous.get("status")).strip().lower()
+        previous_promotion_status = _safe_str(previous_meta.get("promotion_status")).strip().lower()
+        disabled_from_promotion_status = _safe_str(previous_meta.get("disabled_from_promotion_status")).strip().lower()
+        has_promotion_receipt = bool(_safe_str(previous_meta.get("promotion_receipt_id")).strip())
+        was_staged = (
+            previous_status == "staged"
+            or previous_promotion_status == "staged"
+            or (
+                previous_status == "disabled"
+                and disabled_from_promotion_status == "staged"
+                and not has_promotion_receipt
+            )
+        )
         promoted_ts = _now_s()
+        actor = redact_governed_value(_safe_str(payload.actor).strip())
         promotion_receipt_id = ""
         promotion_receipt_path = Path()
         if was_staged:
@@ -12163,9 +12177,19 @@ def enable_plugin(payload: PluginToggleIn, request: Request) -> dict[str, object
                     "promotion_receipt_id": promotion_receipt_id,
                     "promotion_receipt_path": str(promotion_receipt_path),
                     "promoted_ts": promoted_ts,
-                    "promoted_by": redact_governed_value(_safe_str(payload.actor).strip()),
+                    "promoted_by": actor,
                 }
             )
+            current["meta"] = meta
+        else:
+            meta = dict(current.get("meta") or {}) if isinstance(current.get("meta"), dict) else {}
+            promotion_status = _safe_str(meta.get("promotion_status")).strip().lower()
+            if promotion_status in {"disabled", "uninstalled"}:
+                restored_status = _safe_str(meta.get("disabled_from_promotion_status")).strip().lower()
+                meta["promotion_status"] = restored_status if restored_status == "promoted" else "enabled"
+            meta["status"] = "enabled"
+            meta["enabled_ts"] = promoted_ts
+            meta["enabled_by"] = actor
             current["meta"] = meta
 
         current["enabled"] = True
@@ -12216,9 +12240,23 @@ def disable_plugin(payload: PluginToggleIn, request: Request) -> dict[str, objec
         if current is None:
             return {"ok": False, "error": "not_found", "id": plugin_id}
 
+        disabled_ts = _now_s()
+        actor = redact_governed_value(_safe_str(payload.actor).strip())
+        meta = dict(current.get("meta") or {}) if isinstance(current.get("meta"), dict) else {}
+        previous_status = _safe_str(current.get("status")).strip().lower()
+        promotion_status = _safe_str(meta.get("promotion_status")).strip().lower()
+        if promotion_status:
+            meta["disabled_from_promotion_status"] = promotion_status
+        if previous_status:
+            meta["disabled_from_status"] = previous_status
+        meta["promotion_status"] = "disabled"
+        meta["status"] = "disabled"
+        meta["disabled_ts"] = disabled_ts
+        meta["disabled_by"] = actor
+        current["meta"] = meta
         current["enabled"] = False
         current["status"] = "disabled"
-        current["updated_ts"] = _now_s()
+        current["updated_ts"] = disabled_ts
         _write_plugin(registry, _normalize_plugin_record(plugin_id, current))
         catalog = _save_registry_and_catalog(registry)
 
