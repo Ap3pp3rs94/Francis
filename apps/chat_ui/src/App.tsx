@@ -85,6 +85,7 @@ import type {
   PluginCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetResponse,
   PluginCapabilityLibraryProposalEvidencePack,
   PluginCapabilityLibraryProposalEvidencePlanResponse,
+  PluginCapabilityLibraryProposalEvidenceSourceReadinessResponse,
   PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefApplyResponse,
   PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefPack,
   PluginCapabilityLibraryProposalEvidenceFrictionSummaryRefResponse,
@@ -18221,6 +18222,8 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
     useState<PluginCapabilityLibraryPromotionPlanResponse | null>(null);
   const [capabilityLibraryProposalEvidencePlan, setCapabilityLibraryProposalEvidencePlan] =
     useState<PluginCapabilityLibraryProposalEvidencePlanResponse | null>(null);
+  const [capabilityLibraryProposalEvidenceSourceReadiness, setCapabilityLibraryProposalEvidenceSourceReadiness] =
+    useState<PluginCapabilityLibraryProposalEvidenceSourceReadinessResponse | null>(null);
   const [capabilityLibraryProposalReviewPlan, setCapabilityLibraryProposalReviewPlan] =
     useState<PluginCapabilityLibraryProposalReviewPlanResponse | null>(null);
   const [capabilityLibraryProposalReviewApplyReadiness, setCapabilityLibraryProposalReviewApplyReadiness] =
@@ -18646,6 +18649,39 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
     }),
     [capabilityLibraryProposalEvidencePlan],
   );
+  const proposalEvidenceSourceReadinessCounts = useMemo(
+    () => ({
+      missing: capabilityLibraryProposalEvidenceSourceReadiness?.proposal_evidence_missing_count ?? 0,
+      ready: capabilityLibraryProposalEvidenceSourceReadiness?.proposal_evidence_ready_count ?? 0,
+      automaticCandidates:
+        capabilityLibraryProposalEvidenceSourceReadiness?.automatic_source_candidate_capability_count ?? 0,
+      operatorCandidates:
+        capabilityLibraryProposalEvidenceSourceReadiness?.operator_evidence_intake_candidate_capability_count ?? 0,
+      refsRequired: capabilityLibraryProposalEvidenceSourceReadiness?.operator_evidence_ref_required_count ?? 0,
+      recordedRefs: capabilityLibraryProposalEvidenceSourceReadiness?.recorded_operator_evidence_ref_count ?? 0,
+      nextBatch: capabilityLibraryProposalEvidenceSourceReadiness?.next_operator_evidence_batch_capability_count ?? 0,
+    }),
+    [capabilityLibraryProposalEvidenceSourceReadiness],
+  );
+  const nextOperatorEvidenceBatch =
+    capabilityLibraryProposalEvidenceSourceReadiness?.next_operator_evidence_batch ?? null;
+  const nextOperatorEvidenceBatchPayloadHint = useMemo(() => {
+    const hint = nextOperatorEvidenceBatch?.apply_payload_hint;
+    if (!hint) {
+      return {
+        packIds: [] as string[],
+        capabilityIds: [] as string[],
+        evidenceRefs: [] as string[],
+        dryRun: undefined as boolean | undefined,
+      };
+    }
+    return {
+      packIds: safeStringArray(hint.pack_ids) ?? [],
+      capabilityIds: safeStringArray(hint.capability_ids) ?? [],
+      evidenceRefs: safeStringArray(hint.evidence_refs) ?? [],
+      dryRun: typeof hint.dry_run === "boolean" ? Boolean(hint.dry_run) : undefined,
+    };
+  }, [nextOperatorEvidenceBatch?.apply_payload_hint]);
   const proposalEvidenceRemediationCounts = useMemo(
     () => ({
       packs: capabilityLibraryProposalEvidenceRemediation?.candidate_pack_count ?? 0,
@@ -18973,6 +19009,7 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
         capabilityPackPromotionRuleRemediationRes,
         capabilityLibraryPromotionPlanRes,
         capabilityLibraryProposalEvidencePlanRes,
+        capabilityLibraryProposalEvidenceSourceReadinessRes,
         capabilityLibraryProposalReviewPlanRes,
         capabilityLibraryProposalReviewApplyReadinessRes,
         capabilityLibraryProposalEvidenceRemediationRes,
@@ -18994,6 +19031,7 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
         client.listCapabilityPackPromotionRuleRemediation(),
         client.listCapabilityLibraryPromotionPlan(),
         client.listCapabilityLibraryProposalEvidencePlan(),
+        client.listCapabilityLibraryProposalEvidenceSourceReadiness(),
         client.listCapabilityLibraryProposalReviewPlan(),
         client.listCapabilityLibraryProposalReviewApplyReadiness(),
         client.listCapabilityLibraryProposalEvidenceRemediation(),
@@ -19018,6 +19056,7 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
       setCapabilityPackPromotionRuleRemediation(capabilityPackPromotionRuleRemediationRes);
       setCapabilityLibraryPromotionPlan(capabilityLibraryPromotionPlanRes);
       setCapabilityLibraryProposalEvidencePlan(capabilityLibraryProposalEvidencePlanRes);
+      setCapabilityLibraryProposalEvidenceSourceReadiness(capabilityLibraryProposalEvidenceSourceReadinessRes);
       setCapabilityLibraryProposalReviewPlan(capabilityLibraryProposalReviewPlanRes);
       setCapabilityLibraryProposalReviewApplyReadiness(capabilityLibraryProposalReviewApplyReadinessRes);
       setCapabilityLibraryProposalEvidenceRemediation(capabilityLibraryProposalEvidenceRemediationRes);
@@ -19911,6 +19950,185 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
             Proposal evidence plan readback unavailable.
           </div>
         )}
+
+        <div style={{ borderTop: `1px solid ${THEME.panelBorder}`, marginTop: 10, paddingTop: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 12, fontWeight: 600 }}>Source Readiness</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <span style={badgeStyle(proposalEvidenceSourceReadinessCounts.automaticCandidates > 0 ? "ready" : "none")}>
+                automatic candidates {proposalEvidenceSourceReadinessCounts.automaticCandidates}
+              </span>
+              <span style={badgeStyle(proposalEvidenceSourceReadinessCounts.operatorCandidates > 0 ? "blocked" : "clear")}>
+                operator candidates {proposalEvidenceSourceReadinessCounts.operatorCandidates}
+              </span>
+              <span style={badgeStyle(proposalEvidenceSourceReadinessCounts.refsRequired > 0 ? "blocked" : "clear")}>
+                refs required {proposalEvidenceSourceReadinessCounts.refsRequired}
+              </span>
+              <span style={badgeStyle("recorded")}>recorded refs {proposalEvidenceSourceReadinessCounts.recordedRefs}</span>
+              <span style={badgeStyle(proposalEvidenceSourceReadinessCounts.nextBatch > 0 ? "ready" : "none")}>
+                next batch {proposalEvidenceSourceReadinessCounts.nextBatch}
+              </span>
+            </div>
+          </div>
+
+          {capabilityLibraryProposalEvidenceSourceReadiness ? (
+            <div style={{ display: "grid", gap: 6, fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <span style={badgeStyle(capabilityLibraryProposalEvidenceSourceReadiness.status || "unknown")}>
+                  {capabilityLibraryProposalEvidenceSourceReadiness.status || "unknown"}
+                </span>
+                {capabilityLibraryProposalEvidenceSourceReadiness.proposal_evidence_source_readiness_ready ? (
+                  <span style={badgeStyle("readback")}>readback ready</span>
+                ) : null}
+                <span style={badgeStyle(proposalEvidenceSourceReadinessCounts.missing > 0 ? "blocked" : "clear")}>
+                  source missing {proposalEvidenceSourceReadinessCounts.missing}
+                </span>
+                <span style={badgeStyle("source")}>source ready {proposalEvidenceSourceReadinessCounts.ready}</span>
+                <span
+                  style={badgeStyle(
+                    capabilityLibraryProposalEvidenceSourceReadiness.automatic_sources_exhausted ? "clear" : "pending",
+                  )}
+                >
+                  automatic exhausted{" "}
+                  {String(capabilityLibraryProposalEvidenceSourceReadiness.automatic_sources_exhausted ?? false)}
+                </span>
+                {capabilityLibraryProposalEvidenceSourceReadiness.proposal_review_apply_status ? (
+                  <span style={badgeStyle(capabilityLibraryProposalEvidenceSourceReadiness.proposal_review_apply_status)}>
+                    {capabilityLibraryProposalEvidenceSourceReadiness.proposal_review_apply_status}
+                  </span>
+                ) : null}
+                {capabilityLibraryProposalEvidenceSourceReadiness.next_smallest_truthful_gap ? (
+                  <span style={badgeStyle("gap")}>
+                    {capabilityLibraryProposalEvidenceSourceReadiness.next_smallest_truthful_gap}
+                  </span>
+                ) : null}
+              </div>
+
+              {nextOperatorEvidenceBatch ? (
+                <>
+                  <div>
+                    next batch pack <code>{nextOperatorEvidenceBatch.pack_id || "unknown"}</code>
+                    {nextOperatorEvidenceBatch.pack_version ? (
+                      <>
+                        {" "}
+                        / version <code>{nextOperatorEvidenceBatch.pack_version}</code>
+                      </>
+                    ) : null}
+                    {nextOperatorEvidenceBatch.pack_name ? (
+                      <>
+                        {" "}
+                        / name <code>{nextOperatorEvidenceBatch.pack_name}</code>
+                      </>
+                    ) : null}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <span style={badgeStyle(nextOperatorEvidenceBatch.ready ? "ready" : "blocked")}>
+                      {nextOperatorEvidenceBatch.status || "unknown"}
+                    </span>
+                    <span style={badgeStyle("candidate")}>
+                      pack candidates {nextOperatorEvidenceBatch.pack_candidate_capability_count ?? 0}
+                    </span>
+                    <span style={badgeStyle("refs")}>
+                      pack refs {nextOperatorEvidenceBatch.pack_evidence_ref_required_count ?? 0}
+                    </span>
+                    <span style={badgeStyle("candidate")}>
+                      batch capabilities {nextOperatorEvidenceBatch.batch_capability_count ?? 0}
+                    </span>
+                    <span style={badgeStyle("refs")}>
+                      batch refs {nextOperatorEvidenceBatch.batch_evidence_ref_required_count ?? 0}
+                    </span>
+                    {nextOperatorEvidenceBatch.claim_scope ? (
+                      <span style={badgeStyle("claim")}>{nextOperatorEvidenceBatch.claim_scope}</span>
+                    ) : null}
+                    {nextOperatorEvidenceBatch.batch_capabilities_truncated ? (
+                      <span style={badgeStyle("truncated")}>batch truncated</span>
+                    ) : null}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <span style={badgeStyle(nextOperatorEvidenceBatch.operator_must_supply_evidence_refs ? "blocked" : "clear")}>
+                      operator refs {String(nextOperatorEvidenceBatch.operator_must_supply_evidence_refs ?? false)}
+                    </span>
+                    <span style={badgeStyle(nextOperatorEvidenceBatch.does_not_validate_evidence_truth ? "claim" : "clear")}>
+                      validates truth {String(!nextOperatorEvidenceBatch.does_not_validate_evidence_truth)}
+                    </span>
+                    <span style={badgeStyle(nextOperatorEvidenceBatch.no_synthetic_evidence ? "clear" : "blocked")}>
+                      synthetic evidence {String(!nextOperatorEvidenceBatch.no_synthetic_evidence)}
+                    </span>
+                    <span style={badgeStyle(nextOperatorEvidenceBatch.dry_run_required_before_apply ? "pending" : "clear")}>
+                      dry-run required {String(nextOperatorEvidenceBatch.dry_run_required_before_apply ?? false)}
+                    </span>
+                    <span
+                      style={badgeStyle(
+                        nextOperatorEvidenceBatch.requires_future_proposal_review ? "pending" : "clear",
+                      )}
+                    >
+                      future review {String(nextOperatorEvidenceBatch.requires_future_proposal_review ?? false)}
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <span style={badgeStyle("hint")}>hint packs {nextOperatorEvidenceBatchPayloadHint.packIds.length}</span>
+                    <span style={badgeStyle("hint")}>
+                      hint capabilities {nextOperatorEvidenceBatchPayloadHint.capabilityIds.length}
+                    </span>
+                    <span style={badgeStyle(nextOperatorEvidenceBatchPayloadHint.evidenceRefs.length > 0 ? "ready" : "blocked")}>
+                      hint refs {nextOperatorEvidenceBatchPayloadHint.evidenceRefs.length}
+                    </span>
+                    {typeof nextOperatorEvidenceBatchPayloadHint.dryRun === "boolean" ? (
+                      <span style={badgeStyle(nextOperatorEvidenceBatchPayloadHint.dryRun ? "dry_run" : "write")}>
+                        hint dry-run {String(nextOperatorEvidenceBatchPayloadHint.dryRun)}
+                      </span>
+                    ) : null}
+                  </div>
+                  {nextOperatorEvidenceBatch.capabilities?.length ? (
+                    <div style={{ display: "grid", gap: 6 }}>
+                      {nextOperatorEvidenceBatch.capabilities.slice(0, 4).map((item) => (
+                        <div key={`source-readiness-next-batch-${item.capability}`} style={{ display: "grid", gap: 4 }}>
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <span style={badgeStyle(item.evidence_refs_required ? "blocked" : "clear")}>
+                              refs required {String(item.evidence_refs_required ?? false)}
+                            </span>
+                            <span
+                              style={badgeStyle(
+                                item.operator_supplied_evidence_not_independently_verified ? "claim" : "clear",
+                              )}
+                            >
+                              operator supplied{" "}
+                              {String(item.operator_supplied_evidence_not_independently_verified ?? false)}
+                            </span>
+                            {item.status ? <span style={badgeStyle(item.status)}>{item.status}</span> : null}
+                            {item.intake_apply_route ? (
+                              <span style={badgeStyle("route")}>{item.intake_apply_route}</span>
+                            ) : null}
+                          </div>
+                          <div>
+                            capability <code>{item.capability}</code>
+                            {item.proposal_id ? (
+                              <>
+                                {" "}
+                                / proposal <code>{item.proposal_id}</code>
+                              </>
+                            ) : null}
+                          </div>
+                          {item.missing_requirements?.length ? (
+                            <div>missing {item.missing_requirements.join(", ")}</div>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div>No next-batch capability sample returned by the backend.</div>
+                  )}
+                </>
+              ) : (
+                <div>No next operator evidence batch returned by the backend.</div>
+              )}
+            </div>
+          ) : (
+            <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
+              Proposal evidence source-readiness readback unavailable.
+            </div>
+          )}
+        </div>
 
         <div style={{ borderTop: `1px solid ${THEME.panelBorder}`, marginTop: 10, paddingTop: 8 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>

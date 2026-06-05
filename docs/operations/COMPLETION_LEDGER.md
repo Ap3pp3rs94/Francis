@@ -63843,6 +63843,42 @@ Remaining truthful gap:
   refs, approve proposals, promote capabilities, or reduce the 2262 operator
   evidence refs still required in the local readback.
 
+### Stage 17 operator evidence source-readiness UI wiring
+
+This pass made the read-only source-readiness contract visible in the Chat UI
+plugin panel without changing the governed evidence-intake apply path.
+
+Shipped behavior:
+
+- `apps/chat_ui/src/App.tsx` now loads
+  `listCapabilityLibraryProposalEvidenceSourceReadiness()` during plugin refresh
+  with the adjacent Stage 17 proposal-evidence routes.
+- The Proposal Evidence Plan panel now renders a read-only Source Readiness
+  section with automatic-source candidate counts, operator candidate counts,
+  required operator evidence refs, recorded refs, and the backend-provided next
+  operator evidence batch.
+- The next-batch UI keeps the source-readiness contract explicit: blank evidence
+  refs in the payload hint, dry-run required before apply, no synthetic evidence,
+  no independent truth validation, and future proposal review still required.
+
+Latest validation for this UI wiring:
+
+- Chat UI production build:
+  `cd apps\chat_ui; npm run build`
+  Result: passed. Vite emitted the existing non-fatal large chunk warning.
+- Chat UI client/contract tests:
+  `cd apps\chat_ui; npm run test -- src/plugin_browser/index.test.ts`
+  Result: 219 tests passed.
+- Whitespace check:
+  `git diff --check`
+  Result: passed.
+
+Remaining truthful gap:
+
+- This UI pass does not record proposal evidence refs, approve proposals, promote
+  capabilities, or change backend readiness counts. Stage 17 remains blocked on
+  real operator-supplied evidence refs applied through the governed intake path.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
