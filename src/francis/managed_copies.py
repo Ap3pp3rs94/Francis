@@ -21,6 +21,8 @@ MANAGED_COPIES_ROGUE_RECOVERY_CONTRACT_KIND = "francis.stage18.managed_copies.ro
 MANAGED_COPIES_ROGUE_RECOVERY_REVIEW_KIND = "francis.stage18.managed_copies.rogue_recovery_review"
 MANAGED_COPIES_ROGUE_RECOVERY_WRITE_SCOPE = "managed_copies.rogue_recovery.write"
 MANAGED_COPIES_SLA_FRAMEWORK_CONTRACT_KIND = "francis.stage18.managed_copies.sla_framework_contract"
+MANAGED_COPIES_SLA_COMMITMENT_REVIEW_KIND = "francis.stage18.managed_copies.sla_commitment_review"
+MANAGED_COPIES_SLA_WRITE_SCOPE = "managed_copies.sla.write"
 MANAGED_COPIES_ROLES_CONTRACT_KIND = "francis.stage18.managed_copies.roles_contract"
 MANAGED_COPIES_DECOMMISSION_CONTRACT_KIND = "francis.stage18.managed_copies.decommission_contract"
 MANAGED_COPIES_COMPLETION_REVIEW_KIND = "francis.stage18.managed_copies.completion_review"
@@ -458,6 +460,7 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "rogue_recovery_contract": "/managed-copies/rogue-recovery-contract",
             "rogue_recovery_review": "/managed-copies/rogue-recovery-review",
             "sla_framework_contract": "/managed-copies/sla-framework-contract",
+            "sla_commitment_review": "/managed-copies/sla-commitment-review",
             "roles_contract": "/managed-copies/roles-contract",
             "decommission_contract": "/managed-copies/decommission-contract",
             "runtime_evidence_contract": "/managed-copies/runtime-evidence-contract",
@@ -1542,6 +1545,7 @@ def managed_copy_rogue_recovery_review_blocked_snapshot(
 def managed_copy_sla_framework_contract_snapshot() -> dict[str, Any]:
     """Return the managed-copy SLA framework contract without activating service commitments."""
     governance = _governance()
+    status = managed_copies_status_snapshot()
     commitments = [
         _sla_commitment(
             "uptime_commitment",
@@ -1639,6 +1643,12 @@ def managed_copy_sla_framework_contract_snapshot() -> dict[str, Any]:
             "recovery_promise_without_recovery_path",
             "support_tier_without_authority_boundary",
         ],
+        "sla_commitment_review_route": "/managed-copies/sla-commitment-review",
+        "routes": {
+            **status["routes"],
+            "sla_framework_contract": "/managed-copies/sla-framework-contract",
+            "sla_commitment_review": "/managed-copies/sla-commitment-review",
+        },
         "governance": governance,
         "read_only": governance["read_only"],
         "projection_only": governance["projection_only"],
@@ -1658,6 +1668,110 @@ def managed_copy_sla_framework_contract_snapshot() -> dict[str, Any]:
         "opens_incident": False,
         "records_sla_receipt": False,
         "grants_support_authority": False,
+        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+    }
+
+
+def managed_copy_sla_commitment_review_blocked_snapshot(
+    payload: dict[str, Any],
+    *,
+    actor: str,
+) -> dict[str, Any]:
+    """Return a governed SLA commitment review preflight blocked by Stage 17."""
+    governance = _governance()
+    contract = managed_copy_sla_framework_contract_snapshot()
+    raw_commitment_id = _safe_str(payload.get("commitment_id") or payload.get("commitment")).strip()
+    commitment_by_id = {item["id"]: item for item in contract["commitments"]}
+    commitment = commitment_by_id.get(raw_commitment_id, {})
+    raw_support_tier = _safe_str(payload.get("support_tier")).strip()
+    support_tier_known = raw_support_tier in set(contract["support_tiers"])
+    raw_metric = _safe_str(payload.get("metric") or payload.get("service_metric")).strip()
+    metric_known = raw_metric in set(contract["service_metrics"])
+    raw_evidence_refs = payload.get("evidence_refs")
+    evidence_ref_count = len(raw_evidence_refs) if isinstance(raw_evidence_refs, list) else 0
+    return {
+        "ok": False,
+        "kind": MANAGED_COPIES_SLA_COMMITMENT_REVIEW_KIND,
+        "stage": STAGE18_MANAGED_COPIES_STAGE,
+        "source_id": "managed_copies",
+        "status": "blocked_stage17_prerequisite",
+        "error": "stage17_prerequisite_not_closed",
+        "actor": _safe_str(actor).strip(),
+        "copy_id_present": bool(_safe_str(payload.get("copy_id")).strip()),
+        "tenant_id_present": bool(_safe_str(payload.get("tenant_id")).strip()),
+        "incident_present": payload.get("incident") is not None,
+        "evidence_ref_count": evidence_ref_count,
+        "commitment_id": raw_commitment_id if commitment else "unknown",
+        "commitment_known": bool(commitment),
+        "commitment_active": bool(commitment.get("active")),
+        "commitment_requires_receipt": bool(commitment.get("requires_receipt")),
+        "support_tier": raw_support_tier if support_tier_known else "unknown",
+        "support_tier_known": support_tier_known,
+        "metric": raw_metric if metric_known else "unknown",
+        "metric_known": metric_known,
+        "stage17_closed_by_receipt": bool(contract["stage17_closed_by_receipt"]),
+        "stage17_blocker": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "sla_framework_ready": False,
+        "sla_review_enabled": False,
+        "sla_commitments_active": False,
+        "monitoring_enabled": False,
+        "paging_enabled": False,
+        "support_tiers_enabled": False,
+        "billing_entitlements_enabled": False,
+        "creates_service_commitment": False,
+        "pages_support": False,
+        "opens_incident": False,
+        "records_sla_receipt": False,
+        "grants_support_authority": False,
+        "receipt_ready": False,
+        "writes_registry": False,
+        "writes_memory": False,
+        "writes_receipt": False,
+        "writes_receipts": False,
+        "writes_tenant_state": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "expected_review_receipt_path": "logs/managed_copies/sla_commitment_reviews.jsonl",
+        "required_scope": MANAGED_COPIES_SLA_WRITE_SCOPE,
+        "routes": {
+            **contract["routes"],
+            "sla_commitment_review": "/managed-copies/sla-commitment-review",
+        },
+        "governance": {
+            **governance,
+            "write_route": True,
+            "preflight_only": True,
+            "permission_scope": MANAGED_COPIES_SLA_WRITE_SCOPE,
+            "permission_checked": True,
+            "sla_review_enabled": False,
+            "sla_framework_ready": False,
+            "does_not_create_service_commitment": True,
+            "does_not_enable_monitoring": True,
+            "does_not_page_support": True,
+            "does_not_open_incident": True,
+            "does_not_record_sla_receipt": True,
+            "does_not_grant_support_authority": True,
+            "does_not_echo_raw_sla_payload": True,
+            "requires_stage17_closure_receipt": True,
+            "writes_registry": False,
+            "writes_memory": False,
+            "writes_receipts": False,
+            "writes_tenant_state": False,
+            "runs_tools": False,
+            "runs_shell": False,
+            "runs_git": False,
+            "launches_browser": False,
+            "captures_screen": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "read_only": governance["read_only"],
+        "projection_only": governance["projection_only"],
         "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
     }
 

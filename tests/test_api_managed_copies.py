@@ -39,6 +39,7 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
         "rogue_recovery_contract": "/managed-copies/rogue-recovery-contract",
         "rogue_recovery_review": "/managed-copies/rogue-recovery-review",
         "sla_framework_contract": "/managed-copies/sla-framework-contract",
+        "sla_commitment_review": "/managed-copies/sla-commitment-review",
         "roles_contract": "/managed-copies/roles-contract",
         "decommission_contract": "/managed-copies/decommission-contract",
         "runtime_evidence_contract": "/managed-copies/runtime-evidence-contract",
@@ -976,6 +977,8 @@ def test_managed_copy_sla_framework_contract_is_projection_only_and_inactive(
     assert body["stage17_closed_by_receipt"] is False
     assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
     assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["sla_commitment_review_route"] == "/managed-copies/sla-commitment-review"
+    assert body["routes"]["sla_commitment_review"] == "/managed-copies/sla-commitment-review"
 
     commitment_ids = {item["id"] for item in body["commitments"]}
     assert commitment_ids == {
@@ -1058,6 +1061,156 @@ def test_managed_copy_sla_framework_contract_is_projection_only_and_inactive(
     assert governance["copy_creation_enabled"] is False
     assert governance["writes_tenant_state"] is False
     assert governance["writes_receipts"] is False
+    assert governance["grants_execution_authority"] is False
+    assert governance["grants_mutation_authority"] is False
+    assert not data_root.exists()
+
+
+def test_managed_copy_sla_commitment_review_denies_unscoped_actor_without_writing(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+
+    response = TestClient(create_app()).post(
+        "/managed-copies/sla-commitment-review",
+        json={
+            "request_actor": "stage18.sla-unscoped",
+            "copy_id": "copy-denied",
+            "tenant_id": "tenant-denied",
+            "commitment_id": "uptime_commitment",
+            "support_tier": "priority_support",
+            "metric": "uptime_window",
+            "incident": {"summary": "denied path should not open incident"},
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["status"] == "denied"
+    assert body["error"] == "api_permission_denied"
+    assert body["required_scope"] == "managed_copies.sla.write"
+    assert body["sla_framework_ready"] is False
+    assert body["sla_review_enabled"] is False
+    assert body["sla_commitments_active"] is False
+    assert body["monitoring_enabled"] is False
+    assert body["paging_enabled"] is False
+    assert body["support_tiers_enabled"] is False
+    assert body["billing_entitlements_enabled"] is False
+    assert body["writes_receipts"] is False
+    assert body["writes_tenant_state"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+
+    governance = body["governance"]
+    assert governance["gate"] == "permission_gate"
+    assert governance["reason"] == "missing_scopes"
+    assert governance["required_scope"] == "managed_copies.sla.write"
+    assert governance["evidence"]["route"] == "/managed-copies/sla-commitment-review"
+    assert governance["evidence"]["method"] == "POST"
+    assert governance["evidence"]["required_scope_count"] == 1
+    assert governance["evidence"]["actor_scope_count"] == 0
+    assert not data_root.exists()
+
+
+def test_managed_copy_sla_commitment_review_blocks_scoped_actor_until_stage17_closes(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    actor = "stage18.sla-reviewer"
+    raw_tenant_id = "tenant-sla-secret-should-not-echo"
+    raw_incident_text = "raw sla incident payload should not echo"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({actor: ["managed_copies.sla.write"]}),
+    )
+
+    response = TestClient(create_app()).post(
+        "/managed-copies/sla-commitment-review",
+        json={
+            "request_actor": actor,
+            "copy_id": "copy-123",
+            "tenant_id": raw_tenant_id,
+            "commitment_id": "uptime_commitment",
+            "support_tier": "priority_support",
+            "metric": "uptime_window",
+            "incident": {"raw_text": raw_incident_text},
+            "evidence_refs": ["receipt-1", "receipt-2", "receipt-3"],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    encoded = json.dumps(body)
+    assert body["ok"] is False
+    assert body["kind"] == "francis.stage18.managed_copies.sla_commitment_review"
+    assert body["status"] == "blocked_stage17_prerequisite"
+    assert body["error"] == "stage17_prerequisite_not_closed"
+    assert body["actor"] == actor
+    assert body["copy_id_present"] is True
+    assert body["tenant_id_present"] is True
+    assert body["incident_present"] is True
+    assert body["evidence_ref_count"] == 3
+    assert raw_tenant_id not in encoded
+    assert raw_incident_text not in encoded
+    assert body["commitment_id"] == "uptime_commitment"
+    assert body["commitment_known"] is True
+    assert body["commitment_active"] is False
+    assert body["commitment_requires_receipt"] is True
+    assert body["support_tier"] == "priority_support"
+    assert body["support_tier_known"] is True
+    assert body["metric"] == "uptime_window"
+    assert body["metric_known"] is True
+    assert body["stage17_closed_by_receipt"] is False
+    assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["sla_framework_ready"] is False
+    assert body["sla_review_enabled"] is False
+    assert body["sla_commitments_active"] is False
+    assert body["monitoring_enabled"] is False
+    assert body["paging_enabled"] is False
+    assert body["support_tiers_enabled"] is False
+    assert body["billing_entitlements_enabled"] is False
+    assert body["creates_service_commitment"] is False
+    assert body["pages_support"] is False
+    assert body["opens_incident"] is False
+    assert body["records_sla_receipt"] is False
+    assert body["grants_support_authority"] is False
+    assert body["receipt_ready"] is False
+    assert body["writes_registry"] is False
+    assert body["writes_receipts"] is False
+    assert body["writes_tenant_state"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["expected_review_receipt_path"] == "logs/managed_copies/sla_commitment_reviews.jsonl"
+    assert body["required_scope"] == "managed_copies.sla.write"
+    assert body["routes"]["sla_commitment_review"] == "/managed-copies/sla-commitment-review"
+    assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+
+    governance = body["governance"]
+    assert governance["write_route"] is True
+    assert governance["preflight_only"] is True
+    assert governance["permission_scope"] == "managed_copies.sla.write"
+    assert governance["permission_checked"] is True
+    assert governance["sla_review_enabled"] is False
+    assert governance["sla_framework_ready"] is False
+    assert governance["does_not_create_service_commitment"] is True
+    assert governance["does_not_enable_monitoring"] is True
+    assert governance["does_not_page_support"] is True
+    assert governance["does_not_open_incident"] is True
+    assert governance["does_not_record_sla_receipt"] is True
+    assert governance["does_not_grant_support_authority"] is True
+    assert governance["does_not_echo_raw_sla_payload"] is True
+    assert governance["requires_stage17_closure_receipt"] is True
+    assert governance["writes_receipts"] is False
+    assert governance["writes_tenant_state"] is False
     assert governance["grants_execution_authority"] is False
     assert governance["grants_mutation_authority"] is False
     assert not data_root.exists()
