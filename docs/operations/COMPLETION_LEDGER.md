@@ -65310,6 +65310,67 @@ Remaining truthful gap:
   managed copies, write managed-copy receipts, enforce tenant isolation, export
   safe deltas, activate SLAs, bind roles, or decommission tenant state.
 
+### 2026-06-05 - Stage 17 operator proposal-evidence refs record bulkfast capability
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence for the capability-library promotion path.
+
+This pass used the governed operator proposal-evidence intake route to record
+real local artifact references for the next queued capability in the local
+Stage 17 capability-library backlog. The refs were supplied for pack
+`legacy.generated.bulkfastplugin` and capability
+`1780356924_bulkfastplugin`.
+
+Recorded evidence refs:
+
+- `artifact:plugins/proposals/plugin_proposal_1780524614_1780356924-bulkfastplugin.json`
+- `artifact:plugins/validations/plugin_validation_1780524614_1780356924-bulkfastplugin.json`
+- `artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1780357006_legacy-generated-bulkfastplugin.json`
+- `artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1780632847_legacy-generated-bulkfastplugin_404100.json`
+
+Latest validation for this live Stage 17 intake:
+
+- Artifact existence check:
+  all four referenced local files existed under `data/artifacts/plugins`.
+- Governed dry-run/apply runner:
+  the one-pack runner targeted actor `stage17.operator`,
+  `FRANCIS_API_ACTOR_SCOPES={"stage17.operator":["plugins.write"]}`,
+  pack `legacy.generated.bulkfastplugin`, capability
+  `1780356924_bulkfastplugin`, `max_pack_count: 1`,
+  `max_total_capability_count: 1`, and
+  `max_capability_count_per_pack: 1`. The runner asserted dry-run status,
+  planned pack/capability counts, evidence-ref count, fingerprint presence,
+  and governance no-approval/no-promotion/no-execution flags before applying
+  with the returned fingerprint.
+- Apply-output caveat:
+  the runner was terminated during the slower post-apply aggregate readback
+  phase before it printed the dry-run/apply summary. Follow-up readbacks below
+  were run before this ledger entry was recorded.
+- Public capability readback:
+  `GET /plugins/get?id=1780356924_bulkfastplugin` returned `ok: true`,
+  `proposal_evidence_count: 4`, link source
+  `stage17_capability_library_operator_proposal_evidence_intake_apply`,
+  future review required, `proposal_evidence_writes_proposals: false`, and
+  `proposal_evidence_approval_claimed: false`.
+- Public queue readback:
+  `GET /plugins/capabilities/library/proposal-evidence/operator-intake/checklist`
+  returned `status: ready_for_operator_evidence_refs`,
+  `candidate_pack_count: 44`, `candidate_capability_count: 2260`,
+  `evidence_ref_required_count: 2260`, and next visible pack
+  `legacy.generated.bulkmigrationplanplugin`.
+- Direct proposal-review state:
+  `plugin_proposal_1780524614_1780356924-bulkfastplugin` reported
+  `approved: false`, `review_status: not_reviewed`, and
+  `status: reconstructed_lineage`.
+
+Remaining truthful gap:
+
+- This does not close Stage 17, promote capabilities, approve proposals, close
+  the proposal-review or promotion gates, independently verify artifact truth,
+  clear the remaining 2260 capability evidence refs, close Stage 18, create
+  managed copies, write managed-copy receipts, enforce tenant isolation, export
+  safe deltas, activate SLAs, bind roles, or decommission tenant state.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
