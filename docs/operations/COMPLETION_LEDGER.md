@@ -63173,6 +63173,51 @@ Remaining truthful gap:
 - The next bounded Stage 17 blocker remains
   `stage17_capability_library_operator_proposal_evidence_refs`.
 
+### 2026-06-05 - Stage 17 operator proposal-evidence import-preview UI control
+
+Roadmap area: Stage 17 / Capability Economy.
+
+Truthful change:
+
+- Added a Plugins panel control for pasting filled operator proposal-evidence
+  export rows and calling the read-only import-preview route from the UI.
+- The UI accepts a raw row array, an object with `rows`, or the full export
+  response shape with `packs[].rows`, then sends bounded rows to
+  `previewCapabilityLibraryOperatorProposalEvidenceIntakeImport`.
+- The import-preview readback now surfaces processed, ready, pending, invalid,
+  and grouped payload counts, plus the first grouped preview/apply scope and
+  invalid-row errors.
+- The UI control resets stale import-preview state when the pasted rows change
+  and clears stale intake preview/apply response state before import preview.
+
+Latest validation for this UI pass:
+
+- Chat UI production build:
+  `npm run build`
+  Result: passed. Vite emitted the existing non-fatal large chunk warning for
+  the bundled app asset.
+- Full chat UI test script:
+  `npm run test`
+  Result: 216 tests passed.
+
+Validation risk:
+
+- This pass did not run a browser screenshot or Playwright visual check, so the
+  UI validation claim is TypeScript/build and test coverage, not pixel-level
+  layout proof.
+- This UI control only previews pasted rows. It does not record operator refs,
+  validate evidence truth, approve proposals, promote capabilities, or bypass
+  the existing dry-run fingerprint and `plugins.write` apply boundary.
+
+Remaining truthful gap:
+
+- No real operator proposal-evidence refs were recorded in this pass.
+- Proposal-review application and explicit promotion application remain blocked
+  until real operator evidence references are supplied and the proposal-evidence
+  plan no longer reports missing evidence.
+- The next bounded Stage 17 blocker remains
+  `stage17_capability_library_operator_proposal_evidence_refs`.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

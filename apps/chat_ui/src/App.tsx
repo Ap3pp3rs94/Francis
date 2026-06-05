@@ -78,6 +78,7 @@ import type {
   PluginCapabilityLibraryOperatorProposalEvidenceIntakeChecklistResponse,
   PluginCapabilityLibraryOperatorProposalEvidenceIntakeExportPack,
   PluginCapabilityLibraryOperatorProposalEvidenceIntakeExportResponse,
+  PluginCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewResponse,
   PluginCapabilityLibraryOperatorProposalEvidenceIntakeResponse,
   PluginCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetPack,
   PluginCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetResponse,
@@ -18235,6 +18236,12 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
     setCapabilityLibraryOperatorProposalEvidenceIntakeExport,
   ] = useState<PluginCapabilityLibraryOperatorProposalEvidenceIntakeExportResponse | null>(null);
   const [
+    capabilityLibraryOperatorProposalEvidenceImportPreview,
+    setCapabilityLibraryOperatorProposalEvidenceImportPreview,
+  ] = useState<PluginCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewResponse | null>(null);
+  const [capabilityLibraryOperatorProposalEvidenceImportRows, setCapabilityLibraryOperatorProposalEvidenceImportRows] =
+    useState("");
+  const [
     capabilityLibraryOperatorProposalEvidenceIntakeAudit,
     setCapabilityLibraryOperatorProposalEvidenceIntakeAudit,
   ] = useState<PluginCapabilityLibraryOperatorProposalEvidenceIntakeAuditResponse | null>(null);
@@ -18660,6 +18667,17 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
     }),
     [capabilityLibraryOperatorProposalEvidenceIntakeExport],
   );
+  const operatorProposalEvidenceImportPreviewCounts = useMemo(
+    () => ({
+      inputRows: capabilityLibraryOperatorProposalEvidenceImportPreview?.input_row_count ?? 0,
+      processedRows: capabilityLibraryOperatorProposalEvidenceImportPreview?.processed_row_count ?? 0,
+      readyRows: capabilityLibraryOperatorProposalEvidenceImportPreview?.ready_row_count ?? 0,
+      pendingRows: capabilityLibraryOperatorProposalEvidenceImportPreview?.pending_row_count ?? 0,
+      invalidRows: capabilityLibraryOperatorProposalEvidenceImportPreview?.invalid_row_count ?? 0,
+      applyGroups: capabilityLibraryOperatorProposalEvidenceImportPreview?.apply_group_count ?? 0,
+    }),
+    [capabilityLibraryOperatorProposalEvidenceImportPreview],
+  );
   const operatorProposalEvidenceAuditCounts = useMemo(
     () => ({
       packs: capabilityLibraryOperatorProposalEvidenceIntakeAudit?.recorded_pack_count ?? 0,
@@ -18820,6 +18838,22 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
     if (Array.isArray(value)) return value.length;
     if (isRecord(value)) return Object.keys(value).length;
     return safeString(value).trim() ? 1 : 0;
+  }
+
+  function parseOperatorEvidenceImportRowsInput(value: string): Array<Record<string, unknown>> {
+    const raw = value.trim();
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (Array.isArray(parsed)) return parsed.filter(isRecord);
+    if (!isRecord(parsed)) return [];
+    const directRows = parsed.rows;
+    if (Array.isArray(directRows)) return directRows.filter(isRecord);
+    const packs = parsed.packs;
+    if (!Array.isArray(packs)) return [];
+    return packs.flatMap((pack) => {
+      if (!isRecord(pack) || !Array.isArray(pack.rows)) return [];
+      return pack.rows.filter(isRecord);
+    });
   }
 
   const refreshPlugins = useCallback(async () => {
@@ -19216,6 +19250,43 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
       setCapabilityPackBulkDecisionResponse(res);
       setResult(JSON.stringify(res, null, 2));
       await refreshPlugins();
+    } catch (err) {
+      setError(pluginErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function previewCapabilityLibraryOperatorProposalEvidenceImport() {
+    let rows: Array<Record<string, unknown>>;
+    try {
+      rows = parseOperatorEvidenceImportRowsInput(capabilityLibraryOperatorProposalEvidenceImportRows);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Operator evidence import rows must be valid JSON.");
+      return;
+    }
+    if (!rows.length) {
+      setError("Paste operator evidence export rows before import preview.");
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    setRunResponse(null);
+    setCapabilityLibraryOperatorProposalEvidenceImportPreview(null);
+    setCapabilityLibraryOperatorProposalEvidenceIntakeResponse(null);
+    try {
+      const res = await client.previewCapabilityLibraryOperatorProposalEvidenceIntakeImport({
+        rows,
+        max_row_count: Math.min(Math.max(rows.length, 1), 5000),
+        max_apply_group_count: 500,
+        meta: {
+          surface: "chat_ui.plugins.proposal_evidence_import_preview",
+          row_source: "operator_pasted_export_rows",
+        },
+      });
+      setCapabilityLibraryOperatorProposalEvidenceImportPreview(res);
+      setResult(JSON.stringify(res, null, 2));
     } catch (err) {
       setError(pluginErrorMessage(err));
     } finally {
@@ -20095,6 +20166,95 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
               ) : (
                 <div>No operator evidence export rows returned by the backend.</div>
               )}
+              <div style={{ display: "grid", gap: 8, borderTop: `1px solid ${THEME.panelBorder}`, paddingTop: 8 }}>
+                <textarea
+                  value={capabilityLibraryOperatorProposalEvidenceImportRows}
+                  onChange={(e) => {
+                    setCapabilityLibraryOperatorProposalEvidenceImportRows(e.target.value);
+                    setCapabilityLibraryOperatorProposalEvidenceImportPreview(null);
+                  }}
+                  placeholder="Filled export rows JSON"
+                  rows={4}
+                  style={inputStyle}
+                />
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button
+                    style={buttonStyle}
+                    disabled={busy || !capabilityLibraryOperatorProposalEvidenceImportRows.trim()}
+                    onClick={() => void previewCapabilityLibraryOperatorProposalEvidenceImport()}
+                  >
+                    Import-preview rows
+                  </button>
+                  {capabilityLibraryOperatorProposalEvidenceImportPreview ? (
+                    <>
+                      <span
+                        style={badgeStyle(
+                          capabilityLibraryOperatorProposalEvidenceImportPreview.operator_evidence_intake_import_preview_ready
+                            ? "ready"
+                            : "blocked",
+                        )}
+                      >
+                        import {capabilityLibraryOperatorProposalEvidenceImportPreview.status || "unknown"}
+                      </span>
+                      <span style={badgeStyle("rows")}>
+                        processed {operatorProposalEvidenceImportPreviewCounts.processedRows}
+                      </span>
+                      <span style={badgeStyle("ready")}>
+                        ready {operatorProposalEvidenceImportPreviewCounts.readyRows}
+                      </span>
+                      <span style={badgeStyle(operatorProposalEvidenceImportPreviewCounts.pendingRows ? "pending" : "clear")}>
+                        pending {operatorProposalEvidenceImportPreviewCounts.pendingRows}
+                      </span>
+                      <span style={badgeStyle(operatorProposalEvidenceImportPreviewCounts.invalidRows ? "blocked" : "clear")}>
+                        invalid {operatorProposalEvidenceImportPreviewCounts.invalidRows}
+                      </span>
+                      <span style={badgeStyle("groups")}>
+                        groups {operatorProposalEvidenceImportPreviewCounts.applyGroups}
+                      </span>
+                    </>
+                  ) : null}
+                </div>
+                {capabilityLibraryOperatorProposalEvidenceImportPreview?.apply_payload_groups?.length ? (
+                  <div style={{ display: "grid", gap: 6 }}>
+                    {capabilityLibraryOperatorProposalEvidenceImportPreview.apply_payload_groups.slice(0, 3).map((group, index) => (
+                      <div
+                        key={`operator-evidence-import-group-${group.pack_id}-${group.pack_version ?? ""}-${index}`}
+                        style={{ display: "grid", gap: 4 }}
+                      >
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          <span style={badgeStyle("pack")}>{group.pack_id}</span>
+                          <span style={badgeStyle("capabilities")}>caps {group.capability_count ?? 0}</span>
+                          <span style={badgeStyle("refs")}>refs {group.evidence_ref_count ?? 0}</span>
+                          {group.apply_payload_hint?.dry_run_fingerprint_required ? (
+                            <span style={badgeStyle("dry-run")}>fingerprint required</span>
+                          ) : null}
+                        </div>
+                        {group.preview_payload?.capability_ids?.length ? (
+                          <div>
+                            preview scope <code>{group.preview_payload.capability_ids.slice(0, 6).join(", ")}</code>
+                          </div>
+                        ) : null}
+                        {group.preview_payload?.evidence_refs?.length ? (
+                          <div>
+                            refs <code>{group.preview_payload.evidence_refs.join(", ")}</code>
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {capabilityLibraryOperatorProposalEvidenceImportPreview?.invalid_rows?.length ? (
+                  <div>
+                    invalid rows{" "}
+                    <code>
+                      {capabilityLibraryOperatorProposalEvidenceImportPreview.invalid_rows
+                        .slice(0, 3)
+                        .map((row) => `${row.row_index}:${row.error || "invalid"}`)
+                        .join(", ")}
+                    </code>
+                  </div>
+                ) : null}
+              </div>
             </div>
           ) : (
             <div style={{ fontSize: 11, color: THEME.muted, marginTop: 8 }}>
