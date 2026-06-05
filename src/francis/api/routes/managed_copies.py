@@ -8,6 +8,7 @@ from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPer
 
 from francis.managed_copies import (
     MANAGED_COPIES_COPY_CREATION_WRITE_SCOPE,
+    MANAGED_COPIES_ISOLATION_VERIFICATION_WRITE_SCOPE,
     MANAGED_COPIES_RUNTIME_EVIDENCE_WRITE_SCOPE,
     managed_copies_status_snapshot,
     managed_copy_completion_review_snapshot,
@@ -15,6 +16,7 @@ from francis.managed_copies import (
     managed_copy_creation_request_blocked_snapshot,
     managed_copy_decommission_contract_snapshot,
     managed_copy_isolation_rules_contract_snapshot,
+    managed_copy_isolation_verification_blocked_snapshot,
     managed_copy_rogue_recovery_contract_snapshot,
     managed_copy_runtime_evidence_contract_snapshot,
     managed_copy_runtime_evidence_readback_blocked_snapshot,
@@ -62,6 +64,8 @@ def _permission_denied(
         "error": "api_permission_denied",
         "required_scope": required_scope,
         "copy_creation_enabled": False,
+        "isolation_enforcement_enabled": False,
+        "isolation_verification_enabled": False,
         "runtime_evidence_recording_enabled": False,
         "writes_receipt": False,
         "writes_receipts": False,
@@ -75,6 +79,8 @@ def _permission_denied(
             "required_scope": required_scope,
             "evidence": decision.evidence,
             "copy_creation_enabled": False,
+            "isolation_enforcement_enabled": False,
+            "isolation_verification_enabled": False,
             "runtime_evidence_recording_enabled": False,
             "writes_receipts": False,
             "writes_tenant_state": False,
@@ -115,6 +121,24 @@ def copy_creation_request(payload: dict[str, Any], request: Request) -> dict[str
 @router.get("/isolation-rules-contract")
 def isolation_rules_contract() -> dict[str, Any]:
     return managed_copy_isolation_rules_contract_snapshot()
+
+
+@router.post("/isolation-verification")
+def isolation_verification(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    actor = _managed_copy_write_actor(payload)
+    decision = _write_permission(
+        actor,
+        required_scope=MANAGED_COPIES_ISOLATION_VERIFICATION_WRITE_SCOPE,
+        route=request.url.path,
+        method=request.method,
+    )
+    if not decision.allowed:
+        return _permission_denied(
+            decision,
+            required_scope=MANAGED_COPIES_ISOLATION_VERIFICATION_WRITE_SCOPE,
+            next_step="configure_actor_scope_before_verifying_managed_copy_isolation",
+        )
+    return managed_copy_isolation_verification_blocked_snapshot(payload, actor=actor)
 
 
 @router.get("/safe-delta-model-contract")

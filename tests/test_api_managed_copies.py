@@ -33,6 +33,7 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
         "copy_creation_contract": "/managed-copies/copy-creation-contract",
         "copy_creation_request": "/managed-copies/copy-creation-request",
         "isolation_rules_contract": "/managed-copies/isolation-rules-contract",
+        "isolation_verification": "/managed-copies/isolation-verification",
         "safe_delta_model_contract": "/managed-copies/safe-delta-model-contract",
         "rogue_recovery_contract": "/managed-copies/rogue-recovery-contract",
         "sla_framework_contract": "/managed-copies/sla-framework-contract",
@@ -318,6 +319,7 @@ def test_managed_copy_completion_review_blocks_closure_without_runtime_evidence(
     }
     assert body["routes"]["completion_review"] == "/managed-copies/completion-review"
     assert body["routes"]["copy_creation_request"] == "/managed-copies/copy-creation-request"
+    assert body["routes"]["isolation_verification"] == "/managed-copies/isolation-verification"
     assert body["routes"]["runtime_evidence_contract"] == "/managed-copies/runtime-evidence-contract"
     assert body["routes"]["runtime_evidence_readbacks"] == "/managed-copies/runtime-evidence-readbacks"
     assert body["routes"]["runtime_evidence_readback"] == "/managed-copies/runtime-evidence-readback"
@@ -1316,6 +1318,8 @@ def test_managed_copy_isolation_rules_contract_is_projection_only_and_unenforced
     assert body["stage17_closed_by_receipt"] is False
     assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
     assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["isolation_verification_route"] == "/managed-copies/isolation-verification"
+    assert body["routes"]["isolation_verification"] == "/managed-copies/isolation-verification"
 
     domain_ids = {item["id"] for item in body["isolation_domains"]}
     assert {
@@ -1391,6 +1395,140 @@ def test_managed_copy_isolation_rules_contract_is_projection_only_and_unenforced
     assert governance["copy_creation_enabled"] is False
     assert governance["writes_tenant_state"] is False
     assert governance["writes_receipts"] is False
+    assert governance["grants_execution_authority"] is False
+    assert governance["grants_mutation_authority"] is False
+    assert not data_root.exists()
+
+
+def test_managed_copy_isolation_verification_denies_unscoped_actor_without_writing(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+
+    response = TestClient(create_app()).post(
+        "/managed-copies/isolation-verification",
+        json={
+            "request_actor": "stage18.isolation-unscoped",
+            "copy_id": "copy-denied",
+            "tenant_id": "tenant-denied",
+            "domains": ["tenant_data", "tenant_memory"],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["status"] == "denied"
+    assert body["error"] == "api_permission_denied"
+    assert body["required_scope"] == "managed_copies.isolation_verification.write"
+    assert body["isolation_enforcement_enabled"] is False
+    assert body["isolation_verification_enabled"] is False
+    assert body["writes_receipts"] is False
+    assert body["writes_tenant_state"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+
+    governance = body["governance"]
+    assert governance["gate"] == "permission_gate"
+    assert governance["reason"] == "missing_scopes"
+    assert governance["required_scope"] == "managed_copies.isolation_verification.write"
+    assert governance["evidence"]["route"] == "/managed-copies/isolation-verification"
+    assert governance["evidence"]["method"] == "POST"
+    assert governance["evidence"]["required_scope_count"] == 1
+    assert governance["evidence"]["actor_scope_count"] == 0
+    assert not data_root.exists()
+
+
+def test_managed_copy_isolation_verification_blocks_scoped_actor_until_stage17_closes(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    actor = "stage18.isolation-verifier"
+    raw_tenant_id = "tenant-isolation-secret-should-not-echo"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({actor: ["managed_copies.isolation_verification.write"]}),
+    )
+
+    response = TestClient(create_app()).post(
+        "/managed-copies/isolation-verification",
+        json={
+            "request_actor": actor,
+            "copy_id": "copy-123",
+            "tenant_id": raw_tenant_id,
+            "domains": [
+                "tenant_data",
+                "tenant_memory",
+                "tenant_receipts",
+                "tenant_connectors",
+                "tenant_capability_packs",
+                "tenant_policy",
+                "support_operator_authority",
+                "unexpected_cross_tenant_domain",
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["kind"] == "francis.stage18.managed_copies.isolation_verification"
+    assert body["status"] == "blocked_stage17_prerequisite"
+    assert body["error"] == "stage17_prerequisite_not_closed"
+    assert body["actor"] == actor
+    assert body["copy_id_present"] is True
+    assert body["tenant_id_present"] is True
+    assert raw_tenant_id not in json.dumps(body)
+    assert body["requested_domain_count"] == 8
+    assert body["requested_unknown_domains"] == ["unexpected_cross_tenant_domain"]
+    assert body["required_domain_count"] == 7
+    assert body["verified_domain_count"] == 0
+    assert all(item["requested"] is True for item in body["domain_checks"])
+    assert all(item["verified"] is False for item in body["domain_checks"])
+    assert all(item["status"] == "blocked_stage17_prerequisite" for item in body["domain_checks"])
+    assert body["stage17_closed_by_receipt"] is False
+    assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["isolation_rules_ready"] is False
+    assert body["isolation_enforcement_enabled"] is False
+    assert body["isolation_verification_enabled"] is False
+    assert body["isolation_verified"] is False
+    assert body["tenant_state_shared"] is False
+    assert body["cross_tenant_data_flow_allowed"] is False
+    assert body["raw_private_pooling_allowed"] is False
+    assert body["support_backdoor_allowed"] is False
+    assert body["receipt_ready"] is False
+    assert body["writes_registry"] is False
+    assert body["writes_receipts"] is False
+    assert body["writes_tenant_state"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["expected_verification_receipt_path"] == "logs/managed_copies/isolation_verifications.jsonl"
+    assert body["required_scope"] == "managed_copies.isolation_verification.write"
+    assert body["routes"]["isolation_verification"] == "/managed-copies/isolation-verification"
+    assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+
+    governance = body["governance"]
+    assert governance["write_route"] is True
+    assert governance["preflight_only"] is True
+    assert governance["permission_scope"] == "managed_copies.isolation_verification.write"
+    assert governance["permission_checked"] is True
+    assert governance["isolation_enforcement_enabled"] is False
+    assert governance["isolation_verification_enabled"] is False
+    assert governance["does_not_enforce_isolation"] is True
+    assert governance["does_not_record_isolation_receipt"] is True
+    assert governance["does_not_mutate_tenant_state"] is True
+    assert governance["does_not_echo_raw_tenant_payload"] is True
+    assert governance["requires_stage17_closure_receipt"] is True
+    assert governance["writes_receipts"] is False
+    assert governance["writes_tenant_state"] is False
     assert governance["grants_execution_authority"] is False
     assert governance["grants_mutation_authority"] is False
     assert not data_root.exists()

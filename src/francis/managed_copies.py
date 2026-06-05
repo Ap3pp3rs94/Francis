@@ -12,6 +12,8 @@ MANAGED_COPIES_COPY_CREATION_CONTRACT_KIND = "francis.stage18.managed_copies.cop
 MANAGED_COPIES_COPY_CREATION_REQUEST_KIND = "francis.stage18.managed_copies.copy_creation_request"
 MANAGED_COPIES_COPY_CREATION_WRITE_SCOPE = "managed_copies.copy_creation.write"
 MANAGED_COPIES_ISOLATION_RULES_CONTRACT_KIND = "francis.stage18.managed_copies.isolation_rules_contract"
+MANAGED_COPIES_ISOLATION_VERIFICATION_KIND = "francis.stage18.managed_copies.isolation_verification"
+MANAGED_COPIES_ISOLATION_VERIFICATION_WRITE_SCOPE = "managed_copies.isolation_verification.write"
 MANAGED_COPIES_SAFE_DELTA_MODEL_CONTRACT_KIND = "francis.stage18.managed_copies.safe_delta_model_contract"
 MANAGED_COPIES_ROGUE_RECOVERY_CONTRACT_KIND = "francis.stage18.managed_copies.rogue_recovery_contract"
 MANAGED_COPIES_SLA_FRAMEWORK_CONTRACT_KIND = "francis.stage18.managed_copies.sla_framework_contract"
@@ -446,6 +448,7 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "copy_creation_contract": "/managed-copies/copy-creation-contract",
             "copy_creation_request": "/managed-copies/copy-creation-request",
             "isolation_rules_contract": "/managed-copies/isolation-rules-contract",
+            "isolation_verification": "/managed-copies/isolation-verification",
             "safe_delta_model_contract": "/managed-copies/safe-delta-model-contract",
             "rogue_recovery_contract": "/managed-copies/rogue-recovery-contract",
             "sla_framework_contract": "/managed-copies/sla-framework-contract",
@@ -762,6 +765,7 @@ def managed_copy_creation_request_blocked_snapshot(
 def managed_copy_isolation_rules_contract_snapshot() -> dict[str, Any]:
     """Return the managed-copy isolation rules contract without enforcing tenant state."""
     governance = _governance()
+    status = managed_copies_status_snapshot()
     isolation_domains = [
         _isolation_domain(
             "tenant_data",
@@ -854,6 +858,12 @@ def managed_copy_isolation_rules_contract_snapshot() -> dict[str, Any]:
             "support_authority_boundary_receipt",
             "cross_tenant_flow_denial_receipt",
         ],
+        "isolation_verification_route": "/managed-copies/isolation-verification",
+        "routes": {
+            **status["routes"],
+            "isolation_rules_contract": "/managed-copies/isolation-rules-contract",
+            "isolation_verification": "/managed-copies/isolation-verification",
+        },
         "blocked_failure_modes": [
             "privacy_weak_pooling",
             "cross_customer_leakage",
@@ -880,6 +890,106 @@ def managed_copy_isolation_rules_contract_snapshot() -> dict[str, Any]:
         "raw_private_pooling_allowed": False,
         "support_backdoor_allowed": False,
         "tenant_state_shared": False,
+        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+    }
+
+
+def managed_copy_isolation_verification_blocked_snapshot(
+    payload: dict[str, Any],
+    *,
+    actor: str,
+) -> dict[str, Any]:
+    """Return a governed isolation verification preflight blocked by Stage 17."""
+    governance = _governance()
+    contract = managed_copy_isolation_rules_contract_snapshot()
+    raw_domains = payload.get("domains")
+    domain_values = raw_domains if isinstance(raw_domains, list) else []
+    requested_domains = {_safe_str(domain).strip() for domain in domain_values if _safe_str(domain).strip()}
+    required_domains = [item["id"] for item in contract["isolation_domains"]]
+    domain_checks = [
+        {
+            "id": domain_id,
+            "requested": domain_id in requested_domains,
+            "verified": False,
+            "status": "blocked_stage17_prerequisite",
+            "verification_gap": next(
+                item["verification_gap"] for item in contract["isolation_domains"] if item["id"] == domain_id
+            ),
+        }
+        for domain_id in required_domains
+    ]
+    requested_unknown_domains = sorted(requested_domains.difference(required_domains))
+    return {
+        "ok": False,
+        "kind": MANAGED_COPIES_ISOLATION_VERIFICATION_KIND,
+        "stage": STAGE18_MANAGED_COPIES_STAGE,
+        "source_id": "managed_copies",
+        "status": "blocked_stage17_prerequisite",
+        "error": "stage17_prerequisite_not_closed",
+        "actor": _safe_str(actor).strip(),
+        "copy_id_present": bool(_safe_str(payload.get("copy_id")).strip()),
+        "tenant_id_present": bool(_safe_str(payload.get("tenant_id")).strip()),
+        "requested_domain_count": len(requested_domains),
+        "requested_unknown_domains": requested_unknown_domains,
+        "required_domain_count": len(required_domains),
+        "verified_domain_count": 0,
+        "domain_checks": domain_checks,
+        "stage17_closed_by_receipt": bool(contract["stage17_closed_by_receipt"]),
+        "stage17_blocker": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "isolation_rules_ready": False,
+        "isolation_enforcement_enabled": False,
+        "isolation_verification_enabled": False,
+        "isolation_verified": False,
+        "tenant_state_shared": False,
+        "cross_tenant_data_flow_allowed": False,
+        "raw_private_pooling_allowed": False,
+        "support_backdoor_allowed": False,
+        "receipt_ready": False,
+        "writes_registry": False,
+        "writes_memory": False,
+        "writes_receipt": False,
+        "writes_receipts": False,
+        "writes_tenant_state": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "expected_verification_receipt_path": "logs/managed_copies/isolation_verifications.jsonl",
+        "required_scope": MANAGED_COPIES_ISOLATION_VERIFICATION_WRITE_SCOPE,
+        "routes": {
+            **contract["routes"],
+            "isolation_verification": "/managed-copies/isolation-verification",
+        },
+        "governance": {
+            **governance,
+            "write_route": True,
+            "preflight_only": True,
+            "permission_scope": MANAGED_COPIES_ISOLATION_VERIFICATION_WRITE_SCOPE,
+            "permission_checked": True,
+            "isolation_enforcement_enabled": False,
+            "isolation_verification_enabled": False,
+            "does_not_enforce_isolation": True,
+            "does_not_record_isolation_receipt": True,
+            "does_not_mutate_tenant_state": True,
+            "does_not_echo_raw_tenant_payload": True,
+            "requires_stage17_closure_receipt": True,
+            "writes_registry": False,
+            "writes_memory": False,
+            "writes_receipts": False,
+            "writes_tenant_state": False,
+            "runs_tools": False,
+            "runs_shell": False,
+            "runs_git": False,
+            "launches_browser": False,
+            "captures_screen": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "read_only": governance["read_only"],
+        "projection_only": governance["projection_only"],
         "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
     }
 
