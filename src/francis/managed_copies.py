@@ -5,6 +5,7 @@ from typing import Any
 STAGE18_MANAGED_COPIES_STAGE = "Stage 18 / Managed Copies Platform"
 MANAGED_COPIES_STATUS_KIND = "francis.stage18.managed_copies.status"
 MANAGED_COPIES_COPY_CREATION_CONTRACT_KIND = "francis.stage18.managed_copies.copy_creation_contract"
+MANAGED_COPIES_ISOLATION_RULES_CONTRACT_KIND = "francis.stage18.managed_copies.isolation_rules_contract"
 STAGE17_OPERATOR_EVIDENCE_REFS_GAP = "stage17_capability_library_operator_proposal_evidence_refs"
 
 
@@ -90,6 +91,23 @@ def _contract_step(
     }
 
 
+def _isolation_domain(
+    domain_id: str,
+    title: str,
+    *,
+    isolated: bool,
+    enforcement_status: str,
+    verification_gap: str,
+) -> dict[str, Any]:
+    return {
+        "id": domain_id,
+        "title": title,
+        "isolated": isolated,
+        "enforcement_status": enforcement_status,
+        "verification_gap": verification_gap,
+    }
+
+
 def managed_copies_status_snapshot() -> dict[str, Any]:
     """Return the Stage 18 managed-copy substrate posture without creating state."""
     governance = _governance()
@@ -118,8 +136,11 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "isolation_rules",
             "Isolation rules",
             ready=False,
-            status="pending",
+            status="contract_readback_ready",
             next_gap="stage18_copy_isolation_rules",
+            evidence=[
+                "GET /managed-copies/isolation-rules-contract exposes tenant boundary rules without enforcing them.",
+            ],
         ),
         _deliverable(
             "safe_delta_model",
@@ -174,6 +195,7 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
         "routes": {
             "status": "/managed-copies/status",
             "copy_creation_contract": "/managed-copies/copy-creation-contract",
+            "isolation_rules_contract": "/managed-copies/isolation-rules-contract",
         },
         "managed_copy_roles_required": [
             "end_user",
@@ -382,5 +404,130 @@ def managed_copy_creation_contract_snapshot() -> dict[str, Any]:
         "captures_screen": governance["captures_screen"],
         "grants_execution_authority": governance["grants_execution_authority"],
         "grants_mutation_authority": governance["grants_mutation_authority"],
+        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+    }
+
+
+def managed_copy_isolation_rules_contract_snapshot() -> dict[str, Any]:
+    """Return the managed-copy isolation rules contract without enforcing tenant state."""
+    governance = _governance()
+    isolation_domains = [
+        _isolation_domain(
+            "tenant_data",
+            "Tenant data remains copy-local and cannot be pooled across customers",
+            isolated=False,
+            enforcement_status="contract_only",
+            verification_gap="stage18_tenant_data_isolation_verification",
+        ),
+        _isolation_domain(
+            "tenant_memory",
+            "Tenant memory and continuity traces remain copy-local",
+            isolated=False,
+            enforcement_status="contract_only",
+            verification_gap="stage18_tenant_memory_isolation_verification",
+        ),
+        _isolation_domain(
+            "tenant_receipts",
+            "Tenant receipts are scoped to the managed copy and support audit boundary",
+            isolated=False,
+            enforcement_status="contract_only",
+            verification_gap="stage18_tenant_receipt_isolation_verification",
+        ),
+        _isolation_domain(
+            "tenant_connectors",
+            "Tenant connectors and credentials stay inside declared tenant authority",
+            isolated=False,
+            enforcement_status="contract_only",
+            verification_gap="stage18_tenant_connector_isolation_verification",
+        ),
+        _isolation_domain(
+            "tenant_capability_packs",
+            "Tenant capability-pack customizations preserve lineage to core packs",
+            isolated=False,
+            enforcement_status="contract_only",
+            verification_gap="stage18_tenant_capability_pack_lineage_verification",
+        ),
+        _isolation_domain(
+            "tenant_policy",
+            "Tenant policy overlays are explicit and do not weaken core governance law",
+            isolated=False,
+            enforcement_status="contract_only",
+            verification_gap="stage18_tenant_policy_overlay_verification",
+        ),
+        _isolation_domain(
+            "support_operator_authority",
+            "Support operator authority is explicit, time-bounded, audited, and revocable",
+            isolated=False,
+            enforcement_status="contract_only",
+            verification_gap="stage18_support_operator_authority_verification",
+        ),
+    ]
+    return {
+        "ok": True,
+        "kind": MANAGED_COPIES_ISOLATION_RULES_CONTRACT_KIND,
+        "stage": STAGE18_MANAGED_COPIES_STAGE,
+        "source_id": "managed_copies",
+        "status": "contract_readback_ready",
+        "contract_readback_ready": True,
+        "isolation_rules_ready": False,
+        "isolation_enforcement_enabled": False,
+        "copy_creation_enabled": False,
+        "stage17_closed_by_receipt": False,
+        "stage17_blocker": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "isolation_domains": isolation_domains,
+        "required_domain_count": len(isolation_domains),
+        "enforced_domain_count": sum(1 for domain in isolation_domains if domain["isolated"]),
+        "support_access_rules": [
+            "support_operator_identity_required",
+            "tenant_admin_approval_required",
+            "scope_limited_support_session_required",
+            "time_bound_support_access_required",
+            "support_action_receipts_required",
+            "tenant_visible_support_activity_required",
+            "support_revocation_required",
+        ],
+        "cross_tenant_rules": [
+            "no_raw_private_data_pooling",
+            "no_cross_tenant_memory_reads",
+            "no_cross_tenant_receipt_writes",
+            "no_cross_tenant_connector_reuse",
+            "no_unattributed_safe_delta_flow",
+            "no_uncontrolled_capability_pack_forks",
+        ],
+        "verification_receipts_required": [
+            "tenant_data_isolation_receipt",
+            "tenant_memory_isolation_receipt",
+            "tenant_receipt_isolation_receipt",
+            "tenant_connector_isolation_receipt",
+            "tenant_policy_overlay_receipt",
+            "support_authority_boundary_receipt",
+            "cross_tenant_flow_denial_receipt",
+        ],
+        "blocked_failure_modes": [
+            "privacy_weak_pooling",
+            "cross_customer_leakage",
+            "support_backdoor",
+            "ambiguous_operator_rights",
+            "uncontrolled_forks",
+            "policy_thin_managed_service",
+        ],
+        "governance": governance,
+        "read_only": governance["read_only"],
+        "projection_only": governance["projection_only"],
+        "writes_registry": governance["writes_registry"],
+        "writes_memory": governance["writes_memory"],
+        "writes_receipts": governance["writes_receipts"],
+        "writes_tenant_state": governance["writes_tenant_state"],
+        "runs_tools": governance["runs_tools"],
+        "runs_shell": governance["runs_shell"],
+        "runs_git": governance["runs_git"],
+        "launches_browser": governance["launches_browser"],
+        "captures_screen": governance["captures_screen"],
+        "grants_execution_authority": governance["grants_execution_authority"],
+        "grants_mutation_authority": governance["grants_mutation_authority"],
+        "cross_tenant_data_flow_allowed": False,
+        "raw_private_pooling_allowed": False,
+        "support_backdoor_allowed": False,
+        "tenant_state_shared": False,
         "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
     }

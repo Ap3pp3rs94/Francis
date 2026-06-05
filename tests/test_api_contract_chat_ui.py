@@ -75,6 +75,7 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("POST", "/federation/live-runtime-readback"),
         ("GET", "/managed-copies/status"),
         ("GET", "/managed-copies/copy-creation-contract"),
+        ("GET", "/managed-copies/isolation-rules-contract"),
         ("GET", "/federation/instances/list"),
         ("GET", "/federation/instances/get"),
         ("GET", "/federation/delegations/list"),

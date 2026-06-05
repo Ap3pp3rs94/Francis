@@ -64274,6 +64274,55 @@ Remaining truthful gap:
   copy-creation receipts, implement safe delta handling, implement rogue
   recovery, or define SLA operations.
 
+### Stage 18 managed-copy isolation rules contract readback
+
+This pass made the Stage 18 managed-copy isolation rules inspectable without
+enforcing tenant isolation or enabling copy creation.
+
+Shipped behavior:
+
+- `src/francis/managed_copies.py` now exposes
+  `managed_copy_isolation_rules_contract_snapshot()`, a read-only isolation
+  rules contract for managed copies.
+- `GET /managed-copies/isolation-rules-contract` now returns the tenant
+  isolation domains, support access rules, cross-tenant denials, required
+  verification receipts, and blocked failure modes.
+- `GET /managed-copies/status` now advertises the isolation-rules contract route
+  and records the `isolation_rules` deliverable as
+  `contract_readback_ready` while still reporting `ready: false`.
+- The contract keeps `isolation_rules_ready: false`,
+  `isolation_enforcement_enabled: false`, and `copy_creation_enabled: false`.
+  It does not create copies, share tenant state, write registries, write memory,
+  write receipts, write tenant state, run tools, run shell, run git, launch
+  browsers, capture screens, grant execution authority, or grant mutation
+  authority.
+- The contract preserves the current blocker as
+  `stage17_capability_library_operator_proposal_evidence_refs` and reports
+  `stage17_closed_by_receipt: false`.
+
+Latest validation for this readback:
+
+- Focused API contract tests:
+  `python -m pytest tests\test_api_managed_copies.py tests\test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted -q`
+  Result: 4 tests passed.
+- Ruff lint:
+  `python -m ruff check src\francis\managed_copies.py src\francis\api\routes\managed_copies.py tests\test_api_managed_copies.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Ruff format check:
+  `python -m ruff format --check src\francis\managed_copies.py src\francis\api\routes\managed_copies.py tests\test_api_managed_copies.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Mypy:
+  `python -m mypy src\francis\managed_copies.py src\francis\api\routes\managed_copies.py`
+  Result: passed.
+
+Remaining truthful gap:
+
+- This does not close Stage 17, enforce tenant data isolation, enforce tenant
+  memory isolation, enforce connector/credential isolation, persist tenant
+  policy overlays, implement support access receipts, deny live cross-tenant
+  flows at runtime, create managed copies, implement safe delta handling, or
+  implement rogue recovery.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
