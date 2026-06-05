@@ -27,6 +27,8 @@ MANAGED_COPIES_ROLES_CONTRACT_KIND = "francis.stage18.managed_copies.roles_contr
 MANAGED_COPIES_ROLE_AUTHORITY_REVIEW_KIND = "francis.stage18.managed_copies.role_authority_review"
 MANAGED_COPIES_ROLE_AUTHORITY_WRITE_SCOPE = "managed_copies.role_authority.write"
 MANAGED_COPIES_DECOMMISSION_CONTRACT_KIND = "francis.stage18.managed_copies.decommission_contract"
+MANAGED_COPIES_DECOMMISSION_REVIEW_KIND = "francis.stage18.managed_copies.decommission_review"
+MANAGED_COPIES_DECOMMISSION_WRITE_SCOPE = "managed_copies.decommission.write"
 MANAGED_COPIES_COMPLETION_REVIEW_KIND = "francis.stage18.managed_copies.completion_review"
 MANAGED_COPIES_RUNTIME_EVIDENCE_CONTRACT_KIND = "francis.stage18.managed_copies.runtime_evidence_contract"
 MANAGED_COPIES_RUNTIME_EVIDENCE_READBACKS_KIND = "francis.stage18.managed_copies.runtime_evidence_readbacks"
@@ -466,6 +468,7 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "roles_contract": "/managed-copies/roles-contract",
             "role_authority_review": "/managed-copies/role-authority-review",
             "decommission_contract": "/managed-copies/decommission-contract",
+            "decommission_review": "/managed-copies/decommission-review",
             "runtime_evidence_contract": "/managed-copies/runtime-evidence-contract",
             "runtime_evidence_readbacks": "/managed-copies/runtime-evidence-readbacks",
             "runtime_evidence_readback": "/managed-copies/runtime-evidence-readback",
@@ -2074,6 +2077,7 @@ def managed_copy_role_authority_review_blocked_snapshot(
 def managed_copy_decommission_contract_snapshot() -> dict[str, Any]:
     """Return managed-copy exit-rights rules without mutating tenant state."""
     governance = _governance()
+    status = managed_copies_status_snapshot()
     steps = [
         _decommission_step(
             "request",
@@ -2197,6 +2201,12 @@ def managed_copy_decommission_contract_snapshot() -> dict[str, Any]:
             "hidden_retention",
             "vendor_gravity_exit_block",
         ],
+        "decommission_review_route": "/managed-copies/decommission-review",
+        "routes": {
+            **status["routes"],
+            "decommission_contract": "/managed-copies/decommission-contract",
+            "decommission_review": "/managed-copies/decommission-review",
+        },
         "governance": governance,
         "read_only": governance["read_only"],
         "projection_only": governance["projection_only"],
@@ -2218,6 +2228,133 @@ def managed_copy_decommission_contract_snapshot() -> dict[str, Any]:
         "purges_memory": False,
         "records_decommission_receipt": False,
         "weakens_other_copies": False,
+        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+    }
+
+
+def _requested_known_scope_counts(payload: dict[str, Any], field: str, allowed: list[str]) -> dict[str, int]:
+    raw_items = payload.get(field)
+    if not isinstance(raw_items, list):
+        return {"requested_count": 0, "known_count": 0, "unknown_count": 0}
+    requested = [_safe_str(item).strip() for item in raw_items if _safe_str(item).strip()]
+    allowed_set = set(allowed)
+    known_count = sum(1 for item in requested if item in allowed_set)
+    return {
+        "requested_count": len(requested),
+        "known_count": known_count,
+        "unknown_count": len(requested) - known_count,
+    }
+
+
+def managed_copy_decommission_review_blocked_snapshot(
+    payload: dict[str, Any],
+    *,
+    actor: str,
+) -> dict[str, Any]:
+    """Return a governed decommission review preflight blocked by Stage 17."""
+    governance = _governance()
+    contract = managed_copy_decommission_contract_snapshot()
+    action = _safe_str(payload.get("action") or payload.get("decommission_step")).strip()
+    step_by_id = {item["id"]: item for item in contract["decommission_steps"]}
+    step = step_by_id.get(action, {})
+    raw_evidence_refs = payload.get("evidence_refs")
+    evidence_ref_count = len(raw_evidence_refs) if isinstance(raw_evidence_refs, list) else 0
+    export_scope_counts = _requested_known_scope_counts(payload, "export_scope", contract["export_scope"])
+    deletion_scope_counts = _requested_known_scope_counts(payload, "deletion_scope", contract["deletion_scope"])
+    retention_scope_counts = _requested_known_scope_counts(payload, "retention_scope", contract["retention_scope"])
+    return {
+        "ok": False,
+        "kind": MANAGED_COPIES_DECOMMISSION_REVIEW_KIND,
+        "stage": STAGE18_MANAGED_COPIES_STAGE,
+        "source_id": "managed_copies",
+        "status": "blocked_stage17_prerequisite",
+        "error": "stage17_prerequisite_not_closed",
+        "actor": _safe_str(actor).strip(),
+        "copy_id_present": bool(_safe_str(payload.get("copy_id")).strip()),
+        "tenant_id_present": bool(_safe_str(payload.get("tenant_id")).strip()),
+        "request_present": payload.get("decommission_request") is not None,
+        "evidence_ref_count": evidence_ref_count,
+        "action": action if step else "unknown",
+        "action_known": bool(step),
+        "action_writes_receipt": bool(step.get("writes_receipt")),
+        "action_mutates_tenant_state": bool(step.get("mutates_tenant_state")),
+        "export_scope_requested_count": export_scope_counts["requested_count"],
+        "export_scope_known_count": export_scope_counts["known_count"],
+        "export_scope_unknown_count": export_scope_counts["unknown_count"],
+        "deletion_scope_requested_count": deletion_scope_counts["requested_count"],
+        "deletion_scope_known_count": deletion_scope_counts["known_count"],
+        "deletion_scope_unknown_count": deletion_scope_counts["unknown_count"],
+        "retention_scope_requested_count": retention_scope_counts["requested_count"],
+        "retention_scope_known_count": retention_scope_counts["known_count"],
+        "retention_scope_unknown_count": retention_scope_counts["unknown_count"],
+        "stage17_closed_by_receipt": bool(contract["stage17_closed_by_receipt"]),
+        "stage17_blocker": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "decommission_contract_ready": False,
+        "decommission_review_enabled": False,
+        "decommission_enabled": False,
+        "export_enabled": False,
+        "delete_enabled": False,
+        "purge_enabled": False,
+        "credential_revocation_enabled": False,
+        "node_unpairing_enabled": False,
+        "proof_receipts_enabled": False,
+        "exports_tenant_data": False,
+        "deletes_tenant_state": False,
+        "revokes_credentials": False,
+        "unpairs_nodes": False,
+        "purges_memory": False,
+        "records_decommission_receipt": False,
+        "weakens_other_copies": False,
+        "receipt_ready": False,
+        "writes_registry": False,
+        "writes_memory": False,
+        "writes_receipt": False,
+        "writes_receipts": False,
+        "writes_tenant_state": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "expected_review_receipt_path": "logs/managed_copies/decommission_reviews.jsonl",
+        "required_scope": MANAGED_COPIES_DECOMMISSION_WRITE_SCOPE,
+        "routes": {
+            **contract["routes"],
+            "decommission_review": "/managed-copies/decommission-review",
+        },
+        "governance": {
+            **governance,
+            "write_route": True,
+            "preflight_only": True,
+            "permission_scope": MANAGED_COPIES_DECOMMISSION_WRITE_SCOPE,
+            "permission_checked": True,
+            "decommission_review_enabled": False,
+            "decommission_enabled": False,
+            "does_not_export_tenant_data": True,
+            "does_not_delete_tenant_state": True,
+            "does_not_revoke_credentials": True,
+            "does_not_unpair_nodes": True,
+            "does_not_purge_memory": True,
+            "does_not_record_decommission_receipt": True,
+            "does_not_weaken_other_copies": True,
+            "does_not_echo_raw_decommission_payload": True,
+            "requires_stage17_closure_receipt": True,
+            "writes_registry": False,
+            "writes_memory": False,
+            "writes_receipts": False,
+            "writes_tenant_state": False,
+            "runs_tools": False,
+            "runs_shell": False,
+            "runs_git": False,
+            "launches_browser": False,
+            "captures_screen": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "read_only": governance["read_only"],
+        "projection_only": governance["projection_only"],
         "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
     }
 

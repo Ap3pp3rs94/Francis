@@ -87,6 +87,7 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("GET", "/managed-copies/roles-contract"),
         ("POST", "/managed-copies/role-authority-review"),
         ("GET", "/managed-copies/decommission-contract"),
+        ("POST", "/managed-copies/decommission-review"),
         ("GET", "/managed-copies/completion-review"),
         ("GET", "/managed-copies/runtime-evidence-contract"),
         ("GET", "/managed-copies/runtime-evidence-readbacks"),

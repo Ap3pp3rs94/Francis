@@ -43,6 +43,7 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
         "roles_contract": "/managed-copies/roles-contract",
         "role_authority_review": "/managed-copies/role-authority-review",
         "decommission_contract": "/managed-copies/decommission-contract",
+        "decommission_review": "/managed-copies/decommission-review",
         "runtime_evidence_contract": "/managed-copies/runtime-evidence-contract",
         "runtime_evidence_readbacks": "/managed-copies/runtime-evidence-readbacks",
         "runtime_evidence_readback": "/managed-copies/runtime-evidence-readback",
@@ -734,6 +735,8 @@ def test_managed_copy_decommission_contract_is_projection_only_and_inactive(
     assert body["stage17_closed_by_receipt"] is False
     assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
     assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["decommission_review_route"] == "/managed-copies/decommission-review"
+    assert body["routes"]["decommission_review"] == "/managed-copies/decommission-review"
 
     step_by_id = {item["id"]: item for item in body["decommission_steps"]}
     assert set(step_by_id) == {
@@ -839,6 +842,183 @@ def test_managed_copy_decommission_contract_is_projection_only_and_inactive(
     assert governance["copy_creation_enabled"] is False
     assert governance["writes_tenant_state"] is False
     assert governance["writes_receipts"] is False
+    assert governance["grants_execution_authority"] is False
+    assert governance["grants_mutation_authority"] is False
+    assert not data_root.exists()
+
+
+def test_managed_copy_decommission_review_denies_unscoped_actor_without_writing(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+
+    response = TestClient(create_app()).post(
+        "/managed-copies/decommission-review",
+        json={
+            "request_actor": "stage18.decommission-unscoped",
+            "copy_id": "copy-denied",
+            "tenant_id": "tenant-denied",
+            "action": "revoke_credentials",
+            "decommission_request": {"reason": "denied path should not revoke anything"},
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["status"] == "denied"
+    assert body["error"] == "api_permission_denied"
+    assert body["required_scope"] == "managed_copies.decommission.write"
+    assert body["decommission_contract_ready"] is False
+    assert body["decommission_review_enabled"] is False
+    assert body["decommission_enabled"] is False
+    assert body["export_enabled"] is False
+    assert body["delete_enabled"] is False
+    assert body["purge_enabled"] is False
+    assert body["credential_revocation_enabled"] is False
+    assert body["node_unpairing_enabled"] is False
+    assert body["proof_receipts_enabled"] is False
+    assert body["exports_tenant_data"] is False
+    assert body["deletes_tenant_state"] is False
+    assert body["revokes_credentials"] is False
+    assert body["unpairs_nodes"] is False
+    assert body["purges_memory"] is False
+    assert body["records_decommission_receipt"] is False
+    assert body["weakens_other_copies"] is False
+    assert body["writes_receipts"] is False
+    assert body["writes_tenant_state"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+
+    governance = body["governance"]
+    assert governance["gate"] == "permission_gate"
+    assert governance["reason"] == "missing_scopes"
+    assert governance["required_scope"] == "managed_copies.decommission.write"
+    assert governance["evidence"]["route"] == "/managed-copies/decommission-review"
+    assert governance["evidence"]["method"] == "POST"
+    assert governance["evidence"]["required_scope_count"] == 1
+    assert governance["evidence"]["actor_scope_count"] == 0
+    assert not data_root.exists()
+
+
+def test_managed_copy_decommission_review_blocks_scoped_actor_until_stage17_closes(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    actor = "stage18.decommission-reviewer"
+    raw_tenant_id = "tenant-decommission-secret-should-not-echo"
+    raw_request_reason = "raw decommission reason should not echo"
+    raw_unknown_scope = "tenant_private_extra_scope_should_not_echo"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({actor: ["managed_copies.decommission.write"]}),
+    )
+
+    response = TestClient(create_app()).post(
+        "/managed-copies/decommission-review",
+        json={
+            "request_actor": actor,
+            "copy_id": "copy-123",
+            "tenant_id": raw_tenant_id,
+            "action": "revoke_credentials",
+            "decommission_request": {"reason": raw_request_reason},
+            "export_scope": [
+                "tenant_configuration",
+                "tenant_receipts",
+                raw_unknown_scope,
+            ],
+            "deletion_scope": [
+                "tenant_credentials",
+                "tenant_pairings",
+            ],
+            "retention_scope": ["legal_hold_records"],
+            "evidence_refs": ["receipt-1", "receipt-2", "receipt-3"],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    encoded = json.dumps(body)
+    assert body["ok"] is False
+    assert body["kind"] == "francis.stage18.managed_copies.decommission_review"
+    assert body["status"] == "blocked_stage17_prerequisite"
+    assert body["error"] == "stage17_prerequisite_not_closed"
+    assert body["actor"] == actor
+    assert body["copy_id_present"] is True
+    assert body["tenant_id_present"] is True
+    assert body["request_present"] is True
+    assert body["evidence_ref_count"] == 3
+    assert raw_tenant_id not in encoded
+    assert raw_request_reason not in encoded
+    assert raw_unknown_scope not in encoded
+    assert body["action"] == "revoke_credentials"
+    assert body["action_known"] is True
+    assert body["action_writes_receipt"] is True
+    assert body["action_mutates_tenant_state"] is True
+    assert body["export_scope_requested_count"] == 3
+    assert body["export_scope_known_count"] == 2
+    assert body["export_scope_unknown_count"] == 1
+    assert body["deletion_scope_requested_count"] == 2
+    assert body["deletion_scope_known_count"] == 2
+    assert body["deletion_scope_unknown_count"] == 0
+    assert body["retention_scope_requested_count"] == 1
+    assert body["retention_scope_known_count"] == 1
+    assert body["retention_scope_unknown_count"] == 0
+    assert body["stage17_closed_by_receipt"] is False
+    assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["decommission_contract_ready"] is False
+    assert body["decommission_review_enabled"] is False
+    assert body["decommission_enabled"] is False
+    assert body["export_enabled"] is False
+    assert body["delete_enabled"] is False
+    assert body["purge_enabled"] is False
+    assert body["credential_revocation_enabled"] is False
+    assert body["node_unpairing_enabled"] is False
+    assert body["proof_receipts_enabled"] is False
+    assert body["exports_tenant_data"] is False
+    assert body["deletes_tenant_state"] is False
+    assert body["revokes_credentials"] is False
+    assert body["unpairs_nodes"] is False
+    assert body["purges_memory"] is False
+    assert body["records_decommission_receipt"] is False
+    assert body["weakens_other_copies"] is False
+    assert body["receipt_ready"] is False
+    assert body["writes_registry"] is False
+    assert body["writes_receipts"] is False
+    assert body["writes_tenant_state"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["expected_review_receipt_path"] == "logs/managed_copies/decommission_reviews.jsonl"
+    assert body["required_scope"] == "managed_copies.decommission.write"
+    assert body["routes"]["decommission_review"] == "/managed-copies/decommission-review"
+    assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+
+    governance = body["governance"]
+    assert governance["write_route"] is True
+    assert governance["preflight_only"] is True
+    assert governance["permission_scope"] == "managed_copies.decommission.write"
+    assert governance["permission_checked"] is True
+    assert governance["decommission_review_enabled"] is False
+    assert governance["decommission_enabled"] is False
+    assert governance["does_not_export_tenant_data"] is True
+    assert governance["does_not_delete_tenant_state"] is True
+    assert governance["does_not_revoke_credentials"] is True
+    assert governance["does_not_unpair_nodes"] is True
+    assert governance["does_not_purge_memory"] is True
+    assert governance["does_not_record_decommission_receipt"] is True
+    assert governance["does_not_weaken_other_copies"] is True
+    assert governance["does_not_echo_raw_decommission_payload"] is True
+    assert governance["requires_stage17_closure_receipt"] is True
+    assert governance["writes_receipts"] is False
+    assert governance["writes_tenant_state"] is False
     assert governance["grants_execution_authority"] is False
     assert governance["grants_mutation_authority"] is False
     assert not data_root.exists()

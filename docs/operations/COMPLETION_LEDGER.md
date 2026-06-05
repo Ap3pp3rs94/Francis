@@ -65185,6 +65185,77 @@ Remaining truthful gap:
   write copy-creation receipts, write decommission receipts, or write closure
   receipts.
 
+### Stage 18 managed-copy decommission review gate
+
+This pass added the first governed decommission review boundary without
+exporting tenant data, deleting tenant state, revoking credentials, unpairing
+nodes, purging memory, writing decommission receipts, weakening other managed
+copies, mutating tenant state, closing Stage 18, activating SLAs, or binding
+roles.
+
+Shipped behavior:
+
+- `POST /managed-copies/decommission-review` is now mounted as the
+  decommission review preflight route for managed copies.
+- The route is guarded by `FRANCIS_API_ACTOR_SCOPES` through a dedicated
+  `managed_copies.decommission.write` scope before any decommission review
+  payload is accepted.
+- Unscoped actors receive `api_permission_denied`, and the denial reports
+  `decommission_contract_ready: false`, `decommission_review_enabled: false`,
+  `decommission_enabled: false`, `export_enabled: false`,
+  `delete_enabled: false`, `purge_enabled: false`,
+  `credential_revocation_enabled: false`, `node_unpairing_enabled: false`,
+  `proof_receipts_enabled: false`, `writes_receipts: false`,
+  `writes_tenant_state: false`, and no execution or mutation authority.
+- Scoped actors still receive `blocked_stage17_prerequisite` because
+  `stage17_closed_by_receipt` remains false and the current blocker is still
+  `stage17_capability_library_operator_proposal_evidence_refs`.
+- The blocked preflight reports copy and tenant ID presence, request presence,
+  evidence-ref count, known decommission action, whether that action would
+  normally write receipts or mutate tenant state, and requested/known/unknown
+  export, deletion, and retention scope counts. It does not echo raw tenant
+  IDs, request reasons, or unknown scope payload text.
+- `GET /managed-copies/status`,
+  `GET /managed-copies/decommission-contract`, and
+  `GET /managed-copies/completion-review` now advertise the decommission review
+  preflight route.
+- The gate does not write `logs/managed_copies/decommission_reviews.jsonl`,
+  write registries, write memory, write receipts, write tenant state, run
+  tools, run shell, run git, launch browsers, capture screens, grant execution
+  authority, grant mutation authority, export tenant data, delete tenant state,
+  revoke credentials, unpair nodes, purge memory, record decommission
+  receipts, or weaken other managed copies.
+
+Latest validation for this gate:
+
+- Focused API contract tests:
+  `python -m pytest tests\test_api_managed_copies.py tests\test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted -q`
+  Result: 29 tests passed.
+- Ruff lint:
+  `python -m ruff check src\francis\managed_copies.py src\francis\api\routes\managed_copies.py tests\test_api_managed_copies.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Ruff format check:
+  `python -m ruff format --check src\francis\managed_copies.py src\francis\api\routes\managed_copies.py tests\test_api_managed_copies.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Mypy:
+  `python -m mypy src\francis\managed_copies.py src\francis\api\routes\managed_copies.py`
+  Result: passed.
+
+Remaining truthful gap:
+
+- This does not close Stage 17, close Stage 18, export tenant data, delete
+  tenant state, revoke credentials, unpair nodes, purge memory, record
+  decommission receipts, weaken other managed copies, bind managed-copy roles,
+  bind credentials, grant support access, activate automation principals, pair
+  nodes, revoke roles, record role-authority receipts, activate SLA
+  commitments, start monitoring, page support, open incidents, record SLA
+  receipts, configure support tiers, detect rogue copies, halt copies,
+  quarantine copies, replace copies, restore copies, review safe deltas at
+  runtime, export or import safe deltas, write learning, enforce tenant
+  isolation, verify tenant isolation at runtime, create managed copies, persist
+  tenant identity or policy, write runtime evidence receipts, write
+  copy-creation receipts, or write closure receipts.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

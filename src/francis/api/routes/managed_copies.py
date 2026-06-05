@@ -8,6 +8,7 @@ from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPer
 
 from francis.managed_copies import (
     MANAGED_COPIES_COPY_CREATION_WRITE_SCOPE,
+    MANAGED_COPIES_DECOMMISSION_WRITE_SCOPE,
     MANAGED_COPIES_ISOLATION_VERIFICATION_WRITE_SCOPE,
     MANAGED_COPIES_ROGUE_RECOVERY_WRITE_SCOPE,
     MANAGED_COPIES_ROLE_AUTHORITY_WRITE_SCOPE,
@@ -19,6 +20,7 @@ from francis.managed_copies import (
     managed_copy_creation_contract_snapshot,
     managed_copy_creation_request_blocked_snapshot,
     managed_copy_decommission_contract_snapshot,
+    managed_copy_decommission_review_blocked_snapshot,
     managed_copy_isolation_rules_contract_snapshot,
     managed_copy_isolation_verification_blocked_snapshot,
     managed_copy_rogue_recovery_contract_snapshot,
@@ -109,6 +111,22 @@ def _permission_denied(
         "activates_automation_principal": False,
         "pairs_node": False,
         "revokes_role": False,
+        "decommission_contract_ready": False,
+        "decommission_review_enabled": False,
+        "decommission_enabled": False,
+        "export_enabled": False,
+        "delete_enabled": False,
+        "purge_enabled": False,
+        "credential_revocation_enabled": False,
+        "node_unpairing_enabled": False,
+        "proof_receipts_enabled": False,
+        "exports_tenant_data": False,
+        "deletes_tenant_state": False,
+        "revokes_credentials": False,
+        "unpairs_nodes": False,
+        "purges_memory": False,
+        "records_decommission_receipt": False,
+        "weakens_other_copies": False,
         "writes_receipt": False,
         "writes_receipts": False,
         "writes_tenant_state": False,
@@ -158,6 +176,22 @@ def _permission_denied(
             "activates_automation_principal": False,
             "pairs_node": False,
             "revokes_role": False,
+            "decommission_contract_ready": False,
+            "decommission_review_enabled": False,
+            "decommission_enabled": False,
+            "export_enabled": False,
+            "delete_enabled": False,
+            "purge_enabled": False,
+            "credential_revocation_enabled": False,
+            "node_unpairing_enabled": False,
+            "proof_receipts_enabled": False,
+            "exports_tenant_data": False,
+            "deletes_tenant_state": False,
+            "revokes_credentials": False,
+            "unpairs_nodes": False,
+            "purges_memory": False,
+            "records_decommission_receipt": False,
+            "weakens_other_copies": False,
             "writes_receipts": False,
             "writes_tenant_state": False,
             "grants_execution_authority": False,
@@ -312,6 +346,24 @@ def role_authority_review(payload: dict[str, Any], request: Request) -> dict[str
 @router.get("/decommission-contract")
 def decommission_contract() -> dict[str, Any]:
     return managed_copy_decommission_contract_snapshot()
+
+
+@router.post("/decommission-review")
+def decommission_review(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    actor = _managed_copy_write_actor(payload)
+    decision = _write_permission(
+        actor,
+        required_scope=MANAGED_COPIES_DECOMMISSION_WRITE_SCOPE,
+        route=request.url.path,
+        method=request.method,
+    )
+    if not decision.allowed:
+        return _permission_denied(
+            decision,
+            required_scope=MANAGED_COPIES_DECOMMISSION_WRITE_SCOPE,
+            next_step="configure_actor_scope_before_reviewing_managed_copy_decommission",
+        )
+    return managed_copy_decommission_review_blocked_snapshot(payload, actor=actor)
 
 
 @router.get("/completion-review")
