@@ -1140,6 +1140,54 @@ test("PluginBrowserClient lists capability library proposal evidence source read
       recorded_operator_evidence_pack_count: 0,
       recorded_operator_evidence_capability_count: 0,
       recorded_operator_evidence_ref_count: 0,
+      next_operator_evidence_batch_ready: true,
+      next_operator_evidence_batch_capability_count: 2,
+      next_operator_evidence_batch: {
+        status: "ready_for_operator_evidence_batch",
+        ready: true,
+        batch_source: "operator_evidence_intake_checklist_first_visible_pack",
+        pack_id: "ops.market",
+        pack_version: "1.0.0",
+        pack_name: "Ops Market Pack",
+        pack_candidate_capability_count: 2,
+        pack_evidence_ref_required_count: 2,
+        batch_capability_count: 2,
+        batch_evidence_ref_required_count: 2,
+        batch_capabilities_truncated: false,
+        claim_scope: "operator_supplied_friction_evidence_reference_not_independent_verification",
+        operator_must_supply_evidence_refs: true,
+        operator_supplied_evidence_not_independently_verified: true,
+        does_not_validate_evidence_truth: true,
+        requires_future_proposal_review: true,
+        dry_run_required_before_apply: true,
+        no_synthetic_evidence: true,
+        capabilities: [
+          {
+            capability: "generated.market",
+            status: "staged",
+            proposal_id: "plugin_proposal_market",
+            proposal_review_status: "staged",
+            proposal_review_receipt_id: "",
+            missing_requirements: ["proposal_evidence", "proposal_review"],
+            blockers_before_evidence: [],
+            evidence_refs_required: true,
+            operator_supplied_evidence_not_independently_verified: true,
+            intake_apply_route: "/plugins/capabilities/library/proposal-evidence/operator-intake/apply",
+          },
+        ],
+        apply_payload_hint: {
+          pack_ids: ["ops.market"],
+          capability_ids: ["generated.market"],
+          evidence_refs: [],
+          dry_run: true,
+          max_pack_count: 1,
+          max_total_capability_count: 1,
+          max_capability_count_per_pack: 1,
+        },
+        routes: {
+          operator_intake_apply_route: "/plugins/capabilities/library/proposal-evidence/operator-intake/apply",
+        },
+      },
       proposal_review_apply_status: "blocked_on_operator_evidence_refs",
       source_proposal_evidence_plan: {
         status: "blocked",
@@ -1211,6 +1259,16 @@ test("PluginBrowserClient lists capability library proposal evidence source read
     assert.equal(readiness.automatic_sources_exhausted, true);
     assert.equal(readiness.operator_evidence_intake_candidate_capability_count, 2268);
     assert.equal(readiness.operator_evidence_ref_required_count, 2268);
+    assert.equal(readiness.next_operator_evidence_batch_ready, true);
+    assert.equal(readiness.next_operator_evidence_batch_capability_count, 2);
+    assert.equal(readiness.next_operator_evidence_batch?.status, "ready_for_operator_evidence_batch");
+    assert.equal(readiness.next_operator_evidence_batch?.pack_id, "ops.market");
+    assert.equal(readiness.next_operator_evidence_batch?.batch_capability_count, 2);
+    assert.equal(readiness.next_operator_evidence_batch?.operator_must_supply_evidence_refs, true);
+    assert.equal(readiness.next_operator_evidence_batch?.does_not_validate_evidence_truth, true);
+    assert.equal(readiness.next_operator_evidence_batch?.dry_run_required_before_apply, true);
+    assert.equal(readiness.next_operator_evidence_batch?.capabilities?.[0]?.capability, "generated.market");
+    assert.deepEqual(readiness.next_operator_evidence_batch?.apply_payload_hint?.evidence_refs, []);
     assert.equal(readiness.source_proposal_evidence_plan?.candidate_pack_count, 47);
     assert.equal(readiness.source_inventory?.existing_linked_proposal_artifact?.candidate_capability_count, 0);
     assert.equal(

@@ -4654,6 +4654,8 @@ def test_plugins_capability_library_proposal_evidence_source_readiness_inventory
     assert readiness_body["operator_evidence_intake_candidate_capability_count"] == 1
     assert readiness_body["operator_evidence_ref_required_count"] == 1
     assert readiness_body["recorded_operator_evidence_capability_count"] == 0
+    assert readiness_body["next_operator_evidence_batch_ready"] is True
+    assert readiness_body["next_operator_evidence_batch_capability_count"] == 1
     assert readiness_body["next_smallest_truthful_gap"] == (
         "stage17_capability_library_operator_proposal_evidence_refs"
     )
@@ -4682,6 +4684,40 @@ def test_plugins_capability_library_proposal_evidence_source_readiness_inventory
     assert inventory["operator_supplied_evidence_refs"]["does_not_validate_evidence_truth"] is True
     assert inventory["recorded_operator_evidence_refs"]["recorded_capability_count"] == 0
     assert inventory["synthetic_evidence"]["status"] == "disallowed"
+    next_batch = readiness_body["next_operator_evidence_batch"]
+    assert next_batch["status"] == "ready_for_operator_evidence_batch"
+    assert next_batch["ready"] is True
+    assert next_batch["batch_source"] == "operator_evidence_intake_checklist_first_visible_pack"
+    assert next_batch["pack_id"] == pack_id
+    assert next_batch["pack_version"] == pack_version
+    assert next_batch["pack_candidate_capability_count"] == 1
+    assert next_batch["batch_capability_count"] == 1
+    assert next_batch["batch_evidence_ref_required_count"] == 1
+    assert next_batch["batch_capabilities_truncated"] is False
+    assert next_batch["operator_must_supply_evidence_refs"] is True
+    assert next_batch["operator_supplied_evidence_not_independently_verified"] is True
+    assert next_batch["does_not_validate_evidence_truth"] is True
+    assert next_batch["dry_run_required_before_apply"] is True
+    assert next_batch["no_synthetic_evidence"] is True
+    assert next_batch["apply_payload_hint"] == {
+        "pack_ids": [pack_id],
+        "capability_ids": [plugin_id],
+        "evidence_refs": [],
+        "dry_run": True,
+        "max_pack_count": 1,
+        "max_total_capability_count": 1,
+        "max_capability_count_per_pack": 1,
+    }
+    assert next_batch["routes"]["operator_intake_apply_route"] == (
+        "/plugins/capabilities/library/proposal-evidence/operator-intake/apply"
+    )
+    next_batch_capability = next_batch["capabilities"][0]
+    assert next_batch_capability["capability"] == plugin_id
+    assert next_batch_capability["proposal_id"] == proposal_id
+    assert next_batch_capability["evidence_refs_required"] is True
+    assert next_batch_capability["intake_apply_route"] == (
+        "/plugins/capabilities/library/proposal-evidence/operator-intake/apply"
+    )
 
     friction_pack_id = "ops.capability_library_proposal_evidence_source_readiness_friction"
     friction_meta = {

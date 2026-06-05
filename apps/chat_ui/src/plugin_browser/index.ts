@@ -799,6 +799,43 @@ export type PluginCapabilityLibraryProposalEvidenceSourceReadinessPlan = {
   next_smallest_truthful_gap?: string;
 };
 
+export type PluginCapabilityLibraryOperatorEvidenceBatchCapability = {
+  capability: string;
+  status?: string;
+  proposal_id?: string;
+  proposal_review_status?: string;
+  proposal_review_receipt_id?: string;
+  missing_requirements?: string[];
+  blockers_before_evidence?: string[];
+  evidence_refs_required?: boolean;
+  operator_supplied_evidence_not_independently_verified?: boolean;
+  intake_apply_route?: string;
+};
+
+export type PluginCapabilityLibraryOperatorEvidenceBatch = {
+  status?: string;
+  ready?: boolean;
+  batch_source?: string;
+  pack_id?: string;
+  pack_version?: string;
+  pack_name?: string;
+  pack_candidate_capability_count?: number;
+  pack_evidence_ref_required_count?: number;
+  batch_capability_count?: number;
+  batch_evidence_ref_required_count?: number;
+  batch_capabilities_truncated?: boolean;
+  claim_scope?: string;
+  operator_must_supply_evidence_refs?: boolean;
+  operator_supplied_evidence_not_independently_verified?: boolean;
+  does_not_validate_evidence_truth?: boolean;
+  requires_future_proposal_review?: boolean;
+  dry_run_required_before_apply?: boolean;
+  no_synthetic_evidence?: boolean;
+  capabilities?: PluginCapabilityLibraryOperatorEvidenceBatchCapability[];
+  apply_payload_hint?: Record<string, unknown>;
+  routes?: Record<string, string>;
+};
+
 export type PluginCapabilityLibraryProposalEvidenceSourceReadinessResponse = {
   ok: boolean;
   kind?: string;
@@ -818,6 +855,9 @@ export type PluginCapabilityLibraryProposalEvidenceSourceReadinessResponse = {
   recorded_operator_evidence_pack_count?: number;
   recorded_operator_evidence_capability_count?: number;
   recorded_operator_evidence_ref_count?: number;
+  next_operator_evidence_batch_ready?: boolean;
+  next_operator_evidence_batch_capability_count?: number;
+  next_operator_evidence_batch?: PluginCapabilityLibraryOperatorEvidenceBatch;
   proposal_review_apply_status?: string;
   source_proposal_evidence_plan?: PluginCapabilityLibraryProposalEvidenceSourceReadinessPlan;
   source_inventory?: Record<string, Record<string, unknown>>;
@@ -2637,6 +2677,85 @@ function parseCapabilityLibraryProposalEvidencePack(
   }
   if (typeof raw.capabilities_truncated === "boolean") pack.capabilities_truncated = raw.capabilities_truncated;
   return pack;
+}
+
+function parseOperatorEvidenceBatchCapability(
+  raw: unknown,
+): PluginCapabilityLibraryOperatorEvidenceBatchCapability | null {
+  if (!isRecord(raw)) return null;
+
+  const capability = safeString(raw.capability, safeString(raw.id, "")).trim();
+  if (!capability) return null;
+
+  return {
+    capability,
+    status: safeString(raw.status, "") || undefined,
+    proposal_id: safeString(raw.proposal_id, "") || undefined,
+    proposal_review_status: safeString(raw.proposal_review_status, "") || undefined,
+    proposal_review_receipt_id: safeString(raw.proposal_review_receipt_id, "") || undefined,
+    missing_requirements: safeStringArray(raw.missing_requirements) ?? [],
+    blockers_before_evidence: safeStringArray(raw.blockers_before_evidence) ?? [],
+    evidence_refs_required:
+      typeof raw.evidence_refs_required === "boolean" ? Boolean(raw.evidence_refs_required) : undefined,
+    operator_supplied_evidence_not_independently_verified:
+      typeof raw.operator_supplied_evidence_not_independently_verified === "boolean"
+        ? Boolean(raw.operator_supplied_evidence_not_independently_verified)
+        : undefined,
+    intake_apply_route: safeString(raw.intake_apply_route, "") || undefined,
+  };
+}
+
+function parseOperatorEvidenceBatch(raw: unknown): PluginCapabilityLibraryOperatorEvidenceBatch | undefined {
+  if (!isRecord(raw)) return undefined;
+
+  const capabilitiesRaw = safeUnknownArray(raw.capabilities) ?? [];
+  const capabilities = capabilitiesRaw
+    .map(parseOperatorEvidenceBatchCapability)
+    .filter((item): item is PluginCapabilityLibraryOperatorEvidenceBatchCapability => item !== null);
+  return {
+    status: safeString(raw.status, "") || undefined,
+    ready: typeof raw.ready === "boolean" ? Boolean(raw.ready) : undefined,
+    batch_source: safeString(raw.batch_source, "") || undefined,
+    pack_id: safeString(raw.pack_id, "") || undefined,
+    pack_version: safeString(raw.pack_version, "") || undefined,
+    pack_name: safeString(raw.pack_name, "") || undefined,
+    pack_candidate_capability_count: safeNumber(raw.pack_candidate_capability_count, 0),
+    pack_evidence_ref_required_count: safeNumber(raw.pack_evidence_ref_required_count, 0),
+    batch_capability_count: safeNumber(raw.batch_capability_count, capabilities.length),
+    batch_evidence_ref_required_count: safeNumber(raw.batch_evidence_ref_required_count, capabilities.length),
+    batch_capabilities_truncated:
+      typeof raw.batch_capabilities_truncated === "boolean" ? Boolean(raw.batch_capabilities_truncated) : undefined,
+    claim_scope: safeString(raw.claim_scope, "") || undefined,
+    operator_must_supply_evidence_refs:
+      typeof raw.operator_must_supply_evidence_refs === "boolean"
+        ? Boolean(raw.operator_must_supply_evidence_refs)
+        : undefined,
+    operator_supplied_evidence_not_independently_verified:
+      typeof raw.operator_supplied_evidence_not_independently_verified === "boolean"
+        ? Boolean(raw.operator_supplied_evidence_not_independently_verified)
+        : undefined,
+    does_not_validate_evidence_truth:
+      typeof raw.does_not_validate_evidence_truth === "boolean"
+        ? Boolean(raw.does_not_validate_evidence_truth)
+        : undefined,
+    requires_future_proposal_review:
+      typeof raw.requires_future_proposal_review === "boolean"
+        ? Boolean(raw.requires_future_proposal_review)
+        : undefined,
+    dry_run_required_before_apply:
+      typeof raw.dry_run_required_before_apply === "boolean" ? Boolean(raw.dry_run_required_before_apply) : undefined,
+    no_synthetic_evidence:
+      typeof raw.no_synthetic_evidence === "boolean" ? Boolean(raw.no_synthetic_evidence) : undefined,
+    capabilities,
+    apply_payload_hint: isRecord(raw.apply_payload_hint)
+      ? (raw.apply_payload_hint as Record<string, unknown>)
+      : undefined,
+    routes: isRecord(raw.routes)
+      ? Object.fromEntries(
+          Object.entries(raw.routes as Record<string, unknown>).map(([key, value]) => [key, safeString(value, "")]),
+        )
+      : undefined,
+  };
 }
 
 function parseCapabilityLibraryPromotionCapability(raw: unknown): PluginCapabilityLibraryPromotionCapability | null {
@@ -4726,6 +4845,17 @@ export class PluginBrowserClient {
       recorded_operator_evidence_ref_count: safeNumber(
         (json as Record<string, unknown>).recorded_operator_evidence_ref_count,
         0,
+      ),
+      next_operator_evidence_batch_ready:
+        typeof (json as Record<string, unknown>).next_operator_evidence_batch_ready === "boolean"
+          ? Boolean((json as Record<string, unknown>).next_operator_evidence_batch_ready)
+          : undefined,
+      next_operator_evidence_batch_capability_count: safeNumber(
+        (json as Record<string, unknown>).next_operator_evidence_batch_capability_count,
+        0,
+      ),
+      next_operator_evidence_batch: parseOperatorEvidenceBatch(
+        (json as Record<string, unknown>).next_operator_evidence_batch,
       ),
       proposal_review_apply_status:
         safeString((json as Record<string, unknown>).proposal_review_apply_status, "") || undefined,

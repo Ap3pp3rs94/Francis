@@ -5612,6 +5612,86 @@ def _capability_library_proposal_review_apply_readiness_projection(
     }
 
 
+def _capability_library_operator_proposal_evidence_next_batch(operator_checklist: dict[str, Any]) -> dict[str, Any]:
+    raw_packs = operator_checklist.get("packs") if isinstance(operator_checklist.get("packs"), list) else []
+    pack = next((item for item in raw_packs if isinstance(item, dict)), None)
+    if pack is None:
+        return {
+            "status": "no_operator_evidence_batch",
+            "ready": False,
+            "batch_capability_count": 0,
+            "batch_evidence_ref_required_count": 0,
+            "operator_must_supply_evidence_refs": True,
+            "no_synthetic_evidence": True,
+        }
+
+    pack_id = _safe_str(pack.get("pack_id")).strip()
+    pack_version = _safe_str(pack.get("pack_version")).strip()
+    raw_capabilities = pack.get("capabilities") if isinstance(pack.get("capabilities"), list) else []
+    capabilities = [item for item in raw_capabilities if isinstance(item, dict)]
+    capability_ids = [
+        capability_id
+        for capability in capabilities
+        if (capability_id := _safe_str(capability.get("capability")).strip())
+    ]
+    batch_capability_count = len(capability_ids)
+    pack_candidate_count = _count_value(pack.get("candidate_capability_count"))
+    batch_truncated = bool(pack.get("capabilities_truncated")) or batch_capability_count < pack_candidate_count
+    return {
+        "status": "ready_for_operator_evidence_batch" if batch_capability_count else "no_operator_evidence_batch",
+        "ready": bool(batch_capability_count),
+        "batch_source": "operator_evidence_intake_checklist_first_visible_pack",
+        "pack_id": pack_id,
+        "pack_version": pack_version,
+        "pack_name": _safe_str(pack.get("pack_name")).strip(),
+        "pack_candidate_capability_count": pack_candidate_count,
+        "pack_evidence_ref_required_count": _count_value(pack.get("evidence_ref_required_count")),
+        "batch_capability_count": batch_capability_count,
+        "batch_evidence_ref_required_count": batch_capability_count,
+        "batch_capabilities_truncated": batch_truncated,
+        "claim_scope": "operator_supplied_friction_evidence_reference_not_independent_verification",
+        "operator_must_supply_evidence_refs": True,
+        "operator_supplied_evidence_not_independently_verified": True,
+        "does_not_validate_evidence_truth": True,
+        "requires_future_proposal_review": True,
+        "dry_run_required_before_apply": True,
+        "no_synthetic_evidence": True,
+        "capabilities": [
+            {
+                "capability": _safe_str(capability.get("capability")).strip(),
+                "status": _safe_str(capability.get("status")).strip(),
+                "proposal_id": _safe_str(capability.get("proposal_id")).strip(),
+                "proposal_review_status": _safe_str(capability.get("proposal_review_status")).strip(),
+                "proposal_review_receipt_id": _safe_str(capability.get("proposal_review_receipt_id")).strip(),
+                "missing_requirements": _unique_texts(capability.get("missing_requirements"), limit=25),
+                "blockers_before_evidence": _unique_texts(capability.get("blockers_before_evidence"), limit=25),
+                "evidence_refs_required": True,
+                "operator_supplied_evidence_not_independently_verified": True,
+                "intake_apply_route": _CAPABILITY_LIBRARY_OPERATOR_PROPOSAL_EVIDENCE_INTAKE_APPLY_ROUTE,
+            }
+            for capability in capabilities
+        ],
+        "apply_payload_hint": {
+            "pack_ids": [pack_id] if pack_id else [],
+            "capability_ids": capability_ids,
+            "evidence_refs": [],
+            "dry_run": True,
+            "max_pack_count": 1,
+            "max_total_capability_count": max(1, batch_capability_count),
+            "max_capability_count_per_pack": max(1, batch_capability_count),
+        },
+        "routes": {
+            "operator_intake_worksheet_route": _CAPABILITY_LIBRARY_OPERATOR_PROPOSAL_EVIDENCE_INTAKE_WORKSHEET_ROUTE,
+            "operator_intake_export_route": _CAPABILITY_LIBRARY_OPERATOR_PROPOSAL_EVIDENCE_INTAKE_EXPORT_ROUTE,
+            "operator_intake_import_preview_route": (
+                _CAPABILITY_LIBRARY_OPERATOR_PROPOSAL_EVIDENCE_INTAKE_IMPORT_PREVIEW_ROUTE
+            ),
+            "operator_intake_preview_route": _CAPABILITY_LIBRARY_OPERATOR_PROPOSAL_EVIDENCE_INTAKE_PREVIEW_ROUTE,
+            "operator_intake_apply_route": _CAPABILITY_LIBRARY_OPERATOR_PROPOSAL_EVIDENCE_INTAKE_APPLY_ROUTE,
+        },
+    }
+
+
 def _capability_library_proposal_evidence_source_readiness_projection(
     *,
     proposal_evidence_plan: dict[str, Any],
@@ -5644,6 +5724,8 @@ def _capability_library_proposal_evidence_source_readiness_projection(
     automatic_sources_exhausted = (
         proposal_evidence_missing_count > 0 and automatic_source_candidate_capability_count == 0
     )
+    next_operator_batch = _capability_library_operator_proposal_evidence_next_batch(operator_checklist)
+    next_operator_batch_count = _count_value(next_operator_batch.get("batch_capability_count"))
 
     if discipline_blocked_pack_count:
         status = "blocked"
@@ -5685,6 +5767,9 @@ def _capability_library_proposal_evidence_source_readiness_projection(
         "recorded_operator_evidence_pack_count": recorded_operator_pack_count,
         "recorded_operator_evidence_capability_count": recorded_operator_capability_count,
         "recorded_operator_evidence_ref_count": recorded_operator_evidence_ref_count,
+        "next_operator_evidence_batch_ready": bool(next_operator_batch.get("ready")),
+        "next_operator_evidence_batch_capability_count": next_operator_batch_count,
+        "next_operator_evidence_batch": next_operator_batch,
         "proposal_review_apply_status": _safe_str(proposal_review_apply_readiness.get("status")).strip(),
         "source_proposal_evidence_plan": {
             "status": _safe_str(proposal_evidence_plan.get("status")).strip(),

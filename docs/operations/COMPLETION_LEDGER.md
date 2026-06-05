@@ -63776,6 +63776,73 @@ Follow-up validation artifact guard:
   `operator_evidence_ref_required_count=2262`, and
   `next_smallest_truthful_gap=stage17_capability_library_operator_proposal_evidence_refs`.
 
+### Stage 17 operator evidence next-batch readback
+
+This pass made the operator evidence-ref gap more directly actionable without
+recording or inventing evidence.
+
+Shipped behavior:
+
+- `GET /plugins/capabilities/library/proposal-evidence/source-readiness` now
+  includes `next_operator_evidence_batch_ready`,
+  `next_operator_evidence_batch_capability_count`, and
+  `next_operator_evidence_batch`.
+- The batch readback is derived from the existing operator evidence-intake
+  checklist. It selects the first visible operator-ready pack, reports the
+  bounded capability IDs in that batch, and includes a dry-run apply payload
+  hint with blank `evidence_refs`.
+- The batch readback explicitly keeps the same authority boundary: the operator
+  must supply evidence refs, no synthetic evidence is allowed, evidence truth is
+  not independently validated by this route, future proposal review is still
+  required, and the source-readiness route remains read-only.
+- The Chat UI plugin-browser client now parses the optional batch object as a
+  typed source-readiness field.
+
+Latest validation for this readback:
+
+- Focused backend test:
+  `python -m pytest tests\test_api_plugins.py -k
+  "proposal_evidence_source_readiness_inventory" -q`
+  Result: 1 selected test passed.
+- Chat UI plugin-browser/client tests:
+  `cd apps\chat_ui; npm run test -- src/plugin_browser/index.test.ts`
+  Result: 219 tests passed.
+- Chat UI production build:
+  `cd apps\chat_ui; npm run build`
+  Result: passed. Vite emitted the existing non-fatal large chunk warning.
+- Python lint:
+  `python -m ruff check src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py`
+  Result: passed.
+- Python format check:
+  `python -m ruff format --check src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py`
+  Result: passed.
+- Whitespace check:
+  `git diff --check`
+  Result: passed. Git warned that
+  `apps/chat_ui/src/plugin_browser/index.ts` will normalize CRLF to LF when Git
+  next touches it.
+
+Live local readback:
+
+- `GET /plugins/capabilities/library/proposal-evidence/source-readiness`
+  returned `status=operator_evidence_refs_required`,
+  `proposal_evidence_source_readiness_ready=true`,
+  `operator_evidence_ref_required_count=2262`,
+  `next_operator_evidence_batch_ready=true`,
+  `next_operator_evidence_batch_capability_count=1`,
+  `next_operator_evidence_batch.status=ready_for_operator_evidence_batch`,
+  `next_operator_evidence_batch.pack_id=legacy.generated.bulkdirectplugin`,
+  `next_operator_evidence_batch.batch_capabilities_truncated=false`, and
+  `next_smallest_truthful_gap=stage17_capability_library_operator_proposal_evidence_refs`.
+
+Remaining truthful gap:
+
+- This is a read-only operator workflow improvement. It does not record evidence
+  refs, approve proposals, promote capabilities, or reduce the 2262 operator
+  evidence refs still required in the local readback.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
