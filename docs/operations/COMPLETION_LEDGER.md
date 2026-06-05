@@ -63275,6 +63275,57 @@ Remaining truthful gap:
   missing evidence.
 - Stage 18 remains a next-stage target, not a claimed current posture.
 
+### 2026-06-05 - Stage 17 import-preview groups can dry-run and apply through UI
+
+Roadmap area: Stage 17 / Capability Economy.
+
+Truthful change:
+
+- Extended the Plugins panel import-preview workflow so ready pasted
+  operator-evidence export groups can continue through the existing governed
+  operator-intake dry-run/apply route from the UI.
+- Each import-preview group now exposes `Dry-run group` and `Apply group refs`
+  controls. Apply remains disabled until the same group has a dry-run response
+  with a fingerprint.
+- The UI binds the active dry-run confirmation to the group pack/capability/ref
+  scope, so a fingerprint from selected-pack intake or another pasted group is
+  not reused silently.
+- Changing pasted import rows or manual selected-pack refs clears stale intake
+  response state and stale import-group confirmation state.
+- This is a UI follow-through only: the backend write authority, dry-run
+  fingerprint requirement, `plugins.write` scope, and no-proposal/no-promotion
+  governance contract remain unchanged.
+
+Latest validation for this UI pass:
+
+- Chat UI production build:
+  `npm run build`
+  Result: passed. Vite emitted the existing non-fatal large chunk warning for
+  the bundled app asset.
+- Full chat UI test script:
+  `npm run test`
+  Result: 216 tests passed.
+- Whitespace check:
+  `git diff --check`
+  Result: passed.
+
+Validation risk:
+
+- This pass did not run a browser screenshot or Playwright visual check, so the
+  UI validation claim is TypeScript/build and test coverage, not pixel-level
+  layout proof.
+- This pass did not record real operator proposal-evidence refs by itself. It
+  only makes filled export rows easier to move through the governed dry-run and
+  apply path.
+
+Remaining truthful gap:
+
+- Stage 17 remains blocked until actual operator-supplied proposal-evidence refs
+  are recorded and the proposal-evidence plan no longer reports missing
+  evidence.
+- Stage 18 Managed Copies Platform remains a next-stage target, not a current
+  completion claim.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

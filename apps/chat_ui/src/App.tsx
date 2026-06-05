@@ -78,6 +78,7 @@ import type {
   PluginCapabilityLibraryOperatorProposalEvidenceIntakeChecklistResponse,
   PluginCapabilityLibraryOperatorProposalEvidenceIntakeExportPack,
   PluginCapabilityLibraryOperatorProposalEvidenceIntakeExportResponse,
+  PluginCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewGroup,
   PluginCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewResponse,
   PluginCapabilityLibraryOperatorProposalEvidenceIntakeResponse,
   PluginCapabilityLibraryOperatorProposalEvidenceIntakeWorksheetPack,
@@ -18242,6 +18243,10 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
   const [capabilityLibraryOperatorProposalEvidenceImportRows, setCapabilityLibraryOperatorProposalEvidenceImportRows] =
     useState("");
   const [
+    capabilityLibraryOperatorProposalEvidenceImportApplyGroupKey,
+    setCapabilityLibraryOperatorProposalEvidenceImportApplyGroupKey,
+  ] = useState("");
+  const [
     capabilityLibraryOperatorProposalEvidenceIntakeAudit,
     setCapabilityLibraryOperatorProposalEvidenceIntakeAudit,
   ] = useState<PluginCapabilityLibraryOperatorProposalEvidenceIntakeAuditResponse | null>(null);
@@ -18856,6 +18861,32 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
     });
   }
 
+  function operatorProposalEvidenceImportGroupKey(
+    group: PluginCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewGroup,
+  ) {
+    const payload = group.preview_payload ?? group.apply_payload_hint;
+    return [
+      group.pack_id,
+      group.pack_version ?? "",
+      (payload?.capability_ids ?? []).join(","),
+      (payload?.evidence_refs ?? []).join(","),
+    ].join("|");
+  }
+
+  function operatorProposalEvidenceImportGroupCanApply(
+    group: PluginCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewGroup,
+  ) {
+    const groupKey = operatorProposalEvidenceImportGroupKey(group);
+    return Boolean(
+      capabilityLibraryOperatorProposalEvidenceImportApplyGroupKey === groupKey &&
+        capabilityLibraryOperatorProposalEvidenceIntakeResponse?.status === "dry_run" &&
+        capabilityLibraryOperatorProposalEvidenceIntakeResponse.dry_run_fingerprint &&
+        capabilityLibraryOperatorProposalEvidenceIntakeResponse.planned?.some(
+          (pack) => pack.pack_id === group.pack_id && pack.pack_version === group.pack_version,
+        ),
+    );
+  }
+
   const refreshPlugins = useCallback(async () => {
     setLoading(true);
     try {
@@ -19275,6 +19306,7 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
     setRunResponse(null);
     setCapabilityLibraryOperatorProposalEvidenceImportPreview(null);
     setCapabilityLibraryOperatorProposalEvidenceIntakeResponse(null);
+    setCapabilityLibraryOperatorProposalEvidenceImportApplyGroupKey("");
     try {
       const res = await client.previewCapabilityLibraryOperatorProposalEvidenceIntakeImport({
         rows,
@@ -19287,6 +19319,64 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
       });
       setCapabilityLibraryOperatorProposalEvidenceImportPreview(res);
       setResult(JSON.stringify(res, null, 2));
+    } catch (err) {
+      setError(pluginErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function applyCapabilityLibraryOperatorProposalEvidenceImportGroup(
+    group: PluginCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewGroup,
+    dryRun: boolean,
+  ) {
+    const payload = group.preview_payload;
+    const packIds = payload?.pack_ids ?? [];
+    const capabilityIds = payload?.capability_ids ?? [];
+    const evidenceRefs = payload?.evidence_refs ?? [];
+    if (!packIds.length || !capabilityIds.length || !evidenceRefs.length) {
+      setError("Import-preview group is missing pack, capability, or evidence-ref scope.");
+      return;
+    }
+    const groupKey = operatorProposalEvidenceImportGroupKey(group);
+    const dryRunFingerprint = capabilityLibraryOperatorProposalEvidenceIntakeResponse?.dry_run_fingerprint ?? "";
+    if (!dryRun && (capabilityLibraryOperatorProposalEvidenceImportApplyGroupKey !== groupKey || !dryRunFingerprint)) {
+      setError("Dry-run this import-preview group before applying operator evidence references.");
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    setRunResponse(null);
+    setCapabilityLibraryOperatorProposalEvidenceIntakeResponse(null);
+    setCapabilityLibraryOperatorProposalEvidenceImportApplyGroupKey("");
+    try {
+      const intakeRequest = {
+        reason: dryRun
+          ? "preview pasted operator proposal evidence import group from chat UI"
+          : "apply pasted operator proposal evidence import group from chat UI",
+        pack_ids: packIds,
+        capability_ids: capabilityIds,
+        evidence_refs: evidenceRefs,
+        max_pack_count: Math.max(packIds.length, 1),
+        max_total_capability_count: Math.max(capabilityIds.length, 1),
+        max_capability_count_per_pack: Math.max(capabilityIds.length, 1),
+        dry_run: dryRun,
+        dry_run_fingerprint: dryRun ? undefined : dryRunFingerprint,
+        meta: {
+          surface: "chat_ui.plugins.proposal_evidence_import_group_intake",
+          pack_version: group.pack_version,
+          import_group_key: groupKey,
+          claim_scope: "operator_supplied_friction_evidence_reference_not_independent_verification",
+        },
+      };
+      const res = dryRun
+        ? await client.previewCapabilityLibraryOperatorProposalEvidenceIntake(intakeRequest)
+        : await client.applyCapabilityLibraryOperatorProposalEvidenceIntake(intakeRequest);
+      setCapabilityLibraryOperatorProposalEvidenceImportApplyGroupKey(groupKey);
+      setCapabilityLibraryOperatorProposalEvidenceIntakeResponse(res);
+      setResult(JSON.stringify(res, null, 2));
+      await refreshPlugins();
     } catch (err) {
       setError(pluginErrorMessage(err));
     } finally {
@@ -20172,6 +20262,8 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
                   onChange={(e) => {
                     setCapabilityLibraryOperatorProposalEvidenceImportRows(e.target.value);
                     setCapabilityLibraryOperatorProposalEvidenceImportPreview(null);
+                    setCapabilityLibraryOperatorProposalEvidenceImportApplyGroupKey("");
+                    setCapabilityLibraryOperatorProposalEvidenceIntakeResponse(null);
                   }}
                   placeholder="Filled export rows JSON"
                   rows={4}
@@ -20216,31 +20308,59 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
                 </div>
                 {capabilityLibraryOperatorProposalEvidenceImportPreview?.apply_payload_groups?.length ? (
                   <div style={{ display: "grid", gap: 6 }}>
-                    {capabilityLibraryOperatorProposalEvidenceImportPreview.apply_payload_groups.slice(0, 3).map((group, index) => (
-                      <div
-                        key={`operator-evidence-import-group-${group.pack_id}-${group.pack_version ?? ""}-${index}`}
-                        style={{ display: "grid", gap: 4 }}
-                      >
-                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                          <span style={badgeStyle("pack")}>{group.pack_id}</span>
-                          <span style={badgeStyle("capabilities")}>caps {group.capability_count ?? 0}</span>
-                          <span style={badgeStyle("refs")}>refs {group.evidence_ref_count ?? 0}</span>
-                          {group.apply_payload_hint?.dry_run_fingerprint_required ? (
-                            <span style={badgeStyle("dry-run")}>fingerprint required</span>
+                    {capabilityLibraryOperatorProposalEvidenceImportPreview.apply_payload_groups.slice(0, 3).map((group, index) => {
+                      const groupKey = operatorProposalEvidenceImportGroupKey(group);
+                      const groupCanDryRun = Boolean(
+                        group.preview_payload?.pack_ids?.length &&
+                          group.preview_payload.capability_ids?.length &&
+                          group.preview_payload.evidence_refs?.length,
+                      );
+                      const groupCanApply = operatorProposalEvidenceImportGroupCanApply(group);
+                      return (
+                        <div
+                          key={`operator-evidence-import-group-${group.pack_id}-${group.pack_version ?? ""}-${index}`}
+                          style={{ display: "grid", gap: 4 }}
+                        >
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <span style={badgeStyle("pack")}>{group.pack_id}</span>
+                            <span style={badgeStyle("capabilities")}>caps {group.capability_count ?? 0}</span>
+                            <span style={badgeStyle("refs")}>refs {group.evidence_ref_count ?? 0}</span>
+                            {group.apply_payload_hint?.dry_run_fingerprint_required ? (
+                              <span style={badgeStyle("dry-run")}>fingerprint required</span>
+                            ) : null}
+                            {capabilityLibraryOperatorProposalEvidenceImportApplyGroupKey === groupKey ? (
+                              <span style={badgeStyle(groupCanApply ? "ready" : "dry-run")}>group dry-run active</span>
+                            ) : null}
+                          </div>
+                          {group.preview_payload?.capability_ids?.length ? (
+                            <div>
+                              preview scope <code>{group.preview_payload.capability_ids.slice(0, 6).join(", ")}</code>
+                            </div>
                           ) : null}
+                          {group.preview_payload?.evidence_refs?.length ? (
+                            <div>
+                              refs <code>{group.preview_payload.evidence_refs.join(", ")}</code>
+                            </div>
+                          ) : null}
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <button
+                              style={buttonStyle}
+                              disabled={busy || !groupCanDryRun}
+                              onClick={() => void applyCapabilityLibraryOperatorProposalEvidenceImportGroup(group, true)}
+                            >
+                              Dry-run group
+                            </button>
+                            <button
+                              style={buttonStyle}
+                              disabled={busy || !groupCanApply}
+                              onClick={() => void applyCapabilityLibraryOperatorProposalEvidenceImportGroup(group, false)}
+                            >
+                              Apply group refs
+                            </button>
+                          </div>
                         </div>
-                        {group.preview_payload?.capability_ids?.length ? (
-                          <div>
-                            preview scope <code>{group.preview_payload.capability_ids.slice(0, 6).join(", ")}</code>
-                          </div>
-                        ) : null}
-                        {group.preview_payload?.evidence_refs?.length ? (
-                          <div>
-                            refs <code>{group.preview_payload.evidence_refs.join(", ")}</code>
-                          </div>
-                        ) : null}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : null}
                 {capabilityLibraryOperatorProposalEvidenceImportPreview?.invalid_rows?.length ? (
@@ -20399,6 +20519,7 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
                 onChange={(e) => {
                   setCapabilityLibraryOperatorProposalEvidenceRefs(e.target.value);
                   setCapabilityLibraryOperatorProposalEvidenceIntakeResponse(null);
+                  setCapabilityLibraryOperatorProposalEvidenceImportApplyGroupKey("");
                 }}
                 placeholder="Operator evidence refs"
                 rows={3}
