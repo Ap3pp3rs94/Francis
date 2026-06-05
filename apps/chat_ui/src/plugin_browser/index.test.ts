@@ -5,6 +5,7 @@ import {
   PluginBrowserApiError,
   PluginBrowserClient,
   operatorEvidenceExportRowsToImportPreviewText,
+  summarizeOperatorEvidenceImportRowsText,
 } from "./index.ts";
 
 type FetchHandler = (url: string, init?: RequestInit) => Response | Promise<Response>;
@@ -102,6 +103,51 @@ test("operatorEvidenceExportRowsToImportPreviewText fills explicit operator refs
       evidence_refs_input: JSON.stringify(["mission.operator.ref", "mission.operator.ref.2"]),
     },
   ]);
+});
+
+test("summarizeOperatorEvidenceImportRowsText reports local import readiness", () => {
+  const summary = summarizeOperatorEvidenceImportRowsText(
+    JSON.stringify([
+      {
+        pack_id: "legacy.generated.ops",
+        capability: "generated.ops.run",
+        evidence_refs_input: JSON.stringify(["mission.operator.ref"]),
+      },
+      {
+        pack_id: "legacy.generated.ops",
+        capability: "generated.ops.plan",
+        evidence_refs_input: "",
+      },
+      {
+        pack_id: "legacy.generated.ops",
+        capability: "",
+        evidence_refs_input: "mission.invalid",
+      },
+    ]),
+  );
+
+  assert.deepEqual(summary, {
+    row_count: 3,
+    filled_row_count: 1,
+    pending_row_count: 1,
+    invalid_row_count: 1,
+    ready_for_import_preview: true,
+  });
+});
+
+test("summarizeOperatorEvidenceImportRowsText keeps blank and malformed rows unready", () => {
+  assert.deepEqual(summarizeOperatorEvidenceImportRowsText(""), {
+    row_count: 0,
+    filled_row_count: 0,
+    pending_row_count: 0,
+    invalid_row_count: 0,
+    ready_for_import_preview: false,
+  });
+
+  const malformed = summarizeOperatorEvidenceImportRowsText("{");
+  assert.equal(malformed.ready_for_import_preview, false);
+  assert.equal(malformed.invalid_row_count, 1);
+  assert.ok(malformed.parse_error);
 });
 
 test("PluginBrowserClient lifecycle mutations send an explicit plugin actor", async () => {

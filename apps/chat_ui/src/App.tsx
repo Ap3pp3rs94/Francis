@@ -111,6 +111,7 @@ import {
   PluginBrowserApiError,
   PluginBrowserClient,
   operatorEvidenceExportRowsToImportPreviewText,
+  summarizeOperatorEvidenceImportRowsText,
 } from "./plugin_browser";
 import {
   SettingsApiError,
@@ -18782,6 +18783,10 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
     }),
     [capabilityLibraryOperatorProposalEvidenceImportPreview],
   );
+  const operatorProposalEvidenceImportRowsTextSummary = useMemo(
+    () => summarizeOperatorEvidenceImportRowsText(capabilityLibraryOperatorProposalEvidenceImportRows),
+    [capabilityLibraryOperatorProposalEvidenceImportRows],
+  );
   const operatorProposalEvidenceAuditCounts = useMemo(
     () => ({
       packs: capabilityLibraryOperatorProposalEvidenceIntakeAudit?.recorded_pack_count ?? 0,
@@ -20959,6 +20964,26 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
                   >
                     Import-preview rows
                   </button>
+                  <span
+                    style={badgeStyle(
+                      operatorProposalEvidenceImportRowsTextSummary.ready_for_import_preview ? "ready" : "pending",
+                    )}
+                  >
+                    local filled {operatorProposalEvidenceImportRowsTextSummary.filled_row_count}
+                  </span>
+                  <span style={badgeStyle(operatorProposalEvidenceImportRowsTextSummary.pending_row_count ? "pending" : "clear")}>
+                    local pending {operatorProposalEvidenceImportRowsTextSummary.pending_row_count}
+                  </span>
+                  <span
+                    style={badgeStyle(
+                      operatorProposalEvidenceImportRowsTextSummary.invalid_row_count ? "blocked" : "clear",
+                    )}
+                  >
+                    local invalid {operatorProposalEvidenceImportRowsTextSummary.invalid_row_count}
+                  </span>
+                  {operatorProposalEvidenceImportRowsTextSummary.parse_error ? (
+                    <span style={badgeStyle("blocked")}>local parse error</span>
+                  ) : null}
                   {capabilityLibraryOperatorProposalEvidenceImportPreview ? (
                     <>
                       <span

@@ -63956,6 +63956,43 @@ Remaining truthful gap:
   dry-run, and applied through the governed intake route before Stage 17
   proposal-evidence counts can move.
 
+### Stage 17 operator evidence local import-row summary
+
+This pass added local import-row visibility to the Chat UI without treating the
+browser-side parser as authoritative evidence validation.
+
+Shipped behavior:
+
+- `apps/chat_ui/src/plugin_browser/index.ts` now exposes
+  `summarizeOperatorEvidenceImportRowsText()`, a framework-agnostic helper that
+  counts filled, pending, invalid, and malformed operator evidence import rows.
+- The helper is intentionally local/advisory. It reports whether at least one
+  row appears ready for import-preview, but the backend import-preview route
+  remains the authority for current-candidate validation and apply groups.
+- `apps/chat_ui/src/App.tsx` now renders local filled, pending, invalid, and
+  parse-error badges beside the import-preview controls so operators can see
+  blank or malformed rows before sending them to the backend.
+
+Latest validation for this UI helper:
+
+- Chat UI client/contract tests:
+  `cd apps\chat_ui; npm run test -- src/plugin_browser/index.test.ts`
+  Result: 223 tests passed.
+- Chat UI production build:
+  `cd apps\chat_ui; npm run build`
+  Result: passed. Vite emitted the existing non-fatal large chunk warning.
+- Whitespace check:
+  `git diff --check`
+  Result: passed with the existing Git CRLF normalization warning for
+  `apps/chat_ui/src/plugin_browser/index.ts`.
+
+Remaining truthful gap:
+
+- This local summary does not validate evidence truth, prove candidate currency,
+  preview rows, dry-run, apply refs, approve proposals, promote capabilities, or
+  change backend readiness counts. Stage 17 still needs real operator refs to
+  pass through the governed backend intake path.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

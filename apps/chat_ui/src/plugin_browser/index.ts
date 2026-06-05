@@ -1417,6 +1417,15 @@ export type PluginCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewRe
   meta?: Record<string, unknown>;
 };
 
+export type PluginCapabilityLibraryOperatorEvidenceImportRowsTextSummary = {
+  row_count: number;
+  filled_row_count: number;
+  pending_row_count: number;
+  invalid_row_count: number;
+  ready_for_import_preview: boolean;
+  parse_error?: string;
+};
+
 export type PluginCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewRow = {
   row_index: number;
   pack_id?: string;
@@ -1888,6 +1897,95 @@ export function operatorEvidenceExportRowsToImportPreviewText(
     }))
     .filter((row) => row.pack_id && row.capability);
   return JSON.stringify(normalizedRows, null, 2);
+}
+
+function operatorEvidenceRefsInputCount(value: unknown): number {
+  if (Array.isArray(value)) {
+    return (safeStringArray(value) ?? []).length;
+  }
+  const text = safeString(value, "").trim();
+  if (!text) return 0;
+  if (text.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(text) as unknown;
+      return (safeStringArray(parsed) ?? []).length;
+    } catch {
+      return 0;
+    }
+  }
+  return text
+    .split(/[\n,]+/)
+    .map((ref) => ref.trim())
+    .filter((ref) => ref.length > 0).length;
+}
+
+export function summarizeOperatorEvidenceImportRowsText(
+  value: string,
+): PluginCapabilityLibraryOperatorEvidenceImportRowsTextSummary {
+  const trimmed = safeString(value, "").trim();
+  if (!trimmed) {
+    return {
+      row_count: 0,
+      filled_row_count: 0,
+      pending_row_count: 0,
+      invalid_row_count: 0,
+      ready_for_import_preview: false,
+    };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed) as unknown;
+  } catch (err) {
+    return {
+      row_count: 0,
+      filled_row_count: 0,
+      pending_row_count: 0,
+      invalid_row_count: 1,
+      ready_for_import_preview: false,
+      parse_error: err instanceof Error ? err.message : "invalid_json",
+    };
+  }
+
+  if (!Array.isArray(parsed)) {
+    return {
+      row_count: 0,
+      filled_row_count: 0,
+      pending_row_count: 0,
+      invalid_row_count: 1,
+      ready_for_import_preview: false,
+      parse_error: "Operator evidence import rows must be a JSON array.",
+    };
+  }
+
+  let filled = 0;
+  let pending = 0;
+  let invalid = 0;
+  for (const row of parsed) {
+    if (!isRecord(row)) {
+      invalid += 1;
+      continue;
+    }
+    const packId = safeString(row.pack_id, "").trim();
+    const capability = safeString(row.capability, "").trim();
+    if (!packId || !capability) {
+      invalid += 1;
+      continue;
+    }
+    if (operatorEvidenceRefsInputCount(row.evidence_refs_input) > 0) {
+      filled += 1;
+    } else {
+      pending += 1;
+    }
+  }
+
+  return {
+    row_count: parsed.length,
+    filled_row_count: filled,
+    pending_row_count: pending,
+    invalid_row_count: invalid,
+    ready_for_import_preview: filled > 0,
+  };
 }
 
 function normalizeBaseUrl(url: string): string {
