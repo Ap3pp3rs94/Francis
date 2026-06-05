@@ -64802,6 +64802,64 @@ Remaining truthful gap:
   revoke credentials, unpair nodes, write runtime evidence receipts, write
   decommission receipts, or write closure receipts.
 
+### Stage 18 managed-copy copy-creation request gate
+
+This pass added the first governed copy-creation request boundary without
+recording copy requests, provisioning tenant state, closing Stage 18, enforcing
+tenant isolation, exporting safe deltas, activating SLAs, binding roles, or
+decommissioning tenant state.
+
+Shipped behavior:
+
+- `POST /managed-copies/copy-creation-request` is now mounted as the
+  copy-creation request preflight route for managed copies.
+- The route is guarded by `FRANCIS_API_ACTOR_SCOPES` through a dedicated
+  `managed_copies.copy_creation.write` scope before any managed-copy request
+  payload is accepted.
+- Unscoped actors receive `api_permission_denied`, and the denial reports
+  `copy_creation_enabled: false`, `writes_receipts: false`,
+  `writes_tenant_state: false`, and no execution or mutation authority.
+- Scoped actors still receive `blocked_stage17_prerequisite` because
+  `stage17_closed_by_receipt` remains false and the current blocker is still
+  `stage17_capability_library_operator_proposal_evidence_refs`.
+- The blocked preflight reports only request field presence for tenant identity,
+  tenant policy, isolation profile, capability lineage, safe-delta policy,
+  support boundary, and decommission policy. It does not echo raw tenant request
+  payload text.
+- `GET /managed-copies/status`,
+  `GET /managed-copies/copy-creation-contract`, and
+  `GET /managed-copies/completion-review` now advertise the copy-creation
+  request preflight route.
+- The gate does not write `logs/managed_copies/copy_requests.jsonl`, write
+  registries, write memory, write receipts, write tenant state, run tools, run
+  shell, run git, launch browsers, capture screens, grant execution authority,
+  grant mutation authority, or create a managed copy.
+
+Latest validation for this gate:
+
+- Focused API contract tests:
+  `python -m pytest tests\test_api_managed_copies.py tests\test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted -q`
+  Result: 17 tests passed.
+- Ruff lint:
+  `python -m ruff check src\francis\managed_copies.py src\francis\api\routes\managed_copies.py tests\test_api_managed_copies.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Ruff format check:
+  `python -m ruff format --check src\francis\managed_copies.py src\francis\api\routes\managed_copies.py tests\test_api_managed_copies.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Mypy:
+  `python -m mypy src\francis\managed_copies.py src\francis\api\routes\managed_copies.py`
+  Result: passed.
+
+Remaining truthful gap:
+
+- This does not close Stage 17, close Stage 18, record copy requests, create
+  managed copies, persist tenant identity or policy, enforce tenant isolation at
+  runtime, export or import safe deltas, detect/replace live rogue instances,
+  activate SLA commitments, bind managed-copy roles, export tenant data, delete
+  tenant state, purge memory, revoke credentials, unpair nodes, write runtime
+  evidence receipts, write copy-creation receipts, write decommission receipts,
+  or write closure receipts.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

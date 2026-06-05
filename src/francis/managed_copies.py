@@ -9,6 +9,8 @@ from francis.kernel.paths import data_dir
 STAGE18_MANAGED_COPIES_STAGE = "Stage 18 / Managed Copies Platform"
 MANAGED_COPIES_STATUS_KIND = "francis.stage18.managed_copies.status"
 MANAGED_COPIES_COPY_CREATION_CONTRACT_KIND = "francis.stage18.managed_copies.copy_creation_contract"
+MANAGED_COPIES_COPY_CREATION_REQUEST_KIND = "francis.stage18.managed_copies.copy_creation_request"
+MANAGED_COPIES_COPY_CREATION_WRITE_SCOPE = "managed_copies.copy_creation.write"
 MANAGED_COPIES_ISOLATION_RULES_CONTRACT_KIND = "francis.stage18.managed_copies.isolation_rules_contract"
 MANAGED_COPIES_SAFE_DELTA_MODEL_CONTRACT_KIND = "francis.stage18.managed_copies.safe_delta_model_contract"
 MANAGED_COPIES_ROGUE_RECOVERY_CONTRACT_KIND = "francis.stage18.managed_copies.rogue_recovery_contract"
@@ -442,6 +444,7 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
         "routes": {
             "status": "/managed-copies/status",
             "copy_creation_contract": "/managed-copies/copy-creation-contract",
+            "copy_creation_request": "/managed-copies/copy-creation-request",
             "isolation_rules_contract": "/managed-copies/isolation-rules-contract",
             "safe_delta_model_contract": "/managed-copies/safe-delta-model-contract",
             "rogue_recovery_contract": "/managed-copies/rogue-recovery-contract",
@@ -496,6 +499,7 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
 def managed_copy_creation_contract_snapshot() -> dict[str, Any]:
     """Return the governed copy-creation process contract without creating copies."""
     governance = _governance()
+    status = managed_copies_status_snapshot()
     requirements = [
         _contract_requirement(
             "stage17_closed_by_receipt",
@@ -630,6 +634,12 @@ def managed_copy_creation_contract_snapshot() -> dict[str, Any]:
             "isolation_verification_receipt",
             "support_handoff_receipt",
         ],
+        "copy_creation_request_route": "/managed-copies/copy-creation-request",
+        "routes": {
+            **status["routes"],
+            "copy_creation_contract": "/managed-copies/copy-creation-contract",
+            "copy_creation_request": "/managed-copies/copy-creation-request",
+        },
         "isolation_boundaries": [
             "tenant_data",
             "tenant_memory",
@@ -660,6 +670,91 @@ def managed_copy_creation_contract_snapshot() -> dict[str, Any]:
         "captures_screen": governance["captures_screen"],
         "grants_execution_authority": governance["grants_execution_authority"],
         "grants_mutation_authority": governance["grants_mutation_authority"],
+        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+    }
+
+
+def managed_copy_creation_request_blocked_snapshot(
+    payload: dict[str, Any],
+    *,
+    actor: str,
+) -> dict[str, Any]:
+    """Return a governed copy-creation request preflight blocked by Stage 17."""
+    governance = _governance()
+    contract = managed_copy_creation_contract_snapshot()
+    request_field_presence = {
+        "tenant_id": bool(_safe_str(payload.get("tenant_id")).strip()),
+        "tenant_identity": bool(payload.get("tenant_identity")),
+        "tenant_policy": bool(payload.get("tenant_policy")),
+        "isolation_profile": bool(payload.get("isolation_profile")),
+        "capability_lineage": bool(payload.get("capability_lineage")),
+        "safe_delta_policy": bool(payload.get("safe_delta_policy")),
+        "support_boundary": bool(payload.get("support_boundary")),
+        "decommission_policy": bool(payload.get("decommission_policy")),
+    }
+    return {
+        "ok": False,
+        "kind": MANAGED_COPIES_COPY_CREATION_REQUEST_KIND,
+        "stage": STAGE18_MANAGED_COPIES_STAGE,
+        "source_id": "managed_copies",
+        "status": "blocked_stage17_prerequisite",
+        "error": "stage17_prerequisite_not_closed",
+        "actor": _safe_str(actor).strip(),
+        "request_known": any(request_field_presence.values()),
+        "request_field_presence": request_field_presence,
+        "stage17_closed_by_receipt": bool(contract["stage17_closed_by_receipt"]),
+        "stage17_blocker": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "copy_creation_enabled": False,
+        "copy_creation_allowed": False,
+        "copy_request_recording_enabled": False,
+        "copy_request_recorded": False,
+        "copy_created": False,
+        "receipt_ready": False,
+        "writes_registry": False,
+        "writes_memory": False,
+        "writes_receipt": False,
+        "writes_receipts": False,
+        "writes_tenant_state": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "expected_request_receipt_path": "logs/managed_copies/copy_requests.jsonl",
+        "required_scope": MANAGED_COPIES_COPY_CREATION_WRITE_SCOPE,
+        "routes": {
+            **contract["routes"],
+            "copy_creation_request": "/managed-copies/copy-creation-request",
+        },
+        "governance": {
+            **governance,
+            "write_route": True,
+            "preflight_only": True,
+            "permission_scope": MANAGED_COPIES_COPY_CREATION_WRITE_SCOPE,
+            "permission_checked": True,
+            "copy_creation_enabled": False,
+            "copy_request_recording_enabled": False,
+            "does_not_record_copy_request": True,
+            "does_not_create_copy": True,
+            "does_not_mark_stage_closed": True,
+            "does_not_echo_raw_tenant_payload": True,
+            "requires_stage17_closure_receipt": True,
+            "writes_registry": False,
+            "writes_memory": False,
+            "writes_receipts": False,
+            "writes_tenant_state": False,
+            "runs_tools": False,
+            "runs_shell": False,
+            "runs_git": False,
+            "launches_browser": False,
+            "captures_screen": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "read_only": governance["read_only"],
+        "projection_only": governance["projection_only"],
         "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
     }
 

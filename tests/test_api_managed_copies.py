@@ -31,6 +31,7 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
     assert body["routes"] == {
         "status": "/managed-copies/status",
         "copy_creation_contract": "/managed-copies/copy-creation-contract",
+        "copy_creation_request": "/managed-copies/copy-creation-request",
         "isolation_rules_contract": "/managed-copies/isolation-rules-contract",
         "safe_delta_model_contract": "/managed-copies/safe-delta-model-contract",
         "rogue_recovery_contract": "/managed-copies/rogue-recovery-contract",
@@ -113,6 +114,133 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
     assert not data_root.exists()
 
 
+def test_managed_copy_creation_request_denies_unscoped_actor_without_writing(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+
+    response = TestClient(create_app()).post(
+        "/managed-copies/copy-creation-request",
+        json={
+            "request_actor": "stage18.copy-unscoped",
+            "tenant_id": "tenant-denied",
+            "tenant_identity": {"tenant_name": "Denied Tenant"},
+            "tenant_policy": {"support_allowed": False},
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["status"] == "denied"
+    assert body["error"] == "api_permission_denied"
+    assert body["required_scope"] == "managed_copies.copy_creation.write"
+    assert body["copy_creation_enabled"] is False
+    assert body["writes_receipts"] is False
+    assert body["writes_tenant_state"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+
+    governance = body["governance"]
+    assert governance["gate"] == "permission_gate"
+    assert governance["reason"] == "missing_scopes"
+    assert governance["required_scope"] == "managed_copies.copy_creation.write"
+    assert governance["evidence"]["route"] == "/managed-copies/copy-creation-request"
+    assert governance["evidence"]["method"] == "POST"
+    assert governance["evidence"]["required_scope_count"] == 1
+    assert governance["evidence"]["actor_scope_count"] == 0
+    assert not data_root.exists()
+
+
+def test_managed_copy_creation_request_blocks_scoped_actor_until_stage17_closes(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    actor = "stage18.copy-requester"
+    raw_tenant_id = "tenant-secret-should-not-echo"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({actor: ["managed_copies.copy_creation.write"]}),
+    )
+
+    response = TestClient(create_app()).post(
+        "/managed-copies/copy-creation-request",
+        json={
+            "request_actor": actor,
+            "tenant_id": raw_tenant_id,
+            "tenant_identity": {"tenant_name": "Customer Alpha"},
+            "tenant_policy": {"support_allowed": True},
+            "isolation_profile": {"tenant_data": "isolated"},
+            "capability_lineage": {"base_pack": "core"},
+            "safe_delta_policy": {"raw_private_pooling_allowed": False},
+            "support_boundary": {"time_bound": True},
+            "decommission_policy": {"export_required": True},
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["kind"] == "francis.stage18.managed_copies.copy_creation_request"
+    assert body["status"] == "blocked_stage17_prerequisite"
+    assert body["error"] == "stage17_prerequisite_not_closed"
+    assert body["actor"] == actor
+    assert body["request_known"] is True
+    assert body["request_field_presence"] == {
+        "tenant_id": True,
+        "tenant_identity": True,
+        "tenant_policy": True,
+        "isolation_profile": True,
+        "capability_lineage": True,
+        "safe_delta_policy": True,
+        "support_boundary": True,
+        "decommission_policy": True,
+    }
+    assert raw_tenant_id not in json.dumps(body)
+    assert body["stage17_closed_by_receipt"] is False
+    assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["copy_creation_enabled"] is False
+    assert body["copy_creation_allowed"] is False
+    assert body["copy_request_recording_enabled"] is False
+    assert body["copy_request_recorded"] is False
+    assert body["copy_created"] is False
+    assert body["receipt_ready"] is False
+    assert body["writes_registry"] is False
+    assert body["writes_receipts"] is False
+    assert body["writes_tenant_state"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["expected_request_receipt_path"] == "logs/managed_copies/copy_requests.jsonl"
+    assert body["required_scope"] == "managed_copies.copy_creation.write"
+    assert body["routes"]["copy_creation_request"] == "/managed-copies/copy-creation-request"
+    assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+
+    governance = body["governance"]
+    assert governance["write_route"] is True
+    assert governance["preflight_only"] is True
+    assert governance["permission_scope"] == "managed_copies.copy_creation.write"
+    assert governance["permission_checked"] is True
+    assert governance["copy_creation_enabled"] is False
+    assert governance["copy_request_recording_enabled"] is False
+    assert governance["does_not_record_copy_request"] is True
+    assert governance["does_not_create_copy"] is True
+    assert governance["does_not_echo_raw_tenant_payload"] is True
+    assert governance["requires_stage17_closure_receipt"] is True
+    assert governance["writes_receipts"] is False
+    assert governance["writes_tenant_state"] is False
+    assert governance["grants_execution_authority"] is False
+    assert governance["grants_mutation_authority"] is False
+    assert not data_root.exists()
+
+
 def test_managed_copy_completion_review_blocks_closure_without_runtime_evidence(
     monkeypatch,
     tmp_path,
@@ -189,6 +317,7 @@ def test_managed_copy_completion_review_blocks_closure_without_runtime_evidence(
         "business_model_aligned_to_product_law": False,
     }
     assert body["routes"]["completion_review"] == "/managed-copies/completion-review"
+    assert body["routes"]["copy_creation_request"] == "/managed-copies/copy-creation-request"
     assert body["routes"]["runtime_evidence_contract"] == "/managed-copies/runtime-evidence-contract"
     assert body["routes"]["runtime_evidence_readbacks"] == "/managed-copies/runtime-evidence-readbacks"
     assert body["routes"]["runtime_evidence_readback"] == "/managed-copies/runtime-evidence-readback"
@@ -1288,6 +1417,8 @@ def test_managed_copy_creation_contract_is_projection_only_and_disabled(
     assert body["stage17_closed_by_receipt"] is False
     assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
     assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["copy_creation_request_route"] == "/managed-copies/copy-creation-request"
+    assert body["routes"]["copy_creation_request"] == "/managed-copies/copy-creation-request"
 
     requirement_ids = {item["id"] for item in body["requirements"]}
     assert {

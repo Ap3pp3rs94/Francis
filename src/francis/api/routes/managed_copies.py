@@ -7,10 +7,12 @@ from fastapi import APIRouter, Request
 from francis.governance.api_permission_gate import ApiPermissionDecision, ApiPermissionGate
 
 from francis.managed_copies import (
+    MANAGED_COPIES_COPY_CREATION_WRITE_SCOPE,
     MANAGED_COPIES_RUNTIME_EVIDENCE_WRITE_SCOPE,
     managed_copies_status_snapshot,
     managed_copy_completion_review_snapshot,
     managed_copy_creation_contract_snapshot,
+    managed_copy_creation_request_blocked_snapshot,
     managed_copy_decommission_contract_snapshot,
     managed_copy_isolation_rules_contract_snapshot,
     managed_copy_rogue_recovery_contract_snapshot,
@@ -31,7 +33,7 @@ def _safe_str(value: Any) -> str:
     return str(value)
 
 
-def _runtime_evidence_write_actor(payload: dict[str, Any]) -> str:
+def _managed_copy_write_actor(payload: dict[str, Any]) -> str:
     return (
         _safe_str(payload.get("request_actor")).strip()
         or _safe_str(payload.get("api_actor")).strip()
@@ -39,21 +41,27 @@ def _runtime_evidence_write_actor(payload: dict[str, Any]) -> str:
     )
 
 
-def _runtime_evidence_write_permission(actor: Any, *, route: str, method: str) -> ApiPermissionDecision:
+def _write_permission(actor: Any, *, required_scope: str, route: str, method: str) -> ApiPermissionDecision:
     return ApiPermissionGate.from_env().check(
         actor_id=actor,
-        required_scopes=[MANAGED_COPIES_RUNTIME_EVIDENCE_WRITE_SCOPE],
+        required_scopes=[required_scope],
         route=route,
         method=method,
     )
 
 
-def _permission_denied(decision: ApiPermissionDecision) -> dict[str, Any]:
+def _permission_denied(
+    decision: ApiPermissionDecision,
+    *,
+    required_scope: str,
+    next_step: str,
+) -> dict[str, Any]:
     return {
         "ok": False,
         "status": "denied",
         "error": "api_permission_denied",
-        "required_scope": MANAGED_COPIES_RUNTIME_EVIDENCE_WRITE_SCOPE,
+        "required_scope": required_scope,
+        "copy_creation_enabled": False,
         "runtime_evidence_recording_enabled": False,
         "writes_receipt": False,
         "writes_receipts": False,
@@ -63,9 +71,10 @@ def _permission_denied(decision: ApiPermissionDecision) -> dict[str, Any]:
         "governance": {
             "gate": "permission_gate",
             "reason": decision.reason,
-            "next_step": "configure_actor_scope_before_recording_managed_copy_runtime_evidence",
-            "required_scope": MANAGED_COPIES_RUNTIME_EVIDENCE_WRITE_SCOPE,
+            "next_step": next_step,
+            "required_scope": required_scope,
             "evidence": decision.evidence,
+            "copy_creation_enabled": False,
             "runtime_evidence_recording_enabled": False,
             "writes_receipts": False,
             "writes_tenant_state": False,
@@ -83,6 +92,24 @@ def status() -> dict[str, Any]:
 @router.get("/copy-creation-contract")
 def copy_creation_contract() -> dict[str, Any]:
     return managed_copy_creation_contract_snapshot()
+
+
+@router.post("/copy-creation-request")
+def copy_creation_request(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    actor = _managed_copy_write_actor(payload)
+    decision = _write_permission(
+        actor,
+        required_scope=MANAGED_COPIES_COPY_CREATION_WRITE_SCOPE,
+        route=request.url.path,
+        method=request.method,
+    )
+    if not decision.allowed:
+        return _permission_denied(
+            decision,
+            required_scope=MANAGED_COPIES_COPY_CREATION_WRITE_SCOPE,
+            next_step="configure_actor_scope_before_requesting_managed_copy_creation",
+        )
+    return managed_copy_creation_request_blocked_snapshot(payload, actor=actor)
 
 
 @router.get("/isolation-rules-contract")
@@ -132,8 +159,17 @@ def runtime_evidence_readbacks(limit: int = 100) -> dict[str, Any]:
 
 @router.post("/runtime-evidence-readback")
 def runtime_evidence_readback(payload: dict[str, Any], request: Request) -> dict[str, Any]:
-    actor = _runtime_evidence_write_actor(payload)
-    decision = _runtime_evidence_write_permission(actor, route=request.url.path, method=request.method)
+    actor = _managed_copy_write_actor(payload)
+    decision = _write_permission(
+        actor,
+        required_scope=MANAGED_COPIES_RUNTIME_EVIDENCE_WRITE_SCOPE,
+        route=request.url.path,
+        method=request.method,
+    )
     if not decision.allowed:
-        return _permission_denied(decision)
+        return _permission_denied(
+            decision,
+            required_scope=MANAGED_COPIES_RUNTIME_EVIDENCE_WRITE_SCOPE,
+            next_step="configure_actor_scope_before_recording_managed_copy_runtime_evidence",
+        )
     return managed_copy_runtime_evidence_readback_blocked_snapshot(payload, actor=actor)
