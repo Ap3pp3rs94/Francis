@@ -8,6 +8,7 @@ MANAGED_COPIES_COPY_CREATION_CONTRACT_KIND = "francis.stage18.managed_copies.cop
 MANAGED_COPIES_ISOLATION_RULES_CONTRACT_KIND = "francis.stage18.managed_copies.isolation_rules_contract"
 MANAGED_COPIES_SAFE_DELTA_MODEL_CONTRACT_KIND = "francis.stage18.managed_copies.safe_delta_model_contract"
 MANAGED_COPIES_ROGUE_RECOVERY_CONTRACT_KIND = "francis.stage18.managed_copies.rogue_recovery_contract"
+MANAGED_COPIES_SLA_FRAMEWORK_CONTRACT_KIND = "francis.stage18.managed_copies.sla_framework_contract"
 STAGE17_OPERATOR_EVIDENCE_REFS_GAP = "stage17_capability_library_operator_proposal_evidence_refs"
 
 
@@ -163,6 +164,23 @@ def _rogue_recovery_step(
     }
 
 
+def _sla_commitment(
+    commitment_id: str,
+    title: str,
+    *,
+    status: str,
+    active: bool,
+    requires_receipt: bool = True,
+) -> dict[str, Any]:
+    return {
+        "id": commitment_id,
+        "title": title,
+        "status": status,
+        "active": active,
+        "requires_receipt": requires_receipt,
+    }
+
+
 def managed_copies_status_snapshot() -> dict[str, Any]:
     """Return the Stage 18 managed-copy substrate posture without creating state."""
     governance = _governance()
@@ -221,8 +239,11 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "sla_framework",
             "SLA framework beginnings",
             ready=False,
-            status="pending",
+            status="contract_readback_ready",
             next_gap="stage18_sla_framework",
+            evidence=[
+                "GET /managed-copies/sla-framework-contract exposes service commitments without activating them.",
+            ],
         ),
         _deliverable(
             "managed_copy_roles",
@@ -259,6 +280,7 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "isolation_rules_contract": "/managed-copies/isolation-rules-contract",
             "safe_delta_model_contract": "/managed-copies/safe-delta-model-contract",
             "rogue_recovery_contract": "/managed-copies/rogue-recovery-contract",
+            "sla_framework_contract": "/managed-copies/sla-framework-contract",
         },
         "managed_copy_roles_required": [
             "end_user",
@@ -918,5 +940,128 @@ def managed_copy_rogue_recovery_contract_snapshot() -> dict[str, Any]:
         "replaces_copy": False,
         "restores_copy": False,
         "support_backdoor_allowed": False,
+        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+    }
+
+
+def managed_copy_sla_framework_contract_snapshot() -> dict[str, Any]:
+    """Return the managed-copy SLA framework contract without activating service commitments."""
+    governance = _governance()
+    commitments = [
+        _sla_commitment(
+            "uptime_commitment",
+            "Managed-copy uptime commitments require tenant plan, monitoring, and incident receipts",
+            status="contract_only",
+            active=False,
+        ),
+        _sla_commitment(
+            "response_commitment",
+            "Support response commitments require support tier, escalation rules, and tenant visibility",
+            status="contract_only",
+            active=False,
+        ),
+        _sla_commitment(
+            "incident_handling_commitment",
+            "Incident handling commitments require evidence preservation and operator-visible state",
+            status="contract_only",
+            active=False,
+        ),
+        _sla_commitment(
+            "recovery_commitment",
+            "Recovery commitments require rogue recovery, clean baseline, and restore verification receipts",
+            status="contract_only",
+            active=False,
+        ),
+        _sla_commitment(
+            "support_tier_commitment",
+            "Support tiers require bounded support authority and tenant-admin approval paths",
+            status="contract_only",
+            active=False,
+        ),
+        _sla_commitment(
+            "managed_governance_commitment",
+            "Managed governance commitments require policy review, auditability, and revocation paths",
+            status="contract_only",
+            active=False,
+        ),
+    ]
+    return {
+        "ok": True,
+        "kind": MANAGED_COPIES_SLA_FRAMEWORK_CONTRACT_KIND,
+        "stage": STAGE18_MANAGED_COPIES_STAGE,
+        "source_id": "managed_copies",
+        "status": "contract_readback_ready",
+        "contract_readback_ready": True,
+        "sla_framework_ready": False,
+        "sla_commitments_active": False,
+        "monitoring_enabled": False,
+        "paging_enabled": False,
+        "support_tiers_enabled": False,
+        "billing_entitlements_enabled": False,
+        "copy_creation_enabled": False,
+        "stage17_closed_by_receipt": False,
+        "stage17_blocker": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "commitments": commitments,
+        "commitment_count": len(commitments),
+        "active_commitment_count": sum(1 for commitment in commitments if commitment["active"]),
+        "support_tiers": [
+            "standard_support",
+            "priority_support",
+            "premium_governance_support",
+            "rogue_recovery_assistance",
+        ],
+        "required_receipts": [
+            "sla_plan_receipt",
+            "tenant_support_tier_receipt",
+            "monitoring_scope_receipt",
+            "incident_response_receipt",
+            "recovery_commitment_receipt",
+            "managed_governance_review_receipt",
+            "sla_exception_or_breach_receipt",
+        ],
+        "service_metrics": [
+            "uptime_window",
+            "response_time_window",
+            "incident_acknowledgement_time",
+            "recovery_time_objective",
+            "recovery_point_objective",
+            "governance_review_interval",
+            "support_access_audit_interval",
+        ],
+        "operator_controls_required": [
+            "tenant_visible_sla_state",
+            "support_authority_scope_check",
+            "incident_severity_review",
+            "recovery_plan_review",
+            "breach_exception_review",
+            "revocation_or_downgrade_path",
+        ],
+        "blocked_failure_modes": [
+            "unbounded_support_obligation",
+            "invisible_vendor_power",
+            "sla_claim_without_monitoring",
+            "incident_handling_without_receipts",
+            "recovery_promise_without_recovery_path",
+            "support_tier_without_authority_boundary",
+        ],
+        "governance": governance,
+        "read_only": governance["read_only"],
+        "projection_only": governance["projection_only"],
+        "writes_registry": governance["writes_registry"],
+        "writes_memory": governance["writes_memory"],
+        "writes_receipts": governance["writes_receipts"],
+        "writes_tenant_state": governance["writes_tenant_state"],
+        "runs_tools": governance["runs_tools"],
+        "runs_shell": governance["runs_shell"],
+        "runs_git": governance["runs_git"],
+        "launches_browser": governance["launches_browser"],
+        "captures_screen": governance["captures_screen"],
+        "grants_execution_authority": governance["grants_execution_authority"],
+        "grants_mutation_authority": governance["grants_mutation_authority"],
+        "creates_service_commitment": False,
+        "pages_support": False,
+        "opens_incident": False,
+        "records_sla_receipt": False,
+        "grants_support_authority": False,
         "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
     }

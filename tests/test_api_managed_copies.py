@@ -32,6 +32,7 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
         "isolation_rules_contract": "/managed-copies/isolation-rules-contract",
         "safe_delta_model_contract": "/managed-copies/safe-delta-model-contract",
         "rogue_recovery_contract": "/managed-copies/rogue-recovery-contract",
+        "sla_framework_contract": "/managed-copies/sla-framework-contract",
     }
 
     deliverable_ids = {item["id"] for item in body["deliverables"]}
@@ -101,6 +102,119 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
     assert governance["privacy_weak_pooling_allowed"] is False
     assert governance["uncontrolled_forks_allowed"] is False
     assert governance["invisible_vendor_power_allowed"] is False
+    assert not data_root.exists()
+
+
+def test_managed_copy_sla_framework_contract_is_projection_only_and_inactive(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    response = TestClient(create_app()).get("/managed-copies/sla-framework-contract")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kind"] == "francis.stage18.managed_copies.sla_framework_contract"
+    assert body["stage"] == "Stage 18 / Managed Copies Platform"
+    assert body["source_id"] == "managed_copies"
+    assert body["status"] == "contract_readback_ready"
+    assert body["contract_readback_ready"] is True
+    assert body["sla_framework_ready"] is False
+    assert body["sla_commitments_active"] is False
+    assert body["monitoring_enabled"] is False
+    assert body["paging_enabled"] is False
+    assert body["support_tiers_enabled"] is False
+    assert body["billing_entitlements_enabled"] is False
+    assert body["copy_creation_enabled"] is False
+    assert body["stage17_closed_by_receipt"] is False
+    assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+
+    commitment_ids = {item["id"] for item in body["commitments"]}
+    assert commitment_ids == {
+        "uptime_commitment",
+        "response_commitment",
+        "incident_handling_commitment",
+        "recovery_commitment",
+        "support_tier_commitment",
+        "managed_governance_commitment",
+    }
+    assert body["commitment_count"] == len(body["commitments"])
+    assert body["active_commitment_count"] == 0
+    assert all(item["status"] == "contract_only" for item in body["commitments"])
+    assert all(item["active"] is False for item in body["commitments"])
+    assert all(item["requires_receipt"] is True for item in body["commitments"])
+
+    assert body["support_tiers"] == [
+        "standard_support",
+        "priority_support",
+        "premium_governance_support",
+        "rogue_recovery_assistance",
+    ]
+    assert body["required_receipts"] == [
+        "sla_plan_receipt",
+        "tenant_support_tier_receipt",
+        "monitoring_scope_receipt",
+        "incident_response_receipt",
+        "recovery_commitment_receipt",
+        "managed_governance_review_receipt",
+        "sla_exception_or_breach_receipt",
+    ]
+    assert body["service_metrics"] == [
+        "uptime_window",
+        "response_time_window",
+        "incident_acknowledgement_time",
+        "recovery_time_objective",
+        "recovery_point_objective",
+        "governance_review_interval",
+        "support_access_audit_interval",
+    ]
+    assert body["operator_controls_required"] == [
+        "tenant_visible_sla_state",
+        "support_authority_scope_check",
+        "incident_severity_review",
+        "recovery_plan_review",
+        "breach_exception_review",
+        "revocation_or_downgrade_path",
+    ]
+    assert body["blocked_failure_modes"] == [
+        "unbounded_support_obligation",
+        "invisible_vendor_power",
+        "sla_claim_without_monitoring",
+        "incident_handling_without_receipts",
+        "recovery_promise_without_recovery_path",
+        "support_tier_without_authority_boundary",
+    ]
+
+    assert body["read_only"] is True
+    assert body["projection_only"] is True
+    assert body["writes_registry"] is False
+    assert body["writes_memory"] is False
+    assert body["writes_receipts"] is False
+    assert body["writes_tenant_state"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["launches_browser"] is False
+    assert body["captures_screen"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["creates_service_commitment"] is False
+    assert body["pages_support"] is False
+    assert body["opens_incident"] is False
+    assert body["records_sla_receipt"] is False
+    assert body["grants_support_authority"] is False
+
+    governance = body["governance"]
+    assert governance["read_only"] is True
+    assert governance["projection_only"] is True
+    assert governance["copy_creation_enabled"] is False
+    assert governance["writes_tenant_state"] is False
+    assert governance["writes_receipts"] is False
+    assert governance["grants_execution_authority"] is False
+    assert governance["grants_mutation_authority"] is False
     assert not data_root.exists()
 
 

@@ -64425,6 +64425,58 @@ Remaining truthful gap:
   continuity, create managed copies, enforce tenant isolation at runtime, or
   implement SLA operations.
 
+### Stage 18 managed-copy SLA framework contract readback
+
+This pass made the Stage 18 managed-copy SLA framework inspectable without
+activating service commitments, monitoring, paging, support tiers, billing
+entitlements, or managed-service authority.
+
+Shipped behavior:
+
+- `src/francis/managed_copies.py` now exposes
+  `managed_copy_sla_framework_contract_snapshot()`, a read-only SLA framework
+  contract for managed copies.
+- `GET /managed-copies/sla-framework-contract` now returns inactive uptime,
+  response, incident handling, recovery, support-tier, and managed-governance
+  commitments, plus required receipts, service metrics, operator controls, and
+  blocked failure modes.
+- `GET /managed-copies/status` now advertises the SLA framework contract route
+  and records the `sla_framework` deliverable as `contract_readback_ready` while
+  still reporting `ready: false`.
+- The contract keeps `sla_framework_ready: false`,
+  `sla_commitments_active: false`, `monitoring_enabled: false`,
+  `paging_enabled: false`, `support_tiers_enabled: false`,
+  `billing_entitlements_enabled: false`, and `copy_creation_enabled: false`.
+  It does not create service commitments, page support, open incidents, record
+  SLA receipts, grant support authority, write registries, write memory, write
+  receipts, write tenant state, run tools, run shell, run git, launch browsers,
+  capture screens, grant execution authority, or grant mutation authority.
+- The contract preserves the current blocker as
+  `stage17_capability_library_operator_proposal_evidence_refs` and reports
+  `stage17_closed_by_receipt: false`.
+
+Latest validation for this readback:
+
+- Focused API contract tests:
+  `python -m pytest tests\test_api_managed_copies.py tests\test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted -q`
+  Result: 7 tests passed.
+- Ruff lint:
+  `python -m ruff check src\francis\managed_copies.py src\francis\api\routes\managed_copies.py tests\test_api_managed_copies.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Ruff format check:
+  `python -m ruff format --check src\francis\managed_copies.py src\francis\api\routes\managed_copies.py tests\test_api_managed_copies.py tests\test_api_contract_chat_ui.py`
+  Result: passed with non-fatal `.ruff_cache` write warnings.
+- Mypy:
+  `python -m mypy src\francis\managed_copies.py src\francis\api\routes\managed_copies.py`
+  Result: passed.
+
+Remaining truthful gap:
+
+- This does not close Stage 17, activate SLA commitments, start monitoring,
+  page support, open incidents, write SLA receipts, configure support tiers,
+  grant managed-service authority, create managed copies, enforce tenant
+  isolation at runtime, export safe deltas, or implement live rogue recovery.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
