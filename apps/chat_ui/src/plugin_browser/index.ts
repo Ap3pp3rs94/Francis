@@ -788,6 +788,46 @@ export type PluginCapabilityLibraryProposalEvidencePlanResponse = {
   catalog?: Record<string, unknown>;
 };
 
+export type PluginCapabilityLibraryProposalEvidenceSourceReadinessPlan = {
+  status?: string;
+  candidate_pack_count?: number;
+  candidate_capability_count?: number;
+  proposal_evidence_missing_count?: number;
+  proposal_evidence_ready_count?: number;
+  proposal_review_missing_count?: number;
+  blocked_before_evidence_count?: number;
+  next_smallest_truthful_gap?: string;
+};
+
+export type PluginCapabilityLibraryProposalEvidenceSourceReadinessResponse = {
+  ok: boolean;
+  kind?: string;
+  stage?: string;
+  status?: string;
+  proposal_evidence_source_readiness_ready?: boolean;
+  proposal_evidence_missing_count?: number;
+  proposal_evidence_ready_count?: number;
+  proposal_review_missing_count?: number;
+  blocked_before_evidence_count?: number;
+  automatic_source_candidate_pack_count?: number;
+  automatic_source_candidate_capability_count?: number;
+  automatic_sources_exhausted?: boolean;
+  operator_evidence_intake_candidate_pack_count?: number;
+  operator_evidence_intake_candidate_capability_count?: number;
+  operator_evidence_ref_required_count?: number;
+  recorded_operator_evidence_pack_count?: number;
+  recorded_operator_evidence_capability_count?: number;
+  recorded_operator_evidence_ref_count?: number;
+  proposal_review_apply_status?: string;
+  source_proposal_evidence_plan?: PluginCapabilityLibraryProposalEvidenceSourceReadinessPlan;
+  source_inventory?: Record<string, Record<string, unknown>>;
+  routes?: Record<string, string>;
+  requirements?: Record<string, boolean>;
+  governance?: Record<string, unknown>;
+  next_smallest_truthful_gap?: string;
+  catalog?: Record<string, unknown>;
+};
+
 export type PluginCapabilityLibraryPromotionCapability = {
   capability: string;
   status?: string;
@@ -3826,6 +3866,7 @@ export type PluginBrowserEndpoints = {
   capabilityPackPromotionRuleRemediation: () => string;
   capabilityLibraryPromotionPlan: () => string;
   capabilityLibraryProposalEvidencePlan: () => string;
+  capabilityLibraryProposalEvidenceSourceReadiness: () => string;
   capabilityLibraryProposalReviewPlan: () => string;
   capabilityLibraryProposalReviewApplyReadiness: () => string;
   capabilityLibraryProposalEvidenceRemediation: () => string;
@@ -3896,6 +3937,8 @@ export function defaultPluginBrowserEndpoints(): PluginBrowserEndpoints {
     capabilityPackPromotionRuleRemediation: () => "/plugins/capabilities/packs/promotion/rules/remediation",
     capabilityLibraryPromotionPlan: () => "/plugins/capabilities/library/promotion/plan",
     capabilityLibraryProposalEvidencePlan: () => "/plugins/capabilities/library/proposal-evidence/plan",
+    capabilityLibraryProposalEvidenceSourceReadiness: () =>
+      "/plugins/capabilities/library/proposal-evidence/source-readiness",
     capabilityLibraryProposalReviewPlan: () => "/plugins/capabilities/library/proposal-review/plan",
     capabilityLibraryProposalReviewApplyReadiness: () =>
       "/plugins/capabilities/library/proposal-review/apply-readiness",
@@ -4587,6 +4630,118 @@ export class PluginBrowserClient {
       packs,
       packs_truncated: Boolean((json as Record<string, unknown>).packs_truncated ?? false),
       capability_preview_limit: safeNumber((json as Record<string, unknown>).capability_preview_limit, 0) || undefined,
+      routes: isRecord((json as Record<string, unknown>).routes)
+        ? Object.fromEntries(
+            Object.entries((json as Record<string, unknown>).routes as Record<string, unknown>).map(([key, value]) => [
+              key,
+              safeString(value, ""),
+            ]),
+          )
+        : undefined,
+      requirements: isRecord((json as Record<string, unknown>).requirements)
+        ? Object.fromEntries(
+            Object.entries((json as Record<string, unknown>).requirements as Record<string, unknown>)
+              .filter(([, value]) => typeof value === "boolean")
+              .map(([key, value]) => [key, Boolean(value)]),
+          )
+        : undefined,
+      governance: isRecord((json as Record<string, unknown>).governance)
+        ? ((json as Record<string, unknown>).governance as Record<string, unknown>)
+        : undefined,
+      next_smallest_truthful_gap:
+        safeString((json as Record<string, unknown>).next_smallest_truthful_gap, "") || undefined,
+      catalog: isRecord((json as Record<string, unknown>).catalog)
+        ? ((json as Record<string, unknown>).catalog as Record<string, unknown>)
+        : undefined,
+    };
+  }
+
+  /**
+   * List read-only proposal-evidence source readiness across automatic and operator-supplied paths.
+   */
+  async listCapabilityLibraryProposalEvidenceSourceReadiness(
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<PluginCapabilityLibraryProposalEvidenceSourceReadinessResponse> {
+    const url = this.url(this.endpoints.capabilityLibraryProposalEvidenceSourceReadiness());
+    const json = await this.fetchJson(url, { method: "GET", signal: opts?.signal, timeoutMs: opts?.timeoutMs });
+    if (!isRecord(json)) return { ok: false };
+
+    const sourcePlanRaw = (json as Record<string, unknown>).source_proposal_evidence_plan;
+    const sourceInventoryRaw = (json as Record<string, unknown>).source_inventory;
+    const sourceInventory = isRecord(sourceInventoryRaw)
+      ? Object.fromEntries(
+          Object.entries(sourceInventoryRaw)
+            .filter(([, value]) => isRecord(value))
+            .map(([key, value]) => [key, value as Record<string, unknown>]),
+        )
+      : undefined;
+    return {
+      ok: Boolean((json as Record<string, unknown>).ok ?? false),
+      kind: safeString((json as Record<string, unknown>).kind, "") || undefined,
+      stage: safeString((json as Record<string, unknown>).stage, "") || undefined,
+      status: safeString((json as Record<string, unknown>).status, "") || undefined,
+      proposal_evidence_source_readiness_ready:
+        typeof (json as Record<string, unknown>).proposal_evidence_source_readiness_ready === "boolean"
+          ? Boolean((json as Record<string, unknown>).proposal_evidence_source_readiness_ready)
+          : undefined,
+      proposal_evidence_missing_count: safeNumber(
+        (json as Record<string, unknown>).proposal_evidence_missing_count,
+        0,
+      ),
+      proposal_evidence_ready_count: safeNumber((json as Record<string, unknown>).proposal_evidence_ready_count, 0),
+      proposal_review_missing_count: safeNumber((json as Record<string, unknown>).proposal_review_missing_count, 0),
+      blocked_before_evidence_count: safeNumber((json as Record<string, unknown>).blocked_before_evidence_count, 0),
+      automatic_source_candidate_pack_count: safeNumber(
+        (json as Record<string, unknown>).automatic_source_candidate_pack_count,
+        0,
+      ),
+      automatic_source_candidate_capability_count: safeNumber(
+        (json as Record<string, unknown>).automatic_source_candidate_capability_count,
+        0,
+      ),
+      automatic_sources_exhausted:
+        typeof (json as Record<string, unknown>).automatic_sources_exhausted === "boolean"
+          ? Boolean((json as Record<string, unknown>).automatic_sources_exhausted)
+          : undefined,
+      operator_evidence_intake_candidate_pack_count: safeNumber(
+        (json as Record<string, unknown>).operator_evidence_intake_candidate_pack_count,
+        0,
+      ),
+      operator_evidence_intake_candidate_capability_count: safeNumber(
+        (json as Record<string, unknown>).operator_evidence_intake_candidate_capability_count,
+        0,
+      ),
+      operator_evidence_ref_required_count: safeNumber(
+        (json as Record<string, unknown>).operator_evidence_ref_required_count,
+        0,
+      ),
+      recorded_operator_evidence_pack_count: safeNumber(
+        (json as Record<string, unknown>).recorded_operator_evidence_pack_count,
+        0,
+      ),
+      recorded_operator_evidence_capability_count: safeNumber(
+        (json as Record<string, unknown>).recorded_operator_evidence_capability_count,
+        0,
+      ),
+      recorded_operator_evidence_ref_count: safeNumber(
+        (json as Record<string, unknown>).recorded_operator_evidence_ref_count,
+        0,
+      ),
+      proposal_review_apply_status:
+        safeString((json as Record<string, unknown>).proposal_review_apply_status, "") || undefined,
+      source_proposal_evidence_plan: isRecord(sourcePlanRaw)
+        ? {
+            status: safeString(sourcePlanRaw.status, "") || undefined,
+            candidate_pack_count: safeNumber(sourcePlanRaw.candidate_pack_count, 0),
+            candidate_capability_count: safeNumber(sourcePlanRaw.candidate_capability_count, 0),
+            proposal_evidence_missing_count: safeNumber(sourcePlanRaw.proposal_evidence_missing_count, 0),
+            proposal_evidence_ready_count: safeNumber(sourcePlanRaw.proposal_evidence_ready_count, 0),
+            proposal_review_missing_count: safeNumber(sourcePlanRaw.proposal_review_missing_count, 0),
+            blocked_before_evidence_count: safeNumber(sourcePlanRaw.blocked_before_evidence_count, 0),
+            next_smallest_truthful_gap: safeString(sourcePlanRaw.next_smallest_truthful_gap, "") || undefined,
+          }
+        : undefined,
+      source_inventory: sourceInventory,
       routes: isRecord((json as Record<string, unknown>).routes)
         ? Object.fromEntries(
             Object.entries((json as Record<string, unknown>).routes as Record<string, unknown>).map(([key, value]) => [

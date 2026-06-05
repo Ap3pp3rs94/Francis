@@ -1116,6 +1116,129 @@ test("PluginBrowserClient lists capability library proposal evidence remediation
   }
 });
 
+test("PluginBrowserClient lists capability library proposal evidence source readiness", async () => {
+  const requests: string[] = [];
+  const restoreFetch = installFetch(async (url) => {
+    const parsed = new URL(url);
+    requests.push(parsed.pathname);
+    return jsonResponse({
+      ok: true,
+      kind: "plugin.capability_library.proposal_evidence_source_readiness",
+      stage: "Stage 17 / Capability Economy",
+      status: "operator_evidence_refs_required",
+      proposal_evidence_source_readiness_ready: true,
+      proposal_evidence_missing_count: 2268,
+      proposal_evidence_ready_count: 0,
+      proposal_review_missing_count: 2268,
+      blocked_before_evidence_count: 0,
+      automatic_source_candidate_pack_count: 0,
+      automatic_source_candidate_capability_count: 0,
+      automatic_sources_exhausted: true,
+      operator_evidence_intake_candidate_pack_count: 47,
+      operator_evidence_intake_candidate_capability_count: 2268,
+      operator_evidence_ref_required_count: 2268,
+      recorded_operator_evidence_pack_count: 0,
+      recorded_operator_evidence_capability_count: 0,
+      recorded_operator_evidence_ref_count: 0,
+      proposal_review_apply_status: "blocked_on_operator_evidence_refs",
+      source_proposal_evidence_plan: {
+        status: "blocked",
+        candidate_pack_count: 47,
+        candidate_capability_count: 2268,
+        proposal_evidence_missing_count: 2268,
+        proposal_evidence_ready_count: 0,
+        proposal_review_missing_count: 2268,
+        blocked_before_evidence_count: 0,
+        next_smallest_truthful_gap: "stage17_capability_library_promotion_readiness",
+      },
+      source_inventory: {
+        existing_linked_proposal_artifact: {
+          status: "no_existing_artifact_evidence_candidates",
+          ready: false,
+          candidate_capability_count: 0,
+          writes_proposals: false,
+        },
+        existing_registry_friction_summary_ref: {
+          status: "no_existing_friction_summary_ref_candidates",
+          ready: false,
+          candidate_capability_count: 0,
+          records_reference_not_friction_summary_body: true,
+        },
+        operator_supplied_evidence_refs: {
+          status: "ready_for_operator_evidence_refs",
+          ready: true,
+          candidate_capability_count: 2268,
+          evidence_ref_required_count: 2268,
+          does_not_validate_evidence_truth: true,
+        },
+        synthetic_evidence: {
+          status: "disallowed",
+          ready: false,
+          candidate_capability_count: 0,
+        },
+      },
+      routes: {
+        proposal_evidence_source_readiness_route:
+          "/plugins/capabilities/library/proposal-evidence/source-readiness",
+        operator_intake_export_route: "/plugins/capabilities/library/proposal-evidence/operator-intake/export",
+      },
+      requirements: {
+        read_only_source_inventory: true,
+        no_synthetic_evidence: true,
+        does_not_validate_evidence_truth: true,
+      },
+      governance: {
+        read_only: true,
+        does_not_write_proposals: true,
+        does_not_approve_proposals: true,
+        does_not_promote_capabilities: true,
+        memory_write: false,
+      },
+      next_smallest_truthful_gap: "stage17_capability_library_operator_proposal_evidence_refs",
+    });
+  });
+
+  try {
+    const client = new PluginBrowserClient("http://127.0.0.1:8000", { retry: { retries: 0 } });
+
+    const readiness = await client.listCapabilityLibraryProposalEvidenceSourceReadiness();
+
+    assert.deepEqual(requests, ["/plugins/capabilities/library/proposal-evidence/source-readiness"]);
+    assert.equal(readiness.status, "operator_evidence_refs_required");
+    assert.equal(readiness.proposal_evidence_source_readiness_ready, true);
+    assert.equal(readiness.proposal_evidence_missing_count, 2268);
+    assert.equal(readiness.automatic_source_candidate_capability_count, 0);
+    assert.equal(readiness.automatic_sources_exhausted, true);
+    assert.equal(readiness.operator_evidence_intake_candidate_capability_count, 2268);
+    assert.equal(readiness.operator_evidence_ref_required_count, 2268);
+    assert.equal(readiness.source_proposal_evidence_plan?.candidate_pack_count, 47);
+    assert.equal(readiness.source_inventory?.existing_linked_proposal_artifact?.candidate_capability_count, 0);
+    assert.equal(
+      readiness.source_inventory?.existing_registry_friction_summary_ref
+        ?.records_reference_not_friction_summary_body,
+      true,
+    );
+    assert.equal(readiness.source_inventory?.operator_supplied_evidence_refs?.ready, true);
+    assert.equal(readiness.source_inventory?.operator_supplied_evidence_refs?.does_not_validate_evidence_truth, true);
+    assert.equal(readiness.source_inventory?.synthetic_evidence?.status, "disallowed");
+    assert.equal(readiness.requirements?.read_only_source_inventory, true);
+    assert.equal(readiness.requirements?.no_synthetic_evidence, true);
+    assert.equal(readiness.governance?.does_not_write_proposals, true);
+    assert.equal(readiness.governance?.does_not_approve_proposals, true);
+    assert.equal(readiness.governance?.does_not_promote_capabilities, true);
+    assert.equal(
+      readiness.routes?.operator_intake_export_route,
+      "/plugins/capabilities/library/proposal-evidence/operator-intake/export",
+    );
+    assert.equal(
+      readiness.next_smallest_truthful_gap,
+      "stage17_capability_library_operator_proposal_evidence_refs",
+    );
+  } finally {
+    restoreFetch();
+  }
+});
+
 test("PluginBrowserClient lists capability library proposal evidence friction summary refs", async () => {
   const requests: string[] = [];
   const restoreFetch = installFetch(async (url) => {

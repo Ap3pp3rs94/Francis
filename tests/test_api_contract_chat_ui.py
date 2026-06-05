@@ -157,6 +157,7 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("GET", "/plugins/capabilities/library/operator/surface"),
         ("GET", "/plugins/capabilities/library/promotion/plan"),
         ("GET", "/plugins/capabilities/library/proposal-evidence/plan"),
+        ("GET", "/plugins/capabilities/library/proposal-evidence/source-readiness"),
         ("GET", "/plugins/capabilities/library/proposal-evidence/remediation"),
         ("POST", "/plugins/capabilities/library/proposal-evidence/remediation/apply"),
         ("GET", "/plugins/capabilities/library/proposal-evidence/friction-summary-refs"),

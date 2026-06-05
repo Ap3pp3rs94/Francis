@@ -63581,6 +63581,95 @@ Remaining truthful gap:
   references or add another bounded evidence-source route if a truthful source
   exists. The current registry friction-summary route reports no candidates.
 
+### 2026-06-05 - Stage 17 proposal-evidence source readiness contract
+
+Roadmap area: Stage 17 / Capability Economy.
+
+Truthful change:
+
+- Added read-only `GET
+  /plugins/capabilities/library/proposal-evidence/source-readiness`.
+- The route composes the existing proposal-evidence plan, existing linked
+  proposal-artifact remediation, registry friction-summary reference
+  remediation, operator evidence-intake checklist, operator evidence-intake
+  audit, and proposal-review apply-readiness projections.
+- The route reports whether automatic evidence sources are available, whether
+  automatic sources are exhausted, how many operator evidence refs are still
+  required, and which governed routes can be used next.
+- The response explicitly includes a `synthetic_evidence` source with
+  `status=disallowed` and keeps the route read-only: it does not mutate the
+  registry, write receipts, write proposals, approve proposals, promote
+  capabilities, enable capabilities, execute capabilities, or write memory.
+- The Chat UI plugin-browser client now has a typed
+  `listCapabilityLibraryProposalEvidenceSourceReadiness` readback method and
+  default endpoint for the new route.
+- The Chat UI route contract now asserts the new route is mounted.
+
+Latest validation for this contract pass:
+
+- Focused backend/API contract tests:
+  `python -m pytest tests\test_api_plugins.py -k
+  "proposal_evidence_source_readiness_inventory or
+  proposal_evidence_friction_summary_refs_backfill_existing_registry_refs or
+  operator_proposal_evidence_intake_records_operator_refs_only"
+  tests\test_api_contract_chat_ui.py -q`
+  Result: 3 selected tests passed.
+- Python lint:
+  `python -m ruff check src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Python format check:
+  `python -m ruff format --check src\francis\api\routes\plugins.py
+  tests\test_api_plugins.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Chat UI test script:
+  `npm run test`
+  Result: 219 tests passed.
+- Chat UI production build:
+  `npm run build`
+  Result: passed. Vite emitted the existing non-fatal large chunk warning for
+  the bundled app asset.
+- Whitespace check:
+  `git diff --check`
+  Result: passed. Git warned that
+  `apps/chat_ui/src/plugin_browser/index.ts` will normalize CRLF to LF when Git
+  next touches it.
+
+Live local readback:
+
+- `GET /plugins/capabilities/library/proposal-evidence/source-readiness`
+  returned `ok=true`,
+  `kind=plugin.capability_library.proposal_evidence_source_readiness`,
+  `proposal_evidence_missing_count=2268`,
+  `proposal_evidence_ready_count=0`,
+  `automatic_source_candidate_capability_count=0`,
+  `automatic_sources_exhausted=true`,
+  `operator_evidence_intake_candidate_capability_count=2268`,
+  `operator_evidence_ref_required_count=2268`, and
+  `recorded_operator_evidence_capability_count=0`.
+- The same live readback reported `status=blocked` and
+  `next_smallest_truthful_gap=stage17_capability_pack_promotion_rules` because
+  local generated-plugin data had one current upstream pack-discipline blocker
+  during validation. This pass did not clear or conceal that blocker.
+
+Validation risk:
+
+- This pass did not run the full repository gate `.\scripts\check.ps1`.
+- This pass did not record real proposal-evidence refs and did not advance
+  proposal review or promotion readiness.
+- The new source-readiness route is a readback/inventory surface only. It
+  identifies the next legitimate evidence path; it does not validate the truth
+  of operator-supplied refs.
+
+Remaining truthful gap:
+
+- Stage 17 remains blocked until current local pack-discipline blockers are
+  cleared and real proposal-evidence refs are supplied or recorded through a
+  governed path.
+- The current source inventory shows no automatic proposal-evidence candidates
+  in the local readback. The legitimate proposal-evidence gap remains operator
+  evidence refs, not synthetic backfill.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

@@ -4467,6 +4467,202 @@ def test_plugins_capability_library_proposal_evidence_friction_summary_refs_back
     assert proposal_state["review_status"] == "staged"
 
 
+def test_plugins_capability_library_proposal_evidence_source_readiness_inventory(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    from fastapi.testclient import TestClient
+
+    from francis.api.app import create_app
+    from francis.api.routes import plugins
+
+    _isolate_generated_plugin_root(monkeypatch, plugins, tmp_path)
+    client = TestClient(create_app())
+    pack_id = "ops.capability_library_proposal_evidence_source_readiness"
+    pack_version = "1.0.0"
+    meta = {
+        **_forge_promotion_meta("capability_library_proposal_evidence_source_readiness"),
+        "pack_id": pack_id,
+        "pack_version": pack_version,
+        "pack_name": "Ops Capability Library Proposal Evidence Source Readiness Pack",
+        "promotion_rules": [
+            "metadata_receipt_before_promotion",
+            "quality_standards_before_promotion",
+            "operator_review_before_promotion",
+        ],
+        "pack_governance": {
+            "risk_tier": "normal",
+            "scope": "build_dev",
+            "operator_review_required": True,
+        },
+    }
+    built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Capability Library Proposal Evidence Source Readiness Plugin",
+            "description": "Stage 17 proposal evidence source readiness coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": meta,
+        },
+    )
+    assert built.status_code == 200
+    built_body = built.json()
+    assert built_body["ok"] is True
+    plugin_id = str(built_body["plugin_id"])
+    proposal_id = str(built_body["proposal_id"])
+
+    registry = plugins._load_registry()
+    plugin = plugins._read_plugin(registry, plugin_id)
+    assert plugin is not None
+    plugin_meta = dict(plugin.get("meta") or {})
+    plugin_meta.pop("proposal_evidence", None)
+    plugin_meta.pop("evidence", None)
+    plugin_meta.pop("friction_summary", None)
+    plugin_meta.pop("friction", None)
+    plugin["meta"] = plugin_meta
+    plugins._write_plugin(registry, plugins._normalize_plugin_record(plugin_id, plugin))
+    plugins._save_registry_and_catalog(registry)
+    proposal_path = plugins._plugin_proposal_path(proposal_id)
+    proposal_record = json.loads(proposal_path.read_text(encoding="utf-8"))
+    assert isinstance(proposal_record, dict)
+    friction = dict(proposal_record.get("friction") or {})
+    friction["evidence"] = []
+    proposal_record["friction"] = friction
+    proposal_path.write_text(json.dumps(proposal_record, indent=2, sort_keys=True), encoding="utf-8")
+
+    _approve_capability_pack_operator_review(
+        client,
+        pack_id=pack_id,
+        pack_version=pack_version,
+    )
+
+    readiness = client.get("/plugins/capabilities/library/proposal-evidence/source-readiness")
+
+    assert readiness.status_code == 200
+    readiness_body = readiness.json()
+    assert readiness_body["ok"] is True
+    assert readiness_body["kind"] == "plugin.capability_library.proposal_evidence_source_readiness"
+    assert readiness_body["stage"] == "Stage 17 / Capability Economy"
+    assert readiness_body["status"] == "operator_evidence_refs_required"
+    assert readiness_body["proposal_evidence_source_readiness_ready"] is True
+    assert readiness_body["proposal_evidence_missing_count"] == 1
+    assert readiness_body["proposal_evidence_ready_count"] == 0
+    assert readiness_body["automatic_source_candidate_capability_count"] == 0
+    assert readiness_body["automatic_sources_exhausted"] is True
+    assert readiness_body["operator_evidence_intake_candidate_capability_count"] == 1
+    assert readiness_body["operator_evidence_ref_required_count"] == 1
+    assert readiness_body["recorded_operator_evidence_capability_count"] == 0
+    assert readiness_body["next_smallest_truthful_gap"] == (
+        "stage17_capability_library_operator_proposal_evidence_refs"
+    )
+    assert readiness_body["routes"]["proposal_evidence_source_readiness_route"] == (
+        "/plugins/capabilities/library/proposal-evidence/source-readiness"
+    )
+    assert readiness_body["routes"]["operator_intake_export_route"] == (
+        "/plugins/capabilities/library/proposal-evidence/operator-intake/export"
+    )
+    assert readiness_body["requirements"]["read_only_source_inventory"] is True
+    assert readiness_body["requirements"]["no_synthetic_evidence"] is True
+    assert readiness_body["requirements"]["does_not_validate_evidence_truth"] is True
+    assert readiness_body["governance"]["read_only"] is True
+    assert readiness_body["governance"]["does_not_write_proposals"] is True
+    assert readiness_body["governance"]["does_not_approve_proposals"] is True
+    assert readiness_body["governance"]["does_not_promote_capabilities"] is True
+    assert readiness_body["governance"]["memory_write"] is False
+
+    inventory = readiness_body["source_inventory"]
+    assert inventory["existing_linked_proposal_artifact"]["candidate_capability_count"] == 0
+    assert inventory["existing_linked_proposal_artifact"]["writes_proposals"] is False
+    assert inventory["existing_registry_friction_summary_ref"]["candidate_capability_count"] == 0
+    assert inventory["existing_registry_friction_summary_ref"]["records_reference_not_friction_summary_body"] is True
+    assert inventory["operator_supplied_evidence_refs"]["ready"] is True
+    assert inventory["operator_supplied_evidence_refs"]["candidate_capability_count"] == 1
+    assert inventory["operator_supplied_evidence_refs"]["does_not_validate_evidence_truth"] is True
+    assert inventory["recorded_operator_evidence_refs"]["recorded_capability_count"] == 0
+    assert inventory["synthetic_evidence"]["status"] == "disallowed"
+
+    friction_pack_id = "ops.capability_library_proposal_evidence_source_readiness_friction"
+    friction_meta = {
+        **_forge_promotion_meta("capability_library_proposal_evidence_source_readiness_friction"),
+        "pack_id": friction_pack_id,
+        "pack_version": pack_version,
+        "pack_name": "Ops Capability Library Proposal Evidence Source Readiness Friction Pack",
+        "promotion_rules": [
+            "metadata_receipt_before_promotion",
+            "quality_standards_before_promotion",
+            "operator_review_before_promotion",
+        ],
+        "pack_governance": {
+            "risk_tier": "normal",
+            "scope": "build_dev",
+            "operator_review_required": True,
+        },
+    }
+    friction_built = client.post(
+        "/plugins/build",
+        json={
+            "name": "Capability Library Proposal Evidence Source Readiness Friction Plugin",
+            "description": "Stage 17 proposal evidence source readiness friction coverage",
+            "actor": _PLUGIN_ACTOR,
+            "meta": friction_meta,
+        },
+    )
+    assert friction_built.status_code == 200
+    friction_body = friction_built.json()
+    assert friction_body["ok"] is True
+    friction_plugin_id = str(friction_body["plugin_id"])
+    friction_proposal_id = str(friction_body["proposal_id"])
+
+    registry = plugins._load_registry()
+    friction_plugin = plugins._read_plugin(registry, friction_plugin_id)
+    assert friction_plugin is not None
+    friction_plugin_meta = dict(friction_plugin.get("meta") or {})
+    friction_plugin_meta.pop("proposal_evidence", None)
+    friction_plugin_meta.pop("evidence", None)
+    friction_plugin_meta["friction_summary"] = friction_meta["friction_summary"]
+    friction_plugin["meta"] = friction_plugin_meta
+    plugins._write_plugin(registry, plugins._normalize_plugin_record(friction_plugin_id, friction_plugin))
+    plugins._save_registry_and_catalog(registry)
+    friction_proposal_path = plugins._plugin_proposal_path(friction_proposal_id)
+    friction_proposal_record = json.loads(friction_proposal_path.read_text(encoding="utf-8"))
+    assert isinstance(friction_proposal_record, dict)
+    friction_proposal = dict(friction_proposal_record.get("friction") or {})
+    friction_proposal["evidence"] = []
+    friction_proposal_record["friction"] = friction_proposal
+    friction_proposal_path.write_text(
+        json.dumps(friction_proposal_record, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+
+    _approve_capability_pack_operator_review(
+        client,
+        pack_id=friction_pack_id,
+        pack_version=pack_version,
+    )
+
+    readiness_with_friction = client.get("/plugins/capabilities/library/proposal-evidence/source-readiness")
+
+    assert readiness_with_friction.status_code == 200
+    friction_readiness_body = readiness_with_friction.json()
+    assert friction_readiness_body["ok"] is True
+    assert friction_readiness_body["status"] == "ready_for_friction_summary_ref_backfill"
+    assert friction_readiness_body["proposal_evidence_missing_count"] == 2
+    assert friction_readiness_body["automatic_source_candidate_capability_count"] == 1
+    assert friction_readiness_body["automatic_sources_exhausted"] is False
+    assert friction_readiness_body["operator_evidence_intake_candidate_capability_count"] == 2
+    assert friction_readiness_body["source_inventory"]["existing_registry_friction_summary_ref"]["ready"] is True
+    assert (
+        friction_readiness_body["source_inventory"]["existing_registry_friction_summary_ref"][
+            "candidate_capability_count"
+        ]
+        == 1
+    )
+    assert friction_readiness_body["source_inventory"]["operator_supplied_evidence_refs"]["ready"] is True
+
+
 def test_plugins_capability_library_operator_proposal_evidence_intake_records_operator_refs_only(
     monkeypatch,
     tmp_path: Path,

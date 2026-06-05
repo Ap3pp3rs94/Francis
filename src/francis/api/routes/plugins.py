@@ -149,6 +149,9 @@ _CAPABILITY_LIBRARY_PROPOSAL_EVIDENCE_REMEDIATION_APPLY_ROUTE = (
 _CAPABILITY_LIBRARY_PROPOSAL_EVIDENCE_REMEDIATION_SOURCE = (
     "stage17_capability_library_proposal_evidence_remediation_apply"
 )
+_CAPABILITY_LIBRARY_PROPOSAL_EVIDENCE_SOURCE_READINESS_ROUTE = (
+    "/plugins/capabilities/library/proposal-evidence/source-readiness"
+)
 _CAPABILITY_LIBRARY_PROPOSAL_EVIDENCE_FRICTION_REF_APPLY_ROUTE = (
     "/plugins/capabilities/library/proposal-evidence/friction-summary-refs/apply"
 )
@@ -3255,6 +3258,7 @@ def _capability_library_proposal_evidence_plan_projection(
         "capability_preview_limit": _CAPABILITY_LIBRARY_PROPOSAL_EVIDENCE_PLAN_PREVIEW_LIMIT,
         "routes": {
             "promotion_plan_route": "/plugins/capabilities/library/promotion/plan",
+            "proposal_evidence_source_readiness_route": (_CAPABILITY_LIBRARY_PROPOSAL_EVIDENCE_SOURCE_READINESS_ROUTE),
             "proposal_review_plan_route": "/plugins/capabilities/library/proposal-review/plan",
             "proposal_review_route": "/forge/proposals/decision",
             "promotion_route": "/plugins/enable",
@@ -5593,6 +5597,208 @@ def _capability_library_proposal_review_apply_readiness_projection(
             "generated_plugin_registry_sync_performed": sync_performed,
             "does_not_mutate_registry": not sync_performed,
             "does_not_write_receipts": True,
+            "does_not_write_proposal_review_receipts": True,
+            "does_not_approve_proposals": True,
+            "does_not_promote_capabilities": True,
+            "does_not_enable_capabilities": True,
+            "does_not_execute_capabilities": True,
+            "proposal_review_authority": False,
+            "promotion_authority": False,
+            "execution_authority": False,
+            "approval_authority": False,
+            "memory_write": False,
+        },
+        "next_smallest_truthful_gap": next_gap,
+    }
+
+
+def _capability_library_proposal_evidence_source_readiness_projection(
+    *,
+    proposal_evidence_plan: dict[str, Any],
+    artifact_remediation: dict[str, Any],
+    friction_summary_refs: dict[str, Any],
+    operator_checklist: dict[str, Any],
+    operator_audit: dict[str, Any],
+    proposal_review_apply_readiness: dict[str, Any],
+    generated_plugin_sync_performed: bool,
+) -> dict[str, Any]:
+    discipline_blocked_pack_count = _count_value(proposal_evidence_plan.get("blocked_pack_count"))
+    proposal_evidence_missing_count = _count_value(proposal_evidence_plan.get("proposal_evidence_missing_count"))
+    proposal_evidence_ready_count = _count_value(proposal_evidence_plan.get("proposal_evidence_ready_count"))
+    blocked_before_evidence_count = _count_value(proposal_evidence_plan.get("blocked_before_evidence_count"))
+    proposal_review_missing_count = _count_value(proposal_evidence_plan.get("proposal_review_missing_count"))
+    artifact_candidate_pack_count = _count_value(artifact_remediation.get("candidate_pack_count"))
+    artifact_candidate_capability_count = _count_value(artifact_remediation.get("candidate_capability_count"))
+    friction_candidate_pack_count = _count_value(friction_summary_refs.get("candidate_pack_count"))
+    friction_candidate_capability_count = _count_value(friction_summary_refs.get("candidate_capability_count"))
+    operator_candidate_pack_count = _count_value(operator_checklist.get("candidate_pack_count"))
+    operator_candidate_capability_count = _count_value(operator_checklist.get("candidate_capability_count"))
+    operator_evidence_ref_required_count = _count_value(operator_checklist.get("evidence_ref_required_count"))
+    recorded_operator_pack_count = _count_value(operator_audit.get("recorded_pack_count"))
+    recorded_operator_capability_count = _count_value(operator_audit.get("recorded_capability_count"))
+    recorded_operator_evidence_ref_count = _count_value(operator_audit.get("evidence_ref_count"))
+    automatic_source_candidate_pack_count = artifact_candidate_pack_count + friction_candidate_pack_count
+    automatic_source_candidate_capability_count = (
+        artifact_candidate_capability_count + friction_candidate_capability_count
+    )
+    automatic_sources_exhausted = (
+        proposal_evidence_missing_count > 0 and automatic_source_candidate_capability_count == 0
+    )
+
+    if discipline_blocked_pack_count:
+        status = "blocked"
+        next_gap = _safe_str(proposal_evidence_plan.get("next_smallest_truthful_gap")).strip()
+    elif proposal_evidence_missing_count == 0:
+        status = "proposal_evidence_complete"
+        next_gap = _safe_str(proposal_review_apply_readiness.get("next_smallest_truthful_gap")).strip()
+    elif artifact_candidate_capability_count:
+        status = "ready_for_existing_artifact_evidence_backfill"
+        next_gap = _safe_str(artifact_remediation.get("next_smallest_truthful_gap")).strip()
+    elif friction_candidate_capability_count:
+        status = "ready_for_friction_summary_ref_backfill"
+        next_gap = _safe_str(friction_summary_refs.get("next_smallest_truthful_gap")).strip()
+    elif operator_candidate_capability_count:
+        status = "operator_evidence_refs_required"
+        next_gap = "stage17_capability_library_operator_proposal_evidence_refs"
+    elif blocked_before_evidence_count:
+        status = "blocked_before_operator_evidence_refs"
+        next_gap = _safe_str(proposal_evidence_plan.get("next_smallest_truthful_gap")).strip()
+    else:
+        status = "blocked_no_current_evidence_source"
+        next_gap = _safe_str(proposal_evidence_plan.get("next_smallest_truthful_gap")).strip()
+
+    sync_performed = bool(generated_plugin_sync_performed)
+    return {
+        "stage": "Stage 17 / Capability Economy",
+        "status": status,
+        "proposal_evidence_source_readiness_ready": not bool(discipline_blocked_pack_count),
+        "proposal_evidence_missing_count": proposal_evidence_missing_count,
+        "proposal_evidence_ready_count": proposal_evidence_ready_count,
+        "proposal_review_missing_count": proposal_review_missing_count,
+        "blocked_before_evidence_count": blocked_before_evidence_count,
+        "automatic_source_candidate_pack_count": automatic_source_candidate_pack_count,
+        "automatic_source_candidate_capability_count": automatic_source_candidate_capability_count,
+        "automatic_sources_exhausted": automatic_sources_exhausted,
+        "operator_evidence_intake_candidate_pack_count": operator_candidate_pack_count,
+        "operator_evidence_intake_candidate_capability_count": operator_candidate_capability_count,
+        "operator_evidence_ref_required_count": operator_evidence_ref_required_count,
+        "recorded_operator_evidence_pack_count": recorded_operator_pack_count,
+        "recorded_operator_evidence_capability_count": recorded_operator_capability_count,
+        "recorded_operator_evidence_ref_count": recorded_operator_evidence_ref_count,
+        "proposal_review_apply_status": _safe_str(proposal_review_apply_readiness.get("status")).strip(),
+        "source_proposal_evidence_plan": {
+            "status": _safe_str(proposal_evidence_plan.get("status")).strip(),
+            "candidate_pack_count": _count_value(proposal_evidence_plan.get("candidate_pack_count")),
+            "candidate_capability_count": _count_value(proposal_evidence_plan.get("candidate_capability_count")),
+            "proposal_evidence_missing_count": proposal_evidence_missing_count,
+            "proposal_evidence_ready_count": proposal_evidence_ready_count,
+            "proposal_review_missing_count": proposal_review_missing_count,
+            "blocked_before_evidence_count": blocked_before_evidence_count,
+            "next_smallest_truthful_gap": _safe_str(proposal_evidence_plan.get("next_smallest_truthful_gap")).strip(),
+        },
+        "source_inventory": {
+            "existing_linked_proposal_artifact": {
+                "status": _safe_str(artifact_remediation.get("status")).strip(),
+                "ready": bool(artifact_remediation.get("proposal_evidence_remediation_ready")),
+                "candidate_pack_count": artifact_candidate_pack_count,
+                "candidate_capability_count": artifact_candidate_capability_count,
+                "claim_scope": "existing_linked_proposal_artifact_friction_evidence",
+                "apply_route": _CAPABILITY_LIBRARY_PROPOSAL_EVIDENCE_REMEDIATION_APPLY_ROUTE,
+                "requires_plugins_write_scope": True,
+                "writes_registry_metadata_on_apply": True,
+                "writes_proposals": False,
+            },
+            "existing_registry_friction_summary_ref": {
+                "status": _safe_str(friction_summary_refs.get("status")).strip(),
+                "ready": bool(friction_summary_refs.get("proposal_evidence_friction_summary_refs_ready")),
+                "candidate_pack_count": friction_candidate_pack_count,
+                "candidate_capability_count": friction_candidate_capability_count,
+                "claim_scope": _CAPABILITY_LIBRARY_PROPOSAL_EVIDENCE_FRICTION_REF_CLAIM_SCOPE,
+                "apply_route": _CAPABILITY_LIBRARY_PROPOSAL_EVIDENCE_FRICTION_REF_APPLY_ROUTE,
+                "requires_plugins_write_scope": True,
+                "records_reference_not_friction_summary_body": True,
+                "requires_future_review": True,
+                "writes_registry_metadata_on_apply": True,
+                "writes_proposals": False,
+            },
+            "operator_supplied_evidence_refs": {
+                "status": _safe_str(operator_checklist.get("status")).strip(),
+                "ready": bool(operator_checklist.get("operator_evidence_intake_checklist_ready")),
+                "candidate_pack_count": operator_candidate_pack_count,
+                "candidate_capability_count": operator_candidate_capability_count,
+                "evidence_ref_required_count": operator_evidence_ref_required_count,
+                "claim_scope": "operator_supplied_friction_evidence_reference_not_independent_verification",
+                "apply_route": _CAPABILITY_LIBRARY_OPERATOR_PROPOSAL_EVIDENCE_INTAKE_APPLY_ROUTE,
+                "preview_route": _CAPABILITY_LIBRARY_OPERATOR_PROPOSAL_EVIDENCE_INTAKE_PREVIEW_ROUTE,
+                "worksheet_route": _CAPABILITY_LIBRARY_OPERATOR_PROPOSAL_EVIDENCE_INTAKE_WORKSHEET_ROUTE,
+                "export_route": _CAPABILITY_LIBRARY_OPERATOR_PROPOSAL_EVIDENCE_INTAKE_EXPORT_ROUTE,
+                "requires_plugins_write_scope": True,
+                "dry_run_required_before_apply": True,
+                "does_not_validate_evidence_truth": True,
+                "requires_future_review": True,
+            },
+            "recorded_operator_evidence_refs": {
+                "status": _safe_str(operator_audit.get("status")).strip(),
+                "ready": bool(operator_audit.get("operator_evidence_intake_audit_ready")),
+                "recorded_pack_count": recorded_operator_pack_count,
+                "recorded_capability_count": recorded_operator_capability_count,
+                "evidence_ref_count": recorded_operator_evidence_ref_count,
+                "future_review_required_count": _count_value(operator_audit.get("future_review_required_count")),
+                "audit_route": _CAPABILITY_LIBRARY_OPERATOR_PROPOSAL_EVIDENCE_INTAKE_AUDIT_ROUTE,
+            },
+            "synthetic_evidence": {
+                "status": "disallowed",
+                "ready": False,
+                "candidate_capability_count": 0,
+                "no_synthetic_evidence": True,
+            },
+        },
+        "routes": {
+            "proposal_evidence_source_readiness_route": (_CAPABILITY_LIBRARY_PROPOSAL_EVIDENCE_SOURCE_READINESS_ROUTE),
+            "proposal_evidence_plan_route": "/plugins/capabilities/library/proposal-evidence/plan",
+            "proposal_evidence_remediation_route": "/plugins/capabilities/library/proposal-evidence/remediation",
+            "proposal_evidence_remediation_apply_route": (
+                _CAPABILITY_LIBRARY_PROPOSAL_EVIDENCE_REMEDIATION_APPLY_ROUTE
+            ),
+            "proposal_evidence_friction_summary_refs_route": (
+                "/plugins/capabilities/library/proposal-evidence/friction-summary-refs"
+            ),
+            "proposal_evidence_friction_summary_refs_apply_route": (
+                _CAPABILITY_LIBRARY_PROPOSAL_EVIDENCE_FRICTION_REF_APPLY_ROUTE
+            ),
+            "operator_intake_checklist_route": _CAPABILITY_LIBRARY_OPERATOR_PROPOSAL_EVIDENCE_INTAKE_CHECKLIST_ROUTE,
+            "operator_intake_worksheet_route": _CAPABILITY_LIBRARY_OPERATOR_PROPOSAL_EVIDENCE_INTAKE_WORKSHEET_ROUTE,
+            "operator_intake_export_route": _CAPABILITY_LIBRARY_OPERATOR_PROPOSAL_EVIDENCE_INTAKE_EXPORT_ROUTE,
+            "operator_intake_import_preview_route": (
+                _CAPABILITY_LIBRARY_OPERATOR_PROPOSAL_EVIDENCE_INTAKE_IMPORT_PREVIEW_ROUTE
+            ),
+            "operator_intake_audit_route": _CAPABILITY_LIBRARY_OPERATOR_PROPOSAL_EVIDENCE_INTAKE_AUDIT_ROUTE,
+            "operator_intake_preview_route": _CAPABILITY_LIBRARY_OPERATOR_PROPOSAL_EVIDENCE_INTAKE_PREVIEW_ROUTE,
+            "operator_intake_apply_route": _CAPABILITY_LIBRARY_OPERATOR_PROPOSAL_EVIDENCE_INTAKE_APPLY_ROUTE,
+            "proposal_review_apply_readiness_route": _CAPABILITY_LIBRARY_PROPOSAL_REVIEW_APPLY_READINESS_ROUTE,
+            "proposal_review_route": "/forge/proposals/decision",
+        },
+        "requirements": {
+            "read_only_source_inventory": True,
+            "proposal_evidence_required_before_proposal_review": True,
+            "automatic_sources_must_be_existing_artifacts_or_registry_refs": True,
+            "operator_supplied_refs_required_when_automatic_sources_exhausted": True,
+            "operator_supplied_refs_are_not_independently_verified": True,
+            "future_proposal_review_required_after_evidence": True,
+            "dry_run_required_before_any_apply": True,
+            "no_synthetic_evidence": True,
+            "does_not_validate_evidence_truth": True,
+            "does_not_review_or_approve_proposals": True,
+            "does_not_promote_or_enable_capabilities": True,
+        },
+        "governance": {
+            "read_only": True,
+            "operator_facing": True,
+            "generated_plugin_registry_sync_performed": sync_performed,
+            "does_not_mutate_registry": not sync_performed,
+            "does_not_write_receipts": True,
+            "does_not_write_validation_receipts": True,
+            "does_not_write_proposals": True,
             "does_not_write_proposal_review_receipts": True,
             "does_not_approve_proposals": True,
             "does_not_promote_capabilities": True,
@@ -8928,6 +9134,96 @@ def capability_library_proposal_evidence_plan() -> dict[str, object]:
         return {
             "ok": False,
             "kind": "plugin.capability_library.proposal_evidence_plan",
+            "error": api_error_message(exc),
+        }
+
+
+@router.get("/capabilities/library/proposal-evidence/source-readiness")
+def capability_library_proposal_evidence_source_readiness() -> dict[str, object]:
+    try:
+        registry = _load_registry()
+        synced = _sync_generated_plugins(registry)
+        catalog = _save_registry_and_catalog(registry) if synced else _compile_runtime_catalog(registry)
+        runtime_catalog = _read_runtime_catalog_payload(catalog)
+        marketplace = marketplace_from_plugin_catalog(runtime_catalog)
+        entries = list(marketplace.catalog())
+        available_proposals = _available_capability_pack_proposals()
+        available_validation_receipts = _available_capability_pack_validation_receipts()
+        available_promotion_receipts = _available_capability_pack_promotion_receipts()
+        promotion_discipline = analyze_capability_pack_promotion_discipline(
+            entries,
+            available_proposal_ids=available_proposals["ids"],
+            available_validation_receipt_ids=available_validation_receipts["ids"],
+            available_promotion_receipt_ids=available_promotion_receipts["ids"],
+            operator_review_decisions=_read_capability_pack_operator_review_decisions(limit=500),
+        )
+        source_plan = _capability_library_proposal_evidence_plan_projection(
+            registry=registry,
+            entries=entries,
+            promotion_discipline=promotion_discipline,
+            generated_plugin_sync_performed=bool(synced),
+        )
+        artifact_remediation = _capability_library_proposal_evidence_remediation_projection(
+            registry=registry,
+            entries=entries,
+            promotion_discipline=promotion_discipline,
+            generated_plugin_sync_performed=bool(synced),
+        )
+        friction_summary_refs = _capability_library_proposal_evidence_friction_summary_ref_projection(
+            registry=registry,
+            entries=entries,
+            promotion_discipline=promotion_discipline,
+            generated_plugin_sync_performed=bool(synced),
+        )
+        operator_checklist = _capability_library_operator_proposal_evidence_intake_checklist_projection(
+            registry=registry,
+            entries=entries,
+            promotion_discipline=promotion_discipline,
+            source_plan=source_plan,
+            generated_plugin_sync_performed=bool(synced),
+        )
+        operator_audit = _capability_library_operator_proposal_evidence_intake_audit_projection(
+            registry=registry,
+            entries=entries,
+            promotion_discipline=promotion_discipline,
+            source_plan=source_plan,
+            generated_plugin_sync_performed=bool(synced),
+        )
+        proposal_review_plan = _capability_library_proposal_review_plan_projection(
+            registry=registry,
+            entries=entries,
+            promotion_discipline=promotion_discipline,
+            generated_plugin_sync_performed=bool(synced),
+        )
+        proposal_review_apply_readiness = _capability_library_proposal_review_apply_readiness_projection(
+            proposal_review_plan=proposal_review_plan,
+            proposal_evidence_plan=source_plan,
+            operator_evidence_audit=operator_audit,
+            generated_plugin_sync_performed=bool(synced),
+        )
+        readiness = _capability_library_proposal_evidence_source_readiness_projection(
+            proposal_evidence_plan=source_plan,
+            artifact_remediation=artifact_remediation,
+            friction_summary_refs=friction_summary_refs,
+            operator_checklist=operator_checklist,
+            operator_audit=operator_audit,
+            proposal_review_apply_readiness=proposal_review_apply_readiness,
+            generated_plugin_sync_performed=bool(synced),
+        )
+        return {
+            "ok": True,
+            "kind": "plugin.capability_library.proposal_evidence_source_readiness",
+            **readiness,
+            "catalog": {
+                "path": _safe_str(catalog.get("path")).strip(),
+                "total_plugins": int(runtime_catalog.get("total_plugins") or catalog.get("total_plugins") or 0),
+                "total_tools": int(runtime_catalog.get("total_tools") or catalog.get("total_tools") or 0),
+            },
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "kind": "plugin.capability_library.proposal_evidence_source_readiness",
             "error": api_error_message(exc),
         }
 
