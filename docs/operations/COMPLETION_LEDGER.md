@@ -63993,6 +63993,45 @@ Remaining truthful gap:
   change backend readiness counts. Stage 17 still needs real operator refs to
   pass through the governed backend intake path.
 
+### Stage 17 operator evidence import-preview guard readback
+
+This pass made the backend import-preview governance guard visible in the Chat
+UI after an operator previews filled evidence rows.
+
+Shipped behavior:
+
+- `apps/chat_ui/src/plugin_browser/index.ts` now exposes
+  `summarizeOperatorEvidenceImportPreviewGuards()`, a framework-agnostic helper
+  that preserves backend guard flags as explicit `true`, `false`, or `unknown`
+  strings instead of coercing missing fields.
+- `apps/chat_ui/src/App.tsx` now renders import-preview guard badges for
+  `read_only`, `preview_only`, `write_authority`,
+  `writes_registry_metadata`, `writes_operator_evidence_metadata`,
+  `does_not_validate_evidence_truth`, `no_synthetic_evidence`, and
+  `memory_write`.
+- These badges are shown only after a backend import-preview response exists.
+  They are readback only and do not grant authority, dry-run, apply refs,
+  approve proposals, promote capabilities, or write memory/registry metadata.
+
+Latest validation for this UI helper:
+
+- Chat UI client/contract tests:
+  `cd apps\chat_ui; npm run test -- src/plugin_browser/index.test.ts`
+  Result: 224 tests passed.
+- Chat UI production build:
+  `cd apps\chat_ui; npm run build`
+  Result: passed. Vite emitted the existing non-fatal large chunk warning.
+- Whitespace check:
+  `git diff --check`
+  Result: passed with the existing Git CRLF normalization warning for
+  `apps/chat_ui/src/plugin_browser/index.ts`.
+
+Remaining truthful gap:
+
+- The import-preview guard readback does not validate evidence truth or apply
+  evidence refs. Stage 17 still requires real operator refs to pass through
+  backend import-preview, dry-run, and governed apply.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:

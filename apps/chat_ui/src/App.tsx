@@ -111,6 +111,7 @@ import {
   PluginBrowserApiError,
   PluginBrowserClient,
   operatorEvidenceExportRowsToImportPreviewText,
+  summarizeOperatorEvidenceImportPreviewGuards,
   summarizeOperatorEvidenceImportRowsText,
 } from "./plugin_browser";
 import {
@@ -18787,6 +18788,10 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
     () => summarizeOperatorEvidenceImportRowsText(capabilityLibraryOperatorProposalEvidenceImportRows),
     [capabilityLibraryOperatorProposalEvidenceImportRows],
   );
+  const operatorProposalEvidenceImportPreviewGuardSummary = useMemo(
+    () => summarizeOperatorEvidenceImportPreviewGuards(capabilityLibraryOperatorProposalEvidenceImportPreview),
+    [capabilityLibraryOperatorProposalEvidenceImportPreview],
+  );
   const operatorProposalEvidenceAuditCounts = useMemo(
     () => ({
       packs: capabilityLibraryOperatorProposalEvidenceIntakeAudit?.recorded_pack_count ?? 0,
@@ -21009,6 +21014,73 @@ function PluginsPanel(props: { baseUrl: string; onOpenApprovals: (approvalId?: s
                       </span>
                       <span style={badgeStyle("groups")}>
                         groups {operatorProposalEvidenceImportPreviewCounts.applyGroups}
+                      </span>
+                      <span
+                        style={badgeStyle(
+                          operatorProposalEvidenceImportPreviewGuardSummary.read_only === "true" ? "clear" : "pending",
+                        )}
+                      >
+                        preview read only {operatorProposalEvidenceImportPreviewGuardSummary.read_only}
+                      </span>
+                      <span
+                        style={badgeStyle(
+                          operatorProposalEvidenceImportPreviewGuardSummary.preview_only === "true" ? "clear" : "pending",
+                        )}
+                      >
+                        preview only {operatorProposalEvidenceImportPreviewGuardSummary.preview_only}
+                      </span>
+                      <span
+                        style={badgeStyle(
+                          operatorProposalEvidenceImportPreviewGuardSummary.write_authority === "false"
+                            ? "clear"
+                            : "blocked",
+                        )}
+                      >
+                        write authority {operatorProposalEvidenceImportPreviewGuardSummary.write_authority}
+                      </span>
+                      <span
+                        style={badgeStyle(
+                          operatorProposalEvidenceImportPreviewGuardSummary.writes_registry_metadata === "false"
+                            ? "clear"
+                            : "blocked",
+                        )}
+                      >
+                        registry writes {operatorProposalEvidenceImportPreviewGuardSummary.writes_registry_metadata}
+                      </span>
+                      <span
+                        style={badgeStyle(
+                          operatorProposalEvidenceImportPreviewGuardSummary.writes_operator_evidence_metadata === "false"
+                            ? "clear"
+                            : "blocked",
+                        )}
+                      >
+                        evidence writes {operatorProposalEvidenceImportPreviewGuardSummary.writes_operator_evidence_metadata}
+                      </span>
+                      <span
+                        style={badgeStyle(
+                          operatorProposalEvidenceImportPreviewGuardSummary.does_not_validate_evidence_truth === "true"
+                            ? "claim"
+                            : "pending",
+                        )}
+                      >
+                        does not validate truth{" "}
+                        {operatorProposalEvidenceImportPreviewGuardSummary.does_not_validate_evidence_truth}
+                      </span>
+                      <span
+                        style={badgeStyle(
+                          operatorProposalEvidenceImportPreviewGuardSummary.no_synthetic_evidence === "true"
+                            ? "clear"
+                            : "pending",
+                        )}
+                      >
+                        no synthetic evidence {operatorProposalEvidenceImportPreviewGuardSummary.no_synthetic_evidence}
+                      </span>
+                      <span
+                        style={badgeStyle(
+                          operatorProposalEvidenceImportPreviewGuardSummary.memory_write === "false" ? "clear" : "blocked",
+                        )}
+                      >
+                        memory writes {operatorProposalEvidenceImportPreviewGuardSummary.memory_write}
                       </span>
                     </>
                   ) : null}

@@ -5,6 +5,7 @@ import {
   PluginBrowserApiError,
   PluginBrowserClient,
   operatorEvidenceExportRowsToImportPreviewText,
+  summarizeOperatorEvidenceImportPreviewGuards,
   summarizeOperatorEvidenceImportRowsText,
 } from "./index.ts";
 
@@ -148,6 +149,38 @@ test("summarizeOperatorEvidenceImportRowsText keeps blank and malformed rows unr
   assert.equal(malformed.ready_for_import_preview, false);
   assert.equal(malformed.invalid_row_count, 1);
   assert.ok(malformed.parse_error);
+});
+
+test("summarizeOperatorEvidenceImportPreviewGuards preserves backend preview guards", () => {
+  assert.deepEqual(
+    summarizeOperatorEvidenceImportPreviewGuards({
+      ok: true,
+      requirements: {
+        no_synthetic_evidence: true,
+        does_not_validate_evidence_truth: true,
+      },
+      governance: {
+        read_only: true,
+        preview_only: true,
+        write_authority: false,
+        writes_registry_metadata: false,
+        writes_operator_evidence_metadata: false,
+        memory_write: false,
+      },
+    }),
+    {
+      read_only: "true",
+      preview_only: "true",
+      write_authority: "false",
+      writes_registry_metadata: "false",
+      writes_operator_evidence_metadata: "false",
+      does_not_validate_evidence_truth: "true",
+      no_synthetic_evidence: "true",
+      memory_write: "false",
+    },
+  );
+
+  assert.equal(summarizeOperatorEvidenceImportPreviewGuards(null).read_only, "unknown");
 });
 
 test("PluginBrowserClient lifecycle mutations send an explicit plugin actor", async () => {

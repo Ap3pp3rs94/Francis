@@ -1426,6 +1426,17 @@ export type PluginCapabilityLibraryOperatorEvidenceImportRowsTextSummary = {
   parse_error?: string;
 };
 
+export type PluginCapabilityLibraryOperatorEvidenceImportPreviewGuardSummary = {
+  read_only: string;
+  preview_only: string;
+  write_authority: string;
+  writes_registry_metadata: string;
+  writes_operator_evidence_metadata: string;
+  does_not_validate_evidence_truth: string;
+  no_synthetic_evidence: string;
+  memory_write: string;
+};
+
 export type PluginCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewRow = {
   row_index: number;
   pack_id?: string;
@@ -1985,6 +1996,27 @@ export function summarizeOperatorEvidenceImportRowsText(
     pending_row_count: pending,
     invalid_row_count: invalid,
     ready_for_import_preview: filled > 0,
+  };
+}
+
+function booleanGuardStatus(value: unknown): string {
+  return typeof value === "boolean" ? String(value) : "unknown";
+}
+
+export function summarizeOperatorEvidenceImportPreviewGuards(
+  preview: PluginCapabilityLibraryOperatorProposalEvidenceIntakeImportPreviewResponse | null | undefined,
+): PluginCapabilityLibraryOperatorEvidenceImportPreviewGuardSummary {
+  const requirements = isRecord(preview?.requirements) ? preview.requirements : {};
+  const governance = isRecord(preview?.governance) ? preview.governance : {};
+  return {
+    read_only: booleanGuardStatus(governance.read_only),
+    preview_only: booleanGuardStatus(governance.preview_only),
+    write_authority: booleanGuardStatus(governance.write_authority),
+    writes_registry_metadata: booleanGuardStatus(governance.writes_registry_metadata),
+    writes_operator_evidence_metadata: booleanGuardStatus(governance.writes_operator_evidence_metadata),
+    does_not_validate_evidence_truth: booleanGuardStatus(requirements.does_not_validate_evidence_truth),
+    no_synthetic_evidence: booleanGuardStatus(requirements.no_synthetic_evidence),
+    memory_write: booleanGuardStatus(governance.memory_write),
   };
 }
 
