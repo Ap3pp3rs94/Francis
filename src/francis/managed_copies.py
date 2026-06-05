@@ -24,6 +24,8 @@ MANAGED_COPIES_SLA_FRAMEWORK_CONTRACT_KIND = "francis.stage18.managed_copies.sla
 MANAGED_COPIES_SLA_COMMITMENT_REVIEW_KIND = "francis.stage18.managed_copies.sla_commitment_review"
 MANAGED_COPIES_SLA_WRITE_SCOPE = "managed_copies.sla.write"
 MANAGED_COPIES_ROLES_CONTRACT_KIND = "francis.stage18.managed_copies.roles_contract"
+MANAGED_COPIES_ROLE_AUTHORITY_REVIEW_KIND = "francis.stage18.managed_copies.role_authority_review"
+MANAGED_COPIES_ROLE_AUTHORITY_WRITE_SCOPE = "managed_copies.role_authority.write"
 MANAGED_COPIES_DECOMMISSION_CONTRACT_KIND = "francis.stage18.managed_copies.decommission_contract"
 MANAGED_COPIES_COMPLETION_REVIEW_KIND = "francis.stage18.managed_copies.completion_review"
 MANAGED_COPIES_RUNTIME_EVIDENCE_CONTRACT_KIND = "francis.stage18.managed_copies.runtime_evidence_contract"
@@ -462,6 +464,7 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "sla_framework_contract": "/managed-copies/sla-framework-contract",
             "sla_commitment_review": "/managed-copies/sla-commitment-review",
             "roles_contract": "/managed-copies/roles-contract",
+            "role_authority_review": "/managed-copies/role-authority-review",
             "decommission_contract": "/managed-copies/decommission-contract",
             "runtime_evidence_contract": "/managed-copies/runtime-evidence-contract",
             "runtime_evidence_readbacks": "/managed-copies/runtime-evidence-readbacks",
@@ -1779,6 +1782,7 @@ def managed_copy_sla_commitment_review_blocked_snapshot(
 def managed_copy_roles_contract_snapshot() -> dict[str, Any]:
     """Return managed-copy role boundaries without activating role authority."""
     governance = _governance()
+    status = managed_copies_status_snapshot()
     roles = [
         _managed_copy_role(
             "end_user",
@@ -1916,6 +1920,12 @@ def managed_copy_roles_contract_snapshot() -> dict[str, Any]:
             "raw_secret_exposure",
             "tenant_admin_core_law_bypass",
         ],
+        "role_authority_review_route": "/managed-copies/role-authority-review",
+        "routes": {
+            **status["routes"],
+            "roles_contract": "/managed-copies/roles-contract",
+            "role_authority_review": "/managed-copies/role-authority-review",
+        },
         "governance": governance,
         "read_only": governance["read_only"],
         "projection_only": governance["projection_only"],
@@ -1936,6 +1946,127 @@ def managed_copy_roles_contract_snapshot() -> dict[str, Any]:
         "activates_automation_principal": False,
         "pairs_node": False,
         "revokes_role": False,
+        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+    }
+
+
+def managed_copy_role_authority_review_blocked_snapshot(
+    payload: dict[str, Any],
+    *,
+    actor: str,
+) -> dict[str, Any]:
+    """Return a governed role-authority review preflight blocked by Stage 17."""
+    governance = _governance()
+    contract = managed_copy_roles_contract_snapshot()
+    role_id = _safe_str(payload.get("role_id") or payload.get("role")).strip()
+    role_by_id = {item["id"]: item for item in contract["roles"]}
+    role = role_by_id.get(role_id, {})
+    requested_authority = _safe_str(payload.get("requested_authority") or payload.get("authority")).strip()
+    allowed_authorities = set(role.get("allowed_authority", []))
+    denied_authorities = set(role.get("denied_authority", []))
+    authority_known = requested_authority in allowed_authorities or requested_authority in denied_authorities
+    binding_type = _safe_str(payload.get("binding_type") or payload.get("binding")).strip()
+    known_binding_types = {
+        "role_binding",
+        "tenant_admin_delegation",
+        "support_authority",
+        "automation_principal_scope",
+        "paired_node_trust",
+        "credential_binding",
+        "role_revocation",
+    }
+    binding_type_known = binding_type in known_binding_types
+    raw_evidence_refs = payload.get("evidence_refs")
+    evidence_ref_count = len(raw_evidence_refs) if isinstance(raw_evidence_refs, list) else 0
+    return {
+        "ok": False,
+        "kind": MANAGED_COPIES_ROLE_AUTHORITY_REVIEW_KIND,
+        "stage": STAGE18_MANAGED_COPIES_STAGE,
+        "source_id": "managed_copies",
+        "status": "blocked_stage17_prerequisite",
+        "error": "stage17_prerequisite_not_closed",
+        "actor": _safe_str(actor).strip(),
+        "copy_id_present": bool(_safe_str(payload.get("copy_id")).strip()),
+        "tenant_id_present": bool(_safe_str(payload.get("tenant_id")).strip()),
+        "role_id": role_id if role else "unknown",
+        "role_known": bool(role),
+        "requested_authority": requested_authority if authority_known else "unknown",
+        "requested_authority_known": authority_known,
+        "requested_authority_allowed_by_contract": requested_authority in allowed_authorities,
+        "requested_authority_denied_by_contract": requested_authority in denied_authorities,
+        "binding_type": binding_type if binding_type_known else "unknown",
+        "binding_type_known": binding_type_known,
+        "credential_binding_present": payload.get("credential_binding") is not None,
+        "support_access_requested": payload.get("support_access") is not None,
+        "automation_principal_requested": payload.get("automation_principal") is not None,
+        "node_pairing_requested": payload.get("node_pairing") is not None,
+        "evidence_ref_count": evidence_ref_count,
+        "stage17_closed_by_receipt": bool(contract["stage17_closed_by_receipt"]),
+        "stage17_blocker": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "roles_contract_ready": False,
+        "role_authority_review_enabled": False,
+        "role_authority_active": False,
+        "authority_binding_enabled": False,
+        "credential_binding_enabled": False,
+        "support_authority_enabled": False,
+        "automation_principal_enabled": False,
+        "paired_node_authority_enabled": False,
+        "creates_role_binding": False,
+        "binds_credentials": False,
+        "grants_support_access": False,
+        "activates_automation_principal": False,
+        "pairs_node": False,
+        "revokes_role": False,
+        "receipt_ready": False,
+        "writes_registry": False,
+        "writes_memory": False,
+        "writes_receipt": False,
+        "writes_receipts": False,
+        "writes_tenant_state": False,
+        "runs_tools": False,
+        "runs_shell": False,
+        "runs_git": False,
+        "launches_browser": False,
+        "captures_screen": False,
+        "grants_execution_authority": False,
+        "grants_mutation_authority": False,
+        "expected_review_receipt_path": "logs/managed_copies/role_authority_reviews.jsonl",
+        "required_scope": MANAGED_COPIES_ROLE_AUTHORITY_WRITE_SCOPE,
+        "routes": {
+            **contract["routes"],
+            "role_authority_review": "/managed-copies/role-authority-review",
+        },
+        "governance": {
+            **governance,
+            "write_route": True,
+            "preflight_only": True,
+            "permission_scope": MANAGED_COPIES_ROLE_AUTHORITY_WRITE_SCOPE,
+            "permission_checked": True,
+            "role_authority_review_enabled": False,
+            "role_authority_active": False,
+            "does_not_create_role_binding": True,
+            "does_not_bind_credentials": True,
+            "does_not_grant_support_access": True,
+            "does_not_activate_automation_principal": True,
+            "does_not_pair_node": True,
+            "does_not_revoke_role": True,
+            "does_not_record_role_authority_receipt": True,
+            "does_not_echo_raw_authority_payload": True,
+            "requires_stage17_closure_receipt": True,
+            "writes_registry": False,
+            "writes_memory": False,
+            "writes_receipts": False,
+            "writes_tenant_state": False,
+            "runs_tools": False,
+            "runs_shell": False,
+            "runs_git": False,
+            "launches_browser": False,
+            "captures_screen": False,
+            "grants_execution_authority": False,
+            "grants_mutation_authority": False,
+        },
+        "read_only": governance["read_only"],
+        "projection_only": governance["projection_only"],
         "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
     }
 

@@ -10,6 +10,7 @@ from francis.managed_copies import (
     MANAGED_COPIES_COPY_CREATION_WRITE_SCOPE,
     MANAGED_COPIES_ISOLATION_VERIFICATION_WRITE_SCOPE,
     MANAGED_COPIES_ROGUE_RECOVERY_WRITE_SCOPE,
+    MANAGED_COPIES_ROLE_AUTHORITY_WRITE_SCOPE,
     MANAGED_COPIES_RUNTIME_EVIDENCE_WRITE_SCOPE,
     MANAGED_COPIES_SAFE_DELTA_WRITE_SCOPE,
     MANAGED_COPIES_SLA_WRITE_SCOPE,
@@ -22,6 +23,7 @@ from francis.managed_copies import (
     managed_copy_isolation_verification_blocked_snapshot,
     managed_copy_rogue_recovery_contract_snapshot,
     managed_copy_rogue_recovery_review_blocked_snapshot,
+    managed_copy_role_authority_review_blocked_snapshot,
     managed_copy_runtime_evidence_contract_snapshot,
     managed_copy_runtime_evidence_readback_blocked_snapshot,
     managed_copy_runtime_evidence_readbacks_snapshot,
@@ -93,6 +95,20 @@ def _permission_denied(
         "opens_incident": False,
         "records_sla_receipt": False,
         "grants_support_authority": False,
+        "roles_contract_ready": False,
+        "role_authority_review_enabled": False,
+        "role_authority_active": False,
+        "authority_binding_enabled": False,
+        "credential_binding_enabled": False,
+        "support_authority_enabled": False,
+        "automation_principal_enabled": False,
+        "paired_node_authority_enabled": False,
+        "creates_role_binding": False,
+        "binds_credentials": False,
+        "grants_support_access": False,
+        "activates_automation_principal": False,
+        "pairs_node": False,
+        "revokes_role": False,
         "writes_receipt": False,
         "writes_receipts": False,
         "writes_tenant_state": False,
@@ -128,6 +144,20 @@ def _permission_denied(
             "opens_incident": False,
             "records_sla_receipt": False,
             "grants_support_authority": False,
+            "roles_contract_ready": False,
+            "role_authority_review_enabled": False,
+            "role_authority_active": False,
+            "authority_binding_enabled": False,
+            "credential_binding_enabled": False,
+            "support_authority_enabled": False,
+            "automation_principal_enabled": False,
+            "paired_node_authority_enabled": False,
+            "creates_role_binding": False,
+            "binds_credentials": False,
+            "grants_support_access": False,
+            "activates_automation_principal": False,
+            "pairs_node": False,
+            "revokes_role": False,
             "writes_receipts": False,
             "writes_tenant_state": False,
             "grants_execution_authority": False,
@@ -259,6 +289,24 @@ def sla_commitment_review(payload: dict[str, Any], request: Request) -> dict[str
 @router.get("/roles-contract")
 def roles_contract() -> dict[str, Any]:
     return managed_copy_roles_contract_snapshot()
+
+
+@router.post("/role-authority-review")
+def role_authority_review(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+    actor = _managed_copy_write_actor(payload)
+    decision = _write_permission(
+        actor,
+        required_scope=MANAGED_COPIES_ROLE_AUTHORITY_WRITE_SCOPE,
+        route=request.url.path,
+        method=request.method,
+    )
+    if not decision.allowed:
+        return _permission_denied(
+            decision,
+            required_scope=MANAGED_COPIES_ROLE_AUTHORITY_WRITE_SCOPE,
+            next_step="configure_actor_scope_before_reviewing_managed_copy_role_authority",
+        )
+    return managed_copy_role_authority_review_blocked_snapshot(payload, actor=actor)
 
 
 @router.get("/decommission-contract")

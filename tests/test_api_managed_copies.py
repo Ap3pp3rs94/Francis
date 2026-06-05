@@ -41,6 +41,7 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
         "sla_framework_contract": "/managed-copies/sla-framework-contract",
         "sla_commitment_review": "/managed-copies/sla-commitment-review",
         "roles_contract": "/managed-copies/roles-contract",
+        "role_authority_review": "/managed-copies/role-authority-review",
         "decommission_contract": "/managed-copies/decommission-contract",
         "runtime_evidence_contract": "/managed-copies/runtime-evidence-contract",
         "runtime_evidence_readbacks": "/managed-copies/runtime-evidence-readbacks",
@@ -870,6 +871,8 @@ def test_managed_copy_roles_contract_is_projection_only_and_authority_inactive(
     assert body["stage17_closed_by_receipt"] is False
     assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
     assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["role_authority_review_route"] == "/managed-copies/role-authority-review"
+    assert body["routes"]["role_authority_review"] == "/managed-copies/role-authority-review"
 
     role_ids = {item["id"] for item in body["roles"]}
     assert role_ids == {
@@ -946,6 +949,172 @@ def test_managed_copy_roles_contract_is_projection_only_and_authority_inactive(
     assert governance["copy_creation_enabled"] is False
     assert governance["writes_tenant_state"] is False
     assert governance["writes_receipts"] is False
+    assert governance["grants_execution_authority"] is False
+    assert governance["grants_mutation_authority"] is False
+    assert not data_root.exists()
+
+
+def test_managed_copy_role_authority_review_denies_unscoped_actor_without_writing(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv("FRANCIS_API_ACTOR_SCOPES", "{}")
+
+    response = TestClient(create_app()).post(
+        "/managed-copies/role-authority-review",
+        json={
+            "request_actor": "stage18.role-unscoped",
+            "copy_id": "copy-denied",
+            "tenant_id": "tenant-denied",
+            "role_id": "support_operator",
+            "requested_authority": "inspect_tenant_visible_incident_state",
+            "binding_type": "support_authority",
+            "support_access": {"reason": "denied path should not grant access"},
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["status"] == "denied"
+    assert body["error"] == "api_permission_denied"
+    assert body["required_scope"] == "managed_copies.role_authority.write"
+    assert body["roles_contract_ready"] is False
+    assert body["role_authority_review_enabled"] is False
+    assert body["role_authority_active"] is False
+    assert body["authority_binding_enabled"] is False
+    assert body["credential_binding_enabled"] is False
+    assert body["support_authority_enabled"] is False
+    assert body["automation_principal_enabled"] is False
+    assert body["paired_node_authority_enabled"] is False
+    assert body["creates_role_binding"] is False
+    assert body["binds_credentials"] is False
+    assert body["grants_support_access"] is False
+    assert body["activates_automation_principal"] is False
+    assert body["pairs_node"] is False
+    assert body["revokes_role"] is False
+    assert body["writes_receipts"] is False
+    assert body["writes_tenant_state"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+
+    governance = body["governance"]
+    assert governance["gate"] == "permission_gate"
+    assert governance["reason"] == "missing_scopes"
+    assert governance["required_scope"] == "managed_copies.role_authority.write"
+    assert governance["evidence"]["route"] == "/managed-copies/role-authority-review"
+    assert governance["evidence"]["method"] == "POST"
+    assert governance["evidence"]["required_scope_count"] == 1
+    assert governance["evidence"]["actor_scope_count"] == 0
+    assert not data_root.exists()
+
+
+def test_managed_copy_role_authority_review_blocks_scoped_actor_until_stage17_closes(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    actor = "stage18.role-reviewer"
+    raw_tenant_id = "tenant-role-secret-should-not-echo"
+    raw_credential_secret = "credential-secret-should-not-echo"
+    raw_support_reason = "raw support authority context should not echo"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+    monkeypatch.setenv(
+        "FRANCIS_API_ACTOR_SCOPES",
+        json.dumps({actor: ["managed_copies.role_authority.write"]}),
+    )
+
+    response = TestClient(create_app()).post(
+        "/managed-copies/role-authority-review",
+        json={
+            "request_actor": actor,
+            "copy_id": "copy-123",
+            "tenant_id": raw_tenant_id,
+            "role_id": "support_operator",
+            "requested_authority": "inspect_tenant_visible_incident_state",
+            "binding_type": "support_authority",
+            "credential_binding": {"secret": raw_credential_secret},
+            "support_access": {"reason": raw_support_reason},
+            "evidence_refs": ["receipt-1", "receipt-2"],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    encoded = json.dumps(body)
+    assert body["ok"] is False
+    assert body["kind"] == "francis.stage18.managed_copies.role_authority_review"
+    assert body["status"] == "blocked_stage17_prerequisite"
+    assert body["error"] == "stage17_prerequisite_not_closed"
+    assert body["actor"] == actor
+    assert body["copy_id_present"] is True
+    assert body["tenant_id_present"] is True
+    assert raw_tenant_id not in encoded
+    assert raw_credential_secret not in encoded
+    assert raw_support_reason not in encoded
+    assert body["role_id"] == "support_operator"
+    assert body["role_known"] is True
+    assert body["requested_authority"] == "inspect_tenant_visible_incident_state"
+    assert body["requested_authority_known"] is True
+    assert body["requested_authority_allowed_by_contract"] is True
+    assert body["requested_authority_denied_by_contract"] is False
+    assert body["binding_type"] == "support_authority"
+    assert body["binding_type_known"] is True
+    assert body["credential_binding_present"] is True
+    assert body["support_access_requested"] is True
+    assert body["automation_principal_requested"] is False
+    assert body["node_pairing_requested"] is False
+    assert body["evidence_ref_count"] == 2
+    assert body["stage17_closed_by_receipt"] is False
+    assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["roles_contract_ready"] is False
+    assert body["role_authority_review_enabled"] is False
+    assert body["role_authority_active"] is False
+    assert body["authority_binding_enabled"] is False
+    assert body["credential_binding_enabled"] is False
+    assert body["support_authority_enabled"] is False
+    assert body["automation_principal_enabled"] is False
+    assert body["paired_node_authority_enabled"] is False
+    assert body["creates_role_binding"] is False
+    assert body["binds_credentials"] is False
+    assert body["grants_support_access"] is False
+    assert body["activates_automation_principal"] is False
+    assert body["pairs_node"] is False
+    assert body["revokes_role"] is False
+    assert body["receipt_ready"] is False
+    assert body["writes_registry"] is False
+    assert body["writes_receipts"] is False
+    assert body["writes_tenant_state"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["expected_review_receipt_path"] == "logs/managed_copies/role_authority_reviews.jsonl"
+    assert body["required_scope"] == "managed_copies.role_authority.write"
+    assert body["routes"]["role_authority_review"] == "/managed-copies/role-authority-review"
+    assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+
+    governance = body["governance"]
+    assert governance["write_route"] is True
+    assert governance["preflight_only"] is True
+    assert governance["permission_scope"] == "managed_copies.role_authority.write"
+    assert governance["permission_checked"] is True
+    assert governance["role_authority_review_enabled"] is False
+    assert governance["role_authority_active"] is False
+    assert governance["does_not_create_role_binding"] is True
+    assert governance["does_not_bind_credentials"] is True
+    assert governance["does_not_grant_support_access"] is True
+    assert governance["does_not_activate_automation_principal"] is True
+    assert governance["does_not_pair_node"] is True
+    assert governance["does_not_revoke_role"] is True
+    assert governance["does_not_record_role_authority_receipt"] is True
+    assert governance["does_not_echo_raw_authority_payload"] is True
+    assert governance["requires_stage17_closure_receipt"] is True
+    assert governance["writes_receipts"] is False
+    assert governance["writes_tenant_state"] is False
     assert governance["grants_execution_authority"] is False
     assert governance["grants_mutation_authority"] is False
     assert not data_root.exists()
