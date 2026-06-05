@@ -28,6 +28,7 @@ from francis.api.routes import (
     industrial,
     knowledge_fabric,
     lens,
+    managed_copies,
     memory_timeline,
     missions,
     operations,
@@ -96,6 +97,7 @@ def create_app() -> FastAPI:
     app.include_router(trust_calibration.router, prefix="/trust-calibration", tags=["trust_calibration"])
     app.include_router(adversarial_hardening.router, prefix="/adversarial-hardening", tags=["adversarial_hardening"])
     app.include_router(swarm.router, prefix="/swarm", tags=["swarm"])
+    app.include_router(managed_copies.router, prefix="/managed-copies", tags=["managed_copies"])
     app.include_router(industrial.router, prefix="/industrial", tags=["industrial"])
     app.include_router(digital_twin.router, prefix="/digital_twin", tags=["digital_twin"])
 
