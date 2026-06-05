@@ -33,6 +33,7 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
         "safe_delta_model_contract": "/managed-copies/safe-delta-model-contract",
         "rogue_recovery_contract": "/managed-copies/rogue-recovery-contract",
         "sla_framework_contract": "/managed-copies/sla-framework-contract",
+        "roles_contract": "/managed-copies/roles-contract",
     }
 
     deliverable_ids = {item["id"] for item in body["deliverables"]}
@@ -102,6 +103,114 @@ def test_managed_copies_status_is_readonly_stage18_prerequisite_contract(
     assert governance["privacy_weak_pooling_allowed"] is False
     assert governance["uncontrolled_forks_allowed"] is False
     assert governance["invisible_vendor_power_allowed"] is False
+    assert not data_root.exists()
+
+
+def test_managed_copy_roles_contract_is_projection_only_and_authority_inactive(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    data_root = tmp_path / "francis_data"
+    monkeypatch.setenv("FRANCIS_DATA_DIR", str(data_root))
+
+    response = TestClient(create_app()).get("/managed-copies/roles-contract")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kind"] == "francis.stage18.managed_copies.roles_contract"
+    assert body["stage"] == "Stage 18 / Managed Copies Platform"
+    assert body["source_id"] == "managed_copies"
+    assert body["status"] == "contract_readback_ready"
+    assert body["contract_readback_ready"] is True
+    assert body["roles_contract_ready"] is False
+    assert body["role_authority_active"] is False
+    assert body["authority_binding_enabled"] is False
+    assert body["credential_binding_enabled"] is False
+    assert body["support_authority_enabled"] is False
+    assert body["automation_principal_enabled"] is False
+    assert body["paired_node_authority_enabled"] is False
+    assert body["copy_creation_enabled"] is False
+    assert body["stage17_closed_by_receipt"] is False
+    assert body["stage17_blocker"] == "stage17_capability_library_operator_proposal_evidence_refs"
+    assert body["next_smallest_truthful_gap"] == "stage17_capability_library_operator_proposal_evidence_refs"
+
+    role_ids = {item["id"] for item in body["roles"]}
+    assert role_ids == {
+        "end_user",
+        "tenant_admin",
+        "support_operator",
+        "automation_principal",
+        "paired_node",
+    }
+    assert body["required_role_count"] == len(body["roles"])
+    assert body["active_role_count"] == 0
+    assert all(item["status"] == "contract_only" for item in body["roles"])
+    assert all(item["requires_explicit_binding"] is True for item in body["roles"])
+    assert all(item["authority_active"] is False for item in body["roles"])
+    assert all(item["allowed_authority"] for item in body["roles"])
+    assert all(item["denied_authority"] for item in body["roles"])
+
+    assert body["role_separation_rules"] == [
+        "human_authority_separate_from_backend_service_authority",
+        "support_authority_separate_from_tenant_admin_authority",
+        "automation_principal_cannot_impersonate_human_operator",
+        "paired_node_authority_is_scoped_and_revocable",
+        "tenant_admin_cannot_surrender_core_ip_or_bypass_core_law",
+    ]
+    assert body["credential_binding_rules"] == [
+        "scoped_credentials_only",
+        "rotation_and_revocation_required",
+        "bind_credentials_to_node_copy_connector_or_capability_class",
+        "no_raw_secret_exposure_in_lens_logs_receipts_or_replay",
+        "approval_and_audit_required_for_creation_attachment_elevation_and_replacement",
+    ]
+    assert body["required_receipts"] == [
+        "role_binding_receipt",
+        "tenant_admin_delegation_receipt",
+        "support_authority_receipt",
+        "automation_principal_scope_receipt",
+        "paired_node_trust_receipt",
+        "credential_binding_receipt",
+        "role_revocation_receipt",
+    ]
+    assert body["blocked_failure_modes"] == [
+        "fuzzy_role_authority",
+        "standing_support_access",
+        "backend_service_impersonates_user",
+        "paired_node_trust_expansion",
+        "automation_principal_scope_creep",
+        "raw_secret_exposure",
+        "tenant_admin_core_law_bypass",
+    ]
+
+    assert body["read_only"] is True
+    assert body["projection_only"] is True
+    assert body["writes_registry"] is False
+    assert body["writes_memory"] is False
+    assert body["writes_receipts"] is False
+    assert body["writes_tenant_state"] is False
+    assert body["runs_tools"] is False
+    assert body["runs_shell"] is False
+    assert body["runs_git"] is False
+    assert body["launches_browser"] is False
+    assert body["captures_screen"] is False
+    assert body["grants_execution_authority"] is False
+    assert body["grants_mutation_authority"] is False
+    assert body["creates_role_binding"] is False
+    assert body["binds_credentials"] is False
+    assert body["grants_support_access"] is False
+    assert body["activates_automation_principal"] is False
+    assert body["pairs_node"] is False
+    assert body["revokes_role"] is False
+
+    governance = body["governance"]
+    assert governance["read_only"] is True
+    assert governance["projection_only"] is True
+    assert governance["copy_creation_enabled"] is False
+    assert governance["writes_tenant_state"] is False
+    assert governance["writes_receipts"] is False
+    assert governance["grants_execution_authority"] is False
+    assert governance["grants_mutation_authority"] is False
     assert not data_root.exists()
 
 

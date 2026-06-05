@@ -9,6 +9,7 @@ MANAGED_COPIES_ISOLATION_RULES_CONTRACT_KIND = "francis.stage18.managed_copies.i
 MANAGED_COPIES_SAFE_DELTA_MODEL_CONTRACT_KIND = "francis.stage18.managed_copies.safe_delta_model_contract"
 MANAGED_COPIES_ROGUE_RECOVERY_CONTRACT_KIND = "francis.stage18.managed_copies.rogue_recovery_contract"
 MANAGED_COPIES_SLA_FRAMEWORK_CONTRACT_KIND = "francis.stage18.managed_copies.sla_framework_contract"
+MANAGED_COPIES_ROLES_CONTRACT_KIND = "francis.stage18.managed_copies.roles_contract"
 STAGE17_OPERATOR_EVIDENCE_REFS_GAP = "stage17_capability_library_operator_proposal_evidence_refs"
 
 
@@ -181,6 +182,27 @@ def _sla_commitment(
     }
 
 
+def _managed_copy_role(
+    role_id: str,
+    title: str,
+    *,
+    status: str,
+    allowed_authority: list[str],
+    denied_authority: list[str],
+    requires_explicit_binding: bool = True,
+    authority_active: bool = False,
+) -> dict[str, Any]:
+    return {
+        "id": role_id,
+        "title": title,
+        "status": status,
+        "allowed_authority": allowed_authority,
+        "denied_authority": denied_authority,
+        "requires_explicit_binding": requires_explicit_binding,
+        "authority_active": authority_active,
+    }
+
+
 def managed_copies_status_snapshot() -> dict[str, Any]:
     """Return the Stage 18 managed-copy substrate posture without creating state."""
     governance = _governance()
@@ -249,8 +271,11 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "managed_copy_roles",
             "Managed-copy role contract",
             ready=False,
-            status="pending",
+            status="contract_readback_ready",
             next_gap="stage18_managed_copy_roles_contract",
+            evidence=[
+                "GET /managed-copies/roles-contract exposes managed-copy role boundaries without activating authority.",
+            ],
         ),
         _deliverable(
             "exit_rights",
@@ -281,6 +306,7 @@ def managed_copies_status_snapshot() -> dict[str, Any]:
             "safe_delta_model_contract": "/managed-copies/safe-delta-model-contract",
             "rogue_recovery_contract": "/managed-copies/rogue-recovery-contract",
             "sla_framework_contract": "/managed-copies/sla-framework-contract",
+            "roles_contract": "/managed-copies/roles-contract",
         },
         "managed_copy_roles_required": [
             "end_user",
@@ -1063,5 +1089,169 @@ def managed_copy_sla_framework_contract_snapshot() -> dict[str, Any]:
         "opens_incident": False,
         "records_sla_receipt": False,
         "grants_support_authority": False,
+        "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+    }
+
+
+def managed_copy_roles_contract_snapshot() -> dict[str, Any]:
+    """Return managed-copy role boundaries without activating role authority."""
+    governance = _governance()
+    roles = [
+        _managed_copy_role(
+            "end_user",
+            "End user",
+            status="contract_only",
+            allowed_authority=[
+                "use_tenant_scoped_surfaces",
+                "request_work_inside_tenant_policy",
+                "view_own_visible_receipts",
+            ],
+            denied_authority=[
+                "create_managed_copy",
+                "change_tenant_policy",
+                "grant_support_access",
+                "bind_credentials",
+                "pair_nodes",
+            ],
+        ),
+        _managed_copy_role(
+            "tenant_admin",
+            "Tenant admin",
+            status="contract_only",
+            allowed_authority=[
+                "approve_tenant_policy_changes",
+                "approve_support_access",
+                "review_sla_state",
+                "request_export_or_decommission",
+            ],
+            denied_authority=[
+                "surrender_core_ip",
+                "bypass_core_governance",
+                "grant_vendor_backdoor",
+                "share_raw_private_pooling",
+            ],
+        ),
+        _managed_copy_role(
+            "support_operator",
+            "Support operator",
+            status="contract_only",
+            allowed_authority=[
+                "inspect_tenant_visible_incident_state",
+                "assist_recovery_with_scoped_approval",
+                "write_support_review_receipts_when_enabled",
+            ],
+            denied_authority=[
+                "standing_tenant_access",
+                "hidden_control",
+                "read_raw_secrets",
+                "mutate_tenant_state_without_approval",
+                "expand_scope",
+            ],
+        ),
+        _managed_copy_role(
+            "automation_principal",
+            "Automation principal",
+            status="contract_only",
+            allowed_authority=[
+                "run_bounded_service_tasks_when_scoped",
+                "use_bound_service_credentials_when_enabled",
+                "emit_receipts_when_enabled",
+            ],
+            denied_authority=[
+                "impersonate_human_operator",
+                "hold_broad_standing_tokens",
+                "change_policy",
+                "grant_authority",
+            ],
+        ),
+        _managed_copy_role(
+            "paired_node",
+            "Paired node",
+            status="contract_only",
+            allowed_authority=[
+                "exchange_selective_state_when_paired",
+                "carry_node_attributed_receipts_when_enabled",
+                "participate_in_safe_delta_flow_when_approved",
+            ],
+            denied_authority=[
+                "silent_trust_expansion",
+                "receive_out_of_scope_artifacts",
+                "read_cross_tenant_memory",
+                "act_without_node_attribution",
+            ],
+        ),
+    ]
+    return {
+        "ok": True,
+        "kind": MANAGED_COPIES_ROLES_CONTRACT_KIND,
+        "stage": STAGE18_MANAGED_COPIES_STAGE,
+        "source_id": "managed_copies",
+        "status": "contract_readback_ready",
+        "contract_readback_ready": True,
+        "roles_contract_ready": False,
+        "role_authority_active": False,
+        "authority_binding_enabled": False,
+        "credential_binding_enabled": False,
+        "support_authority_enabled": False,
+        "automation_principal_enabled": False,
+        "paired_node_authority_enabled": False,
+        "copy_creation_enabled": False,
+        "stage17_closed_by_receipt": False,
+        "stage17_blocker": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
+        "roles": roles,
+        "required_role_count": len(roles),
+        "active_role_count": sum(1 for role in roles if role["authority_active"]),
+        "role_separation_rules": [
+            "human_authority_separate_from_backend_service_authority",
+            "support_authority_separate_from_tenant_admin_authority",
+            "automation_principal_cannot_impersonate_human_operator",
+            "paired_node_authority_is_scoped_and_revocable",
+            "tenant_admin_cannot_surrender_core_ip_or_bypass_core_law",
+        ],
+        "credential_binding_rules": [
+            "scoped_credentials_only",
+            "rotation_and_revocation_required",
+            "bind_credentials_to_node_copy_connector_or_capability_class",
+            "no_raw_secret_exposure_in_lens_logs_receipts_or_replay",
+            "approval_and_audit_required_for_creation_attachment_elevation_and_replacement",
+        ],
+        "required_receipts": [
+            "role_binding_receipt",
+            "tenant_admin_delegation_receipt",
+            "support_authority_receipt",
+            "automation_principal_scope_receipt",
+            "paired_node_trust_receipt",
+            "credential_binding_receipt",
+            "role_revocation_receipt",
+        ],
+        "blocked_failure_modes": [
+            "fuzzy_role_authority",
+            "standing_support_access",
+            "backend_service_impersonates_user",
+            "paired_node_trust_expansion",
+            "automation_principal_scope_creep",
+            "raw_secret_exposure",
+            "tenant_admin_core_law_bypass",
+        ],
+        "governance": governance,
+        "read_only": governance["read_only"],
+        "projection_only": governance["projection_only"],
+        "writes_registry": governance["writes_registry"],
+        "writes_memory": governance["writes_memory"],
+        "writes_receipts": governance["writes_receipts"],
+        "writes_tenant_state": governance["writes_tenant_state"],
+        "runs_tools": governance["runs_tools"],
+        "runs_shell": governance["runs_shell"],
+        "runs_git": governance["runs_git"],
+        "launches_browser": governance["launches_browser"],
+        "captures_screen": governance["captures_screen"],
+        "grants_execution_authority": governance["grants_execution_authority"],
+        "grants_mutation_authority": governance["grants_mutation_authority"],
+        "creates_role_binding": False,
+        "binds_credentials": False,
+        "grants_support_access": False,
+        "activates_automation_principal": False,
+        "pairs_node": False,
+        "revokes_role": False,
         "next_smallest_truthful_gap": STAGE17_OPERATOR_EVIDENCE_REFS_GAP,
     }

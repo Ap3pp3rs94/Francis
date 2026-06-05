@@ -79,6 +79,7 @@ def test_chat_ui_contract_endpoints_are_mounted() -> None:
         ("GET", "/managed-copies/safe-delta-model-contract"),
         ("GET", "/managed-copies/rogue-recovery-contract"),
         ("GET", "/managed-copies/sla-framework-contract"),
+        ("GET", "/managed-copies/roles-contract"),
         ("GET", "/federation/instances/list"),
         ("GET", "/federation/instances/get"),
         ("GET", "/federation/delegations/list"),

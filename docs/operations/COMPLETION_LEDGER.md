@@ -64477,6 +64477,61 @@ Remaining truthful gap:
   grant managed-service authority, create managed copies, enforce tenant
   isolation at runtime, export safe deltas, or implement live rogue recovery.
 
+### Stage 18 managed-copy roles contract readback
+
+This pass made managed-copy role boundaries inspectable without creating role
+bindings, binding credentials, granting support authority, activating automation
+principals, pairing nodes, or revoking roles.
+
+Shipped behavior:
+
+- `src/francis/managed_copies.py` now exposes
+  `managed_copy_roles_contract_snapshot()`, a read-only role-boundary contract
+  for managed copies.
+- `GET /managed-copies/roles-contract` now returns the required roles
+  `end_user`, `tenant_admin`, `support_operator`, `automation_principal`, and
+  `paired_node`, plus allowed/denied authority summaries, role separation
+  rules, credential binding rules, required receipts, and blocked failure
+  modes.
+- `GET /managed-copies/status` now advertises the roles contract route and
+  records the `managed_copy_roles` deliverable as `contract_readback_ready`
+  while still reporting `ready: false`.
+- The contract keeps `roles_contract_ready: false`,
+  `role_authority_active: false`, `authority_binding_enabled: false`,
+  `credential_binding_enabled: false`, `support_authority_enabled: false`,
+  `automation_principal_enabled: false`, `paired_node_authority_enabled: false`,
+  and `copy_creation_enabled: false`.
+  It does not create role bindings, bind credentials, grant support access,
+  activate automation principals, pair nodes, revoke roles, write registries,
+  write memory, write receipts, write tenant state, run tools, run shell, run
+  git, launch browsers, capture screens, grant execution authority, or grant
+  mutation authority.
+- The contract preserves the current blocker as
+  `stage17_capability_library_operator_proposal_evidence_refs` and reports
+  `stage17_closed_by_receipt: false`.
+
+Latest validation for this readback:
+
+- Focused API contract tests:
+  `python -m pytest tests\test_api_managed_copies.py tests\test_api_contract_chat_ui.py::test_chat_ui_contract_endpoints_are_mounted -q`
+  Result: 8 tests passed.
+- Ruff lint:
+  `python -m ruff check src\francis\managed_copies.py src\francis\api\routes\managed_copies.py tests\test_api_managed_copies.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Ruff format check:
+  `python -m ruff format --check src\francis\managed_copies.py src\francis\api\routes\managed_copies.py tests\test_api_managed_copies.py tests\test_api_contract_chat_ui.py`
+  Result: passed.
+- Mypy:
+  `python -m mypy src\francis\managed_copies.py src\francis\api\routes\managed_copies.py`
+  Result: passed.
+
+Remaining truthful gap:
+
+- This does not close Stage 17, create active managed-copy roles, bind
+  credentials, grant support authority, activate automation principals, pair
+  nodes, write role receipts, create managed copies, enforce tenant isolation at
+  runtime, activate SLAs, export safe deltas, or implement live rogue recovery.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
