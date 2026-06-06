@@ -67794,6 +67794,97 @@ Remaining truthful gap:
   managed-copy receipts, enforce tenant isolation, export safe deltas, activate
   SLAs, bind roles, or decommission tenant state.
 
+### 2026-06-06 - Stage 17 operator proposal-evidence refs record capability operator review decision pack
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence for the capability-library promotion path.
+
+This pass cleared `legacy.generated.capabilityoperatorreviewdecisionplugin`
+from the Stage 17 operator-evidence queue by recording proposal-evidence refs
+for all 15 capabilities through the existing governed operator
+proposal-evidence intake route. Stage 17 remains open because other packs still
+have unresolved evidence refs.
+
+Capabilities recorded in this pack:
+
+- `1780388599_capabilityoperatorreviewdecisionplugin`
+- `1780388894_capabilityoperatorreviewdecisionplugin`
+- `1780388999_capabilityoperatorreviewdecisionplugin`
+- `1780389059_capabilityoperatorreviewdecisionplugin`
+- `1780447723_capabilityoperatorreviewdecisionplugin`
+- `1780462934_capabilityoperatorreviewdecisionplugin`
+- `1780488147_capabilityoperatorreviewdecisionplugin`
+- `1780490603_capabilityoperatorreviewdecisionplugin`
+- `1780494975_capabilityoperatorreviewdecisionplugin`
+- `1780505783_capabilityoperatorreviewdecisionplugin`
+- `1780627109_capabilityoperatorreviewdecisionplugin`
+- `1780627270_capabilityoperatorreviewdecisionplugin`
+- `1780627976_capabilityoperatorreviewdecisionplugin`
+- `1780633311_capabilityoperatorreviewdecisionplugin`
+- `1780634503_capabilityoperatorreviewdecisionplugin`
+
+Recorded evidence ref pattern:
+
+- each capability recorded its matching proposal artifact ref
+- each capability recorded its matching validation artifact ref
+- each capability recorded shared current-shape pack metadata ref
+  `artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1780634843_legacy-generated-capabilityoperatorreviewdecisionplugin.json`
+- each capability recorded shared current-shape operator-review ref
+  `artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1780635037_legacy-generated-capabilityoperatorreviewdecisionplugin_128400.json`
+
+Latest validation for this live Stage 17 intake:
+
+- Artifact existence check:
+  all proposal, validation, metadata, and operator-review refs for the 15
+  capabilities existed under `data/artifacts/plugins`.
+- Current-shape receipt selection:
+  historical metadata/operator-review receipts existed for this pack, so the
+  selected metadata and operator-review receipts were accepted only after their
+  `capability_ids` exactly matched the current 15-capability unresolved queue.
+- Operator-review receipt coverage:
+  the selected operator-review receipt covered all 15 operator review decision
+  pack capability ids.
+- Governed dry-run/apply runner:
+  the pack walker called
+  `POST /plugins/capabilities/library/proposal-evidence/operator-intake/apply`
+  once per capability with actor `stage17.operator`,
+  `FRANCIS_API_ACTOR_SCOPES={"stage17.operator":["plugins.write"]}`,
+  `max_pack_count: 1`, `max_total_capability_count: 1`, and
+  `max_capability_count_per_pack: 1`. For every capability, dry-run returned
+  `ok: true`, `status: dry_run`, `planned_capability_count: 1`,
+  `evidence_ref_count: 4`, and a fingerprint before apply used the returned
+  fingerprint. Every apply returned `ok: true`, `status: recorded`,
+  `applied: true`, `recorded_capability_count: 1`, and
+  `evidence_ref_count: 4`.
+- Per-capability readback:
+  after apply, `GET /plugins/get?id=<capability_id>` returned the same four
+  refs, future review required, `proposal_evidence_writes_proposals: false`,
+  `proposal_evidence_approval_claimed: false`, and unchanged plugin
+  status/enabled values.
+- Direct pack summary:
+  the operator review decision pack had `recorded_capabilities: 15`,
+  `recorded_refs: 60`, and `remaining_unrecorded_in_pack: 0`; recorded
+  capabilities required future review, none wrote proposals, and none claimed
+  approval.
+- Public queue readback:
+  `GET /plugins/capabilities/library/proposal-evidence/operator-intake/checklist`
+  returned `status: ready_for_operator_evidence_refs`,
+  `candidate_pack_count: 32`, `candidate_capability_count: 1968`,
+  `evidence_ref_required_count: 1968`, first visible pack
+  `legacy.generated.capabilityoperatorreviewplugin`, and
+  `operator_review_decision_pack_still_visible: false`.
+
+Remaining truthful gap:
+
+- This clears `legacy.generated.capabilityoperatorreviewdecisionplugin` from
+  the Stage 17 operator-evidence queue, but it does not close Stage 17, promote
+  capabilities, approve proposals, grant execution authority, grant mutation
+  authority beyond governed evidence-ref recording, close the proposal-review or
+  promotion gates, independently verify artifact truth, clear the remaining 1968
+  capability evidence refs, close Stage 18, create managed copies, write
+  managed-copy receipts, enforce tenant isolation, export safe deltas, activate
+  SLAs, bind roles, or decommission tenant state.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
