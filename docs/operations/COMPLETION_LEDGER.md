@@ -68326,6 +68326,108 @@ Remaining truthful gap:
   managed-copy receipts, enforce tenant isolation, export safe deltas, activate
   SLAs, bind roles, or decommission tenant state.
 
+### 2026-06-06 - Stage 17 operator proposal-evidence refs record capability quality remediation apply pack
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence for the capability-library promotion path.
+
+This pass cleared
+`legacy.generated.capabilityqualityevidenceremediationapplyplugin` from the
+Stage 17 operator-evidence queue by recording proposal-evidence refs for all 25
+capabilities through the existing governed operator proposal-evidence intake
+route. Stage 17 remains open because other packs still have unresolved evidence
+refs.
+
+Capabilities recorded in this pack:
+
+- `1780445062_capabilityqualityevidenceremediationapplyplugin`
+- `1780445221_capabilityqualityevidenceremediationapplyplugin`
+- `1780445374_capabilityqualityevidenceremediationapplyplugin`
+- `1780445514_capabilityqualityevidenceremediationapplyplugin`
+- `1780445752_capabilityqualityevidenceremediationapplyplugin`
+- `1780447201_capabilityqualityevidenceremediationapplyplugin`
+- `1780457581_capabilityqualityevidenceremediationapplyplugin`
+- `1780457780_capabilityqualityevidenceremediationapplyplugin`
+- `1780458257_capabilityqualityevidenceremediationapplyplugin`
+- `1780459938_capabilityqualityevidenceremediationapplyplugin`
+- `1780462738_capabilityqualityevidenceremediationapplyplugin`
+- `1780487341_capabilityqualityevidenceremediationapplyplugin`
+- `1780487946_capabilityqualityevidenceremediationapplyplugin`
+- `1780488718_capabilityqualityevidenceremediationapplyplugin`
+- `1780490398_capabilityqualityevidenceremediationapplyplugin`
+- `1780493492_capabilityqualityevidenceremediationapplyplugin`
+- `1780494770_capabilityqualityevidenceremediationapplyplugin`
+- `1780498276_capabilityqualityevidenceremediationapplyplugin`
+- `1780498623_capabilityqualityevidenceremediationapplyplugin`
+- `1780502085_capabilityqualityevidenceremediationapplyplugin`
+- `1780502398_capabilityqualityevidenceremediationapplyplugin`
+- `1780503707_capabilityqualityevidenceremediationapplyplugin`
+- `1780505575_capabilityqualityevidenceremediationapplyplugin`
+- `1780508271_capabilityqualityevidenceremediationapplyplugin`
+- `1780508673_capabilityqualityevidenceremediationapplyplugin`
+
+Recorded evidence ref pattern:
+
+- each capability recorded its matching proposal artifact ref
+- each capability recorded its matching validation artifact ref
+- each capability recorded shared pack metadata ref
+  `artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1780539809_legacy-generated-capabilityqualityevidenceremediationapplyplugin.json`
+- each capability recorded shared operator-review ref
+  `artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1780632847_legacy-generated-capabilityqualityevidenceremediationapplyplugin_012000.json`
+
+Latest validation for this live Stage 17 intake:
+
+- Artifact existence check:
+  all proposal, validation, metadata, and operator-review refs for the 25
+  capabilities existed under `data/artifacts/plugins`.
+- Receipt selection:
+  the selected metadata and operator-review receipts matched the current
+  unresolved 25-capability queue for this pack before dry-run.
+- Operator-review receipt coverage:
+  the selected operator-review receipt covered all 25 quality remediation apply
+  pack capability ids.
+- Governed dry-run/apply runner:
+  the pack walker called
+  `POST /plugins/capabilities/library/proposal-evidence/operator-intake/apply`
+  once per capability with actor `stage17.operator`,
+  `FRANCIS_API_ACTOR_SCOPES={"stage17.operator":["plugins.write"]}`,
+  `max_pack_count: 1`, `max_total_capability_count: 1`, and
+  `max_capability_count_per_pack: 1`. For every capability, dry-run returned
+  `ok: true`, `status: dry_run`, `planned_capability_count: 1`,
+  `evidence_ref_count: 4`, and a fingerprint before apply used the returned
+  fingerprint. Every apply returned `ok: true`, `status: recorded`,
+  `applied: true`, `recorded_capability_count: 1`, and
+  `evidence_ref_count: 4`.
+- Per-capability readback:
+  after apply, `GET /plugins/get?id=<capability_id>` returned the same four
+  refs, future review required, `proposal_evidence_writes_proposals: false`,
+  `proposal_evidence_approval_claimed: false`, and unchanged plugin
+  status/enabled values.
+- Direct pack summary:
+  the quality remediation apply pack had `recorded_capabilities: 25`,
+  `recorded_refs: 100`, and `remaining_unrecorded_in_pack: 0`; recorded
+  capabilities required future review, none wrote proposals, and none claimed
+  approval.
+- Public queue readback:
+  `GET /plugins/capabilities/library/proposal-evidence/operator-intake/checklist`
+  returned `status: ready_for_operator_evidence_refs`,
+  `candidate_pack_count: 26`, `candidate_capability_count: 1876`,
+  `evidence_ref_required_count: 1876`, first visible pack
+  `legacy.generated.capabilityqualityevidenceremediationplugin`, and
+  `quality_remediation_apply_pack_still_visible: false`.
+
+Remaining truthful gap:
+
+- This clears
+  `legacy.generated.capabilityqualityevidenceremediationapplyplugin` from the
+  Stage 17 operator-evidence queue, but it does not close Stage 17, promote
+  capabilities, approve proposals, grant execution authority, grant mutation
+  authority beyond governed evidence-ref recording, close the proposal-review or
+  promotion gates, independently verify artifact truth, clear the remaining 1876
+  capability evidence refs, close Stage 18, create managed copies, write
+  managed-copy receipts, enforce tenant isolation, export safe deltas, activate
+  SLAs, bind roles, or decommission tenant state.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
