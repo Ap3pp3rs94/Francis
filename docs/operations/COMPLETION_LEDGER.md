@@ -66767,6 +66767,85 @@ Remaining truthful gap:
   managed-copy receipts, enforce tenant isolation, export safe deltas, activate
   SLAs, bind roles, or decommission tenant state.
 
+### 2026-06-05 - Stage 17 operator proposal-evidence refs record capability catalog chunk 12
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence for the capability-library promotion path.
+
+This pass continued `legacy.generated.capabilitycatalogplugin` by recording the
+twelfth bounded chunk of 10 capabilities through the existing governed operator
+proposal-evidence intake route. The pack is not complete; 87 catalog
+capabilities remained unresolved after this chunk.
+
+Capabilities recorded in this chunk:
+
+- `1779200096_capabilitycatalogplugin`
+- `1779203855_capabilitycatalogplugin`
+- `1779208189_capabilitycatalogplugin`
+- `1779209993_capabilitycatalogplugin`
+- `1779213642_capabilitycatalogplugin`
+- `1779218028_capabilitycatalogplugin`
+- `1779223794_capabilitycatalogplugin`
+- `1779227608_capabilitycatalogplugin`
+- `1779231662_capabilitycatalogplugin`
+- `1779237157_capabilitycatalogplugin`
+
+Recorded evidence ref pattern:
+
+- each capability recorded its matching proposal artifact ref
+- each capability recorded its matching validation artifact ref
+- each capability recorded shared pack metadata ref
+  `artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1780540826_legacy-generated-capabilitycatalogplugin.json`
+- each capability recorded shared operator-review ref
+  `artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1780632847_legacy-generated-capabilitycatalogplugin_937800.json`
+
+Latest validation for this live Stage 17 intake:
+
+- Artifact existence check:
+  all proposal, validation, metadata, and operator-review refs for the 10
+  capabilities existed under `data/artifacts/plugins`.
+- Operator-review receipt coverage:
+  the selected operator-review receipt covered all 207 catalog pack capability
+  ids.
+- Governed dry-run/apply runner:
+  the chunk walker called
+  `POST /plugins/capabilities/library/proposal-evidence/operator-intake/apply`
+  once per capability with actor `stage17.operator`,
+  `FRANCIS_API_ACTOR_SCOPES={"stage17.operator":["plugins.write"]}`,
+  `max_pack_count: 1`, `max_total_capability_count: 1`, and
+  `max_capability_count_per_pack: 1`. For every capability, dry-run returned
+  `ok: true`, `status: dry_run`, `planned_capability_count: 1`,
+  `evidence_ref_count: 4`, and a fingerprint before apply used the returned
+  fingerprint. Every apply returned `ok: true`, `status: recorded`,
+  `applied: true`, `recorded_capability_count: 1`, and
+  `evidence_ref_count: 4`.
+- Per-capability readback:
+  after apply, `GET /plugins/get?id=<capability_id>` returned the same four
+  refs, future review required, `proposal_evidence_writes_proposals: false`,
+  `proposal_evidence_approval_claimed: false`, and unchanged plugin
+  status/enabled values.
+- Direct pack summary:
+  the catalog pack had `recorded_capabilities: 120`, `recorded_refs: 480`, and
+  `remaining_unrecorded_in_pack: 87`; recorded capabilities required future
+  review, none wrote proposals, and none claimed approval.
+- Public queue readback:
+  `GET /plugins/capabilities/library/proposal-evidence/operator-intake/checklist`
+  returned `status: ready_for_operator_evidence_refs`,
+  `candidate_pack_count: 37`, `candidate_capability_count: 2092`,
+  `evidence_ref_required_count: 2092`, first visible pack
+  `legacy.generated.capabilitycatalogplugin`, and
+  `first_pack_candidate_capability_count: 87`.
+
+Remaining truthful gap:
+
+- This does not complete the catalog pack, close Stage 17, promote
+  capabilities, approve proposals, grant execution authority, grant mutation
+  authority beyond governed evidence-ref recording, close the proposal-review or
+  promotion gates, independently verify artifact truth, clear the remaining
+  2092 capability evidence refs, close Stage 18, create managed copies, write
+  managed-copy receipts, enforce tenant isolation, export safe deltas, activate
+  SLAs, bind roles, or decommission tenant state.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
