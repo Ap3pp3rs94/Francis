@@ -68058,6 +68058,101 @@ Remaining truthful gap:
   managed-copy receipts, enforce tenant isolation, export safe deltas, activate
   SLAs, bind roles, or decommission tenant state.
 
+### 2026-06-06 - Stage 17 operator proposal-evidence refs record capability promotion discipline pack
+
+Roadmap area: Stage 17 / Capability Economy, operator-supplied proposal
+evidence for the capability-library promotion path.
+
+This pass cleared `legacy.generated.capabilitypromotiondisciplineplugin` from
+the Stage 17 operator-evidence queue by recording proposal-evidence refs for all
+20 capabilities through the existing governed operator proposal-evidence intake
+route. Stage 17 remains open because other packs still have unresolved evidence
+refs.
+
+Capabilities recorded in this pack:
+
+- `1780402849_capabilitypromotiondisciplineplugin`
+- `1780403005_capabilitypromotiondisciplineplugin`
+- `1780447845_capabilitypromotiondisciplineplugin`
+- `1780462962_capabilitypromotiondisciplineplugin`
+- `1780488175_capabilitypromotiondisciplineplugin`
+- `1780490632_capabilitypromotiondisciplineplugin`
+- `1780495004_capabilitypromotiondisciplineplugin`
+- `1780505812_capabilitypromotiondisciplineplugin`
+- `1780627139_capabilitypromotiondisciplineplugin`
+- `1780627299_capabilitypromotiondisciplineplugin`
+- `1780628006_capabilitypromotiondisciplineplugin`
+- `1780633341_capabilitypromotiondisciplineplugin`
+- `1780634538_capabilitypromotiondisciplineplugin`
+- `1780635603_capabilitypromotiondisciplineplugin`
+- `1780635808_capabilitypromotiondisciplineplugin`
+- `1780635938_capabilitypromotiondisciplineplugin`
+- `1780636462_capabilitypromotiondisciplineplugin`
+- `1780665653_capabilitypromotiondisciplineplugin`
+- `1780665827_capabilitypromotiondisciplineplugin`
+- `1780665942_capabilitypromotiondisciplineplugin`
+
+Recorded evidence ref pattern:
+
+- each capability recorded its matching proposal artifact ref
+- each capability recorded its matching validation artifact ref
+- each capability recorded shared pack metadata ref
+  `artifact:plugins/capability_packs/metadata_receipts/capability_pack_metadata_1780668652_legacy-generated-capabilitypromotiondisciplineplugin.json`
+- each capability recorded shared operator-review ref
+  `artifact:plugins/capability_packs/operator_review_decisions/capability_pack_operator_review_1780669150_legacy-generated-capabilitypromotiondisciplineplugin_605100.json`
+
+Latest validation for this live Stage 17 intake:
+
+- Artifact existence check:
+  all proposal, validation, metadata, and operator-review refs for the 20
+  capabilities existed under `data/artifacts/plugins`.
+- Receipt selection:
+  the selected metadata and operator-review receipts matched the current
+  unresolved 20-capability queue for this pack before dry-run.
+- Operator-review receipt coverage:
+  the selected operator-review receipt covered all 20 promotion discipline pack
+  capability ids.
+- Governed dry-run/apply runner:
+  the pack walker called
+  `POST /plugins/capabilities/library/proposal-evidence/operator-intake/apply`
+  once per capability with actor `stage17.operator`,
+  `FRANCIS_API_ACTOR_SCOPES={"stage17.operator":["plugins.write"]}`,
+  `max_pack_count: 1`, `max_total_capability_count: 1`, and
+  `max_capability_count_per_pack: 1`. For every capability, dry-run returned
+  `ok: true`, `status: dry_run`, `planned_capability_count: 1`,
+  `evidence_ref_count: 4`, and a fingerprint before apply used the returned
+  fingerprint. Every apply returned `ok: true`, `status: recorded`,
+  `applied: true`, `recorded_capability_count: 1`, and
+  `evidence_ref_count: 4`.
+- Per-capability readback:
+  after apply, `GET /plugins/get?id=<capability_id>` returned the same four
+  refs, future review required, `proposal_evidence_writes_proposals: false`,
+  `proposal_evidence_approval_claimed: false`, and unchanged plugin
+  status/enabled values.
+- Direct pack summary:
+  the promotion discipline pack had `recorded_capabilities: 20`,
+  `recorded_refs: 80`, and `remaining_unrecorded_in_pack: 0`; recorded
+  capabilities required future review, none wrote proposals, and none claimed
+  approval.
+- Public queue readback:
+  `GET /plugins/capabilities/library/proposal-evidence/operator-intake/checklist`
+  returned `status: ready_for_operator_evidence_refs`,
+  `candidate_pack_count: 29`, `candidate_capability_count: 1924`,
+  `evidence_ref_required_count: 1924`, first visible pack
+  `legacy.generated.capabilitypromotionreceiptsplugin`, and
+  `promotion_discipline_pack_still_visible: false`.
+
+Remaining truthful gap:
+
+- This clears `legacy.generated.capabilitypromotiondisciplineplugin` from the
+  Stage 17 operator-evidence queue, but it does not close Stage 17, promote
+  capabilities, approve proposals, grant execution authority, grant mutation
+  authority beyond governed evidence-ref recording, close the proposal-review or
+  promotion gates, independently verify artifact truth, clear the remaining 1924
+  capability evidence refs, close Stage 18, create managed copies, write
+  managed-copy receipts, enforce tenant isolation, export safe deltas, activate
+  SLAs, bind roles, or decommission tenant state.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
