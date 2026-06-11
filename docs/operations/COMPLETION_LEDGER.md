@@ -68873,6 +68873,37 @@ Remaining truthful gap:
   managed-copy receipts, enforce tenant isolation, export safe deltas, activate
   SLAs, bind roles, or decommission tenant state.
 
+## 5c. Francis Lab v0 real Docker substrate verification
+
+As of `2026-06-10`, the Lab v0 real Docker execution **substrate** was verified
+against a live Docker daemon (server 29.2.0). A minimal, Francis-owned sandbox
+image (`infra/lab/Dockerfile`, `francis-lab-base:pinned`, base `alpine:3.20`
+pinned by digest `sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc`) was built locally and exercised
+through the production execution components.
+
+Exact result (no overclaim):
+
+- Real Docker substrate verified: the locked-down container shape from
+  `build_run_argv` runs with `--network none`, read-only root + read-only `/src`
+  mount, `--cap-drop ALL`, `no-new-privileges`, pids/memory limits, and tmpfs
+  `/work` scratch; network egress is blocked and exit code is 0.
+- `execution_mode=real` proven through production `SandboxExecutor.run_real`
+  (with `CapabilityRebuilder`, `validate_run`, `decide_promotion`) on a harmless
+  Francis fixture: real run, exit 0, `validate_run=VALID`, promotion
+  `drafted -> runnable` (one rung), and the host fixture repo was byte-identical
+  after the run (no host mutation).
+- No `lab.execution.run` receipt was written, because the
+  `IngestService.run_lab_capability` wrapper was not invoked (its consumed-approval
+  gate was not satisfied; it was not bypassed or faked).
+- Full wrapper approval-chain live verification (governed consumed approval ->
+  real run -> `lab.execution.run` receipt) remains **pending**. The wrapper,
+  receipt write, and approval gate stay covered by unit tests only.
+
+This entry records an infrastructure/substrate verification plus the new
+`infra/lab/` image. It does not move overall or phase percentages, does not
+advance any roadmap stage, and does not claim full `run_lab_capability` live
+verification.
+
 ## 6. Update rule
 
 Update this ledger only when at least one of the following is true:
