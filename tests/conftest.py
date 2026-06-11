@@ -169,19 +169,6 @@ def _safe_real_path(path: Path) -> str:
     return str(path.resolve())
 
 
-def _dir_size_bytes(path: Path) -> int:
-    if not path.exists():
-        return 0
-    total = 0
-    for entry in path.rglob("*"):
-        try:
-            if entry.is_file():
-                total += entry.stat().st_size
-        except (OSError, ValueError):
-            continue
-    return total
-
-
 def _session_directories(pytest_root: Path) -> list[Path]:
     if not pytest_root.exists():
         return []
@@ -244,14 +231,12 @@ def run_pytest_session_retention(
             failed_deletions.append(f"{session.resolve()} (unreadable)")
             continue
         if mtime <= stale_cutoff:
-            session_size = _dir_size_bytes(session)
             try:
                 shutil.rmtree(session)
             except OSError:
                 failed_deletions.append(str(session.resolve()))
                 continue
             deleted_sessions.append(session)
-            bytes_freed += session_size
 
     if receipt_path is None:
         receipt_path = _build_retention_receipt_path(pytest_root, now_ts)
