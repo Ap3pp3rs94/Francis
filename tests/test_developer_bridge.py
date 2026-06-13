@@ -15,8 +15,6 @@ def _normalize_newlines(value: str) -> str:
     return value.replace("\r\n", "\n")
 
 
-
-
 def test_read_repo_file_is_repo_bounded_and_text_only(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.setenv("FRANCIS_ROOT", str(tmp_path))
     target = tmp_path / "docs" / "note.md"

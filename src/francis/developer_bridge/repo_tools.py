@@ -198,7 +198,9 @@ def read_completion_ledger(max_bytes: int = _DEFAULT_MAX_BYTES) -> dict[str, obj
     return read_repo_file("docs/operations/COMPLETION_LEDGER.md", max_bytes=max_bytes)
 
 
-def read_supervised_exec_receipt(run_id: str, filename: str = "result.json", max_bytes: int = _DEFAULT_MAX_BYTES) -> dict[str, object]:
+def read_supervised_exec_receipt(
+    run_id: str, filename: str = "result.json", max_bytes: int = _DEFAULT_MAX_BYTES
+) -> dict[str, object]:
     """Read a bounded supervised-exec display artifact by run id and allowed filename."""
 
     safe_run_id = (run_id or "").strip()
@@ -283,7 +285,9 @@ def _git_lines(root: Path, args: list[str]) -> list[str]:
 def _safe_repo_path(root: Path, path: str) -> Path:
     rel = _normalize_repo_relative_path(path)
     if _is_sensitive_relpath(rel):
-        raise DeveloperBridgeError("sensitive_file_denied", "requested path is denied by developer bridge sensitivity rules")
+        raise DeveloperBridgeError(
+            "sensitive_file_denied", "requested path is denied by developer bridge sensitivity rules"
+        )
     candidate = _real_path(root / Path(rel))
     if not _path_is_under(root, candidate):
         raise DeveloperBridgeError("path_outside_repo_denied", "requested path escaped the repo root")
