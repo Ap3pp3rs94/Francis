@@ -17,6 +17,7 @@ from francis.api.routes import (
     chat,
     continuity,
     credentials,
+    developer_bridge,
     domain_learner,
     digital_twin,
     domains,
@@ -76,6 +77,7 @@ def create_app() -> FastAPI:
     app.include_router(resilience.router, prefix="/resilience", tags=["resilience"])
     app.include_router(evolution.router, prefix="/evolution", tags=["evolution"])
     app.include_router(credentials.router, prefix="/credentials", tags=["credentials"])
+    app.include_router(developer_bridge.router, prefix="/developer-bridge", tags=["developer_bridge"])
     app.include_router(web_learning.router, prefix="/web_learning", tags=["web_learning"])
     app.include_router(web_learning.router, prefix="/web-learning", tags=["web_learning"])
     app.include_router(web_learning.router, prefix="/system/web_learning", tags=["web_learning"])
