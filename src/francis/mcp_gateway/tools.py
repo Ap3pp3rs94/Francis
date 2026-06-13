@@ -381,6 +381,78 @@ def _receipts_readback(args: dict[str, Any]) -> ToolResult:
     )
 
 
+def _input_status(_args: dict[str, Any]) -> ToolResult:
+    from francis.input_actuator.tools import input_status
+
+    result = input_status()
+    return ToolResult(
+        ok=bool(result.get("ok")),
+        status=_clean_text(result.get("status"), "ready"),
+        tool="francis.input.status",
+        data=result,
+        governance={
+            "read_only": True,
+            "raw_shell": False,
+            "authority": "input_actuator_readback",
+        },
+        error=_clean_text(result.get("error")) or None,
+    )
+
+
+def _input_propose(args: dict[str, Any]) -> ToolResult:
+    from francis.input_actuator.tools import propose_input_action
+
+    result = propose_input_action(args)
+    return ToolResult(
+        ok=bool(result.get("ok")),
+        status=_clean_text(result.get("status"), "approval_required"),
+        tool="francis.input.propose",
+        data=result,
+        governance={
+            "read_only": False,
+            "raw_shell": False,
+            "authority": "manual_approval_required",
+        },
+        error=_clean_text(result.get("error")) or None,
+    )
+
+
+def _input_execute_approved(args: dict[str, Any]) -> ToolResult:
+    from francis.input_actuator.tools import execute_approved_input_action
+
+    result = execute_approved_input_action(args)
+    return ToolResult(
+        ok=bool(result.get("ok")),
+        status=_clean_text(result.get("status"), "complete" if result.get("ok") else "blocked"),
+        tool="francis.input.execute_approved",
+        data=result,
+        governance={
+            "read_only": False,
+            "raw_shell": False,
+            "authority": "manual_approval_consumed" if result.get("ok") else "manual_approval_required",
+        },
+        error=_clean_text(result.get("error")) or None,
+    )
+
+
+def _input_receipts(args: dict[str, Any]) -> ToolResult:
+    from francis.input_actuator.tools import input_receipts_readback
+
+    result = input_receipts_readback(args)
+    return ToolResult(
+        ok=bool(result.get("ok")),
+        status=_clean_text(result.get("status"), "ready"),
+        tool="francis.input.receipts",
+        data=result,
+        governance={
+            "read_only": True,
+            "raw_shell": False,
+            "authority": "input_actuator_readback",
+        },
+        error=_clean_text(result.get("error")) or None,
+    )
+
+
 _TOOL_SPECS = [
     ToolSpec("francis.health", "Read local Francis gateway health.", read_only=True),
     ToolSpec("francis.repo.status", "Read branch, head, and dirty state.", read_only=True),
@@ -399,6 +471,20 @@ _TOOL_SPECS = [
         requires_approval=True,
     ),
     ToolSpec("francis.receipts.readback", "Read MCP gateway receipts.", read_only=True),
+    ToolSpec("francis.input.status", "Read governed input actuator status.", read_only=True),
+    ToolSpec(
+        "francis.input.propose",
+        "Create a governed input action proposal.",
+        read_only=False,
+        requires_approval=True,
+    ),
+    ToolSpec(
+        "francis.input.execute_approved",
+        "Execute a previously approved governed input action.",
+        read_only=False,
+        requires_approval=True,
+    ),
+    ToolSpec("francis.input.receipts", "Read governed input actuator receipts.", read_only=True),
 ]
 
 _TOOL_HANDLERS: dict[str, Callable[[dict[str, Any]], ToolResult]] = {
@@ -409,6 +495,10 @@ _TOOL_HANDLERS: dict[str, Callable[[dict[str, Any]], ToolResult]] = {
     "francis.command.propose": _command_propose,
     "francis.command.execute_approved": _command_execute_approved,
     "francis.receipts.readback": _receipts_readback,
+    "francis.input.status": _input_status,
+    "francis.input.propose": _input_propose,
+    "francis.input.execute_approved": _input_execute_approved,
+    "francis.input.receipts": _input_receipts,
 }
 
 

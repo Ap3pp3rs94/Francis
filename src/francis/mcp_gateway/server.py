@@ -77,6 +77,45 @@ def run_stdio_server() -> None:
     def francis_receipts_readback(receipt_id: str = "") -> str:
         return _tool_payload(run_tool("francis.receipts.readback", {"receipt_id": receipt_id}))
 
+    @server.tool(name="francis_input_status")
+    def francis_input_status() -> str:
+        return _tool_payload(run_tool("francis.input.status", {}))
+
+    @server.tool(name="francis_input_propose")
+    def francis_input_propose(
+        kind: str,
+        payload_json: str,
+        objective: str,
+        actor: str = "mcp-client",
+        session_id: str = "",
+    ) -> str:
+        payload = json.loads(payload_json) if payload_json else {}
+        return _tool_payload(
+            run_tool(
+                "francis.input.propose",
+                {
+                    "kind": kind,
+                    "payload": payload,
+                    "objective": objective,
+                    "actor": actor,
+                    "session_id": session_id,
+                },
+            )
+        )
+
+    @server.tool(name="francis_input_execute_approved")
+    def francis_input_execute_approved(proposal_id: str, approval_phrase: str) -> str:
+        return _tool_payload(
+            run_tool(
+                "francis.input.execute_approved",
+                {"proposal_id": proposal_id, "approval_phrase": approval_phrase},
+            )
+        )
+
+    @server.tool(name="francis_input_receipts")
+    def francis_input_receipts(receipt_id: str = "") -> str:
+        return _tool_payload(run_tool("francis.input.receipts", {"receipt_id": receipt_id}))
+
     server.run()
 
 
