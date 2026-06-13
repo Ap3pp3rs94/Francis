@@ -7318,6 +7318,7 @@ Forge should be able to detect potential friction from several major sources:
 * repeated telemetry patterns
 * repeated user corrections
 * observed teaching sessions
+* local source and repository ingestion that exposes reusable capability patterns
 * repeated approval queues of similar shape
 * recurring incident types
 * repeated report or workflow assembly
@@ -7336,6 +7337,124 @@ The canonical path is:
 **friction → proposal → staged implementation → tests/docs/risk tier → validation → user promotion → active capability**
 
 Each stage matters.
+
+When the input is a local or open-source repository, the pre-proposal intake must
+remain source-indexed and receipts-backed: source record, repo map, risk signals,
+capability candidates, and lab plan/refusal records. It may also produce
+runner command allowlist enforcement preflight receipts that check declared
+command entries against missing live runner and allowlist controls while command
+execution stays blocked, and runner sandbox readiness receipts that check
+workspace evidence plus missing sandbox controls while execution stays blocked,
+and execution receipt write readiness receipts that check reserved execution
+receipt prewrite/final-write controls while execution receipt writing stays
+blocked, plus execution receipt prewrite binding receipts that bind the future
+`lab.execution.run` receipt schema and prewrite/final-write contracts while
+writer implementations and execution receipt writes stay blocked, plus execution
+receipt writer preflight receipts that declare reserved sink path, atomic write,
+and redaction controls while writer implementations and execution receipt writes
+stay blocked, plus synthetic no-op execution receipt writes that can prewrite and
+finalize only receipts with execution, approval consumption, network, and
+repository write flags false, plus synthetic no-op approval-consumption records
+that enforce single-use approval reuse blocking after finalized no-op receipts
+without granting execution authority, plus built-in no-op runner envelopes that
+complete a Francis-owned no-op handoff without repository commands, plus
+built-in no-op runner transcripts that record deterministic empty stdout/stderr
+metadata without real process output capture, plus built-in no-op runner
+identity bindings that bind only the Francis-owned no-op runner identity without
+live runner or sandbox runner binding, plus source-mount readiness records that
+confirm the Lab workspace source reference remains read-only without binding or
+enforcing a live source mount, plus source-mount contract records that declare
+the future read-only mount contract without binding or enforcing a live source
+mount, plus sandbox provider contracts that declare the future provider boundary
+without binding or enforcing a live sandbox, plus sandbox provider binding
+preflights that declare the future provider selection and binding checklist
+without selecting, verifying, binding, or enforcing a live provider, plus
+sandbox provider selection preflights that record requested provider kind, local
+provider reference metadata, and optional policy manifest metadata without
+provider binary/service verification or live provider binding, plus sandbox
+provider verifier preflights that capture static provider reference
+fingerprints, sanitized policy-manifest hashes, declared version evidence, and
+Francis verifier identity without runtime-probing providers, executing provider
+binaries, querying services, launching containers, or binding a live provider,
+plus sandbox provider runtime-probe preflights that declare future provider
+probe authorization, timeout, network-blocking, workspace-isolation, receipt,
+and repository-execution separation controls without executing provider
+binaries, querying provider services, launching containers, binding a provider,
+consuming approval, or running repository code,
+plus sandbox provider runtime-probe harness preflights that declare future probe
+runner, sandbox, service-query guard, output capture, and kill-switch controls
+without executing provider binaries, querying provider services, launching
+containers, binding a provider, consuming approval, writing execution receipts,
+or running repository code,
+plus sandbox provider runtime-probe runner readiness records that declare the
+future probe-runner interface and missing runner implementation, identity,
+policy, sandbox, network-blocking, workspace-isolation, timeout, output-capture,
+kill-switch, and receipt-contract controls without executing provider binaries,
+querying provider services, launching processes or containers, binding a
+provider, consuming approval, writing execution receipts, or running repository
+code,
+plus sandbox provider runtime-probe runner binding preflights that declare the
+future probe-runner binding contract and missing live runner/runtime-probe
+binding, sandbox, network, timeout, output-capture, kill-switch, and receipt
+controls without executing provider binaries, querying provider services,
+launching processes or containers, binding a provider, consuming approval,
+writing execution receipts, or running repository code,
+plus sandbox provider runtime-probe runner enforcement preflights that declare
+the future probe-runner enforcement contract and missing live enforcement,
+runner binding, runtime-probe binding, provider runtime probe, sandbox,
+network, timeout, output-capture, kill-switch, and receipt controls without
+executing provider binaries, querying provider services, launching processes or
+containers, binding or enforcing a provider runner, consuming approval, writing
+execution receipts, or running repository code,
+plus run-boundary preflights that aggregate the missing
+source-mount, sandbox provider, sandbox provider binding, sandbox provider
+selection, sandbox provider verifier, sandbox provider runtime-probe preflight,
+sandbox provider runtime-probe harness preflight, sandbox provider
+runtime-probe runner enforcement preflight, sandbox enforcement, command
+allowlist, receipt-writer, and approval-consumption controls without
+granting execution authority,
+plus sandbox provider runtime-probe execution boundaries that declare the
+future provider-probe execution gate while provider probing, provider binary
+execution, provider service queries, process/container launch, approval
+consumption, execution receipt writes, and repository execution remain blocked,
+plus sandbox provider runtime-probe refusals that write receipts when a provider
+probe is requested before governed probe execution exists, plus sandbox provider
+runtime-probe approval requests that queue pending exact-action approval for
+future provider probing without consuming approval or probing providers, plus
+sandbox provider runtime-probe approval-consumption records that consume approved
+provider-probe approvals once without probing providers, launching
+processes/containers, writing execution receipts, or executing repository code,
+plus sandbox provider runtime-probe invocation boundaries that bind consumed
+provider-probe approval evidence to missing future runner, policy, sandbox,
+network, timeout, output-capture, kill-switch, and receipt-writer controls
+without invoking a provider, plus sandbox provider runtime-probe runner
+pre-execution boundaries that bind the invocation boundary to still-missing live
+runner identity, policy, sandbox, network, timeout, output-capture, kill-switch,
+and receipt-writer controls without launching or probing a provider, plus
+sandbox provider runtime-probe runner control bindings that record those future
+controls as governance evidence while live runner, sandbox, provider, and
+execution bindings remain false, plus sandboxed rebuild/run/test boundaries
+that record the future governed execution boundary while separate execution
+approval, live runner, sandbox, network, output, receipt, build, test,
+validation, and promotion controls remain missing, plus sandboxed
+rebuild/run/test approval-request records that queue pending exact-action
+operator approval for future governed repository execution without consuming
+approval or running install/build/test commands, plus sandboxed rebuild/run/test
+approval-consumption records that consume approved exact-action sandboxed
+rebuild/run/test approvals once as governance evidence without live runner
+binding, sandbox enforcement, command execution, install/build/test execution,
+network access, repo writes, execution receipt writing, validation, promotion,
+or execution authority, plus sandboxed rebuild/run/test runner-binding preflight
+records that record static local provider reference and policy-manifest metadata
+after approval consumption while live runner binding, sandbox enforcement,
+provider execution, provider service queries, command execution, execution
+receipt writing, validation, promotion, and execution authority remain blocked,
+plus sandboxed rebuild/run/test sandbox-policy preflight records that record
+default-deny network, read-only source reference, no repo write, no destructive
+action, no secret storage, disabled command execution, and missing live
+sandbox/allowlist/receipt-writer controls after runner-binding evidence.
+This intake can feed Forge, but it must not run repository code or
+treat repository instructions as authority.
 
 ### 8.4.1 Friction detection
 
@@ -22293,6 +22412,7 @@ This is where Francis first starts to remove recurring burdens rather than only 
 * capability catalog
 * test/docs/risk-tier requirements
 * isolation of staged outputs
+* source-ingest and repo-map feeders for capability candidates
 
 ### Done looks like
 
@@ -23043,6 +23163,7 @@ This stage adds:
 * promotion rules
 * quality standards
 * capability library coherence
+* provenance links from source records, repo maps, lab plans, validations, and receipts
 
 ### Done looks like
 
@@ -24244,6 +24365,7 @@ Francis is designed to grow through:
 * later domain packs
 * managed-copy customization
 * connectors
+* local folders and open-source repositories
 * third-party dependencies
 
 That means the system will not only execute capability. It will ingest capability.
@@ -24252,6 +24374,19 @@ This creates a supply-chain problem.
 
 The roadmap should explicitly require:
 
+* source records for imported files, folders, repositories, applications, packs, and connectors
+* read-only repo maps before any build/run/test attempt
+* lab plan and refusal receipts when an imported source asks for execution before a governed sandbox exists
+* exact-action approval binding and runner-contract receipts before any imported source execution
+* runner-readiness receipts that enumerate missing sandbox, runner, network, filesystem, resource, command, environment, and execution-receipt controls before any imported source execution
+* runner-binding receipts that enumerate missing governed runner binding and execution-receipt sink contract controls before any imported source execution
+* runner-enforcement receipts that verify missing runner identity, command allowlist, environment, network, filesystem, resource, timeout, capture, receipt-write, and approval-consumption controls before any imported source execution
+* approval-consumption handoff receipts that bind approved exact-action evidence to runner-enforcement state while consumption and execution stay blocked
+* execution-receipt sink reservation receipts that reserve future execution receipt ids/paths while prewrite, final write, and execution stay blocked
+* runner command allowlist binding receipts that bind exact-action command plans to missing allowlist controls while command execution stays blocked
+* runner command allowlist declaration receipts that derive exact-action command entries and hashes while live binding and execution stay blocked
+* permission-gated readbacks for approval binding, runner-contract, runner-readiness, runner-binding, runner-enforcement, approval-consumption handoff, execution-receipt sink reservation, runner command allowlist binding, and runner command allowlist declaration state
+* operator UI readbacks for source records, repo maps, risk signals, candidate capability status, and Lab blockers before any execution controls are exposed
 * provenance for imported capabilities, packs, and connectors
 * version pinning and compatibility tracking for dependencies
 * quarantine and review for untrusted or externally sourced capability
